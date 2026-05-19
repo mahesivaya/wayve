@@ -45,8 +45,9 @@ pub async fn record_usage(
 
     let metric = data.metric.trim();
     if metric.is_empty() {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "metric is required" })));
+        return Ok(
+            HttpResponse::BadRequest().json(serde_json::json!({ "message": "metric is required" }))
+        );
     }
 
     record_event(pool.get_ref(), owner, metric, data.quantity).await?;

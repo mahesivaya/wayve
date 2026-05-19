@@ -1,14 +1,14 @@
+use crate::cache::TtlCache;
 use crate::email::profile::invalidate_me_cache;
 use crate::models::auth::ChangePasswordInput;
 use crate::models::email_request::UserResponse;
 use crate::prelude::*;
 use crate::security::api_key::{generate_api_key, hash_api_key};
 use crate::security::jwt::get_user_id_from_request;
+use crate::security::password::{hash_password, verify_password};
 use crate::security::rbac::{self, Permission, Role, Scope};
 use actix_web::{HttpRequest, HttpResponse, Responder, delete, get, post, put, web};
-use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{DateTime, Utc};
-use crate::cache::TtlCache;
 use serde::Deserialize;
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
@@ -440,9 +440,7 @@ pub async fn admin_create_organization(
     let mut admin_json = serde_json::Value::Null;
 
     if let Some((username, email, password)) = organization_admin {
-        let hashed = hash(&password, DEFAULT_COST).map_err(|e| {
-            AppError::Internal(format!("organization admin bcrypt hash failed: {e}"))
-        })?;
+        let hashed = hash_password(&password).await?;
 
         match sqlx::query(
             r#"
@@ -543,8 +541,9 @@ pub async fn admin_generate_api_key(
         .fetch_optional(pool.get_ref())
         .await?;
     if org_exists.is_none() {
-        return Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Unknown organization" })));
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Unknown organization" }))
+        );
     }
 
     // The raw key is returned to the caller exactly once; only its SHA-256
@@ -735,9 +734,8 @@ pub async fn admin_create_user(
     };
 
     if username.is_empty() || email.is_empty() || data.password.is_empty() {
-        return Ok(HttpResponse::BadRequest().json(
-            serde_json::json!({ "message": "Username, email, and password are required" }),
-        ));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Username, email, and password are required" })));
     }
 
     if data.password.len() < 6 {
@@ -793,8 +791,7 @@ pub async fn admin_create_user(
         None
     };
 
-    let hashed = hash(&data.password, DEFAULT_COST)
-        .map_err(|e| AppError::Internal(format!("admin create user bcrypt hash failed: {e}")))?;
+    let hashed = hash_password(&data.password).await?;
 
     let result = sqlx::query(
         r#"
@@ -991,9 +988,8 @@ pub async fn change_password(
     };
 
     if data.new_password.len() < 6 {
-        return Ok(HttpResponse::BadRequest().json(
-            serde_json::json!({ "message": "New password must be at least 6 characters" }),
-        ));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "New password must be at least 6 characters" })));
     }
 
     let row = sqlx::query("SELECT password, auth_provider FROM users WHERE id = $1")
@@ -1012,7 +1008,9 @@ pub async fn change_password(
 
     if let Some(stored) = stored {
         let current_password = data.current_password.as_deref().unwrap_or("");
-        let valid = verify(current_password, &stored).unwrap_or(false);
+        let valid = verify_password(current_password, &stored)
+            .await
+            .unwrap_or(false);
         if !valid {
             warn!(target: "auth", user_id, "change-password: wrong current password");
             return Ok(HttpResponse::Unauthorized()
@@ -1024,8 +1022,7 @@ pub async fn change_password(
             .json(serde_json::json!({ "message": "This account has no password to change" })));
     }
 
-    let hashed = hash(&data.new_password, DEFAULT_COST)
-        .map_err(|e| AppError::Internal(format!("change-password bcrypt hash failed: {e}")))?;
+    let hashed = hash_password(&data.new_password).await?;
 
     sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
         .bind(&hashed)
@@ -1267,8 +1264,9 @@ pub async fn update_organization_member_role(
     {
         Some(row) => row,
         None => {
-            return Ok(HttpResponse::NotFound()
-                .json(serde_json::json!({ "message": "User not found" })));
+            return Ok(
+                HttpResponse::NotFound().json(serde_json::json!({ "message": "User not found" }))
+            );
         }
     };
 

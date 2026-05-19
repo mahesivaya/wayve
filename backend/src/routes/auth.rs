@@ -5,7 +5,7 @@ use crate::models::auth::{ForgotInput, LoginInput, LoginResponse, RegisterInput,
 use crate::models::message::MessageResponse;
 use crate::models::user::User;
 use crate::security::jwt::{auth_cookie, create_jwt, create_jwt_for_account, expired_auth_cookie};
-use bcrypt::{DEFAULT_COST, hash, verify};
+use crate::security::password::{hash_password, verify_password};
 use rand::RngCore;
 use tracing::{error, info, instrument, warn};
 
@@ -23,8 +23,7 @@ pub async fn register(pool: web::Data<PgPool>, data: web::Json<RegisterInput>) -
             .json(serde_json::json!({ "message": "Passwords do not match" })));
     }
 
-    let hashed = hash(&data.password, DEFAULT_COST)
-        .map_err(|e| AppError::Internal(format!("register bcrypt hash failed: {e}")))?;
+    let hashed = hash_password(&data.password).await?;
 
     let result = sqlx::query("INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id")
         .bind(&data.email)
@@ -72,7 +71,10 @@ pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) 
     let user = match user {
         Some(user) => user,
         None => {
-            let _ = verify(&data.password, DUMMY_PASSWORD_HASH);
+            // Burn the same bcrypt cost as a real verify so the unknown-email
+            // path doesn't return faster than a wrong-password path. Result
+            // intentionally discarded.
+            let _ = verify_password(&data.password, DUMMY_PASSWORD_HASH).await;
             warn!("Invalid login attempt: {}", data.email);
             return Ok(HttpResponse::Unauthorized().json(MessageResponse {
                 message: "Invalid credentials".to_string(),
@@ -91,8 +93,7 @@ pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) 
         }
     };
 
-    let valid = verify(&data.password, stored_password)
-        .map_err(|e| AppError::Internal(format!("login bcrypt verify failed: {e}")))?;
+    let valid = verify_password(&data.password, stored_password).await?;
 
     if !valid {
         warn!("Invalid login attempt: {}", data.email);
@@ -232,8 +233,7 @@ pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>
             .json(serde_json::json!({ "message": "Invalid or expired link" })));
     }
 
-    let hashed = hash(&data.new_password, DEFAULT_COST)
-        .map_err(|e| AppError::Internal(format!("reset bcrypt hash failed: {e}")))?;
+    let hashed = hash_password(&data.new_password).await?;
 
     let mut tx = pool.begin().await?;
 

@@ -57,9 +57,14 @@ pub async fn refresh_access_token(
 }
 
 pub static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
+    // Without `connect_timeout` / `timeout`, a hung TLS handshake or a stalled
+    // provider response can park an async worker indefinitely. These caps turn
+    // such failures into a fast error instead of a wedged request.
     Client::builder()
         .pool_idle_timeout(std::time::Duration::from_secs(90))
         .pool_max_idle_per_host(20)
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
         .build()
         .unwrap()
 });

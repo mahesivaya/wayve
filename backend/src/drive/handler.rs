@@ -209,8 +209,9 @@ pub async fn download_file(
     match fs::read(&file_path).await {
         Ok(bytes) => {
             let body = match file_iv.as_deref().filter(|value| !value.is_empty()) {
-                Some(iv) => decrypt_binary(iv, &bytes)
-                    .map_err(|e| AppError::Internal(format!("download_file decrypt failed: {e}")))?,
+                Some(iv) => decrypt_binary(iv, &bytes).map_err(|e| {
+                    AppError::Internal(format!("download_file decrypt failed: {e}"))
+                })?,
                 None => bytes,
             };
 

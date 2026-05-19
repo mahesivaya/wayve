@@ -68,7 +68,13 @@ pub async fn send(
 
     Ok(account
         .provider
-        .send(&token.access_token, &account.email, account.id, &data, user_id)
+        .send(
+            &token.access_token,
+            &account.email,
+            account.id,
+            &data,
+            user_id,
+        )
         .await)
 }
 

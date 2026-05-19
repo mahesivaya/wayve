@@ -1,8 +1,8 @@
 use crate::prelude::*;
 
+use crate::cache::TtlCache;
 use crate::routes::user::{display_organization_name, effective_access_for_user};
 use crate::security::jwt::get_user_id_from_request;
-use crate::cache::TtlCache;
 use actix_web::{HttpResponse, get};
 use sqlx::PgPool;
 use tracing::{error, info, instrument};
@@ -48,8 +48,9 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let row = match row {
         Some(row) => row,
         None => {
-            return Ok(HttpResponse::Unauthorized()
-                .json(serde_json::json!({ "error": "User not found" })));
+            return Ok(
+                HttpResponse::Unauthorized().json(serde_json::json!({ "error": "User not found" }))
+            );
         }
     };
 

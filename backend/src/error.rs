@@ -73,8 +73,7 @@ impl actix_web::ResponseError for AppError {
             AppError::Db(_) | AppError::Internal(_) => "Internal server error".to_string(),
             other => other.to_string(),
         };
-        HttpResponse::build(self.status_code())
-            .json(serde_json::json!({ "message": message }))
+        HttpResponse::build(self.status_code()).json(serde_json::json!({ "message": message }))
     }
 }
 

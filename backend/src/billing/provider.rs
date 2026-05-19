@@ -8,7 +8,15 @@ use anyhow::anyhow;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
-static HTTP: Lazy<Client> = Lazy::new(Client::new);
+// Same rationale as `email::oauth::HTTP_CLIENT`: cap connect + total request
+// time so a stalled Stripe response can't park an async worker forever.
+static HTTP: Lazy<Client> = Lazy::new(|| {
+    Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .unwrap()
+});
 
 /// Secret API key (`sk_...`). Absent in dev/test environments without Stripe.
 pub fn secret_key() -> Option<String> {
