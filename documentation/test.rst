@@ -1024,8 +1024,6 @@ backend/.env.development.example
 # GOOGLE_CLIENT_SECRET_PATH=../client_secret.json
 # GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8080/oauth/callback
 
-# OUTLOOK_CLIENT_ID=6c5f44cf-8bbb-4858-b923-f365755f58cc
-# OUTLOOK_CLIENT_SECRET=s3F8Q~ObZHPvepeP2Dgl~gVToDLsbXCU6kBjMaW7
 
 # SMTP_HOST=localhost
 # SMTP_PORT=1025
