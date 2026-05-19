@@ -5,21 +5,16 @@ use crate::email::oauth::{HTTP_CLIENT, refresh_access_token, try_load_google_sec
 use crate::email::utils::{extract_attachments, extract_body};
 use crate::security::encryption::{decrypt, encrypt};
 use crate::security::jwt::get_user_id_from_request;
+use crate::cache::TtlCache;
 use actix_web::{HttpResponse, get};
-use moka::future::Cache as MokaCache;
 use sqlx::PgPool;
-use std::time::Duration;
 use tracing::{error, info, instrument, warn};
 
 const EMAIL_BODY_CACHE_TTL_SECS: u64 = 300;
 const EMAIL_BODY_CACHE_MAX_CAPACITY: u64 = 10_000;
 
-static EMAIL_BODY_CACHE: Lazy<MokaCache<(i32, i32), String>> = Lazy::new(|| {
-    MokaCache::builder()
-        .max_capacity(EMAIL_BODY_CACHE_MAX_CAPACITY)
-        .time_to_live(Duration::from_secs(EMAIL_BODY_CACHE_TTL_SECS))
-        .build()
-});
+static EMAIL_BODY_CACHE: Lazy<TtlCache<(i32, i32), String>> =
+    Lazy::new(|| TtlCache::new(EMAIL_BODY_CACHE_MAX_CAPACITY, EMAIL_BODY_CACHE_TTL_SECS));
 
 #[get("/emails/{id}")]
 #[instrument(target = "http", skip(pool))]

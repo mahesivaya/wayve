@@ -8,21 +8,16 @@ use crate::security::rbac::{self, Permission, Role, Scope};
 use actix_web::{HttpRequest, HttpResponse, Responder, delete, get, post, put, web};
 use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{DateTime, Utc};
-use moka::future::Cache as MokaCache;
+use crate::cache::TtlCache;
 use serde::Deserialize;
 use sqlx::PgPool;
-use std::time::Duration;
 use tracing::{error, info, instrument, warn};
 
 const PROFILE_CACHE_TTL_SECS: u64 = 30;
 const PROFILE_CACHE_MAX_CAPACITY: u64 = 5000;
 
-static PROFILE_CACHE: Lazy<MokaCache<i32, serde_json::Value>> = Lazy::new(|| {
-    MokaCache::builder()
-        .max_capacity(PROFILE_CACHE_MAX_CAPACITY)
-        .time_to_live(Duration::from_secs(PROFILE_CACHE_TTL_SECS))
-        .build()
-});
+static PROFILE_CACHE: Lazy<TtlCache<i32, serde_json::Value>> =
+    Lazy::new(|| TtlCache::new(PROFILE_CACHE_MAX_CAPACITY, PROFILE_CACHE_TTL_SECS));
 
 pub async fn invalidate_profile_cache(user_id: i32) {
     PROFILE_CACHE.invalidate(&user_id).await;

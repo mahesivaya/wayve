@@ -2,21 +2,16 @@ use crate::prelude::*;
 
 use crate::routes::user::{display_organization_name, effective_access_for_user};
 use crate::security::jwt::get_user_id_from_request;
+use crate::cache::TtlCache;
 use actix_web::{HttpResponse, get};
-use moka::future::Cache as MokaCache;
 use sqlx::PgPool;
-use std::time::Duration;
 use tracing::{error, info, instrument};
 
 const ME_CACHE_TTL_SECS: u64 = 60;
 const ME_CACHE_MAX_CAPACITY: u64 = 10_000;
 
-static ME_CACHE: Lazy<MokaCache<i32, Value>> = Lazy::new(|| {
-    MokaCache::builder()
-        .max_capacity(ME_CACHE_MAX_CAPACITY)
-        .time_to_live(Duration::from_secs(ME_CACHE_TTL_SECS))
-        .build()
-});
+static ME_CACHE: Lazy<TtlCache<i32, Value>> =
+    Lazy::new(|| TtlCache::new(ME_CACHE_MAX_CAPACITY, ME_CACHE_TTL_SECS));
 
 pub async fn invalidate_me_cache(user_id: i32) {
     ME_CACHE.invalidate(&user_id).await;

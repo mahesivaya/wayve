@@ -1,7 +1,5 @@
 use crate::email::account::load_user_email_accounts_for_older_sync;
-use crate::email::outlook::sync_outlook_account_before;
-use crate::email::provider::{MailProvider, MailProviderClients, refresh_and_persist_email_token};
-use crate::email::sync::sync_account_before;
+use crate::email::provider::{MailProviderClients, refresh_and_persist_email_token};
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
 use sqlx::PgPool;
@@ -42,28 +40,16 @@ pub async fn sync_older_page(
                 )
                 .await?;
 
-                match account.provider {
-                    MailProvider::Google => {
-                        sync_account_before(
-                            &pool,
-                            account.id,
-                            &token.access_token,
-                            before_timestamp,
-                            limit,
-                        )
-                        .await
-                    }
-                    MailProvider::Microsoft => {
-                        sync_outlook_account_before(
-                            &pool,
-                            account.id,
-                            &token.access_token,
-                            before_timestamp,
-                            limit,
-                        )
-                        .await
-                    }
-                }
+                account
+                    .provider
+                    .sync_before(
+                        &pool,
+                        account.id,
+                        &token.access_token,
+                        before_timestamp,
+                        limit,
+                    )
+                    .await
             }
             .boxed(),
         );

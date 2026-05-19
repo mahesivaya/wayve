@@ -87,6 +87,43 @@ impl Cache {
     }
 }
 
+/// A bounded, time-to-live in-memory cache — a thin wrapper over
+/// `moka::future::Cache` that bundles the builder boilerplate. Used for the
+/// per-feature lookup caches (user profiles, `/me`, email bodies, ...) so each
+/// is one `TtlCache::new(capacity, ttl)` instead of a repeated builder chain.
+pub struct TtlCache<K, V> {
+    inner: MokaCache<K, V>,
+}
+
+impl<K, V> TtlCache<K, V>
+where
+    K: std::hash::Hash + Eq + Send + Sync + 'static,
+    V: Clone + Send + Sync + 'static,
+{
+    /// A cache holding at most `max_capacity` entries, each expiring
+    /// `ttl_secs` after insertion.
+    pub fn new(max_capacity: u64, ttl_secs: u64) -> Self {
+        Self {
+            inner: MokaCache::builder()
+                .max_capacity(max_capacity)
+                .time_to_live(Duration::from_secs(ttl_secs))
+                .build(),
+        }
+    }
+
+    pub async fn get(&self, key: &K) -> Option<V> {
+        self.inner.get(key).await
+    }
+
+    pub async fn insert(&self, key: K, value: V) {
+        self.inner.insert(key, value).await;
+    }
+
+    pub async fn invalidate(&self, key: &K) {
+        self.inner.invalidate(key).await;
+    }
+}
+
 fn local_json_cache() -> MokaCache<String, String> {
     let ttl_secs = crate::config::local_json_cache_ttl_secs();
     let max_capacity = crate::config::local_json_cache_max_capacity();

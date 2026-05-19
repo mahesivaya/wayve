@@ -2,8 +2,7 @@ use crate::prelude::*;
 
 use crate::email::account::load_syncable_email_accounts;
 use crate::email::oauth::HTTP_CLIENT;
-use crate::email::outlook::sync_outlook_account;
-use crate::email::provider::{MailProvider, MailProviderClients, refresh_and_persist_email_token};
+use crate::email::provider::{MailProviderClients, refresh_and_persist_email_token};
 
 use serde_json::Value;
 use tracing::{debug, error, info, instrument, warn};
@@ -87,15 +86,10 @@ pub async fn sync_all(pool: &PgPool) -> Result<()> {
                 }
             };
 
-            let sync_result = match account.provider {
-                MailProvider::Google => {
-                    sync_account(&pool, account.id, &token.access_token, account.last_sync).await
-                }
-                MailProvider::Microsoft => {
-                    sync_outlook_account(&pool, account.id, &token.access_token, account.last_sync)
-                        .await
-                }
-            };
+            let sync_result = account
+                .provider
+                .sync(&pool, account.id, &token.access_token, account.last_sync)
+                .await;
 
             if let Err(e) = sync_result {
                 error!(target: "worker", account_id = account.id, provider = account.provider.as_db(), error = ?e, "email sync failed");

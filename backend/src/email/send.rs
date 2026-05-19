@@ -3,7 +3,7 @@ use crate::prelude::*;
 use crate::email::account::load_email_account_for_user;
 use crate::email::oauth::HTTP_CLIENT;
 use crate::email::outlook::send_outlook_mail;
-use crate::email::provider::{MailProvider, MailProviderClients, refresh_and_persist_email_token};
+use crate::email::provider::{MailProviderClients, refresh_and_persist_email_token};
 use crate::models::email_request::SendEmailRequest;
 use crate::security::jwt::get_user_id_from_request;
 use actix_web::HttpResponse;
@@ -56,10 +56,7 @@ pub async fn send(
         Ok(token) => token,
         Err(e) => {
             error!(target: "gmail", user_id, account_id = account.id, provider = account.provider.as_db(), error = ?e, "send token refresh failed");
-            let provider_name = match account.provider {
-                MailProvider::Google => "Gmail",
-                MailProvider::Microsoft => "Outlook",
-            };
+            let provider_name = account.provider.display_name();
             if e.to_string().contains("not configured") {
                 return Ok(HttpResponse::InternalServerError()
                     .body(format!("{provider_name} OAuth is not configured")));
@@ -69,15 +66,13 @@ pub async fn send(
         }
     };
 
-    Ok(match account.provider {
-        MailProvider::Google => {
-            send_via_gmail(&token.access_token, &account.email, &data, user_id).await
-        }
-        MailProvider::Microsoft => send_via_outlook(&token.access_token, account.id, &data).await,
-    })
+    Ok(account
+        .provider
+        .send(&token.access_token, &account.email, account.id, &data, user_id)
+        .await)
 }
 
-async fn send_via_gmail(
+pub(super) async fn send_via_gmail(
     access_token: &str,
     from_email: &str,
     data: &SendEmailRequest,
@@ -132,7 +127,7 @@ async fn send_via_gmail(
 }
 
 /// Sends from a connected Outlook mailbox through Graph `sendMail`.
-async fn send_via_outlook(
+pub(super) async fn send_via_outlook(
     access_token: &str,
     account_id: i32,
     data: &SendEmailRequest,

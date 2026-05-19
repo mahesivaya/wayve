@@ -2,7 +2,11 @@ use crate::email::account::invalidate_email_account_cache;
 use crate::email::oauth::{refresh_access_token, try_load_google_secrets};
 use crate::email::outlook::{
     OUTLOOK_MAIL_SCOPE, OutlookCredentials, outlook_credentials, refresh_outlook_token,
+    sync_outlook_account, sync_outlook_account_before,
 };
+use crate::email::send::{send_via_gmail, send_via_outlook};
+use crate::email::sync::{sync_account, sync_account_before};
+use crate::models::email_request::SendEmailRequest;
 use crate::prelude::*;
 use tracing::instrument;
 
@@ -33,6 +37,70 @@ impl MailProvider {
 
     pub fn is_microsoft(self) -> bool {
         self == Self::Microsoft
+    }
+
+    /// Human-readable label used in user-facing error messages.
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Google => "Gmail",
+            Self::Microsoft => "Outlook",
+        }
+    }
+
+    /// Sync new messages since `last_sync` for `account_id` via this provider.
+    pub async fn sync(
+        self,
+        pool: &PgPool,
+        account_id: i32,
+        access_token: &str,
+        last_sync: Option<i64>,
+    ) -> Result<()> {
+        match self {
+            Self::Google => sync_account(pool, account_id, access_token, last_sync).await,
+            Self::Microsoft => {
+                sync_outlook_account(pool, account_id, access_token, last_sync).await
+            }
+        }
+    }
+
+    /// Fetch a page of messages older than `before_timestamp`, used when the UI
+    /// scrolls past the synced window.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn sync_before(
+        self,
+        pool: &PgPool,
+        account_id: i32,
+        access_token: &str,
+        before_timestamp: i64,
+        limit: usize,
+    ) -> Result<()> {
+        match self {
+            Self::Google => {
+                sync_account_before(pool, account_id, access_token, before_timestamp, limit).await
+            }
+            Self::Microsoft => {
+                sync_outlook_account_before(pool, account_id, access_token, before_timestamp, limit)
+                    .await
+            }
+        }
+    }
+
+    /// Send an email via this provider. Gmail builds its own MIME from
+    /// `from_email`; Graph sends from the authenticated account directly, so
+    /// each backend takes a different slice of the inputs.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn send(
+        self,
+        access_token: &str,
+        from_email: &str,
+        account_id: i32,
+        data: &SendEmailRequest,
+        user_id: i32,
+    ) -> HttpResponse {
+        match self {
+            Self::Google => send_via_gmail(access_token, from_email, data, user_id).await,
+            Self::Microsoft => send_via_outlook(access_token, account_id, data).await,
+        }
     }
 }
 
