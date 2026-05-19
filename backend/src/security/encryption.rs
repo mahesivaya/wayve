@@ -111,8 +111,8 @@ fn get_key() -> Result<[u8; 32], String> {
 }
 
 fn get_key_material() -> Result<[u8; 32], String> {
-    let key = std::env::var("AES_KEY")
-        .map_err(|_| "AES_KEY is not set. Configure a 64-character Hex64 key.".to_string())?;
+    let key = crate::config::aes_key()
+        .ok_or_else(|| "AES_KEY is not set. Configure a 64-character Hex64 key.".to_string())?;
     let trimmed = key.trim();
 
     if trimmed.len() == 64 && trimmed.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -137,9 +137,9 @@ fn derive_hkdf_sha512_key(input_key_material: &[u8; 32]) -> Result<[u8; 32], Str
 }
 
 fn hkdf_salt() -> Vec<u8> {
-    match std::env::var("AES_HKDF_SALT") {
-        Ok(value) if !value.trim().is_empty() => value.trim().as_bytes().to_vec(),
-        _ => DEFAULT_HKDF_SALT.to_vec(),
+    match crate::config::aes_hkdf_salt() {
+        Some(value) => value.into_bytes(),
+        None => DEFAULT_HKDF_SALT.to_vec(),
     }
 }
 

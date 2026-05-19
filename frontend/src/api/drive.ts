@@ -1,4 +1,4 @@
-import { API_BASE } from "../config/env";
+import { getApiBase } from "../config/env";
 import { apiFetch } from "./client";
 
 export type UploadedFile = {
@@ -22,7 +22,7 @@ export const uploadDriveFiles = async (files: File[]) => {
   files.forEach((file) => formData.append("files", file));
 
   // Raw fetch (not apiFetch) so the browser sets the multipart boundary.
-  const res = await fetch(`${API_BASE}/api/files/upload`, {
+  const res = await fetch(`${getApiBase()}/api/files/upload`, {
     method: "POST",
     credentials: "include",
     body: formData,

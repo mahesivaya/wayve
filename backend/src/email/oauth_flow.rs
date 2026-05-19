@@ -25,18 +25,13 @@ const OAUTH_FLOW_CONNECT: &str = "connect";
 const OAUTH_FLOW_SIGNUP: &str = "signup";
 
 fn google_redirect_uri(req: &HttpRequest, secrets: &Value) -> String {
-    if let Ok(uri) = std::env::var("GOOGLE_OAUTH_REDIRECT_URI") {
-        let uri = uri.trim();
-        if !uri.is_empty() {
-            return uri.to_string();
-        }
+    if let Some(uri) = crate::config::google_oauth().redirect_uri {
+        return uri;
     }
 
-    if let Ok(base_url) = std::env::var("BACKEND_URL") {
-        let base_url = base_url.trim().trim_end_matches('/');
-        if !base_url.is_empty() {
-            return format!("{base_url}/oauth/callback");
-        }
+    if let Some(base_url) = crate::config::backend_url() {
+        let base_url = base_url.trim_end_matches('/');
+        return format!("{base_url}/oauth/callback");
     }
 
     let connection = req.connection_info();
@@ -297,7 +292,7 @@ pub async fn oauth_callback(
         return HttpResponse::BadRequest().body("Google account did not expose an email address");
     }
 
-    let frontend_for_errors = std::env::var("FRONTEND_URL").unwrap_or_default();
+    let frontend_for_errors = crate::config::frontend_url();
     if is_signup {
         let existing =
             sqlx::query("SELECT id, auth_provider, account_type FROM users WHERE email = $1")
@@ -409,13 +404,7 @@ pub async fn oauth_callback(
 
     info!(target: "gmail", user_id, signup = is_signup, "redirecting to frontend");
 
-    let frontend = match std::env::var("FRONTEND_URL") {
-        Ok(v) => v,
-        Err(e) => {
-            error!("FRONTEND_URL missing: {:?}", e);
-            return HttpResponse::InternalServerError().body("Server configuration error");
-        }
-    };
+    let frontend = crate::config::frontend_url();
 
     let account_type: String = sqlx::query_scalar("SELECT account_type FROM users WHERE id = $1")
         .bind(user_id)

@@ -8,8 +8,6 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 
 const TRACING_LOG_DIR: &str = "logs";
 const TRACING_LOG_PATH: &str = "logs/tracing.log";
-const TRACING_LOG_MAX_BYTES: u64 = 30 * 1024 * 1024;
-const TRACING_LOG_DEFAULT_ARCHIVES: usize = 5;
 
 #[derive(Clone)]
 struct SizeRotatingFileWriter {
@@ -140,18 +138,11 @@ fn archive_path(index: usize) -> String {
 }
 
 fn tracing_log_max_bytes() -> u64 {
-    std::env::var("TRACING_LOG_MAX_BYTES")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .filter(|value| *value > 0)
-        .unwrap_or(TRACING_LOG_MAX_BYTES)
+    crate::config::tracing_log_max_bytes()
 }
 
 fn tracing_log_max_archives() -> usize {
-    std::env::var("TRACING_LOG_MAX_ARCHIVES")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(TRACING_LOG_DEFAULT_ARCHIVES)
+    crate::config::tracing_log_max_archives()
 }
 
 fn tempfile_file() -> io::Result<File> {

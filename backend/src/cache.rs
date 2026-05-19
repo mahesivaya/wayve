@@ -3,12 +3,8 @@ use redis::AsyncCommands;
 use redis::aio::MultiplexedConnection;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use std::env;
 use std::time::Duration;
 use tracing::{instrument, warn};
-
-const DEFAULT_LOCAL_JSON_CACHE_TTL_SECS: u64 = 60;
-const DEFAULT_LOCAL_JSON_CACHE_MAX_CAPACITY: u64 = 10_000;
 
 #[derive(Clone)]
 pub struct Cache {
@@ -19,7 +15,7 @@ pub struct Cache {
 impl Cache {
     #[instrument(target = "cache")]
     pub async fn connect() -> Result<Self, redis::RedisError> {
-        let url = env::var("REDIS_URL").unwrap_or_else(|_| "redis://redis:6379".to_string());
+        let url = crate::config::redis_url();
         let client = redis::Client::open(url)?;
         let conn = client.get_multiplexed_async_connection().await?;
         Ok(Self {
@@ -92,14 +88,8 @@ impl Cache {
 }
 
 fn local_json_cache() -> MokaCache<String, String> {
-    let ttl_secs = env::var("LOCAL_JSON_CACHE_TTL_SECS")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(DEFAULT_LOCAL_JSON_CACHE_TTL_SECS);
-    let max_capacity = env::var("LOCAL_JSON_CACHE_MAX_CAPACITY")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(DEFAULT_LOCAL_JSON_CACHE_MAX_CAPACITY);
+    let ttl_secs = crate::config::local_json_cache_ttl_secs();
+    let max_capacity = crate::config::local_json_cache_max_capacity();
 
     MokaCache::builder()
         .max_capacity(max_capacity)

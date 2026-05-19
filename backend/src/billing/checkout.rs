@@ -17,7 +17,7 @@ fn owner_id(owner: BillingOwner) -> i32 {
 }
 
 fn frontend_url() -> String {
-    std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string())
+    crate::config::frontend_url()
 }
 
 /// Fetch the requesting user's email — used as the Stripe customer contact.
