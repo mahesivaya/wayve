@@ -159,16 +159,45 @@ mod tests {
         let body: serde_json::Value = test::read_body_json(resp).await;
         let meeting_id = body["meeting_id"].as_i64().expect("meeting_id");
 
-        // Meeting row exists with the Zoom URL we mocked.
-        let row = sqlx::query("SELECT title, zoom_join_url FROM meetings WHERE id = $1")
-            .bind(meeting_id as i32)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        // Meeting row exists and stores sensitive fields encrypted. The
+        // legacy plaintext columns are intentionally blank/null for new rows.
+        let row = sqlx::query(
+            r#"
+            SELECT title, title_encrypted, title_iv,
+                   zoom_join_url, zoom_join_url_encrypted, zoom_join_url_iv
+            FROM meetings
+            WHERE id = $1
+            "#,
+        )
+        .bind(meeting_id as i32)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         let title: String = sqlx::Row::get(&row, "title");
+        let title_encrypted: String = sqlx::Row::get(&row, "title_encrypted");
+        let title_iv: String = sqlx::Row::get(&row, "title_iv");
         let join_url: Option<String> = sqlx::Row::try_get(&row, "zoom_join_url").unwrap_or(None);
-        assert_eq!(title, "Standup");
-        assert_eq!(join_url.as_deref(), Some("https://zoom.example/j/99"));
+        let join_url_encrypted: Option<String> =
+            sqlx::Row::try_get(&row, "zoom_join_url_encrypted").unwrap_or(None);
+        let join_url_iv: Option<String> =
+            sqlx::Row::try_get(&row, "zoom_join_url_iv").unwrap_or(None);
+
+        assert_eq!(title, "");
+        assert_eq!(
+            crate::security::encryption::decrypt(&title_iv, &title_encrypted).unwrap(),
+            "Standup"
+        );
+        assert_eq!(join_url, None);
+        assert_eq!(
+            crate::security::encryption::decrypt(
+                join_url_iv.as_deref().expect("zoom_join_url_iv"),
+                join_url_encrypted
+                    .as_deref()
+                    .expect("zoom_join_url_encrypted"),
+            )
+            .unwrap(),
+            "https://zoom.example/j/99"
+        );
 
         // Participants row was inserted.
         let p_count: i64 =
