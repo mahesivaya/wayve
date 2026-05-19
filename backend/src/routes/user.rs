@@ -882,8 +882,8 @@ pub async fn admin_create_user(
             let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
             let role = default_role_for_account_type(&account_type);
 
-            if normalized_account_type(&account_type) == "platform_admin" {
-                if let Err(e) = sqlx::query(
+            if normalized_account_type(&account_type) == "platform_admin"
+                && let Err(e) = sqlx::query(
                     r#"
                     INSERT INTO platform_members (user_id, role)
                     VALUES ($1, $2)
@@ -895,10 +895,9 @@ pub async fn admin_create_user(
                 .bind(role)
                 .execute(pool.get_ref())
                 .await
-                {
-                    error!(target: "db", admin_id, user_id = id, error = ?e, "admin create platform membership failed");
-                    return HttpResponse::InternalServerError().finish();
-                }
+            {
+                error!(target: "db", admin_id, user_id = id, error = ?e, "admin create platform membership failed");
+                return HttpResponse::InternalServerError().finish();
             }
 
             if let Some(org_id) = organization_id

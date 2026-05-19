@@ -589,25 +589,23 @@ pub async fn update_meeting(
         None => (false, None),
     };
 
-    if content_changed {
-        if !participants.is_empty() {
-            let pool_clone = pool.clone();
-            let email_req = MeetingEmailRequest {
-                user_id,
-                participants,
-                title: data.title.clone(),
-                date,
-                start: start_time,
-                end: end_time,
-                kind: MeetingEmailKind::Update,
-                zoom_join_url: existing_zoom_url,
-            };
-            actix_web::rt::spawn(async move {
-                if let Err(e) = send_meeting_emails(pool_clone.get_ref(), email_req).await {
-                    warn!(target: "scheduler", meeting_id = id, error = %e, "update email failed");
-                }
-            });
-        }
+    if content_changed && !participants.is_empty() {
+        let pool_clone = pool.clone();
+        let email_req = MeetingEmailRequest {
+            user_id,
+            participants,
+            title: data.title.clone(),
+            date,
+            start: start_time,
+            end: end_time,
+            kind: MeetingEmailKind::Update,
+            zoom_join_url: existing_zoom_url,
+        };
+        actix_web::rt::spawn(async move {
+            if let Err(e) = send_meeting_emails(pool_clone.get_ref(), email_req).await {
+                warn!(target: "scheduler", meeting_id = id, error = %e, "update email failed");
+            }
+        });
     }
 
     // ================= RESPONSE =================

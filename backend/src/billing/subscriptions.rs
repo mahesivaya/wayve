@@ -112,13 +112,12 @@ pub async fn cancel_subscription(req: HttpRequest, pool: web::Data<PgPool>) -> i
         }
     };
 
-    if let Some(stripe_id) = stripe_id.filter(|s| !s.is_empty()) {
-        if let Err(e) = provider::cancel_at_period_end(&stripe_id).await {
-            error!(target: "billing", error = ?e, "stripe cancel failed");
-            return HttpResponse::BadGateway().json(
-                serde_json::json!({ "message": "Could not cancel with the payment provider" }),
-            );
-        }
+    if let Some(stripe_id) = stripe_id.filter(|s| !s.is_empty())
+        && let Err(e) = provider::cancel_at_period_end(&stripe_id).await
+    {
+        error!(target: "billing", error = ?e, "stripe cancel failed");
+        return HttpResponse::BadGateway()
+            .json(serde_json::json!({ "message": "Could not cancel with the payment provider" }));
     }
 
     if let Err(e) = sqlx::query(
