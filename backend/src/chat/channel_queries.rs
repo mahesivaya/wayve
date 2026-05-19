@@ -3,28 +3,19 @@ use crate::security::jwt::get_user_id_from_request;
 use crate::security::rbac;
 
 use sqlx::Row;
-use tracing::{error, instrument};
+use tracing::instrument;
 
 #[get("/chat/channels")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     // A channel is visible only when its creator shares the caller's scope —
     // same platform, same organization, or both personal. This mirrors the
     // scoped chat people-picker so cross-tenant channels never appear.
-    let ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
-        Ok(ctx) => ctx,
-        Err(e) => {
-            error!(target: "db", user_id, error = ?e, "get_channels scope resolution failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let ctx = rbac::resolve_role_context(pool.get_ref(), user_id).await?;
 
-    let result = sqlx::query(
+    let rows = sqlx::query(
         r#"
         SELECT
             c.id,
@@ -99,45 +90,37 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> impl Res
     .bind(ctx.scope.as_str())
     .bind(ctx.organization_id)
     .fetch_all(pool.get_ref())
-    .await;
+    .await?;
 
-    match result {
-        Ok(rows) => {
-            let channels: Vec<_> = rows
-                .into_iter()
-                .map(|row| {
-                    let created_naive: chrono::NaiveDateTime = row.get("created_at");
-                    let created_at = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
-                        created_naive,
-                        chrono::Utc,
-                    );
+    let channels: Vec<_> = rows
+        .into_iter()
+        .map(|row| {
+            let created_naive: chrono::NaiveDateTime = row.get("created_at");
+            let created_at = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+                created_naive,
+                chrono::Utc,
+            );
 
-                    serde_json::json!({
-                        "id": row.get::<i32, _>("id"),
-                        "name": row.get::<String, _>("name"),
-                        "visibility": row.get::<String, _>("visibility"),
-                        "created_by": row.get::<i32, _>("created_by"),
-                        "created_at": created_at.to_rfc3339(),
-                        "current_user_role": row.get::<Option<String>, _>("current_user_role"),
-                        "is_member": row.get::<bool, _>("is_member"),
-                        "join_status": row.get::<Option<String>, _>("join_status"),
-                        "member_ids": row.get::<Vec<i32>, _>("member_ids"),
-                        "member_emails": row.get::<Vec<String>, _>("member_emails"),
-                        "admin_emails": row.get::<Vec<String>, _>("admin_emails"),
-                        "user_emails": row.get::<Vec<String>, _>("user_emails"),
-                        "invite_emails": row.get::<Vec<String>, _>("invite_emails"),
-                        "admin_invite_emails": row.get::<Vec<String>, _>("admin_invite_emails"),
-                        "user_invite_emails": row.get::<Vec<String>, _>("user_invite_emails"),
-                        "pending_join_requests": row.get::<Vec<serde_json::Value>, _>("pending_join_requests"),
-                    })
-                })
-                .collect();
+            serde_json::json!({
+                "id": row.get::<i32, _>("id"),
+                "name": row.get::<String, _>("name"),
+                "visibility": row.get::<String, _>("visibility"),
+                "created_by": row.get::<i32, _>("created_by"),
+                "created_at": created_at.to_rfc3339(),
+                "current_user_role": row.get::<Option<String>, _>("current_user_role"),
+                "is_member": row.get::<bool, _>("is_member"),
+                "join_status": row.get::<Option<String>, _>("join_status"),
+                "member_ids": row.get::<Vec<i32>, _>("member_ids"),
+                "member_emails": row.get::<Vec<String>, _>("member_emails"),
+                "admin_emails": row.get::<Vec<String>, _>("admin_emails"),
+                "user_emails": row.get::<Vec<String>, _>("user_emails"),
+                "invite_emails": row.get::<Vec<String>, _>("invite_emails"),
+                "admin_invite_emails": row.get::<Vec<String>, _>("admin_invite_emails"),
+                "user_invite_emails": row.get::<Vec<String>, _>("user_invite_emails"),
+                "pending_join_requests": row.get::<Vec<serde_json::Value>, _>("pending_join_requests"),
+            })
+        })
+        .collect();
 
-            HttpResponse::Ok().json(channels)
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "get_channels failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    Ok(HttpResponse::Ok().json(channels))
 }

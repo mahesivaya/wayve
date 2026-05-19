@@ -125,23 +125,23 @@ pub async fn refresh_entitlements(pool: &PgPool, owner: BillingOwner) -> Result<
 
 #[get("/billing/entitlements")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn get_entitlements(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn get_entitlements(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = match super::current_user(&req) {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     let owner = match resolve_owner(pool.get_ref(), user_id).await {
         Ok(owner) => owner,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
 
     let entitlement = effective_entitlements(pool.get_ref(), owner).await;
-    HttpResponse::Ok().json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "owner_type": owner.kind(),
         "plan_code": entitlement.plan_code,
         "storage_limit_bytes": entitlement.storage_limit_bytes,
         "seat_limit": entitlement.seat_limit,
         "features": entitlement.features,
         "active": entitlement.active,
-    }))
+    })))
 }

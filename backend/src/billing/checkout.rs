@@ -98,22 +98,22 @@ pub async fn create_checkout(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     data: web::Json<CheckoutInput>,
-) -> impl Responder {
+) -> AppResult {
     let user_id = match super::current_user(&req) {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     if !provider::is_configured() {
-        return HttpResponse::ServiceUnavailable()
-            .json(serde_json::json!({ "message": "Billing is not configured" }));
+        return Ok(HttpResponse::ServiceUnavailable()
+            .json(serde_json::json!({ "message": "Billing is not configured" })));
     }
 
     let owner = match resolve_owner(pool.get_ref(), user_id).await {
         Ok(owner) => owner,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
-        return resp;
+        return Ok(resp);
     }
 
     // Resolve the requested plan and confirm it is purchasable by this owner.
@@ -122,37 +122,35 @@ pub async fn create_checkout(
     )
     .bind(data.plan_code.trim())
     .fetch_optional(pool.get_ref())
-    .await;
+    .await?;
 
     let (plan_id, price_id, audience) = match plan {
-        Ok(Some(row)) => row,
-        Ok(None) => {
-            return HttpResponse::NotFound().json(serde_json::json!({ "message": "Unknown plan" }));
-        }
-        Err(e) => {
-            error!(target: "billing", error = ?e, "plan lookup failed");
-            return HttpResponse::InternalServerError().finish();
+        Some(row) => row,
+        None => {
+            return Ok(
+                HttpResponse::NotFound().json(serde_json::json!({ "message": "Unknown plan" }))
+            );
         }
     };
 
     if audience != owner.kind() {
-        return HttpResponse::BadRequest().json(serde_json::json!({
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
             "message": format!("This plan is for {audience} accounts")
-        }));
+        })));
     }
     let Some(price_id) = price_id.filter(|p| !p.is_empty()) else {
-        return HttpResponse::BadRequest().json(serde_json::json!({
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
             "message": "This plan is not linked to a Stripe price yet"
-        }));
+        })));
     };
 
     let email = match actor_email(pool.get_ref(), user_id).await {
         Ok(email) => email,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     let customer_id = match ensure_customer(pool.get_ref(), owner, &email).await {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
 
     let base = frontend_url();
@@ -166,68 +164,68 @@ pub async fn create_checkout(
     };
 
     match provider::create_checkout_session(&params).await {
-        Ok(session) => HttpResponse::Ok()
-            .json(serde_json::json!({ "url": session.url, "session_id": session.id })),
+        Ok(session) => Ok(HttpResponse::Ok()
+            .json(serde_json::json!({ "url": session.url, "session_id": session.id }))),
         Err(e) => {
             error!(target: "billing", error = ?e, "checkout session create failed");
-            HttpResponse::BadGateway()
-                .json(serde_json::json!({ "message": "Could not start checkout" }))
+            Ok(HttpResponse::BadGateway()
+                .json(serde_json::json!({ "message": "Could not start checkout" })))
         }
     }
 }
 
 #[get("/billing/stripe-status")]
 #[instrument(target = "http", skip(req))]
-pub async fn stripe_status(req: HttpRequest) -> impl Responder {
+pub async fn stripe_status(req: HttpRequest) -> AppResult {
     if let Err(resp) = super::current_user(&req) {
-        return resp;
+        return Ok(resp);
     }
 
-    HttpResponse::Ok().json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "configured": provider::is_configured(),
         "test_mode": provider::is_test_mode(),
         "country": "US",
         "publishable_key": provider::publishable_key().unwrap_or_else(|| "pk_test_sample_configure_in_env".to_string())
-    }))
+    })))
 }
 
 #[post("/billing/portal")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn create_portal(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn create_portal(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = match super::current_user(&req) {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     if !provider::is_configured() {
-        return HttpResponse::ServiceUnavailable()
-            .json(serde_json::json!({ "message": "Billing is not configured" }));
+        return Ok(HttpResponse::ServiceUnavailable()
+            .json(serde_json::json!({ "message": "Billing is not configured" })));
     }
 
     let owner = match resolve_owner(pool.get_ref(), user_id).await {
         Ok(owner) => owner,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
-        return resp;
+        return Ok(resp);
     }
 
     let email = match actor_email(pool.get_ref(), user_id).await {
         Ok(email) => email,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     let customer_id = match ensure_customer(pool.get_ref(), owner, &email).await {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
 
     match provider::create_portal_session(&customer_id, &format!("{}/billing", frontend_url()))
         .await
     {
-        Ok(url) => HttpResponse::Ok().json(serde_json::json!({ "url": url })),
+        Ok(url) => Ok(HttpResponse::Ok().json(serde_json::json!({ "url": url }))),
         Err(e) => {
             error!(target: "billing", error = ?e, "portal session create failed");
-            HttpResponse::BadGateway()
-                .json(serde_json::json!({ "message": "Could not open the billing portal" }))
+            Ok(HttpResponse::BadGateway()
+                .json(serde_json::json!({ "message": "Could not open the billing portal" })))
         }
     }
 }

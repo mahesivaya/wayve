@@ -13,17 +13,14 @@ pub async fn create_channel(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     input: web::Json<CreateChannelInput>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let name = input.name.trim();
     if name.is_empty() {
-        return HttpResponse::BadRequest().json(serde_json::json!({
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
             "error": "Channel name is required"
-        }));
+        })));
     }
 
     let invite_role = normalize_channel_role(input.invite_role.as_deref());
@@ -32,20 +29,13 @@ pub async fn create_channel(
     let invited_users = if invite_emails.is_empty() {
         Vec::new()
     } else {
-        match sqlx::query("SELECT id, email FROM users WHERE LOWER(email) = ANY($1)")
+        sqlx::query("SELECT id, email FROM users WHERE LOWER(email) = ANY($1)")
             .bind(&invite_emails)
             .fetch_all(pool.get_ref())
-            .await
-        {
-            Ok(rows) => rows
-                .into_iter()
-                .map(|row| (row.get::<i32, _>("id"), row.get::<String, _>("email")))
-                .collect::<Vec<_>>(),
-            Err(e) => {
-                error!(target: "db", error = ?e, "create_channel invite lookup failed");
-                return HttpResponse::InternalServerError().finish();
-            }
-        }
+            .await?
+            .into_iter()
+            .map(|row| (row.get::<i32, _>("id"), row.get::<String, _>("email")))
+            .collect::<Vec<_>>()
     };
 
     let mut member_ids = input.member_ids.clone().unwrap_or_default();
@@ -55,20 +45,14 @@ pub async fn create_channel(
     member_ids.dedup();
 
     if member_ids.len() < 2 && invite_emails.is_empty() {
-        return HttpResponse::BadRequest().json(serde_json::json!({
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
             "error": "Add at least one invitee email"
-        }));
+        })));
     }
 
-    let mut tx = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(e) => {
-            error!(target: "db", error = ?e, "create_channel begin failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let mut tx = pool.begin().await?;
 
-    let row = match sqlx::query(
+    let row = sqlx::query(
         r#"
         INSERT INTO channels (name, created_by)
         VALUES ($1, $2)
@@ -78,14 +62,7 @@ pub async fn create_channel(
     .bind(name)
     .bind(user_id)
     .fetch_one(&mut *tx)
-    .await
-    {
-        Ok(row) => row,
-        Err(e) => {
-            error!(target: "db", error = ?e, "create_channel insert failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    .await?;
 
     let channel_id: i32 = row.get("id");
     for member_id in &member_ids {
@@ -95,6 +72,8 @@ pub async fn create_channel(
             invite_role
         };
 
+        // A failed member insert is reported as a 400, not a 500 — the most
+        // likely cause is a bad member id in the request body.
         if let Err(e) = sqlx::query(
             r#"
             INSERT INTO channel_members (channel_id, user_id, role)
@@ -109,9 +88,9 @@ pub async fn create_channel(
         .await
         {
             error!(target: "db", error = ?e, channel_id, member_id, "create_channel member insert failed");
-            return HttpResponse::BadRequest().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "error": "One or more members could not be added"
-            }));
+            })));
         }
     }
 
@@ -123,7 +102,7 @@ pub async fn create_channel(
         .iter()
         .filter(|email| !registered_invite_emails.contains(email))
     {
-        if let Err(e) = sqlx::query(
+        sqlx::query(
             r#"
             INSERT INTO channel_invites (channel_id, email, role, invited_by)
             VALUES ($1, $2, $3, $4)
@@ -135,21 +114,16 @@ pub async fn create_channel(
         .bind(invite_role)
         .bind(user_id)
         .execute(&mut *tx)
-        .await
-        {
-            error!(target: "db", error = ?e, channel_id, email, "create_channel invite insert failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+        .await?;
     }
 
-    if let Err(e) = tx.commit().await {
-        error!(target: "db", error = ?e, channel_id, "create_channel commit failed");
-        return HttpResponse::InternalServerError().finish();
-    }
+    tx.commit().await?;
 
     let created_naive: chrono::NaiveDateTime = row.get("created_at");
     let created_at =
         chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(created_naive, chrono::Utc);
+    // A failed member-email read is non-fatal: the channel already exists, so
+    // we log and fall back to empty lists rather than failing the request.
     let member_rows = match sqlx::query(
         r#"
         SELECT u.email, cm.role
@@ -194,7 +168,7 @@ pub async fn create_channel(
         Vec::new()
     };
 
-    HttpResponse::Created().json(serde_json::json!({
+    Ok(HttpResponse::Created().json(serde_json::json!({
         "id": channel_id,
         "name": name,
         "visibility": "private",
@@ -212,5 +186,5 @@ pub async fn create_channel(
         "admin_invite_emails": admin_invite_emails,
         "user_invite_emails": user_invite_emails,
         "pending_join_requests": [],
-    }))
+    })))
 }

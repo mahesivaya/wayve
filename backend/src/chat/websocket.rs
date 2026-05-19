@@ -5,20 +5,17 @@ use crate::security::encryption::encrypt;
 
 use super::dto::WsAuthQuery;
 
-use actix::{Actor, ActorFutureExt, Addr, Handler, Message as ActixMessage, StreamHandler};
+use crate::ws_registry::SessionRegistry;
+
+use actix::{Actor, ActorFutureExt, Handler, Message as ActixMessage, StreamHandler};
 use actix_web_actors::ws;
 use actix_web_actors::ws::WebsocketContext;
-use lazy_static::lazy_static;
 use sqlx::{PgPool, Row};
-use std::collections::HashMap;
-use std::sync::Mutex;
 use tracing::{debug, error, info, instrument, warn};
 
 const CHAT_E2E_PREFIX: &str = "WAYVE_CHAT_E2E_V1\n";
 
-lazy_static! {
-    static ref SESSIONS: Mutex<HashMap<i32, Addr<ChatSession>>> = Mutex::new(HashMap::new());
-}
+static SESSIONS: Lazy<SessionRegistry<ChatSession>> = Lazy::new(SessionRegistry::new);
 
 #[derive(ActixMessage)]
 #[rtype(result = "()")]
@@ -76,18 +73,12 @@ impl Actor for ChatSession {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("Chat WS connected: user_id={}", self.user_id);
-        SESSIONS
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(self.user_id, ctx.address());
+        SESSIONS.register(self.user_id, ctx.address());
     }
 
     fn stopped(&mut self, _: &mut Self::Context) {
         info!("Chat WS disconnected: user_id={}", self.user_id);
-        SESSIONS
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&self.user_id);
+        SESSIONS.unregister(self.user_id);
     }
 }
 
@@ -152,8 +143,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 })
                                 .to_string();
 
-                                let sessions = SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
-                                if let Some(addr) = sessions.get(&other) {
+                                if let Some(addr) = SESSIONS.addr(other) {
                                     addr.do_send(WsMessage(receipt));
                                 }
                             }
@@ -263,14 +253,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     })
                                     .to_string();
 
-                                    let sessions =
-                                        SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
                                     for member_id in members {
                                         if member_id == sender_id {
                                             continue;
                                         }
 
-                                        if let Some(addr) = sessions.get(&member_id) {
+                                        if let Some(addr) = SESSIONS.addr(member_id) {
                                             addr.do_send(WsMessage(msg_json.clone()));
                                         }
                                     }
@@ -367,11 +355,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 .to_string();
 
                                 // SEND TO RECEIVER
-                                if let Some(addr) = SESSIONS
-                                    .lock()
-                                    .unwrap_or_else(|e| e.into_inner())
-                                    .get(&receiver_id)
-                                {
+                                if let Some(addr) = SESSIONS.addr(receiver_id) {
                                     addr.do_send(WsMessage(msg_json.clone()));
 
                                     // 🔥 DELIVERED

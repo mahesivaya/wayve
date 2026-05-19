@@ -4,21 +4,21 @@
 use super::models::Invoice;
 use super::resolve_owner;
 use crate::prelude::*;
-use tracing::{error, instrument};
+use tracing::instrument;
 
 #[get("/billing/invoices")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn list_invoices(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn list_invoices(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = match super::current_user(&req) {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     let owner = match resolve_owner(pool.get_ref(), user_id).await {
         Ok(owner) => owner,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
 
-    let rows = sqlx::query_as::<_, Invoice>(
+    let invoices = sqlx::query_as::<_, Invoice>(
         r#"
         SELECT i.id, i.stripe_invoice_id, i.amount_due_cents, i.amount_paid_cents,
                i.currency, i.status, i.hosted_invoice_url, i.invoice_pdf, i.created_at
@@ -33,13 +33,7 @@ pub async fn list_invoices(req: HttpRequest, pool: web::Data<PgPool>) -> impl Re
     .bind(owner.user_id())
     .bind(owner.organization_id())
     .fetch_all(pool.get_ref())
-    .await;
+    .await?;
 
-    match rows {
-        Ok(invoices) => HttpResponse::Ok().json(invoices),
-        Err(e) => {
-            error!(target: "billing", error = ?e, "invoice list failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    Ok(HttpResponse::Ok().json(invoices))
 }

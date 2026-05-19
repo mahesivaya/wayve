@@ -14,23 +14,17 @@ const DUMMY_PASSWORD_HASH: &str = "$2b$12$BeUHqArduWoNmhYKnepJYeYTQdhF/XcdcGFHax
 
 #[post("/register")]
 #[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
-pub async fn register(pool: web::Data<PgPool>, data: web::Json<RegisterInput>) -> HttpResponse {
+pub async fn register(pool: web::Data<PgPool>, data: web::Json<RegisterInput>) -> AppResult {
     info!(target: "auth", "register attempt");
 
     if data.password != data.confirm_password {
         warn!(target: "auth", "register rejected: password mismatch");
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Passwords do not match" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Passwords do not match" })));
     }
 
-    let hashed = match hash(&data.password, DEFAULT_COST) {
-        Ok(h) => h,
-        Err(e) => {
-            error!(target: "auth", error = %e, "bcrypt hash failed");
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "message": "Password hashing failed" }));
-        }
-    };
+    let hashed = hash(&data.password, DEFAULT_COST)
+        .map_err(|e| AppError::Internal(format!("register bcrypt hash failed: {e}")))?;
 
     let result = sqlx::query("INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id")
         .bind(&data.email)
@@ -43,23 +37,21 @@ pub async fn register(pool: web::Data<PgPool>, data: web::Json<RegisterInput>) -
             let user_id: i32 = row.get("id");
             info!("User registered: {}", data.email);
             let token = create_jwt(user_id, data.email.clone());
-            HttpResponse::Ok()
+            Ok(HttpResponse::Ok()
                 .cookie(auth_cookie(token.clone()))
                 .json(serde_json::json!({
                     "token": token,
                     "account_type": "personal"
-                }))
+                })))
         }
 
         Err(e) => {
             if e.to_string().contains("duplicate key") {
                 warn!("Register rejected (already exists): {}", data.email);
-                HttpResponse::BadRequest()
-                    .json(serde_json::json!({ "message": "User already exists" }))
+                Ok(HttpResponse::BadRequest()
+                    .json(serde_json::json!({ "message": "User already exists" })))
             } else {
-                error!("Register insert failed for {}: {:?}", data.email, e);
-                HttpResponse::InternalServerError()
-                    .json(serde_json::json!({ "message": "Insert failed" }))
+                Err(AppError::Db(e))
             }
         }
     }
@@ -67,30 +59,24 @@ pub async fn register(pool: web::Data<PgPool>, data: web::Json<RegisterInput>) -
 
 #[post("/login")]
 #[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
-pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) -> HttpResponse {
+pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) -> AppResult {
     info!(target: "auth", "login attempt");
 
-    let user_result = sqlx::query_as::<_, User>(
+    let user = sqlx::query_as::<_, User>(
         "SELECT id, email, password, account_type FROM users WHERE email = $1",
     )
     .bind(&data.email)
     .fetch_optional(pool.get_ref())
-    .await;
+    .await?;
 
-    let user = match user_result {
-        Ok(Some(user)) => user,
-        Ok(None) => {
+    let user = match user {
+        Some(user) => user,
+        None => {
             let _ = verify(&data.password, DUMMY_PASSWORD_HASH);
             warn!("Invalid login attempt: {}", data.email);
-            return HttpResponse::Unauthorized().json(MessageResponse {
+            return Ok(HttpResponse::Unauthorized().json(MessageResponse {
                 message: "Invalid credentials".to_string(),
-            });
-        }
-        Err(e) => {
-            error!("Login user lookup failed: {:?}", e);
-            return HttpResponse::InternalServerError().json(MessageResponse {
-                message: "Database error".to_string(),
-            });
+            }));
         }
     };
 
@@ -99,37 +85,30 @@ pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) 
         Some(p) => p,
         None => {
             warn!("Password login rejected for Google account: {}", data.email);
-            return HttpResponse::Unauthorized().json(MessageResponse {
+            return Ok(HttpResponse::Unauthorized().json(MessageResponse {
                 message: "Use 'Sign in with Google' for this account".to_string(),
-            });
+            }));
         }
     };
 
-    let valid = match verify(&data.password, stored_password) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(target: "auth", error = %e, "bcrypt verify failed");
-            return HttpResponse::InternalServerError().json(MessageResponse {
-                message: "Password verification failed".to_string(),
-            });
-        }
-    };
+    let valid = verify(&data.password, stored_password)
+        .map_err(|e| AppError::Internal(format!("login bcrypt verify failed: {e}")))?;
 
     if !valid {
         warn!("Invalid login attempt: {}", data.email);
-        return HttpResponse::Unauthorized().json(MessageResponse {
+        return Ok(HttpResponse::Unauthorized().json(MessageResponse {
             message: "Invalid credentials".to_string(),
-        });
+        }));
     }
 
     info!("Login success: {}", data.email);
     let token = create_jwt_for_account(user.id, user.email.clone(), user.account_type.clone());
-    HttpResponse::Ok()
+    Ok(HttpResponse::Ok()
         .cookie(auth_cookie(token.clone()))
         .json(LoginResponse {
             token,
             account_type: user.account_type,
-        })
+        }))
 }
 
 #[post("/logout")]
@@ -216,14 +195,16 @@ pub async fn forgot_password(
 
 #[post("/reset-password")]
 #[instrument(target = "auth", skip(pool, data))]
-pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>) -> HttpResponse {
+pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>) -> AppResult {
     info!(target: "auth", "reset-password attempt");
 
     if data.new_password.len() < 6 {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Password must be at least 6 characters" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Password must be at least 6 characters" })));
     }
 
+    // A lookup failure is treated like an unknown token (400) rather than a
+    // 500 — the caller learns nothing either way.
     let row = sqlx::query(
         "SELECT user_id, expires_at, used_at \
          FROM password_reset_tokens WHERE token = $1",
@@ -236,8 +217,8 @@ pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>
         Ok(Some(r)) => r,
         _ => {
             warn!(target: "auth", "reset rejected: unknown token");
-            return HttpResponse::BadRequest()
-                .json(serde_json::json!({ "message": "Invalid or expired link" }));
+            return Ok(HttpResponse::BadRequest()
+                .json(serde_json::json!({ "message": "Invalid or expired link" })));
         }
     };
 
@@ -247,55 +228,28 @@ pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>
 
     if used_at.is_some() || expires_at < chrono::Utc::now() {
         warn!(target: "auth", user_id, "reset rejected: token expired or used");
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Invalid or expired link" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Invalid or expired link" })));
     }
 
-    let hashed = match hash(&data.new_password, DEFAULT_COST) {
-        Ok(h) => h,
-        Err(e) => {
-            error!(target: "auth", error = %e, "bcrypt hash failed");
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "message": "Server error" }));
-        }
-    };
+    let hashed = hash(&data.new_password, DEFAULT_COST)
+        .map_err(|e| AppError::Internal(format!("reset bcrypt hash failed: {e}")))?;
 
-    let mut tx = match pool.begin().await {
-        Ok(t) => t,
-        Err(e) => {
-            error!(target: "auth", error = %e, "tx begin failed");
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "message": "Server error" }));
-        }
-    };
+    let mut tx = pool.begin().await?;
 
-    if let Err(e) = sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
+    sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
         .bind(&hashed)
         .bind(user_id)
         .execute(&mut *tx)
-        .await
-    {
-        error!(target: "auth", error = %e, "password update failed");
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({ "message": "Server error" }));
-    }
+        .await?;
 
-    if let Err(e) = sqlx::query("UPDATE password_reset_tokens SET used_at = NOW() WHERE token = $1")
+    sqlx::query("UPDATE password_reset_tokens SET used_at = NOW() WHERE token = $1")
         .bind(&data.token)
         .execute(&mut *tx)
-        .await
-    {
-        error!(target: "auth", error = %e, "token mark-used failed");
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({ "message": "Server error" }));
-    }
+        .await?;
 
-    if let Err(e) = tx.commit().await {
-        error!(target: "auth", error = %e, "tx commit failed");
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({ "message": "Server error" }));
-    }
+    tx.commit().await?;
 
     info!(target: "auth", user_id, "password reset successful");
-    HttpResponse::Ok().json(serde_json::json!({ "message": "Password updated" }))
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "Password updated" })))
 }

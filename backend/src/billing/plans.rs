@@ -3,7 +3,7 @@
 
 use super::models::{CreatePlanInput, Plan};
 use crate::prelude::*;
-use tracing::{error, instrument};
+use tracing::instrument;
 
 const PLAN_COLUMNS: &str = "id, code, name, description, audience, stripe_price_id, \
     amount_cents, currency, billing_interval, storage_limit_bytes, seat_limit, \
@@ -11,23 +11,18 @@ const PLAN_COLUMNS: &str = "id, code, name, description, audience, stripe_price_
 
 #[get("/billing/plans")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn list_plans(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn list_plans(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     if let Err(resp) = super::current_user(&req) {
-        return resp;
+        return Ok(resp);
     }
 
     let query =
         format!("SELECT {PLAN_COLUMNS} FROM plans WHERE is_active = true ORDER BY amount_cents");
-    match sqlx::query_as::<_, Plan>(&query)
+    let plans = sqlx::query_as::<_, Plan>(&query)
         .fetch_all(pool.get_ref())
-        .await
-    {
-        Ok(plans) => HttpResponse::Ok().json(plans),
-        Err(e) => {
-            error!(target: "billing", error = ?e, "plan list failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+        .await?;
+
+    Ok(HttpResponse::Ok().json(plans))
 }
 
 #[post("/billing/admin/plans")]
@@ -36,26 +31,26 @@ pub async fn admin_create_plan(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     data: web::Json<CreatePlanInput>,
-) -> impl Responder {
+) -> AppResult {
     let user_id = match super::current_user(&req) {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     if let Err(resp) = super::require_platform_admin(pool.get_ref(), user_id).await {
-        return resp;
+        return Ok(resp);
     }
 
     let code = data.code.trim();
     let name = data.name.trim();
     if code.is_empty() || name.is_empty() {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "code and name are required" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "code and name are required" })));
     }
 
     let audience = data.audience.as_deref().unwrap_or("personal");
     if !matches!(audience, "personal" | "organization") {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "audience must be personal or organization" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "audience must be personal or organization" })));
     }
 
     let query = format!(
@@ -79,7 +74,7 @@ pub async fn admin_create_plan(
         "#
     );
 
-    let result = sqlx::query_as::<_, Plan>(&query)
+    let plan = sqlx::query_as::<_, Plan>(&query)
         .bind(code)
         .bind(name)
         .bind(data.description.as_deref())
@@ -91,13 +86,7 @@ pub async fn admin_create_plan(
         .bind(data.storage_limit_bytes.unwrap_or(0))
         .bind(data.seat_limit.unwrap_or(1))
         .fetch_one(pool.get_ref())
-        .await;
+        .await?;
 
-    match result {
-        Ok(plan) => HttpResponse::Created().json(plan),
-        Err(e) => {
-            error!(target: "billing", user_id, error = ?e, "plan upsert failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    Ok(HttpResponse::Created().json(plan))
 }

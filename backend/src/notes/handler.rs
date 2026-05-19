@@ -4,7 +4,7 @@ use crate::security::encryption::{decrypt, encrypt};
 use crate::security::jwt::get_user_id_from_request;
 use actix_web::{delete, put};
 use sqlx::Row;
-use tracing::{error, instrument};
+use tracing::instrument;
 
 fn decrypt_field(
     iv: Option<String>,
@@ -42,13 +42,10 @@ fn note_from_row(row: sqlx::postgres::PgRow) -> Note {
 
 #[get("/notes")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn list_notes(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+pub async fn list_notes(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let result = sqlx::query(
+    let rows = sqlx::query(
         "SELECT id, title, content, title_encrypted, title_iv, content_encrypted, content_iv, created_at, updated_at
          FROM notes
          WHERE user_id = $1
@@ -56,17 +53,9 @@ pub async fn list_notes(req: HttpRequest, pool: web::Data<PgPool>) -> impl Respo
     )
     .bind(user_id)
     .fetch_all(pool.get_ref())
-    .await;
+    .await?;
 
-    match result {
-        Ok(rows) => {
-            HttpResponse::Ok().json(rows.into_iter().map(note_from_row).collect::<Vec<_>>())
-        }
-        Err(e) => {
-            error!(target: "db", user_id, error = ?e, "notes list failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    Ok(HttpResponse::Ok().json(rows.into_iter().map(note_from_row).collect::<Vec<_>>()))
 }
 
 #[post("/notes")]
@@ -75,30 +64,17 @@ pub async fn create_note(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     data: web::Json<NoteInput>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let title = data.title.as_deref().unwrap_or("");
     let content = data.content.as_deref().unwrap_or("");
-    let (title_iv, title_encrypted) = match encrypt(title) {
-        Ok(value) => value,
-        Err(e) => {
-            error!(target: "notes", user_id, error = %e, "note title encrypt failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
-    let (content_iv, content_encrypted) = match encrypt(content) {
-        Ok(value) => value,
-        Err(e) => {
-            error!(target: "notes", user_id, error = %e, "note content encrypt failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let (title_iv, title_encrypted) = encrypt(title)
+        .map_err(|e| AppError::Internal(format!("note title encrypt failed: {e}")))?;
+    let (content_iv, content_encrypted) = encrypt(content)
+        .map_err(|e| AppError::Internal(format!("note content encrypt failed: {e}")))?;
 
-    let result = sqlx::query(
+    let row = sqlx::query(
         "INSERT INTO notes (user_id, title, content, title_encrypted, title_iv, content_encrypted, content_iv)
          VALUES ($1, '', '', $2, $3, $4, $5)
          RETURNING id, title, content, title_encrypted, title_iv, content_encrypted, content_iv, created_at, updated_at",
@@ -109,15 +85,9 @@ pub async fn create_note(
     .bind(&content_encrypted)
     .bind(&content_iv)
     .fetch_one(pool.get_ref())
-    .await;
+    .await?;
 
-    match result {
-        Ok(row) => HttpResponse::Ok().json(note_from_row(row)),
-        Err(e) => {
-            error!(target: "db", user_id, error = ?e, "notes create failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    Ok(HttpResponse::Ok().json(note_from_row(row)))
 }
 
 #[put("/notes/{id}")]
@@ -127,34 +97,20 @@ pub async fn update_note(
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
     data: web::Json<NoteInput>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
-
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let id = path.into_inner();
 
     // Owner-scoped UPDATE — silently no-ops if the note belongs to someone
     // else, so we 404 rather than leaking that the id exists.
     let title = data.title.as_deref().unwrap_or("");
     let content = data.content.as_deref().unwrap_or("");
-    let (title_iv, title_encrypted) = match encrypt(title) {
-        Ok(value) => value,
-        Err(e) => {
-            error!(target: "notes", user_id, note_id = id, error = %e, "note title encrypt failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
-    let (content_iv, content_encrypted) = match encrypt(content) {
-        Ok(value) => value,
-        Err(e) => {
-            error!(target: "notes", user_id, note_id = id, error = %e, "note content encrypt failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let (title_iv, title_encrypted) = encrypt(title)
+        .map_err(|e| AppError::Internal(format!("note title encrypt failed: {e}")))?;
+    let (content_iv, content_encrypted) = encrypt(content)
+        .map_err(|e| AppError::Internal(format!("note content encrypt failed: {e}")))?;
 
-    let result = sqlx::query(
+    let row = sqlx::query(
         "UPDATE notes
          SET title = '', content = '', title_encrypted = $1, title_iv = $2,
              content_encrypted = $3, content_iv = $4, updated_at = NOW()
@@ -168,16 +124,10 @@ pub async fn update_note(
     .bind(id)
     .bind(user_id)
     .fetch_optional(pool.get_ref())
-    .await;
+    .await?
+    .ok_or(AppError::NotFound("note"))?;
 
-    match result {
-        Ok(Some(row)) => HttpResponse::Ok().json(note_from_row(row)),
-        Ok(None) => HttpResponse::NotFound().finish(),
-        Err(e) => {
-            error!(target: "db", user_id, note_id = id, error = ?e, "notes update failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    Ok(HttpResponse::Ok().json(note_from_row(row)))
 }
 
 #[delete("/notes/{id}")]
@@ -186,26 +136,19 @@ pub async fn delete_note(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
-
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let id = path.into_inner();
 
     let result = sqlx::query("DELETE FROM notes WHERE id = $1 AND user_id = $2")
         .bind(id)
         .bind(user_id)
         .execute(pool.get_ref())
-        .await;
+        .await?;
 
-    match result {
-        Ok(r) if r.rows_affected() == 0 => HttpResponse::NotFound().finish(),
-        Ok(_) => HttpResponse::Ok().json(serde_json::json!({ "deleted": true })),
-        Err(e) => {
-            error!(target: "db", user_id, note_id = id, error = ?e, "notes delete failed");
-            HttpResponse::InternalServerError().finish()
-        }
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("note"));
     }
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }

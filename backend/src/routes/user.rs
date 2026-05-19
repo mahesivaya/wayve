@@ -194,44 +194,38 @@ pub async fn get_user_by_email(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     query: web::Query<UserLookupQuery>,
-) -> impl Responder {
+) -> AppResult {
     // Require a valid JWT — this endpoint exposes user ids and public keys,
     // so it must not be reachable anonymously.
     if get_user_id_from_request(&req).is_none() {
-        return HttpResponse::Unauthorized().finish();
+        return Ok(HttpResponse::Unauthorized().finish());
     }
 
     let email = query.email.trim();
     if email.is_empty() {
-        return HttpResponse::BadRequest().body("Email required");
+        return Ok(HttpResponse::BadRequest().body("Email required"));
     }
 
-    let result = sqlx::query_as::<_, UserResponse>(
+    let user = sqlx::query_as::<_, UserResponse>(
         "SELECT id, email, public_key FROM users WHERE email = $1",
     )
     .bind(email)
     .fetch_optional(pool.get_ref())
-    .await;
+    .await?;
 
-    match result {
-        Ok(Some(user)) => {
+    match user {
+        Some(user) => {
             let parsed_key = user
                 .public_key
                 .and_then(|k| serde_json::from_str::<Vec<u8>>(&k).ok());
 
-            HttpResponse::Ok().json(serde_json::json!({
+            Ok(HttpResponse::Ok().json(serde_json::json!({
                 "id": user.id,
                 "email": user.email,
                 "public_key": parsed_key
-            }))
+            })))
         }
-
-        Ok(None) => HttpResponse::Ok().json(serde_json::json!(null)),
-
-        Err(e) => {
-            error!(target: "db", error = ?e, "get_user_by_email lookup failed");
-            HttpResponse::InternalServerError().finish()
-        }
+        None => Ok(HttpResponse::Ok().json(serde_json::json!(null))),
     }
 }
 
@@ -293,7 +287,7 @@ async fn require_platform_admin(req: &HttpRequest, pool: &PgPool) -> Result<i32,
 
 #[get("/admin/organizations")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let list_ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersRead)
         .await
     {
@@ -304,13 +298,13 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
     match list_ctx {
         Ok(ctx) if ctx.scope == Scope::Platform => {}
         Ok(_) => {
-            return HttpResponse::Forbidden()
-                .json(serde_json::json!({ "message": "Platform staff access required" }));
+            return Ok(HttpResponse::Forbidden()
+                .json(serde_json::json!({ "message": "Platform staff access required" })));
         }
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     }
 
-    match sqlx::query(
+    let rows = sqlx::query(
         r#"
         SELECT
             o.id,
@@ -329,35 +323,28 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
         "#,
     )
     .fetch_all(pool.get_ref())
-    .await
-    {
-        Ok(rows) => {
-            let organizations: Vec<_> = rows
-                .into_iter()
-                .map(|row| {
-                    let id: i32 = row.get("id");
-                    let name: String = row.get("name");
-                    let slug: Option<String> = row.get("slug");
-                    let user_count: i64 = row.get("user_count");
-                    let admin: Option<serde_json::Value> = row.get("admin");
+    .await?;
 
-                    serde_json::json!({
-                        "id": id,
-                        "name": name,
-                        "slug": slug,
-                        "user_count": user_count,
-                        "admin": admin
-                    })
-                })
-                .collect();
+    let organizations: Vec<_> = rows
+        .into_iter()
+        .map(|row| {
+            let id: i32 = row.get("id");
+            let name: String = row.get("name");
+            let slug: Option<String> = row.get("slug");
+            let user_count: i64 = row.get("user_count");
+            let admin: Option<serde_json::Value> = row.get("admin");
 
-            HttpResponse::Ok().json(organizations)
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "list organizations failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+            serde_json::json!({
+                "id": id,
+                "name": name,
+                "slug": slug,
+                "user_count": user_count,
+                "admin": admin
+            })
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(organizations))
 }
 
 #[post("/admin/organizations")]
@@ -366,16 +353,16 @@ pub async fn admin_create_organization(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     data: web::Json<CreateOrganizationInput>,
-) -> impl Responder {
+) -> AppResult {
     let admin_id = match require_platform_admin(&req, pool.get_ref()).await {
         Ok(id) => id,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
 
     let name = data.name.trim();
     if name.is_empty() {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Organization name is required" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Organization name is required" })));
     }
 
     // The organization admin block is optional, but if any field is supplied the
@@ -401,9 +388,9 @@ pub async fn admin_create_organization(
             match (admin_username, admin_email.as_deref(), admin_password) {
                 (Some(username), Some(email), Some(password)) => {
                     if password.len() < 6 {
-                        return HttpResponse::BadRequest().json(serde_json::json!({
+                        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                             "message": "Password must be at least 6 characters"
-                        }));
+                        })));
                     }
                     Some((
                         username.to_string(),
@@ -412,22 +399,16 @@ pub async fn admin_create_organization(
                     ))
                 }
                 _ => {
-                    return HttpResponse::BadRequest().json(serde_json::json!({
+                    return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                     "message": "Organization admin username, email, and password are all required"
-                }));
+                })));
                 }
             }
         } else {
             None
         };
 
-    let mut tx = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(e) => {
-            error!(target: "db", admin_id, error = ?e, "begin organization transaction failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let mut tx = pool.begin().await?;
 
     // The slug is derived from the name at insert time (same expression as the
     // init.sql backfill) so runtime-created orgs are never left slug-less.
@@ -449,12 +430,11 @@ pub async fn admin_create_organization(
         Ok(row) => row,
         Err(e) => {
             if e.to_string().contains("duplicate key") {
-                return HttpResponse::Conflict().json(serde_json::json!({
+                return Ok(HttpResponse::Conflict().json(serde_json::json!({
                     "message": "Another organization already uses that URL slug"
-                }));
+                })));
             }
-            error!(target: "db", admin_id, error = ?e, "create organization failed");
-            return HttpResponse::InternalServerError().finish();
+            return Err(AppError::Db(e));
         }
     };
 
@@ -465,13 +445,9 @@ pub async fn admin_create_organization(
     let mut admin_json = serde_json::Value::Null;
 
     if let Some((username, email, password)) = organization_admin {
-        let hashed = match hash(&password, DEFAULT_COST) {
-            Ok(value) => value,
-            Err(e) => {
-                error!(target: "auth", error = %e, "organization admin bcrypt hash failed");
-                return HttpResponse::InternalServerError().finish();
-            }
-        };
+        let hashed = hash(&password, DEFAULT_COST).map_err(|e| {
+            AppError::Internal(format!("organization admin bcrypt hash failed: {e}"))
+        })?;
 
         match sqlx::query(
             r#"
@@ -502,7 +478,7 @@ pub async fn admin_create_organization(
                     "organization_id": org_id
                 });
 
-                if let Err(e) = sqlx::query(
+                sqlx::query(
                     r#"
                     INSERT INTO organization_members (organization_id, user_id, role)
                     VALUES ($1, $2, 'owner')
@@ -513,39 +489,30 @@ pub async fn admin_create_organization(
                 .bind(organization_id)
                 .bind(id)
                 .execute(&mut *tx)
-                .await
-                {
-                    error!(target: "db", admin_id, organization_id, user_id = id, error = ?e, "create organization admin membership failed");
-                    let _ = tx.rollback().await;
-                    return HttpResponse::InternalServerError().finish();
-                }
+                .await?;
             }
             Err(e) => {
                 if e.to_string().contains("duplicate key") {
-                    return HttpResponse::Conflict().json(serde_json::json!({
+                    return Ok(HttpResponse::Conflict().json(serde_json::json!({
                         "message": "A user with that username or email already exists"
-                    }));
+                    })));
                 }
-                error!(target: "db", admin_id, error = ?e, "create organization admin failed");
-                return HttpResponse::InternalServerError().finish();
+                return Err(AppError::Db(e));
             }
         }
     }
 
-    if let Err(e) = tx.commit().await {
-        error!(target: "db", admin_id, error = ?e, "commit organization transaction failed");
-        return HttpResponse::InternalServerError().finish();
-    }
+    tx.commit().await?;
 
     let user_count = if admin_json.is_null() { 0 } else { 1 };
     info!(target: "auth", admin_id, organization_id, "platform admin created organization");
-    HttpResponse::Created().json(serde_json::json!({
+    Ok(HttpResponse::Created().json(serde_json::json!({
         "id": organization_id,
         "name": organization_name,
         "slug": organization_slug,
         "user_count": user_count,
         "admin": admin_json
-    }))
+    })))
 }
 
 #[post("/admin/organizations/{id}/keys")]
@@ -555,7 +522,7 @@ pub async fn admin_generate_api_key(
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
     data: web::Json<GenerateApiKeyInput>,
-) -> impl Responder {
+) -> AppResult {
     let organization_id = path.into_inner();
     let admin_id = match rbac::require_org_access(
         &req,
@@ -566,30 +533,23 @@ pub async fn admin_generate_api_key(
     .await
     {
         Ok(ctx) => ctx.user_id,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
 
     let key_name = data.name.trim();
     if key_name.is_empty() {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Key name is required" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Key name is required" })));
     }
 
     // Clean 404 instead of a foreign-key 500 when the org id is wrong.
-    match sqlx::query_scalar::<_, i32>("SELECT id FROM organizations WHERE id = $1")
+    let org_exists = sqlx::query_scalar::<_, i32>("SELECT id FROM organizations WHERE id = $1")
         .bind(organization_id)
         .fetch_optional(pool.get_ref())
-        .await
-    {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return HttpResponse::NotFound()
-                .json(serde_json::json!({ "message": "Unknown organization" }));
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "api key org lookup failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+        .await?;
+    if org_exists.is_none() {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Unknown organization" })));
     }
 
     // The raw key is returned to the caller exactly once; only its SHA-256
@@ -598,7 +558,7 @@ pub async fn admin_generate_api_key(
     let key_hash = hash_api_key(&raw_key);
     let key_preview = format!("{}...{}", &raw_key[..10], &raw_key[raw_key.len() - 4..]);
 
-    match sqlx::query(
+    let row = sqlx::query(
         r#"
         INSERT INTO api_keys (organization_id, name, key_hash, key_preview, created_by)
         VALUES ($1, $2, $3, $4, $5)
@@ -611,23 +571,16 @@ pub async fn admin_generate_api_key(
     .bind(&key_preview)
     .bind(admin_id)
     .fetch_one(pool.get_ref())
-    .await
-    {
-        Ok(row) => {
-            info!(target: "auth", admin_id, organization_id, "api key generated");
-            HttpResponse::Created().json(serde_json::json!({
-                "id": row.get::<i32, _>("id"),
-                "name": row.get::<String, _>("name"),
-                "key_preview": row.get::<String, _>("key_preview"),
-                "created_at": row.get::<DateTime<Utc>, _>("created_at"),
-                "api_key": raw_key,
-            }))
-        }
-        Err(e) => {
-            error!(target: "db", admin_id, error = ?e, "failed to generate api key");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    .await?;
+
+    info!(target: "auth", admin_id, organization_id, "api key generated");
+    Ok(HttpResponse::Created().json(serde_json::json!({
+        "id": row.get::<i32, _>("id"),
+        "name": row.get::<String, _>("name"),
+        "key_preview": row.get::<String, _>("key_preview"),
+        "created_at": row.get::<DateTime<Utc>, _>("created_at"),
+        "api_key": raw_key,
+    })))
 }
 
 #[get("/admin/organizations/{id}/keys")]
@@ -636,7 +589,7 @@ pub async fn admin_list_api_keys(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
-) -> impl Responder {
+) -> AppResult {
     let organization_id = path.into_inner();
     if let Err(response) = rbac::require_org_access(
         &req,
@@ -646,10 +599,10 @@ pub async fn admin_list_api_keys(
     )
     .await
     {
-        return response;
+        return Ok(response);
     }
 
-    match sqlx::query_as::<_, ApiKeyRow>(
+    let rows = sqlx::query_as::<_, ApiKeyRow>(
         r#"
         SELECT id, name, key_preview, created_at, last_used_at, revoked_at
           FROM api_keys
@@ -659,14 +612,9 @@ pub async fn admin_list_api_keys(
     )
     .bind(organization_id)
     .fetch_all(pool.get_ref())
-    .await
-    {
-        Ok(rows) => HttpResponse::Ok().json(rows),
-        Err(e) => {
-            error!(target: "db", error = ?e, "api key list failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    .await?;
+
+    Ok(HttpResponse::Ok().json(rows))
 }
 
 #[delete("/admin/organizations/{id}/keys/{key_id}")]
@@ -675,7 +623,7 @@ pub async fn admin_revoke_api_key(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<(i32, i32)>,
-) -> impl Responder {
+) -> AppResult {
     let (organization_id, key_id) = path.into_inner();
     let admin_id = match rbac::require_org_access(
         &req,
@@ -686,10 +634,10 @@ pub async fn admin_revoke_api_key(
     .await
     {
         Ok(ctx) => ctx.user_id,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
 
-    match sqlx::query(
+    let result = sqlx::query(
         r#"
         UPDATE api_keys SET revoked_at = NOW()
          WHERE id = $1 AND organization_id = $2 AND revoked_at IS NULL
@@ -698,19 +646,14 @@ pub async fn admin_revoke_api_key(
     .bind(key_id)
     .bind(organization_id)
     .execute(pool.get_ref())
-    .await
-    {
-        Ok(result) if result.rows_affected() == 0 => HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Key not found or already revoked" })),
-        Ok(_) => {
-            info!(target: "auth", admin_id, organization_id, key_id, "api key revoked");
-            HttpResponse::Ok().json(serde_json::json!({ "revoked": true }))
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "api key revoke failed");
-            HttpResponse::InternalServerError().finish()
-        }
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Key not found or already revoked" })));
     }
+    info!(target: "auth", admin_id, organization_id, key_id, "api key revoked");
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "revoked": true })))
 }
 
 /// Resolve an `X-API-KEY` request header to the owning organization id.
@@ -764,14 +707,14 @@ pub async fn admin_create_user(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     data: web::Json<AdminCreateUserInput>,
-) -> impl Responder {
+) -> AppResult {
     // Creating accounts requires `members:manage` — held by org and platform
     // owner / super_admin / admin. This replaces the old account_type check, so
     // an organization `admin` (not just `organization_admin`) can add members.
     let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersManage).await
     {
         Ok(ctx) => ctx,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
     let admin_id = ctx.user_id;
 
@@ -797,13 +740,14 @@ pub async fn admin_create_user(
     };
 
     if username.is_empty() || email.is_empty() || data.password.is_empty() {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Username, email, and password are required" }));
+        return Ok(HttpResponse::BadRequest().json(
+            serde_json::json!({ "message": "Username, email, and password are required" }),
+        ));
     }
 
     if data.password.len() < 6 {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Password must be at least 6 characters" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Password must be at least 6 characters" })));
     }
 
     let organization_id: Option<i32> = if account_type == "organization_admin" {
@@ -814,8 +758,8 @@ pub async fn admin_create_user(
             .filter(|value| !value.is_empty());
 
         let Some(organization_name) = organization_name else {
-            return HttpResponse::BadRequest()
-                .json(serde_json::json!({ "message": "Organization name is required for organization admin accounts" }));
+            return Ok(HttpResponse::BadRequest()
+                .json(serde_json::json!({ "message": "Organization name is required for organization admin accounts" })));
         };
 
         match sqlx::query(
@@ -834,34 +778,28 @@ pub async fn admin_create_user(
             Ok(row) => Some(row.get("id")),
             Err(e) => {
                 if e.to_string().contains("duplicate key") {
-                    return HttpResponse::Conflict().json(serde_json::json!({
+                    return Ok(HttpResponse::Conflict().json(serde_json::json!({
                         "message": "Another organization already uses that URL slug"
-                    }));
+                    })));
                 }
-                error!(target: "db", admin_id, error = ?e, "organization upsert failed");
-                return HttpResponse::InternalServerError().finish();
+                return Err(AppError::Db(e));
             }
         }
     } else if ctx.scope == Scope::Organization {
         match ctx.organization_id {
             Some(id) => Some(id),
             None => {
-                return HttpResponse::BadRequest().json(serde_json::json!({
+                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                     "message": "Organization manager is not assigned to an organization"
-                }));
+                })));
             }
         }
     } else {
         None
     };
 
-    let hashed = match hash(&data.password, DEFAULT_COST) {
-        Ok(value) => value,
-        Err(e) => {
-            error!(target: "auth", error = %e, "admin create user bcrypt hash failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let hashed = hash(&data.password, DEFAULT_COST)
+        .map_err(|e| AppError::Internal(format!("admin create user bcrypt hash failed: {e}")))?;
 
     let result = sqlx::query(
         r#"
@@ -898,8 +836,8 @@ pub async fn admin_create_user(
             let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
             let role = default_role_for_account_type(&account_type);
 
-            if normalized_account_type(&account_type) == "platform_admin"
-                && let Err(e) = sqlx::query(
+            if normalized_account_type(&account_type) == "platform_admin" {
+                sqlx::query(
                     r#"
                     INSERT INTO platform_members (user_id, role)
                     VALUES ($1, $2)
@@ -910,14 +848,11 @@ pub async fn admin_create_user(
                 .bind(id)
                 .bind(role)
                 .execute(pool.get_ref())
-                .await
-            {
-                error!(target: "db", admin_id, user_id = id, error = ?e, "admin create platform membership failed");
-                return HttpResponse::InternalServerError().finish();
+                .await?;
             }
 
-            if let Some(org_id) = organization_id
-                && let Err(e) = sqlx::query(
+            if let Some(org_id) = organization_id {
+                sqlx::query(
                     r#"
                     INSERT INTO organization_members (organization_id, user_id, role)
                     VALUES ($1, $2, $3)
@@ -929,44 +864,39 @@ pub async fn admin_create_user(
                 .bind(id)
                 .bind(role)
                 .execute(pool.get_ref())
-                .await
-            {
-                error!(target: "db", admin_id, organization_id = org_id, user_id = id, error = ?e, "admin create user membership failed");
-                return HttpResponse::InternalServerError().finish();
+                .await?;
             }
 
             info!(target: "auth", admin_id, user_id = id, "admin created user");
-            HttpResponse::Created().json(serde_json::json!({
+            Ok(HttpResponse::Created().json(serde_json::json!({
                 "id": id,
                 "username": username,
                 "email": email,
                 "account_type": account_type,
                 "organization_id": organization_id,
                 "role": role
-            }))
+            })))
         }
         Err(e) => {
             if e.to_string().contains("duplicate key") {
-                return HttpResponse::Conflict()
-                    .json(serde_json::json!({ "message": "Username or email already exists" }));
+                return Ok(HttpResponse::Conflict()
+                    .json(serde_json::json!({ "message": "Username or email already exists" })));
             }
-
-            error!(target: "db", admin_id, error = ?e, "admin create user failed");
-            HttpResponse::InternalServerError().finish()
+            Err(AppError::Db(e))
         }
     }
 }
 
 #[get("/profile")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
+        None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
     if let Some(cached) = PROFILE_CACHE.get(&user_id).await {
-        return HttpResponse::Ok().json(cached);
+        return Ok(HttpResponse::Ok().json(cached));
     }
 
     let result = sqlx::query(
@@ -1046,13 +976,10 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> impl Resp
             });
 
             PROFILE_CACHE.insert(user_id, response.clone()).await;
-            HttpResponse::Ok().json(response)
+            Ok(HttpResponse::Ok().json(response))
         }
-        Ok(None) => HttpResponse::NotFound().finish(),
-        Err(e) => {
-            error!(target: "db", user_id, error = ?e, "get_profile lookup failed");
-            HttpResponse::InternalServerError().finish()
-        }
+        Ok(None) => Ok(HttpResponse::NotFound().finish()),
+        Err(e) => Err(AppError::Db(e)),
     }
 }
 
@@ -1062,15 +989,16 @@ pub async fn change_password(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     data: web::Json<ChangePasswordInput>,
-) -> impl Responder {
+) -> AppResult {
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
+        None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
     if data.new_password.len() < 6 {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "New password must be at least 6 characters" }));
+        return Ok(HttpResponse::BadRequest().json(
+            serde_json::json!({ "message": "New password must be at least 6 characters" }),
+        ));
     }
 
     let row = sqlx::query("SELECT password, auth_provider FROM users WHERE id = $1")
@@ -1084,7 +1012,7 @@ pub async fn change_password(
             r.try_get("auth_provider")
                 .unwrap_or_else(|_| "local".to_string()),
         ),
-        _ => return HttpResponse::Unauthorized().finish(),
+        _ => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
     if let Some(stored) = stored {
@@ -1092,35 +1020,26 @@ pub async fn change_password(
         let valid = verify(current_password, &stored).unwrap_or(false);
         if !valid {
             warn!(target: "auth", user_id, "change-password: wrong current password");
-            return HttpResponse::Unauthorized()
-                .json(serde_json::json!({ "message": "Current password is incorrect" }));
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Current password is incorrect" })));
         }
     } else if auth_provider != "google" {
         warn!(target: "auth", user_id, "change-password rejected: missing password");
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "This account has no password to change" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "This account has no password to change" })));
     }
 
-    let hashed = match hash(&data.new_password, DEFAULT_COST) {
-        Ok(h) => h,
-        Err(e) => {
-            error!(target: "auth", error = %e, "bcrypt hash failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let hashed = hash(&data.new_password, DEFAULT_COST)
+        .map_err(|e| AppError::Internal(format!("change-password bcrypt hash failed: {e}")))?;
 
-    if let Err(e) = sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
+    sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
         .bind(&hashed)
         .bind(user_id)
         .execute(pool.get_ref())
-        .await
-    {
-        error!(target: "auth", user_id, error = %e, "password update failed");
-        return HttpResponse::InternalServerError().finish();
-    }
+        .await?;
 
     info!(target: "auth", user_id, had_password = data.current_password.is_some(), "password updated");
-    HttpResponse::Ok().json(serde_json::json!({ "message": "Password updated" }))
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "Password updated" })))
 }
 
 #[put("/profile")]
@@ -1129,10 +1048,10 @@ pub async fn update_profile(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     data: web::Json<ProfileUpdate>,
-) -> impl Responder {
+) -> AppResult {
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
+        None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
     let result = sqlx::query(
@@ -1158,43 +1077,34 @@ pub async fn update_profile(
             let last_name: Option<String> = row.try_get("last_name").ok();
 
             info!(target: "http", user_id, "profile updated");
-            HttpResponse::Ok().json(serde_json::json!({
+            Ok(HttpResponse::Ok().json(serde_json::json!({
                 "id": id,
                 "email": email,
                 "first_name": first_name,
                 "last_name": last_name,
-            }))
+            })))
         }
-        Ok(None) => HttpResponse::NotFound().finish(),
-        Err(e) => {
-            error!(target: "db", user_id, error = ?e, "update_profile failed");
-            HttpResponse::InternalServerError().finish()
-        }
+        Ok(None) => Ok(HttpResponse::NotFound().finish()),
+        Err(e) => Err(AppError::Db(e)),
     }
 }
 
 #[get("/users/all")]
 #[instrument(target = "http", skip(req, pool))]
-async fn get_all_users(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+async fn get_all_users(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     // Require a valid JWT — this endpoint enumerates accounts.
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
+        None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
     // Scope the directory to the caller's own world so the chat people-picker
     // never leaks accounts across tenants: a platform account sees only
     // platform accounts, an organization account sees only same-org accounts,
     // and a personal account sees only other personal accounts.
-    let ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
-        Ok(ctx) => ctx,
-        Err(e) => {
-            error!(target: "db", user_id, error = ?e, "get_all_users scope resolution failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let ctx = rbac::resolve_role_context(pool.get_ref(), user_id).await?;
 
-    let result = sqlx::query(
+    let rows = sqlx::query(
         r#"
         SELECT id, email, public_key
         FROM users u
@@ -1209,34 +1119,25 @@ async fn get_all_users(req: HttpRequest, pool: web::Data<PgPool>) -> impl Respon
     .bind(ctx.scope.as_str())
     .bind(ctx.organization_id)
     .fetch_all(pool.get_ref())
-    .await;
+    .await?;
 
-    match result {
-        Ok(rows) => {
-            let users: Vec<_> = rows
-                .into_iter()
-                .map(|r| {
-                    let id: i32 = r.get("id");
-                    let email: String = r.get("email");
-                    let public_key: Option<String> = r.get("public_key");
-                    let public_key =
-                        public_key.and_then(|k| serde_json::from_str::<Vec<u8>>(&k).ok());
+    let users: Vec<_> = rows
+        .into_iter()
+        .map(|r| {
+            let id: i32 = r.get("id");
+            let email: String = r.get("email");
+            let public_key: Option<String> = r.get("public_key");
+            let public_key = public_key.and_then(|k| serde_json::from_str::<Vec<u8>>(&k).ok());
 
-                    serde_json::json!({
-                        "id": id,
-                        "email": email,
-                        "public_key": public_key
-                    })
-                })
-                .collect();
+            serde_json::json!({
+                "id": id,
+                "email": email,
+                "public_key": public_key
+            })
+        })
+        .collect();
 
-            HttpResponse::Ok().json(users)
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "get_all_users failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    Ok(HttpResponse::Ok().json(users))
 }
 
 // ============================================================
@@ -1289,7 +1190,7 @@ pub async fn list_organization_members(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
-) -> impl Responder {
+) -> AppResult {
     let organization_id = path.into_inner();
     if let Err(response) = rbac::require_org_access(
         &req,
@@ -1299,10 +1200,10 @@ pub async fn list_organization_members(
     )
     .await
     {
-        return response;
+        return Ok(response);
     }
 
-    match sqlx::query(
+    let rows = sqlx::query(
         r#"
         SELECT u.id AS user_id, u.email, u.username,
                COALESCE(om.role, 'member') AS role
@@ -1315,18 +1216,13 @@ pub async fn list_organization_members(
     )
     .bind(organization_id)
     .fetch_all(pool.get_ref())
-    .await
-    {
-        Ok(rows) => HttpResponse::Ok().json(
-            rows.iter()
-                .map(|row| member_row_json(row, false))
-                .collect::<Vec<_>>(),
-        ),
-        Err(e) => {
-            error!(target: "db", organization_id, error = ?e, "list organization members failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    .await?;
+
+    Ok(HttpResponse::Ok().json(
+        rows.iter()
+            .map(|row| member_row_json(row, false))
+            .collect::<Vec<_>>(),
+    ))
 }
 
 #[put("/organizations/{id}/members/{user_id}/role")]
@@ -1336,7 +1232,7 @@ pub async fn update_organization_member_role(
     pool: web::Data<PgPool>,
     path: web::Path<(i32, i32)>,
     data: web::Json<UpdateRoleInput>,
-) -> impl Responder {
+) -> AppResult {
     let (organization_id, target_user_id) = path.into_inner();
 
     let ctx = match rbac::require_org_access(
@@ -1348,20 +1244,16 @@ pub async fn update_organization_member_role(
     .await
     {
         Ok(ctx) => ctx,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
 
     let Some(new_role) = parse_assignable_role(&data.role) else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "message": "Unknown role" }));
+        return Ok(
+            HttpResponse::BadRequest().json(serde_json::json!({ "message": "Unknown role" }))
+        );
     };
 
-    let mut tx = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(e) => {
-            error!(target: "db", error = ?e, "begin role-update transaction failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let mut tx = pool.begin().await?;
 
     // Confirm the target belongs to this organization and read their role.
     let current = match sqlx::query(
@@ -1376,57 +1268,46 @@ pub async fn update_organization_member_role(
     .bind(organization_id)
     .bind(target_user_id)
     .fetch_optional(&mut *tx)
-    .await
+    .await?
     {
-        Ok(Some(row)) => row,
-        Ok(None) => {
-            return HttpResponse::NotFound()
-                .json(serde_json::json!({ "message": "User not found" }));
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "role-update target lookup failed");
-            return HttpResponse::InternalServerError().finish();
+        Some(row) => row,
+        None => {
+            return Ok(HttpResponse::NotFound()
+                .json(serde_json::json!({ "message": "User not found" })));
         }
     };
 
     let target_org: Option<i32> = current.try_get("organization_id").ok().flatten();
     if target_org != Some(organization_id) {
-        return HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "User is not a member of this organization" }));
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "User is not a member of this organization" })));
     }
     let current_role = Role::from_str(&current.get::<String, _>("role"));
 
     if !rbac::can_assign_role(&ctx, current_role, new_role) {
-        return HttpResponse::Forbidden().json(serde_json::json!({
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "message": "Your role cannot assign or modify that role"
-        }));
+        })));
     }
 
     // Never strand an organization with zero owners. `FOR UPDATE` locks the
     // owner rows so two concurrent demotions can't both pass this check.
     if current_role == Role::Owner && new_role != Role::Owner {
-        let owners = match sqlx::query_scalar::<_, i32>(
+        let owners = sqlx::query_scalar::<_, i32>(
             "SELECT user_id FROM organization_members \
              WHERE organization_id = $1 AND role = 'owner' FOR UPDATE",
         )
         .bind(organization_id)
         .fetch_all(&mut *tx)
-        .await
-        {
-            Ok(ids) => ids,
-            Err(e) => {
-                error!(target: "db", error = ?e, "owner lock query failed");
-                return HttpResponse::InternalServerError().finish();
-            }
-        };
+        .await?;
         if owners.len() <= 1 {
-            return HttpResponse::Conflict().json(serde_json::json!({
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
                 "message": "Cannot demote the last owner of the organization"
-            }));
+            })));
         }
     }
 
-    if let Err(e) = sqlx::query(
+    sqlx::query(
         r#"
         INSERT INTO organization_members (organization_id, user_id, role)
         VALUES ($1, $2, $3)
@@ -1438,16 +1319,9 @@ pub async fn update_organization_member_role(
     .bind(target_user_id)
     .bind(new_role.as_str())
     .execute(&mut *tx)
-    .await
-    {
-        error!(target: "db", error = ?e, "organization role update failed");
-        return HttpResponse::InternalServerError().finish();
-    }
+    .await?;
 
-    if let Err(e) = tx.commit().await {
-        error!(target: "db", error = ?e, "commit role-update transaction failed");
-        return HttpResponse::InternalServerError().finish();
-    }
+    tx.commit().await?;
 
     // Refresh the target's cached identity so the new permissions take effect
     // on their next request rather than after the 60s cache TTL.
@@ -1460,26 +1334,26 @@ pub async fn update_organization_member_role(
         "organization member role updated"
     );
 
-    HttpResponse::Ok().json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "user_id": target_user_id,
         "role": new_role.as_str(),
         "role_label": role_label(new_role.as_str(), "organization"),
-    }))
+    })))
 }
 
 #[get("/platform/members")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn list_platform_members(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn list_platform_members(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersRead).await {
         Ok(ctx) => ctx,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
     if ctx.scope != Scope::Platform {
-        return HttpResponse::Forbidden()
-            .json(serde_json::json!({ "message": "Platform staff access required" }));
+        return Ok(HttpResponse::Forbidden()
+            .json(serde_json::json!({ "message": "Platform staff access required" })));
     }
 
-    match sqlx::query(
+    let rows = sqlx::query(
         r#"
         SELECT u.id AS user_id, u.email, u.username, pm.role AS role
         FROM platform_members pm
@@ -1488,18 +1362,13 @@ pub async fn list_platform_members(req: HttpRequest, pool: web::Data<PgPool>) ->
         "#,
     )
     .fetch_all(pool.get_ref())
-    .await
-    {
-        Ok(rows) => HttpResponse::Ok().json(
-            rows.iter()
-                .map(|row| member_row_json(row, true))
-                .collect::<Vec<_>>(),
-        ),
-        Err(e) => {
-            error!(target: "db", error = ?e, "list platform members failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    .await?;
+
+    Ok(HttpResponse::Ok().json(
+        rows.iter()
+            .map(|row| member_row_json(row, true))
+            .collect::<Vec<_>>(),
+    ))
 }
 
 #[put("/platform/members/{user_id}/role")]
@@ -1509,91 +1378,68 @@ pub async fn update_platform_member_role(
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
     data: web::Json<UpdateRoleInput>,
-) -> impl Responder {
+) -> AppResult {
     let target_user_id = path.into_inner();
 
     let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::RolesAssignLimited)
         .await
     {
         Ok(ctx) => ctx,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
     if ctx.scope != Scope::Platform {
-        return HttpResponse::Forbidden()
-            .json(serde_json::json!({ "message": "Platform staff access required" }));
+        return Ok(HttpResponse::Forbidden()
+            .json(serde_json::json!({ "message": "Platform staff access required" })));
     }
 
     let Some(new_role) = parse_assignable_role(&data.role) else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "message": "Unknown role" }));
+        return Ok(
+            HttpResponse::BadRequest().json(serde_json::json!({ "message": "Unknown role" }))
+        );
     };
 
-    let mut tx = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(e) => {
-            error!(target: "db", error = ?e, "begin platform role-update transaction failed");
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let mut tx = pool.begin().await?;
 
     let current_role = match sqlx::query_scalar::<_, String>(
         "SELECT role FROM platform_members WHERE user_id = $1",
     )
     .bind(target_user_id)
     .fetch_optional(&mut *tx)
-    .await
+    .await?
     {
-        Ok(Some(role)) => Role::from_str(&role),
-        Ok(None) => {
-            return HttpResponse::NotFound()
-                .json(serde_json::json!({ "message": "User is not a platform member" }));
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "platform role-update lookup failed");
-            return HttpResponse::InternalServerError().finish();
+        Some(role) => Role::from_str(&role),
+        None => {
+            return Ok(HttpResponse::NotFound()
+                .json(serde_json::json!({ "message": "User is not a platform member" })));
         }
     };
 
     if !rbac::can_assign_role(&ctx, current_role, new_role) {
-        return HttpResponse::Forbidden().json(serde_json::json!({
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "message": "Your role cannot assign or modify that role"
-        }));
+        })));
     }
 
     if current_role == Role::Owner && new_role != Role::Owner {
-        let owners = match sqlx::query_scalar::<_, i32>(
+        let owners = sqlx::query_scalar::<_, i32>(
             "SELECT user_id FROM platform_members WHERE role = 'owner' FOR UPDATE",
         )
         .fetch_all(&mut *tx)
-        .await
-        {
-            Ok(ids) => ids,
-            Err(e) => {
-                error!(target: "db", error = ?e, "platform owner lock query failed");
-                return HttpResponse::InternalServerError().finish();
-            }
-        };
+        .await?;
         if owners.len() <= 1 {
-            return HttpResponse::Conflict().json(serde_json::json!({
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
                 "message": "Cannot demote the last platform owner"
-            }));
+            })));
         }
     }
 
-    if let Err(e) =
-        sqlx::query("UPDATE platform_members SET role = $1, updated_at = NOW() WHERE user_id = $2")
-            .bind(new_role.as_str())
-            .bind(target_user_id)
-            .execute(&mut *tx)
-            .await
-    {
-        error!(target: "db", error = ?e, "platform role update failed");
-        return HttpResponse::InternalServerError().finish();
-    }
+    sqlx::query("UPDATE platform_members SET role = $1, updated_at = NOW() WHERE user_id = $2")
+        .bind(new_role.as_str())
+        .bind(target_user_id)
+        .execute(&mut *tx)
+        .await?;
 
-    if let Err(e) = tx.commit().await {
-        error!(target: "db", error = ?e, "commit platform role-update transaction failed");
-        return HttpResponse::InternalServerError().finish();
-    }
+    tx.commit().await?;
 
     invalidate_me_cache(target_user_id).await;
     invalidate_profile_cache(target_user_id).await;
@@ -1604,11 +1450,11 @@ pub async fn update_platform_member_role(
         "platform member role updated"
     );
 
-    HttpResponse::Ok().json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "user_id": target_user_id,
         "role": new_role.as_str(),
         "role_label": role_label(new_role.as_str(), "platform_admin"),
-    }))
+    })))
 }
 
 #[cfg(test)]

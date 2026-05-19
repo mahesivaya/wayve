@@ -1,17 +1,13 @@
 use crate::prelude::*;
-use actix::Addr;
+use crate::ws_registry::SessionRegistry;
 use actix::*;
 use actix_web_actors::ws;
-use lazy_static::lazy_static;
 use std::collections::HashMap;
-use std::sync::Mutex;
 use tracing::{debug, info, instrument, warn};
 
 use crate::models::callmodel::SignalMessage;
 
-lazy_static! {
-    static ref SESSIONS: Mutex<HashMap<i32, Addr<CallSession>>> = Mutex::new(HashMap::new());
-}
+static SESSIONS: Lazy<SessionRegistry<CallSession>> = Lazy::new(SessionRegistry::new);
 
 pub struct CallSession {
     pub user_id: i32,
@@ -22,20 +18,12 @@ impl Actor for CallSession {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("Call WS connected: user_id={}", self.user_id);
-
-        SESSIONS
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(self.user_id, ctx.address());
+        SESSIONS.register(self.user_id, ctx.address());
     }
 
     fn stopped(&mut self, _: &mut Self::Context) {
         info!("Call WS disconnected: user_id={}", self.user_id);
-
-        SESSIONS
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&self.user_id);
+        SESSIONS.unregister(self.user_id);
     }
 }
 
@@ -59,9 +47,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for CallSession {
                 if let Ok(signal) = serde_json::from_str::<SignalMessage>(&text) {
                     let target = signal.to;
 
-                    let sessions = SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
-
-                    if let Some(addr) = sessions.get(&target).cloned() {
+                    if let Some(addr) = SESSIONS.addr(target) {
                         debug!(target: "ws", from = self.user_id, to = target, kind = %signal.r#type, "forwarding signal");
 
                         addr.do_send(SignalMessage {

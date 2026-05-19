@@ -6,25 +6,16 @@ use crate::prelude::*;
 use crate::security::jwt::get_user_id_from_request;
 use actix_web::{delete, put};
 use serde::Deserialize;
-use tracing::{error, info, instrument};
+use tracing::{info, instrument};
 
 #[get("/accounts")]
 #[instrument(target = "http", skip(req, pool))]
-pub(crate) async fn get_accounts(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().body("Missing or invalid token"),
-    };
+pub(crate) async fn get_accounts(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let result = load_account_summaries_for_user(pool.get_ref(), user_id).await;
+    let rows = load_account_summaries_for_user(pool.get_ref(), user_id).await?;
 
-    match result {
-        Ok(rows) => HttpResponse::Ok().json(rows),
-        Err(e) => {
-            error!(target: "db", user_id, error = ?e, "get_accounts failed");
-            HttpResponse::InternalServerError().body("error")
-        }
-    }
+    Ok(HttpResponse::Ok().json(rows))
 }
 
 #[derive(Deserialize)]
@@ -39,11 +30,8 @@ pub async fn update_account_display_name(
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
     body: web::Json<UpdateAccountNameBody>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let id = path.into_inner();
     let display_name = body
@@ -63,23 +51,16 @@ pub async fn update_account_display_name(
     .bind(id)
     .bind(user_id)
     .execute(pool.get_ref())
-    .await;
+    .await?;
 
-    match result {
-        Ok(r) if r.rows_affected() == 0 => HttpResponse::NotFound().json(serde_json::json!({
+    if result.rows_affected() == 0 {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "error": "Email account not found"
-        })),
-        Ok(_) => {
-            invalidate_user_account_list_cache(user_id).await;
-            HttpResponse::Ok().json(serde_json::json!({ "updated": true }))
-        }
-        Err(e) => {
-            error!(target: "db", user_id, account_id = id, error = ?e, "update_account_display_name failed");
-            HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to update email account name"
-            }))
-        }
+        })));
     }
+
+    invalidate_user_account_list_cache(user_id).await;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "updated": true })))
 }
 
 #[delete("/accounts/{id}")]
@@ -88,11 +69,8 @@ pub async fn delete_account(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let id = path.into_inner();
 
@@ -100,19 +78,14 @@ pub async fn delete_account(
         .bind(id)
         .bind(user_id)
         .execute(pool.get_ref())
-        .await;
+        .await?;
 
-    match result {
-        Ok(r) if r.rows_affected() == 0 => HttpResponse::NotFound().finish(),
-        Ok(_) => {
-            invalidate_email_account_cache(id).await;
-            invalidate_user_account_list_cache(user_id).await;
-            info!("Email account deleted: id={} user_id={}", id, user_id);
-            HttpResponse::Ok().json(serde_json::json!({ "deleted": true }))
-        }
-        Err(e) => {
-            error!(target: "db", user_id, account_id = id, error = ?e, "delete_account failed");
-            HttpResponse::InternalServerError().finish()
-        }
+    if result.rows_affected() == 0 {
+        return Ok(HttpResponse::NotFound().finish());
     }
+
+    invalidate_email_account_cache(id).await;
+    invalidate_user_account_list_cache(user_id).await;
+    info!("Email account deleted: id={} user_id={}", id, user_id);
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }

@@ -5,7 +5,7 @@ use crate::email::oauth::{HTTP_CLIENT, refresh_access_token, try_load_google_sec
 use crate::email::utils::{extract_attachments, extract_body};
 use crate::security::encryption::{decrypt, encrypt};
 use crate::security::jwt::get_user_id_from_request;
-use actix_web::{HttpResponse, Responder, get};
+use actix_web::{HttpResponse, get};
 use moka::future::Cache as MokaCache;
 use sqlx::PgPool;
 use std::time::Duration;
@@ -27,15 +27,15 @@ pub async fn get_email_by_id(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
-) -> impl Responder {
+) -> AppResult {
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
+        None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
     let email_id = path.into_inner();
 
-    let result = sqlx::query(
+    let row = sqlx::query(
         r#"
         SELECT e.id, e.account_id, e.subject, e.sender, e.receiver, e.body_encrypted, e.body_iv,
                e.attachments_checked
@@ -47,54 +47,50 @@ pub async fn get_email_by_id(
     .bind(email_id)
     .bind(user_id)
     .fetch_optional(pool.get_ref())
-    .await;
+    .await?;
 
-    match result {
-        Ok(Some(row)) => {
-            let body_iv: String = row.get("body_iv");
-            let body_encrypted: String = row.get("body_encrypted");
-            let attachments_checked = row
-                .get::<Option<bool>, _>("attachments_checked")
-                .unwrap_or(false);
+    let row = match row {
+        Some(row) => row,
+        None => return Ok(HttpResponse::NotFound().body("Email not found")),
+    };
 
-            let body = if body_encrypted.is_empty() || body_iv.is_empty() {
+    let body_iv: String = row.get("body_iv");
+    let body_encrypted: String = row.get("body_encrypted");
+    let attachments_checked = row
+        .get::<Option<bool>, _>("attachments_checked")
+        .unwrap_or(false);
+
+    let body = if body_encrypted.is_empty() || body_iv.is_empty() {
+        String::new()
+    } else {
+        match crate::security::encryption::decrypt(&body_iv, &body_encrypted) {
+            Ok(text) => text,
+            Err(e) => {
+                warn!(
+                    target: "gmail",
+                    email_id,
+                    error = %e,
+                    "email body decrypt failed; returning empty body so client can refetch"
+                );
                 String::new()
-            } else {
-                match crate::security::encryption::decrypt(&body_iv, &body_encrypted) {
-                    Ok(text) => text,
-                    Err(e) => {
-                        warn!(
-                            target: "gmail",
-                            email_id,
-                            error = %e,
-                            "email body decrypt failed; returning empty body so client can refetch"
-                        );
-                        String::new()
-                    }
-                }
-            };
-            if attachments_checked && !body.is_empty() {
-                EMAIL_BODY_CACHE
-                    .insert((user_id, row.get::<i32, _>("id")), body.clone())
-                    .await;
             }
-
-            HttpResponse::Ok().json(serde_json::json!({
-                "id": row.get::<i32, _>("id"),
-                "account_id": row.get::<Option<i32>, _>("account_id"),
-                "subject": row.get::<Option<String>, _>("subject").unwrap_or_default(),
-                "sender": row.get::<Option<String>, _>("sender").unwrap_or_default(),
-                "receiver": row.get::<Option<String>, _>("receiver").unwrap_or_default(),
-                "body": body,
-                "attachments_checked": attachments_checked
-            }))
         }
-        Ok(None) => HttpResponse::NotFound().body("Email not found"),
-        Err(e) => {
-            error!(target: "db", email_id, error = ?e, "get_email_by_id failed");
-            HttpResponse::InternalServerError().finish()
-        }
+    };
+    if attachments_checked && !body.is_empty() {
+        EMAIL_BODY_CACHE
+            .insert((user_id, row.get::<i32, _>("id")), body.clone())
+            .await;
     }
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "id": row.get::<i32, _>("id"),
+        "account_id": row.get::<Option<i32>, _>("account_id"),
+        "subject": row.get::<Option<String>, _>("subject").unwrap_or_default(),
+        "sender": row.get::<Option<String>, _>("sender").unwrap_or_default(),
+        "receiver": row.get::<Option<String>, _>("receiver").unwrap_or_default(),
+        "body": body,
+        "attachments_checked": attachments_checked
+    })))
 }
 
 #[get("/emails/{id}/body")]
@@ -103,17 +99,17 @@ pub async fn get_email_body(
     req: HttpRequest,
     path: web::Path<i32>,
     pool: web::Data<PgPool>,
-) -> impl Responder {
+) -> AppResult {
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
+        None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
     let email_id = path.into_inner();
     let cache_key = (user_id, email_id);
 
     if let Some(body) = EMAIL_BODY_CACHE.get(&cache_key).await {
-        return HttpResponse::Ok().json(serde_json::json!({ "body": body }));
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
     }
 
     let row = sqlx::query(
@@ -128,15 +124,11 @@ pub async fn get_email_body(
     .bind(email_id)
     .bind(user_id)
     .fetch_optional(pool.get_ref())
-    .await;
+    .await?;
 
     let row = match row {
-        Ok(Some(r)) => r,
-        Ok(None) => return HttpResponse::NotFound().finish(),
-        Err(e) => {
-            error!(target: "db", user_id, email_id, error = ?e, "get_email_body lookup failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+        Some(r) => r,
+        None => return Ok(HttpResponse::NotFound().finish()),
     };
 
     let body_encrypted: String = row.get("body_encrypted");
@@ -148,7 +140,7 @@ pub async fn get_email_body(
             Ok(body) => {
                 if attachments_checked.unwrap_or(false) {
                     EMAIL_BODY_CACHE.insert(cache_key, body.clone()).await;
-                    return HttpResponse::Ok().json(serde_json::json!({ "body": body }));
+                    return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
                 }
 
                 info!(
@@ -176,9 +168,9 @@ pub async fn get_email_body(
         Some(value) => value,
         None => {
             error!(target: "gmail", email_id, "email body request missing gmail_id");
-            return HttpResponse::Conflict().json(serde_json::json!({
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
                 "error": "Email is missing its Gmail message id. Re-sync this account."
-            }));
+            })));
         }
     };
 
@@ -186,9 +178,9 @@ pub async fn get_email_body(
         Some(value) => value,
         None => {
             error!(target: "gmail", account_id, "email account missing refresh_token");
-            return HttpResponse::Conflict().json(serde_json::json!({
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
                 "error": "This Gmail account needs to be reconnected before Wayve can load message bodies."
-            }));
+            })));
         }
     };
 
@@ -196,9 +188,9 @@ pub async fn get_email_body(
         Ok(secrets) => secrets,
         Err(e) => {
             error!(target: "gmail", error = %e, "google secrets unavailable for body fetch");
-            return HttpResponse::InternalServerError().json(serde_json::json!({
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Google OAuth client secret is not configured"
-            }));
+            })));
         }
     };
 
@@ -206,9 +198,9 @@ pub async fn get_email_body(
         Some(value) if !value.trim().is_empty() => value.to_string(),
         _ => {
             error!(target: "gmail", "google client_id missing for body fetch");
-            return HttpResponse::InternalServerError().json(serde_json::json!({
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Google OAuth client id is not configured"
-            }));
+            })));
         }
     };
 
@@ -216,9 +208,9 @@ pub async fn get_email_body(
         Some(value) if !value.trim().is_empty() => value.to_string(),
         _ => {
             error!(target: "gmail", "google client_secret missing for body fetch");
-            return HttpResponse::InternalServerError().json(serde_json::json!({
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Google OAuth client secret is not configured"
-            }));
+            })));
         }
     };
 
@@ -226,7 +218,7 @@ pub async fn get_email_body(
         Ok(t) => t,
         Err(e) => {
             error!(target: "gmail", account_id, error = ?e, "refresh_access_token failed");
-            return HttpResponse::BadGateway().finish();
+            return Ok(HttpResponse::BadGateway().finish());
         }
     };
 
@@ -246,12 +238,12 @@ pub async fn get_email_body(
             Ok(v) => v,
             Err(e) => {
                 error!(target: "gmail", email_id, error = %e, "gmail body json parse failed");
-                return HttpResponse::BadGateway().finish();
+                return Ok(HttpResponse::BadGateway().finish());
             }
         },
         Err(e) => {
             error!(target: "gmail", email_id, error = %e, "gmail body request failed");
-            return HttpResponse::BadGateway().finish();
+            return Ok(HttpResponse::BadGateway().finish());
         }
     };
 
@@ -276,9 +268,9 @@ pub async fn get_email_body(
         }
         Err(e) => {
             error!(target: "gmail", email_id, error = %e, "email body encrypt failed");
-            return HttpResponse::InternalServerError().json(serde_json::json!({
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": format!("Failed to secure email body: {}", e)
-            }));
+            })));
         }
     }
 
@@ -293,5 +285,5 @@ pub async fn get_email_body(
 
     EMAIL_BODY_CACHE.insert(cache_key, body.clone()).await;
 
-    HttpResponse::Ok().json(serde_json::json!({ "body": body }))
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })))
 }

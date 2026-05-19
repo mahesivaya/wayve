@@ -16,14 +16,11 @@ pub async fn get_messages(
     pool: web::Data<PgPool>,
     _cache: web::Data<Option<Cache>>,
     query: web::Query<QueryParams>,
-) -> impl Responder {
+) -> AppResult {
     // Auth: require a valid JWT and confirm the caller is one of the two
     // participants. Without this, any caller could read any conversation by
     // supplying arbitrary user1/user2 ids.
-    let caller_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+    let caller_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     if caller_id != query.user1 && caller_id != query.user2 {
         warn!(
@@ -33,13 +30,13 @@ pub async fn get_messages(
             user2 = query.user2,
             "get_messages rejected: caller is not a conversation participant"
         );
-        return HttpResponse::Forbidden().finish();
+        return Ok(HttpResponse::Forbidden().finish());
     }
 
     // Two ordered scans (each index-served by idx_messages_conversation /
     // idx_messages_reverse) merged via UNION ALL, then a final 50-row cap.
     // Faster than a single OR-predicate which forces a bitmap scan + sort.
-    let result = sqlx::query(
+    let rows = sqlx::query(
         r#"
         SELECT id, sender_id, receiver_id, content_encrypted, content_iv, status::TEXT AS status, created_at
         FROM (
@@ -61,69 +58,58 @@ pub async fn get_messages(
         ) AS m
         ORDER BY created_at DESC
         LIMIT 50
-        "#
+        "#,
     )
     .bind(query.user1)
     .bind(query.user2)
     .fetch_all(pool.get_ref())
+    .await?;
+
+    let _ = sqlx::query(
+        r#"
+        UPDATE messages
+        SET status = 'read'
+        WHERE receiver_id = $1 AND sender_id = $2
+          AND status <> 'read'
+        "#,
+    )
+    .bind(query.user1)
+    .bind(query.user2)
+    .execute(pool.get_ref())
     .await;
 
-    match result {
-        Ok(rows) => {
-            let _ = sqlx::query(
-                r#"
-                UPDATE messages
-                SET status = 'read'
-                WHERE receiver_id = $1 AND sender_id = $2
-                  AND status <> 'read'
-                "#,
-            )
-            .bind(query.user1)
-            .bind(query.user2)
-            .execute(pool.get_ref())
-            .await;
+    let mut messages: Vec<Message> = rows
+        .into_iter()
+        .map(|row| {
+            let encrypted: String = row.get("content_encrypted");
+            let iv: String = row.get("content_iv");
 
-            let mut messages: Vec<Message> = rows
-                .into_iter()
-                .map(|row| {
-                    let encrypted: String = row.get("content_encrypted");
-                    let iv: String = row.get("content_iv");
+            let content = match decrypt(&iv, &encrypted) {
+                Ok(text) => text,
+                Err(e) => {
+                    error!(target: "ws", error = %e, "message decrypt failed");
+                    "[decryption failed]".to_string()
+                }
+            };
 
-                    let content = match decrypt(&iv, &encrypted) {
-                        Ok(text) => text,
-                        Err(e) => {
-                            error!(target: "ws", error = %e, "message decrypt failed");
-                            "[decryption failed]".to_string()
-                        }
-                    };
+            let created_naive: chrono::NaiveDateTime = row.get("created_at");
+            let created_at = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+                created_naive,
+                chrono::Utc,
+            );
 
-                    let created_naive: chrono::NaiveDateTime = row.get("created_at");
-                    let created_at = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
-                        created_naive,
-                        chrono::Utc,
-                    );
+            Message {
+                message_id: Some(row.get("id")),
+                sender_id: row.get("sender_id"),
+                receiver_id: row.get("receiver_id"),
+                content,
+                status: Some(row.get::<String, _>("status")),
+                created_at: Some(created_at),
+            }
+        })
+        .collect();
 
-                    Message {
-                        message_id: Some(row.get("id")),
-                        sender_id: row.get("sender_id"),
-                        receiver_id: row.get("receiver_id"),
-                        content,
-                        status: Some(row.get::<String, _>("status")),
-                        created_at: Some(created_at),
-                    }
-                })
-                .collect();
+    messages.reverse();
 
-            messages.reverse();
-
-            HttpResponse::Ok().json(messages)
-        }
-
-        Err(e) => {
-            error!(target: "db", error = ?e, "get_messages query failed");
-
-            HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "error": "Failed to fetch messages" }))
-        }
-    }
+    Ok(HttpResponse::Ok().json(messages))
 }

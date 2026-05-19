@@ -5,9 +5,9 @@
 use crate::prelude::*;
 use crate::security::api_key::{generate_api_key, hash_api_key, is_valid_scope};
 use crate::security::rbac::{self, Permission, RoleContext, Scope};
-use actix_web::{HttpRequest, HttpResponse, Responder, delete, get, post, web};
+use actix_web::{HttpRequest, HttpResponse, delete, get, post, web};
 use chrono::{DateTime, Utc};
-use tracing::{error, info, instrument};
+use tracing::{info, instrument};
 
 const INTERNAL_RATE_DEFAULT: i32 = 6000;
 const EXTERNAL_RATE_DEFAULT: i32 = 120;
@@ -98,59 +98,60 @@ pub async fn create_api_key(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     data: web::Json<CreateKeyInput>,
-) -> impl Responder {
+) -> AppResult {
     let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::ApiKeysManage).await
     {
         Ok(ctx) => ctx,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
 
     let name = data.name.trim();
     if name.is_empty() {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Key name is required" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Key name is required" })));
     }
 
     let key_type = data.key_type.trim();
     if !matches!(key_type, "internal" | "external") {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "key_type must be 'internal' or 'external'" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "key_type must be 'internal' or 'external'" })));
     }
     // Internal keys are full-trust — only platform staff may mint them.
     if key_type == "internal" && ctx.scope != Scope::Platform {
-        return HttpResponse::Forbidden().json(serde_json::json!({
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "message": "Only platform staff may create internal keys"
-        }));
+        })));
     }
 
     // Validate the requested scopes.
     for scope in &data.scopes {
         if !is_valid_scope(scope) {
-            return HttpResponse::BadRequest()
-                .json(serde_json::json!({ "message": format!("Unknown scope: {scope}") }));
+            return Ok(HttpResponse::BadRequest()
+                .json(serde_json::json!({ "message": format!("Unknown scope: {scope}") })));
         }
     }
     let has_wildcard = data.scopes.iter().any(|scope| scope == "*");
     if key_type == "external" {
         if data.scopes.is_empty() {
-            return HttpResponse::BadRequest()
-                .json(serde_json::json!({ "message": "External keys must list explicit scopes" }));
+            return Ok(HttpResponse::BadRequest().json(
+                serde_json::json!({ "message": "External keys must list explicit scopes" }),
+            ));
         }
         if has_wildcard {
-            return HttpResponse::BadRequest().json(serde_json::json!({
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "message": "External keys may not hold the '*' scope"
-            }));
+            })));
         }
         if data.expires_at.is_none() {
-            return HttpResponse::BadRequest()
-                .json(serde_json::json!({ "message": "External keys require an expiry" }));
+            return Ok(HttpResponse::BadRequest()
+                .json(serde_json::json!({ "message": "External keys require an expiry" })));
         }
     }
     if let Some(expiry) = data.expires_at
         && expiry <= Utc::now()
     {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Expiry must be in the future" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Expiry must be in the future" })));
     }
 
     // Resolve the acting principal.
@@ -159,32 +160,28 @@ pub async fn create_api_key(
         ctx.organization_id
     } else {
         if !ctx.has(Permission::MembersManage) {
-            return HttpResponse::Forbidden().json(serde_json::json!({
+            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
                 "message": "You cannot issue a key acting as another user"
-            }));
+            })));
         }
         match sqlx::query_scalar::<_, Option<i32>>(
             "SELECT organization_id FROM users WHERE id = $1",
         )
         .bind(act_as)
         .fetch_optional(pool.get_ref())
-        .await
+        .await?
         {
-            Ok(Some(org)) => {
+            Some(org) => {
                 if ctx.scope == Scope::Organization && org != ctx.organization_id {
-                    return HttpResponse::Forbidden().json(serde_json::json!({
+                    return Ok(HttpResponse::Forbidden().json(serde_json::json!({
                         "message": "That user is not in your organization"
-                    }));
+                    })));
                 }
                 org
             }
-            Ok(None) => {
-                return HttpResponse::NotFound()
-                    .json(serde_json::json!({ "message": "Acting user not found" }));
-            }
-            Err(e) => {
-                error!(target: "db", error = ?e, "act-as user lookup failed");
-                return HttpResponse::InternalServerError().finish();
+            None => {
+                return Ok(HttpResponse::NotFound()
+                    .json(serde_json::json!({ "message": "Acting user not found" })));
             }
         }
     };
@@ -203,7 +200,7 @@ pub async fn create_api_key(
     let key_hash = hash_api_key(&raw_key);
     let key_preview = format!("{}...{}", &raw_key[..10], &raw_key[raw_key.len() - 4..]);
 
-    let inserted = sqlx::query(
+    let row = sqlx::query(
         r#"
         INSERT INTO api_keys
             (organization_id, user_id, created_by, name, key_hash, key_preview,
@@ -223,44 +220,36 @@ pub async fn create_api_key(
     .bind(data.expires_at)
     .bind(rate_limit)
     .fetch_one(pool.get_ref())
-    .await;
+    .await?;
 
-    match inserted {
-        Ok(row) => {
-            let id: i32 = row.get("id");
-            let created_at: DateTime<Utc> = row.get("created_at");
-            info!(target: "auth", actor = ctx.user_id, key_id = id, act_as, key_type, "api key created");
-            HttpResponse::Created().json(serde_json::json!({
-                "id": id,
-                "name": name,
-                "key_type": key_type,
-                "scopes": data.scopes,
-                "key_preview": key_preview,
-                "user_id": act_as,
-                "organization_id": acting_org,
-                "rate_limit_per_min": rate_limit,
-                "expires_at": data.expires_at,
-                "created_at": created_at,
-                "api_key": raw_key,
-            }))
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "api key insert failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    let id: i32 = row.get("id");
+    let created_at: DateTime<Utc> = row.get("created_at");
+    info!(target: "auth", actor = ctx.user_id, key_id = id, act_as, key_type, "api key created");
+    Ok(HttpResponse::Created().json(serde_json::json!({
+        "id": id,
+        "name": name,
+        "key_type": key_type,
+        "scopes": data.scopes,
+        "key_preview": key_preview,
+        "user_id": act_as,
+        "organization_id": acting_org,
+        "rate_limit_per_min": rate_limit,
+        "expires_at": data.expires_at,
+        "created_at": created_at,
+        "api_key": raw_key,
+    })))
 }
 
 #[get("/keys")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn list_api_keys(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn list_api_keys(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::ApiKeysManage).await
     {
         Ok(ctx) => ctx,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
 
-    let result = match ctx.scope {
+    let rows = match ctx.scope {
         Scope::Platform => {
             sqlx::query_as::<_, ApiKeyView>(&format!(
                 "SELECT {KEY_COLUMNS} FROM api_keys ORDER BY created_at DESC"
@@ -290,15 +279,9 @@ pub async fn list_api_keys(req: HttpRequest, pool: web::Data<PgPool>) -> impl Re
             .fetch_all(pool.get_ref())
             .await
         }
-    };
+    }?;
 
-    match result {
-        Ok(rows) => HttpResponse::Ok().json(rows),
-        Err(e) => {
-            error!(target: "db", error = ?e, "api key list failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    Ok(HttpResponse::Ok().json(rows))
 }
 
 #[delete("/keys/{id}")]
@@ -307,42 +290,31 @@ pub async fn revoke_api_key(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
-) -> impl Responder {
+) -> AppResult {
     let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::ApiKeysManage).await
     {
         Ok(ctx) => ctx,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
     let key_id = path.into_inner();
 
-    match key_in_caller_scope(pool.get_ref(), &ctx, key_id).await {
-        Ok(true) => {}
-        Ok(false) => {
-            return HttpResponse::NotFound()
-                .json(serde_json::json!({ "message": "Key not found" }));
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "api key scope check failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+    if !key_in_caller_scope(pool.get_ref(), &ctx, key_id).await? {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Key not found" })));
     }
 
-    match sqlx::query("UPDATE api_keys SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL")
-        .bind(key_id)
-        .execute(pool.get_ref())
-        .await
-    {
-        Ok(result) if result.rows_affected() == 0 => HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Key not found or already revoked" })),
-        Ok(_) => {
-            info!(target: "auth", actor = ctx.user_id, key_id, "api key revoked");
-            HttpResponse::Ok().json(serde_json::json!({ "revoked": true }))
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "api key revoke failed");
-            HttpResponse::InternalServerError().finish()
-        }
+    let result =
+        sqlx::query("UPDATE api_keys SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL")
+            .bind(key_id)
+            .execute(pool.get_ref())
+            .await?;
+
+    if result.rows_affected() == 0 {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Key not found or already revoked" })));
     }
+
+    info!(target: "auth", actor = ctx.user_id, key_id, "api key revoked");
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "revoked": true })))
 }
 
 #[get("/keys/{id}/audit")]
@@ -351,27 +323,19 @@ pub async fn api_key_audit(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
-) -> impl Responder {
+) -> AppResult {
     let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::ApiKeysManage).await
     {
         Ok(ctx) => ctx,
-        Err(response) => return response,
+        Err(response) => return Ok(response),
     };
     let key_id = path.into_inner();
 
-    match key_in_caller_scope(pool.get_ref(), &ctx, key_id).await {
-        Ok(true) => {}
-        Ok(false) => {
-            return HttpResponse::NotFound()
-                .json(serde_json::json!({ "message": "Key not found" }));
-        }
-        Err(e) => {
-            error!(target: "db", error = ?e, "api key scope check failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+    if !key_in_caller_scope(pool.get_ref(), &ctx, key_id).await? {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Key not found" })));
     }
 
-    match sqlx::query_as::<_, AuditView>(
+    let rows = sqlx::query_as::<_, AuditView>(
         r#"
         SELECT id, api_key_id, method, path, status_code, outcome, ip, created_at
         FROM api_key_audit_log
@@ -383,14 +347,9 @@ pub async fn api_key_audit(
     .bind(key_id)
     .bind(AUDIT_PAGE_LIMIT)
     .fetch_all(pool.get_ref())
-    .await
-    {
-        Ok(rows) => HttpResponse::Ok().json(rows),
-        Err(e) => {
-            error!(target: "db", error = ?e, "api key audit fetch failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    .await?;
+
+    Ok(HttpResponse::Ok().json(rows))
 }
 
 #[cfg(test)]

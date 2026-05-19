@@ -13,19 +13,19 @@ use tracing::{error, instrument};
 
 #[get("/billing/organization")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = match super::current_user(&req) {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     let (account_type, organization_id) = match super::account_row(pool.get_ref(), user_id).await {
         Ok(row) => row,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
 
     let Some(org_id) = organization_id else {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "You are not part of an organization" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "You are not part of an organization" })));
     };
     let owner = BillingOwner::Organization(org_id);
 
@@ -34,14 +34,10 @@ pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>)
     )
     .bind(org_id)
     .fetch_optional(pool.get_ref())
-    .await;
+    .await?;
     let (org_name, org_slug) = match org {
-        Ok(Some(row)) => row,
-        Ok(None) => return HttpResponse::NotFound().finish(),
-        Err(e) => {
-            error!(target: "billing", error = ?e, "organization lookup failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+        Some(row) => row,
+        None => return Ok(HttpResponse::NotFound().finish()),
     };
 
     let seats_used = sqlx::query_scalar::<_, i64>(
@@ -66,10 +62,10 @@ pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>)
     )
     .bind(org_id)
     .fetch_optional(pool.get_ref())
-    .await;
+    .await?;
 
     let subscription_json = match subscription {
-        Ok(Some(row)) => {
+        Some(row) => {
             let period_end: Option<DateTime<Utc>> =
                 row.try_get("current_period_end").ok().flatten();
             serde_json::json!({
@@ -79,11 +75,7 @@ pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>)
                 "plan_code": row.try_get::<Option<String>, _>("plan_code").ok().flatten(),
             })
         }
-        Ok(None) => Value::Null,
-        Err(e) => {
-            error!(target: "billing", error = ?e, "org subscription lookup failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+        None => Value::Null,
     };
 
     let members = sqlx::query(
@@ -128,7 +120,7 @@ pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>)
         }
     };
 
-    HttpResponse::Ok().json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "organization": { "id": org_id, "name": org_name, "slug": org_slug },
         "can_manage": can_manage,
         "seats_used": seats_used,
@@ -138,5 +130,5 @@ pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>)
         "plan_active": entitlement.active,
         "subscription": subscription_json,
         "members": members,
-    }))
+    })))
 }

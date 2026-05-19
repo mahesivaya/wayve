@@ -17,34 +17,30 @@ pub async fn send(
     req: HttpRequest,
     data: web::Json<SendEmailRequest>,
     pool: web::Data<PgPool>,
-) -> HttpResponse {
+) -> AppResult {
     if data.to.trim().is_empty() || data.subject.trim().is_empty() {
-        return HttpResponse::BadRequest().body("Recipient and Subject are required");
+        return Ok(HttpResponse::BadRequest().body("Recipient and Subject are required"));
     }
 
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
-        None => return HttpResponse::Unauthorized().body("Invalid token"),
+        None => return Ok(HttpResponse::Unauthorized().body("Invalid token")),
     };
 
     info!(target: "gmail", user_id, account_id = data.account_id, "send email request");
 
-    let account = match load_email_account_for_user(pool.get_ref(), data.account_id, user_id).await
-    {
-        Ok(Some(account)) => account,
-        Ok(None) => return HttpResponse::Unauthorized().body("Email account not found"),
-        Err(e) => {
-            error!(target: "gmail", user_id, account_id = data.account_id, error = ?e, "email account lookup failed");
-            return HttpResponse::InternalServerError().body("Email account lookup failed");
-        }
-    };
+    let account =
+        match load_email_account_for_user(pool.get_ref(), data.account_id, user_id).await? {
+            Some(account) => account,
+            None => return Ok(HttpResponse::Unauthorized().body("Email account not found")),
+        };
 
     let refresh_token = match account.usable_refresh_token() {
         Some(value) => value,
         None => {
-            return HttpResponse::Conflict().json(serde_json::json!({
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
                 "error": "Reconnect the email account to send email"
-            }));
+            })));
         }
     };
 
@@ -65,20 +61,20 @@ pub async fn send(
                 MailProvider::Microsoft => "Outlook",
             };
             if e.to_string().contains("not configured") {
-                return HttpResponse::InternalServerError()
-                    .body(format!("{provider_name} OAuth is not configured"));
+                return Ok(HttpResponse::InternalServerError()
+                    .body(format!("{provider_name} OAuth is not configured")));
             }
-            return HttpResponse::BadGateway()
-                .body(format!("Failed to refresh {provider_name} credentials"));
+            return Ok(HttpResponse::BadGateway()
+                .body(format!("Failed to refresh {provider_name} credentials")));
         }
     };
 
-    match account.provider {
+    Ok(match account.provider {
         MailProvider::Google => {
             send_via_gmail(&token.access_token, &account.email, &data, user_id).await
         }
         MailProvider::Microsoft => send_via_outlook(&token.access_token, account.id, &data).await,
-    }
+    })
 }
 
 async fn send_via_gmail(

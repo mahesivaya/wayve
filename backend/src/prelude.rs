@@ -27,6 +27,7 @@ pub use once_cell::sync::Lazy;
 pub use std::fs;
 
 // ❗ Error handling
+pub use crate::error::{AppError, AppResult};
 pub use anyhow::Result;
 
 // 🚀 Constants

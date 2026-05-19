@@ -5,7 +5,7 @@
 use super::models::{BillingOwner, RecordUsageInput};
 use super::resolve_owner;
 use crate::prelude::*;
-use tracing::{error, instrument};
+use tracing::instrument;
 
 /// Append a usage event for a billing owner.
 pub async fn record_event(
@@ -33,41 +33,36 @@ pub async fn record_usage(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     data: web::Json<RecordUsageInput>,
-) -> impl Responder {
+) -> AppResult {
     let user_id = match super::current_user(&req) {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     let owner = match resolve_owner(pool.get_ref(), user_id).await {
         Ok(owner) => owner,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
 
     let metric = data.metric.trim();
     if metric.is_empty() {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "metric is required" }));
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "metric is required" })));
     }
 
-    match record_event(pool.get_ref(), owner, metric, data.quantity).await {
-        Ok(()) => HttpResponse::Created().json(serde_json::json!({ "recorded": true })),
-        Err(e) => {
-            error!(target: "billing", error = ?e, "usage record failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    record_event(pool.get_ref(), owner, metric, data.quantity).await?;
+    Ok(HttpResponse::Created().json(serde_json::json!({ "recorded": true })))
 }
 
 #[get("/billing/usage")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = match super::current_user(&req) {
         Ok(id) => id,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
     let owner = match resolve_owner(pool.get_ref(), user_id).await {
         Ok(owner) => owner,
-        Err(resp) => return resp,
+        Err(resp) => return Ok(resp),
     };
 
     let rows = sqlx::query_as::<_, (String, i64, i64)>(
@@ -85,24 +80,16 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> impl Respon
     .bind(owner.user_id())
     .bind(owner.organization_id())
     .fetch_all(pool.get_ref())
-    .await;
+    .await?;
 
-    match rows {
-        Ok(rows) => {
-            let metrics: Vec<_> = rows
-                .into_iter()
-                .map(|(metric, total, events)| {
-                    serde_json::json!({ "metric": metric, "total": total, "events": events })
-                })
-                .collect();
-            HttpResponse::Ok().json(serde_json::json!({
-                "owner_type": owner.kind(),
-                "metrics": metrics,
-            }))
-        }
-        Err(e) => {
-            error!(target: "billing", error = ?e, "usage summary failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    let metrics: Vec<_> = rows
+        .into_iter()
+        .map(|(metric, total, events)| {
+            serde_json::json!({ "metric": metric, "total": total, "events": events })
+        })
+        .collect();
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "owner_type": owner.kind(),
+        "metrics": metrics,
+    })))
 }

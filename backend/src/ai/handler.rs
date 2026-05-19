@@ -22,18 +22,15 @@ pub struct ChatRequest {
 /// never exposed to the browser. Auth is JWT-gated like the rest of /api.
 #[post("/ai/chat")]
 #[instrument(target = "ai", skip(req, data), fields(turns = data.messages.len()))]
-pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let api_key = match crate::config::gemini_api_key() {
         Some(key) => key,
         None => {
             error!("GEMINI_API_KEY missing");
-            return HttpResponse::InternalServerError()
-                .body("AI not configured (GEMINI_API_KEY missing)");
+            return Ok(HttpResponse::InternalServerError()
+                .body("AI not configured (GEMINI_API_KEY missing)"));
         }
     };
 
@@ -62,7 +59,7 @@ pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> impl Res
         .collect();
 
     if contents.is_empty() {
-        return HttpResponse::BadRequest().body("Empty conversation");
+        return Ok(HttpResponse::BadRequest().body("Empty conversation"));
     }
 
     let url = format!(
@@ -80,7 +77,7 @@ pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> impl Res
         Ok(r) => r,
         Err(e) => {
             error!("Gemini upstream transport error: {}", e);
-            return HttpResponse::BadGateway().body("Upstream error");
+            return Ok(HttpResponse::BadGateway().body("Upstream error"));
         }
     };
 
@@ -89,7 +86,7 @@ pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> impl Res
         Ok(v) => v,
         Err(e) => {
             error!("Gemini json parse failed: {}", e);
-            return HttpResponse::BadGateway().body("Bad upstream response");
+            return Ok(HttpResponse::BadGateway().body("Bad upstream response"));
         }
     };
 
@@ -99,7 +96,7 @@ pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> impl Res
             .unwrap_or("Upstream error")
             .to_string();
         warn!("Gemini non-2xx: {} - {}", status, msg);
-        return HttpResponse::BadGateway().body(msg);
+        return Ok(HttpResponse::BadGateway().body(msg));
     }
 
     // Stitch together every text part of the first candidate. Gemini may
@@ -116,5 +113,5 @@ pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> impl Res
         })
         .unwrap_or_default();
 
-    HttpResponse::Ok().json(serde_json::json!({ "reply": reply }))
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "reply": reply })))
 }

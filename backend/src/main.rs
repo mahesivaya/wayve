@@ -9,6 +9,7 @@ mod chat;
 mod config;
 mod drive;
 mod email;
+mod error;
 mod external;
 mod middleware;
 mod models;
@@ -20,6 +21,7 @@ mod scheduler;
 pub mod security;
 mod startup;
 mod workers;
+mod ws_registry;
 
 #[cfg(test)]
 mod test_support;

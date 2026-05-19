@@ -7,7 +7,7 @@ use crate::prelude::*;
 use crate::security::jwt::get_user_id_from_request;
 
 use actix_web::http::header;
-use actix_web::{HttpRequest, HttpResponse, Responder, delete, get, web};
+use actix_web::{HttpRequest, HttpResponse, delete, get, web};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::Value;
@@ -45,11 +45,8 @@ pub async fn get_emails(
     pool: web::Data<PgPool>,
     _cache: web::Data<Option<Cache>>,
     query: web::Query<EmailQuery>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let page_size = 50;
     let query_limit = page_size + 1;
@@ -108,7 +105,7 @@ pub async fn get_emails(
         qb.push(
             r#"
             AND (
-                lower(coalesce(e.subject, '')) LIKE 
+                lower(coalesce(e.subject, '')) LIKE
             "#,
         );
         qb.push_bind(pattern.clone());
@@ -134,46 +131,38 @@ pub async fn get_emails(
     qb.push(" ORDER BY e.created_at DESC, e.id DESC LIMIT ");
     qb.push_bind(query_limit as i64);
 
-    let result = qb.build().fetch_all(pool.get_ref()).await;
+    let rows = qb.build().fetch_all(pool.get_ref()).await?;
 
-    match result {
-        Ok(rows) => {
-            let has_more = rows.len() > page_size;
-            let emails: Vec<Value> = rows
-                .into_iter()
-                .take(page_size)
-                .map(|row| {
-                    let created_at: Option<NaiveDateTime> = row.get("created_at");
-                    let created_at = created_at.map(|dt| {
-                        chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
-                            .to_rfc3339()
-                    });
+    let has_more = rows.len() > page_size;
+    let emails: Vec<Value> = rows
+        .into_iter()
+        .take(page_size)
+        .map(|row| {
+            let created_at: Option<NaiveDateTime> = row.get("created_at");
+            let created_at = created_at.map(|dt| {
+                chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
+                    .to_rfc3339()
+            });
 
-                    serde_json::json!({
-                        "id": row.get::<i32,_>("id"),
-                        "gmail_id": row.get::<String,_>("gmail_id"),
-                        "subject": row.get::<Option<String>,_>("subject"),
-                        "sender": row.get::<Option<String>,_>("sender"),
-                        "receiver": row.get::<Option<String>,_>("receiver"),
-                        "has_body": row.get::<bool,_>("has_body"),
-                        "has_attachments": row.get::<bool,_>("has_attachments"),
-                        "account_id": row.get::<Option<i32>,_>("account_id"),
-                        "is_read": row.get::<Option<bool>,_>("is_read").unwrap_or(true),
-                        "created_at": created_at,
-                    })
-                })
-                .collect();
+            serde_json::json!({
+                "id": row.get::<i32,_>("id"),
+                "gmail_id": row.get::<String,_>("gmail_id"),
+                "subject": row.get::<Option<String>,_>("subject"),
+                "sender": row.get::<Option<String>,_>("sender"),
+                "receiver": row.get::<Option<String>,_>("receiver"),
+                "has_body": row.get::<bool,_>("has_body"),
+                "has_attachments": row.get::<bool,_>("has_attachments"),
+                "account_id": row.get::<Option<i32>,_>("account_id"),
+                "is_read": row.get::<Option<bool>,_>("is_read").unwrap_or(true),
+                "created_at": created_at,
+            })
+        })
+        .collect();
 
-            info!(target: "http", user_id, count = emails.len(), "Fetched emails");
-            HttpResponse::Ok()
-                .append_header(("x-has-more", has_more.to_string()))
-                .json(emails)
-        }
-        Err(e) => {
-            error!(target: "db", user_id, error = ?e, "get_emails query failed");
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    info!(target: "http", user_id, count = emails.len(), "Fetched emails");
+    Ok(HttpResponse::Ok()
+        .append_header(("x-has-more", has_more.to_string()))
+        .json(emails))
 }
 
 #[delete("/emails/{id}")]
@@ -182,11 +171,8 @@ pub async fn delete_email(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<EmailDeletePath>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let email_id = path.id;
     let row = match sqlx::query(
@@ -200,19 +186,13 @@ pub async fn delete_email(
     .bind(email_id)
     .bind(user_id)
     .fetch_optional(pool.get_ref())
-    .await
+    .await?
     {
-        Ok(Some(row)) => row,
-        Ok(None) => {
-            return HttpResponse::NotFound().json(serde_json::json!({
+        Some(row) => row,
+        None => {
+            return Ok(HttpResponse::NotFound().json(serde_json::json!({
                 "error": "Email not found"
-            }));
-        }
-        Err(e) => {
-            error!(target: "db", user_id, email_id, error = ?e, "delete email lookup failed");
-            return HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to find email"
-            }));
+            })));
         }
     };
 
@@ -229,9 +209,9 @@ pub async fn delete_email(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     else {
-        return HttpResponse::Unauthorized().json(serde_json::json!({
+        return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
             "error": "Reconnect your email account to delete this email"
-        }));
+        })));
     };
 
     let token = match refresh_and_persist_email_token(
@@ -246,9 +226,9 @@ pub async fn delete_email(
         Ok(token) => token.access_token,
         Err(e) => {
             error!(target: "gmail", user_id, account_id, provider = provider.as_db(), error = ?e, "delete email token refresh failed");
-            return HttpResponse::BadGateway().json(serde_json::json!({
+            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
                 "error": "Failed to refresh email account credentials"
-            }));
+            })));
         }
     };
 
@@ -277,45 +257,32 @@ pub async fn delete_email(
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             error!(target: "gmail", user_id, account_id, provider = provider.as_db(), email_id, %status, body = %body, "remote email delete failed");
-            return HttpResponse::BadGateway().json(serde_json::json!({
+            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
                 "error": "Email provider rejected the delete request"
-            }));
+            })));
         }
         Err(e) => {
             error!(target: "gmail", user_id, account_id, provider = provider.as_db(), email_id, error = ?e, "remote email delete request failed");
-            return HttpResponse::BadGateway().json(serde_json::json!({
+            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
                 "error": "Failed to reach email provider"
-            }));
+            })));
         }
     }
 
-    match sqlx::query("DELETE FROM emails WHERE id = $1")
+    sqlx::query("DELETE FROM emails WHERE id = $1")
         .bind(email_id)
         .execute(pool.get_ref())
-        .await
-    {
-        Ok(_) => HttpResponse::Ok().json(serde_json::json!({ "deleted": true })),
-        Err(e) => {
-            error!(target: "db", user_id, email_id, error = ?e, "local email delete failed");
-            HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Deleted remotely, but failed to remove local email"
-            }))
-        }
-    }
+        .await?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }
 
 #[get("/emails/attachments")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn get_all_email_attachments(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+pub async fn get_all_email_attachments(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let result = sqlx::query(
+    let rows = sqlx::query(
         r#"
         SELECT ea.id, ea.email_id, ea.filename, ea.mime_type, ea.size,
                ea.created_at, e.subject, e.sender, e.receiver
@@ -328,42 +295,32 @@ pub async fn get_all_email_attachments(
     )
     .bind(user_id)
     .fetch_all(pool.get_ref())
-    .await;
+    .await?;
 
-    match result {
-        Ok(rows) => {
-            let files: Vec<Value> = rows
-                .into_iter()
-                .map(|row| {
-                    let created_at: Option<NaiveDateTime> = row.get("created_at");
-                    let created_at = created_at.map(|dt| {
-                        chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
-                            .to_rfc3339()
-                    });
+    let files: Vec<Value> = rows
+        .into_iter()
+        .map(|row| {
+            let created_at: Option<NaiveDateTime> = row.get("created_at");
+            let created_at = created_at.map(|dt| {
+                chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
+                    .to_rfc3339()
+            });
 
-                    serde_json::json!({
-                        "id": row.get::<i32, _>("id"),
-                        "email_id": row.get::<i32, _>("email_id"),
-                        "filename": row.get::<String, _>("filename"),
-                        "mime_type": row.get::<Option<String>, _>("mime_type"),
-                        "size": row.get::<Option<i64>, _>("size"),
-                        "created_at": created_at,
-                        "subject": row.get::<Option<String>, _>("subject"),
-                        "sender": row.get::<Option<String>, _>("sender"),
-                        "receiver": row.get::<Option<String>, _>("receiver"),
-                    })
-                })
-                .collect();
+            serde_json::json!({
+                "id": row.get::<i32, _>("id"),
+                "email_id": row.get::<i32, _>("email_id"),
+                "filename": row.get::<String, _>("filename"),
+                "mime_type": row.get::<Option<String>, _>("mime_type"),
+                "size": row.get::<Option<i64>, _>("size"),
+                "created_at": created_at,
+                "subject": row.get::<Option<String>, _>("subject"),
+                "sender": row.get::<Option<String>, _>("sender"),
+                "receiver": row.get::<Option<String>, _>("receiver"),
+            })
+        })
+        .collect();
 
-            HttpResponse::Ok().json(files)
-        }
-        Err(e) => {
-            error!(target: "db", user_id, error = ?e, "get_all_email_attachments failed");
-            HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to fetch email attachments"
-            }))
-        }
-    }
+    Ok(HttpResponse::Ok().json(files))
 }
 
 #[get("/emails/{id}/attachments")]
@@ -372,15 +329,12 @@ pub async fn get_email_attachments(
     req: HttpRequest,
     path: web::Path<EmailAttachmentPath>,
     pool: web::Data<PgPool>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let email_id = path.id;
 
-    let result = sqlx::query(
+    let rows = sqlx::query(
         r#"
         SELECT ea.id, ea.email_id, ea.filename, ea.mime_type, ea.size, ea.created_at
         FROM email_attachments ea
@@ -392,39 +346,29 @@ pub async fn get_email_attachments(
     .bind(email_id)
     .bind(user_id)
     .fetch_all(pool.get_ref())
-    .await;
+    .await?;
 
-    match result {
-        Ok(rows) => {
-            let files: Vec<Value> = rows
-                .into_iter()
-                .map(|row| {
-                    let created_at: Option<NaiveDateTime> = row.get("created_at");
-                    let created_at = created_at.map(|dt| {
-                        chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
-                            .to_rfc3339()
-                    });
+    let files: Vec<Value> = rows
+        .into_iter()
+        .map(|row| {
+            let created_at: Option<NaiveDateTime> = row.get("created_at");
+            let created_at = created_at.map(|dt| {
+                chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
+                    .to_rfc3339()
+            });
 
-                    serde_json::json!({
-                        "id": row.get::<i32, _>("id"),
-                        "email_id": row.get::<i32, _>("email_id"),
-                        "filename": row.get::<String, _>("filename"),
-                        "mime_type": row.get::<Option<String>, _>("mime_type"),
-                        "size": row.get::<Option<i64>, _>("size"),
-                        "created_at": created_at,
-                    })
-                })
-                .collect();
+            serde_json::json!({
+                "id": row.get::<i32, _>("id"),
+                "email_id": row.get::<i32, _>("email_id"),
+                "filename": row.get::<String, _>("filename"),
+                "mime_type": row.get::<Option<String>, _>("mime_type"),
+                "size": row.get::<Option<i64>, _>("size"),
+                "created_at": created_at,
+            })
+        })
+        .collect();
 
-            HttpResponse::Ok().json(files)
-        }
-        Err(e) => {
-            error!(target: "db", user_id, email_id, error = ?e, "get_email_attachments failed");
-            HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to fetch email attachments"
-            }))
-        }
-    }
+    Ok(HttpResponse::Ok().json(files))
 }
 
 #[get("/email-attachments/{id}/download")]
@@ -433,13 +377,10 @@ pub async fn download_email_attachment(
     req: HttpRequest,
     path: web::Path<EmailAttachmentDownloadPath>,
     pool: web::Data<PgPool>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let attachment_row = sqlx::query(
+    let row = match sqlx::query(
         r#"
         SELECT ea.attachment_id, ea.gmail_id, ea.filename, ea.mime_type,
                a.id AS account_id, a.refresh_token, a.provider
@@ -451,15 +392,10 @@ pub async fn download_email_attachment(
     .bind(path.id)
     .bind(user_id)
     .fetch_optional(pool.get_ref())
-    .await;
-
-    let row = match attachment_row {
-        Ok(Some(row)) => row,
-        Ok(None) => return HttpResponse::NotFound().finish(),
-        Err(e) => {
-            error!(target: "db", user_id, attachment_id = path.id, error = ?e, "attachment lookup failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+    .await?
+    {
+        Some(row) => row,
+        None => return Ok(HttpResponse::NotFound().finish()),
     };
 
     let account_id: i32 = row.get("account_id");
@@ -467,9 +403,9 @@ pub async fn download_email_attachment(
     let refresh_token = match refresh_token.filter(|value| !value.trim().is_empty()) {
         Some(value) => value,
         None => {
-            return HttpResponse::Conflict().json(serde_json::json!({
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
                 "error": "Reconnect your email account to download this attachment"
-            }));
+            })));
         }
     };
 
@@ -495,15 +431,15 @@ pub async fn download_email_attachment(
         Err(e) => {
             error!(target: "gmail", account_id, provider = provider.as_db(), error = ?e, "attachment token refresh failed");
             if e.to_string().contains("not configured") {
-                return HttpResponse::InternalServerError().finish();
+                return Ok(HttpResponse::InternalServerError().finish());
             }
-            return HttpResponse::BadGateway().finish();
+            return Ok(HttpResponse::BadGateway().finish());
         }
     };
 
     // Outlook attachments come from Microsoft Graph; Gmail continues below.
     if provider.is_microsoft() {
-        return download_outlook_attachment(
+        return Ok(download_outlook_attachment(
             &token.access_token,
             OutlookAttachmentRef {
                 message_id: &gmail_id,
@@ -512,7 +448,7 @@ pub async fn download_email_attachment(
                 mime_type,
             },
         )
-        .await;
+        .await);
     }
 
     let url = format!(
@@ -532,12 +468,12 @@ pub async fn download_email_attachment(
             Ok(json) => json,
             Err(e) => {
                 error!(target: "gmail", error = %e, "attachment json parse failed");
-                return HttpResponse::BadGateway().finish();
+                return Ok(HttpResponse::BadGateway().finish());
             }
         },
         Err(e) => {
             error!(target: "gmail", error = %e, "attachment request failed");
-            return HttpResponse::BadGateway().finish();
+            return Ok(HttpResponse::BadGateway().finish());
         }
     };
 
@@ -546,11 +482,11 @@ pub async fn download_email_attachment(
         Ok(bytes) => bytes,
         Err(e) => {
             error!(target: "gmail", error = ?e, "attachment base64 decode failed");
-            return HttpResponse::BadGateway().finish();
+            return Ok(HttpResponse::BadGateway().finish());
         }
     };
 
-    HttpResponse::Ok()
+    Ok(HttpResponse::Ok()
         .insert_header((
             header::CONTENT_TYPE,
             mime_type.unwrap_or_else(|| "application/octet-stream".to_string()),
@@ -559,5 +495,5 @@ pub async fn download_email_attachment(
             header::CONTENT_DISPOSITION,
             format!("attachment; filename=\"{}\"", filename.replace('"', "")),
         ))
-        .body(bytes)
+        .body(bytes))
 }

@@ -3,7 +3,7 @@ use crate::security::encryption::{decrypt_binary, encrypt_binary};
 use crate::security::jwt::get_user_id_from_request;
 use actix_multipart::Multipart;
 use actix_web::http::header;
-use actix_web::{Error, HttpResponse, Responder, get, post, web};
+use actix_web::{Error, HttpResponse, get, post, web};
 use chrono::NaiveDateTime;
 use futures_util::StreamExt;
 use sqlx::{FromRow, PgPool, Row};
@@ -144,52 +144,38 @@ pub async fn upload_file(
 //
 #[get("/files")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn get_files(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+pub async fn get_files(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     // Files are scoped to the authenticated user — the previous `?user_id=`
     // query param let any caller list anyone's files.
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let result = sqlx::query_as::<_, FileRecord>(
+    let rows = sqlx::query_as::<_, FileRecord>(
         "SELECT id, name, file_path, file_iv, size, created_at FROM files WHERE user_id = $1 ORDER BY created_at DESC"
     )
     .bind(user_id)
     .fetch_all(pool.get_ref())
-    .await;
+    .await?;
 
-    match result {
-        Ok(rows) => {
-            debug!(target: "http", user_id, count = rows.len(), "files listed");
+    debug!(target: "http", user_id, count = rows.len(), "files listed");
 
-            let files: Vec<FileResponse> = rows
-                .into_iter()
-                .map(|row| {
-                    let file_type = row.name.split('.').next_back().unwrap_or("").to_string();
+    let files: Vec<FileResponse> = rows
+        .into_iter()
+        .map(|row| {
+            let file_type = row.name.split('.').next_back().unwrap_or("").to_string();
 
-                    FileResponse {
-                        id: row.id,
-                        name: row.name,
-                        file_type,
-                        size: row.size,
-                        // Authenticated, ownership-checked download route.
-                        drive_url: format!("/api/files/{}/download", row.id),
-                        created_at: row.created_at,
-                    }
-                })
-                .collect();
+            FileResponse {
+                id: row.id,
+                name: row.name,
+                file_type,
+                size: row.size,
+                // Authenticated, ownership-checked download route.
+                drive_url: format!("/api/files/{}/download", row.id),
+                created_at: row.created_at,
+            }
+        })
+        .collect();
 
-            HttpResponse::Ok().json(files)
-        }
-
-        Err(e) => {
-            error!(target: "db", user_id, error = ?e, "files list failed");
-
-            HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "error": "Failed to fetch files" }))
-        }
-    }
+    Ok(HttpResponse::Ok().json(files))
 }
 
 //
@@ -201,11 +187,8 @@ pub async fn download_file(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<i64>,
-) -> impl Responder {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let file_id = path.into_inner();
 
@@ -216,41 +199,32 @@ pub async fn download_file(
             .bind(file_id)
             .bind(user_id)
             .fetch_optional(pool.get_ref())
-            .await;
+            .await?;
 
     let (file_name, file_path, file_iv): (String, String, Option<String>) = match row {
-        Ok(Some(row)) => (row.get("name"), row.get("file_path"), row.get("file_iv")),
-        Ok(None) => return HttpResponse::NotFound().finish(),
-        Err(e) => {
-            error!(target: "db", user_id, file_id, error = ?e, "download_file lookup failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+        Some(row) => (row.get("name"), row.get("file_path"), row.get("file_iv")),
+        None => return Ok(HttpResponse::NotFound().finish()),
     };
 
     match fs::read(&file_path).await {
         Ok(bytes) => {
             let body = match file_iv.as_deref().filter(|value| !value.is_empty()) {
-                Some(iv) => match decrypt_binary(iv, &bytes) {
-                    Ok(decrypted) => decrypted,
-                    Err(e) => {
-                        error!(target: "http", user_id, file_id, error = %e, "download_file decrypt failed");
-                        return HttpResponse::InternalServerError().finish();
-                    }
-                },
+                Some(iv) => decrypt_binary(iv, &bytes)
+                    .map_err(|e| AppError::Internal(format!("download_file decrypt failed: {e}")))?,
                 None => bytes,
             };
 
-            HttpResponse::Ok()
+            Ok(HttpResponse::Ok()
                 .append_header((header::CONTENT_TYPE, "application/octet-stream"))
                 .append_header((
                     header::CONTENT_DISPOSITION,
                     format!("attachment; filename=\"{}\"", file_name.replace('"', "")),
                 ))
-                .body(body)
+                .body(body))
         }
         Err(e) => {
             error!(target: "http", user_id, file_id, error = ?e, "download_file open failed");
-            HttpResponse::NotFound().finish()
+            Ok(HttpResponse::NotFound().finish())
         }
     }
 }

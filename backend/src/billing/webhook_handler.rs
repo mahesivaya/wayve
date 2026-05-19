@@ -16,10 +16,10 @@ pub async fn stripe_webhook(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     body: web::Bytes,
-) -> impl Responder {
+) -> AppResult {
     let Some(secret) = provider::webhook_secret() else {
         warn!(target: "billing", "webhook received but STRIPE_WEBHOOK_SECRET unset; ignoring");
-        return HttpResponse::Ok().json(serde_json::json!({ "ignored": true }));
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "ignored": true })));
     };
 
     let signature = match req
@@ -28,35 +28,32 @@ pub async fn stripe_webhook(
         .and_then(|value| value.to_str().ok())
     {
         Some(sig) => sig,
-        None => return HttpResponse::BadRequest().body("missing signature"),
+        None => return Ok(HttpResponse::BadRequest().body("missing signature")),
     };
     if !provider::verify_webhook_signature(&body, signature, &secret) {
         warn!(target: "billing", "webhook signature verification failed");
-        return HttpResponse::BadRequest().body("bad signature");
+        return Ok(HttpResponse::BadRequest().body("bad signature"));
     }
 
     let event: Value = match serde_json::from_slice(&body) {
         Ok(value) => value,
-        Err(_) => return HttpResponse::BadRequest().body("invalid json"),
+        Err(_) => return Ok(HttpResponse::BadRequest().body("invalid json")),
     };
     let event_id = event.get("id").and_then(Value::as_str).unwrap_or("");
     let event_type = event.get("type").and_then(Value::as_str).unwrap_or("");
     if event_id.is_empty() {
-        return HttpResponse::BadRequest().body("missing event id");
+        return Ok(HttpResponse::BadRequest().body("missing event id"));
     }
 
     // Idempotency: a previously processed event is acknowledged, not re-run.
-    match sqlx::query_scalar::<_, i32>("SELECT 1 FROM webhook_events WHERE stripe_event_id = $1")
-        .bind(event_id)
-        .fetch_optional(pool.get_ref())
-        .await
-    {
-        Ok(Some(_)) => return HttpResponse::Ok().json(serde_json::json!({ "duplicate": true })),
-        Ok(None) => {}
-        Err(e) => {
-            error!(target: "billing", error = ?e, "webhook dedup lookup failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+    let already_processed =
+        sqlx::query_scalar::<_, i32>("SELECT 1 FROM webhook_events WHERE stripe_event_id = $1")
+            .bind(event_id)
+            .fetch_optional(pool.get_ref())
+            .await?
+            .is_some();
+    if already_processed {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "duplicate": true })));
     }
 
     let object = event
@@ -81,9 +78,10 @@ pub async fn stripe_webhook(
         }
     };
 
+    // A transient processing failure returns 500 on purpose so Stripe retries.
     if let Err(e) = result {
         error!(target: "billing", event_type, error = ?e, "webhook processing failed");
-        return HttpResponse::InternalServerError().finish();
+        return Ok(HttpResponse::InternalServerError().finish());
     }
 
     if let Err(e) = sqlx::query(
@@ -99,7 +97,7 @@ pub async fn stripe_webhook(
     }
 
     info!(target: "billing", event_type, "webhook processed");
-    HttpResponse::Ok().json(serde_json::json!({ "received": true }))
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "received": true })))
 }
 
 /// Parse a checkout `client_reference_id` of the form `kind:owner_id:plan_id`.
