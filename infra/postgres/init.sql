@@ -388,6 +388,10 @@ ON meeting_participants(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_email_accounts_user_id
 ON email_accounts(user_id);
 
+-- Speed up the per-user storage SUMs in GET /api/profile.
+CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id);
+CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);
+
 -- ============================================================
 -- 💳 BILLING (Stripe)
 -- ------------------------------------------------------------
