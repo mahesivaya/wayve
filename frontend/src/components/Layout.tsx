@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { canAccessPricing } from "../auth/accountHome";
+import { canAccessPricingForUser } from "../auth/accountHome";
 import { Suspense, useState, useCallback } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
@@ -118,7 +118,7 @@ export default function Layout() {
           {renderNavItem("/aichat", "aichat", "AI Chat")}
           {/* Pricing: hidden from regular organization members (covered by
               the organization subscription); shown to everyone else. */}
-          {canAccessPricing(user.account_type) && (
+          {canAccessPricingForUser(user) && (
             <Link
               to="/pricing"
               className={location.pathname === "/pricing" ? "active" : ""}
@@ -131,6 +131,17 @@ export default function Layout() {
         </div>
 
         <div className="actions">
+          {/* Welcome message — shows the signed-in account (platform /
+              organization / personal) and its role; handy for RBAC testing. */}
+          <div className="header-welcome" title={`Role: ${user.role_label ?? "—"}`}>
+            <span className="header-welcome-text">
+              Welcome, <strong>{user.email}</strong>
+            </span>
+            {user.role_label && (
+              <span className="header-welcome-role">{user.role_label}</span>
+            )}
+          </div>
+
           <button
             type="button"
             className={`duplicate-pane-btn ${splitTarget === "right" ? "active" : ""}`}

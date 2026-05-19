@@ -83,7 +83,7 @@ export type OrganizationBilling = {
     cancel_at_period_end: boolean;
     plan_code: string | null;
   } | null;
-  members: { id: number; email: string; account_type: string }[];
+  members: { id: number; email: string; account_type: string; role?: string | null }[];
 };
 
 // ---- Calls -----------------------------------------------------------------

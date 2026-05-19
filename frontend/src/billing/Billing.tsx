@@ -457,7 +457,7 @@ export default function Billing() {
               {org.members.map((member) => (
                 <tr key={member.id}>
                   <td>{member.email}</td>
-                  <td>{member.account_type}</td>
+                  <td>{member.role ?? member.account_type}</td>
                 </tr>
               ))}
             </tbody>

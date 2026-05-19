@@ -173,7 +173,8 @@ export default function Home() {
     <div className="dashboard">
       {/* HEADER */}
       <div className="dashboard-header">
-        <h2>Welcome, {user.email} 👋</h2>
+        <h2>Welcome {user.role_label ?? "Personal workspace owner"}</h2>
+        <p>{user.email}</p>
       </div>
 
       {/* GRID */}
@@ -184,10 +185,6 @@ export default function Home() {
             <p>{card.description}</p>
           </div>
         ))}
-        <div className="card" onClick={() => navigate("/organization")}>
-          <h3>Organization</h3>
-          <p>Welcome to Wayve platform</p>
-        </div>
       </div>
     </div>
   );

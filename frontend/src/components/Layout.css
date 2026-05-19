@@ -807,3 +807,32 @@
 .email-item.active {
   background: #e0e7ff;
 }
+
+/* =============================
+   👋 HEADER WELCOME (sign-in / role indicator)
+============================== */
+.header-welcome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.header-welcome-text {
+  font-size: 13px;
+  color: #374151;
+}
+
+.header-welcome-text strong {
+  color: #111827;
+}
+
+.header-welcome-role {
+  font-size: 11px;
+  font-weight: 600;
+  color: #4338ca;
+  background: #e0e7ff;
+  border-radius: 999px;
+  padding: 2px 9px;
+}

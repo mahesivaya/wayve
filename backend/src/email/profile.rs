@@ -1,5 +1,6 @@
 use crate::prelude::*;
 
+use crate::routes::user::effective_access_for_user;
 use crate::security::jwt::get_user_id_from_request;
 use actix_web::{HttpResponse, Responder, get};
 use moka::future::Cache as MokaCache;
@@ -63,11 +64,22 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder
             } else {
                 row.try_get("organization_name").ok().flatten()
             };
+            let access = match effective_access_for_user(pool.get_ref(), id).await {
+                Ok(value) => value,
+                Err(e) => {
+                    error!(target: "db", user_id = id, error = ?e, "effective access lookup failed");
+                    crate::routes::user::fallback_access(&account_type)
+                }
+            };
 
             let response = serde_json::json!({
                 "id": id,
                 "email": email,
                 "account_type": account_type,
+                "effective_role": access.role,
+                "role_label": access.role_label,
+                "scope": access.scope,
+                "permissions": access.permissions,
                 "organization_id": organization_id,
                 "organization_slug": organization_slug,
                 "organization_name": organization_name

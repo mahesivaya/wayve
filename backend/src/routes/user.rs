@@ -3,6 +3,7 @@ use crate::models::auth::ChangePasswordInput;
 use crate::models::email_request::UserResponse;
 use crate::prelude::*;
 use crate::security::jwt::get_user_id_from_request;
+use crate::security::rbac::{self, Permission, Role, Scope};
 use actix_web::{HttpRequest, HttpResponse, Responder, delete, get, post, put, web};
 use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{DateTime, Utc};
@@ -34,6 +35,136 @@ pub fn normalized_account_type(value: &str) -> &str {
     match value {
         "organization" | "organization_admin" | "platform_admin" => value,
         _ => "personal",
+    }
+}
+
+pub fn normalized_org_role(value: &str) -> &str {
+    match value {
+        "owner" | "super_admin" | "admin" | "security" | "billing" | "developer" | "support"
+        | "member" | "guest" => value,
+        _ => "member",
+    }
+}
+
+pub fn normalized_platform_role(value: &str) -> &str {
+    match value {
+        "owner" | "super_admin" | "admin" | "security" | "billing" | "developer" | "support"
+        | "member" | "guest" => value,
+        _ => "member",
+    }
+}
+
+fn default_role_for_account_type(account_type: &str) -> &'static str {
+    match normalized_account_type(account_type) {
+        "organization_admin" => "owner",
+        "organization" => "member",
+        "platform_admin" => "owner",
+        _ => "owner",
+    }
+}
+
+fn role_label(role: &str, account_type: &str) -> &'static str {
+    match normalized_account_type(account_type) {
+        "personal" => "Personal workspace owner",
+        "platform_admin" => match normalized_platform_role(role) {
+            "owner" => "Platform owner",
+            "super_admin" => "Platform super admin",
+            "admin" => "Platform admin",
+            "security" => "Platform security",
+            "billing" => "Platform billing",
+            "developer" => "Platform developer",
+            "support" => "Platform support",
+            "guest" => "Platform guest",
+            _ => "Platform member",
+        },
+        _ => match normalized_org_role(role) {
+            "owner" => "Organization owner",
+            "super_admin" => "Organization super admin",
+            "admin" => "Organization admin",
+            "security" => "Organization security",
+            "billing" => "Organization billing",
+            "developer" => "Developer",
+            "support" => "Support",
+            "guest" => "Guest",
+            _ => "Member",
+        },
+    }
+}
+
+/// Resolve a user's effective role string and its display label.
+///
+/// Delegates to `rbac::resolve_role_context` so role resolution lives in one
+/// place; this wrapper only adds the scope-prefixed human label.
+pub async fn effective_role_for_user(
+    pool: &PgPool,
+    user_id: i32,
+) -> Result<(String, String), sqlx::Error> {
+    let ctx = rbac::resolve_role_context(pool, user_id).await?;
+    Ok((
+        ctx.role.as_str().to_string(),
+        effective_role_label(ctx.scope, ctx.role),
+    ))
+}
+
+/// Scope-prefixed display label for a resolved role.
+fn effective_role_label(scope: Scope, role: Role) -> String {
+    match scope {
+        Scope::Personal => "Personal workspace owner".to_string(),
+        Scope::Platform => format!("Platform {}", role.label().to_lowercase()),
+        Scope::Organization => match role {
+            Role::Owner => "Organization owner".to_string(),
+            Role::SuperAdmin => "Organization super admin".to_string(),
+            Role::Admin => "Organization admin".to_string(),
+            Role::Security => "Organization security".to_string(),
+            Role::Billing => "Organization billing".to_string(),
+            Role::Developer => "Developer".to_string(),
+            Role::Support => "Support".to_string(),
+            Role::Member => "Member".to_string(),
+            Role::Guest => "Guest".to_string(),
+        },
+    }
+}
+
+/// A user's resolved access — role, scope, and the permission strings the
+/// frontend uses to gate UI. Returned by `/api/me` and `/profile`.
+pub struct EffectiveAccess {
+    pub role: String,
+    pub role_label: String,
+    pub scope: String,
+    pub permissions: Vec<String>,
+}
+
+/// Full access info for a user, computed from the RBAC role context.
+pub async fn effective_access_for_user(
+    pool: &PgPool,
+    user_id: i32,
+) -> Result<EffectiveAccess, sqlx::Error> {
+    let ctx = rbac::resolve_role_context(pool, user_id).await?;
+    Ok(EffectiveAccess {
+        role: ctx.role.as_str().to_string(),
+        role_label: effective_role_label(ctx.scope, ctx.role),
+        scope: ctx.scope.as_str().to_string(),
+        permissions: ctx.permission_strings(),
+    })
+}
+
+/// Best-effort access used only when the role-context query fails (a DB error).
+/// Derives scope/role from the account_type the caller already holds.
+pub fn fallback_access(account_type: &str) -> EffectiveAccess {
+    let (scope, role) = match normalized_account_type(account_type) {
+        "platform_admin" => (Scope::Platform, Role::Owner),
+        "organization_admin" => (Scope::Organization, Role::Owner),
+        "organization" => (Scope::Organization, Role::Member),
+        _ => (Scope::Personal, Role::Owner),
+    };
+    EffectiveAccess {
+        role: role.as_str().to_string(),
+        role_label: effective_role_label(scope, role),
+        scope: scope.as_str().to_string(),
+        permissions: rbac::permissions_for(role)
+            .iter()
+            .map(|perm| perm.as_str().to_string())
+            .collect(),
     }
 }
 
@@ -133,37 +264,35 @@ pub struct CreateOrganizationInput {
     pub admin_password: Option<String>,
 }
 
+/// Require the caller to be platform-scope staff holding `members:manage` — the
+/// gate for platform-only actions such as provisioning organizations. Platform
+/// `owner`, `super_admin`, and `admin` qualify. Returns the caller's user id.
 async fn require_platform_admin(req: &HttpRequest, pool: &PgPool) -> Result<i32, HttpResponse> {
-    let admin_id =
-        get_user_id_from_request(req).ok_or_else(|| HttpResponse::Unauthorized().finish())?;
-
-    let account_type: Option<String> =
-        match sqlx::query_scalar("SELECT account_type FROM users WHERE id = $1")
-            .bind(admin_id)
-            .fetch_optional(pool)
-            .await
-        {
-            Ok(value) => value,
-            Err(e) => {
-                error!(target: "db", admin_id, error = ?e, "platform admin lookup failed");
-                return Err(HttpResponse::InternalServerError().finish());
-            }
-        };
-
-    if normalized_account_type(account_type.as_deref().unwrap_or("personal")) != "platform_admin" {
-        return Err(HttpResponse::Forbidden().json(
-            serde_json::json!({ "message": "Only platform admins can manage organizations" }),
-        ));
+    let ctx = rbac::require_permission(req, pool, Permission::MembersManage).await?;
+    if ctx.scope != Scope::Platform {
+        return Err(HttpResponse::Forbidden()
+            .json(serde_json::json!({ "message": "Platform staff access required" })));
     }
-
-    Ok(admin_id)
+    Ok(ctx.user_id)
 }
 
 #[get("/admin/organizations")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
-    if let Err(response) = require_platform_admin(&req, pool.get_ref()).await {
-        return response;
+    let list_ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersRead)
+        .await
+    {
+        Ok(ctx) => Ok(ctx),
+        Err(_) => rbac::require_permission(&req, pool.get_ref(), Permission::ApiKeysManage).await,
+    };
+
+    match list_ctx {
+        Ok(ctx) if ctx.scope == Scope::Platform => {}
+        Ok(_) => {
+            return HttpResponse::Forbidden()
+                .json(serde_json::json!({ "message": "Platform staff access required" }));
+        }
+        Err(response) => return response,
     }
 
     match sqlx::query(
@@ -357,6 +486,24 @@ pub async fn admin_create_organization(
                     "account_type": account_type, // Use the enum directly
                     "organization_id": org_id
                 });
+
+                if let Err(e) = sqlx::query(
+                    r#"
+                    INSERT INTO organization_members (organization_id, user_id, role)
+                    VALUES ($1, $2, 'owner')
+                    ON CONFLICT (organization_id, user_id) DO UPDATE
+                    SET role = EXCLUDED.role, updated_at = NOW()
+                    "#,
+                )
+                .bind(organization_id)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                {
+                    error!(target: "db", admin_id, organization_id, user_id = id, error = ?e, "create organization admin membership failed");
+                    let _ = tx.rollback().await;
+                    return HttpResponse::InternalServerError().finish();
+                }
             }
             Err(e) => {
                 if e.to_string().contains("duplicate key") {
@@ -394,12 +541,19 @@ pub async fn admin_generate_api_key(
     path: web::Path<i32>,
     data: web::Json<GenerateApiKeyInput>,
 ) -> impl Responder {
-    let admin_id = match require_platform_admin(&req, pool.get_ref()).await {
-        Ok(id) => id,
+    let organization_id = path.into_inner();
+    let admin_id = match rbac::require_org_access(
+        &req,
+        pool.get_ref(),
+        organization_id,
+        Permission::ApiKeysManage,
+    )
+    .await
+    {
+        Ok(ctx) => ctx.user_id,
         Err(response) => return response,
     };
 
-    let organization_id = path.into_inner();
     let key_name = data.name.trim();
     if key_name.is_empty() {
         return HttpResponse::BadRequest()
@@ -468,10 +622,17 @@ pub async fn admin_list_api_keys(
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
 ) -> impl Responder {
-    if let Err(response) = require_platform_admin(&req, pool.get_ref()).await {
+    let organization_id = path.into_inner();
+    if let Err(response) = rbac::require_org_access(
+        &req,
+        pool.get_ref(),
+        organization_id,
+        Permission::ApiKeysManage,
+    )
+    .await
+    {
         return response;
     }
-    let organization_id = path.into_inner();
 
     match sqlx::query_as::<_, ApiKeyRow>(
         r#"
@@ -500,11 +661,18 @@ pub async fn admin_revoke_api_key(
     pool: web::Data<PgPool>,
     path: web::Path<(i32, i32)>,
 ) -> impl Responder {
-    let admin_id = match require_platform_admin(&req, pool.get_ref()).await {
-        Ok(id) => id,
+    let (organization_id, key_id) = path.into_inner();
+    let admin_id = match rbac::require_org_access(
+        &req,
+        pool.get_ref(),
+        organization_id,
+        Permission::ApiKeysManage,
+    )
+    .await
+    {
+        Ok(ctx) => ctx.user_id,
         Err(response) => return response,
     };
-    let (organization_id, key_id) = path.into_inner();
 
     match sqlx::query(
         r#"
@@ -601,38 +769,15 @@ pub async fn admin_create_user(
     pool: web::Data<PgPool>,
     data: web::Json<AdminCreateUserInput>,
 ) -> impl Responder {
-    let admin_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
-
-    let admin_row = match sqlx::query_as::<_, (String, Option<i32>)>(
-        "SELECT account_type, organization_id FROM users WHERE id = $1",
-    )
-    .bind(admin_id)
-    .fetch_optional(pool.get_ref())
-    .await
+    // Creating accounts requires `members:manage` — held by org and platform
+    // owner / super_admin / admin. This replaces the old account_type check, so
+    // an organization `admin` (not just `organization_admin`) can add members.
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersManage).await
     {
-        Ok(value) => value,
-        Err(e) => {
-            error!(target: "db", admin_id, error = ?e, "admin account lookup failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+        Ok(ctx) => ctx,
+        Err(response) => return response,
     };
-
-    let (admin_account_type, admin_organization_id) = match admin_row {
-        Some(pair) => pair,
-        None => return HttpResponse::Unauthorized().finish(),
-    };
-
-    if !matches!(
-        normalized_account_type(&admin_account_type),
-        "organization_admin" | "platform_admin"
-    ) {
-        warn!(target: "auth", admin_id, "non-admin user tried to create user");
-        return HttpResponse::Forbidden()
-            .json(serde_json::json!({ "message": "Only admins can create users" }));
-    }
+    let admin_id = ctx.user_id;
 
     let username = data.username.trim();
     let email = data.email.trim().to_lowercase();
@@ -642,15 +787,17 @@ pub async fn admin_create_user(
         .map(normalized_account_type)
         .unwrap_or("personal");
 
-    let account_type: &str = match normalized_account_type(&admin_account_type) {
-        "platform_admin" => match requested_account_type {
+    // Platform staff may provision any account type; an organization manager
+    // may only add "organization" members to their own organization.
+    let account_type: &str = match ctx.scope {
+        Scope::Platform => match requested_account_type {
             "organization_admin" | "platform_admin" | "organization" | "personal" => {
                 requested_account_type
             }
             _ => "personal",
         },
-        "organization_admin" => "organization",
-        _ => "personal",
+        Scope::Organization => "organization",
+        Scope::Personal => "personal",
     };
 
     if username.is_empty() || email.is_empty() || data.password.is_empty() {
@@ -699,12 +846,12 @@ pub async fn admin_create_user(
                 return HttpResponse::InternalServerError().finish();
             }
         }
-    } else if normalized_account_type(&admin_account_type) == "organization_admin" {
-        match admin_organization_id {
+    } else if ctx.scope == Scope::Organization {
+        match ctx.organization_id {
             Some(id) => Some(id),
             None => {
                 return HttpResponse::BadRequest().json(serde_json::json!({
-                    "message": "Organization admin is not assigned to an organization"
+                    "message": "Organization manager is not assigned to an organization"
                 }));
             }
         }
@@ -753,6 +900,45 @@ pub async fn admin_create_user(
             let email: String = row.get("email");
             let account_type: String = row.get("account_type");
             let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
+            let role = default_role_for_account_type(&account_type);
+
+            if normalized_account_type(&account_type) == "platform_admin" {
+                if let Err(e) = sqlx::query(
+                    r#"
+                    INSERT INTO platform_members (user_id, role)
+                    VALUES ($1, $2)
+                    ON CONFLICT (user_id) DO UPDATE
+                    SET role = EXCLUDED.role, updated_at = NOW()
+                    "#,
+                )
+                .bind(id)
+                .bind(role)
+                .execute(pool.get_ref())
+                .await
+                {
+                    error!(target: "db", admin_id, user_id = id, error = ?e, "admin create platform membership failed");
+                    return HttpResponse::InternalServerError().finish();
+                }
+            }
+
+            if let Some(org_id) = organization_id
+                && let Err(e) = sqlx::query(
+                    r#"
+                    INSERT INTO organization_members (organization_id, user_id, role)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (organization_id, user_id) DO UPDATE
+                    SET role = EXCLUDED.role, updated_at = NOW()
+                    "#,
+                )
+                .bind(org_id)
+                .bind(id)
+                .bind(role)
+                .execute(pool.get_ref())
+                .await
+            {
+                error!(target: "db", admin_id, organization_id = org_id, user_id = id, error = ?e, "admin create user membership failed");
+                return HttpResponse::InternalServerError().finish();
+            }
 
             info!(target: "auth", admin_id, user_id = id, "admin created user");
             HttpResponse::Created().json(serde_json::json!({
@@ -760,7 +946,8 @@ pub async fn admin_create_user(
                 "username": username,
                 "email": email,
                 "account_type": account_type,
-                "organization_id": organization_id
+                "organization_id": organization_id,
+                "role": role
             }))
         }
         Err(e) => {
@@ -835,6 +1022,13 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> impl Resp
             } else {
                 row.try_get("organization_name").ok().flatten()
             };
+            let access = match effective_access_for_user(pool.get_ref(), id).await {
+                Ok(value) => value,
+                Err(e) => {
+                    error!(target: "db", user_id = id, error = ?e, "effective access lookup failed");
+                    fallback_access(&account_type)
+                }
+            };
 
             let response = serde_json::json!({
                 "id": id,
@@ -843,6 +1037,10 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> impl Resp
                 "last_name": last_name,
                 "auth_provider": auth_provider,
                 "account_type": account_type,
+                "effective_role": access.role,
+                "role_label": access.role_label,
+                "scope": access.scope,
+                "permissions": access.permissions,
                 "organization_id": organization_id,
                 "organization_name": organization_name,
                 "total_emails": total_emails,
@@ -1021,6 +1219,378 @@ async fn get_all_users(req: HttpRequest, pool: web::Data<PgPool>) -> impl Respon
     }
 }
 
+// ============================================================
+// 🔐 RBAC — member listing & role management
+// ============================================================
+
+/// Body of a role-change request.
+#[derive(Deserialize)]
+pub struct UpdateRoleInput {
+    pub role: String,
+}
+
+/// Parse a request's target role, rejecting anything that is not an exact
+/// canonical role token (so "Owner", "MEMBER", "bogus" are 400s rather than
+/// silently normalizing to `member`).
+fn parse_assignable_role(raw: &str) -> Option<Role> {
+    let trimmed = raw.trim();
+    let role = Role::from_str(trimmed);
+    (role.as_str() == trimmed).then_some(role)
+}
+
+/// JSON for one member row of a `/members` listing.
+fn member_row_json(row: &sqlx::postgres::PgRow, platform: bool) -> serde_json::Value {
+    let user_id: i32 = row.get("user_id");
+    let email: String = row.get("email");
+    let username: Option<String> = row.try_get("username").ok().flatten();
+    let stored_role: String = row.get("role");
+    let role = if platform {
+        normalized_platform_role(&stored_role)
+    } else {
+        normalized_org_role(&stored_role)
+    };
+    let account_type = if platform {
+        "platform_admin"
+    } else {
+        "organization"
+    };
+    serde_json::json!({
+        "user_id": user_id,
+        "email": email,
+        "username": username,
+        "role": role,
+        "role_label": role_label(role, account_type),
+    })
+}
+
+#[get("/organizations/{id}/members")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn list_organization_members(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> impl Responder {
+    let organization_id = path.into_inner();
+    if let Err(response) = rbac::require_org_access(
+        &req,
+        pool.get_ref(),
+        organization_id,
+        Permission::MembersRead,
+    )
+    .await
+    {
+        return response;
+    }
+
+    match sqlx::query(
+        r#"
+        SELECT u.id AS user_id, u.email, u.username,
+               COALESCE(om.role, 'member') AS role
+        FROM users u
+        LEFT JOIN organization_members om
+          ON om.organization_id = u.organization_id AND om.user_id = u.id
+        WHERE u.organization_id = $1
+        ORDER BY u.email
+        "#,
+    )
+    .bind(organization_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => HttpResponse::Ok().json(
+            rows.iter()
+                .map(|row| member_row_json(row, false))
+                .collect::<Vec<_>>(),
+        ),
+        Err(e) => {
+            error!(target: "db", organization_id, error = ?e, "list organization members failed");
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+#[put("/organizations/{id}/members/{user_id}/role")]
+#[instrument(target = "auth", skip(req, pool, data))]
+pub async fn update_organization_member_role(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(i32, i32)>,
+    data: web::Json<UpdateRoleInput>,
+) -> impl Responder {
+    let (organization_id, target_user_id) = path.into_inner();
+
+    let ctx = match rbac::require_org_access(
+        &req,
+        pool.get_ref(),
+        organization_id,
+        Permission::RolesAssignLimited,
+    )
+    .await
+    {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+
+    let Some(new_role) = parse_assignable_role(&data.role) else {
+        return HttpResponse::BadRequest().json(serde_json::json!({ "message": "Unknown role" }));
+    };
+
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            error!(target: "db", error = ?e, "begin role-update transaction failed");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    // Confirm the target belongs to this organization and read their role.
+    let current = match sqlx::query(
+        r#"
+        SELECT u.organization_id, COALESCE(om.role, 'member') AS role
+        FROM users u
+        LEFT JOIN organization_members om
+          ON om.organization_id = $1 AND om.user_id = u.id
+        WHERE u.id = $2
+        "#,
+    )
+    .bind(organization_id)
+    .bind(target_user_id)
+    .fetch_optional(&mut *tx)
+    .await
+    {
+        Ok(Some(row)) => row,
+        Ok(None) => {
+            return HttpResponse::NotFound()
+                .json(serde_json::json!({ "message": "User not found" }));
+        }
+        Err(e) => {
+            error!(target: "db", error = ?e, "role-update target lookup failed");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let target_org: Option<i32> = current.try_get("organization_id").ok().flatten();
+    if target_org != Some(organization_id) {
+        return HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "User is not a member of this organization" }));
+    }
+    let current_role = Role::from_str(&current.get::<String, _>("role"));
+
+    if !rbac::can_assign_role(&ctx, current_role, new_role) {
+        return HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Your role cannot assign or modify that role"
+        }));
+    }
+
+    // Never strand an organization with zero owners. `FOR UPDATE` locks the
+    // owner rows so two concurrent demotions can't both pass this check.
+    if current_role == Role::Owner && new_role != Role::Owner {
+        let owners = match sqlx::query_scalar::<_, i32>(
+            "SELECT user_id FROM organization_members \
+             WHERE organization_id = $1 AND role = 'owner' FOR UPDATE",
+        )
+        .bind(organization_id)
+        .fetch_all(&mut *tx)
+        .await
+        {
+            Ok(ids) => ids,
+            Err(e) => {
+                error!(target: "db", error = ?e, "owner lock query failed");
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+        if owners.len() <= 1 {
+            return HttpResponse::Conflict().json(serde_json::json!({
+                "message": "Cannot demote the last owner of the organization"
+            }));
+        }
+    }
+
+    if let Err(e) = sqlx::query(
+        r#"
+        INSERT INTO organization_members (organization_id, user_id, role)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (organization_id, user_id) DO UPDATE
+        SET role = EXCLUDED.role, updated_at = NOW()
+        "#,
+    )
+    .bind(organization_id)
+    .bind(target_user_id)
+    .bind(new_role.as_str())
+    .execute(&mut *tx)
+    .await
+    {
+        error!(target: "db", error = ?e, "organization role update failed");
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    if let Err(e) = tx.commit().await {
+        error!(target: "db", error = ?e, "commit role-update transaction failed");
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    // Refresh the target's cached identity so the new permissions take effect
+    // on their next request rather than after the 60s cache TTL.
+    invalidate_me_cache(target_user_id).await;
+    invalidate_profile_cache(target_user_id).await;
+    info!(
+        target: "auth",
+        actor = ctx.user_id, organization_id, target_user_id,
+        role = new_role.as_str(),
+        "organization member role updated"
+    );
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "user_id": target_user_id,
+        "role": new_role.as_str(),
+        "role_label": role_label(new_role.as_str(), "organization"),
+    }))
+}
+
+#[get("/platform/members")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn list_platform_members(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersRead).await {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+    if ctx.scope != Scope::Platform {
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({ "message": "Platform staff access required" }));
+    }
+
+    match sqlx::query(
+        r#"
+        SELECT u.id AS user_id, u.email, u.username, pm.role AS role
+        FROM platform_members pm
+        JOIN users u ON u.id = pm.user_id
+        ORDER BY u.email
+        "#,
+    )
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => HttpResponse::Ok().json(
+            rows.iter()
+                .map(|row| member_row_json(row, true))
+                .collect::<Vec<_>>(),
+        ),
+        Err(e) => {
+            error!(target: "db", error = ?e, "list platform members failed");
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+#[put("/platform/members/{user_id}/role")]
+#[instrument(target = "auth", skip(req, pool, data))]
+pub async fn update_platform_member_role(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    data: web::Json<UpdateRoleInput>,
+) -> impl Responder {
+    let target_user_id = path.into_inner();
+
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::RolesAssignLimited)
+        .await
+    {
+        Ok(ctx) => ctx,
+        Err(response) => return response,
+    };
+    if ctx.scope != Scope::Platform {
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({ "message": "Platform staff access required" }));
+    }
+
+    let Some(new_role) = parse_assignable_role(&data.role) else {
+        return HttpResponse::BadRequest().json(serde_json::json!({ "message": "Unknown role" }));
+    };
+
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            error!(target: "db", error = ?e, "begin platform role-update transaction failed");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let current_role = match sqlx::query_scalar::<_, String>(
+        "SELECT role FROM platform_members WHERE user_id = $1",
+    )
+    .bind(target_user_id)
+    .fetch_optional(&mut *tx)
+    .await
+    {
+        Ok(Some(role)) => Role::from_str(&role),
+        Ok(None) => {
+            return HttpResponse::NotFound()
+                .json(serde_json::json!({ "message": "User is not a platform member" }));
+        }
+        Err(e) => {
+            error!(target: "db", error = ?e, "platform role-update lookup failed");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    if !rbac::can_assign_role(&ctx, current_role, new_role) {
+        return HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Your role cannot assign or modify that role"
+        }));
+    }
+
+    if current_role == Role::Owner && new_role != Role::Owner {
+        let owners = match sqlx::query_scalar::<_, i32>(
+            "SELECT user_id FROM platform_members WHERE role = 'owner' FOR UPDATE",
+        )
+        .fetch_all(&mut *tx)
+        .await
+        {
+            Ok(ids) => ids,
+            Err(e) => {
+                error!(target: "db", error = ?e, "platform owner lock query failed");
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+        if owners.len() <= 1 {
+            return HttpResponse::Conflict().json(serde_json::json!({
+                "message": "Cannot demote the last platform owner"
+            }));
+        }
+    }
+
+    if let Err(e) =
+        sqlx::query("UPDATE platform_members SET role = $1, updated_at = NOW() WHERE user_id = $2")
+            .bind(new_role.as_str())
+            .bind(target_user_id)
+            .execute(&mut *tx)
+            .await
+    {
+        error!(target: "db", error = ?e, "platform role update failed");
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    if let Err(e) = tx.commit().await {
+        error!(target: "db", error = ?e, "commit platform role-update transaction failed");
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    invalidate_me_cache(target_user_id).await;
+    invalidate_profile_cache(target_user_id).await;
+    info!(
+        target: "auth",
+        actor = ctx.user_id, target_user_id,
+        role = new_role.as_str(),
+        "platform member role updated"
+    );
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "user_id": target_user_id,
+        "role": new_role.as_str(),
+        "role_label": role_label(new_role.as_str(), "platform_admin"),
+    }))
+}
+
 #[cfg(test)]
 mod auth_regression_tests {
     use super::*;
@@ -1043,17 +1613,18 @@ mod auth_regression_tests {
         let pool = test_pool().await;
 
         // 1. Setup: Create an organization
-        let org_id: i32 = sqlx::query_scalar("INSERT INTO organizations (name) VALUES ('Test Org') RETURNING id")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let org_id: i32 =
+            sqlx::query_scalar("INSERT INTO organizations (name) VALUES ('Test Org') RETURNING id")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
 
         // 2. Generate Key (Logic Check)
         let raw_key = "wv_sk_test_secret_123";
         // Store the key the same way the code does — SHA-256, not bcrypt —
         // so validate_api_key's indexed lookup on key_hash finds it.
         let key_hash = hash_api_key(raw_key);
-        
+
         sqlx::query("INSERT INTO api_keys (organization_id, name, key_hash, key_preview) VALUES ($1, $2, $3, $4)")
             .bind(org_id)
             .bind("Test Key")
@@ -1075,7 +1646,7 @@ mod auth_regression_tests {
         let req_bad = actix_test::TestRequest::default()
             .insert_header(("X-API-KEY", "wrong_key"))
             .to_http_request();
-        
+
         let validated_bad = validate_api_key(&req_bad, &pool).await;
         assert!(validated_bad.is_none());
     }
@@ -1124,5 +1695,97 @@ mod auth_regression_tests {
         let resp = actix_test::call_service(&app, req).await;
 
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    async fn update_organization_member_role_authorization() {
+        use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
+        let pool = test_pool().await;
+
+        // An organization with an owner, a plain member, and a target member.
+        let org_id: i32 =
+            sqlx::query_scalar("INSERT INTO organizations (name) VALUES ($1) RETURNING id")
+                .bind(format!("RBAC Org {}", random_email()))
+                .fetch_one(&pool)
+                .await
+                .unwrap_or_else(|e| panic!("create org: {e}"));
+
+        let owner_email = random_email();
+        let owner_id = insert_local_user(&pool, &owner_email, "password123").await;
+        let member_email = random_email();
+        let member_id = insert_local_user(&pool, &member_email, "password123").await;
+        let target_email = random_email();
+        let target_id = insert_local_user(&pool, &target_email, "password123").await;
+
+        for (uid, role) in [
+            (owner_id, "owner"),
+            (member_id, "member"),
+            (target_id, "member"),
+        ] {
+            sqlx::query(
+                "UPDATE users SET account_type = 'organization', organization_id = $1 WHERE id = $2",
+            )
+            .bind(org_id)
+            .bind(uid)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("attach user to org: {e}"));
+            sqlx::query(
+                "INSERT INTO organization_members (organization_id, user_id, role) \
+                 VALUES ($1, $2, $3)",
+            )
+            .bind(org_id)
+            .bind(uid)
+            .bind(role)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("insert membership: {e}"));
+        }
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(update_organization_member_role),
+        )
+        .await;
+
+        let put = |actor_id: i32, actor_email: &str, uid: i32, role: &str| {
+            actix_test::TestRequest::put()
+                .uri(&format!("/organizations/{org_id}/members/{uid}/role"))
+                .insert_header((
+                    "Authorization",
+                    format!("Bearer {}", jwt_for(actor_id, actor_email)),
+                ))
+                .set_json(serde_json::json!({ "role": role }))
+                .to_request()
+        };
+
+        // Owner holds roles:manage — may demote the target member.
+        let resp =
+            actix_test::call_service(&app, put(owner_id, &owner_email, target_id, "developer"))
+                .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // A plain member has no role-management permission — 403.
+        let resp =
+            actix_test::call_service(&app, put(member_id, &member_email, target_id, "support"))
+                .await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        // The sole owner cannot demote themselves — 409.
+        let resp =
+            actix_test::call_service(&app, put(owner_id, &owner_email, owner_id, "member")).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+
+        for uid in [owner_id, member_id, target_id] {
+            let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+                .bind(uid)
+                .execute(&pool)
+                .await;
+        }
+        let _ = sqlx::query("DELETE FROM organizations WHERE id = $1")
+            .bind(org_id)
+            .execute(&pool)
+            .await;
     }
 }

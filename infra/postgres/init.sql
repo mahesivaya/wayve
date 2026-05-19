@@ -49,6 +49,54 @@ UPDATE organizations
 CREATE UNIQUE INDEX IF NOT EXISTS organizations_slug_unique_idx
     ON organizations (slug) WHERE slug IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS organization_members (
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'member',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (organization_id, user_id),
+    CONSTRAINT organization_members_role_chk CHECK (
+        role IN ('owner', 'super_admin', 'admin', 'security', 'billing', 'developer', 'support', 'member', 'guest')
+    )
+);
+
+ALTER TABLE organization_members DROP CONSTRAINT IF EXISTS organization_members_role_chk;
+ALTER TABLE organization_members ADD CONSTRAINT organization_members_role_chk CHECK (
+    role IN ('owner', 'super_admin', 'admin', 'security', 'billing', 'developer', 'support', 'member', 'guest')
+);
+
+INSERT INTO organization_members (organization_id, user_id, role)
+SELECT organization_id, id,
+       CASE
+           WHEN account_type = 'organization_admin' THEN 'owner'
+           ELSE 'member'
+       END
+FROM users
+WHERE organization_id IS NOT NULL
+ON CONFLICT (organization_id, user_id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS platform_members (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'admin',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT platform_members_role_chk CHECK (
+        role IN ('owner', 'super_admin', 'admin', 'security', 'billing', 'developer', 'support', 'member', 'guest')
+    )
+);
+
+ALTER TABLE platform_members DROP CONSTRAINT IF EXISTS platform_members_role_chk;
+ALTER TABLE platform_members ADD CONSTRAINT platform_members_role_chk CHECK (
+    role IN ('owner', 'super_admin', 'admin', 'security', 'billing', 'developer', 'support', 'member', 'guest')
+);
+
+INSERT INTO platform_members (user_id, role)
+SELECT id, 'owner'
+FROM users
+WHERE account_type = 'platform_admin'
+ON CONFLICT (user_id) DO NOTHING;
+
 -- Password reset tokens. Single-use, 30-minute lifetime.
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id SERIAL PRIMARY KEY,

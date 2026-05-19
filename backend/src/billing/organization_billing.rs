@@ -5,7 +5,9 @@
 use super::entitlements::effective_entitlements;
 use super::models::BillingOwner;
 use crate::prelude::*;
-use crate::routes::user::normalized_account_type;
+use crate::routes::user::{
+    effective_role_for_user, normalized_account_type, normalized_platform_role,
+};
 use chrono::{DateTime, Utc};
 use tracing::{error, instrument};
 
@@ -85,7 +87,15 @@ pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>)
     };
 
     let members = sqlx::query(
-        "SELECT id, email, account_type FROM users WHERE organization_id = $1 ORDER BY id LIMIT 100",
+        r#"
+        SELECT u.id, u.email, u.account_type, COALESCE(om.role, 'member') AS role
+        FROM users u
+        LEFT JOIN organization_members om
+          ON om.organization_id = u.organization_id AND om.user_id = u.id
+        WHERE u.organization_id = $1
+        ORDER BY u.id
+        LIMIT 100
+        "#,
     )
     .bind(org_id)
     .fetch_all(pool.get_ref())
@@ -97,16 +107,26 @@ pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>)
                     "id": row.get::<i32, _>("id"),
                     "email": row.get::<String, _>("email"),
                     "account_type": row.get::<String, _>("account_type"),
+                    "role": row.get::<String, _>("role"),
                 })
             })
             .collect::<Vec<_>>()
     })
     .unwrap_or_default();
 
-    let can_manage = matches!(
-        normalized_account_type(&account_type),
-        "organization_admin" | "platform_admin"
-    );
+    let can_manage = match effective_role_for_user(pool.get_ref(), user_id).await {
+        Ok((role, _)) => {
+            if normalized_account_type(&account_type) == "platform_admin" {
+                matches!(normalized_platform_role(&role), "owner" | "admin")
+            } else {
+                matches!(role.as_str(), "owner" | "admin")
+            }
+        }
+        Err(e) => {
+            error!(target: "billing", user_id, error = ?e, "role lookup failed");
+            false
+        }
+    };
 
     HttpResponse::Ok().json(serde_json::json!({
         "organization": { "id": org_id, "name": org_name, "slug": org_slug },

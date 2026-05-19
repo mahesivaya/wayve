@@ -18,7 +18,9 @@ pub mod webhook_handler;
 pub use routes::{public_routes, routes};
 
 use crate::prelude::*;
-use crate::routes::user::normalized_account_type;
+use crate::routes::user::{
+    effective_role_for_user, normalized_account_type, normalized_platform_role,
+};
 use crate::security::jwt::get_user_id_from_request;
 use models::BillingOwner;
 use std::time::Duration;
@@ -74,8 +76,22 @@ pub async fn require_owner_manager(
         return Ok(());
     }
     let (account_type, _) = account_row(pool, user_id).await?;
-    match normalized_account_type(&account_type) {
-        "organization_admin" | "platform_admin" => Ok(()),
+    let (role, _) = effective_role_for_user(pool, user_id).await.map_err(|e| {
+        error!(target: "billing", user_id, error = ?e, "role lookup failed");
+        HttpResponse::InternalServerError().finish()
+    })?;
+
+    if normalized_account_type(&account_type) == "platform_admin" {
+        return match normalized_platform_role(&role) {
+            "owner" | "admin" => Ok(()),
+            _ => Err(HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "Platform owner or admin role required"
+            }))),
+        };
+    }
+
+    match role.as_str() {
+        "owner" | "admin" => Ok(()),
         _ => Err(HttpResponse::Forbidden().json(serde_json::json!({
             "message": "Only organization admins can manage organization billing"
         }))),
@@ -88,11 +104,21 @@ pub async fn require_platform_admin(
     user_id: i32,
 ) -> std::result::Result<(), HttpResponse> {
     let (account_type, _) = account_row(pool, user_id).await?;
-    if normalized_account_type(&account_type) == "platform_admin" {
+    if normalized_account_type(&account_type) != "platform_admin" {
+        return Err(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Platform admin access required"
+        })));
+    }
+
+    let (role, _) = effective_role_for_user(pool, user_id).await.map_err(|e| {
+        error!(target: "billing", user_id, error = ?e, "platform role lookup failed");
+        HttpResponse::InternalServerError().finish()
+    })?;
+    if matches!(normalized_platform_role(&role), "owner" | "admin") {
         Ok(())
     } else {
         Err(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Platform admin access required"
+            "message": "Platform owner or admin role required"
         })))
     }
 }

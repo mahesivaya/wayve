@@ -5,6 +5,12 @@ export type UserType = {
   email: string;
   id: number;
   account_type: AccountType;
+  effective_role?: string | null;
+  role_label?: string | null;
+  // RBAC scope ("personal" | "organization" | "platform") and the resolved
+  // permission strings — server-computed, used to gate UI.
+  scope?: string | null;
+  permissions?: string[];
   organization_id?: number | null;
   organization_slug?: string | null;
   organization_name?: string | null;
