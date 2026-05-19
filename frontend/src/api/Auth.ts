@@ -1,5 +1,5 @@
 import { logger } from "../utils/logger";
-import { API_BASE } from "../config/env";
+import { getApiBase } from "../config/env";
 
 const log = logger.scope("auth");
 import { apiFetch } from "./client";
@@ -121,7 +121,7 @@ export async function saveUserPublicKey(publicKey: ArrayBuffer) {
 }
 
 export async function getMe(token?: string | null, signal?: AbortSignal) {
-  return fetch(`${API_BASE}/api/me`, {
+  return fetch(`${getApiBase()}/api/me`, {
     credentials: "include",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     signal,

@@ -199,7 +199,7 @@ pub async fn forgot_password(
         return generic_ok;
     }
 
-    let frontend = std::env::var("FRONTEND_URL").unwrap_or_default();
+    let frontend = crate::config::frontend_url();
     let link = format!("{}/reset-password?token={}", frontend, token);
     let body = format!(
         "Hi,\n\nWe received a request to reset your Wayve password.\n\
