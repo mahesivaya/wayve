@@ -5,7 +5,7 @@ import { login } from "../api/Auth";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { homePathForUser } from "../auth/accountHome";
-import { API_BASE } from "../config";
+import { getApiBase } from "../config";
 import "./login.css";
 
 export default function Login() {
@@ -43,11 +43,11 @@ export default function Login() {
   };
 
   const handleGoogle = () => {
-    window.location.href = `${API_BASE}/gmail/login?mode=signup`;
+    window.location.href = `${getApiBase()}/gmail/login?mode=signup`;
   };
 
   const handleOutlook = () => {
-    window.location.href = `${API_BASE}/outlook/login?mode=signup`;
+    window.location.href = `${getApiBase()}/outlook/login?mode=signup`;
   };
 
   return (

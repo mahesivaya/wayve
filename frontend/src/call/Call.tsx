@@ -1,6 +1,6 @@
 import { logger } from "../utils/logger";
 import { useEffect, useRef, useState } from "react";
-import { WS_BASE } from "../config/env";
+import { getWsBase } from "../config/env";
 
 export default function Call() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -43,7 +43,7 @@ export default function Call() {
 
   // 🔥 Start WebSocket
   useEffect(() => {
-    const ws = new WebSocket(`${WS_BASE}/ws/call`);
+    const ws = new WebSocket(`${getWsBase()}/ws/call`);
     wsRef.current = ws;
 
     ws.onopen = () => {

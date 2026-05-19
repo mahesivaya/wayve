@@ -210,7 +210,7 @@ pub async fn outlook_callback(
         Err(response) => return response,
     };
 
-    let frontend = std::env::var("FRONTEND_URL").unwrap_or_default();
+    let frontend = crate::config::frontend_url();
 
     finalize_oauth_session(
         pool.get_ref(),

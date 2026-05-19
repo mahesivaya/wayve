@@ -7,11 +7,8 @@ COPY package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm install
 
-ARG VITE_API_URL=
-ARG VITE_WS_BASE_URL=
-ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_WS_BASE_URL=$VITE_WS_BASE_URL
-
+# No VITE_* build args: the bundle is environment-agnostic and reads its
+# API/WS base at runtime from the backend's GET /api/config.
 COPY . .
 RUN npm run build
 

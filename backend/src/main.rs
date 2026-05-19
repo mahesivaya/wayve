@@ -83,7 +83,7 @@ fn app_routes(cfg: &mut web::ServiceConfig) {
 async fn main() -> std::io::Result<()> {
     init_tracing();
     load_env_files();
-    crate::security::jwt::jwt_secret();
+    crate::config::validate();
     info!("Server starting...");
     tracing::info!("Server starting...");
     let role = RuntimeRole::from_env();
@@ -158,8 +158,7 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
-    let frontend_url =
-        std::env::var("FRONTEND_URL").unwrap_or_else(|_| panic!("FRONTEND_URL missing"));
+    let frontend_url = crate::config::frontend_url();
 
     let port = listen_port();
     info!(port, "Listen port selected");

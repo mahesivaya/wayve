@@ -37,16 +37,11 @@ pub struct OutlookCredentials {
 /// Reads the three required `OUTLOOK_*` env vars; `None` if any is missing.
 /// The client secret must only ever live in the gitignored backend env.
 pub fn outlook_credentials() -> Option<OutlookCredentials> {
-    let value = |key: &str| {
-        std::env::var(key)
-            .ok()
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-    };
+    let outlook = crate::config::outlook_oauth();
     Some(OutlookCredentials {
-        client_id: value("OUTLOOK_CLIENT_ID")?,
-        client_secret: value("OUTLOOK_CLIENT_SECRET")?,
-        redirect_uri: value("OUTLOOK_REDIRECT_URI")?,
+        client_id: outlook.client_id?,
+        client_secret: outlook.client_secret?,
+        redirect_uri: outlook.redirect_uri?,
     })
 }
 

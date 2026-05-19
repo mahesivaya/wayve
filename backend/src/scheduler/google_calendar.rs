@@ -6,9 +6,7 @@ use thiserror::Error;
 use tracing::{instrument, warn};
 
 fn cal_url() -> String {
-    std::env::var("GOOGLE_CALENDAR_URL").unwrap_or_else(|_| {
-        "https://www.googleapis.com/calendar/v3/calendars/primary/events".into()
-    })
+    crate::external::google_calendar_url()
 }
 
 #[derive(Debug, Error)]

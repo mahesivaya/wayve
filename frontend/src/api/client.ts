@@ -1,4 +1,4 @@
-import { API_BASE } from "../config/env";
+import { getApiBase } from "../config/env";
 import { clearAuthToken, getAuthToken } from "../auth/token";
 
 type ApiOptions =
@@ -28,7 +28,7 @@ export async function apiFetch(
   const token = getAuthToken();
   const url = path.startsWith("http")
     ? path
-    : `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+    : `${getApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
 
   let response: Response;
 

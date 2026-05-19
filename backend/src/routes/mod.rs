@@ -1,6 +1,7 @@
 pub mod account;
 pub mod api_keys;
 pub mod auth;
+pub mod config;
 pub mod email;
 pub mod health;
 pub mod user;
@@ -10,6 +11,7 @@ use actix_web::web;
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(health::health)
         .service(health::ready)
+        .service(config::public_config)
         .service(auth::register)
         .service(auth::login)
         .service(auth::logout)

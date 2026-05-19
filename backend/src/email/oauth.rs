@@ -6,16 +6,8 @@ pub fn try_load_google_secrets() -> Result<serde_json::Value> {
     // Preferred: credentials from the centralized secrets file (.env.secrets),
     // surfaced as GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET. The shape mirrors a
     // Google `client_secret.json` so every consumer stays unchanged.
-    let from_env = |key: &str| {
-        std::env::var(key)
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-    };
-    if let (Some(client_id), Some(client_secret)) = (
-        from_env("GOOGLE_CLIENT_ID"),
-        from_env("GOOGLE_CLIENT_SECRET"),
-    ) {
+    let google = crate::config::google_oauth();
+    if let (Some(client_id), Some(client_secret)) = (google.client_id, google.client_secret) {
         return Ok(serde_json::json!({
             "web": { "client_id": client_id, "client_secret": client_secret }
         }));
@@ -23,8 +15,7 @@ pub fn try_load_google_secrets() -> Result<serde_json::Value> {
 
     // Fallback: legacy client_secret.json file. GOOGLE_CLIENT_SECRET_PATH lets
     // tests (and any setup still using the file) point at a custom location.
-    let path = std::env::var("GOOGLE_CLIENT_SECRET_PATH")
-        .unwrap_or_else(|_| "client_secret.json".to_string());
+    let path = google.client_secret_path;
     let data = fs::read_to_string(&path).with_context(|| {
         format!("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set and could not read {path}")
     })?;

@@ -4,7 +4,7 @@ import { register } from "../api/Auth";
 import { useAuth } from "../auth/useAuth";
 import { homePathForAccount } from "../auth/accountHome";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { API_BASE } from "../config";
+import { getApiBase } from "../config";
 import "./login.css"; // ✅ reuse styles
 
 export default function Register() {
@@ -22,7 +22,7 @@ export default function Register() {
   const navigate = useNavigate();
 
   const handleGoogleSignup = () => {
-    window.location.href = `${API_BASE}/gmail/login?mode=signup`;
+    window.location.href = `${getApiBase()}/gmail/login?mode=signup`;
   };
 
   const handleRegister = async (e: FormEvent<HTMLFormElement>) => {

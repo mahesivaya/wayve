@@ -28,9 +28,9 @@ pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> impl Res
         None => return HttpResponse::Unauthorized().finish(),
     };
 
-    let api_key = match std::env::var("GEMINI_API_KEY") {
-        Ok(k) if !k.is_empty() => k,
-        _ => {
+    let api_key = match crate::config::gemini_api_key() {
+        Some(key) => key,
+        None => {
             error!("GEMINI_API_KEY missing");
             return HttpResponse::InternalServerError()
                 .body("AI not configured (GEMINI_API_KEY missing)");
@@ -43,7 +43,7 @@ pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> impl Res
         data.messages.len()
     );
 
-    let model = std::env::var("GEMINI_MODEL").unwrap_or_else(|_| "gemini-2.0-flash".to_string());
+    let model = crate::config::gemini_model();
 
     // Map our {role, content} turns to Gemini's {role, parts:[{text}]} shape.
     // Gemini accepts roles "user" and "model"; anything else gets coerced
