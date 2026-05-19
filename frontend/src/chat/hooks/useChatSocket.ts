@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { ChatMessage } from "../../api/chat";
-import { WS_BASE } from "../../config/env";
+import { getWsBase } from "../../config/env";
 import { logger } from "../../utils/logger";
 import type { Conversation } from "../types";
 
@@ -22,7 +22,7 @@ export function useChatSocket(
       return () => window.clearTimeout(timeout);
     }
 
-    const ws = new WebSocket(`${WS_BASE}/ws/chat`);
+    const ws = new WebSocket(`${getWsBase()}/ws/chat`);
     wsRef.current = ws;
     const initialStateTimeout = window.setTimeout(
       () => setReadyState(ws.readyState),

@@ -1,13 +1,24 @@
-export const API_BASE =
-  import.meta.env.VITE_API_URL ||
-  "";
+import { runtimeConfig } from "./runtimeConfig";
 
-const configuredWsBase =
-  import.meta.env.VITE_WS_URL ||
-  import.meta.env.VITE_WS_BASE_URL ||
-  `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
+// Resolved API / WebSocket bases. Priority: runtime config from the backend
+// (`/api/config`) → build-time `VITE_*` → the page origin. Functions, not
+// constants, because runtime config is fetched asynchronously at boot.
 
-export const WS_BASE =
-  configuredWsBase.startsWith("ws")
-    ? configuredWsBase
-    : `ws://${configuredWsBase}`;
+/** API base for HTTP calls; "" means same-origin. */
+export function getApiBase(): string {
+  return runtimeConfig().apiBase || import.meta.env.VITE_API_URL || "";
+}
+
+/** WebSocket base, e.g. `wss://host`. */
+export function getWsBase(): string {
+  const configured =
+    runtimeConfig().wsBase ||
+    import.meta.env.VITE_WS_URL ||
+    import.meta.env.VITE_WS_BASE_URL ||
+    "";
+  if (configured) {
+    return configured.startsWith("ws") ? configured : `ws://${configured}`;
+  }
+  const { protocol, host } = window.location;
+  return `${protocol === "https:" ? "wss" : "ws"}://${host}`;
+}

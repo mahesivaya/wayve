@@ -1,5 +1,13 @@
 name: rwayve
 
+# Shared backend environment for the API + worker services (docker-network
+# hostnames). Each service's own `environment:` only adds RWAYVE_ROLE.
+x-backend-env: &backend-env
+  RWAYVE_ENV: development
+  POSTGRES_HOST: postgres_db
+  REDIS_URL: redis://redis:6379
+  SMTP_HOST: mailhog
+
 services:
   postgres_db:
     image: postgres:15
@@ -69,12 +77,9 @@ services:
       - ../backend/.env.development
       - ../.env.secrets
     environment:
-      RWAYVE_ENV: development
+      <<: *backend-env
       RWAYVE_ROLE: api
-      POSTGRES_HOST: postgres_db
-      REDIS_URL: redis://redis:6379
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
-      SMTP_HOST: mailhog
     volumes:
       - ../uploads:/app/uploads
       - ../logs:/app/logs
@@ -103,11 +108,8 @@ services:
       - ../backend/.env.development
       - ../.env.secrets
     environment:
-      RWAYVE_ENV: development
+      <<: *backend-env
       RWAYVE_ROLE: email-sync-worker
-      POSTGRES_HOST: postgres_db
-      REDIS_URL: redis://redis:6379
-      SMTP_HOST: mailhog
     volumes:
       - ../logs:/app/logs
 
@@ -127,11 +129,8 @@ services:
       - ../backend/.env.development
       - ../.env.secrets
     environment:
-      RWAYVE_ENV: development
+      <<: *backend-env
       RWAYVE_ROLE: email-body-worker
-      POSTGRES_HOST: postgres_db
-      REDIS_URL: redis://redis:6379
-      SMTP_HOST: mailhog
     volumes:
       - ../uploads:/app/uploads
       - ../logs:/app/logs

@@ -1,7 +1,6 @@
 use lettre::message::header::ContentType;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
-use std::env;
 use thiserror::Error;
 use tracing::{error, info, instrument};
 
@@ -17,8 +16,6 @@ pub(crate) fn clean_mailbox(value: &str) -> String {
 pub enum MailError {
     #[error("{0} missing")]
     MissingEnv(&'static str),
-    #[error("SMTP_PORT invalid")]
-    InvalidPort(#[source] std::num::ParseIntError),
     #[error("{field} invalid: {source}")]
     InvalidMailbox {
         field: &'static str,
@@ -34,14 +31,13 @@ pub enum MailError {
 
 #[instrument(target = "smtp", skip(body), fields(to, subject))]
 pub async fn send_mail(to: &str, subject: &str, body: &str) -> Result<(), MailError> {
-    let host = env::var("SMTP_HOST").map_err(|_| MailError::MissingEnv("SMTP_HOST"))?;
-    let port: u16 = env::var("SMTP_PORT")
-        .unwrap_or_else(|_| "587".to_string())
-        .parse()
-        .map_err(MailError::InvalidPort)?;
-    let user = env::var("SMTP_USER").map_err(|_| MailError::MissingEnv("SMTP_USER"))?;
-    let pass = env::var("SMTP_PASS").map_err(|_| MailError::MissingEnv("SMTP_PASS"))?;
-    let from = env::var("SMTP_FROM").unwrap_or_else(|_| user.clone());
+    let crate::config::SmtpConfig {
+        host,
+        port,
+        user,
+        pass,
+        from,
+    } = crate::config::smtp().map_err(MailError::MissingEnv)?;
 
     let from_parsed = clean_mailbox(&from)
         .parse()

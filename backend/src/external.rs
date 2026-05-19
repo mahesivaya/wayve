@@ -63,3 +63,10 @@ pub fn microsoft_graph_base() -> String {
     std::env::var("MICROSOFT_GRAPH_BASE")
         .unwrap_or_else(|_| "https://graph.microsoft.com".to_string())
 }
+
+/// Google Calendar events endpoint for the primary calendar.
+pub fn google_calendar_url() -> String {
+    std::env::var("GOOGLE_CALENDAR_URL").unwrap_or_else(|_| {
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events".to_string()
+    })
+}

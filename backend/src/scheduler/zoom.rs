@@ -3,7 +3,6 @@ use base64::engine::general_purpose::STANDARD;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::json;
-use std::env;
 use thiserror::Error;
 use tracing::instrument;
 
@@ -39,12 +38,11 @@ pub enum ZoomError {
 
 #[instrument(target = "scheduler")]
 async fn fetch_access_token() -> Result<String, ZoomError> {
-    let account_id =
-        env::var("ZOOM_ACCOUNT_ID").map_err(|_| ZoomError::MissingEnv("ZOOM_ACCOUNT_ID"))?;
-    let client_id =
-        env::var("ZOOM_CLIENT_ID").map_err(|_| ZoomError::MissingEnv("ZOOM_CLIENT_ID"))?;
-    let client_secret =
-        env::var("ZOOM_CLIENT_SECRET").map_err(|_| ZoomError::MissingEnv("ZOOM_CLIENT_SECRET"))?;
+    let crate::config::ZoomConfig {
+        account_id,
+        client_id,
+        client_secret,
+    } = crate::config::zoom().map_err(ZoomError::MissingEnv)?;
 
     let basic = STANDARD.encode(format!("{}:{}", client_id, client_secret));
 

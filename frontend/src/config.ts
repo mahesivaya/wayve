@@ -1,1 +1,1 @@
-export { API_BASE } from "./config/env";
+export { getApiBase } from "./config/env";

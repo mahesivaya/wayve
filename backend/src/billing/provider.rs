@@ -12,23 +12,17 @@ static HTTP: Lazy<Client> = Lazy::new(Client::new);
 
 /// Secret API key (`sk_...`). Absent in dev/test environments without Stripe.
 pub fn secret_key() -> Option<String> {
-    std::env::var("STRIPE_SECRET_KEY")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
+    crate::config::stripe().secret_key
 }
 
 /// Webhook signing secret (`whsec_...`).
 pub fn webhook_secret() -> Option<String> {
-    std::env::var("STRIPE_WEBHOOK_SECRET")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
+    crate::config::stripe().webhook_secret
 }
 
 /// API root. Overridable in tests via STRIPE_API_BASE (wiremock).
 pub fn api_base() -> String {
-    std::env::var("STRIPE_API_BASE").unwrap_or_else(|_| "https://api.stripe.com".to_string())
+    crate::config::stripe().api_base
 }
 
 pub fn is_configured() -> bool {
@@ -36,10 +30,7 @@ pub fn is_configured() -> bool {
 }
 
 pub fn publishable_key() -> Option<String> {
-    std::env::var("STRIPE_PUBLISHABLE_KEY")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
+    crate::config::stripe().publishable_key
 }
 
 pub fn is_test_mode() -> bool {
