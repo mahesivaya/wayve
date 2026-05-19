@@ -555,3 +555,36 @@ CREATE TABLE IF NOT EXISTS api_keys (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS api_keys_org_idx ON api_keys(organization_id);
+
+-- API key auth system: a key acts as a specific user (user_id), constrained by
+-- scopes / rate limit / expiry. key_type 'internal' may hold the '*' scope;
+-- 'external' must enumerate scopes and carry an expiry.
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key_type TEXT NOT NULL DEFAULT 'external';
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS scopes TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS rate_limit_per_min INTEGER NOT NULL DEFAULT 120;
+-- Personal users have no organization, so a key need not belong to one.
+ALTER TABLE api_keys ALTER COLUMN organization_id DROP NOT NULL;
+-- Pre-API-key-system rows had no acting principal; adopt their creator.
+UPDATE api_keys SET user_id = created_by WHERE user_id IS NULL;
+ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_key_type_chk;
+ALTER TABLE api_keys ADD CONSTRAINT api_keys_key_type_chk
+    CHECK (key_type IN ('internal', 'external'));
+CREATE INDEX IF NOT EXISTS api_keys_user_idx ON api_keys(user_id);
+
+-- Append-only audit trail of API-key-authenticated requests. api_key_id is
+-- nullable so attempts with an unknown key ('invalid') are still recorded.
+CREATE TABLE IF NOT EXISTS api_key_audit_log (
+    id BIGSERIAL PRIMARY KEY,
+    api_key_id INTEGER REFERENCES api_keys(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    method TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status_code INTEGER NOT NULL,
+    outcome TEXT NOT NULL,
+    ip TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS api_key_audit_key_idx
+    ON api_key_audit_log(api_key_id, created_at DESC);

@@ -1,4 +1,5 @@
 pub mod account;
+pub mod api_keys;
 pub mod auth;
 pub mod email;
 pub mod health;
@@ -26,6 +27,10 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(user::update_organization_member_role)
         .service(user::list_platform_members)
         .service(user::update_platform_member_role)
+        .service(api_keys::create_api_key)
+        .service(api_keys::list_api_keys)
+        .service(api_keys::revoke_api_key)
+        .service(api_keys::api_key_audit)
         .service(account::get_accounts)
         .service(account::update_account_display_name)
         .service(user::get_user_by_email)

@@ -79,8 +79,8 @@ pub fn decode_jwt(token: &str) -> Option<Claims> {
 }
 
 // 🔥 Extract user from request
-use actix_web::HttpRequest;
 use actix_web::cookie::{Cookie, SameSite};
+use actix_web::{HttpMessage, HttpRequest};
 
 pub const AUTH_COOKIE_NAME: &str = "rwayve_auth";
 
@@ -123,6 +123,15 @@ pub fn token_from_request(req: &HttpRequest) -> Option<String> {
 }
 
 pub fn get_user_id_from_request(req: &HttpRequest) -> Option<i32> {
+    // An API-key request carries an ApiKeyPrincipal injected by the
+    // ApiKeyMiddleware; it authenticates the acting user without a JWT.
+    if let Some(principal) = req
+        .extensions()
+        .get::<crate::security::api_key::ApiKeyPrincipal>()
+    {
+        return Some(principal.user_id);
+    }
+
     let token = token_from_request(req)?;
     let claims = decode_jwt(&token)?;
     Some(claims.sub)

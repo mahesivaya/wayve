@@ -1,6 +1,7 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { canAccessPricingForUser } from "../auth/accountHome";
+import { hasPermission } from "../auth/permissions";
 import { Suspense, useState, useCallback } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
@@ -125,6 +126,16 @@ export default function Layout() {
               onClick={() => setNavOpen(false)}
             >
               Pricing
+            </Link>
+          )}
+          {/* API Keys: visible only to roles that may manage them. */}
+          {hasPermission(user, "api_keys:manage") && (
+            <Link
+              to="/api-keys"
+              className={location.pathname === "/api-keys" ? "active" : ""}
+              onClick={() => setNavOpen(false)}
+            >
+              API Keys
             </Link>
           )}
           {renderNavItem("/about", "about", "About")}

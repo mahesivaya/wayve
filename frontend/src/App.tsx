@@ -32,6 +32,7 @@ const EmailFiles = lazy(() => import("./files/EmailFiles"));
 const ServicePage = lazy(() => import("./services/ServicePage"));
 const Billing = lazy(() => import("./billing/Billing"));
 const Pricing = lazy(() => import("./pricing/Pricing"));
+const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
 
 export default function App() {
   const { user } = useAuth();
@@ -121,6 +122,7 @@ export default function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/billing" element={<Billing />} />
+            <Route path="/api-keys" element={<ApiKeysPage />} />
             <Route
               path="/pricing"
               element={

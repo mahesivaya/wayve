@@ -94,23 +94,21 @@ pub async fn call_ws(
     stream: web::Payload,
     query: web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse, Error> {
-    // Auth: prefer the httpOnly cookie, with query-token fallback for older clients.
-    let token = match crate::security::jwt::token_from_request(&req)
-        .or_else(|| query.get("token").cloned())
-        .filter(|token| !token.trim().is_empty())
-    {
-        Some(token) => token,
+    // Auth: an API key (resolved by ApiKeyMiddleware into the request
+    // extensions) or a cookie/Bearer JWT, with a ?token= query fallback for
+    // older clients.
+    let user_id = match crate::security::jwt::get_user_id_from_request(&req).or_else(|| {
+        query
+            .get("token")
+            .cloned()
+            .filter(|token| !token.trim().is_empty())
+            .and_then(|token| crate::security::jwt::decode_jwt(&token))
+            .map(|claims| claims.sub)
+    }) {
+        Some(id) => id,
         None => {
-            warn!(target: "ws", "call_ws rejected: missing token");
-            return Ok(HttpResponse::Unauthorized().body("Missing token"));
-        }
-    };
-
-    let user_id = match crate::security::jwt::decode_jwt(&token) {
-        Some(claims) => claims.sub,
-        None => {
-            warn!(target: "ws", "call_ws rejected: invalid token");
-            return Ok(HttpResponse::Unauthorized().body("Invalid token"));
+            warn!(target: "ws", "call_ws rejected: missing or invalid credentials");
+            return Ok(HttpResponse::Unauthorized().body("Missing or invalid credentials"));
         }
     };
 
