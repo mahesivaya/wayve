@@ -2,15 +2,14 @@ use crate::email::profile::invalidate_me_cache;
 use crate::models::auth::ChangePasswordInput;
 use crate::models::email_request::UserResponse;
 use crate::prelude::*;
+use crate::security::api_key::{generate_api_key, hash_api_key};
 use crate::security::jwt::get_user_id_from_request;
 use crate::security::rbac::{self, Permission, Role, Scope};
 use actix_web::{HttpRequest, HttpResponse, Responder, delete, get, post, put, web};
 use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{DateTime, Utc};
 use moka::future::Cache as MokaCache;
-use rand::RngCore;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::time::Duration;
 use tracing::{error, info, instrument, warn};
@@ -696,25 +695,6 @@ pub async fn admin_revoke_api_key(
             HttpResponse::InternalServerError().finish()
         }
     }
-}
-
-/// Generate a cryptographically-random API key: `wv_sk_` + 48 hex chars
-/// (192 bits of entropy from the thread CSPRNG).
-fn generate_api_key() -> String {
-    let mut bytes = [0u8; 24];
-    rand::thread_rng().fill_bytes(&mut bytes);
-    let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
-    format!("wv_sk_{hex}")
-}
-
-/// SHA-256 hex of an API key. API keys are high-entropy tokens, so a fast
-/// deterministic hash is correct here — it lets validation be a single
-/// indexed lookup instead of a bcrypt scan over every row.
-fn hash_api_key(raw: &str) -> String {
-    Sha256::digest(raw.as_bytes())
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
 }
 
 /// Resolve an `X-API-KEY` request header to the owning organization id.

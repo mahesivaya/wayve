@@ -37,6 +37,7 @@ use crate::observability::tracing::init_tracing;
 
 use crate::config::{RuntimeRole, database_url, db_max_connections, listen_port, load_env_files};
 use crate::email::body_worker::run_body_worker;
+use crate::middleware::api_key::ApiKeyMiddleware;
 use crate::middleware::rate_limit::RateLimitMiddleware;
 use crate::workers::run_sync_worker;
 
@@ -179,6 +180,7 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .wrap(TracingLogger::default()) // 🚧
+            .wrap(ApiKeyMiddleware)
             .wrap(RateLimitMiddleware)
             .wrap(cors)
             .app_data(web::Data::new(pool.clone()))
