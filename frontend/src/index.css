@@ -11,6 +11,60 @@
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
+  --color-surface: #ffffff;
+  --color-surface-soft: #f8fafc;
+  --color-surface-hover: #f3f4f6;
+  --color-text-black: black;
+  --color-text-primary: #111827;
+  --color-text-ink: #1f2937;
+  --color-text-secondary: #374151;
+  --color-text-slate: #334155;
+  --color-text-muted: #6b7280;
+  --color-border: #e5e7eb;
+  --color-border-soft: #d8e0eb;
+  --color-border-muted: #d1d5db;
+  --color-input-border: #cbd5e1;
+  --color-input-border-strong: #9ca3af;
+  --color-primary: #1a73e8;
+  --color-primary-hover: #1669c1;
+  --color-primary-action: #2563eb;
+  --color-primary-action-hover: #1d4ed8;
+  --color-primary-soft: #eff6ff;
+  --color-primary-hover-soft: #e8f0fe;
+  --color-primary-border: #93c5fd;
+  --color-primary-panel: #dbeafe;
+  --color-primary-panel-border: #bfdbfe;
+  --color-danger: #b91c1c;
+  --color-danger-hover: #dc2626;
+  --color-danger-soft: #fee2e2;
+  --color-danger-border: #fecaca;
+  --color-email-bg: lightsteelblue;
+  --color-email-list-bg: #d7e4f4;
+  --color-email-control-bg: lightslategray;
+  --color-email-resizer-hover: #9fb4cd;
+  --color-overlay-soft: rgba(255, 255, 255, 0.55);
+  --color-overlay-strong: rgba(255, 255, 255, 0.65);
+  --color-overlay-border: rgba(255, 255, 255, 0.7);
+  --color-panel-border: rgba(17, 24, 39, 0.12);
+  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 16px;
+  --space-8: 18px;
+  --space-9: 24px;
+  --space-10: 48px;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-pill: 999px;
+
+  --u-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
@@ -48,6 +102,103 @@
   #social .button-icon {
     filter: invert(1) brightness(2);
   }
+}
+
+.u-page-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-8);
+  box-sizing: border-box;
+  background: var(--color-email-bg);
+}
+
+.u-flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+:where(.u-panel, .u-card) {
+  border-radius: var(--radius-md);
+}
+
+.u-panel {
+  border: 1px solid var(--color-overlay-border);
+  background: var(--color-email-list-bg);
+}
+
+.u-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--u-card-shadow);
+}
+
+.u-card-interactive {
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+
+.u-form-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+}
+
+.u-form-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.u-form-label-text {
+  color: var(--color-text-slate);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.u-form-control {
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font: inherit;
+}
+
+.u-form-control:focus {
+  outline: 2px solid var(--color-primary-panel-border);
+  border-color: var(--color-primary-action);
+}
+
+:where(.u-btn-primary, .u-btn-danger-soft) {
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.u-btn-primary {
+  border: 1px solid var(--color-primary-action);
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.u-btn-primary:disabled {
+  background: var(--color-primary-border);
+  border-color: var(--color-primary-border);
+  cursor: default;
+}
+
+.u-btn-danger-soft {
+  border: 1px solid var(--color-danger-border);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-hover);
+  font-weight: 750;
 }
 
 html,

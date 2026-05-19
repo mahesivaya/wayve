@@ -1,203 +1,61 @@
-.platform-admin-home {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 18px;
-  box-sizing: border-box;
-  background: lightsteelblue;
-}
-
-.platform-admin-header,
-.platform-admin-panel {
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 8px;
-  background: #d7e4f4;
-}
-
-.platform-admin-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-  padding: 16px;
-}
-
-.platform-admin-header h1,
-.platform-admin-section-header h2 {
-  margin: 0;
-  color: #111827;
-}
-
-.platform-admin-header h1 {
-  font-size: 24px;
-}
-
-.platform-admin-header p,
-.platform-admin-section-header p {
-  margin: 6px 0 0;
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.platform-admin-header-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.platform-admin-header-actions button,
-.platform-admin-form button {
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid #2563eb;
-  border-radius: 8px;
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.platform-admin-header-actions .danger {
-  border-color: #fecaca;
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.platform-admin-panel {
-  margin-bottom: 16px;
-  padding: 16px;
-}
-
 .platform-admin-section-header {
-  display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
-}
 
-.platform-admin-section-header h2 {
-  font-size: 18px;
-}
-
-.platform-admin-section-header > span {
-  flex: 0 0 auto;
-  padding: 5px 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #374151;
-  font-size: 12px;
-  font-weight: 750;
+  > span {
+    flex: 0 0 auto;
+    padding: 5px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #374151;
+    font-size: 12px;
+    font-weight: 750;
+  }
 }
 
 .platform-admin-form {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-.platform-admin-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.platform-admin-form span {
-  color: #334155;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.platform-admin-form input {
-  width: 100%;
-  min-height: 38px;
-  box-sizing: border-box;
-  padding: 8px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  font: inherit;
-}
-
-.platform-admin-form input:focus {
-  outline: 2px solid #bfdbfe;
-  border-color: #2563eb;
-}
-
-.platform-admin-form button {
-  justify-self: start;
-}
-
-.platform-admin-hint {
-  margin: -4px 0 0;
-  color: #475569;
-  font-size: 12px;
-}
-
-.platform-admin-hint strong {
-  color: #1d4ed8;
-}
-
-.platform-admin-form button:disabled {
-  background: #93c5fd;
-  border-color: #93c5fd;
-  cursor: default;
-}
-
-.platform-admin-error,
-.platform-admin-success {
-  margin-top: 10px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.platform-admin-error {
-  border: 1px solid #fecaca;
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.platform-admin-success {
-  border: 1px solid #bbf7d0;
-  background: #dcfce7;
-  color: #166534;
+  button {
+    min-height: 34px;
+    padding: 0 12px;
+    justify-self: start;
+  }
 }
 
 .organization-name-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
-}
 
-.organization-name-list article {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #ffffff;
-}
+  article {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #ffffff;
+  }
 
-.organization-name-list strong {
-  min-width: 0;
-  overflow: hidden;
-  color: #111827;
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+  strong {
+    min-width: 0;
+    overflow: hidden;
+    color: #111827;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-.organization-name-list span {
-  flex: 0 0 auto;
-  color: #6b7280;
-  font-size: 13px;
+  span {
+    flex: 0 0 auto;
+    color: #6b7280;
+    font-size: 13px;
+  }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: #374151;
+  }
 }
 
 .platform-admin-empty {
@@ -211,8 +69,7 @@
 
 @media (max-width: 720px) {
   .platform-admin-header,
-  .platform-admin-section-header,
-  .platform-admin-header-actions {
+  .platform-admin-section-header {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -220,25 +77,7 @@
 
 /* ================= API KEYS ================= */
 .platform-admin-key-org {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   margin-bottom: 14px;
-}
-
-.platform-admin-key-org span {
-  color: #334155;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.platform-admin-key-org select {
-  min-height: 38px;
-  padding: 8px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  font: inherit;
 }
 
 .platform-admin-key-reveal {
@@ -252,23 +91,17 @@
   background: #f0fdf4;
   color: #166534;
   font-size: 13px;
-}
 
-.platform-admin-key-reveal code {
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #ffffff;
-  border: 1px solid #d1fae5;
-  color: #111827;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  word-break: break-all;
-}
-
-.organization-name-list code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  color: #374151;
+  code {
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: #ffffff;
+    border: 1px solid #d1fae5;
+    color: #111827;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    word-break: break-all;
+  }
 }
 
 .platform-admin-key-revoke {
@@ -282,8 +115,8 @@
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-}
 
-.platform-admin-key-revoke:hover {
-  background: #fecaca;
+  &:hover {
+    background: #fecaca;
+  }
 }

@@ -6,6 +6,7 @@ import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import MembersRolesPanel from "./MembersRolesPanel";
 import "../home/home.css";
+import "./admin-ui.css";
 import "./organizationAdmin.css";
 
 // Organization admins create accounts for users inside their own organization.
@@ -50,8 +51,8 @@ export default function OrganizationAdminHome() {
   };
 
   return (
-    <div className="organization-admin-home">
-      <div className="organization-admin-header">
+    <div className="organization-admin-home u-page-shell">
+      <div className="organization-admin-header u-panel u-flex-between">
         <div>
           <h1>Welcome {user?.role_label ?? "Organization member"}</h1>
           <p>{user?.email}</p>
@@ -59,7 +60,7 @@ export default function OrganizationAdminHome() {
       </div>
 
       {canManageMembers && (
-      <section className="organization-admin-create">
+      <section className="organization-admin-create u-panel">
         <div className="organization-admin-section-header">
           <div>
             <h2>Create account</h2>
@@ -71,9 +72,10 @@ export default function OrganizationAdminHome() {
         </div>
 
         <form className="organization-admin-form" onSubmit={createUser}>
-          <label>
-            <span>Handle</span>
+          <label className="u-form-label">
+            <span className="u-form-label-text">Handle</span>
             <input
+              className="u-form-control"
               value={handle}
               onChange={(event) => setHandle(event.target.value)}
               placeholder="e.g. john"
@@ -90,9 +92,10 @@ export default function OrganizationAdminHome() {
             </p>
           )}
 
-          <label>
-            <span>Password</span>
+          <label className="u-form-label">
+            <span className="u-form-label-text">Password</span>
             <input
+              className="u-form-control"
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -102,7 +105,7 @@ export default function OrganizationAdminHome() {
             />
           </label>
 
-          <button type="submit" disabled={creating}>
+          <button className="u-btn-primary" type="submit" disabled={creating}>
             {creating ? "Creating..." : "Create account"}
           </button>
         </form>
@@ -131,19 +134,19 @@ export default function OrganizationAdminHome() {
       )}
 
       <div className="organization-admin-grid">
-        <article onClick={() => navigate("/emails")}>
+        <article className="u-card" onClick={() => navigate("/emails")}>
           <h3>Mail</h3>
           <p>Manage organization communication from the shared workspace.</p>
         </article>
-        <article onClick={() => navigate("/chat")}>
+        <article className="u-card" onClick={() => navigate("/chat")}>
           <h3>Team Chat</h3>
           <p>Create channels, manage members, and coordinate team work.</p>
         </article>
-        <article onClick={() => navigate("/tasks")}>
+        <article className="u-card" onClick={() => navigate("/tasks")}>
           <h3>Tasks</h3>
           <p>Create and track action items for organization workflows.</p>
         </article>
-        <article onClick={() => navigate("/scheduler")}>
+        <article className="u-card" onClick={() => navigate("/scheduler")}>
           <h3>Scheduler</h3>
           <p>Review meetings and plan team schedules.</p>
         </article>

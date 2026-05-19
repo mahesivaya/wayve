@@ -356,17 +356,6 @@
   grid-template-columns: repeat(3, 1fr);
 }
 
-/* Signed-in dashboard */
-.dashboard {
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 18px;
-  background: lightsteelblue;
-  width: 100%;
-  box-sizing: border-box;
-}
-
 .dashboard-topbar {
   min-height: 46px;
   display: flex;
@@ -406,14 +395,8 @@
 }
 
 .dashboard-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 16px;
   padding: 14px 16px;
-  background: #d7e4f4;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 8px;
 }
 
 .dashboard-header h2 {
@@ -441,14 +424,8 @@
 }
 
 .card {
-  background: #ffffff;
   min-height: 118px;
   padding: 18px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
 }
 
 .card h3 {

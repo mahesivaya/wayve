@@ -170,9 +170,9 @@ export default function Home() {
   }
 
   return (
-    <div className="dashboard">
+    <div className="dashboard u-page-shell">
       {/* HEADER */}
-      <div className="dashboard-header">
+      <div className="dashboard-header u-panel u-flex-between">
         <h2>Welcome {user.role_label ?? "Personal workspace owner"}</h2>
         <p>{user.email}</p>
       </div>
@@ -180,7 +180,7 @@ export default function Home() {
       {/* GRID */}
       <div className="dashboard-grid">
         {visibleCards.map((card) => (
-          <div key={card.path} className="card" onClick={() => navigate(card.path)}>
+          <div key={card.path} className="card u-card u-card-interactive" onClick={() => navigate(card.path)}>
             <h3>{card.title}</h3>
             <p>{card.description}</p>
           </div>

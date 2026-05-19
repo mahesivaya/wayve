@@ -12,6 +12,7 @@ import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { slugify } from "../auth/accountHome";
 import MembersRolesPanel from "./MembersRolesPanel";
+import "./admin-ui.css";
 import "./platformAdmin.css";
 
 export default function PlatformAdminHome() {
@@ -160,8 +161,8 @@ export default function PlatformAdminHome() {
   };
 
   return (
-    <div className="platform-admin-home">
-      <div className="platform-admin-header">
+    <div className="platform-admin-home u-page-shell">
+      <div className="platform-admin-header u-panel u-flex-between">
         <div>
           <h1>Welcome {user?.role_label ?? "Platform member"}</h1>
           <p>{user?.email}</p>
@@ -169,7 +170,7 @@ export default function PlatformAdminHome() {
       </div>
 
       {canManageMembers && (
-      <section className="platform-admin-panel">
+      <section className="platform-admin-panel u-panel">
         <div className="platform-admin-section-header">
           <div>
             <h2>Create organization</h2>
@@ -177,19 +178,21 @@ export default function PlatformAdminHome() {
           </div>
         </div>
 
-        <form className="platform-admin-form" onSubmit={createOrganization}>
-          <label>
-            <span>Organization name</span>
+        <form className="platform-admin-form u-form-stack" onSubmit={createOrganization}>
+          <label className="u-form-label">
+            <span className="u-form-label-text">Organization name</span>
             <input
+              className="u-form-control"
               value={organizationName}
               onChange={(event) => setOrganizationName(event.target.value)}
               placeholder="Enter organization name"
               required
             />
           </label>
-          <label>
-            <span>Organization admin handle</span>
+          <label className="u-form-label">
+            <span className="u-form-label-text">Organization admin handle</span>
             <input
+              className="u-form-control"
               value={adminHandle}
               onChange={(event) => setAdminHandle(event.target.value)}
               placeholder="e.g. john"
@@ -204,9 +207,10 @@ export default function PlatformAdminHome() {
               </strong>
             </p>
           )}
-          <label>
-            <span>Organization admin password</span>
+          <label className="u-form-label">
+            <span className="u-form-label-text">Organization admin password</span>
             <input
+              className="u-form-control"
               type="password"
               value={adminPassword}
               onChange={(event) => setAdminPassword(event.target.value)}
@@ -215,7 +219,7 @@ export default function PlatformAdminHome() {
               required
             />
           </label>
-          <button type="submit" disabled={creating}>
+          <button className="u-btn-primary" type="submit" disabled={creating}>
             {creating ? "Creating..." : "Create Organization"}
           </button>
         </form>
@@ -226,7 +230,7 @@ export default function PlatformAdminHome() {
       )}
 
       {canManageMembers && (
-      <section className="platform-admin-panel">
+      <section className="platform-admin-panel u-panel">
         <div className="platform-admin-section-header">
           <div>
             <h2>Organization names</h2>
@@ -261,7 +265,7 @@ export default function PlatformAdminHome() {
       )}
 
       {canManageApiKeys && (
-      <section className="platform-admin-panel">
+      <section className="platform-admin-panel u-panel">
         <div className="platform-admin-section-header">
           <div>
             <h2>API keys</h2>
@@ -269,9 +273,10 @@ export default function PlatformAdminHome() {
           </div>
         </div>
 
-        <label className="platform-admin-key-org">
-          <span>Organization</span>
+        <label className="platform-admin-key-org u-form-label">
+          <span className="u-form-label-text">Organization</span>
           <select
+            className="u-form-control"
             value={keyOrgId ?? ""}
             onChange={(event) => void selectKeyOrg(event.target.value)}
           >
@@ -286,17 +291,18 @@ export default function PlatformAdminHome() {
 
         {keyOrgId != null && (
           <>
-            <form className="platform-admin-form" onSubmit={generateKey}>
-              <label>
-                <span>Key name</span>
+            <form className="platform-admin-form u-form-stack" onSubmit={generateKey}>
+              <label className="u-form-label">
+                <span className="u-form-label-text">Key name</span>
                 <input
+                  className="u-form-control"
                   value={keyName}
                   onChange={(event) => setKeyName(event.target.value)}
                   placeholder="e.g. CI pipeline"
                   required
                 />
               </label>
-              <button type="submit" disabled={keyBusy}>
+              <button className="u-btn-primary" type="submit" disabled={keyBusy}>
                 {keyBusy ? "Generating..." : "Generate key"}
               </button>
             </form>

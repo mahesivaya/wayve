@@ -1,0 +1,70 @@
+:is(.platform-admin-header, .organization-admin-header) {
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+:is(.platform-admin-panel, .organization-admin-create) {
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+:is(.platform-admin-section-header, .organization-admin-section-header) {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+:is(.platform-admin-header, .platform-admin-section-header, .organization-admin-header, .organization-admin-section-header)
+  :is(h1, h2) {
+  margin: 0;
+  color: #111827;
+}
+
+:is(.platform-admin-header, .organization-admin-header) h1 {
+  font-size: 24px;
+}
+
+:is(.platform-admin-section-header, .organization-admin-section-header) h2 {
+  font-size: 18px;
+}
+
+:is(.platform-admin-header, .organization-admin-header) p {
+  margin: 6px 0 0;
+}
+
+:is(.platform-admin-header, .platform-admin-section-header, .organization-admin-header, .organization-admin-section-header) p {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+:is(.platform-admin-hint, .organization-admin-hint) {
+  margin: -4px 0 0;
+  color: #475569;
+  font-size: 12px;
+}
+
+:is(.platform-admin-hint, .organization-admin-hint) strong {
+  color: #1d4ed8;
+}
+
+:is(.platform-admin-error, .platform-admin-success, .organization-admin-error, .organization-admin-success) {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+:is(.platform-admin-error, .organization-admin-error) {
+  border: 1px solid #fecaca;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+:is(.platform-admin-success, .organization-admin-success) {
+  border: 1px solid #bbf7d0;
+  background: #dcfce7;
+  color: #166534;
+}
