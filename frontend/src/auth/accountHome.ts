@@ -28,7 +28,9 @@ export const getEmailDomain = (slug?: string | null) =>
 export function homePathForAccount(accountType?: string | null) {
   const normalized = normalizeAccountType(accountType);
   if (normalized === "platform_admin") return "/platform-admin-home";
-  if (normalized === "organization_admin") return "/organization-home";
+  if (normalized === "organization_admin" || normalized === "organization") {
+    return "/organization-home";
+  }
   return "/home";
 }
 
@@ -48,26 +50,27 @@ export function canAccessPricing(accountType?: string | null): boolean {
 type AccountLike = {
   account_type?: string | null;
   organization_id?: number | null;
-  organization_slug?: string | null;
+  permissions?: string[] | null;
 };
 
-// Landing route for a fully-resolved user. Organization members (organization
-// admins and the personal accounts created inside an organization) land on
-// their own /organization/<slug> home page. Until the slug is known (optimistic
-// JWT boot or right after login, before /api/me resolves) we fall back to
-// "/home", which re-redirects itself once the slug arrives — never a dead end.
+export function canAccessPricingForUser(user?: AccountLike | null): boolean {
+  if (normalizeAccountType(user?.account_type) === "personal") return true;
+  return Boolean(
+    user?.permissions?.includes("billing:manage") ||
+      user?.permissions?.includes("billing:read")
+  );
+}
+
+// Landing route for a fully-resolved user. The app intentionally has three
+// dashboard surfaces: personal, organization, and platform. Role-specific
+// panels are handled inside the dashboard with RBAC permissions.
 export function homePathForUser(user?: AccountLike | null): string {
   const normalized = normalizeAccountType(user?.account_type);
   if (normalized === "platform_admin") return "/platform-admin-home";
-  if (normalized === "organization_admin") return "/organization-home";
-
-  const inOrganization =
-    normalized === "organization" || user?.organization_id != null;
-  if (inOrganization) {
-    return user?.organization_slug
-      ? `/organization/${user.organization_slug}`
-      : "/home";
+  if (normalized === "organization_admin" || normalized === "organization") {
+    return "/organization-home";
   }
+  if (user?.organization_id != null) return "/organization-home";
 
   return "/home";
 }

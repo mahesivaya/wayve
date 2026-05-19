@@ -9,11 +9,15 @@ import {
   type ApiKey,
 } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
+import { hasPermission } from "../auth/permissions";
 import { slugify } from "../auth/accountHome";
+import MembersRolesPanel from "./MembersRolesPanel";
 import "./platformAdmin.css";
 
 export default function PlatformAdminHome() {
   const { user } = useAuth();
+  const canManageMembers = hasPermission(user, "members:manage");
+  const canManageApiKeys = hasPermission(user, "api_keys:manage");
   const [organizationName, setOrganizationName] = useState("");
   const [adminHandle, setAdminHandle] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
@@ -33,6 +37,10 @@ export default function PlatformAdminHome() {
   const [newRawKey, setNewRawKey] = useState("");
 
   useEffect(() => {
+    // Organization data feeds both the member-management panels and API-key
+    // panel. Roles without either permission have no organization data to load.
+    if (!canManageMembers && !canManageApiKeys) return;
+
     let alive = true;
 
     listAdminOrganizations()
@@ -51,7 +59,7 @@ export default function PlatformAdminHome() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [canManageMembers, canManageApiKeys]);
 
   const createOrganization = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -155,11 +163,12 @@ export default function PlatformAdminHome() {
     <div className="platform-admin-home">
       <div className="platform-admin-header">
         <div>
-          <h1>Platform Admin Home</h1>
+          <h1>Welcome {user?.role_label ?? "Platform member"}</h1>
           <p>{user?.email}</p>
         </div>
       </div>
 
+      {canManageMembers && (
       <section className="platform-admin-panel">
         <div className="platform-admin-section-header">
           <div>
@@ -214,7 +223,9 @@ export default function PlatformAdminHome() {
         {error && <div className="platform-admin-error">{error}</div>}
         {success && <div className="platform-admin-success">{success}</div>}
       </section>
+      )}
 
+      {canManageMembers && (
       <section className="platform-admin-panel">
         <div className="platform-admin-section-header">
           <div>
@@ -247,7 +258,9 @@ export default function PlatformAdminHome() {
           </div>
         )}
       </section>
+      )}
 
+      {canManageApiKeys && (
       <section className="platform-admin-panel">
         <div className="platform-admin-section-header">
           <div>
@@ -333,6 +346,9 @@ export default function PlatformAdminHome() {
           </>
         )}
       </section>
+      )}
+
+      <MembersRolesPanel scope="platform" />
     </div>
   );
 }

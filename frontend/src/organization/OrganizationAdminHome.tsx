@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { createAdminUser, type AdminCreatedUser } from "../api/admin";
 import { slugify, getEmailDomain } from "../auth/accountHome";
 import { useAuth } from "../auth/useAuth";
+import { hasPermission } from "../auth/permissions";
+import MembersRolesPanel from "./MembersRolesPanel";
 import "../home/home.css";
 import "./organizationAdmin.css";
 
@@ -13,6 +15,7 @@ import "./organizationAdmin.css";
 export default function OrganizationAdminHome() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const canManageMembers = hasPermission(user, "members:manage");
   const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
   const [createdUsers, setCreatedUsers] = useState<AdminCreatedUser[]>([]);
@@ -50,17 +53,18 @@ export default function OrganizationAdminHome() {
     <div className="organization-admin-home">
       <div className="organization-admin-header">
         <div>
-          <h1>Organization Admin page</h1>
+          <h1>Welcome {user?.role_label ?? "Organization member"}</h1>
           <p>{user?.email}</p>
         </div>
       </div>
 
+      {canManageMembers && (
       <section className="organization-admin-create">
         <div className="organization-admin-section-header">
           <div>
             <h2>Create account</h2>
             <p>
-              Add a new account inside your organization. Enter a handle — the
+              Add a new account inside your organization. Enter a handle - the
               email is generated automatically.
             </p>
           </div>
@@ -117,6 +121,14 @@ export default function OrganizationAdminHome() {
           </div>
         )}
       </section>
+      )}
+
+      {user?.organization_id != null && (
+        <MembersRolesPanel
+          scope="organization"
+          organizationId={user.organization_id}
+        />
+      )}
 
       <div className="organization-admin-grid">
         <article onClick={() => navigate("/emails")}>

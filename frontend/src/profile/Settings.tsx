@@ -101,6 +101,14 @@ export default function Settings() {
               <span>Account Type</span>
               <strong style={{ textTransform: "capitalize" }}>{user.account_type}</strong>
             </div>
+            <div className="settings-usage-row">
+              <span>Access Role</span>
+              <strong>{profile?.role_label ?? user.role_label ?? "Personal workspace owner"}</strong>
+            </div>
+            <div className="settings-usage-row">
+              <span>Role Key</span>
+              <strong>{profile?.effective_role ?? user.effective_role ?? "owner"}</strong>
+            </div>
           </div>
         )}
 

@@ -6,6 +6,11 @@ export type ProfileData = {
   first_name: string | null;
   last_name: string | null;
   auth_provider: string;
+  account_type?: string;
+  effective_role?: string | null;
+  role_label?: string | null;
+  organization_id?: number | null;
+  organization_name?: string | null;
 };
 
 export const getProfile = async () => {

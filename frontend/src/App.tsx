@@ -9,7 +9,7 @@ import Login from "./auth/Login";
 import ForgotPassword from "./auth/ForgotPassword";
 import ResetPassword from "./auth/ResetPassword";
 import { useAuth } from "./auth/useAuth";
-import { canAccessPricing, homePathForUser, normalizeAccountType } from "./auth/accountHome";
+import { canAccessPricingForUser, homePathForUser, normalizeAccountType } from "./auth/accountHome";
 
 // 🔥 Lazy loaded pages
 const Home = lazy(() => import("./home/Home"));
@@ -40,6 +40,10 @@ export default function App() {
   const accountHome = homePathForUser(user).toLowerCase();
 
   const accountType = normalizeAccountType(user?.account_type);
+  const isOrganizationUser =
+    accountType === "organization_admin" ||
+    accountType === "organization" ||
+    user?.organization_id != null;
 
   const isAtAccountHome = location.pathname.toLowerCase() === accountHome;
 
@@ -83,7 +87,7 @@ export default function App() {
             <Route
               path="/organization-home"
               element={
-                accountType === "organization_admin" ? (
+                isOrganizationUser ? (
                   <OrganizationAdminHome />
                 ) : (
                   redirectToAccountHome ?? <OrganizationAdminHome />
@@ -100,7 +104,10 @@ export default function App() {
                 )
               }
             />
-            <Route path="/organization/:slug" element={<OrganizationHome />} />
+            <Route
+              path="/organization/:slug"
+              element={redirectToAccountHome ?? <OrganizationHome />}
+            />
             <Route path="/emails" element={<Emails />} />
             <Route path="/email-files" element={<EmailFiles />} />
             <Route path="/chat" element={<Chat />} />
@@ -117,7 +124,7 @@ export default function App() {
             <Route
               path="/pricing"
               element={
-                canAccessPricing(user?.account_type) ? (
+                canAccessPricingForUser(user) ? (
                   <Pricing />
                 ) : (
                   redirectToAccountHome ?? <Pricing />

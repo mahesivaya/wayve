@@ -949,3 +949,107 @@ Without these the module degrades gracefully — checkout returns “Billing is 
 Two deps were added to Cargo.toml: hmac (webhook signatures) and the sqlx json feature (JSONB features column). Nothing is committed — all changes are in your working tree.
 
 One scope note: entitlement resolution is complete (effective_entitlements), but I did not wire enforcement into the email/drive modules — that touches non-billing code and is best done as a deliberate follow-up. Want me to take that next?
+
+
+
+
+Ready for review
+Select text to add comments on the plan
+RBAC for Platform & Organization
+Context
+The app has two admin scopes — platform and organization — plus personal accounts. The schema groundwork exists (organization_members / platform_members tables each with a role column) and user.rs resolves an effective_role, but there is no permission layer: roles are bare strings, the only gate (require_platform_admin) is an ad-hoc string check, and org-management endpoints ignore organization_members.role entirely (they gate on account_type only).
+
+This change adds a real Role-Based Access Control system: a fixed permission catalog, a role→permission matrix for the 7 roles, server-side enforcement on every privileged endpoint, role-management endpoints, and permission-driven UI gating. Permissions are computed server-side per request (immediate effect on role change); the JWT is unchanged. Outcome: an org admin can actually manage members, a developer can manage API keys, a platform support user no longer gets an owner-level UI, and owners/admins can change member roles.
+
+Roles & permission matrix
+8 roles per scope: owner, admin, security, billing, developer, support, member, guest. Permission strings are resource:action. owner always implies the full catalog.
+
+Permission	owner	admin	security	billing	developer	support	member	guest
+apps:use	✓	✓	✓	✓	✓	✓	✓	✓
+profile:manage_self	✓	✓	✓	✓	✓	✓	✓	✓
+members:read	✓	✓	✓	✓		✓		
+members:manage	✓	✓						
+roles:manage	✓							
+roles:assign_limited	✓	✓						
+org:settings	✓	✓						
+org:delete	✓							
+apps:manage	✓	✓						
+billing:manage	✓			✓				
+billing:read	✓			✓				
+usage:read	✓	✓		✓		✓		
+api_keys:manage	✓				✓			
+webhooks:manage	✓				✓			
+integrations:manage	✓				✓			
+logs:read	✓		✓		✓			
+logs:read_limited	✓		✓		✓	✓		
+audit:read	✓		✓					
+security:manage	✓		✓					
+tickets:manage	✓					✓		
+security and billing were unspecified in the original request — filled in above. logs:read callers also accept logs:read_limited holders implicitly by listing both in each role (no hierarchy logic). roles:assign_limited = may assign/modify only roles strictly below admin (developer/security/support/ member/guest) and may not touch a member who currently holds owner/admin.
+
+guest carries the same capability bundle as member (apps:use + profile:manage_self) — it is a distinct role for seat/billing classification, role-management UI (the lowest assignable role), and as the hook for the real guest limitation: visibility restricted to explicitly-shared resources. That resource-level scoping is enforced at the data layer (resource ACLs), out of scope for this RBAC pass and flagged as a follow-up; the role exists now so the permission/role plumbing does not need re-migration later.
+
+Backend
+1. Schema — infra/postgres/init.sql
+Add billing and guest to both role CHECK constraints (drop+re-add, matching the existing idempotent pattern at lines 64-67 and 89-92): role IN ('owner','admin','security','billing','developer','support','member','guest').
+
+2. New module — backend/src/security/rbac.rs (declare in security/mod.rs)
+enum Scope { Personal, Organization, Platform }
+enum Role { Owner, Admin, Security, Billing, Developer, Support, Member, Guest } with as_str / from_str (unknown → Member).
+enum Permission { ... } (20 variants) with as_str.
+permissions_for(Role) -> &'static [Permission] — the matrix; Owner → all.
+role_has(Role, Permission) -> bool.
+struct RoleContext { scope: Scope, role: Role, organization_id: Option<i32> } with has(Permission) -> bool and permission_strings() -> Vec<String>.
+async fn resolve_role_context(&PgPool, user_id) -> Result<RoleContext, sqlx::Error> — one query joining users + organization_members + platform_members (same join effective_role_for_user already uses).
+async fn require_permission(&HttpRequest, &PgPool, Permission) -> Result<RoleContext, HttpResponse> — 401 if no JWT, 403 if missing permission.
+async fn require_org_access(&HttpRequest, &PgPool, org_id, Permission) -> Result<RoleContext, HttpResponse> — passes if the caller is Platform scope with the permission, or a member of org_id with the permission.
+#[cfg(test)] mod tests — matrix assertions + roles:assign_limited rules (kept inline so cargo test actually compiles them; see CLAUDE.md warning).
+3. Refactor backend/src/routes/user.rs
+effective_role_for_user delegates to rbac::resolve_role_context (keep role_label for display); add billing/guest cases to role_label.
+Add billing and guest to normalized_org_role / normalized_platform_role.
+Re-gate endpoints:
+require_platform_admin → rbac::require_permission(.., Members_Manage) on Platform scope (org provisioning is a platform-staff action).
+admin_create_user → require_permission(.., Members_Manage) (replaces the account_type IN (...) check) — lets org admin/owner create members.
+admin_generate_api_key / admin_list_api_keys / admin_revoke_api_key → require_org_access(.., org_id, ApiKeys_Manage) — platform staff manage any org, and a developer/owner self-serves their own org's keys.
+4. New role-management endpoints (routes/user.rs, registered in routes/mod.rs)
+GET /api/organizations/{id}/members — require_org_access(.., Members_Read); returns [{ user_id, email, username, role, role_label }].
+PUT /api/organizations/{id}/members/{user_id}/role — body { role }. roles:manage allows any change; roles:assign_limited allows only when both current and new role are below admin. Reject demoting the last owner (count in a transaction). On success, invalidate_me_cache + invalidate_profile_cache for the target so permissions refresh immediately.
+GET /api/platform/members + PUT /api/platform/members/{user_id}/role — same rules on platform_members, gated by require_permission (Platform scope).
+5. Expose permissions — backend/src/email/profile.rs & routes/user.rs
+/api/me and /profile JSON gain "scope" and "permissions": [...] (from RoleContext). effective_role / role_label stay.
+
+Frontend
+6. New frontend/src/auth/permissions.ts
+Permission string-literal union, Role type, ROLE_PERMISSIONS map (mirror of the matrix), permissionsForRole(role), hasPermission(user, perm).
+
+7. Auth wiring
+authContextValue.ts — UserType gains permissions?: string[], scope?.
+AuthContext.tsx — read data.permissions / data.scope from /api/me; optimistic init + defaultAccessForAccount derive permissions from the guessed role via permissionsForRole (JWT carries no role, so the guess self-corrects once /api/me returns — existing pattern).
+8. New frontend/src/api/rbac.ts
+listOrgMembers, updateOrgMemberRole, listPlatformMembers, updatePlatformMemberRole (via apiFetch).
+
+9. UI gating
+OrganizationAdminHome.tsx — gate the "Create account" panel behind members:manage; add a Members & Roles panel (list + role <select>, options limited by roles:manage vs roles:assign_limited).
+PlatformAdminHome.tsx — gate "Create organization" / "API keys" panels behind members:manage / api_keys:manage; add the platform Members & Roles panel.
+Layout.tsx — minor: nav already mostly apps:use; no functional change needed.
+Tests
+Backend: rbac.rs inline tests (matrix + assign-limited); an endpoint test for PUT .../members/{id}/role authorization (owner succeeds, member 403, last-owner demotion rejected). Run single-threaded per CLAUDE.md.
+Frontend: src/test/permissions.test.ts — hasPermission, role-map parity with the documented matrix.
+Verification
+cd backend && cargo fmt && cargo clippy -- -D warnings && cargo test --no-fail-fast -- --test-threads=1
+cd frontend && npx tsc --noEmit && npm test
+just db-reset then just docker-up — log in as a platform owner, open Platform Admin → Members & Roles, demote a user to support; confirm that user's /api/me now returns the reduced permissions and their UI hides the create/API-key panels. As an org admin, confirm member creation works and the role <select> offers only developer/security/support/member/guest (no owner/admin).
+./scripts/smoke.sh to confirm the stack still boots.
+Key files
+infra/postgres/init.sql — role CHECK constraints
+backend/src/security/rbac.rs (new), backend/src/security/mod.rs
+backend/src/routes/user.rs, backend/src/routes/mod.rs
+backend/src/email/profile.rs
+frontend/src/auth/permissions.ts (new), authContextValue.ts, AuthContext.tsx
+frontend/src/api/rbac.ts (new)
+frontend/src/organization/OrganizationAdminHome.tsx, PlatformAdminHome.tsx
+Tests: backend/src/security/rbac.rs (inline), frontend/src/test/permissions.test.ts
+
+
+
+

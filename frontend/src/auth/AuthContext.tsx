@@ -9,6 +9,7 @@ import { getMe, logout as logoutRequest, saveUserPublicKey } from "../api/Auth";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./token";
 import { logger } from "../utils/logger";
 import { normalizeAccountType } from "./accountHome";
+import { permissionsForRole } from "./permissions";
 import { AuthContext, type UserType } from "./authContextValue";
 
 const log = logger.scope("auth");
@@ -72,6 +73,43 @@ async function publishPublicKey(publicKey: ArrayBuffer) {
   await saveUserPublicKey(publicKey);
 }
 
+// Optimistic access guessed from account_type before /api/me confirms it. The
+// JWT carries no role, so this assumes the top role for the account type; it is
+// corrected the moment /api/me returns the server-computed permissions.
+function defaultAccessForAccount(accountType?: string | null) {
+  const normalized = normalizeAccountType(accountType);
+  if (normalized === "platform_admin") {
+    return {
+      effective_role: "owner",
+      role_label: "Platform owner",
+      scope: "platform",
+      permissions: permissionsForRole("owner"),
+    };
+  }
+  if (normalized === "organization_admin") {
+    return {
+      effective_role: "owner",
+      role_label: "Organization owner",
+      scope: "organization",
+      permissions: permissionsForRole("owner"),
+    };
+  }
+  if (normalized === "organization") {
+    return {
+      effective_role: "member",
+      role_label: "Member",
+      scope: "organization",
+      permissions: permissionsForRole("member"),
+    };
+  }
+  return {
+    effective_role: "owner",
+    role_label: "Personal workspace owner",
+    scope: "personal",
+    permissions: permissionsForRole("owner"),
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const authVersion = useRef(0);
 
@@ -81,11 +119,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = resolveBootToken();
     if (!token) return null;
     const claims = parseJwt(token);
+    const access = claims ? defaultAccessForAccount(claims.account_type) : null;
     return claims
       ? {
           email: claims.email,
           id: claims.sub,
           account_type: normalizeAccountType(claims.account_type),
+          effective_role: access?.effective_role,
+          role_label: access?.role_label,
+          scope: access?.scope ?? null,
+          permissions: access?.permissions ?? [],
           organization_id: claims.organization_id ?? null,
           // The JWT carries no org slug/name — /api/me fills these in below.
           organization_slug: null,
@@ -163,10 +206,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const data = await res.json();
-        const nextUser = {
+        const nextUser: UserType = {
           email: data.email,
           id: data.id,
           account_type: normalizeAccountType(data.account_type),
+          effective_role: data.effective_role ?? null,
+          role_label: data.role_label ?? null,
+          scope: data.scope ?? null,
+          permissions: data.permissions ?? [],
           organization_id: data.organization_id ?? null,
           organization_slug: data.organization_slug ?? null,
           organization_name: data.organization_name ?? null,
@@ -178,6 +225,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           prev.id === nextUser.id &&
           prev.email === nextUser.email &&
           prev.account_type === nextUser.account_type &&
+          prev.effective_role === nextUser.effective_role &&
+          prev.role_label === nextUser.role_label &&
+          prev.scope === nextUser.scope &&
+          (prev.permissions ?? []).join(",") ===
+            (nextUser.permissions ?? []).join(",") &&
           prev.organization_id === nextUser.organization_id &&
           prev.organization_slug === nextUser.organization_slug &&
           prev.organization_name === nextUser.organization_name
@@ -207,10 +259,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const decoded = parseJwt(token);
 
     if (decoded) {
+      const normalizedAccountType = normalizeAccountType(accountType ?? decoded.account_type);
+      const access = defaultAccessForAccount(normalizedAccountType);
       setUser({
         email: decoded.email,
         id: decoded.sub,
-        account_type: normalizeAccountType(accountType ?? decoded.account_type),
+        account_type: normalizedAccountType,
+        effective_role: access.effective_role,
+        role_label: access.role_label,
+        scope: access.scope,
+        permissions: access.permissions,
         organization_id: decoded.organization_id ?? null,
         organization_slug: null,
         organization_name: null,
@@ -230,6 +288,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: data.email,
             id: data.id,
             account_type: normalizeAccountType(data.account_type),
+            effective_role: data.effective_role ?? null,
+            role_label: data.role_label ?? null,
+            scope: data.scope ?? null,
+            permissions: data.permissions ?? [],
             organization_id: data.organization_id ?? null,
             organization_slug: data.organization_slug ?? null,
             organization_name: data.organization_name ?? null,
