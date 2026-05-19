@@ -235,6 +235,14 @@
   padding: 8px 16px;
 }
 
+.settings-password-section {
+  margin-bottom: 24px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 16px;
+}
+
 .settings-usage-row {
   display: flex;
   justify-content: space-between;

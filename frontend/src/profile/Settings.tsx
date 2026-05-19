@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import "./profile.css";
 
+import { changePassword } from "../api/Auth";
 import { deleteAccount, getAccounts } from "../api/email";
 import { getSubscription, type SubscriptionResponse } from "../api/billing";
 import { getProfile, type ProfileData } from "../api/profile";
@@ -31,6 +32,11 @@ export default function Settings() {
   const [subscription, setSubscription] = useState<SubscriptionResponse | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordStatus, setPasswordStatus] = useState("");
 
   const loadData = useCallback(async () => {
     try {
@@ -50,6 +56,46 @@ export default function Settings() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!passwordStatus) return;
+    const timer = window.setTimeout(() => setPasswordStatus(""), 2500);
+    return () => window.clearTimeout(timer);
+  }, [passwordStatus]);
+
+  const updatePassword = async () => {
+    const isCreatingPassword = profile?.auth_provider === "google";
+
+    if (!isCreatingPassword && currentPassword.trim().length === 0) {
+      setPasswordStatus("Current password is required");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordStatus("New password must be at least 6 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordStatus("New passwords do not match");
+      return;
+    }
+
+    setPasswordSaving(true);
+    setPasswordStatus("");
+    try {
+      await changePassword(isCreatingPassword ? null : currentPassword, newPassword);
+      setPasswordStatus(isCreatingPassword ? "Password created" : "Password updated");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setProfile((prev) =>
+        prev ? { ...prev, auth_provider: "local" } : prev
+      );
+    } catch (err) {
+      setPasswordStatus(err instanceof Error ? err.message : "Password update failed");
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
 
   const remove = async (
     id: number,
@@ -103,6 +149,67 @@ export default function Settings() {
             </div>
           </div>
         )}
+
+        <div className="settings-section-title">
+          Password
+        </div>
+
+        <div className="settings-password-section">
+          {profile?.auth_provider !== "google" && (
+            <div className="profile-row">
+              <label htmlFor="settings-current-password">
+                Current password
+              </label>
+              <input
+                id="settings-current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                autoComplete="current-password"
+              />
+            </div>
+          )}
+
+          <div className="profile-row">
+            <label htmlFor="settings-new-password">
+              New password
+            </label>
+            <input
+              id="settings-new-password"
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div className="profile-row">
+            <label htmlFor="settings-confirm-password">
+              Confirm new password
+            </label>
+            <input
+              id="settings-confirm-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div className="profile-actions">
+            <button
+              type="button"
+              className="profile-save"
+              onClick={() => void updatePassword()}
+              disabled={passwordSaving}
+            >
+              {passwordSaving ? "Updating…" : "Update password"}
+            </button>
+            {passwordStatus && (
+              <span className="profile-status">{passwordStatus}</span>
+            )}
+          </div>
+        </div>
 
         <div className="settings-section-title">
           Storage & Usage
