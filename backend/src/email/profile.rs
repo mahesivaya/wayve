@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-use crate::routes::user::effective_access_for_user;
+use crate::routes::user::{display_organization_name, effective_access_for_user};
 use crate::security::jwt::get_user_id_from_request;
 use actix_web::{HttpResponse, Responder, get};
 use moka::future::Cache as MokaCache;
@@ -58,12 +58,11 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder
             let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
             let organization_slug: Option<String> = row.try_get("organization_slug").ok().flatten();
 
-            // Requirement: For personal accounts, organization name is the email address.
-            let organization_name: Option<String> = if account_type == "personal" {
-                Some(email.clone())
-            } else {
-                row.try_get("organization_name").ok().flatten()
-            };
+            let organization_name = display_organization_name(
+                &account_type,
+                &email,
+                row.try_get("organization_name").ok().flatten(),
+            );
             let access = match effective_access_for_user(pool.get_ref(), id).await {
                 Ok(value) => value,
                 Err(e) => {

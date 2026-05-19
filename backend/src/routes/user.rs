@@ -37,6 +37,22 @@ pub fn normalized_account_type(value: &str) -> &str {
     }
 }
 
+/// Organization name as shown to the current user.
+///
+/// Personal accounts do not belong to an organization, but the UI displays the
+/// email address in that slot so account headers stay consistent.
+pub fn display_organization_name(
+    account_type: &str,
+    email: &str,
+    organization_name: Option<String>,
+) -> Option<String> {
+    if normalized_account_type(account_type) == "personal" {
+        Some(email.to_string())
+    } else {
+        organization_name
+    }
+}
+
 pub fn normalized_org_role(value: &str) -> &str {
     match value {
         "owner" | "super_admin" | "admin" | "security" | "billing" | "developer" | "support"
@@ -994,13 +1010,12 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> impl Resp
                 + chat_storage_bytes
                 + notes_storage_bytes;
 
-            // Requirement: For personal accounts, organization name is the email address.
             let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
-            let organization_name: Option<String> = if account_type == "personal" {
-                Some(email.clone())
-            } else {
-                row.try_get("organization_name").ok().flatten()
-            };
+            let organization_name = display_organization_name(
+                &account_type,
+                &email,
+                row.try_get("organization_name").ok().flatten(),
+            );
             let access = match effective_access_for_user(pool.get_ref(), id).await {
                 Ok(value) => value,
                 Err(e) => {
@@ -1584,6 +1599,26 @@ mod auth_regression_tests {
         );
         assert_eq!(normalized_account_type("platform_admin"), "platform_admin");
         assert_eq!(normalized_account_type("unknown"), "personal");
+    }
+
+    #[test]
+    fn test_display_organization_name() {
+        assert_eq!(
+            display_organization_name("personal", "user@example.com", None),
+            Some("user@example.com".to_string())
+        );
+        assert_eq!(
+            display_organization_name(
+                "organization",
+                "member@example.com",
+                Some("Example Org".to_string())
+            ),
+            Some("Example Org".to_string())
+        );
+        assert_eq!(
+            display_organization_name("platform_admin", "admin@example.com", None),
+            None
+        );
     }
 
     #[actix_web::test]
