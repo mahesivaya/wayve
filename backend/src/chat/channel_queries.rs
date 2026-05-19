@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use crate::security::jwt::get_user_id_from_request;
+use crate::security::rbac;
 
 use sqlx::Row;
 use tracing::{error, instrument};
@@ -10,6 +11,17 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> impl Res
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
         None => return HttpResponse::Unauthorized().finish(),
+    };
+
+    // A channel is visible only when its creator shares the caller's scope —
+    // same platform, same organization, or both personal. This mirrors the
+    // scoped chat people-picker so cross-tenant channels never appear.
+    let ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            error!(target: "db", user_id, error = ?e, "get_channels scope resolution failed");
+            return HttpResponse::InternalServerError().finish();
+        }
     };
 
     let result = sqlx::query(
@@ -69,14 +81,23 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> impl Res
                 WHERE cjr.channel_id = c.id AND cjr.status = 'pending'
             ), '{}') AS pending_join_requests
         FROM channels c
+        JOIN users creator ON creator.id = c.created_by
         LEFT JOIN channel_members mine
             ON mine.channel_id = c.id AND mine.user_id = $1
         LEFT JOIN channel_join_requests jr
             ON jr.channel_id = c.id AND jr.user_id = $1 AND jr.status = 'pending'
+        WHERE (
+            ($2 = 'personal'     AND creator.account_type = 'personal')
+         OR ($2 = 'platform'     AND creator.account_type = 'platform_admin')
+         OR ($2 = 'organization' AND creator.account_type IN ('organization', 'organization_admin')
+                                  AND creator.organization_id = $3)
+        )
         ORDER BY c.created_at DESC
         "#,
     )
     .bind(user_id)
+    .bind(ctx.scope.as_str())
+    .bind(ctx.organization_id)
     .fetch_all(pool.get_ref())
     .await;
 

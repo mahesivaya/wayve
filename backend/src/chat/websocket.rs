@@ -12,7 +12,7 @@ use lazy_static::lazy_static;
 use sqlx::{PgPool, Row};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 const CHAT_E2E_PREFIX: &str = "WAYVE_CHAT_E2E_V1\n";
 
@@ -288,6 +288,45 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                     };
 
                     let fut = async move {
+                        // Tenant isolation: a direct message may cross between
+                        // two accounts only when they share a scope — same
+                        // platform, same organization, or both personal. The
+                        // people-picker is already scoped, but user ids are
+                        // guessable, so the boundary is enforced here too.
+                        let same_scope = sqlx::query_scalar::<_, bool>(
+                            r#"
+                            SELECT COALESCE(
+                                (s.account_type = 'personal'
+                                    AND r.account_type = 'personal')
+                             OR (s.account_type = 'platform_admin'
+                                    AND r.account_type = 'platform_admin')
+                             OR (s.account_type IN ('organization', 'organization_admin')
+                                    AND r.account_type IN ('organization', 'organization_admin')
+                                    AND s.organization_id = r.organization_id),
+                            false)
+                            FROM
+                                (SELECT account_type, organization_id
+                                   FROM users WHERE id = $1) s,
+                                (SELECT account_type, organization_id
+                                   FROM users WHERE id = $2) r
+                            "#,
+                        )
+                        .bind(sender_id)
+                        .bind(receiver_id)
+                        .fetch_optional(&pool)
+                        .await?
+                        .unwrap_or(false);
+
+                        if !same_scope {
+                            warn!(
+                                target: "ws",
+                                sender_id,
+                                receiver_id,
+                                "rejected cross-scope direct message"
+                            );
+                            return Err(sqlx::Error::RowNotFound);
+                        }
+
                         sqlx::query(
                             r#"
                             INSERT INTO messages

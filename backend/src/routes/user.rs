@@ -1176,14 +1176,40 @@ pub async fn update_profile(
 #[get("/users/all")]
 #[instrument(target = "http", skip(req, pool))]
 async fn get_all_users(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
-    // Require a valid JWT — this endpoint enumerates every account.
-    if get_user_id_from_request(&req).is_none() {
-        return HttpResponse::Unauthorized().finish();
-    }
+    // Require a valid JWT — this endpoint enumerates accounts.
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => return HttpResponse::Unauthorized().finish(),
+    };
 
-    let result = sqlx::query("SELECT id, email, public_key FROM users")
-        .fetch_all(pool.get_ref())
-        .await;
+    // Scope the directory to the caller's own world so the chat people-picker
+    // never leaks accounts across tenants: a platform account sees only
+    // platform accounts, an organization account sees only same-org accounts,
+    // and a personal account sees only other personal accounts.
+    let ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            error!(target: "db", user_id, error = ?e, "get_all_users scope resolution failed");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let result = sqlx::query(
+        r#"
+        SELECT id, email, public_key
+        FROM users u
+        WHERE (
+            ($1 = 'personal'     AND u.account_type = 'personal')
+         OR ($1 = 'platform'     AND u.account_type = 'platform_admin')
+         OR ($1 = 'organization' AND u.account_type IN ('organization', 'organization_admin')
+                                  AND u.organization_id = $2)
+        )
+        "#,
+    )
+    .bind(ctx.scope.as_str())
+    .bind(ctx.organization_id)
+    .fetch_all(pool.get_ref())
+    .await;
 
     match result {
         Ok(rows) => {
