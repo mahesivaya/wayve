@@ -58,7 +58,7 @@ Entry point `backend/src/main.rs`:
 
 The schema lives in `infra/postgres/init.sql` and is applied **once** when the Postgres container first initializes (via `docker-entrypoint-initdb.d`). It is **not** managed by `sqlx migrate` despite the `just sqlx-migrate` recipe — the file is idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... IF NOT EXISTS`) and is re-applied verbatim in CI. To evolve the schema, edit this file and `just db-reset` locally.
 
-Key tables: `users` (local + Google auth, `auth_provider` discriminator, nullable `password` for OAuth signups), `email_accounts`, `emails`, `meetings` + `meeting_participants` (with optional Zoom / Google Calendar linkage), `messages` (server-encrypted chat content, `message_status` ENUM `sent|delivered|read`), `files`, `notes`, `password_reset_tokens`.
+Key tables: `users` (local + Google auth, `auth_provider` discriminator, nullable `password` for OAuth signups; `account_type` is the RBAC scope discriminator), `organizations` + `organization_members` / `platform_members` (RBAC role rows — see Authorization), `email_accounts`, `emails`, `meetings` + `meeting_participants` (with optional Zoom / Google Calendar linkage), `messages` (server-encrypted chat content, `message_status` ENUM `sent|delivered|read`), `files`, `notes`, `password_reset_tokens`, the Stripe billing projection (`plans`, `subscriptions`, `invoices`, `billing_customers`, `entitlements`, `usage_events`), and `api_keys` + `api_key_audit_log`.
 
 Per-recipient delivery state is intended to live in a separate `message_recipients` table — **do not name it `message_status`**, which collides with the existing ENUM.
 
@@ -68,7 +68,19 @@ Per-recipient delivery state is intended to live in a separate `message_recipien
 
 Chat uses client-side envelope encryption for new direct and channel messages. The frontend encrypts content into a `WAYVE_CHAT_E2E_V1` RSA/AES hybrid envelope for every participant key before sending; `chat/websocket.rs` rejects plaintext normal messages and then applies the backend AES-GCM layer only as storage-at-rest protection for the envelope. `chat/direct_messages.rs` and `chat/channel_messages.rs` decrypt only the storage layer and return the client envelope, which the browser decrypts locally. Legacy rows or manually inserted plaintext are not E2E.
 
-`security/jwt.rs` mints HS256 JWTs from `JWT_SECRET`. The WebSocket endpoints (`chat_ws`, `call_ws`) authenticate from `?token=...` and **derive `user_id` from the verified claims, not from the query string** — preserve that when adding WS routes.
+`security/jwt.rs` mints HS256 JWTs from `JWT_SECRET`. `get_user_id_from_request` is the single auth chokepoint for HTTP handlers — it also resolves API-key requests (see API keys). The WebSocket endpoints (`chat_ws`, `call_ws`) authenticate via `get_user_id_from_request` with a `?token=` query fallback, deriving `user_id` from verified credentials and **never an unverified query value** — preserve that when adding WS routes.
+
+### Authorization (RBAC)
+
+Two privileged scopes — **platform** and **organization** — plus personal accounts. `users.account_type` (`personal | organization | organization_admin | platform_admin`) discriminates the scope; the role *within* a scope is a row in `organization_members.role` / `platform_members.role`. Nine roles: `owner, super_admin, admin, security, billing, developer, support, member, guest` (CHECK-constrained in `init.sql`).
+
+`security/rbac.rs` is the authority — a fixed `Permission` catalog, the role→permission matrix (`owner` = everything; `super_admin` = everything except billing), `resolve_role_context` (resolves a user's scope + role from the DB), and the request gates `require_permission` / `require_org_access`. Authorization is computed per request from the DB and **never trusted from the JWT**, so a role change takes effect on the next request. Role-management endpoints live in `routes/user.rs` (`/api/organizations/{id}/members…`, `/api/platform/members…`); `/api/me` and `/profile` return `scope` + `permissions[]`. `frontend/src/auth/permissions.ts` mirrors the matrix for UI gating only — never for real authorization. `scripts/seed_rbac_users.sh` seeds one test user per role in both scopes.
+
+### API keys
+
+An `X-API-KEY` header lets a service call any endpoint without a login. `middleware/api_key.rs` (`ApiKeyMiddleware`, wrapped in `main.rs`) is a no-op unless the header is present; otherwise it validates the key, enforces the route's required scope and a per-key rate limit, records the outcome in `api_key_audit_log`, and injects an `ApiKeyPrincipal` into the request extensions — which `get_user_id_from_request` returns, so a key authenticates **as a designated `user_id`** across every handler with no per-handler change.
+
+`security/api_key.rs` owns the scope catalog, the `required_scope(method, path)` route map, `resolve_api_key`, and the audit writer. Keys are `internal` (may hold the `*` scope) or `external` (explicit scopes, mandatory expiry). Management endpoints (`/api/keys*`) are in `routes/api_keys.rs`, gated by the `api_keys:manage` permission. The raw key is shown once at creation; only its SHA-256 hash is stored.
 
 ### Logging
 
