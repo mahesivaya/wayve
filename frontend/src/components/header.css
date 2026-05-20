@@ -1,7 +1,7 @@
 .header {
     height: 60px;
     background: #0b1220;
-    color: white;
+    color: var(--color-surface);
   
     display: flex;
     justify-content: space-between;
@@ -13,9 +13,9 @@
   
   /* Left */
   .header__logo {
-    font-size: 18px;
+    font-size: var(--text-3xl);
     font-weight: 700;
-    color: white;
+    color: var(--color-surface);
     text-decoration: none;
   }
   
@@ -27,7 +27,7 @@
   }
   
   .header__email {
-    font-size: 14px;
+    font-size: var(--text-lg);
     color: #9ca3af;
   }
   
@@ -35,10 +35,10 @@
   .header__btn {
     background: #111827;
     border: 1px solid #374151;
-    color: white;
+    color: var(--color-surface);
   
     padding: 6px 12px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
   
     transition: 0.2s;

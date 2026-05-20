@@ -19,7 +19,7 @@
 :is(.platform-admin-header, .platform-admin-section-header, .organization-admin-header, .organization-admin-section-header)
   :is(h1, h2) {
   margin: 0;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 :is(.platform-admin-header, .organization-admin-header) h1 {
@@ -27,7 +27,7 @@
 }
 
 :is(.platform-admin-section-header, .organization-admin-section-header) h2 {
-  font-size: 18px;
+  font-size: var(--text-3xl);
 }
 
 :is(.platform-admin-header, .organization-admin-header) p {
@@ -35,14 +35,14 @@
 }
 
 :is(.platform-admin-header, .platform-admin-section-header, .organization-admin-header, .organization-admin-section-header) p {
-  color: #6b7280;
-  font-size: 13px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
 }
 
 :is(.platform-admin-hint, .organization-admin-hint) {
   margin: -4px 0 0;
   color: #475569;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 :is(.platform-admin-hint, .organization-admin-hint) strong {
@@ -52,8 +52,8 @@
 :is(.platform-admin-error, .platform-admin-success, .organization-admin-error, .organization-admin-success) {
   margin-top: 10px;
   padding: 9px 10px;
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
   font-weight: 700;
 }
 

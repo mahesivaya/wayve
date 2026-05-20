@@ -26,8 +26,8 @@
   gap: 12px;
   padding: 9px 10px;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #ffffff;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 
   :is(strong, span) {
     min-width: 0;
@@ -37,13 +37,13 @@
   }
 
   strong {
-    color: #111827;
-    font-size: 13px;
+    color: var(--color-text-primary);
+    font-size: var(--text-md);
   }
 
   span {
-    color: #6b7280;
-    font-size: 13px;
+    color: var(--color-text-muted);
+    font-size: var(--text-md);
   }
 }
 
@@ -66,14 +66,14 @@
 
   h3 {
     margin: 0;
-    color: #111827;
-    font-size: 16px;
+    color: var(--color-text-primary);
+    font-size: var(--text-2xl);
   }
 
   p {
     margin: 10px 0 0;
-    color: #6b7280;
-    font-size: 13px;
+    color: var(--color-text-muted);
+    font-size: var(--text-md);
     line-height: 1.45;
   }
 }

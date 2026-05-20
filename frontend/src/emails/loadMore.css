@@ -6,7 +6,7 @@
 .load-more-wrap {
   position: sticky;
   bottom: 0;
-  background: #ffffff;
+  background: var(--color-surface);
   border-top: 1px solid #e5e7eb;
   padding: 8px;
   margin-top: auto;
@@ -18,11 +18,11 @@
   width: 100%;
   padding: 10px 12px;
   background: #1a73e8;
-  color: #ffffff;
+  color: var(--color-surface);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
 }
 

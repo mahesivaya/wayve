@@ -23,7 +23,7 @@
   .user-item {
     padding: 10px;
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     color: #cbd5f5;
     transition: all 0.2s ease;
   }
@@ -34,7 +34,7 @@
   
   .user-item.active {
     background: #2563eb;
-    color: white;
+    color: var(--color-surface);
   }
   
   /* CALL AREA */
@@ -86,7 +86,7 @@
   
   .controls button {
     padding: 12px 25px;
-    font-size: 15px;
+    font-size: var(--text-xl);
     border: none;
     border-radius: 30px;
     cursor: pointer;
@@ -96,7 +96,7 @@
   /* START CALL */
   .controls button:not(.end) {
     background: #16a34a;
-    color: white;
+    color: var(--color-surface);
   }
   
   .controls button:not(.end):hover {
@@ -106,7 +106,7 @@
   /* END CALL */
   .end {
     background: #dc2626;
-    color: white;
+    color: var(--color-surface);
   }
   
   .end:hover {
@@ -129,9 +129,9 @@
   
   /* POPUP CARD */
   .incoming-call > div {
-    background: white;
+    background: var(--color-surface);
     padding: 25px 30px;
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     text-align: center;
     width: 300px;
   }
@@ -150,14 +150,14 @@
     padding: 10px 20px;
     border: none;
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     font-weight: bold;
   }
   
   /* ACCEPT */
   .accept {
     background: #16a34a;
-    color: white;
+    color: var(--color-surface);
   }
   
   .accept:hover {
@@ -167,7 +167,7 @@
   /* REJECT */
   .reject {
     background: #dc2626;
-    color: white;
+    color: var(--color-surface);
   }
   
   .reject:hover {
@@ -186,7 +186,7 @@
     height: 60px;
     border-radius: 50%;
     background: #2563eb; /* blue */
-    color: white;
+    color: var(--color-surface);
     font-size: 22px;
     border: none;
     cursor: pointer;
@@ -204,7 +204,7 @@
     height: 60px;
     border-radius: 50%;
     background: #16a34a; /* green */
-    color: white;
+    color: var(--color-surface);
     font-size: 22px;
     border: none;
     cursor: pointer;
@@ -219,7 +219,7 @@
   /* END BUTTON */
   .end {
     background: #dc2626;
-    color: white;
+    color: var(--color-surface);
     padding: 12px 25px;
     border-radius: 30px;
     border: none;

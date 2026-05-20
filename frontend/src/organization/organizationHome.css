@@ -5,14 +5,14 @@
   overflow-y: auto;
   padding: 18px;
   box-sizing: border-box;
-  background: lightsteelblue;
+  background: var(--color-email-bg);
 }
 
 .organization-home-header,
 .organization-home-welcome {
   border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 8px;
-  background: #d7e4f4;
+  border-radius: var(--radius-md);
+  background: var(--color-email-list-bg);
 }
 
 .organization-home-header {
@@ -27,13 +27,13 @@
 .organization-home-header h1 {
   margin: 0;
   font-size: 24px;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 .organization-home-header p {
   margin: 6px 0 0;
-  color: #6b7280;
-  font-size: 13px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
 }
 
 .organization-home-actions {
@@ -45,10 +45,10 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid #2563eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #2563eb;
-  color: #ffffff;
-  font-size: 13px;
+  color: var(--color-surface);
+  font-size: var(--text-md);
   font-weight: 800;
   cursor: pointer;
   white-space: nowrap;
@@ -57,7 +57,7 @@
 .organization-home-actions .danger {
   border-color: #fecaca;
   background: #fee2e2;
-  color: #dc2626;
+  color: var(--color-danger-hover);
 }
 
 .organization-home-welcome {
@@ -67,14 +67,14 @@
 
 .organization-home-welcome h2 {
   margin: 0;
-  font-size: 18px;
-  color: #111827;
+  font-size: var(--text-3xl);
+  color: var(--color-text-primary);
 }
 
 .organization-home-welcome p {
   margin: 6px 0 0;
-  color: #6b7280;
-  font-size: 13px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
 }
 
 .organization-home-grid {
@@ -86,8 +86,8 @@
 .organization-home-grid article {
   padding: 16px;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #ffffff;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   cursor: pointer;
 }
 
@@ -97,14 +97,14 @@
 
 .organization-home-grid h3 {
   margin: 0 0 6px;
-  font-size: 15px;
-  color: #111827;
+  font-size: var(--text-xl);
+  color: var(--color-text-primary);
 }
 
 .organization-home-grid p {
   margin: 0;
-  color: #6b7280;
-  font-size: 13px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
 }
 
 @media (max-width: 720px) {

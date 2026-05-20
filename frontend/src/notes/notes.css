@@ -3,8 +3,8 @@
   display: flex;
   width: 100%;
   height: 100%;
-  background: #ffffff;
-  color: #111827;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
 }
 
 /* ================= LIST ================= */
@@ -30,9 +30,9 @@
   padding: 10px;
   border: none;
   background: #2563eb;
-  color: white;
-  border-radius: 6px;
-  font-size: 13px;
+  color: var(--color-surface);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   margin-bottom: 8px;
@@ -43,7 +43,7 @@
 }
 
 .notes-empty {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: #9ca3af;
   text-align: center;
   padding: 24px 8px;
@@ -51,9 +51,9 @@
 
 .notes-item {
   padding: 10px 12px;
-  background: white;
+  background: var(--color-surface);
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: 0.1s;
 }
@@ -69,17 +69,17 @@
 }
 
 .notes-item-title {
-  font-size: 14px;
+  font-size: var(--text-lg);
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .notes-item-preview {
-  font-size: 12px;
-  color: #6b7280;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -92,7 +92,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: lightsteelblue;
+  background: var(--color-email-bg);
 }
 
 .notes-editor-empty {
@@ -103,7 +103,7 @@
   justify-content: center;
   gap: 8px;
   color: #9ca3af;
-  font-size: 14px;
+  font-size: var(--text-lg);
 }
 
 .notes-editor-empty-icon {
@@ -123,11 +123,11 @@
   width: 32px;
   height: 32px;
   border: 1px solid #e5e7eb;
-  background: white;
-  color: #374151;
-  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-lg);
   flex-shrink: 0;
 }
 
@@ -139,18 +139,18 @@
   flex: 1;
   border: none;
   outline: none;
-  font-size: 18px;
+  font-size: var(--text-3xl);
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary);
   background: transparent;
 }
 
 .notes-status {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #059669;
   background: #d1fae5;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   white-space: nowrap;
 }
 
@@ -160,11 +160,11 @@
   outline: none;
   resize: none;
   padding: 16px;
-  font-size: 14px;
+  font-size: var(--text-lg);
   font-family: inherit;
   line-height: 1.6;
-  color: #111827;
-  background: white;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
   min-height: 0;
 }
 
@@ -180,9 +180,9 @@
 .notes-delete-btn,
 .notes-cancel-btn {
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
   cursor: pointer;
   transition: 0.15s;
@@ -190,7 +190,7 @@
 
 .notes-save-btn {
   background: #2563eb;
-  color: white;
+  color: var(--color-surface);
 }
 
 .notes-save-btn:hover:not(:disabled) {
@@ -203,9 +203,9 @@
 }
 
 .notes-delete-btn {
-  background: white;
+  background: var(--color-surface);
   border-color: #fca5a5;
-  color: #dc2626;
+  color: var(--color-danger-hover);
 }
 
 .notes-delete-btn:hover {
@@ -214,9 +214,9 @@
 
 .notes-cancel-btn {
   margin-left: auto;
-  background: white;
+  background: var(--color-surface);
   border-color: #e5e7eb;
-  color: #374151;
+  color: var(--color-text-secondary);
 }
 
 .notes-cancel-btn:hover {

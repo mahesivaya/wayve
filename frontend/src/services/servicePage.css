@@ -39,15 +39,15 @@
 }
 
 .service-page-nav nav button {
-  font-size: 15px;
+  font-size: var(--text-xl);
   white-space: nowrap;
   padding: 7px 10px;
 }
 
 .service-page-register {
-  border-radius: 8px !important;
+  border-radius: var(--radius-md) !important;
   background: #563ee0 !important;
-  color: #fff !important;
+  color: var(--color-surface) !important;
 }
 
 .service-page-main {
@@ -62,7 +62,7 @@
     linear-gradient(120deg, rgba(86, 62, 224, 0.12), rgba(37, 198, 239, 0.1)),
     #fff;
   border: 1px solid #e1e5ef;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .service-page-icon {
@@ -72,7 +72,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 14px;
-  color: #fff;
+  color: var(--color-surface);
   font-size: 17px;
   font-weight: 850;
   background: linear-gradient(135deg, #7857ff, #37c6ef);
@@ -115,7 +115,7 @@
 .service-page-section-label {
   margin: 22px 0 10px;
   color: #563ee0;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 850;
   text-transform: uppercase;
 }
@@ -139,7 +139,7 @@
   max-width: 820px;
   margin: 18px 0 0;
   color: #566171;
-  font-size: 18px;
+  font-size: var(--text-3xl);
   line-height: 1.65;
 }
 
@@ -154,16 +154,16 @@
   min-height: 42px;
   padding: 0 16px;
   border: 1px solid #563ee0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #563ee0;
-  color: #fff;
-  font-size: 15px;
+  color: var(--color-surface);
+  font-size: var(--text-xl);
   font-weight: 800;
   cursor: pointer;
 }
 
 .service-page-actions button + button {
-  background: #fff;
+  background: var(--color-surface);
   color: #563ee0;
 }
 
@@ -173,9 +173,9 @@
   gap: 36px;
   margin-top: 26px;
   padding: 34px;
-  background: #fff;
+  background: var(--color-surface);
   border: 1px solid #e1e5ef;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .service-page-section h2 {
@@ -199,7 +199,7 @@
   align-items: flex-start;
   gap: 12px;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #f7f8fc;
 }
 
@@ -212,7 +212,7 @@
   border-radius: 50%;
   background: #e8e3ff;
   color: #563ee0;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 900;
   flex: 0 0 auto;
 }
@@ -221,7 +221,7 @@
 .service-usecase-list p {
   margin: 0;
   color: #4d5667;
-  font-size: 16px;
+  font-size: var(--text-2xl);
   line-height: 1.5;
 }
 

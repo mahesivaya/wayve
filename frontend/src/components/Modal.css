@@ -10,8 +10,8 @@
 }
 
 .modal-content {
-  background: #fff;
-  border-radius: 12px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
   width: 520px;
   max-width: 90vw;
   max-height: 90vh;

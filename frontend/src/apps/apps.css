@@ -53,13 +53,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
 }
 
 .app-pane-icon {
-  font-size: 16px;
+  font-size: var(--text-2xl);
 }
 
 .app-pane-empty {
@@ -70,7 +70,7 @@
 .app-pane-close {
   border: none;
   background: transparent;
-  font-size: 18px;
+  font-size: var(--text-3xl);
   line-height: 1;
   width: 24px;
   height: 24px;
@@ -81,7 +81,7 @@
 
 .app-pane-close:hover {
   background: #0B1220;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 .app-pane-body {
@@ -102,7 +102,7 @@
 
 .app-picker-title {
   margin: 0 0 16px;
-  font-size: 14px;
+  font-size: var(--text-lg);
   color: #0B1220;
   font-weight: 500;
 }
@@ -126,7 +126,7 @@
   cursor: pointer;
   transition: all 0.15s;
   font: inherit;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 .app-picker-card:hover {
@@ -140,6 +140,6 @@
 }
 
 .app-picker-label {
-  font-size: 14px;
+  font-size: var(--text-lg);
   font-weight: 600;
 }

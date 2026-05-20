@@ -1,5 +1,14 @@
-/* ================= TOKENS ================= */
-:root {
+/* ================= TOKENS =================
+ * Scoped to `.scheduler` so the local overrides of `--bg`, `--text`,
+ * `--border`, `--accent` etc. don't leak into global `:root`. Previously
+ * this block was `:root { ... }`, which meant once the scheduler chunk
+ * loaded, navigating away from /scheduler left the rest of the app with
+ * `--bg: lightsteelblue` permanently for the rest of the session.
+ *
+ * `--radius-sm/md/lg` and `--shadow-sm/md` now live in index.css's global
+ * `:root` — same values; lifted up so other features can use them too.
+ */
+.scheduler {
   --bg: lightsteelblue;
   --surface: #d7e4f4;
   --surface-alt: #eef4fb;
@@ -14,13 +23,10 @@
   --today: #dbeafe;
   --danger: #ef4444;
   --danger-hover: #dc2626;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+
+  /* Scheduler-only sizing; not reused elsewhere. */
   --gutter: 72px;
   --slot-h: 36px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
 }
 
 /* ================= LAYOUT ================= */
@@ -32,7 +38,7 @@
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-  font-size: 14px;
+  font-size: var(--text-lg);
 }
 
 /* ================= SIDEBAR ================= */
@@ -54,7 +60,7 @@
   align-items: center;
   gap: 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-alt);
   color: var(--text);
   font-weight: 600;
@@ -69,7 +75,7 @@
 }
 
 .scheduler-create-main:hover {
-  background: #ffffff;
+  background: var(--color-surface);
   box-shadow: 0 2px 6px rgba(60, 64, 67, 0.24);
 }
 
@@ -79,16 +85,16 @@
   align-items: center;
   margin-bottom: 8px;
 }
-.mini-header span { font-weight: 600; font-size: 14px; color: var(--text); }
+.mini-header span { font-weight: 600; font-size: var(--text-lg); color: var(--text); }
 .mini-header button {
   border: none;
   background: transparent;
   color: var(--text-muted);
   width: 28px;
   height: 28px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--text-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -104,7 +110,7 @@
 .mini-weekdays span {
   text-align: center;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -116,8 +122,8 @@
 .mini-day {
   padding: 6px 0;
   text-align: center;
-  font-size: 12px;
-  border-radius: 999px;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   color: var(--text);
   transition: background 0.12s, color 0.12s;
@@ -125,7 +131,7 @@
 .mini-day:hover { background: var(--surface-alt); color: var(--text); }
 .mini-day.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--color-surface);
   font-weight: 600;
 }
 
@@ -139,7 +145,7 @@
 .calendar-create-box input {
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 7px 9px;
   color: var(--text);
   background: var(--surface-alt);
@@ -149,13 +155,13 @@
   border: 1px solid var(--border);
   background: var(--surface-alt);
   color: var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 18px;
+  font-size: var(--text-3xl);
 }
 
 .calendar-create-box button:hover {
-  background: #ffffff;
+  background: var(--color-surface);
 }
 
 .calendar-section {
@@ -214,7 +220,7 @@
   margin-right: auto;
   padding-left: 8px;
   color: var(--text);
-  font-size: 18px;
+  font-size: var(--text-3xl);
   font-weight: 500;
 }
 .calendar-header button {
@@ -223,7 +229,7 @@
   border: 1px solid var(--border);
   background: var(--surface);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
   color: var(--text);
   transition: background 0.15s, border-color 0.15s, color 0.15s;
@@ -235,13 +241,13 @@
 }
 .calendar-header .create-btn {
   background: var(--accent);
-  color: #fff;
+  color: var(--color-surface);
   border-color: var(--accent);
 }
 .calendar-header .create-btn:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
-  color: #fff;
+  color: var(--color-surface);
 }
 
 /* ================= DAY VIEW ================= */
@@ -258,7 +264,7 @@
 }
 .day-title {
   padding: 14px 20px;
-  font-size: 15px;
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--text);
   border-bottom: 1px solid var(--border);
@@ -284,7 +290,7 @@
   flex: 0 0 72px;
   padding: 6px 10px 0 0;
   text-align: right;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
   border-right: 1px solid var(--border-soft);
@@ -326,7 +332,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -336,7 +342,7 @@
   flex: 1;
   padding: 8px 6px 10px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -356,8 +362,8 @@
 }
 .week-day-header.is-today .week-day-num {
   background: var(--accent);
-  color: #fff;
-  border-radius: 999px;
+  color: var(--color-surface);
+  border-radius: var(--radius-pill);
   width: 28px;
   height: 28px;
   display: inline-flex;
@@ -412,7 +418,7 @@
 .month-weekday {
   padding: 10px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -446,16 +452,16 @@
 .day-cell.is-today { background: var(--accent-soft); }
 .day-cell.is-today .date {
   background: var(--accent);
-  color: #fff;
+  color: var(--color-surface);
   width: 24px;
   height: 24px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 .date {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   font-weight: 600;
 }
@@ -471,10 +477,10 @@
 .event,
 .event-block {
   background: var(--accent);
-  color: #fff;
+  color: var(--color-surface);
   padding: 4px 6px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   cursor: pointer;
   border: none;
   display: flex;
@@ -525,7 +531,7 @@
 }
 .modal h3 {
   margin: 0 0 14px;
-  font-size: 16px;
+  font-size: var(--text-2xl);
   font-weight: 600;
 }
 .close-btn {
@@ -534,19 +540,19 @@
   right: 12px;
   border: none;
   background: transparent;
-  font-size: 18px;
+  font-size: var(--text-3xl);
   cursor: pointer;
   color: var(--text-muted);
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .close-btn:hover { color: var(--text); background: var(--bg); }
 
 .form { display: flex; flex-direction: column; gap: 12px; }
 .form-group { display: flex; flex-direction: column; gap: 4px; }
 .form-group label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -557,7 +563,7 @@
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--text-md);
   background: var(--surface-alt);
   color: var(--text);
   font-family: inherit;
@@ -581,7 +587,7 @@
   border: 1px solid var(--border);
   background: var(--surface);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
   color: var(--text);
   transition: background 0.12s, border-color 0.12s, color 0.12s;
@@ -589,7 +595,7 @@
 .modal-actions button:hover { background: var(--bg); }
 .modal-actions button:nth-last-of-type(2) {
   background: var(--accent);
-  color: #fff;
+  color: var(--color-surface);
   border-color: var(--accent);
 }
 .modal-actions button:nth-last-of-type(2):hover {
@@ -604,7 +610,7 @@
 }
 .delete-btn:hover {
   background: var(--danger) !important;
-  color: #fff !important;
+  color: var(--color-surface) !important;
 }
 
 /* ================= CHIPS / PARTICIPANTS ================= */
@@ -621,8 +627,8 @@
   background: var(--accent-soft);
   color: var(--accent-hover);
   padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 .chip span {
@@ -640,13 +646,13 @@
   border: 1px solid var(--border);
   background: var(--accent-soft);
   color: var(--accent-hover);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
   cursor: pointer;
 }
 .participant-input button:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--color-surface);
   border-color: var(--accent);
 }
 
@@ -666,12 +672,12 @@
     gap: 6px;
   }
   .calendar-title {
-    font-size: 16px;
+    font-size: var(--text-2xl);
     padding-left: 4px;
   }
   .calendar-header button {
     padding: 6px 10px;
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
 
   .day-view,
@@ -702,11 +708,11 @@
   .calendar-title {
     width: 100%;
     margin: 0 0 2px;
-    font-size: 14px;
+    font-size: var(--text-lg);
   }
   .calendar-header button {
     padding: 5px 8px;
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 
   .day-view,
@@ -725,7 +731,7 @@
   }
 
   .week-day-num {
-    font-size: 18px;
+    font-size: var(--text-3xl);
   }
   .week-day-header {
     padding: 6px 2px 8px;
@@ -739,7 +745,7 @@
     padding: 4px;
   }
   .date {
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 
   .event,

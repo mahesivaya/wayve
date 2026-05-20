@@ -10,7 +10,7 @@
   
   /* Upload Section */
   .upload-section {
-    background: lightsteelblue;
+    background: var(--color-email-bg);
     padding: 20px;
     border-radius: 10px;
     margin-bottom: 20px;
@@ -27,10 +27,10 @@
   
   .upload-btn {
     background: #1a73e8;
-    color: white;
+    color: var(--color-surface);
     border: none;
     padding: 8px 16px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
   }
   
@@ -58,7 +58,7 @@
     padding: 8px 14px;
     background: #e8f0fe;
     color: #1a73e8;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
   }
   
@@ -69,7 +69,7 @@
   
   /* 🔥 FULL WIDTH FILE SECTION */
   .files-section {
-    background: white;
+    background: var(--color-surface);
     padding: 20px;
     border-radius: 10px;
   
@@ -103,7 +103,7 @@
   }
   
   .file-icon {
-    font-size: 18px;
+    font-size: var(--text-3xl);
   }
   
   .file-main {
@@ -116,7 +116,7 @@
   }
   
   .file-meta {
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: gray;
   }
   

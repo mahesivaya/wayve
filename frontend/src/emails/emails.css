@@ -59,7 +59,7 @@
   border: 1px solid var(--color-border);
   margin-bottom: var(--space-7);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-lg);
   text-align: center;
 }
 
@@ -84,7 +84,7 @@
   color: var(--color-text-primary);
   cursor: pointer;
   text-align: left;
-  font-size: 14px;
+  font-size: var(--text-lg);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -109,7 +109,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 700;
   line-height: 1;
   flex: 0 0 auto;
@@ -144,7 +144,7 @@
   border: 1px solid transparent;
   margin: var(--space-2) 0;
   color: var(--color-text-primary);
-  font-size: 14px;
+  font-size: var(--text-lg);
   transition: 0.15s;
   overflow: hidden;
 }
@@ -189,7 +189,7 @@
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1;
 }
 
@@ -228,7 +228,7 @@
 .account-rename-error {
   flex: 1 0 100%;
   color: var(--color-danger);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.2;
   padding-left: 2px;
 }
@@ -290,7 +290,7 @@
 
 /* Time */
 .email-time {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
   white-space: nowrap;
 }
@@ -309,7 +309,7 @@
   display: flex;
   align-items: center;
   gap: 22px;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 700;
   color: var(--color-text-primary);
   overflow: hidden;
@@ -352,7 +352,7 @@
 
 .main.email-list-view .email-primary {
   text-align: left;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .main.email-list-view .email-list-subject {
@@ -362,7 +362,7 @@
 .email-attachment-pin {
   flex: 0 0 auto;
   color: var(--color-text-ink);
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1;
 }
 
@@ -403,7 +403,7 @@
   color: var(--color-text-muted);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -420,7 +420,7 @@
   width: 26px;
   padding: 0;
   color: var(--color-danger);
-  font-size: 15px;
+  font-size: var(--text-xl);
 }
 
 .email-detail-reply {
@@ -534,13 +534,13 @@
   align-items: center;
   gap: var(--space-4);
   color: var(--color-text-muted);
-  font-size: 14px;
+  font-size: var(--text-lg);
   padding: var(--space-5) 0;
 }
 
 .email-body-error {
   color: var(--color-danger);
-  font-size: 14px;
+  font-size: var(--text-lg);
   padding: var(--space-5) 0;
 }
 
@@ -551,7 +551,7 @@
 }
 
 .email-attachments-title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 700;
   color: var(--color-text-primary);
   margin-bottom: var(--space-3);
@@ -587,7 +587,7 @@
 
 .email-attachment-size {
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .spinner {

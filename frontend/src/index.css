@@ -61,9 +61,24 @@
 
   --radius-sm: 6px;
   --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-pill: 999px;
 
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
   --u-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+
+  /* Body-text type scale. The seven values cover ~230 of the 241 raw
+     `font-size:` declarations across feature stylesheets. Heading sizes
+     (20px / 24px / 36px / 56px) stay as raw values because they're
+     one-offs in `h1`/`h2`. */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 14px;
+  --text-xl: 15px;
+  --text-2xl: 16px;
+  --text-3xl: 18px;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -80,7 +95,7 @@
   -moz-osx-font-smoothing: grayscale;
 
   @media (max-width: 1024px) {
-    font-size: 16px;
+    font-size: var(--text-2xl);
   }
 }
 
@@ -154,7 +169,7 @@
 
 .u-form-label-text {
   color: var(--color-text-slate);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 800;
 }
 
@@ -176,7 +191,7 @@
 
 :where(.u-btn-primary, .u-btn-danger-soft) {
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--text-md);
   cursor: pointer;
 }
 
@@ -259,7 +274,7 @@ code,
 }
 
 code {
-  font-size: 15px;
+  font-size: var(--text-xl);
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);

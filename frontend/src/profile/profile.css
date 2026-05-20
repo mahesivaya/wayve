@@ -13,9 +13,9 @@
 .settings-card {
   width: 100%;
   max-width: 560px;
-  background: white;
+  background: var(--color-surface);
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 24px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
@@ -25,7 +25,7 @@
   margin: 0 0 20px;
   font-size: 20px;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 .profile-row {
@@ -36,9 +36,9 @@
 }
 
 .profile-row label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -46,8 +46,8 @@
 .profile-row input {
   padding: 10px 12px;
   border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-lg);
   outline: none;
   transition: 0.15s;
 }
@@ -61,9 +61,9 @@
   padding: 10px 12px;
   background: #f3f4f6;
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  font-size: 14px;
-  color: #374151;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-lg);
+  color: var(--color-text-secondary);
 }
 
 .profile-actions {
@@ -76,10 +76,10 @@
 .profile-save {
   padding: 9px 18px;
   background: #2563eb;
-  color: white;
+  color: var(--color-surface);
   border: none;
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-lg);
   font-weight: 500;
   cursor: pointer;
   transition: 0.15s;
@@ -95,17 +95,17 @@
 }
 
 .profile-status {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #059669;
   background: #d1fae5;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .profile-loading {
   margin-top: 60px;
-  color: #6b7280;
-  font-size: 14px;
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
 }
 
 .profile-password-section {
@@ -116,18 +116,18 @@
 
 .profile-section-title {
   margin: 0 0 16px;
-  font-size: 16px;
+  font-size: var(--text-2xl);
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 .profile-cancel {
   padding: 9px 16px;
-  background: white;
-  color: #374151;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
   border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-lg);
   font-weight: 500;
   cursor: pointer;
   transition: 0.15s;
@@ -150,9 +150,9 @@
 }
 
 .settings-section-title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 8px;
@@ -170,19 +170,19 @@
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: white;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
 }
 
 .settings-account-icon {
-  font-size: 18px;
+  font-size: var(--text-3xl);
   flex-shrink: 0;
 }
 
 .settings-account-email {
   flex: 1;
-  font-size: 14px;
-  color: #111827;
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -190,11 +190,11 @@
 
 .settings-account-delete {
   padding: 6px 12px;
-  background: white;
+  background: var(--color-surface);
   border: 1px solid #fca5a5;
-  color: #dc2626;
-  border-radius: 6px;
-  font-size: 12px;
+  color: var(--color-danger-hover);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: 0.15s;
@@ -208,9 +208,9 @@
   padding: 6px 12px;
   background: #2563eb;
   border: 1px solid #2563eb;
-  color: #ffffff;
-  border-radius: 6px;
-  font-size: 12px;
+  color: var(--color-surface);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
   font-weight: 700;
   cursor: pointer;
   transition: 0.15s;
@@ -221,8 +221,8 @@
 }
 
 .settings-empty {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: var(--text-lg);
+  color: var(--color-text-muted);
   padding: 24px 0;
   text-align: center;
 }
@@ -231,7 +231,7 @@
   margin-bottom: 24px;
   background: #f9fafb;
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 8px 16px;
 }
 
@@ -239,7 +239,7 @@
   margin-bottom: 24px;
   background: #f9fafb;
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 16px;
 }
 
@@ -256,12 +256,12 @@
 }
 
 .settings-usage-row span {
-  font-size: 13px;
-  color: #6b7280;
+  font-size: var(--text-md);
+  color: var(--color-text-muted);
 }
 
 .settings-usage-row strong {
-  font-size: 14px;
-  color: #111827;
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
   font-weight: 600;
 }
