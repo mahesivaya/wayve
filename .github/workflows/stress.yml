@@ -1,0 +1,134 @@
+name: stress
+
+# Nightly WebSocket stress test. Deliberately NOT on PR — connection-storm
+# tests are slow, occasionally flaky on shared CI runners, and have low
+# signal per PR. The point is to catch slow regressions in ws_registry,
+# the actor message loop, or the DB pool over time. Manual dispatch lets
+# you re-run on demand (e.g. after a chat refactor).
+on:
+  schedule:
+    # 03:00 UTC daily — off-hours for most timezones, plenty of GH runner
+    # capacity. Adjust if collisions with other nightly jobs appear.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      peak_vus:
+        description: "Peak concurrent WS connections"
+        required: false
+        default: "200"
+      hold_seconds:
+        description: "Seconds each connection stays open"
+        required: false
+        default: "60"
+
+concurrency:
+  group: stress-${{ github.ref }}
+  cancel-in-progress: false  # never cancel an in-flight stress run
+
+jobs:
+  ws-chat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- Bring up the docker stack (same env contract as smoke.sh /
+      #      smoke.yml / e2e.yml — keep these in sync).
+      - name: Generate .env files for docker-compose
+        run: |
+          cat <<EOF > backend/.env
+          DATABASE_URL=postgres://postgres:postgres@postgres_db:5432/rwayve
+          FRONTEND_URL=http://localhost
+          JWT_SECRET=ci-secret
+          AES_KEY=0123456789abcdef0123456789abcdef
+          REDIS_URL=redis://redis:6379
+          SMTP_HOST=smtp.example.com
+          SMTP_PORT=587
+          SMTP_USER=ci@example.com
+          SMTP_PASS=ci-pass
+          EOF
+
+          cat <<EOF > .env.secrets
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=rwayve
+          POSTGRES_PORT=5432
+          JWT_SECRET=ci-secret
+          AES_KEY=0123456789abcdef0123456789abcdef
+          SMTP_USER=ci@example.com
+          SMTP_PASS=ci-pass
+          EOF
+
+          cat <<EOF > frontend/.env
+          VITE_API_URL=http://localhost:8080
+          EOF
+
+          cat <<EOF > .env
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=rwayve
+          EOF
+
+          cat <<EOF > client_secret.json
+          {"web":{"client_id":"ci","client_secret":"ci","redirect_uris":["http://localhost:8080/oauth/callback"]}}
+          EOF
+
+      - name: Bring up stack
+        env:
+          KEEP_RUNNING: "1"
+        run: ./scripts/smoke.sh
+
+      # ---- Raise the open-file limit. k6 + 200 sockets + nginx + actix each
+      #      need fds; the default 1024 ulimit is borderline.
+      - name: Raise nofile limit for the stress run
+        run: ulimit -n 65536 || true
+
+      # ---- k6. The official Grafana action installs the binary and is
+      #      idempotent across runs.
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run WebSocket connection stress
+        env:
+          API_BASE: http://localhost:8080
+          WS_BASE: ws://localhost:8080
+          PEAK_VUS: ${{ github.event.inputs.peak_vus || '200' }}
+          HOLD_SECONDS: ${{ github.event.inputs.hold_seconds || '60' }}
+        # --summary-export writes machine-readable metrics for the artifact.
+        # --out json writes per-iteration samples for deep dives.
+        run: |
+          k6 run \
+            --summary-export=stress/k6-summary.json \
+            --out json=stress/k6-samples.json \
+            stress/ws_chat_connections.js | tee stress/k6-stdout.txt
+
+      - name: Post k6 summary to job summary
+        if: always()
+        run: |
+          {
+            echo "## WebSocket stress — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo
+            echo '```'
+            tail -n 60 stress/k6-stdout.txt 2>/dev/null || echo "(no stdout captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload k6 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-ws-chat
+          path: |
+            stress/k6-summary.json
+            stress/k6-samples.json
+            stress/k6-stdout.txt
+          retention-days: 30
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs --tail=300 || true
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f infra/docker-compose.yml down -v --remove-orphans || true

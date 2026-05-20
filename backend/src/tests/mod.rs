@@ -5,6 +5,9 @@
 // TEST_DATABASE_URL or DATABASE_URL (see test_support::test_pool). CI provides
 // one; locally, run `psql "$DATABASE_URL" -f infra/postgres/init.sql` first.
 mod ai_handler_test;
+mod api_key_audit_outcomes_test;
+mod api_key_principal_test;
+mod billing_entitlements_test;
 mod call_handler_test;
 mod chat_handler_test;
 mod drive_handler_test;
@@ -13,7 +16,10 @@ mod email_handler_test;
 mod email_sender_test;
 mod email_sync_test;
 mod notes_handler_test;
+mod rbac_authorization_test;
+mod rbac_resolution_test;
 mod routes_account_test;
+mod routes_api_keys_test;
 mod routes_auth_test;
 mod routes_user_test;
 mod scheduler_handler_test;
