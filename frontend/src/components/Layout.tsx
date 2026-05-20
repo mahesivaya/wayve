@@ -1,7 +1,7 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { canAccessPricingForUser } from "../auth/accountHome";
-import { hasPermission } from "../auth/permissions";
+import { canAccessApiKeyAdmin } from "../auth/permissions";
 import { Suspense, useState, useCallback } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
@@ -111,7 +111,9 @@ export default function Layout() {
           {renderNavItem("/", "home", "Home")}
           {renderNavItem("/emails", "emails", "Emails")}
           {renderNavItem("/chat", "chat", "Chat")}
-          {renderNavItem("/call", "call", "Call")}
+          {/* /call is no longer in the top nav — audio/video controls live
+              inside [Chat](../chat/Chat.tsx)'s conversation header. The route
+              is still reachable for legacy bookmarks. */}
           {renderNavItem("/scheduler", "scheduler", "Scheduler")}
           {renderNavItem("/drive", "drive", "Files")}
           {renderNavItem("/notes", "notes", "Notes")}
@@ -128,8 +130,11 @@ export default function Layout() {
               Pricing
             </Link>
           )}
-          {/* API Keys: visible only to roles that may manage them. */}
-          {hasPermission(user, "api_keys:manage") && (
+          {/* API Keys admin surface: visible only to org/platform
+              owner, super_admin, and admin. See [canAccessApiKeyAdmin](../auth/permissions.ts)
+              for the rationale (intentionally stricter than the raw
+              `api_keys:manage` permission, which Developer also holds). */}
+          {canAccessApiKeyAdmin(user) && (
             <Link
               to="/api-keys"
               className={location.pathname === "/api-keys" ? "active" : ""}
@@ -192,7 +197,6 @@ export default function Layout() {
           </button>
           <Link to="/emails">📧</Link>
           <Link to="/chat">💬</Link>
-          <Link to="/call">📞</Link>
           <Link to="/scheduler">📅</Link>
           <Link to="/drive">📁</Link>
           <Link to="/notes">📝</Link>

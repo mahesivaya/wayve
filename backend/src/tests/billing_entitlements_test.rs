@@ -157,24 +157,21 @@ mod tests {
         let pool = test_pool().await;
         let event_id = format!("evt_{}", uuid::Uuid::new_v4());
 
-        sqlx::query(
-            "INSERT INTO webhook_events (stripe_event_id, event_type) VALUES ($1, $2)",
-        )
-        .bind(&event_id)
-        .bind("invoice.payment_succeeded")
-        .execute(&pool)
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO webhook_events (stripe_event_id, event_type) VALUES ($1, $2)")
+            .bind(&event_id)
+            .bind("invoice.payment_succeeded")
+            .execute(&pool)
+            .await
+            .unwrap();
 
         // The application-level pattern is INSERT ... ON CONFLICT DO NOTHING,
         // and the constraint is what makes that pattern correct.
-        let dup = sqlx::query(
-            "INSERT INTO webhook_events (stripe_event_id, event_type) VALUES ($1, $2)",
-        )
-        .bind(&event_id)
-        .bind("invoice.payment_succeeded")
-        .execute(&pool)
-        .await;
+        let dup =
+            sqlx::query("INSERT INTO webhook_events (stripe_event_id, event_type) VALUES ($1, $2)")
+                .bind(&event_id)
+                .bind("invoice.payment_succeeded")
+                .execute(&pool)
+                .await;
         assert!(dup.is_err(), "duplicate stripe_event_id must be rejected");
 
         let _ = sqlx::query("DELETE FROM webhook_events WHERE stripe_event_id = $1")
@@ -190,14 +187,15 @@ mod tests {
         // migration drops the seed, paying customers can't be enrolled.
         let pool = test_pool().await;
 
-        let codes: Vec<String> = sqlx::query_scalar("SELECT code FROM plans WHERE code IN ($1, $2, $3, $4)")
-            .bind("basic_user")
-            .bind("advance_user")
-            .bind("organization")
-            .bind("enterprise")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+        let codes: Vec<String> =
+            sqlx::query_scalar("SELECT code FROM plans WHERE code IN ($1, $2, $3, $4)")
+                .bind("basic_user")
+                .bind("advance_user")
+                .bind("organization")
+                .bind("enterprise")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
 
         for expected in ["basic_user", "advance_user", "organization", "enterprise"] {
             assert!(

@@ -655,3 +655,78 @@
   border-radius: var(--radius-pill);
   padding: 2px 9px;
 }
+
+/* =============================
+   📱 LAYOUT — TABLET & PHONE
+   ============================
+   Survival-mode responsive: keep the app usable down to ~360px.
+   The header nav already collapses at ≤1100px (above). Below the
+   --bp-tablet (768px) threshold we also:
+     - auto-hide the 60px icon sidebar (still openable via the «»
+       toggle so power users keep their entry point),
+     - drop the textual welcome/role chip from the header to free
+       horizontal space for the brand + actions,
+     - collapse any second/third split pane (multi-pane on a phone
+       is unreadable).
+   At ≤480px we tighten paddings and shrink the duplicate-pane
+   button which is a desktop-first affordance.
+============================== */
+@media (max-width: 768px) {
+  /* Auto-collapse the icon sidebar. The class can still be removed
+     by the user clicking the `»` toggle in the header brand, so we
+     don't override the open state — only the default. */
+  .app:not(.sidebar-collapsed) .icon-sidebar {
+    width: 0;
+    border-right-color: transparent;
+  }
+
+  .header {
+    padding: 0 12px;
+    column-gap: 6px;
+  }
+
+  /* The welcome message + role chip eat ~200px of header width and
+     duplicate info available in /profile. Hide on phones; the
+     ProfileMenu avatar still identifies the signed-in user. */
+  .header-welcome {
+    display: none;
+  }
+
+  /* Multi-pane is a desktop pattern. Auto-close any open split
+     panes by hiding them — the underlying state survives, so when
+     the user rotates / resizes wider they reappear. */
+  .split-pane.center,
+  .split-pane.right {
+    display: none;
+  }
+
+  /* Tighten the duplicate-pane button (still useful in landscape /
+     tablet, just narrower). */
+  .duplicate-pane-btn {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    padding: 0 8px;
+  }
+
+  .logo {
+    font-size: var(--text-2xl);
+  }
+
+  /* Duplicate-pane is desktop-first; hide it on phones. */
+  .duplicate-pane-btn {
+    display: none;
+  }
+
+  /* The nav-toggle dropdown anchors to `left: 16px` by default.
+     On a 360px screen this clips the right edge; pin it tighter. */
+  .nav.open {
+    left: 8px;
+    right: 8px;
+    min-width: 0;
+  }
+}

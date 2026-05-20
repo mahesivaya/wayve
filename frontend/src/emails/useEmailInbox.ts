@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { 
-  getAccounts, 
-  getEmails, 
-  getEmail, 
-  getEmailAttachments, 
-  getEmailBody, 
+import {
+  getAccounts,
+  getEmails,
+  getEmail,
+  getEmailAttachments,
+  getEmailBody,
   getAllEmailAttachments,
   deleteEmail as deleteEmailRequest,
+  markEmailRead,
 } from "../api/email";
+import { logger } from "../utils/logger";
 import { decryptWayveBodyIfNeeded, emailBodyErrorMessage } from "./bodyUtils";
 import { EmailAccount, EmailItem, EmailAttachment } from "./types";
 
@@ -56,8 +58,22 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
         query: normalizedSearchQuery,
       });
       setEmails(data);
-      setHasMore(hasMorePage || data.length === 50);
-      setSelectedEmail(null);
+      // The backend's `hasMore` reflects the DB state only — it doesn't know
+      // that the provider (Gmail/Outlook) may have older messages we haven't
+      // synced yet. Default to "more might exist" whenever the list is
+      // non-empty, so the user can always trigger `sync_older_page` via the
+      // "Show more" button. Once a load-more returns zero new rows, the click
+      // handler flips this off and the button hides.
+      setHasMore(hasMorePage || data.length > 0);
+      // Preserve the user's selection across a list refresh. The post-import
+      // poll in [Emails.tsx](./Emails.tsx) bumps `refreshTick` every 2 s for
+      // ~24 s after a new mailbox is connected — without this, every tick
+      // would clobber the selected email back to "Select an email". We only
+      // clear the selection when the email genuinely left the list (account
+      // switch, folder change, server-side delete).
+      setSelectedEmail((cur) =>
+        cur && data.some((email) => email.id === cur.id) ? cur : null,
+      );
     };
     void fetchInitialEmails();
   }, [activeAccount, activeFolder, refreshTick, normalizedSearchQuery]);
@@ -68,7 +84,7 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
     try {
       const last = emails[emails.length - 1];
       const before = Math.floor(new Date(last.created_at).getTime() / 1000);
-      const { emails: data, hasMore: hasMorePage } = await getEmails<EmailItem>({
+      const { emails: data } = await getEmails<EmailItem>({
         folder: activeFolder,
         accountId: activeAccount,
         query: normalizedSearchQuery,
@@ -76,7 +92,12 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
         beforeId: last.id,
       });
       setEmails((prev) => [...prev, ...data]);
-      setHasMore(hasMorePage);
+      // The backend's `hasMore` reflects only whether *this* SQL page hit the
+      // 51-row LIMIT — it doesn't know whether the provider (Gmail/Outlook)
+      // still has more older mail past what was pulled in this tick. Treat
+      // any non-empty response as "more might exist; let the user click
+      // again." Only an empty response means we've reached the end.
+      setHasMore(data.length > 0);
     } finally {
       setLoadingMore(false);
     }
@@ -103,9 +124,34 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
   const openEmail = async (email: EmailItem) => {
     setViewMode("email");
     const openedEmail = { ...email, is_read: true };
+    const wasUnread = email.is_read === false;
     setEmails((prev) =>
       prev.map((item) => (item.id === email.id ? { ...item, is_read: true } : item))
     );
+
+    // Decrement the matching account's unread badge in the sidebar. The
+    // server-side count comes back on the next /api/accounts fetch (which the
+    // post-import poll already triggers), so this is purely about the
+    // immediate flicker — without it, the badge stays stale until refresh.
+    if (wasUnread && email.account_id != null) {
+      setAccounts((prev) =>
+        prev.map((acc) =>
+          acc.id === email.account_id
+            ? { ...acc, unread_count: Math.max(0, (acc.unread_count ?? 0) - 1) }
+            : acc,
+        ),
+      );
+    }
+
+    // Persist the read state so a page refresh doesn't bring the row back as
+    // unread. Fire-and-forget — the optimistic UI above is the source of
+    // truth for this render; a failed POST gets a log line but no rollback
+    // (the next provider sync will reconcile if needed).
+    if (wasUnread) {
+      void markEmailRead(email.id).catch((err) => {
+        logger.warn("Failed to persist read state", { emailId: email.id, err });
+      });
+    }
     if (emailCache.current[email.id]) {
       const cached = { ...emailCache.current[email.id], is_read: true };
       emailCache.current[email.id] = cached;

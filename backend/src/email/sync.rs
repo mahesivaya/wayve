@@ -325,6 +325,12 @@ pub async fn sync_account_recent(
         process_batch(pool, account_id, &mut tasks).await?;
     }
 
+    sqlx::query("UPDATE email_accounts SET last_sync = $1 WHERE id = $2")
+        .bind(chrono::Utc::now().timestamp())
+        .bind(account_id)
+        .execute(pool)
+        .await?;
+
     Ok(())
 }
 

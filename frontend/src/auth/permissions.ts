@@ -189,3 +189,27 @@ export function canModifyMember(
   }
   return false;
 }
+
+// The roles for which the "API Keys" admin surface is appropriate.
+// Stricter than the raw `api_keys:manage` permission (which Developer also
+// holds for their own keys) — this is the *admin UI* gate, not the API gate.
+const API_KEY_ADMIN_ROLES: Role[] = ["owner", "super_admin", "admin"];
+
+/**
+ * Whether the `API Keys` admin button should be visible.
+ *
+ * Visible to: organization / platform owner, super_admin, admin.
+ * Hidden from: personal accounts (no admin surface in a workspace of one),
+ * and from every other role — including Developer, who can still call the
+ * /api/keys endpoints for their own keys but doesn't need the admin UI.
+ */
+export function canAccessApiKeyAdmin(
+  user:
+    | { effective_role?: string | null; scope?: string | null }
+    | null
+    | undefined,
+): boolean {
+  if (!user) return false;
+  if (user.scope === "personal") return false;
+  return API_KEY_ADMIN_ROLES.includes(normalizeRole(user.effective_role));
+}

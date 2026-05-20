@@ -47,6 +47,14 @@ pub async fn ensure_email_schema(pool: &PgPool) {
     let statements = [
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT TRUE",
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS display_name TEXT",
+        // Self-heal accounts that connected before `last_sync` was stamped on
+        // INSERT — NULL forces the sync worker into a full-mailbox crawl on
+        // every tick, which can never finish for large mailboxes. The
+        // on-connect backfill has already pulled the recent history, so it's
+        // safe to seed the cursor to NOW.
+        "UPDATE email_accounts \
+         SET last_sync = EXTRACT(EPOCH FROM NOW())::BIGINT \
+         WHERE last_sync IS NULL",
         "ALTER TABLE notes ADD COLUMN IF NOT EXISTS title_encrypted TEXT",
         "ALTER TABLE notes ADD COLUMN IF NOT EXISTS title_iv TEXT",
         "ALTER TABLE notes ADD COLUMN IF NOT EXISTS content_encrypted TEXT",

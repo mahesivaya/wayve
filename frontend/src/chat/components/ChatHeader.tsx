@@ -4,6 +4,12 @@ type Props = {
   title: string;
   selectedChannel: ChatChannel | null;
   settingsOpen: boolean;
+  // Audio / video call entry points. Only rendered for 1:1 conversations
+  // (the host hides them on channels by passing `null` callbacks).
+  onAudioCall: (() => void) | null;
+  onVideoCall: (() => void) | null;
+  // Disable while we're already in a call or signaling channel is down.
+  callDisabled?: boolean;
   onBack: () => void;
   onToggleSettings: () => void;
   onJoinChannel: (channel: ChatChannel) => void;
@@ -13,10 +19,15 @@ export default function ChatHeader({
   title,
   selectedChannel,
   settingsOpen,
+  onAudioCall,
+  onVideoCall,
+  callDisabled,
   onBack,
   onToggleSettings,
   onJoinChannel,
 }: Props) {
+  const showCallButtons = !selectedChannel && (onAudioCall || onVideoCall);
+
   return (
     <div className="chat-header">
       <div className="chat-header-main">
@@ -46,6 +57,55 @@ export default function ChatHeader({
             </span>
           )}
         </div>
+
+        {showCallButtons && (
+          <div className="chat-header-actions chat-header-call-actions">
+            {onAudioCall && (
+              <button
+                type="button"
+                className="chat-call-btn chat-call-btn-audio"
+                onClick={onAudioCall}
+                disabled={callDisabled}
+                title="Audio call"
+                aria-label={`Audio call ${title}`}
+              >
+                {/* Handset silhouette — matches the green-camcorder treatment
+                    on the sibling video button, but in blue to distinguish
+                    audio-only from video calls at a glance. */}
+                <svg
+                  className="chat-call-icon-audio"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M6.6 10.8a15.2 15.2 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.5 11.5 0 0 0 3.6.58 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.5 11.5 0 0 0 .58 3.6 1 1 0 0 1-.25 1l-2.23 2.2Z" />
+                </svg>
+              </button>
+            )}
+            {onVideoCall && (
+              <button
+                type="button"
+                className="chat-call-btn chat-call-btn-video"
+                onClick={onVideoCall}
+                disabled={callDisabled}
+                title="Video call"
+                aria-label={`Video call ${title}`}
+              >
+                {/* Camcorder silhouette in green — narrow lens snout points
+                    outward, matches the Meet/Zoom-style "start video" icon. */}
+                <svg
+                  className="chat-call-icon-video"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <rect x="2" y="6" width="13" height="12" rx="2.5" />
+                  <path d="M16 9 L22 6 V18 L16 15 Z" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
 
         {selectedChannel && (
           <div className="chat-header-actions">

@@ -139,6 +139,55 @@ export default function Emails() {
     }
   }, [fetchAccounts, setRefreshTick]);
 
+  // ================= BACKGROUND REFRESH =================
+  // Steady poll so newly-arrived mail (synced into the DB by the 30s backend
+  // worker) actually appears in the UI without a manual reload. Cadence is
+  // 60s — twice the worker interval, so new mail surfaces in ~30–90s. The
+  // user's selection survives each tick (see [useEmailInbox.ts](./useEmailInbox.ts))
+  // so the open email won't be clobbered.
+  //
+  // Pauses while the tab is hidden via the Page Visibility API — a
+  // background tab shouldn't burn CPU, network, or OAuth quotas. We force
+  // one immediate refresh on the visibility → visible transition so the
+  // user sees up-to-date mail the moment they switch back.
+  useEffect(() => {
+    const POLL_MS = 60_000;
+    let timer: number | null = null;
+
+    const tick = () => {
+      void fetchAccounts();
+      setRefreshTick((t) => t + 1);
+    };
+
+    const start = () => {
+      if (timer !== null) return;
+      timer = window.setInterval(tick, POLL_MS);
+    };
+    const stop = () => {
+      if (timer === null) return;
+      window.clearInterval(timer);
+      timer = null;
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        // Catch up immediately on focus return, then resume polling.
+        tick();
+        start();
+      }
+    };
+
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
+    };
+  }, [fetchAccounts, setRefreshTick]);
+
   // ================= ADD ACCOUNT =================
   const addAccount = async () => {
     const url = await getGmailConnectUrl();
@@ -148,6 +197,25 @@ export default function Emails() {
   const addOutlookAccount = async () => {
     const url = await getOutlookConnectUrl();
     window.location.href = url;
+  };
+
+  // Single dispatcher from [ProviderPicker](./ProviderPicker.tsx). Each arm
+  // is an existing OAuth helper — no new flow. Yahoo is rendered as
+  // "Coming soon" in the picker and is never selectable, so we don't dispatch
+  // on it here either (the exhaustive switch ensures we'll notice when it
+  // does ship).
+  const addProvider = (provider: import("./providers").ProviderId) => {
+    switch (provider) {
+      case "gmail":
+        void addAccount();
+        return;
+      case "outlook":
+        void addOutlookAccount();
+        return;
+      case "yahoo":
+        // Picker disables Yahoo; this branch only fires once we wire it up.
+        return;
+    }
   };
 
   const renameAccount = async (accountId: number, displayName: string | null) => {
@@ -193,8 +261,7 @@ export default function Emails() {
         setActiveFolder={(f) => { setViewMode("email"); setActiveFolder(f); }}
         viewMode={viewMode}
         onOpenFiles={openFiles}
-        onAddGmail={addAccount}
-        onAddOutlook={addOutlookAccount}
+        onAddProvider={addProvider}
         onCompose={() => setComposeOpen(true)}
         composeDisabled={accounts.length === 0}
         width={sidebarWidth}

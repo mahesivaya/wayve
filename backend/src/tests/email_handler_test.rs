@@ -109,5 +109,104 @@ mod tests {
         );
         assert_eq!(body_2[0]["subject"], "Email #50");
         assert_eq!(body_2[1]["subject"], "Email #51");
+
+        sqlx::query("DELETE FROM emails WHERE account_id = $1")
+            .bind(account_id)
+            .execute(&pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM email_accounts WHERE id = $1")
+            .bind(account_id)
+            .execute(&pool)
+            .await
+            .ok();
+        crate::test_support::delete_user(&pool, user_id).await;
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn inbox_includes_incoming_mail_without_account_in_receiver_header() {
+        let pool = test_pool().await;
+        let email_addr = random_email();
+        let user_id = insert_local_user(&pool, &email_addr, "password").await;
+        let jwt = jwt_for(user_id, &email_addr);
+
+        let account_id: i32 = sqlx::query(
+            "INSERT INTO email_accounts (email, user_id, provider) VALUES ($1, $2, 'google') RETURNING id",
+        )
+        .bind(&email_addr)
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .get("id");
+
+        sqlx::query(
+            "INSERT INTO emails (gmail_id, account_id, subject, sender, receiver, created_at, body_encrypted, body_iv)
+             VALUES ($1, $2, $3, $4, $5, NOW(), '', '')",
+        )
+        .bind("incoming_bcc")
+        .bind(account_id)
+        .bind("Incoming via alias")
+        .bind("sender@example.com")
+        .bind("undisclosed-recipients:;")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO emails (gmail_id, account_id, subject, sender, receiver, created_at, body_encrypted, body_iv)
+             VALUES ($1, $2, $3, $4, $5, NOW(), '', '')",
+        )
+        .bind("sent_message")
+        .bind(account_id)
+        .bind("Sent by account")
+        .bind(format!("Display <{}>", email_addr.to_uppercase()))
+        .bind("friend@example.com")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(None::<crate::cache::Cache>))
+                .service(get_emails),
+        )
+        .await;
+
+        let inbox_req = test::TestRequest::get()
+            .uri("/emails?folder=inbox")
+            .insert_header(("Authorization", format!("Bearer {}", jwt)))
+            .to_request();
+
+        let inbox_resp = test::call_service(&app, inbox_req).await;
+        assert_eq!(inbox_resp.status(), StatusCode::OK);
+        let inbox_body: Vec<Value> = test::read_body_json(inbox_resp).await;
+        assert_eq!(inbox_body.len(), 1);
+        assert_eq!(inbox_body[0]["subject"], "Incoming via alias");
+
+        let sent_req = test::TestRequest::get()
+            .uri("/emails?folder=sent")
+            .insert_header(("Authorization", format!("Bearer {}", jwt)))
+            .to_request();
+
+        let sent_resp = test::call_service(&app, sent_req).await;
+        assert_eq!(sent_resp.status(), StatusCode::OK);
+        let sent_body: Vec<Value> = test::read_body_json(sent_resp).await;
+        assert_eq!(sent_body.len(), 1);
+        assert_eq!(sent_body[0]["subject"], "Sent by account");
+
+        sqlx::query("DELETE FROM emails WHERE account_id = $1")
+            .bind(account_id)
+            .execute(&pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM email_accounts WHERE id = $1")
+            .bind(account_id)
+            .execute(&pool)
+            .await
+            .ok();
+        crate::test_support::delete_user(&pool, user_id).await;
     }
 }

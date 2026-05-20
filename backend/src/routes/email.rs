@@ -91,10 +91,12 @@ pub async fn get_emails(
     if let Some(folder) = &query.folder {
         match folder.as_str() {
             "inbox" => {
-                qb.push(" AND e.receiver LIKE '%' || a.email || '%' ");
+                qb.push(
+                    " AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%' ",
+                );
             }
             "sent" => {
-                qb.push(" AND e.sender LIKE '%' || a.email || '%' ");
+                qb.push(" AND lower(coalesce(e.sender, '')) LIKE '%' || lower(a.email) || '%' ");
             }
             _ => {}
         }
@@ -321,6 +323,63 @@ pub async fn get_all_email_attachments(req: HttpRequest, pool: web::Data<PgPool>
         .collect();
 
     Ok(HttpResponse::Ok().json(files))
+}
+
+// Mark an email as read for the authenticated user. The frontend already
+// flips `is_read` optimistically when the user opens an email, but without
+// this endpoint the change isn't persisted — refreshing the inbox showed
+// the row as unread again. We update Wayve's own `emails.is_read`; pushing
+// the state to Gmail/Outlook so the user's other clients reflect it is a
+// follow-up (needs OAuth token refresh + provider API call per row).
+#[actix_web::post("/emails/{id}/read")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn mark_email_read(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<EmailDeletePath>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let email_id = path.id;
+
+    // Tenant boundary: a user may only mark their *own* emails read. The join
+    // through email_accounts.user_id is the authorization gate.
+    let result = sqlx::query(
+        r#"
+        UPDATE emails AS e
+           SET is_read = TRUE
+          FROM email_accounts AS a
+         WHERE e.account_id = a.id
+           AND e.id = $1
+           AND a.user_id = $2
+           AND e.is_read = FALSE
+        "#,
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .execute(pool.get_ref())
+    .await?;
+
+    // rows_affected == 0 covers two cases that we don't distinguish here:
+    //   - email doesn't exist / isn't owned by this user (treat as 404)
+    //   - email was already marked read (treat as no-op success)
+    // We can't tell them apart without a second query, so probe ownership.
+    if result.rows_affected() == 0 {
+        let owns: Option<i32> = sqlx::query_scalar(
+            "SELECT e.id FROM emails e JOIN email_accounts a ON e.account_id = a.id \
+             WHERE e.id = $1 AND a.user_id = $2",
+        )
+        .bind(email_id)
+        .bind(user_id)
+        .fetch_optional(pool.get_ref())
+        .await?;
+        if owns.is_none() {
+            return Ok(
+                HttpResponse::NotFound().json(serde_json::json!({ "error": "Email not found" }))
+            );
+        }
+    }
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": true })))
 }
 
 #[get("/emails/{id}/attachments")]

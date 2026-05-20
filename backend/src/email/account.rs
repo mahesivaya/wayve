@@ -135,7 +135,7 @@ pub async fn load_account_summaries_for_user(pool: &PgPool, user_id: i32) -> Res
           a.display_name,
           COUNT(e.id) FILTER (
             WHERE e.is_read = false
-              AND e.receiver LIKE '%' || a.email || '%'
+              AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'
           )::BIGINT AS unread_count
         FROM email_accounts a
         LEFT JOIN emails e ON e.account_id = a.id
@@ -182,11 +182,17 @@ pub async fn upsert_connected_email_account(
     let expiry = (chrono::Utc::now() + chrono::Duration::seconds(account.expires_in)).naive_utc();
     let refresh_token = account.refresh_token.unwrap_or("");
 
+    // `last_sync` is the worker's incremental cursor: NULL means "never synced,
+    // crawl the whole mailbox." Set it to NOW on first insert so the worker's
+    // first tick runs a bounded `after:NOW-1h` query instead of paging the
+    // entire mailbox. The on-connect `sync_account_recent` already pulls the
+    // most recent ~51 messages, so nothing is lost. ON CONFLICT preserves the
+    // existing cursor on reconnect.
     let row = sqlx::query(
         r#"
         INSERT INTO email_accounts
-          (email, user_id, access_token, refresh_token, token_expiry, is_active, provider)
-        VALUES ($1, $2, $3, $4, $5, true, $6)
+          (email, user_id, access_token, refresh_token, token_expiry, is_active, provider, last_sync)
+        VALUES ($1, $2, $3, $4, $5, true, $6, EXTRACT(EPOCH FROM NOW())::BIGINT)
         ON CONFLICT (user_id, email) DO UPDATE SET
           access_token = EXCLUDED.access_token,
           token_expiry = EXCLUDED.token_expiry,

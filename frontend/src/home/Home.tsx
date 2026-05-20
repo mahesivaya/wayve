@@ -8,7 +8,9 @@ import "./home.css";
 const HOME_CARDS = [
   { path: "/emails", title: "📧 Emails", description: "View and send emails" },
   { path: "/chat", title: "💬 Chat", description: "Real-time messaging" },
-  { path: "/call", title: " 📞  🎥 Call", description: "Real-time calling" },
+  // /call removed from the home grid — calls live inside [Chat](../chat/Chat.tsx)'s
+  // conversation header (audio + video icons on a 1:1 DM). The /call route is
+  // still reachable directly for any existing bookmarks.
   { path: "/scheduler", title: "📅 Scheduler", description: "Manage your meetings" },
   { path: "/drive", title: "📁 Drive", description: "Store and manage files" },
   { path: "/notes", title: "📝 Notes", description: "Store and manage notes" },

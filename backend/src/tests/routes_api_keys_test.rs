@@ -4,9 +4,7 @@
 // rather than the runtime middleware path (covered separately).
 #[cfg(test)]
 mod tests {
-    use crate::routes::api_keys::{
-        api_key_audit, create_api_key, list_api_keys, revoke_api_key,
-    };
+    use crate::routes::api_keys::{api_key_audit, create_api_key, list_api_keys, revoke_api_key};
     use crate::security::api_key::{AuditEntry, AuditOutcome, hash_api_key, write_audit};
     use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
     use actix_web::{App, http::StatusCode, test as actix_test, web};
@@ -136,11 +134,12 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(stored, 1);
-        let raw_match: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM api_keys WHERE key_hash = $1")
-            .bind(raw)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let raw_match: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM api_keys WHERE key_hash = $1")
+                .bind(raw)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(raw_match, 0, "raw key must not be stored verbatim");
 
         cleanup(&pool, &[user_id], &[]).await;

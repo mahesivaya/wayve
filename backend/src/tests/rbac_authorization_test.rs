@@ -165,9 +165,7 @@ mod tests {
         let actor_token = jwt_for(actor_id, &actor_email);
         // Before promotion: actor lacks roles:assign_limited → 403.
         let req = actix_test::TestRequest::put()
-            .uri(&format!(
-                "/organizations/{org_id}/members/{target_id}/role"
-            ))
+            .uri(&format!("/organizations/{org_id}/members/{target_id}/role"))
             .insert_header(("Authorization", format!("Bearer {actor_token}")))
             .set_json(serde_json::json!({ "role": "support" }))
             .to_request();
@@ -182,9 +180,7 @@ mod tests {
         // The same already-minted token now passes — the gate consulted the DB,
         // not the JWT claims.
         let req = actix_test::TestRequest::put()
-            .uri(&format!(
-                "/organizations/{org_id}/members/{target_id}/role"
-            ))
+            .uri(&format!("/organizations/{org_id}/members/{target_id}/role"))
             .insert_header(("Authorization", format!("Bearer {actor_token}")))
             .set_json(serde_json::json!({ "role": "support" }))
             .to_request();
@@ -269,9 +265,7 @@ mod tests {
 
         for bad in ["Owner", "MEMBER", "captain", ""] {
             let req = actix_test::TestRequest::put()
-                .uri(&format!(
-                    "/organizations/{org_id}/members/{target_id}/role"
-                ))
+                .uri(&format!("/organizations/{org_id}/members/{target_id}/role"))
                 .insert_header((
                     "Authorization",
                     format!("Bearer {}", jwt_for(owner_id, &owner_email)),

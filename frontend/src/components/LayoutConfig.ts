@@ -1,10 +1,12 @@
 import { lazy } from "react";
 
+// "call" intentionally absent — the split-pane picker now treats Call as
+// part of Chat (audio/video icons live in [ChatHeader](../chat/components/ChatHeader.tsx)).
+// The /call route is still reachable directly via App.tsx for legacy bookmarks.
 export type AppKey =
   | "home"
   | "emails"
   | "chat"
-  | "call"
   | "scheduler"
   | "drive"
   | "notes"
@@ -15,7 +17,6 @@ export type AppKey =
 const HomeView = lazy(() => import("../home/Home"));
 const EmailsView = lazy(() => import("../emails/Emails"));
 const ChatView = lazy(() => import("../chat/Chat"));
-const CallView = lazy(() => import("../call/Call"));
 const SchedulerView = lazy(() => import("../scheduler/Scheduler"));
 const DriveView = lazy(() => import("../drive/DriveBox"));
 const NotesView = lazy(() => import("../notes/Notes"));
@@ -27,7 +28,6 @@ export const SPLIT_APPS = [
   { key: "home" as AppKey, label: "Home", path: "/", icon: "🏠", Comp: HomeView },
   { key: "emails" as AppKey, label: "Emails", path: "/emails", icon: "📧", Comp: EmailsView },
   { key: "chat" as AppKey, label: "Chat", path: "/chat", icon: "💬", Comp: ChatView },
-  { key: "call" as AppKey, label: "Call", path: "/call", icon: "📞", Comp: CallView },
   { key: "scheduler" as AppKey, label: "Scheduler", path: "/scheduler", icon: "📅", Comp: SchedulerView },
   { key: "drive" as AppKey, label: "Files", path: "/drive", icon: "📁", Comp: DriveView },
   { key: "notes" as AppKey, label: "Notes", path: "/notes", icon: "📝", Comp: NotesView },

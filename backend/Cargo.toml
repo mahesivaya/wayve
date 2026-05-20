@@ -63,6 +63,10 @@ redis = { version = "0.25", features = ["tokio-comp"] }
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls-tls", "builder"] }
 moka = { version = "0.12", features = ["future"] }
 mimalloc = { version = "0.1", default-features = false }
+# MX lookups to map custom-domain mailboxes (Google Workspace / Microsoft 365)
+# to a provider in email::provider_lookup. tokio-runtime feature mirrors the
+# rest of the IO stack.
+hickory-resolver = { version = "0.24", default-features = false, features = ["tokio-runtime", "system-config"] }
 
 [dev-dependencies]
 serial_test = "3"

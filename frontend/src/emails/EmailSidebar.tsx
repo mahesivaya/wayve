@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { EmailAccount } from "./types";
+import ProviderPicker from "./ProviderPicker";
+import type { ProviderId } from "./providers";
 
 interface EmailSidebarProps {
   accounts: EmailAccount[];
@@ -9,8 +11,9 @@ interface EmailSidebarProps {
   setActiveFolder: (folder: "inbox" | "sent") => void;
   viewMode: "email" | "files";
   onOpenFiles: () => void;
-  onAddGmail: () => void;
-  onAddOutlook: () => void;
+  // Single dispatcher — the parent decides what to do per provider id, so
+  // adding Yahoo/Exchange later doesn't change this component's surface.
+  onAddProvider: (provider: ProviderId) => void;
   onCompose: () => void;
   composeDisabled: boolean;
   width: number;
@@ -25,8 +28,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
   setActiveFolder,
   viewMode,
   onOpenFiles,
-  onAddGmail,
-  onAddOutlook,
+  onAddProvider,
   onCompose,
   composeDisabled,
   width,
@@ -36,6 +38,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
   const [draftName, setDraftName] = useState("");
   const [savingAccountId, setSavingAccountId] = useState<number | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const startEditing = (account: EmailAccount) => {
     setEditingAccountId(account.id);
@@ -155,8 +158,26 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
         );
       })}
 
-      <button className="add-email-btn" onClick={onAddGmail}>➕ Add Gmail</button>
-      <button className="add-email-btn" onClick={onAddOutlook}>➕ Add Outlook</button>
+      <button
+        className="add-email-btn"
+        onClick={() => setPickerOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={pickerOpen}
+      >
+        ➕ Add more emails
+      </button>
+
+      {/* Mount only while open — keeps the picker's state fresh each time
+          and avoids reset-on-close juggling. */}
+      {pickerOpen && (
+        <ProviderPicker
+          onClose={() => setPickerOpen(false)}
+          onSelect={(provider) => {
+            setPickerOpen(false);
+            onAddProvider(provider);
+          }}
+        />
+      )}
 
       <div className="mail-section-title">Folders</div>
 

@@ -95,6 +95,29 @@ export const getOutlookConnectUrl = async () => {
   return data.url;
 };
 
+// Persist that the user has opened this email. The frontend flips `is_read`
+// optimistically; this call is what makes the change survive a page refresh.
+// Fire-and-forget — the caller logs failures but doesn't roll the UI back.
+export const markEmailRead = async (emailId: number): Promise<void> => {
+  await apiFetchJson(`/api/emails/${emailId}/read`, { method: "POST" });
+};
+
+// Maps an arbitrary email address to the OAuth provider key the backend
+// supports (`"gmail"` or `"outlook"` today). Throws on unsupported domains —
+// the backend has logged the attempt at WARN level (target: "email").
+// See [provider_lookup.rs](../../../backend/src/email/provider_lookup.rs).
+export const lookupEmailProvider = async (email: string): Promise<string> => {
+  const data = await apiFetchJson<{ provider: string }>(
+    "/api/email/provider-lookup",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    },
+  );
+  return data.provider;
+};
+
 export const getEmails = async <T = unknown>(
   params: EmailListParams
 ): Promise<EmailListResult<T>> => {

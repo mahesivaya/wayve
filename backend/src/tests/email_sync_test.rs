@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::email::sync::{fetch_headers_only, fetch_ids, sync_account};
+    use crate::email::sync::{fetch_headers_only, fetch_ids, sync_account, sync_account_recent};
     use crate::test_support::{insert_local_user, random_email, test_pool};
     use serde_json::json;
     use wiremock::matchers::{method, path, path_regex, query_param};
@@ -197,6 +197,72 @@ mod tests {
         assert!(ls.is_some());
 
         // cleanup
+        sqlx::query("DELETE FROM emails WHERE account_id = $1")
+            .bind(account_id)
+            .execute(&pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM email_accounts WHERE id = $1")
+            .bind(account_id)
+            .execute(&pool)
+            .await
+            .ok();
+        crate::test_support::delete_user(&pool, user_id).await;
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn sync_account_recent_advances_last_sync() {
+        let pool = test_pool().await;
+        let email = random_email();
+        let user_id = insert_local_user(&pool, &email, "p").await;
+
+        let acc_row = sqlx::query(
+            "INSERT INTO email_accounts (email, user_id, access_token, refresh_token, token_expiry, is_active)
+             VALUES ($1,$2,$3,$4, NOW() + INTERVAL '1 hour', true)
+             RETURNING id",
+        )
+        .bind(&email)
+        .bind(user_id)
+        .bind("fake-access")
+        .bind("fake-refresh")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let account_id: i32 = sqlx::Row::get(&acc_row, "id");
+
+        let server = MockServer::start().await;
+        set_env("GMAIL_API_BASE", &server.uri());
+
+        Mock::given(method("GET"))
+            .and(path("/gmail/v1/users/me/messages"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(page(&["recent-1"], None)))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/gmail/v1/users/me/messages/recent-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(metadata_response(
+                "from@x.com",
+                &email,
+                "Recent subject",
+                1_700_000_000_000,
+            )))
+            .mount(&server)
+            .await;
+
+        sync_account_recent(&pool, account_id, "tok", 51)
+            .await
+            .unwrap();
+
+        let last_sync: Option<i64> =
+            sqlx::query_scalar("SELECT last_sync FROM email_accounts WHERE id = $1")
+                .bind(account_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(last_sync.is_some());
+
         sqlx::query("DELETE FROM emails WHERE account_id = $1")
             .bind(account_id)
             .execute(&pool)

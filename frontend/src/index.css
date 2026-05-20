@@ -84,6 +84,24 @@
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
+  /* ============================================================
+     📱 RESPONSIVE BREAKPOINTS (canonical — use these everywhere)
+     ------------------------------------------------------------
+     CSS variables can't be used directly inside `@media`, so these
+     are *documentation only* — the literal numbers must be repeated
+     in @media rules. Keep all feature CSS aligned to these:
+
+       tablet  ≤ 768px  → collapse multi-pane layouts to single pane,
+                          hide non-essential header elements
+       phone   ≤ 480px  → tighten paddings, stack inline rows,
+                          enlarge touch targets
+
+     The header nav already uses ≤1100px as its breakpoint (the
+     11-item nav stops fitting earlier than the layout itself).
+     ============================================================ */
+  --bp-tablet: 768px;
+  --bp-phone: 480px;
+
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
   color-scheme: light dark;

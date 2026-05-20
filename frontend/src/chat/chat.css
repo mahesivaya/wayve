@@ -301,6 +301,73 @@
   color: #1e3a8a;
 }
 
+/* Audio / video call entry points in the chat header (top-right of a DM). */
+.chat-header-call-actions {
+  margin-left: auto;
+}
+
+.chat-call-btn {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-slate);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-call-btn:hover:not(:disabled) {
+  border-color: #2563eb;
+  background: #dbeafe;
+}
+
+.chat-call-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-call-btn-video:hover:not(:disabled) {
+  background: #dcfce7;
+  border-color: #16a34a;
+}
+
+/* Green camcorder glyph — matches Meet/Zoom's "start video" icon hue.
+   Sized so it sits comfortably inside the 36×36 chat-call-btn. */
+.chat-call-icon-video {
+  width: 20px;
+  height: 20px;
+  color: #16a34a;
+  display: block;
+}
+
+.chat-call-btn-video:hover:not(:disabled) .chat-call-icon-video {
+  color: #15803d;
+}
+
+.chat-call-btn-video:disabled .chat-call-icon-video {
+  color: #94a3b8;
+}
+
+/* Blue handset glyph — paired with the green camcorder so audio vs video
+   reads instantly from color alone, not just from icon shape. */
+.chat-call-icon-audio {
+  width: 18px;
+  height: 18px;
+  color: #2563eb;
+  display: block;
+}
+
+.chat-call-btn-audio:hover:not(:disabled) .chat-call-icon-audio {
+  color: #1e3a8a;
+}
+
+.chat-call-btn-audio:disabled .chat-call-icon-audio {
+  color: #94a3b8;
+}
+
 .chat-content-row {
   flex: 1;
   min-height: 0;

@@ -67,6 +67,275 @@
   background: var(--color-surface-hover);
 }
 
+/* ================= PROVIDER PICKER MODAL =================
+   Triggered by the single "Add more emails" button in [EmailSidebar](./EmailSidebar.tsx)
+   and rendered by [ProviderPicker](./ProviderPicker.tsx). Brand-colored badges
+   make Gmail/Outlook/Yahoo scannable without shipping bundled SVG logos. */
+
+.provider-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.provider-picker-card {
+  background: var(--color-surface, #ffffff);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+  width: 100%;
+  /* Clamp to the viewport so the card never touches the edges on a phone.
+     32px = 16px outer padding (backdrop) × 2. */
+  max-width: min(440px, calc(100vw - 32px));
+  /* On a short phone (especially with the on-screen keyboard up), the form
+     mode can exceed viewport height — make the card itself scroll. */
+  max-height: calc(100vh - 32px);
+  max-height: calc(100svh - 32px);
+  overflow-y: auto;
+  padding: 20px 22px 22px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 480px) {
+  .provider-picker-card {
+    padding: 16px;
+    border-radius: 10px;
+  }
+
+  /* On a 360px screen the brand badge + name + "Coming soon" pill on one
+     row gets tight. Allow the row to wrap so nothing clips. */
+  .provider-option {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+}
+
+.provider-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.provider-picker-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.provider-picker-close {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.provider-picker-close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.provider-picker-sub {
+  margin: 0 0 16px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.provider-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.provider-option:hover:not(:disabled) {
+  border-color: #2563eb;
+  background: #f8fafc;
+}
+
+.provider-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.provider-option-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.provider-option-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.provider-option-desc {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.provider-option-tag {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.provider-badge {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.provider-badge-gmail {
+  background: #d44638;
+}
+
+.provider-badge-outlook {
+  background: #0078d4;
+}
+
+.provider-badge-yahoo {
+  background: #6001d2;
+}
+
+.provider-badge-other {
+  background: #475569;
+}
+
+/* "Other" inline form — second step inside the same modal card. */
+.provider-other-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.provider-other-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.provider-other-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.provider-other-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.provider-other-input:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.provider-other-error {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+.provider-other-redirect-note {
+  margin-top: 4px;
+  color: #b91c1c;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.provider-other-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.provider-other-back,
+.provider-other-submit {
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.provider-other-back {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+.provider-other-back:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.provider-other-submit {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.provider-other-submit:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.provider-other-submit:disabled,
+.provider-other-back:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ================= FILTERS ================= */
 .mail-filters {
   display: flex;
@@ -236,7 +505,9 @@
 /* ================= EMAIL LIST (MIDDLE PANEL) ================= */
 .email-list {
   width: 360px;
-  background: var(--color-email-list-bg);
+  /* Match [.email-detail](./emails.css) so list + open-email read as one
+     surface; the divider between them is the border-right only. */
+  background: var(--color-email-bg);
   border-right: 1px solid var(--color-border);
   overflow-y: auto;
   display: flex;
@@ -259,9 +530,17 @@
   align-items: center;
 }
 
-/* Hover */
+/* Row palette tuned against the new lightsteelblue list background:
+   - Read row (no class):  inherits the list bg (lightsteelblue)
+   - Unread row:           white — pops sharply against the steel-blue base
+   - Hover on read:        a notch lighter than steel-blue so the hover
+                           reads even on the darker surface
+   - Hover on unread:      slate-50, the familiar near-white hover state
+   - Active (selected):    pale primary panel, distinct from BOTH the steel-
+                           blue base AND the white unread row, with an
+                           accented left bar for confirmation. */
 .email-item:hover {
-  background: var(--color-primary-hover-soft);
+  background: #c8d6e9;
 }
 
 .email-item.unread {
@@ -269,13 +548,18 @@
 }
 
 .email-item.unread:hover {
-  background: var(--color-surface-soft);
+  background: #f1f5f9;
 }
 
-/* Active */
-.email-item.active {
-  background: var(--color-primary-soft);
+.email-item.active,
+.email-item.unread.active {
+  background: var(--color-primary-panel);
   box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+.email-item.active:hover,
+.email-item.unread.active:hover {
+  background: #c7dafd;
 }
 
 /* Top row */
@@ -303,35 +587,35 @@
   min-width: 0;
 }
 
+/* Subject-only row. Sender deliberately omitted — folder context already
+   tells the user who they're talking to. Keep this single span behaving
+   well in both the narrow split-view column and the wide list-view. */
 .email-primary {
   min-width: 0;
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 22px;
   font-size: var(--text-md);
-  font-weight: 700;
-  color: var(--color-text-primary);
   overflow: hidden;
-  white-space: nowrap;
 }
 
-.email-sender-name,
 .email-list-subject {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Always bold — unread vs read is distinguished by color, not weight.
+     Color matches the <h2> subject inside the opened email
+     ([EmailDetail.tsx](./EmailDetail.tsx)) for visual continuity when
+     the user clicks a row and the same text appears in the right pane. */
+  font-weight: 700;
+  color: var(--text-h);
 }
 
-.email-sender-name {
-  flex: 0 1 auto;
-}
-
-.email-list-subject {
-  display: none;
-  flex: 1;
-  font-weight: 600;
+/* Read rows fade the subject to muted grey so unread still pops. */
+.email-item.read .email-list-subject {
+  color: var(--color-text-muted);
 }
 
 .main.email-list-view .email-list {
@@ -356,7 +640,7 @@
 }
 
 .main.email-list-view .email-list-subject {
-  display: inline-block;
+  flex: 1;
 }
 
 .email-attachment-pin {

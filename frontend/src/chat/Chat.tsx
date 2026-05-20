@@ -30,6 +30,8 @@ import {
   encryptChatContent,
 } from "./e2ee";
 import { loadPublicKey } from "../crypto/keyStore";
+import CallOverlays from "../call/CallOverlays";
+import { useCallSession } from "../call/useCallSession";
 import type { ChannelRole, ChannelVisibility, Conversation } from "./types";
 import {
   getChannelAdmins,
@@ -111,6 +113,24 @@ export default function Chat() {
     selectedRef,
     appendRealtimeMessage,
   );
+
+  // The 1:1 call entry point lives in [ChatHeader](./components/ChatHeader.tsx).
+  // useCallSession owns the /ws/call socket and the peer-connection lifecycle;
+  // [CallOverlays](../call/CallOverlays.tsx) renders banners + the active
+  // panel in the chat-area so users see incoming calls without leaving /chat.
+  const callSession = useCallSession(user?.id ?? null, user?.email);
+  const selectedUser =
+    selectedConversation?.type === "user" ? selectedConversation.user : null;
+  const callDisabled =
+    !callSession.connected || callSession.callState.kind !== "idle";
+  const onAudioCall = selectedUser
+    ? () =>
+        callSession.startCall(selectedUser.id, selectedUser.email, "audio")
+    : null;
+  const onVideoCall = selectedUser
+    ? () =>
+        callSession.startCall(selectedUser.id, selectedUser.email, "video")
+    : null;
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -399,10 +419,15 @@ export default function Chat() {
           title={selectedTitle}
           selectedChannel={selectedChannel}
           settingsOpen={channelSettingsOpen}
+          onAudioCall={onAudioCall}
+          onVideoCall={onVideoCall}
+          callDisabled={callDisabled}
           onBack={() => setSelectedConversation(null)}
           onToggleSettings={() => setChannelSettingsOpen((open) => !open)}
           onJoinChannel={joinChannel}
         />
+
+        <CallOverlays session={callSession} />
 
         <div
           className={`chat-content-row${

@@ -76,7 +76,10 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
 
         let body: serde_json::Value = actix_test::read_body_json(resp).await;
-        assert_eq!(body.get("user_id").and_then(|v| v.as_i64()), Some(i64::from(user_id)));
+        assert_eq!(
+            body.get("user_id").and_then(|v| v.as_i64()),
+            Some(i64::from(user_id))
+        );
 
         cleanup(&pool, user_id).await;
     }
