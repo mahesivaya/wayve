@@ -4,10 +4,12 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    // The repo currently has stale compiled `.js` siblings next to every
-    // `.tsx`. Without this override Vite's default extension order would
-    // load the stale `.js` file for transitive imports, e.g.
-    // `import { AuthProvider } from "./AuthContext"`.
+    // Defensive: prefer the TypeScript source over any `.js` sibling. Vite's
+    // default extension order would resolve `import "./AuthContext"` to a
+    // `.js` file when both exist. The repo doesn't currently ship stale
+    // siblings (they were removed), but a stray build artifact or
+    // intermediate compile output would silently shadow the source again
+    // without this override.
     extensions: [".mjs", ".tsx", ".ts", ".jsx", ".js", ".json"],
   },
   test: {

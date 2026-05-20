@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchJson } from "./client";
 
 export type EmailFolder = "inbox" | "sent";
 
@@ -62,10 +62,8 @@ const emailListPath = ({
   return `/api/emails?${params.toString()}`;
 };
 
-export const getAccounts = async <T = unknown>() => {
-  const res = await apiFetch("/api/accounts");
-  return res.json() as Promise<T[]>;
-};
+export const getAccounts = async <T = unknown>() =>
+  apiFetchJson<T[]>("/api/accounts");
 
 export const deleteAccount = async (id: number) => {
   await apiFetch(`/api/accounts/${id}`, {
@@ -84,18 +82,16 @@ export const updateAccountDisplayName = async (
 };
 
 export const getGmailConnectUrl = async () => {
-  const res = await apiFetch("/api/gmail/connect-url", {
+  const data = await apiFetchJson<{ url: string }>("/api/gmail/connect-url", {
     method: "POST",
   });
-  const data = (await res.json()) as { url: string };
   return data.url;
 };
 
 export const getOutlookConnectUrl = async () => {
-  const res = await apiFetch("/api/outlook/connect-url", {
+  const data = await apiFetchJson<{ url: string }>("/api/outlook/connect-url", {
     method: "POST",
   });
-  const data = (await res.json()) as { url: string };
   return data.url;
 };
 
@@ -111,10 +107,8 @@ export const getEmails = async <T = unknown>(
   };
 };
 
-export const getEmail = async <T = unknown>(id: number) => {
-  const res = await apiFetch(`/api/emails/${id}`);
-  return res.json() as Promise<T>;
-};
+export const getEmail = async <T = unknown>(id: number) =>
+  apiFetchJson<T>(`/api/emails/${id}`);
 
 export const deleteEmail = async (id: number) => {
   await apiFetch(`/api/emails/${id}`, {
@@ -122,20 +116,14 @@ export const deleteEmail = async (id: number) => {
   });
 };
 
-export const getEmailBody = async (id: number) => {
-  const res = await apiFetch(`/api/emails/${id}/body`);
-  return res.json() as Promise<{ body?: string }>;
-};
+export const getEmailBody = async (id: number) =>
+  apiFetchJson<{ body?: string }>(`/api/emails/${id}/body`);
 
-export const getEmailAttachments = async (emailId: number) => {
-  const res = await apiFetch(`/api/emails/${emailId}/attachments`);
-  return res.json() as Promise<EmailAttachment[]>;
-};
+export const getEmailAttachments = async (emailId: number) =>
+  apiFetchJson<EmailAttachment[]>(`/api/emails/${emailId}/attachments`);
 
-export const getAllEmailAttachments = async () => {
-  const res = await apiFetch("/api/emails/attachments");
-  return res.json() as Promise<EmailAttachment[]>;
-};
+export const getAllEmailAttachments = async () =>
+  apiFetchJson<EmailAttachment[]>("/api/emails/attachments");
 
 export const downloadEmailAttachment = async (attachment: EmailAttachment) => {
   const res = await apiFetch(`/api/email-attachments/${attachment.id}/download`);
@@ -163,14 +151,11 @@ export const sendEmail = async (payload: SendEmailPayload) => {
 export const getWayveRecipientByEmail = async <T = unknown>(
   email: string,
   token?: string
-) => {
-  const res = await apiFetch(`/api/users?email=${encodeURIComponent(email)}`, {
+) =>
+  apiFetchJson<T[] | T>(`/api/users?email=${encodeURIComponent(email)}`, {
     headers: token
       ? {
           Authorization: `Bearer ${token}`,
         }
       : undefined,
   });
-
-  return res.json() as Promise<T[] | T>;
-};

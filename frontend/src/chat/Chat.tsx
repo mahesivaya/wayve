@@ -15,6 +15,7 @@ import {
   updateChatChannelVisibility,
 } from "../api/chat";
 import { useGlobalSearch } from "../search/SearchContext";
+import { asChannelId, asUserId } from "../types/brand";
 import { logger } from "../utils/logger";
 import ChatHeader from "./components/ChatHeader";
 import ChannelSettingsPanel from "./components/ChannelSettingsPanel";
@@ -327,7 +328,10 @@ export default function Chat() {
     setSettingsError("");
 
     try {
-      await approveChatChannelJoinRequest(selectedChannel.id, userId);
+      await approveChatChannelJoinRequest(
+        asChannelId(selectedChannel.id),
+        asUserId(userId),
+      );
       await refreshChannels(selectedChannel.id);
     } catch (err) {
       setSettingsError(err instanceof Error ? err.message : "Failed to approve request");

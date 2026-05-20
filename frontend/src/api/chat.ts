@@ -1,4 +1,5 @@
-import { apiFetch } from "./client";
+import type { ChannelId, UserId } from "../types/brand";
+import { apiFetch, apiFetchJson } from "./client";
 
 export type ChatUser = {
   id: number;
@@ -39,10 +40,8 @@ export type ChatChannel = {
   }>;
 };
 
-export const getChatUsers = async () => {
-  const res = await apiFetch("/api/users/all");
-  return res.json() as Promise<ChatUser[]>;
-};
+export const getChatUsers = async () =>
+  apiFetchJson<ChatUser[]>("/api/users/all");
 
 export const getChatMessages = async (userId: number, otherUserId: number) => {
   const params = new URLSearchParams({
@@ -50,14 +49,11 @@ export const getChatMessages = async (userId: number, otherUserId: number) => {
     user2: String(otherUserId),
   });
 
-  const res = await apiFetch(`/api/messages?${params.toString()}`);
-  return res.json() as Promise<ChatMessage[]>;
+  return apiFetchJson<ChatMessage[]>(`/api/messages?${params.toString()}`);
 };
 
-export const getChatChannels = async () => {
-  const res = await apiFetch("/api/chat/channels");
-  return res.json() as Promise<ChatChannel[]>;
-};
+export const getChatChannels = async () =>
+  apiFetchJson<ChatChannel[]>("/api/chat/channels");
 
 export const createChatChannel = async (
   name: string,
@@ -124,9 +120,12 @@ export const joinChatChannel = async (channelId: number) => {
   return res.json() as Promise<{ status: "joined" | "pending" }>;
 };
 
+// Brands are applied here because the call takes two ids of different kinds
+// positionally — `approveChatChannelJoinRequest(userId, channelId)` would
+// otherwise compile. Callers must funnel ids through `asChannelId` / `asUserId`.
 export const approveChatChannelJoinRequest = async (
-  channelId: number,
-  userId: number,
+  channelId: ChannelId,
+  userId: UserId,
 ) => {
   const res = await apiFetch(`/api/chat/channels/${channelId}/join-requests/approve`, {
     method: "POST",
@@ -178,6 +177,7 @@ export const getChannelMessages = async (channelId: number) => {
     channel_id: String(channelId),
   });
 
-  const res = await apiFetch(`/api/chat/channel-messages?${params.toString()}`);
-  return res.json() as Promise<ChatMessage[]>;
+  return apiFetchJson<ChatMessage[]>(
+    `/api/chat/channel-messages?${params.toString()}`,
+  );
 };

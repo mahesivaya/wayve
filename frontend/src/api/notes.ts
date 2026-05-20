@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchJson } from "./client";
 
 export type Note = {
   id: number;
@@ -12,31 +12,19 @@ export type SaveNotePayload = {
   content: string;
 };
 
-export const getNotes = async () => {
-  const res = await apiFetch("/api/notes");
-  return res.json() as Promise<Note[]>;
-};
+export const getNotes = async () => apiFetchJson<Note[]>("/api/notes");
 
-export const createNoteApi = async (payload: SaveNotePayload) => {
-  const res = await apiFetch("/api/notes", {
+export const createNoteApi = async (payload: SaveNotePayload) =>
+  apiFetchJson<Note>("/api/notes", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 
-  return res.json() as Promise<Note>;
-};
-
-export const updateNoteApi = async (
-  id: number,
-  payload: SaveNotePayload
-) => {
-  const res = await apiFetch(`/api/notes/${id}`, {
+export const updateNoteApi = async (id: number, payload: SaveNotePayload) =>
+  apiFetchJson<Note>(`/api/notes/${id}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
-
-  return res.json() as Promise<Note>;
-};
 
 export const deleteNoteApi = async (id: number) => {
   await apiFetch(`/api/notes/${id}`, {

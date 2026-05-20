@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetchJson } from "./client";
 
 export type ProfileData = {
   id: number;
@@ -13,19 +13,14 @@ export type ProfileData = {
   organization_name?: string | null;
 };
 
-export const getProfile = async () => {
-  const res = await apiFetch("/api/profile");
-  return res.json() as Promise<ProfileData>;
-};
+export const getProfile = async () =>
+  apiFetchJson<ProfileData>("/api/profile");
 
 export const updateProfile = async (data: {
   first_name: string;
   last_name: string;
-}) => {
-  const res = await apiFetch("/api/profile", {
+}) =>
+  apiFetchJson<ProfileData>("/api/profile", {
     method: "PUT",
     body: JSON.stringify(data),
   });
-
-  return res.json() as Promise<ProfileData>;
-};

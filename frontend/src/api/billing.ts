@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetchJson } from "./client";
 
 // ---- Types -----------------------------------------------------------------
 
@@ -88,10 +88,10 @@ export type OrganizationBilling = {
 
 // ---- Calls -----------------------------------------------------------------
 
-async function json<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await apiFetch(path, { preserve401: true, ...options });
-  return res.json() as Promise<T>;
-}
+// Billing routes use `preserve401: true` so a credentials issue surfaces as a
+// throw at the call site instead of bouncing the user to /login mid-flow.
+const json = <T>(path: string, options?: RequestInit) =>
+  apiFetchJson<T>(path, { preserve401: true, ...options });
 
 export const listPlans = () => json<Plan[]>("/api/billing/plans");
 

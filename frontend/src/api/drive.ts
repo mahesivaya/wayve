@@ -1,5 +1,5 @@
 import { getApiBase } from "../config/env";
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchJson } from "./client";
 
 export type UploadedFile = {
   id: number;
@@ -12,10 +12,8 @@ export type UploadedFile = {
 
 // The backend scopes files to the authenticated user (JWT), so no user id
 // is passed from the client anymore.
-export const getDriveFiles = async () => {
-  const res = await apiFetch(`/api/files`);
-  return res.json() as Promise<UploadedFile[]>;
-};
+export const getDriveFiles = async () =>
+  apiFetchJson<UploadedFile[]>(`/api/files`);
 
 export const uploadDriveFiles = async (files: File[]) => {
   const formData = new FormData();

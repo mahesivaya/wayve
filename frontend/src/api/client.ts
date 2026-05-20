@@ -151,3 +151,24 @@ export async function apiFetch(
 
   return response;
 }
+
+/**
+ * Typed JSON wrapper around {@link apiFetch}. The repeated
+ * `const res = await apiFetch(...); return res.json() as Promise<T>;`
+ * pattern across the api/ layer becomes one call here.
+ *
+ * The cast is still a cast — TypeScript can't prove the server returned
+ * shape `T`. It just lives in one place instead of every call site, which
+ * is also where a future runtime validator (zod / generated OpenAPI types)
+ * would slot in.
+ *
+ * `apiFetch` already throws on every non-`ok` response, so this helper
+ * doesn't need its own status check.
+ */
+export async function apiFetchJson<T>(
+  path: string,
+  options?: ApiOptions,
+): Promise<T> {
+  const response = await apiFetch(path, options);
+  return response.json() as Promise<T>;
+}
