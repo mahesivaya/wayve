@@ -138,12 +138,17 @@ services:
       NGINX_ENVSUBST_FILTER: "^(CSP_|NGINX_HOST)"
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.prod.conf.template:/etc/nginx/templates/nginx.conf.template:ro
       - /dev/null:/etc/nginx/conf.d/default.conf
+      - letsencrypt_certs:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
 
 volumes:
   postgres_prod_data:
   redis_prod_data:
   uploads_prod:
   logs_prod:
+  letsencrypt_certs:
+  certbot_webroot:
