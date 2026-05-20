@@ -407,15 +407,6 @@
   line-height: 1.25;
 }
 
-.logout-btn {
-  padding: 8px 14px;
-  border: none;
-  background: #ff4d4f;
-  color: var(--color-surface);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
