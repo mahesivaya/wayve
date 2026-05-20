@@ -9,6 +9,15 @@ pub struct SignalMessage {
     pub from: Option<i32>,
     pub sdp: Option<String>,
     pub candidate: Option<IceCandidate>,
+    // Optional fields used by the ring/accept flow. `media` carries
+    // "audio" | "video" on a `call-invite` so the callee can render the
+    // right UI; `from_email` lets the callee show the caller's identity
+    // without an extra lookup. Both are ignored by the offer/answer/ice
+    // relay and pass through unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_email: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -56,6 +56,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for CallSession {
                             from: Some(self.user_id),
                             sdp: signal.sdp.clone(),
                             candidate: signal.candidate.clone(),
+                            media: signal.media.clone(),
+                            from_email: signal.from_email.clone(),
                         });
                     } else {
                         warn!(target: "ws", target_user = target, "signal target not connected");
