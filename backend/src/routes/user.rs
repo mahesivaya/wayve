@@ -144,6 +144,75 @@ pub struct EffectiveAccess {
     pub permissions: Vec<String>,
 }
 
+/// A snapshot of the user's current plan, suitable for embedding in the
+/// `/api/me` / `/api/profile` response. The frontend uses `code` + `name`
+/// to render the tier badge and decide whether to show the "Upgrade" CTA.
+#[derive(serde::Serialize, sqlx::FromRow)]
+pub struct CurrentPlan {
+    pub code: String,
+    pub name: String,
+    pub audience: String,
+    pub amount_cents: i64,
+}
+
+/// Resolve the user's current tier.
+///
+/// Strategy:
+///   1. Active personal subscription for this user → its plan.
+///   2. Active organization subscription via the user's org → its plan
+///      (org members inherit the org plan).
+///   3. Fall back to the `basic_user` plan row — the canonical free tier.
+///      Every newly-registered user lands here until they subscribe; we
+///      don't insert a redundant subscriptions row to avoid table clutter.
+pub async fn current_plan_for_user(
+    pool: &PgPool,
+    user_id: i32,
+    organization_id: Option<i32>,
+) -> Result<CurrentPlan, sqlx::Error> {
+    if let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
+        r#"
+        SELECT p.code, p.name, p.audience, p.amount_cents
+          FROM subscriptions s
+          JOIN plans p ON p.id = s.plan_id
+         WHERE s.status = 'active'
+           AND s.user_id = $1
+         ORDER BY s.id DESC
+         LIMIT 1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?
+    {
+        return Ok(plan);
+    }
+
+    if let Some(org_id) = organization_id
+        && let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
+            r#"
+            SELECT p.code, p.name, p.audience, p.amount_cents
+              FROM subscriptions s
+              JOIN plans p ON p.id = s.plan_id
+             WHERE s.status = 'active'
+               AND s.organization_id = $1
+             ORDER BY s.id DESC
+             LIMIT 1
+            "#,
+        )
+        .bind(org_id)
+        .fetch_optional(pool)
+        .await?
+    {
+        return Ok(plan);
+    }
+
+    sqlx::query_as::<_, CurrentPlan>(
+        "SELECT code, name, audience, amount_cents FROM plans WHERE code = 'basic_user'",
+    )
+    .fetch_one(pool)
+    .await
+}
+
 /// Full access info for a user, computed from the RBAC role context.
 pub async fn effective_access_for_user(
     pool: &PgPool,
@@ -946,6 +1015,18 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 }
             };
 
+            // Same lookup as /api/me — falls back to basic_user when no
+            // subscription exists. /api/profile is heavier than /api/me but
+            // both pages want the tier badge, so we include it in both.
+            let current_plan =
+                match current_plan_for_user(pool.get_ref(), id, organization_id).await {
+                    Ok(plan) => Some(plan),
+                    Err(e) => {
+                        warn!(target: "db", user_id = id, error = ?e, "current_plan lookup failed");
+                        None
+                    }
+                };
+
             let response = serde_json::json!({
                 "id": id,
                 "email": email,
@@ -959,6 +1040,7 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 "permissions": access.permissions,
                 "organization_id": organization_id,
                 "organization_name": organization_name,
+                "current_plan": current_plan,
                 "total_emails": total_emails,
                 "email_storage_bytes": email_storage_bytes,
                 "drive_storage_bytes": drive_storage_bytes,

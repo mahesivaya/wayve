@@ -1,11 +1,13 @@
 use crate::prelude::*;
 
 use crate::cache::TtlCache;
-use crate::routes::user::{display_organization_name, effective_access_for_user};
+use crate::routes::user::{
+    current_plan_for_user, display_organization_name, effective_access_for_user,
+};
 use crate::security::jwt::get_user_id_from_request;
 use actix_web::{HttpResponse, get};
 use sqlx::PgPool;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 const ME_CACHE_TTL_SECS: u64 = 60;
 const ME_CACHE_MAX_CAPACITY: u64 = 10_000;
@@ -73,6 +75,18 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         }
     };
 
+    // Look up the user's current tier so the frontend can show a tier badge
+    // and the "Upgrade" affordance. Falls back to the basic_user plan when
+    // the user has no active subscription — that's the default state for
+    // every new registration.
+    let current_plan = match current_plan_for_user(pool.get_ref(), id, organization_id).await {
+        Ok(plan) => Some(plan),
+        Err(e) => {
+            warn!(target: "db", user_id = id, error = ?e, "current_plan lookup failed");
+            None
+        }
+    };
+
     let response = serde_json::json!({
         "id": id,
         "email": email,
@@ -83,7 +97,8 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "permissions": access.permissions,
         "organization_id": organization_id,
         "organization_slug": organization_slug,
-        "organization_name": organization_name
+        "organization_name": organization_name,
+        "current_plan": current_plan
     });
 
     ME_CACHE.insert(user_id, response.clone()).await;

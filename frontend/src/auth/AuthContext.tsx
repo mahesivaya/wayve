@@ -217,6 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           organization_id: data.organization_id ?? null,
           organization_slug: data.organization_slug ?? null,
           organization_name: data.organization_name ?? null,
+          current_plan: data.current_plan ?? null,
         };
         // Only patch state if the server sees a different user — avoids a
         // pointless re-render when the optimistic claims already matched.
@@ -232,7 +233,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             (nextUser.permissions ?? []).join(",") &&
           prev.organization_id === nextUser.organization_id &&
           prev.organization_slug === nextUser.organization_slug &&
-          prev.organization_name === nextUser.organization_name
+          prev.organization_name === nextUser.organization_name &&
+          // Plan changes (upgrade / downgrade / new subscription) need to
+          // trigger a re-render so the tier badge + Upgrade affordance
+          // refresh. Comparing the `code` is enough — other plan fields
+          // only change when `code` does.
+          (prev.current_plan?.code ?? null) === (nextUser.current_plan?.code ?? null)
             ? prev
             : nextUser
         );
@@ -295,6 +301,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             organization_id: data.organization_id ?? null,
             organization_slug: data.organization_slug ?? null,
             organization_name: data.organization_name ?? null,
+            current_plan: data.current_plan ?? null,
           });
         })
         .catch((err) => log.error("post-login profile fetch failed", err));

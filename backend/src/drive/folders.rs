@@ -67,13 +67,12 @@ pub async fn create_folder(
     // wouldn't expose data, but corrupts the tree and surfaces foreign rows
     // through the parent lookup.
     if let Some(parent_id) = body.parent_folder_id {
-        let owns_parent: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM folders WHERE id = $1 AND user_id = $2",
-        )
-        .bind(parent_id)
-        .bind(user_id)
-        .fetch_optional(pool.get_ref())
-        .await?;
+        let owns_parent: Option<i64> =
+            sqlx::query_scalar("SELECT id FROM folders WHERE id = $1 AND user_id = $2")
+                .bind(parent_id)
+                .bind(user_id)
+                .fetch_optional(pool.get_ref())
+                .await?;
         if owns_parent.is_none() {
             return Ok(HttpResponse::NotFound()
                 .json(serde_json::json!({ "error": "Parent folder not found" })));
@@ -148,13 +147,12 @@ pub async fn delete_folder(
     // anything happen?" check into one round-trip. The FK ON DELETE CASCADE
     // on both `folders.parent_folder_id` and `files.folder_id` removes any
     // descendants in the same transaction.
-    let removed: Option<i64> = sqlx::query_scalar(
-        "DELETE FROM folders WHERE id = $1 AND user_id = $2 RETURNING id",
-    )
-    .bind(folder_id)
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
+    let removed: Option<i64> =
+        sqlx::query_scalar("DELETE FROM folders WHERE id = $1 AND user_id = $2 RETURNING id")
+            .bind(folder_id)
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
 
     if removed.is_none() {
         return Ok(

@@ -83,6 +83,11 @@ pub struct CheckoutInput {
 }
 
 #[derive(Deserialize)]
+pub struct DefaultPaymentMethodInput {
+    pub payment_method_id: String,
+}
+
+#[derive(Deserialize)]
 pub struct RecordUsageInput {
     pub metric: String,
     pub quantity: i64,

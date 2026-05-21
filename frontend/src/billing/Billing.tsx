@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import {
   cancelSubscription,
+  createPaymentMethodSetupIntent,
   getEntitlements,
   getOrganizationBilling,
   getStripeStatus,
@@ -10,7 +11,7 @@ import {
   getUsage,
   listInvoices,
   listPlans,
-  openBillingPortal,
+  setDefaultPaymentMethod,
   startCheckout,
   type Entitlements,
   type Invoice,
@@ -52,6 +53,8 @@ const STRIPE_TEST_CARDS = [
   { label: "Declined", number: "4000 0000 0000 9995", result: "Decline test" },
 ];
 
+const STRIPE_JS_URL = "https://js.stripe.com/v3/";
+
 function formatMoney(cents: number | null, currency: string | null): string {
   if (cents == null) return "—";
   return `${(cents / 100).toFixed(2)} ${(currency ?? "usd").toUpperCase()}`;
@@ -69,6 +72,30 @@ function formatDate(value: string | null): string {
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
 }
 
+function loadStripeScript(): Promise<void> {
+  if (window.Stripe) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${STRIPE_JS_URL}"]`
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Stripe.js failed to load")), {
+        once: true,
+      });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = STRIPE_JS_URL;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Stripe.js failed to load"));
+    document.head.appendChild(script);
+  });
+}
+
 export default function Billing() {
   const { user } = useAuth();
   const [params] = useSearchParams();
@@ -81,10 +108,20 @@ export default function Billing() {
   const [org, setOrg] = useState<OrganizationBilling | null>(null);
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
   const [autopay, setAutopay] = useState(true);
+  const [paymentFormOpen, setPaymentFormOpen] = useState(false);
+  const [paymentFormReady, setPaymentFormReady] = useState(false);
+  const [paymentZip, setPaymentZip] = useState("");
+  const [paymentMessage, setPaymentMessage] = useState("");
+  const [paymentSuccess, setPaymentSuccess] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const setupClientSecret = useRef("");
+  const cardNumberRef = useRef<StripeCardElement | null>(null);
+  const cardExpiryRef = useRef<StripeCardElement | null>(null);
+  const cardCvcRef = useRef<StripeCardElement | null>(null);
+  const stripeRef = useRef<StripeInstance | null>(null);
 
   const checkoutStatus = params.get("checkout");
 
@@ -143,17 +180,132 @@ export default function Billing() {
     }
   };
 
-  const portal = async () => {
-    setBusy("portal");
+  const clearPaymentElements = useCallback(() => {
+    cardNumberRef.current?.destroy();
+    cardExpiryRef.current?.destroy();
+    cardCvcRef.current?.destroy();
+    cardNumberRef.current = null;
+    cardExpiryRef.current = null;
+    cardCvcRef.current = null;
+    stripeRef.current = null;
+    setupClientSecret.current = "";
+    setPaymentFormReady(false);
+  }, []);
+
+  const openPaymentMethodForm = async () => {
+    if (paymentFormOpen) {
+      setPaymentFormOpen(false);
+      clearPaymentElements();
+      return;
+    }
+
+    setBusy("payment-method");
     setError("");
+    setPaymentMessage("");
+    setPaymentSuccess("");
+    setPaymentFormOpen(true);
     try {
-      const res = await openBillingPortal();
-      window.location.assign(res.url);
+      const publishableKey = stripeStatus?.publishable_key;
+      if (!publishableKey || !publishableKey.startsWith("pk_")) {
+        throw new Error("Stripe publishable key is not configured");
+      }
+
+      const [{ client_secret: clientSecret }] = await Promise.all([
+        createPaymentMethodSetupIntent(),
+        loadStripeScript(),
+      ]);
+      const stripe = window.Stripe?.(publishableKey) ?? null;
+      if (!stripe) throw new Error("Stripe could not initialize");
+
+      const elements = stripe.elements();
+      const elementOptions = {
+        style: {
+          base: {
+            color: "#111827",
+            fontSize: "15px",
+            "::placeholder": { color: "#94a3b8" },
+          },
+          invalid: { color: "#991b1b" },
+        },
+      };
+      const showElementError = (event: StripeElementChangeEvent) => {
+        setPaymentMessage(event.error?.message ?? "");
+      };
+
+      setupClientSecret.current = clientSecret;
+      stripeRef.current = stripe;
+      cardNumberRef.current = elements.create("cardNumber", {
+        ...elementOptions,
+        placeholder: "Card number",
+      });
+      cardExpiryRef.current = elements.create("cardExpiry", elementOptions);
+      cardCvcRef.current = elements.create("cardCvc", elementOptions);
+      cardNumberRef.current.on("change", showElementError);
+      cardExpiryRef.current.on("change", showElementError);
+      cardCvcRef.current.on("change", showElementError);
+      cardNumberRef.current.mount("#billing-card-number");
+      cardExpiryRef.current.mount("#billing-card-expiry");
+      cardCvcRef.current.mount("#billing-card-cvc");
+      setPaymentFormReady(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open portal");
+      clearPaymentElements();
+      setPaymentFormOpen(false);
+      setError(err instanceof Error ? err.message : "Could not prepare payment method form");
+    } finally {
       setBusy("");
     }
   };
+
+  const savePaymentMethod = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy("save-payment-method");
+    setPaymentMessage("");
+    setPaymentSuccess("");
+
+    try {
+      const stripe = stripeRef.current;
+      const card = cardNumberRef.current;
+      const clientSecret = setupClientSecret.current;
+      if (!stripe || !card || !clientSecret) {
+        throw new Error("Payment form is not ready yet");
+      }
+
+      const result = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: {
+          card,
+          billing_details: {
+            address: {
+              postal_code: paymentZip.trim(),
+            },
+          },
+        },
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message ?? "Could not save payment method");
+      }
+
+      const paymentMethod = result.setupIntent?.payment_method;
+      const paymentMethodId =
+        typeof paymentMethod === "string" ? paymentMethod : paymentMethod?.id;
+      if (!paymentMethodId) {
+        throw new Error("Stripe did not return a payment method");
+      }
+
+      await setDefaultPaymentMethod(paymentMethodId);
+      setPaymentSuccess("Payment method saved.");
+      setPaymentZip("");
+      setPaymentFormOpen(false);
+      clearPaymentElements();
+      await reload();
+    } catch (err) {
+      setPaymentMessage(err instanceof Error ? err.message : "Could not save payment method");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  useEffect(() => () => clearPaymentElements(), [clearPaymentElements]);
 
   const cancel = async () => {
     setBusy("cancel");
@@ -174,6 +326,8 @@ export default function Billing() {
 
   const visiblePlans = plans;
   const activeSub = sub?.subscription ?? null;
+  const canViewStripeDetails =
+    user?.account_type === "platform_admin" && user?.effective_role === "owner";
 
   return (
     <div className="billing-page">
@@ -189,10 +343,10 @@ export default function Billing() {
         </div>
         <button
           className="billing-portal-btn"
-          onClick={() => void portal()}
-          disabled={busy === "portal"}
+          onClick={() => void openPaymentMethodForm()}
+          disabled={busy === "payment-method" || busy === "save-payment-method"}
         >
-          {busy === "portal" ? "Opening…" : "Manage payment methods"}
+          {busy === "payment-method" ? "Preparing…" : "Manage payment methods"}
         </button>
       </header>
 
@@ -206,6 +360,59 @@ export default function Billing() {
         <div className="billing-banner">Checkout was canceled.</div>
       )}
       {error && <div className="billing-banner error">{error}</div>}
+      {paymentSuccess && <div className="billing-banner success">{paymentSuccess}</div>}
+
+      {paymentFormOpen && (
+        <section className="billing-card">
+          <h2>Payment method</h2>
+          <form className="billing-payment-form" onSubmit={(event) => void savePaymentMethod(event)}>
+            <label>
+              <span>Card number</span>
+              <div id="billing-card-number" className="billing-stripe-field" />
+            </label>
+            <div className="billing-payment-row">
+              <label>
+                <span>Expiration</span>
+                <div id="billing-card-expiry" className="billing-stripe-field" />
+              </label>
+              <label>
+                <span>CVV</span>
+                <div id="billing-card-cvc" className="billing-stripe-field" />
+              </label>
+              <label>
+                <span>ZIP code</span>
+                <input
+                  value={paymentZip}
+                  onChange={(event) => setPaymentZip(event.target.value)}
+                  autoComplete="postal-code"
+                  inputMode="numeric"
+                  placeholder="12345"
+                  required
+                />
+              </label>
+            </div>
+            {paymentMessage && <p className="billing-payment-error">{paymentMessage}</p>}
+            <div className="billing-payment-actions">
+              <button
+                type="submit"
+                disabled={!paymentFormReady || busy === "save-payment-method"}
+              >
+                {busy === "save-payment-method" ? "Saving…" : "Save card"}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setPaymentFormOpen(false);
+                  clearPaymentElements();
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
 
       {/* ---- Subscription status ---- */}
       <section className="billing-card">
@@ -321,33 +528,35 @@ export default function Billing() {
         </div>
       </section>
 
-      <section className="billing-card">
-        <h2>Payments</h2>
-        <div className="billing-payment-status">
-          <span>Stripe status</span>
-          <strong className={stripeStatus?.configured ? "ready" : "not-ready"}>
-            {stripeStatus?.configured ? "Connected" : "Not configured"}
-          </strong>
-          <span>Mode</span>
-          <strong>{stripeStatus?.test_mode ? "Test mode" : "Live/not detected"}</strong>
-          <span>Country</span>
-          <strong>{stripeStatus?.country ?? "US"}</strong>
-          <span>Publishable key</span>
-          <code>{stripeStatus?.publishable_key ?? "pk_test_sample_configure_in_env"}</code>
-        </div>
-        <p className="billing-note">
-          Use Stripe Checkout for real card entry. These are Stripe test card numbers for test mode only.
-        </p>
-        <div className="billing-card-list">
-          {STRIPE_TEST_CARDS.map((card) => (
-            <div className="billing-test-card" key={card.number}>
-              <span>{card.label}</span>
-              <strong>{card.number}</strong>
-              <small>{card.result}</small>
-            </div>
-          ))}
-        </div>
-      </section>
+      {canViewStripeDetails && (
+        <section className="billing-card">
+          <h2>Payments</h2>
+          <div className="billing-payment-status">
+            <span>Stripe status</span>
+            <strong className={stripeStatus?.configured ? "ready" : "not-ready"}>
+              {stripeStatus?.configured ? "Connected" : "Not configured"}
+            </strong>
+            <span>Mode</span>
+            <strong>{stripeStatus?.test_mode ? "Test mode" : "Live/not detected"}</strong>
+            <span>Country</span>
+            <strong>{stripeStatus?.country ?? "US"}</strong>
+            <span>Publishable key</span>
+            <code>{stripeStatus?.publishable_key ?? "pk_test_sample_configure_in_env"}</code>
+          </div>
+          <p className="billing-note">
+            Use Stripe Checkout for real card entry. These are Stripe test card numbers for test mode only.
+          </p>
+          <div className="billing-card-list">
+            {STRIPE_TEST_CARDS.map((card) => (
+              <div className="billing-test-card" key={card.number}>
+                <span>{card.label}</span>
+                <strong>{card.number}</strong>
+                <small>{card.result}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ---- Usage ---- */}
       <section className="billing-card">

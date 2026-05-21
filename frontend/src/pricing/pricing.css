@@ -29,6 +29,18 @@
   font-size: var(--text-lg);
 }
 
+.pricing-header .pricing-account-context {
+  display: inline-flex;
+  max-width: 100%;
+  margin: 0 0 12px;
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  background: #e0e7ff;
+  color: #4338ca;
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
 .pricing-billing-link {
   min-height: 34px;
   padding: 0 14px;

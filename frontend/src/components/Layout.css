@@ -656,6 +656,22 @@
   padding: 2px 9px;
 }
 
+.header-upgrade-btn {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid #2563eb;
+  border-radius: var(--radius-pill);
+  background: #2563eb;
+  color: var(--color-surface);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.header-upgrade-btn:hover {
+  background: #1d4ed8;
+}
+
 /* =============================
    📱 LAYOUT — TABLET & PHONE
    ============================

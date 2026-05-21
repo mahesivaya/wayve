@@ -117,6 +117,17 @@ export const startCheckout = (planCode: string, autopay = true) =>
 export const openBillingPortal = () =>
   json<{ url: string }>("/api/billing/portal", { method: "POST" });
 
+export const createPaymentMethodSetupIntent = () =>
+  json<{ client_secret: string }>("/api/billing/payment-method/setup-intent", {
+    method: "POST",
+  });
+
+export const setDefaultPaymentMethod = (paymentMethodId: string) =>
+  json<{ saved: boolean }>("/api/billing/payment-method/default", {
+    method: "POST",
+    body: JSON.stringify({ payment_method_id: paymentMethodId }),
+  });
+
 export const cancelSubscription = () =>
   json<{ cancel_at_period_end: boolean }>("/api/billing/subscription/cancel", {
     method: "POST",

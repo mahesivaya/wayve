@@ -19,8 +19,8 @@
 use crate::prelude::*;
 use crate::security::jwt::get_user_id_from_request;
 use actix_web::{HttpRequest, HttpResponse, post, web};
-use hickory_resolver::TokioResolver;
 use hickory_resolver::Resolver;
+use hickory_resolver::TokioResolver;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
 use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::proto::rr::RData;
@@ -63,13 +63,14 @@ static RESOLVER: Lazy<TokioResolver> = Lazy::new(|| {
         }
         Err(_) => (ResolverConfig::default(), opts),
     };
-    let mut builder =
-        Resolver::builder_with_config(cfg, TokioRuntimeProvider::default());
+    let mut builder = Resolver::builder_with_config(cfg, TokioRuntimeProvider::default());
     *builder.options_mut() = builder_opts;
     // `build()` only fails if the underlying runtime/dns plumbing can't
     // initialize — at that point the process can't service mail lookups at
     // all, so panicking here is as well-defined as any startup failure.
-    builder.build().unwrap_or_else(|e| panic!("hickory resolver init failed: {e}"))
+    builder
+        .build()
+        .unwrap_or_else(|e| panic!("hickory resolver init failed: {e}"))
 });
 
 #[post("/email/provider-lookup")]

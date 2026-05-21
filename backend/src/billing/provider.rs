@@ -87,6 +87,10 @@ pub struct CheckoutSession {
     pub url: String,
 }
 
+pub struct SetupIntent {
+    pub client_secret: String,
+}
+
 /// Create a hosted Checkout Session for a subscription.
 pub async fn create_checkout_session(p: &CheckoutParams) -> Result<CheckoutSession> {
     let params = vec![
@@ -128,6 +132,47 @@ pub async fn create_portal_session(customer_id: &str, return_url: &str) -> Resul
         .and_then(Value::as_str)
         .map(str::to_string)
         .ok_or_else(|| anyhow!("portal session missing url"))
+}
+
+/// Create a SetupIntent so Stripe.js can collect and attach a card without
+/// card details touching this app's servers.
+pub async fn create_setup_intent(customer_id: &str) -> Result<SetupIntent> {
+    let params = vec![
+        ("customer", customer_id.to_string()),
+        ("usage", "off_session".to_string()),
+        ("payment_method_types[0]", "card".to_string()),
+    ];
+    let body = post_form("/setup_intents", &params).await?;
+    let client_secret = body
+        .get("client_secret")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("setup intent missing client_secret"))?;
+    Ok(SetupIntent {
+        client_secret: client_secret.to_string(),
+    })
+}
+
+/// Set the default payment method for future invoices on the Stripe customer.
+pub async fn set_customer_default_payment_method(
+    customer_id: &str,
+    payment_method_id: &str,
+) -> Result<()> {
+    let params = vec![(
+        "invoice_settings[default_payment_method]",
+        payment_method_id.to_string(),
+    )];
+    post_form(&format!("/customers/{customer_id}"), &params).await?;
+    Ok(())
+}
+
+/// Set the default payment method on an existing subscription, if present.
+pub async fn set_subscription_default_payment_method(
+    subscription_id: &str,
+    payment_method_id: &str,
+) -> Result<()> {
+    let params = vec![("default_payment_method", payment_method_id.to_string())];
+    post_form(&format!("/subscriptions/{subscription_id}"), &params).await?;
+    Ok(())
 }
 
 /// Schedule cancellation of a subscription at the end of the current period.

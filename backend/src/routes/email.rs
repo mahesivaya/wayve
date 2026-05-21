@@ -439,27 +439,21 @@ async fn push_read_state_to_provider(
     refresh_token: &str,
     provider_message_id: &str,
 ) {
-    let token = match refresh_and_persist_email_token(
-        pool,
-        account_id,
-        provider,
-        refresh_token,
-    )
-    .await
-    {
-        Ok(token) => token.access_token,
-        Err(e) => {
-            warn!(
-                target: "gmail",
-                user_id,
-                account_id,
-                provider = provider.as_db(),
-                error = ?e,
-                "mark-read token refresh failed; provider push skipped"
-            );
-            return;
-        }
-    };
+    let token =
+        match refresh_and_persist_email_token(pool, account_id, provider, refresh_token).await {
+            Ok(token) => token.access_token,
+            Err(e) => {
+                warn!(
+                    target: "gmail",
+                    user_id,
+                    account_id,
+                    provider = provider.as_db(),
+                    error = ?e,
+                    "mark-read token refresh failed; provider push skipped"
+                );
+                return;
+            }
+        };
 
     if let Err(e) = provider.mark_read(&token, provider_message_id).await {
         warn!(

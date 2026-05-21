@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { listPlans, type Plan } from "../api/billing";
 import { useAuth } from "../auth/useAuth";
 import Layout from "../components/Layout";
@@ -228,9 +228,19 @@ function PublicPricing() {
 // logged-out visitors only.
 function AuthenticatedPricing() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [params] = useSearchParams();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const upgradePlanCode = params.get("plan") ?? user?.current_plan?.code ?? "basic_user";
+  const accountLabel =
+    user?.account_type === "personal"
+      ? "Personal account"
+      : user?.account_type === "platform_admin"
+      ? "Platform account"
+      : "Organization account";
+  const planLabel = user?.current_plan?.name ?? upgradePlanCode;
 
   useEffect(() => {
     let alive = true;
@@ -267,6 +277,9 @@ function AuthenticatedPricing() {
         <p>
           One workspace for mail, chat, calls, files, notes, and AI — pick the
           plan that fits. Manage or switch any time from Billing.
+        </p>
+        <p className="pricing-account-context">
+          {accountLabel} · {user?.email} · Current plan: {planLabel}
         </p>
         <button
           className="pricing-billing-link"

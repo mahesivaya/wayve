@@ -171,12 +171,6 @@ export default function Home() {
 
   return (
     <div className="dashboard u-page-shell">
-      {/* HEADER */}
-      <div className="dashboard-header u-panel u-flex-between">
-        <h2>Welcome {user.role_label ?? "Personal workspace owner"}</h2>
-        <p>{user.email}</p>
-      </div>
-
       {/* GRID */}
       <div className="dashboard-grid">
         {visibleCards.map((card) => (

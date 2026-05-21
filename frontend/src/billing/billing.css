@@ -317,6 +317,77 @@
   color: var(--color-danger);
 }
 
+.billing-payment-form {
+  display: grid;
+  gap: 12px;
+}
+
+.billing-payment-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.billing-payment-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.billing-stripe-field,
+.billing-payment-form input {
+  min-height: 42px;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-sizing: border-box;
+}
+
+.billing-payment-form input {
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-md);
+}
+
+.billing-payment-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.billing-payment-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.billing-payment-actions button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #2563eb;
+  border-radius: var(--radius-md);
+  background: #2563eb;
+  color: var(--color-surface);
+  font-size: var(--text-md);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.billing-payment-actions button:disabled {
+  background: #93c5fd;
+  border-color: #93c5fd;
+  cursor: default;
+}
+
+.billing-payment-actions .secondary {
+  background: var(--color-surface);
+  color: #1d4ed8;
+}
+
 .billing-card-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -350,5 +421,9 @@
   .billing-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .billing-payment-row {
+    grid-template-columns: 1fr;
   }
 }

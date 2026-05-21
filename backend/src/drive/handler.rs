@@ -84,8 +84,7 @@ pub async fn upload_file(
         if field_name == "folder_id" {
             let mut bytes = Vec::new();
             while let Some(chunk) = field.next().await {
-                let data = chunk
-                    .map_err(|_| actix_web::error::ErrorBadRequest("Chunk error"))?;
+                let data = chunk.map_err(|_| actix_web::error::ErrorBadRequest("Chunk error"))?;
                 bytes.extend_from_slice(&data);
             }
             let raw = std::str::from_utf8(&bytes)
@@ -97,17 +96,16 @@ pub async fn upload_file(
                         .map_err(|_| actix_web::error::ErrorBadRequest("Invalid folder_id"))?,
                 );
                 // Tenant gate: confirm the folder belongs to this user.
-                let owns: Option<i64> = sqlx::query_scalar(
-                    "SELECT id FROM folders WHERE id = $1 AND user_id = $2",
-                )
-                .bind(folder_id.unwrap_or(0))
-                .bind(user_id)
-                .fetch_optional(pool.get_ref())
-                .await
-                .map_err(|e| {
-                    error!(target: "http", error = ?e, "folder ownership check failed");
-                    actix_web::error::ErrorInternalServerError("DB error")
-                })?;
+                let owns: Option<i64> =
+                    sqlx::query_scalar("SELECT id FROM folders WHERE id = $1 AND user_id = $2")
+                        .bind(folder_id.unwrap_or(0))
+                        .bind(user_id)
+                        .fetch_optional(pool.get_ref())
+                        .await
+                        .map_err(|e| {
+                            error!(target: "http", error = ?e, "folder ownership check failed");
+                            actix_web::error::ErrorInternalServerError("DB error")
+                        })?;
                 if owns.is_none() {
                     return Ok(HttpResponse::NotFound().body("Folder not found"));
                 }
@@ -211,7 +209,7 @@ pub async fn get_files(
            FROM files \
           WHERE user_id = $1 \
             AND folder_id IS NOT DISTINCT FROM $2 \
-          ORDER BY created_at DESC"
+          ORDER BY created_at DESC",
     )
     .bind(user_id)
     .bind(query.folder_id)

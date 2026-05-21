@@ -151,9 +151,12 @@ impl MailProviderClient for GoogleMailClient {
     }
 
     async fn refresh_token(&self, refresh_token: &str) -> Result<RefreshedEmailToken> {
-        let access_token =
-            refresh_access_token(&self.oauth.client_id, &self.oauth.client_secret, refresh_token)
-                .await?;
+        let access_token = refresh_access_token(
+            &self.oauth.client_id,
+            &self.oauth.client_secret,
+            refresh_token,
+        )
+        .await?;
         Ok(RefreshedEmailToken {
             access_token,
             // Google rotates refresh tokens lazily and the refresh endpoint

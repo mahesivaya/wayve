@@ -3,7 +3,7 @@
 // to Stripe's hosted Customer Portal. Both endpoints return a URL for the
 // frontend to redirect to.
 
-use super::models::{BillingOwner, CheckoutInput};
+use super::models::{BillingOwner, CheckoutInput, DefaultPaymentMethodInput};
 use super::provider::{self, CheckoutParams};
 use super::{require_owner_manager, resolve_owner};
 use crate::prelude::*;
@@ -228,4 +228,135 @@ pub async fn create_portal(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
                 .json(serde_json::json!({ "message": "Could not open the billing portal" })))
         }
     }
+}
+
+#[post("/billing/payment-method/setup-intent")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn create_payment_method_setup_intent(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+) -> AppResult {
+    let user_id = match super::current_user(&req) {
+        Ok(id) => id,
+        Err(resp) => return Ok(resp),
+    };
+    if !provider::is_configured() {
+        return Ok(HttpResponse::ServiceUnavailable()
+            .json(serde_json::json!({ "message": "Billing is not configured" })));
+    }
+
+    let owner = match resolve_owner(pool.get_ref(), user_id).await {
+        Ok(owner) => owner,
+        Err(resp) => return Ok(resp),
+    };
+    if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
+        return Ok(resp);
+    }
+
+    let email = match actor_email(pool.get_ref(), user_id).await {
+        Ok(email) => email,
+        Err(resp) => return Ok(resp),
+    };
+    let customer_id = match ensure_customer(pool.get_ref(), owner, &email).await {
+        Ok(id) => id,
+        Err(resp) => return Ok(resp),
+    };
+
+    match provider::create_setup_intent(&customer_id).await {
+        Ok(intent) => {
+            Ok(HttpResponse::Ok()
+                .json(serde_json::json!({ "client_secret": intent.client_secret })))
+        }
+        Err(e) => {
+            error!(target: "billing", error = ?e, "setup intent create failed");
+            Ok(HttpResponse::BadGateway()
+                .json(serde_json::json!({ "message": "Could not prepare payment method entry" })))
+        }
+    }
+}
+
+#[post("/billing/payment-method/default")]
+#[instrument(target = "http", skip(req, pool, data))]
+pub async fn set_default_payment_method(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<DefaultPaymentMethodInput>,
+) -> AppResult {
+    let user_id = match super::current_user(&req) {
+        Ok(id) => id,
+        Err(resp) => return Ok(resp),
+    };
+    if !provider::is_configured() {
+        return Ok(HttpResponse::ServiceUnavailable()
+            .json(serde_json::json!({ "message": "Billing is not configured" })));
+    }
+
+    let payment_method_id = data.payment_method_id.trim();
+    if !payment_method_id.starts_with("pm_") {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Invalid payment method" })));
+    }
+
+    let owner = match resolve_owner(pool.get_ref(), user_id).await {
+        Ok(owner) => owner,
+        Err(resp) => return Ok(resp),
+    };
+    if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
+        return Ok(resp);
+    }
+
+    let customer_id = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT stripe_customer_id FROM billing_customers
+         WHERE ($1::int IS NOT NULL AND user_id = $1)
+            OR ($2::int IS NOT NULL AND organization_id = $2)
+         LIMIT 1
+        "#,
+    )
+    .bind(owner.user_id())
+    .bind(owner.organization_id())
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let Some(customer_id) = customer_id else {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "No billing customer found" })));
+    };
+
+    if let Err(e) =
+        provider::set_customer_default_payment_method(&customer_id, payment_method_id).await
+    {
+        error!(target: "billing", error = ?e, "customer default payment method update failed");
+        return Ok(HttpResponse::BadGateway()
+            .json(serde_json::json!({ "message": "Could not save payment method" })));
+    }
+
+    let subscription_id = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT stripe_subscription_id FROM subscriptions
+         WHERE (($1::int IS NOT NULL AND user_id = $1)
+            OR ($2::int IS NOT NULL AND organization_id = $2))
+           AND stripe_subscription_id IS NOT NULL
+           AND status IN ('active', 'trialing', 'past_due', 'incomplete')
+         ORDER BY updated_at DESC
+         LIMIT 1
+        "#,
+    )
+    .bind(owner.user_id())
+    .bind(owner.organization_id())
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    if let Some(subscription_id) = subscription_id.filter(|id| !id.is_empty())
+        && let Err(e) =
+            provider::set_subscription_default_payment_method(&subscription_id, payment_method_id)
+                .await
+    {
+        error!(target: "billing", error = ?e, "subscription payment method update failed");
+        return Ok(HttpResponse::BadGateway().json(
+            serde_json::json!({ "message": "Could not update subscription payment method" }),
+        ));
+    }
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "saved": true })))
 }

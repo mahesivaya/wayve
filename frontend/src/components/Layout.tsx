@@ -85,6 +85,26 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     return <div className="layout-loading">Loading session...</div>;
   }
 
+  const authedUser = user;
+  const currentPlanCode = authedUser.current_plan?.code ?? "basic_user";
+  const isBasicPersonalUser =
+    authedUser.account_type === "personal" && currentPlanCode === "basic_user";
+
+  function goToUpgrade() {
+    const params = new URLSearchParams({
+      account: authedUser.account_type,
+      plan: currentPlanCode,
+    });
+    navigate(`/pricing?${params.toString()}`, {
+      state: {
+        accountType: authedUser.account_type,
+        currentPlan: authedUser.current_plan,
+        userId: authedUser.id,
+        email: authedUser.email,
+      },
+    });
+  }
+
   return (
     <div className={`app ${!sidebarOpen ? "sidebar-collapsed" : ""}`}>
       {/* 🔝 HEADER */}
@@ -157,6 +177,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             </span>
             {user.role_label && (
               <span className="header-welcome-role">{user.role_label}</span>
+            )}
+            {isBasicPersonalUser && (
+              <button
+                type="button"
+                className="header-upgrade-btn"
+                onClick={goToUpgrade}
+              >
+                Upgrade
+              </button>
             )}
           </div>
 
