@@ -54,7 +54,7 @@ export default function Register() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={handleRegister}>
-        <h2>Create account 🚀</h2>
+        <h2>Create account </h2>
         <p className="subtitle">Join Wayve to get started</p>
 
         <input

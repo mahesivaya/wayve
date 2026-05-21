@@ -32,19 +32,19 @@
           shellHook = ''
             export DATABASE_URL=postgres://postgres:postgres@localhost:5432/wayve
 
-            echo "🚀 Wayve Dev Ready (${system})"
+            echo " Wayve Dev Ready (${system})"
             rustc --version
             node --version
           '';
         };
 
         # ===============================
-        # 🚀 ONE COMMAND RUN
+        #  ONE COMMAND RUN
         # ===============================
         apps.default = {
           type = "app";
           program = toString (pkgs.writeShellScript "wayve-dev" ''
-            echo "🚀 Starting Wayve (${system})..."
+            echo " Starting Wayve (${system})..."
 
             # Start infra
             cd infra

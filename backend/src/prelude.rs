@@ -30,6 +30,6 @@ pub use std::fs;
 pub use crate::error::{AppError, AppResult};
 pub use anyhow::Result;
 
-// 🚀 Constants
+//  Constants
 pub const MAX_EMAIL_CONCURRENCY: usize = 20;
 pub const BATCH_SIZE: usize = 50;

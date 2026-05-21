@@ -394,7 +394,7 @@ flake.nix code:
             export OPENSSL_LIB_DIR=${pkgs.openssl.out}/lib
             export OPENSSL_INCLUDE_DIR=${pkgs.openssl.dev}/include
 
-            echo "🚀 Wayve Dev Environment Ready"
+            echo " Wayve Dev Environment Ready"
             echo "Rust: $(rustc --version)"
             echo "Node: $(node --version)"
           '';

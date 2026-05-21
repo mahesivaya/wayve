@@ -95,7 +95,7 @@ export default function Layout() {
               »
             </button>
           )}
-          <div className="logo" onClick={() => navigate("/")}>Wayve 🚀</div>
+          <div className="logo" onClick={() => navigate("/")}>Wayve </div>
           <button
             className="nav-toggle"
             onClick={() => setNavOpen((open) => !open)}

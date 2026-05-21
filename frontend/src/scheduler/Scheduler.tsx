@@ -242,7 +242,7 @@ export default function Scheduler() {
       }
     }
 
-    logger.log("🚀 sending participants:", finalParticipants);
+    logger.log(" sending participants:", finalParticipants);
 
     const payload = {
       title,
