@@ -23,7 +23,7 @@ export default function Home() {
   const { user } = useAuth();
   const { normalizedSearchQuery } = useGlobalSearch();
   const navigate = useNavigate();
-  const [servicesOpen, setServicesOpen] = useState(true);
+  const [servicesOpen, setServicesOpen] = useState(false);
 
   const visibleCards = useMemo(() => {
     if (!normalizedSearchQuery) return HOME_CARDS;
@@ -51,18 +51,16 @@ export default function Home() {
                 aria-expanded={servicesOpen}
                 aria-controls="services-dropdown"
               >
-                Services
+                Products
                 <span className="services-caret" aria-hidden="true">
                   {servicesOpen ? "⌃" : "⌄"}
                 </span>
               </button>
             </div>
 
-          <button onClick={() => navigate("/organization")}>Organization</button>
             <button onClick={() => navigate("/#pricing")}>Pricing</button>
-            <button onClick={() => navigate("/#x")}>X</button>
-            <button onClick={() => navigate("/#y")}>Y</button>
-            <button onClick={() => navigate("/#z")}>Z</button>
+            <button onClick={() => navigate("/#enterprise")}>Enterprise</button>
+            <button onClick={() => navigate("/#support")}>Support</button>
           </nav>
 
           <div className="public-home-actions">
@@ -153,17 +151,17 @@ export default function Home() {
           </section>
 
           <section className="home-info-grid">
-            <article id="x">
-              <h2>X</h2>
-              <p>Flexible communication tools for day-to-day work.</p>
-            </article>
-            <article id="y">
-              <h2>Y</h2>
-              <p>Organized collaboration across files, schedules, and notes.</p>
-            </article>
-            <article id="z">
-              <h2>Z</h2>
+            <article id="enterprise">
+              <h2>Enterprise</h2>
               <p>Secure productivity features ready for organization workflows.</p>
+            </article>
+            <article id="support">
+              <h2>Support</h2>
+              <p>Guidance for teams setting up communication, billing, and workspaces.</p>
+            </article>
+            <article id="organization">
+              <h2>Organization</h2>
+              <p>Organized collaboration across files, schedules, and notes.</p>
             </article>
           </section>
         </main>
