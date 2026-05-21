@@ -141,7 +141,20 @@ export async function apiFetch(
         message;
 
     } catch {
-      // ignore json parse errors
+      // JSON parse failed — body is probably plain text (most Actix
+      // handlers in this codebase return `HttpResponse::BadRequest()
+      // .body("...")` with a raw string instead of a JSON envelope).
+      // Surface that text instead of swallowing it so callers can see
+      // the real reason (e.g. "Meeting cannot be in the past") rather
+      // than a generic "Request failed (400 Bad Request)".
+      try {
+        const text = (await response.clone().text()).trim();
+        if (text) {
+          message = `${message}: ${text}`;
+        }
+      } catch {
+        // give up — leave the generic message
+      }
     }
 
     throw new Error(

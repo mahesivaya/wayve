@@ -87,21 +87,16 @@ pub async fn create_meeting(
         return Ok(HttpResponse::BadRequest().body("Title is required"));
     }
 
-    if data.participants.is_empty() {
-        return Ok(HttpResponse::BadRequest().body("At least one participant required"));
-    }
-
-    // ================= CLEAN PARTICIPANTS =================
+    // Participants are optional. If the user sends none, the meeting is
+    // created without invites — useful for personal blocks (focus time,
+    // hold a slot). If the array contains garbage entries we silently
+    // filter them; we don't reject the whole request.
     let participants: Vec<String> = data
         .participants
         .iter()
         .map(|e| e.trim().to_lowercase())
         .filter(|e| e.contains("@") && e.contains("."))
         .collect();
-
-    if participants.is_empty() {
-        return Ok(HttpResponse::BadRequest().body("Invalid participant emails"));
-    }
 
     // ================= TIME =================
     let start_time: NaiveTime = minutes_to_time(data.start);
@@ -357,9 +352,7 @@ pub async fn update_meeting(
         return Ok(HttpResponse::BadRequest().body("Title is required"));
     }
 
-    if data.participants.is_empty() {
-        return Ok(HttpResponse::BadRequest().body("At least one participant required"));
-    }
+    // Participants optional — see `create_meeting` above for rationale.
 
     let date = match chrono::NaiveDate::parse_from_str(&data.date, "%Y-%m-%d") {
         Ok(d) => d,
@@ -416,9 +409,10 @@ pub async fn update_meeting(
         .filter(|email| email.contains("@") && email.contains("."))
         .collect();
 
-    if participants.is_empty() {
-        return Ok(HttpResponse::BadRequest().body("Invalid participant emails"));
-    }
+    // Participants optional — if all submitted entries were garbage we end
+    // up with an empty list here and continue. The downstream INSERT uses
+    // UNNEST on the array, which handles zero-length input cleanly, and
+    // the email-send block below is already guarded with `!is_empty()`.
 
     let encrypted_participants: Vec<(String, String)> = participants
         .iter()
