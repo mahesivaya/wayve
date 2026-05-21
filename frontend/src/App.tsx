@@ -9,7 +9,7 @@ import Login from "./auth/Login";
 import ForgotPassword from "./auth/ForgotPassword";
 import ResetPassword from "./auth/ResetPassword";
 import { useAuth } from "./auth/useAuth";
-import { canAccessPricingForUser, homePathForUser, normalizeAccountType } from "./auth/accountHome";
+import { homePathForUser, normalizeAccountType } from "./auth/accountHome";
 
 // 🔥 Lazy loaded pages
 const Home = lazy(() => import("./home/Home"));
@@ -76,6 +76,12 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/organization" element={<Organization />} />
         <Route path="/services/:slug" element={<ServicePage />} />
+        {/* Pricing is a public-facing page: anyone (logged out OR in) should
+            be able to view plans. It lives here rather than under the
+            ProtectedRoute branch so unauth visitors aren't bounced to
+            /login. The component renders its own header chrome, so no
+            Layout wrapper is needed. */}
+        <Route path="/pricing" element={<Pricing />} />
 
         {/* PROTECTED */}
         <Route element={<ProtectedRoute />}>
@@ -123,16 +129,6 @@ export default function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/billing" element={<Billing />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
-            <Route
-              path="/pricing"
-              element={
-                canAccessPricingForUser(user) ? (
-                  <Pricing />
-                ) : (
-                  redirectToAccountHome ?? <Pricing />
-                )
-              }
-            />
 
           </Route>
         </Route>

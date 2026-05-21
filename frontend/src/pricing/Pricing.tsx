@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listPlans, type Plan } from "../api/billing";
+import { useAuth } from "../auth/useAuth";
 import "./pricing.css";
 
 const BYTES_IN_GB = 1024 * 1024 * 1024;
@@ -78,7 +79,153 @@ function PlanCard({
   );
 }
 
-export default function Pricing() {
+// Public marketing tiers shown to logged-out visitors. The order matches the
+// upsell story we want unauthenticated users to walk through:
+//   1. Basic       – on-ramp / free
+//   2. Advance     – first paid personal tier
+//   3. More Advance – top personal tier
+//   4. Small organization – team plan for 1-100 users
+//   5. Enterprise  – 100+ users, contact-sales
+// These are intentionally hardcoded (not fetched from /api/billing/plans)
+// because the public page is design-owned marketing copy, distinct from the
+// dynamic plan picker logged-in users see.
+type PublicTier = {
+  id: string;
+  name: string;
+  price: string;
+  interval: string | null;
+  tagline: string;
+  features: string[];
+  cta: string;
+};
+
+const PUBLIC_TIERS: PublicTier[] = [
+  {
+    id: "basic",
+    name: "Basic",
+    price: "Free",
+    interval: null,
+    tagline: "Free personal plan with daily email send/receive limits.",
+    features: [
+      "1 GB storage",
+      "1 seat",
+      "Billed monthly",
+      "Up to 1,000 emails per day",
+    ],
+    cta: "Get started",
+  },
+  {
+    id: "advance",
+    name: "Advance",
+    price: "7.00 USD",
+    interval: "month",
+    tagline: "Personal paid plan with encrypted app usage allowance.",
+    features: [
+      "10 GB storage",
+      "1 seat",
+      "End-to-end encrypted chat",
+      "1,000 encrypt/decrypt ops per day",
+    ],
+    cta: "Choose plan",
+  },
+  {
+    id: "more-advance",
+    name: "More Advance",
+    price: "15.00 USD",
+    interval: "month",
+    tagline: "Power-user tier — higher limits, priority sync, full AI access.",
+    features: [
+      "50 GB storage",
+      "1 seat",
+      "Unlimited daily emails",
+      "Priority email + AI sync",
+    ],
+    cta: "Choose plan",
+  },
+  {
+    id: "small-organization",
+    name: "Small organization",
+    price: "10.00 USD",
+    interval: "user / month",
+    tagline: "1–100 users with unlimited email send/receive and memory.",
+    features: [
+      "Unlimited storage",
+      "1–100 seats",
+      "Shared org subscription",
+      "Admin & billing controls",
+    ],
+    cta: "Choose plan",
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    price: "Contact sales",
+    interval: null,
+    tagline: "100+ users with unlimited everything. SSO, audit log, support.",
+    features: [
+      "Unlimited storage",
+      "100+ seats",
+      "SSO + RBAC",
+      "Dedicated support",
+    ],
+    cta: "Contact sales",
+  },
+];
+
+function PublicPricing() {
+  const navigate = useNavigate();
+  return (
+    <div className="pricing-page">
+      <header className="pricing-header">
+        <h1>Plans &amp; Pricing</h1>
+        <p>
+          One workspace for mail, chat, calls, files, notes, and AI — pick the
+          plan that fits.
+        </p>
+        <button
+          className="pricing-billing-link"
+          onClick={() => navigate("/")}
+        >
+          Back to home
+        </button>
+      </header>
+
+      <section className="pricing-section">
+        <div className="pricing-grid">
+          {PUBLIC_TIERS.map((tier) => (
+            <article key={tier.id} className="pricing-plan">
+              <h3>{tier.name}</h3>
+              <p className="pricing-plan-price">
+                {tier.price}
+                {tier.interval && (
+                  <span className="pricing-plan-interval"> / {tier.interval}</span>
+                )}
+              </p>
+              <p className="pricing-plan-desc">{tier.tagline}</p>
+              <ul className="pricing-plan-features">
+                {tier.features.map((feature) => (
+                  <li key={feature}>{feature}</li>
+                ))}
+              </ul>
+              <button
+                className="pricing-plan-cta"
+                onClick={() => navigate("/register")}
+              >
+                {tier.cta}
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// Logged-in pricing screen: pulls live plan rows from the backend and lets
+// the user start a Stripe checkout from the Billing page. Authenticated
+// users always see this — the public marketing tiers above are for
+// logged-out visitors only.
+function AuthenticatedPricing() {
   const navigate = useNavigate();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -228,4 +375,14 @@ export default function Pricing() {
       </section>
     </div>
   );
+}
+
+// Public dispatch. Splitting into two top-level components (instead of an
+// early-return inside one) keeps each component's hook order stable —
+// `AuthenticatedPricing` runs `useEffect`/`useState`/`useMemo` only when
+// it's actually mounted, and the unauthenticated path skips the API
+// fetch entirely.
+export default function Pricing() {
+  const { user } = useAuth();
+  return user ? <AuthenticatedPricing /> : <PublicPricing />;
 }

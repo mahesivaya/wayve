@@ -29,7 +29,7 @@ export const SPLIT_APPS = [
   { key: "emails" as AppKey, label: "Emails", path: "/emails", icon: "📧", Comp: EmailsView },
   { key: "chat" as AppKey, label: "Chat", path: "/chat", icon: "💬", Comp: ChatView },
   { key: "scheduler" as AppKey, label: "Scheduler", path: "/scheduler", icon: "📅", Comp: SchedulerView },
-  { key: "drive" as AppKey, label: "Files", path: "/drive", icon: "📁", Comp: DriveView },
+  { key: "drive" as AppKey, label: "Drive", path: "/drive", icon: "📁", Comp: DriveView },
   { key: "notes" as AppKey, label: "Notes", path: "/notes", icon: "📝", Comp: NotesView },
   { key: "tasks" as AppKey, label: "Tasks", path: "/tasks", icon: "☑", Comp: TasksView },
   { key: "aichat" as AppKey, label: "AI Chat", path: "/aichat", icon: "✨", Comp: AIChatView },

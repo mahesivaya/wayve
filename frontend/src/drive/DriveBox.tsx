@@ -141,14 +141,6 @@ export default function Drive() {
       <div className="upload-section">
         <div className="drive-header">
           <h2>📁 My Drive</h2>
-
-          <button
-            className="upload-btn"
-            onClick={uploadFiles}
-            disabled={uploading}
-          >
-            {uploading ? "Uploading..." : "Upload"}
-          </button>
         </div>
 
         <div
@@ -159,15 +151,25 @@ export default function Drive() {
           <p>Drag & Drop files here</p>
           <span>or</span>
 
-          <label className="browse-btn">
-            Browse Files
-            <input
-              type="file"
-              multiple
-              onChange={(e) => handleFiles(e.target.files)}
-              hidden
-            />
-          </label>
+          {files.length > 0 ? (
+            <button
+              className="upload-btn"
+              onClick={uploadFiles}
+              disabled={uploading}
+            >
+              {uploading ? "Uploading..." : "Upload"}
+            </button>
+          ) : (
+            <label className="browse-btn">
+              Upload
+              <input
+                type="file"
+                multiple
+                onChange={(e) => handleFiles(e.target.files)}
+                hidden
+              />
+            </label>
+          )}
         </div>
 
         {error && <p className="drive-error-msg" style={{ color: 'red', fontSize: '0.9rem' }}>{error}</p>}

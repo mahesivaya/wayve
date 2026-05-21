@@ -34,32 +34,11 @@ export function homePathForAccount(accountType?: string | null) {
   return "/home";
 }
 
-// Pricing is for accounts that manage their own billing — personal users,
-// organization admins, and platform admins. Regular organization members are
-// covered by the organization's subscription, so pricing is hidden and the
-// /pricing route is guarded against them.
-export function canAccessPricing(accountType?: string | null): boolean {
-  const normalized = normalizeAccountType(accountType);
-  return (
-    normalized === "personal" ||
-    normalized === "organization_admin" ||
-    normalized === "platform_admin"
-  );
-}
-
 type AccountLike = {
   account_type?: string | null;
   organization_id?: number | null;
   permissions?: string[] | null;
 };
-
-export function canAccessPricingForUser(user?: AccountLike | null): boolean {
-  if (normalizeAccountType(user?.account_type) === "personal") return true;
-  return Boolean(
-    user?.permissions?.includes("billing:manage") ||
-      user?.permissions?.includes("billing:read")
-  );
-}
 
 // Landing route for a fully-resolved user. The app intentionally has three
 // dashboard surfaces: personal, organization, and platform. Role-specific
