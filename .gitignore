@@ -24,6 +24,7 @@ dist-ssr
 *.sln
 *.sw?
 history.rst
+get_keys.rst
 
 backend/target/
 node_modules/

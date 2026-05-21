@@ -11,6 +11,13 @@ use tokio::{fs, io::AsyncWriteExt};
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
+#[derive(Deserialize)]
+pub struct FilesQuery {
+    /// Filter to files in this folder. `None` → files at drive root.
+    /// Same NULL-distinct semantics as `folders::list_folders`.
+    pub folder_id: Option<i64>,
+}
+
 //
 // ✅ RESPONSE STRUCT
 //
@@ -61,10 +68,52 @@ pub async fn upload_file(
         actix_web::error::ErrorInternalServerError("Dir error")
     })?;
 
+    // Optional target folder. Multipart forms send this as a regular text
+    // field alongside the file parts. Collected in the loop below and
+    // validated once before any INSERTs happen.
+    let mut folder_id: Option<i64> = None;
+
     while let Some(item) = payload.next().await {
         let mut field = item.map_err(|_| actix_web::error::ErrorBadRequest("Invalid multipart"))?;
 
         let field_name = field.name().to_string();
+
+        // Pick up `folder_id` (text field) before the `files` parts arrive.
+        // Multipart fields can be interleaved in arbitrary order, but in
+        // practice browsers send non-file fields first.
+        if field_name == "folder_id" {
+            let mut bytes = Vec::new();
+            while let Some(chunk) = field.next().await {
+                let data = chunk
+                    .map_err(|_| actix_web::error::ErrorBadRequest("Chunk error"))?;
+                bytes.extend_from_slice(&data);
+            }
+            let raw = std::str::from_utf8(&bytes)
+                .map_err(|_| actix_web::error::ErrorBadRequest("Invalid folder_id"))?
+                .trim();
+            if !raw.is_empty() {
+                folder_id = Some(
+                    raw.parse::<i64>()
+                        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid folder_id"))?,
+                );
+                // Tenant gate: confirm the folder belongs to this user.
+                let owns: Option<i64> = sqlx::query_scalar(
+                    "SELECT id FROM folders WHERE id = $1 AND user_id = $2",
+                )
+                .bind(folder_id.unwrap_or(0))
+                .bind(user_id)
+                .fetch_optional(pool.get_ref())
+                .await
+                .map_err(|e| {
+                    error!(target: "http", error = ?e, "folder ownership check failed");
+                    actix_web::error::ErrorInternalServerError("DB error")
+                })?;
+                if owns.is_none() {
+                    return Ok(HttpResponse::NotFound().body("Folder not found"));
+                }
+            }
+            continue;
+        }
 
         // ✅ FILES ONLY (any other field, e.g. a stray user_id, is skipped)
         if field_name != "files" {
@@ -113,8 +162,8 @@ pub async fn upload_file(
 
         sqlx::query(
             r#"
-            INSERT INTO files (name, file_path, file_iv, size, file_type, user_id)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO files (name, file_path, file_iv, size, file_type, user_id, folder_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
         )
         .bind(&filename)
@@ -123,6 +172,7 @@ pub async fn upload_file(
         .bind(size)
         .bind(&file_type)
         .bind(user_id)
+        .bind(folder_id)
         .execute(pool.get_ref())
         .await
         .map_err(|e| {
@@ -143,16 +193,28 @@ pub async fn upload_file(
 // ✅ GET FILES
 //
 #[get("/files")]
-#[instrument(target = "http", skip(req, pool))]
-pub async fn get_files(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn get_files(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<FilesQuery>,
+) -> AppResult {
     // Files are scoped to the authenticated user — the previous `?user_id=`
-    // query param let any caller list anyone's files.
+    // query param let any caller list anyone's files. The new `?folder_id=`
+    // optionally narrows to a specific folder; absence means "drive root"
+    // (rows where folder_id IS NULL). `IS NOT DISTINCT FROM` handles the
+    // NULL case in a single query.
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let rows = sqlx::query_as::<_, FileRecord>(
-        "SELECT id, name, file_path, file_iv, size, created_at FROM files WHERE user_id = $1 ORDER BY created_at DESC"
+        "SELECT id, name, file_path, file_iv, size, created_at \
+           FROM files \
+          WHERE user_id = $1 \
+            AND folder_id IS NOT DISTINCT FROM $2 \
+          ORDER BY created_at DESC"
     )
     .bind(user_id)
+    .bind(query.folder_id)
     .fetch_all(pool.get_ref())
     .await?;
 

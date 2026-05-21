@@ -188,7 +188,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           className={`filter-btn ${viewMode === "files" ? "active" : ""}`}
           onClick={onOpenFiles}
         >
-          📎 Files
+          📎 Attachments
         </button>
       </div>
     </div>

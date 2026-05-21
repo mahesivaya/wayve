@@ -125,3 +125,87 @@
     text-decoration: none;
     color: #007bff;
   }
+/* Folder navigation chrome — added with v1 folder feature. */
+.drive-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-surface, #fff);
+}
+
+.drive-crumb {
+  display: inline-flex;
+  align-items: center;
+}
+
+.drive-crumb-sep {
+  color: var(--text-muted, #6b7280);
+}
+
+.drive-crumb-link {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--color-primary, #2563eb);
+  cursor: pointer;
+  font: inherit;
+}
+
+.drive-crumb-link:disabled {
+  color: var(--text-h, #111827);
+  cursor: default;
+  font-weight: 600;
+}
+
+.drive-breadcrumb-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.drive-folder-input {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.drive-folder-new-btn,
+.drive-folder-create-btn,
+.drive-folder-cancel-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.drive-folder-create-btn {
+  background: var(--color-primary, #2563eb);
+  color: #fff;
+  border-color: var(--color-primary, #2563eb);
+}
+
+/* Folder rows reuse the file-row layout — only the "open" affordance
+   differs (left side is a clickable button instead of a static div). */
+.drive-folder-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  flex: 1;
+}
+
+.drive-folder-open:hover .file-name {
+  color: var(--color-primary, #2563eb);
+}

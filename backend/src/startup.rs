@@ -47,6 +47,22 @@ pub async fn ensure_email_schema(pool: &PgPool) {
     let statements = [
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT TRUE",
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS display_name TEXT",
+        // Drive folders. The new table + the FK column on files self-heal
+        // existing DBs on backend startup so a deployed instance picks up
+        // the v1 folder feature without a manual psql step.
+        "CREATE TABLE IF NOT EXISTS folders (
+            id BIGSERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            parent_folder_id BIGINT REFERENCES folders(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_folders_user_parent \
+         ON folders(user_id, parent_folder_id)",
+        "ALTER TABLE files ADD COLUMN IF NOT EXISTS folder_id BIGINT \
+         REFERENCES folders(id) ON DELETE CASCADE",
+        "CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id)",
         // Self-heal accounts that connected before `last_sync` was stamped on
         // INSERT — NULL forces the sync worker into a full-mailbox crawl on
         // every tick, which can never finish for large mailboxes. The

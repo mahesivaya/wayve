@@ -330,6 +330,32 @@ CREATE TABLE IF NOT EXISTS files (
 
 ALTER TABLE files ADD COLUMN IF NOT EXISTS file_iv TEXT;
 
+-- Drive folders. One row per user-created folder. `parent_folder_id` is
+-- NULL for folders at the user's drive root; otherwise it points at the
+-- containing folder. Deleting a parent cascades to all children + files
+-- (see the `files.folder_id` FK below).
+CREATE TABLE IF NOT EXISTS folders (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    parent_folder_id BIGINT REFERENCES folders(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_folders_user_parent
+    ON folders(user_id, parent_folder_id);
+
+-- Attach a file to a folder. NULL = at the drive root. ON DELETE CASCADE
+-- removes the file row when its containing folder is deleted; the
+-- on-disk blob is then garbage-collected on next sweep (or left orphan
+-- until a maintenance pass — fine for v1).
+ALTER TABLE files
+    ADD COLUMN IF NOT EXISTS folder_id BIGINT
+    REFERENCES folders(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id);
+
 -- Notes
 CREATE TABLE IF NOT EXISTS notes (
     id SERIAL PRIMARY KEY,
