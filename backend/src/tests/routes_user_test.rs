@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::routes::user::{change_password, get_profile, update_profile};
+    use crate::routes::user::{
+        change_password, current_plan_for_user, get_profile, update_profile,
+    };
     use crate::test_support::{
         delete_user, insert_google_user, insert_local_user, jwt_for, random_email, test_pool,
     };
@@ -280,5 +282,35 @@ mod tests {
             .to_request();
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn current_plan_falls_back_to_basic_user_without_subscription() {
+        let pool = test_pool().await;
+        sqlx::query(
+            r#"
+            INSERT INTO plans
+                (code, name, description, audience, amount_cents,
+                 billing_interval, storage_limit_bytes, seat_limit, features)
+            VALUES
+                ('basic_user', 'Basic User', 'Free personal plan',
+                 'personal', 0, 'month', 1073741824, 1, '{}'::jsonb)
+            ON CONFLICT (code) DO NOTHING
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let email = random_email();
+        let user_id = insert_local_user(&pool, &email, "password").await;
+
+        let plan = current_plan_for_user(&pool, user_id, None).await.unwrap();
+        assert_eq!(plan.code, "basic_user");
+        assert_eq!(plan.audience, "personal");
+        assert_eq!(plan.amount_cents, 0);
+
+        delete_user(&pool, user_id).await;
     }
 }

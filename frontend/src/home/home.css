@@ -549,3 +549,54 @@
     font-size: 17px;
   }
 }
+
+/* Upgrade nudge banner — sits above the dashboard grid on Home for the
+   exact slice of users defined in [Home.tsx](./Home.tsx):
+     - signed in
+     - account_type === "personal"
+     - current_plan.code === "basic_user"
+   Org/platform users and any paid personal tier never see this. */
+.dashboard-upgrade-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: 0 0 14px 0;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-primary-panel, #eef2ff);
+  border: 1px solid var(--color-primary, #4338ca);
+}
+
+.dashboard-upgrade-copy {
+  flex: 1;
+  color: var(--text-h, #1f2937);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.dashboard-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--color-primary, #4338ca);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--color-primary, #4338ca);
+}
+
+.dashboard-upgrade-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--color-primary, #4338ca);
+  background: var(--color-primary, #4338ca);
+  color: #fff;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dashboard-upgrade-btn:hover {
+  filter: brightness(1.05);
+}

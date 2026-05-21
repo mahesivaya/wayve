@@ -500,6 +500,21 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 CREATE INDEX IF NOT EXISTS subscriptions_user_idx ON subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS subscriptions_org_idx ON subscriptions(organization_id);
 
+-- Partial unique indexes: a given user (or organization) can only have one
+-- *active* subscription at a time. Stripe webhooks can race during plan
+-- upgrades and try to insert a new active row before the old one is marked
+-- canceled — without this guard you'd silently end up with two active rows,
+-- and `current_plan_for_user` would non-deterministically pick whichever
+-- has the higher id. The constraint scoped to `WHERE status = 'active'`
+-- still lets the historical canceled / incomplete / past_due rows pile up
+-- normally.
+CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_active_user_uniq
+    ON subscriptions(user_id)
+    WHERE status = 'active' AND user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_active_org_uniq
+    ON subscriptions(organization_id)
+    WHERE status = 'active' AND organization_id IS NOT NULL;
+
 -- Invoices: local projection of Stripe invoices.
 CREATE TABLE IF NOT EXISTS invoices (
     id SERIAL PRIMARY KEY,

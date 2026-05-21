@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::routes::email::get_emails;
+    use crate::routes::email::{get_emails, mark_email_read};
     use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
     use actix_web::{App, http::StatusCode, test, web};
     use serde_json::Value;
@@ -202,6 +202,78 @@ mod tests {
             .execute(&pool)
             .await
             .ok();
+        sqlx::query("DELETE FROM email_accounts WHERE id = $1")
+            .bind(account_id)
+            .execute(&pool)
+            .await
+            .ok();
+        crate::test_support::delete_user(&pool, user_id).await;
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn mark_read_returns_200_when_provider_push_is_unavailable() {
+        let pool = test_pool().await;
+        let email_addr = random_email();
+        let user_id = insert_local_user(&pool, &email_addr, "password").await;
+        let jwt = jwt_for(user_id, &email_addr);
+
+        let account_id: i32 = sqlx::query(
+            "INSERT INTO email_accounts (email, user_id, provider, refresh_token)
+             VALUES ($1, $2, 'google', NULL)
+             RETURNING id",
+        )
+        .bind(&email_addr)
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .get("id");
+
+        let email_id: i32 = sqlx::query(
+            "INSERT INTO emails
+                (gmail_id, account_id, subject, sender, receiver, created_at,
+                 body_encrypted, body_iv, is_read)
+             VALUES ($1, $2, $3, $4, $5, NOW(), '', '', FALSE)
+             RETURNING id",
+        )
+        .bind("provider_push_unavailable")
+        .bind(account_id)
+        .bind("Provider push unavailable")
+        .bind("sender@example.com")
+        .bind(&email_addr)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .get("id");
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(mark_email_read),
+        )
+        .await;
+
+        let req = test::TestRequest::post()
+            .uri(&format!("/emails/{email_id}/read"))
+            .insert_header(("Authorization", format!("Bearer {jwt}")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body: Value = test::read_body_json(resp).await;
+        assert_eq!(body["is_read"], true);
+
+        let is_read: bool = sqlx::query_scalar("SELECT is_read FROM emails WHERE id = $1")
+            .bind(email_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(
+            is_read,
+            "Wayve read state should persist even without provider push scope/token"
+        );
+
         sqlx::query("DELETE FROM email_accounts WHERE id = $1")
             .bind(account_id)
             .execute(&pool)

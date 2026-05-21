@@ -63,6 +63,22 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE files ADD COLUMN IF NOT EXISTS folder_id BIGINT \
          REFERENCES folders(id) ON DELETE CASCADE",
         "CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id)",
+        // Partial unique indexes that prevent duplicate active subscriptions
+        // for the same user or organization. Stripe webhooks can race during
+        // plan upgrades; without this guard `current_plan_for_user` would
+        // non-deterministically pick whichever row has the higher id.
+        // `CREATE UNIQUE INDEX IF NOT EXISTS` is idempotent BUT will fail
+        // outright if the table already contains duplicate active rows —
+        // the existing `warn!` handler in this loop will log that and
+        // continue, so an operator can spot it and clean up the dupes by
+        // canceling the older one. Doing the cleanup automatically here
+        // would risk overwriting actual subscription state.
+        "CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_active_user_uniq \
+         ON subscriptions(user_id) \
+         WHERE status = 'active' AND user_id IS NOT NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_active_org_uniq \
+         ON subscriptions(organization_id) \
+         WHERE status = 'active' AND organization_id IS NOT NULL",
         // Self-heal accounts that connected before `last_sync` was stamped on
         // INSERT — NULL forces the sync worker into a full-mailbox crawl on
         // every tick, which can never finish for large mailboxes. The

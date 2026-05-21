@@ -50,30 +50,25 @@ jobs:
         # if the noise floor gets too high.
         #
         # Ignored advisories. Each one has been triaged; the comment captures
-        # why we can't / shouldn't fix it from our side. Revisit when bumping
-        # reqwest to 0.12 or actix-web to a release that ships modern rustls.
+        # why we can't / shouldn't fix it from our side. The reqwest 0.11 →
+        # 0.12 migration cleared four advisories that used to live here
+        # (RUSTSEC-2025-0134 + RUSTSEC-2026-0098 / 0099 / 0104). What's left
+        # all rides the actix-tls / sqlx-mysql chain and needs an upstream
+        # release to fully clear.
         run: |
           cargo audit --deny warnings \
             --ignore RUSTSEC-2023-0071 \
             --ignore RUSTSEC-2024-0336 \
             --ignore RUSTSEC-2025-0009 \
-            --ignore RUSTSEC-2025-0010 \
-            --ignore RUSTSEC-2025-0134 \
-            --ignore RUSTSEC-2026-0098 \
-            --ignore RUSTSEC-2026-0099 \
-            --ignore RUSTSEC-2026-0104
+            --ignore RUSTSEC-2025-0010
         # RUSTSEC-2023-0071 — rsa 0.9 Marvin timing sidechannel. Reached via
         #   sqlx-mysql's proc macro. We use the postgres driver only, but
         #   sqlx-macros pulls every driver impl unconditionally. No fix exists.
         # RUSTSEC-2024-0336 — rustls 0.20 infinite loop. Pinned by
         #   actix-tls 3.5; awaits an actix-web release with newer rustls.
         # RUSTSEC-2025-0009 / 0010 — ring 0.16 panic / unmaintained. Same
-        #   transitive chain as above (actix-tls + reqwest 0.11).
-        # RUSTSEC-2025-0134 — rustls-pemfile 1.0 unmaintained. Pulled in by
-        #   reqwest 0.11; gone after the reqwest 0.12 migration.
-        # RUSTSEC-2026-0098 / 0099 / 0104 — rustls-webpki 0.101 (name
-        #   constraints + revocation list parsing). Same fix: reqwest 0.12
-        #   (which brings rustls 0.23 + rustls-webpki 0.103).
+        #   transitive chain as above (actix-tls). Cleared from reqwest's
+        #   side after the 0.12 bump.
 
   # 📦 Frontend supply chain — npm audit. The --audit-level=high gate matches
   # what most enterprises consider blocking; moderate findings are tracked but
@@ -122,90 +117,80 @@ jobs:
       - name: gitleaks detect
         run: gitleaks detect --source . --no-banner --redact --verbose
 
-  # ⚠️ TEMPORARILY DISABLED — both Trivy jobs are commented out below until
-  # the `reqwest 0.11` → `reqwest 0.12` migration lands. Without that bump
-  # the fs scan finds three unfixable rustls-webpki advisories
-  # (RUSTSEC-2026-0098 / 0099 / 0104, all HIGH) and fails the build.
-  # `cargo audit` still runs above and gates on the same advisory IDs via
-  # its --ignore list, so we don't lose the Rust supply-chain signal in
-  # the meantime; what we lose is OS-layer CVE detection on the container
-  # images (the trivy-image job). Re-enable both blocks below once
-  # reqwest 0.12 is merged.
-
   # 🐳 Container & filesystem CVE scan — Trivy. The fs scan picks up the Rust
   # and npm lockfiles AND any vulnerable system packages referenced in the
   # Dockerfiles. We gate on HIGH/CRITICAL and ignore unfixed advisories
   # (there's nothing to patch).
-  # trivy-fs:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Trivy filesystem scan
-  #       uses: aquasecurity/trivy-action@v0.36.0
-  #       with:
-  #         scan-type: fs
-  #         scan-ref: .
-  #         severity: HIGH,CRITICAL
-  #         ignore-unfixed: true
-  #         exit-code: "1"
-  #         format: sarif
-  #         output: trivy-fs.sarif
-  #
-  #     - name: Upload SARIF to GitHub code scanning
-  #       if: always()
-  #       uses: github/codeql-action/upload-sarif@v3
-  #       with:
-  #         sarif_file: trivy-fs.sarif
-  #         category: trivy-fs
+  trivy-fs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: sarif
+          output: trivy-fs.sarif
+
+      - name: Upload SARIF to GitHub code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
 
   # 🐳 Image scan — build each service image once and let Trivy inspect the
   # OS layer for CVEs the fs scan can't see. Runs after fs to fail fast on the
   # cheaper check.
-  # trivy-image:
-  #   runs-on: ubuntu-latest
-  #   needs: trivy-fs
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       include:
-  #         - name: backend
-  #           context: backend
-  #           dockerfile: backend/Dockerfile
-  #         - name: frontend
-  #           context: frontend
-  #           dockerfile: frontend/Dockerfile.prod
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - uses: docker/setup-buildx-action@v3
-  #
-  #     - name: Build ${{ matrix.name }} image
-  #       uses: docker/build-push-action@v6
-  #       with:
-  #         context: ${{ matrix.context }}
-  #         file: ${{ matrix.dockerfile }}
-  #         push: false
-  #         load: true
-  #         tags: rwayve-${{ matrix.name }}:scan
-  #         # Buildx layer cache via GitHub Actions cache — keeps image scans
-  #         # under a couple of minutes on warm runs.
-  #         cache-from: type=gha,scope=${{ matrix.name }}
-  #         cache-to: type=gha,scope=${{ matrix.name }},mode=max
-  #
-  #     - name: Trivy image scan (${{ matrix.name }})
-  #       uses: aquasecurity/trivy-action@v0.36.0
-  #       with:
-  #         image-ref: rwayve-${{ matrix.name }}:scan
-  #         severity: HIGH,CRITICAL
-  #         ignore-unfixed: true
-  #         exit-code: "1"
-  #         format: sarif
-  #         output: trivy-image-${{ matrix.name }}.sarif
-  #
-  #     - name: Upload SARIF to GitHub code scanning
-  #       if: always()
-  #       uses: github/codeql-action/upload-sarif@v3
-  #       with:
-  #         sarif_file: trivy-image-${{ matrix.name }}.sarif
-  #         category: trivy-image-${{ matrix.name }}
+  trivy-image:
+    runs-on: ubuntu-latest
+    needs: trivy-fs
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: backend
+            dockerfile: backend/Dockerfile
+          - name: frontend
+            context: frontend
+            dockerfile: frontend/Dockerfile.prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: rwayve-${{ matrix.name }}:scan
+          # Buildx layer cache via GitHub Actions cache — keeps image scans
+          # under a couple of minutes on warm runs.
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+      - name: Trivy image scan (${{ matrix.name }})
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: rwayve-${{ matrix.name }}:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: sarif
+          output: trivy-image-${{ matrix.name }}.sarif
+
+      - name: Upload SARIF to GitHub code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image-${{ matrix.name }}.sarif
+          category: trivy-image-${{ matrix.name }}
