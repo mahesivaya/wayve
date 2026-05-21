@@ -1,0 +1,55 @@
+# gitleaks config — consumed by .github/workflows/security.yml.
+#
+# `useDefault = true` keeps the upstream rule pack (Stripe, GitHub, AWS,
+# Google API key, Slack token, Azure, generic-api-key, …). Everything below
+# is a path allowlist for known noise and triaged-and-rotated historical
+# credentials — gitleaks scans full history, so dead credentials in past
+# commits still trip the scan unless explicitly allowlisted.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Wayve repository allowlist"
+
+paths = [
+  # Personal dev notes / scratchpad. The historical revisions of these
+  # files contained live Zoom / Google / Outlook credentials that were
+  # rotated on 2026-05-21 (see the "rotated 2026-05-21" markers in the
+  # files themselves). The rotated keys are dead, so the historical
+  # exposure is no longer actionable.
+  #
+  # Trade-off: going forward we lose secret-scanning coverage on
+  # docs in this directory. The policy is that credentials never get
+  # committed there — use .env.secrets and reference it from docs by
+  # name only.
+  '''^documentation/''',
+
+  # Lockfiles. Package and crate hashes look like generic API keys to
+  # the upstream generic-api-key regex.
+  '''(^|/)Cargo\.lock$''',
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)yarn\.lock$''',
+
+  # Vendored / build artifacts. These are gitignored in normal operation;
+  # the allowlist is defense in depth in case they get committed by
+  # accident, so the scanner doesn't sift through megabytes of vendor code.
+  '''(^|/)node_modules/''',
+  '''(^|/)target/''',
+  '''(^|/)dist/''',
+  '''(^|/)build/''',
+
+  # Frontend has compiled .js siblings of every .tsx file checked in
+  # (see CLAUDE.md "Stale .js siblings"). The bundled output occasionally
+  # contains constants the generic regex flags.
+  '''^frontend/src/.*\.js$''',
+
+  # CI workflow files generate throwaway env files inside heredocs
+  # (`JWT_SECRET=ci-secret`, `AES_KEY=0123...`). They're CI-only stubs,
+  # never used outside the action runtime.
+  '''^\.github/workflows/.+\.ya?ml$''',
+
+  # Playwright artifacts uploaded by .github/workflows/e2e.yml. The
+  # captured network logs sometimes include test-account tokens.
+  '''^e2e/(test-results|playwright-report)/''',
+]

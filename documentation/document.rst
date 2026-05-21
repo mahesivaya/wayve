@@ -322,10 +322,10 @@ After that, click any email — you'll get either an instant decrypt (if the wor
 
 
 Zoom:
-Account ID: JG1En7IbQiqv3MdugcE8ww
-Client ID: 2AA4vlpNS4Cshw2huqUTQ
-Client Secret: 0pzG2mxPa3ydbgmZGmKK1rNL1YtxuiK1
-Secret Token: AxcmVknsROGL4A8l1kEegw
+Account ID: <see secrets vault / Zoom marketplace>
+Client ID: <see secrets vault / Zoom marketplace>
+Client Secret: <rotated 2026-05-21; see .env.secrets>
+Secret Token: <rotated 2026-05-21; see .env.secrets>
 
 
 
@@ -474,7 +474,7 @@ npm install lucide-react
 
 Google gemini API key:
 API Key
-AIzaSyAxIJzNyPssV8czY34WbJCvvv3OJeNlEqI
+<rotated-google-api-key-see-secrets-vault>
 Name
 wayve_api_key
 Project name
@@ -484,7 +484,7 @@ Project number
 
 curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent" \
   -H 'Content-Type: application/json' \
-  -H 'X-goog-api-key: AIzaSyAxIJzNyPssV8czY34WbJCvvv3OJeNlEqI' \
+  -H 'X-goog-api-key: <rotated-google-api-key-see-secrets-vault>' \
   -X POST \
   -d '{
     "contents": [
@@ -583,7 +583,7 @@ docker buildx build \
 
 
 Email:maheshiv1999@gmail.com
-App password: cbtq vrls popq eowj
+App password: <revoked 2026-05-21; generate a fresh one at myaccount.google.com/apppasswords>
 
 
 
@@ -925,13 +925,13 @@ docker compose -f infra/docker-compose.dev.yml --env-file infra/.env.development
 
 platform_admin:
   email: maheshiv199@gmail.com
-  password: mahesh
+  password: <local-dev-only>
 organization_admin:
   email: maheshwayve@gmail.com
-  password: mahesh
+  password: <local-dev-only>
 personal:
   email: maheshpy85@gmail.com
-  password: mahesh
+  password: <local-dev-only>
 
 update users set account_type='platform_admin' where email='maheshiv199@gmail.com';
 update users set account_type='organization_admin' where email='maheshwayve@gmail.com';
