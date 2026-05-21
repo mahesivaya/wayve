@@ -120,3 +120,31 @@
     background: #fecaca;
   }
 }
+
+/* Inline action row for the create-organization form. Stacks the Create
+   button next to a quieter Cancel that collapses the form. */
+.platform-admin-form-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.platform-admin-cancel-btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-border, #d1d5db);
+  background: transparent;
+  color: var(--text-h, #374151);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.platform-admin-cancel-btn:hover:not(:disabled) {
+  background: var(--color-surface-muted, #f3f4f6);
+}
+
+.platform-admin-cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

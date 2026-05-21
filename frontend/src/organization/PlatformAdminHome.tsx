@@ -27,6 +27,10 @@ export default function PlatformAdminHome() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  // Collapsed by default — the form takes a lot of vertical space when most
+  // platform admins are landing here to *browse* existing orgs, not create
+  // new ones. The button reveals the form on demand.
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   // API keys panel
   const [keyOrgId, setKeyOrgId] = useState<number | null>(null);
@@ -86,6 +90,7 @@ export default function PlatformAdminHome() {
       setOrganizationName("");
       setAdminHandle("");
       setAdminPassword("");
+      setShowCreateForm(false);
       setSuccess(
         `Created organization ${created.name}` +
           (created.admin ? ` with admin ${created.admin.email}` : "")
@@ -176,53 +181,84 @@ export default function PlatformAdminHome() {
             <h2>Create organization</h2>
             <p>Add a new organization and provision its primary administrator account.</p>
           </div>
+          {!showCreateForm && (
+            <button
+              type="button"
+              className="u-btn-primary"
+              onClick={() => {
+                setError("");
+                setSuccess("");
+                setShowCreateForm(true);
+              }}
+            >
+              + Create new organization
+            </button>
+          )}
         </div>
 
-        <form className="platform-admin-form u-form-stack" onSubmit={createOrganization}>
-          <label className="u-form-label">
-            <span className="u-form-label-text">Organization name</span>
-            <input
-              className="u-form-control"
-              value={organizationName}
-              onChange={(event) => setOrganizationName(event.target.value)}
-              placeholder="Enter organization name"
-              required
-            />
-          </label>
-          <label className="u-form-label">
-            <span className="u-form-label-text">Organization admin handle</span>
-            <input
-              className="u-form-control"
-              value={adminHandle}
-              onChange={(event) => setAdminHandle(event.target.value)}
-              placeholder="e.g. john"
-              required
-            />
-          </label>
-          {adminHandle && organizationName && (
-            <p className="platform-admin-hint">
-              Login email will be{" "}
-              <strong>
-                {slugify(adminHandle)}@{slugify(organizationName)}.com
-              </strong>
-            </p>
-          )}
-          <label className="u-form-label">
-            <span className="u-form-label-text">Organization admin password</span>
-            <input
-              className="u-form-control"
-              type="password"
-              value={adminPassword}
-              onChange={(event) => setAdminPassword(event.target.value)}
-              placeholder="At least 6 characters"
-              minLength={6}
-              required
-            />
-          </label>
-          <button className="u-btn-primary" type="submit" disabled={creating}>
-            {creating ? "Creating..." : "Create Organization"}
-          </button>
-        </form>
+        {showCreateForm && (
+          <form className="platform-admin-form u-form-stack" onSubmit={createOrganization}>
+            <label className="u-form-label">
+              <span className="u-form-label-text">Organization name</span>
+              <input
+                className="u-form-control"
+                value={organizationName}
+                onChange={(event) => setOrganizationName(event.target.value)}
+                placeholder="Enter organization name"
+                required
+              />
+            </label>
+            <label className="u-form-label">
+              <span className="u-form-label-text">Organization admin handle</span>
+              <input
+                className="u-form-control"
+                value={adminHandle}
+                onChange={(event) => setAdminHandle(event.target.value)}
+                placeholder="e.g. john"
+                required
+              />
+            </label>
+            {adminHandle && organizationName && (
+              <p className="platform-admin-hint">
+                Login email will be{" "}
+                <strong>
+                  {slugify(adminHandle)}@{slugify(organizationName)}.com
+                </strong>
+              </p>
+            )}
+            <label className="u-form-label">
+              <span className="u-form-label-text">Organization admin password</span>
+              <input
+                className="u-form-control"
+                type="password"
+                value={adminPassword}
+                onChange={(event) => setAdminPassword(event.target.value)}
+                placeholder="At least 6 characters"
+                minLength={6}
+                required
+              />
+            </label>
+            <div className="platform-admin-form-actions">
+              <button className="u-btn-primary" type="submit" disabled={creating}>
+                {creating ? "Creating..." : "Create Organization"}
+              </button>
+              <button
+                type="button"
+                className="platform-admin-cancel-btn"
+                onClick={() => {
+                  setShowCreateForm(false);
+                  setOrganizationName("");
+                  setAdminHandle("");
+                  setAdminPassword("");
+                  setError("");
+                }}
+                disabled={creating}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
 
         {error && <div className="platform-admin-error">{error}</div>}
         {success && <div className="platform-admin-success">{success}</div>}
