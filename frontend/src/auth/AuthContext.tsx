@@ -306,7 +306,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearAuthToken();
     setUser(null);
     logoutRequest().catch((err) => log.error("logout request failed", err));
-    window.location.href = "/login";
+    window.location.href = "/";
   };
 
   return (

@@ -71,7 +71,7 @@ export default function ProfileMenu() {
             onClick={() => {
               setMenuOpen(false);
               logout();
-              navigate("/login");
+              navigate("/");
             }}
           >
             <span className="profile-dropdown-icon">⏻</span>

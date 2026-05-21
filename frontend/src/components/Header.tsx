@@ -12,7 +12,7 @@ export default function Header() {
           <span>{user.email}</span>
           <button onClick={() => {
     logout();
-    navigate("/login");
+    navigate("/");
   }}>Logout</button>
         </>
       ) : (
