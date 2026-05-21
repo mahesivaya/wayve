@@ -1,7 +1,7 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { canAccessApiKeyAdmin } from "../auth/permissions";
-import { Suspense, useState, useCallback } from "react";
+import { Suspense, useState, useCallback, type ReactNode } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
@@ -19,7 +19,13 @@ function appKeyFromPath(pathname: string): AppKey {
   return match?.key ?? "home";
 }
 
-export default function Layout() {
+// `children` is optional. When omitted (the default usage via
+// `<Route element={<Layout />}>`), the matched child route renders through
+// `<Outlet />`. When provided, callers can wrap arbitrary content in the
+// same chrome — used by the Pricing page which lives outside the routing
+// tree's ProtectedRoute branch but still wants the standard header/sidebar
+// for signed-in visitors.
+export default function Layout({ children }: { children?: ReactNode } = {}) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -209,7 +215,7 @@ export default function Layout() {
             className={`split-pane left ${splitTarget === "left" ? "active-target" : ""}`}
             onMouseDown={() => setSplitTarget("left")}
           >
-            <Outlet />
+            {children ?? <Outlet />}
           </div>
 
           {middleView && (

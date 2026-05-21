@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listPlans, type Plan } from "../api/billing";
 import { useAuth } from "../auth/useAuth";
+import Layout from "../components/Layout";
 import "./pricing.css";
 
 const BYTES_IN_GB = 1024 * 1024 * 1024;
@@ -381,8 +382,15 @@ function AuthenticatedPricing() {
 // early-return inside one) keeps each component's hook order stable —
 // `AuthenticatedPricing` runs `useEffect`/`useState`/`useMemo` only when
 // it's actually mounted, and the unauthenticated path skips the API
-// fetch entirely.
+// fetch entirely. The auth view is wrapped in `<Layout>` so signed-in
+// users see the standard header + sidebar (this route lives outside the
+// ProtectedRoute branch so the unauth path stays public).
 export default function Pricing() {
   const { user } = useAuth();
-  return user ? <AuthenticatedPricing /> : <PublicPricing />;
+  if (!user) return <PublicPricing />;
+  return (
+    <Layout>
+      <AuthenticatedPricing />
+    </Layout>
+  );
 }
