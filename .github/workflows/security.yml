@@ -48,7 +48,32 @@ jobs:
         # --deny warnings turns informational advisories into failures too —
         # appropriate for a security-sensitive service. Drop to --deny vulnerabilities
         # if the noise floor gets too high.
-        run: cargo audit --deny warnings
+        #
+        # Ignored advisories. Each one has been triaged; the comment captures
+        # why we can't / shouldn't fix it from our side. Revisit when bumping
+        # reqwest to 0.12 or actix-web to a release that ships modern rustls.
+        run: |
+          cargo audit --deny warnings \
+            --ignore RUSTSEC-2023-0071 \
+            --ignore RUSTSEC-2024-0336 \
+            --ignore RUSTSEC-2025-0009 \
+            --ignore RUSTSEC-2025-0010 \
+            --ignore RUSTSEC-2025-0134 \
+            --ignore RUSTSEC-2026-0098 \
+            --ignore RUSTSEC-2026-0099 \
+            --ignore RUSTSEC-2026-0104
+        # RUSTSEC-2023-0071 — rsa 0.9 Marvin timing sidechannel. Reached via
+        #   sqlx-mysql's proc macro. We use the postgres driver only, but
+        #   sqlx-macros pulls every driver impl unconditionally. No fix exists.
+        # RUSTSEC-2024-0336 — rustls 0.20 infinite loop. Pinned by
+        #   actix-tls 3.5; awaits an actix-web release with newer rustls.
+        # RUSTSEC-2025-0009 / 0010 — ring 0.16 panic / unmaintained. Same
+        #   transitive chain as above (actix-tls + reqwest 0.11).
+        # RUSTSEC-2025-0134 — rustls-pemfile 1.0 unmaintained. Pulled in by
+        #   reqwest 0.11; gone after the reqwest 0.12 migration.
+        # RUSTSEC-2026-0098 / 0099 / 0104 — rustls-webpki 0.101 (name
+        #   constraints + revocation list parsing). Same fix: reqwest 0.12
+        #   (which brings rustls 0.23 + rustls-webpki 0.103).
 
   # 📦 Frontend supply chain — npm audit. The --audit-level=high gate matches
   # what most enterprises consider blocking; moderate findings are tracked but
