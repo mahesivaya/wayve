@@ -12,6 +12,18 @@ useDefault = true
 [allowlist]
 description = "Wayve repository allowlist"
 
+# Known-fake placeholder strings used across test fixtures, CI workflow
+# heredocs, and docs. Surgical allowlist — a real key accidentally pasted
+# anywhere will still trip the scan.
+regexes = [
+  # Sequential AES test key (0x00 → 0x1F as hex). Used in
+  # backend/src/tests/*.rs and historically in documentation/*.rst.
+  '''000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f''',
+  # 32-char fake AES key used in security_encryption_test.rs and the CI
+  # workflow heredocs (smoke.yml, e2e.yml, stress.yml).
+  '''0123456789abcdef0123456789abcdef''',
+]
+
 paths = [
   # Personal dev notes / scratchpad. The historical revisions of these
   # files contained live Zoom / Google / Outlook credentials that were
@@ -24,6 +36,17 @@ paths = [
   # committed there — use .env.secrets and reference it from docs by
   # name only.
   '''^documentation/''',
+
+  # The same notes lived at the repo root in early commits before being
+  # moved into documentation/ (see commits f02b5fe, bf74102, e8c42a0).
+  # gitleaks scans history, so it still flags the old paths. Any .rst
+  # file is by definition one of these notes — this project doesn't use
+  # reStructuredText for code, only for personal docs.
+  '''\.rst$''',
+
+  # Likewise, a handful of historical root-level markdown notes carried
+  # credentials at one point (deleted/moved since, but still in history).
+  '''(^|/)(claude|ENVIRONMENTS|ec2_prod_deployment)\.md$''',
 
   # Lockfiles. Package and crate hashes look like generic API keys to
   # the upstream generic-api-key regex.
