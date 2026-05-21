@@ -106,12 +106,12 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             PRIMARY KEY (organization_id, user_id),
             CONSTRAINT organization_members_role_chk CHECK (
-                role IN ('owner', 'admin', 'developer', 'security', 'support', 'member')
+                role IN ('owner', 'super_admin', 'admin', 'security', 'billing', 'developer', 'support', 'member', 'guest')
             )
         )",
         "ALTER TABLE organization_members DROP CONSTRAINT IF EXISTS organization_members_role_chk",
         "ALTER TABLE organization_members ADD CONSTRAINT organization_members_role_chk CHECK (
-            role IN ('owner', 'admin', 'developer', 'security', 'support', 'member')
+            role IN ('owner', 'super_admin', 'admin', 'security', 'billing', 'developer', 'support', 'member', 'guest')
         )",
         "INSERT INTO organization_members (organization_id, user_id, role)
          SELECT organization_id, id,
@@ -128,12 +128,12 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             CONSTRAINT platform_members_role_chk CHECK (
-                role IN ('owner', 'admin', 'developer', 'security', 'support', 'member')
+                role IN ('owner', 'super_admin', 'admin', 'security', 'billing', 'developer', 'support', 'member', 'guest')
             )
         )",
         "ALTER TABLE platform_members DROP CONSTRAINT IF EXISTS platform_members_role_chk",
         "ALTER TABLE platform_members ADD CONSTRAINT platform_members_role_chk CHECK (
-            role IN ('owner', 'admin', 'developer', 'security', 'support', 'member')
+            role IN ('owner', 'super_admin', 'admin', 'security', 'billing', 'developer', 'support', 'member', 'guest')
         )",
         "INSERT INTO platform_members (user_id, role)
          SELECT id, 'owner'

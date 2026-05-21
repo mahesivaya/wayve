@@ -37,7 +37,13 @@ http {
         ssl_session_timeout 1d;
 
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ${CSP_CONNECT_SRC} https: wss:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+        # Stripe needs four allowances to render the Elements card form and
+        # complete 3D Secure: load js.stripe.com (script-src), embed its
+        # iframes (frame-src — Elements + hooks.stripe.com for 3DS), let
+        # those iframes inject inline styles (style-src 'unsafe-inline'),
+        # and call api.stripe.com (connect-src, already covered by the
+        # blanket `https:` fallback below).
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ${CSP_CONNECT_SRC} https: wss:; frame-src https://js.stripe.com https://hooks.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;

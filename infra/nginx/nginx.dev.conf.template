@@ -10,7 +10,10 @@ http {
         listen 80;
         server_name ${NGINX_HOST};
 
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ${CSP_CONNECT_SRC} https: ws: wss:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+        # Stripe Elements requires js.stripe.com (script + frame) and
+        # hooks.stripe.com (frame, for 3D Secure). connect-src already
+        # permits api.stripe.com via the blanket `https:` fallback.
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ${CSP_CONNECT_SRC} https: ws: wss:; frame-src https://js.stripe.com https://hooks.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
 
         location /api/ {
             proxy_pass http://backend:8080;
