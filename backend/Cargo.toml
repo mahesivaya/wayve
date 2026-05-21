@@ -67,6 +67,10 @@ mimalloc = { version = "0.1", default-features = false }
 # to a provider in email::provider_lookup. tokio-runtime feature mirrors the
 # rest of the IO stack.
 hickory-resolver = { version = "0.24", default-features = false, features = ["tokio-runtime", "system-config"] }
+# Lets `MailProviderClient` declare async methods through `dyn Trait` so the
+# registry can hand out `Arc<dyn MailProviderClient>` per provider. Already in
+# the transitive graph (Actix uses it); pinned here so we're explicit.
+async-trait = "0.1"
 
 [dev-dependencies]
 serial_test = "3"

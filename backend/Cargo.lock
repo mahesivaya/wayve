@@ -2905,6 +2905,7 @@ dependencies = [
  "actix-web-actors",
  "aes-gcm",
  "anyhow",
+ "async-trait",
  "awc",
  "base64 0.21.7",
  "bcrypt",

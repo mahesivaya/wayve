@@ -1,5 +1,5 @@
 use crate::email::account::load_user_email_accounts_for_older_sync;
-use crate::email::provider::{MailProviderClients, refresh_and_persist_email_token};
+use crate::email::provider::refresh_and_persist_email_token;
 use futures::future::{BoxFuture, FutureExt};
 use futures::stream::{FuturesUnordered, StreamExt};
 use sqlx::PgPool;
@@ -18,8 +18,6 @@ pub async fn sync_older_page(
         return Ok(());
     }
 
-    let clients =
-        MailProviderClients::for_providers(accounts.iter().map(|account| account.provider));
     let mut sync_tasks: FuturesUnordered<BoxFuture<'static, anyhow::Result<()>>> =
         FuturesUnordered::new();
 
@@ -28,7 +26,6 @@ pub async fn sync_older_page(
             continue;
         };
         let pool = pool.clone();
-        let clients = clients.clone();
         sync_tasks.push(
             async move {
                 let token = refresh_and_persist_email_token(
@@ -36,7 +33,6 @@ pub async fn sync_older_page(
                     account.id,
                     account.provider,
                     &refresh_token,
-                    clients,
                 )
                 .await?;
 

@@ -2,7 +2,7 @@ use crate::prelude::*;
 
 use crate::email::account::load_syncable_email_accounts;
 use crate::email::oauth::HTTP_CLIENT;
-use crate::email::provider::{MailProviderClients, refresh_and_persist_email_token};
+use crate::email::provider::refresh_and_persist_email_token;
 
 use serde_json::Value;
 use tracing::{debug, error, info, instrument, warn};
@@ -56,14 +56,10 @@ pub async fn sync_all(pool: &PgPool) -> Result<()> {
 
     info!(target: "worker", accounts = accounts.len(), "sync_all start");
 
-    let clients =
-        MailProviderClients::for_providers(accounts.iter().map(|account| account.provider));
-
     let mut handles = vec![];
 
     for account in accounts {
         let pool = pool.clone();
-        let clients = clients.clone();
         handles.push(tokio::spawn(async move {
             let Some(refresh_token) = account.usable_refresh_token() else {
                 warn!(target: "worker", account_id = account.id, "email account skipped: missing refresh token");
@@ -75,7 +71,6 @@ pub async fn sync_all(pool: &PgPool) -> Result<()> {
                 account.id,
                 account.provider,
                 refresh_token,
-                clients,
             )
             .await
             {

@@ -1,7 +1,7 @@
 use crate::cache::Cache;
 use crate::email::oauth::HTTP_CLIENT;
 use crate::email::outlook::{OutlookAttachmentRef, download_outlook_attachment};
-use crate::email::provider::{MailProvider, MailProviderClients, refresh_and_persist_email_token};
+use crate::email::provider::{MailProvider, refresh_and_persist_email_token};
 use crate::email::sync_older::sync_older_page;
 use crate::prelude::*;
 use crate::security::jwt::get_user_id_from_request;
@@ -221,7 +221,6 @@ pub async fn delete_email(
         account_id,
         provider,
         refresh_token,
-        MailProviderClients::for_provider(provider),
     )
     .await
     {
@@ -328,9 +327,14 @@ pub async fn get_all_email_attachments(req: HttpRequest, pool: web::Data<PgPool>
 // Mark an email as read for the authenticated user. The frontend already
 // flips `is_read` optimistically when the user opens an email, but without
 // this endpoint the change isn't persisted — refreshing the inbox showed
-// the row as unread again. We update Wayve's own `emails.is_read`; pushing
-// the state to Gmail/Outlook so the user's other clients reflect it is a
-// follow-up (needs OAuth token refresh + provider API call per row).
+// the row as unread again. We update Wayve's own `emails.is_read` first
+// (canonical, drives the UI), then spawn a fire-and-forget task that
+// refreshes the provider OAuth token and pushes the read state to Gmail
+// (remove UNREAD label) / Outlook (PATCH isRead=true). Provider push
+// failures are logged but don't fail the request — the worst case is
+// Wayve and the provider's web UI showing different states until the next
+// sync reconciles, which is strictly better than a refresh wiping the
+// local update.
 #[actix_web::post("/emails/{id}/read")]
 #[instrument(target = "http", skip(req, pool, path))]
 pub async fn mark_email_read(
@@ -342,8 +346,10 @@ pub async fn mark_email_read(
     let email_id = path.id;
 
     // Tenant boundary: a user may only mark their *own* emails read. The join
-    // through email_accounts.user_id is the authorization gate.
-    let result = sqlx::query(
+    // through email_accounts.user_id is the authorization gate. RETURNING
+    // lets us pick up the provider message id + refresh token in the same
+    // query so we don't need a second round-trip for the push step.
+    let updated = sqlx::query(
         r#"
         UPDATE emails AS e
            SET is_read = TRUE
@@ -352,34 +358,119 @@ pub async fn mark_email_read(
            AND e.id = $1
            AND a.user_id = $2
            AND e.is_read = FALSE
+        RETURNING e.gmail_id, a.id AS account_id, a.refresh_token, a.provider
         "#,
     )
     .bind(email_id)
     .bind(user_id)
-    .execute(pool.get_ref())
+    .fetch_optional(pool.get_ref())
     .await?;
 
-    // rows_affected == 0 covers two cases that we don't distinguish here:
-    //   - email doesn't exist / isn't owned by this user (treat as 404)
-    //   - email was already marked read (treat as no-op success)
-    // We can't tell them apart without a second query, so probe ownership.
-    if result.rows_affected() == 0 {
-        let owns: Option<i32> = sqlx::query_scalar(
-            "SELECT e.id FROM emails e JOIN email_accounts a ON e.account_id = a.id \
-             WHERE e.id = $1 AND a.user_id = $2",
-        )
-        .bind(email_id)
-        .bind(user_id)
-        .fetch_optional(pool.get_ref())
-        .await?;
-        if owns.is_none() {
-            return Ok(
-                HttpResponse::NotFound().json(serde_json::json!({ "error": "Email not found" }))
+    if let Some(row) = updated {
+        let provider_message_id: String = row.get("gmail_id");
+        let account_id: i32 = row.get("account_id");
+        let provider = row
+            .try_get::<String, _>("provider")
+            .map(|value| MailProvider::from_db(&value))
+            .unwrap_or(MailProvider::Google);
+        let refresh_token: Option<String> = row.get("refresh_token");
+
+        if let Some(refresh_token) = refresh_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+        {
+            // Detach from the request — the provider call can take a few
+            // hundred ms (token refresh + HTTPS round-trip) and the client
+            // already considers this done.
+            let pool_clone = pool.get_ref().clone();
+            tokio::spawn(async move {
+                push_read_state_to_provider(
+                    &pool_clone,
+                    user_id,
+                    account_id,
+                    provider,
+                    &refresh_token,
+                    &provider_message_id,
+                )
+                .await;
+            });
+        } else {
+            warn!(
+                target: "gmail",
+                user_id,
+                account_id,
+                provider = provider.as_db(),
+                email_id,
+                "mark-read: no refresh token; provider push skipped"
             );
         }
+
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": true })));
+    }
+
+    // RETURNING gave no row. Two possibilities:
+    //   - email doesn't exist / isn't owned by this user (treat as 404)
+    //   - email was already marked read (treat as no-op success — no
+    //     provider push needed, the state is already in sync)
+    let owns: Option<i32> = sqlx::query_scalar(
+        "SELECT e.id FROM emails e JOIN email_accounts a ON e.account_id = a.id \
+         WHERE e.id = $1 AND a.user_id = $2",
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    if owns.is_none() {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({ "error": "Email not found" })));
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": true })))
+}
+
+#[instrument(target = "gmail", skip(pool, refresh_token), fields(user_id, account_id, provider = provider.as_db()))]
+#[allow(clippy::too_many_arguments)]
+async fn push_read_state_to_provider(
+    pool: &PgPool,
+    user_id: i32,
+    account_id: i32,
+    provider: MailProvider,
+    refresh_token: &str,
+    provider_message_id: &str,
+) {
+    let token = match refresh_and_persist_email_token(
+        pool,
+        account_id,
+        provider,
+        refresh_token,
+    )
+    .await
+    {
+        Ok(token) => token.access_token,
+        Err(e) => {
+            warn!(
+                target: "gmail",
+                user_id,
+                account_id,
+                provider = provider.as_db(),
+                error = ?e,
+                "mark-read token refresh failed; provider push skipped"
+            );
+            return;
+        }
+    };
+
+    if let Err(e) = provider.mark_read(&token, provider_message_id).await {
+        warn!(
+            target: "gmail",
+            user_id,
+            account_id,
+            provider = provider.as_db(),
+            error = ?e,
+            "mark-read provider push failed; Wayve DB state stands"
+        );
+    }
 }
 
 #[get("/emails/{id}/attachments")]
@@ -482,7 +573,6 @@ pub async fn download_email_attachment(
         account_id,
         provider,
         &refresh_token,
-        MailProviderClients::for_provider(provider),
     )
     .await
     {

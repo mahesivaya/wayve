@@ -3,7 +3,7 @@ use crate::prelude::*;
 use crate::email::account::load_email_account_for_user;
 use crate::email::oauth::HTTP_CLIENT;
 use crate::email::outlook::send_outlook_mail;
-use crate::email::provider::{MailProviderClients, refresh_and_persist_email_token};
+use crate::email::provider::refresh_and_persist_email_token;
 use crate::models::email_request::SendEmailRequest;
 use crate::security::jwt::get_user_id_from_request;
 use actix_web::HttpResponse;
@@ -49,7 +49,6 @@ pub async fn send(
         account.id,
         account.provider,
         refresh_token,
-        MailProviderClients::for_provider(account.provider),
     )
     .await
     {
