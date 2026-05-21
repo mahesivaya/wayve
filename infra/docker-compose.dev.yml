@@ -97,6 +97,13 @@ services:
     # No `profiles:` gate — the worker is the only thing that pulls new mail
     # from Gmail/Outlook, so a dev stack without it shows stale inboxes. Prod
     # runs this as its own service in docker-compose.prod.yml.
+    # `build:` is declared so `docker compose up` can produce the image on a
+    # host that doesn't already have it locally; otherwise compose falls
+    # through to a Docker Hub pull of `rwayve-backend`, which doesn't exist
+    # there. Compose detects the identical build and reuses cached layers.
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
     image: rwayve-backend:dev
     container_name: rwayve_email_sync_worker_dev
     hostname: rwayve_email_sync_worker_dev
@@ -120,6 +127,10 @@ services:
     # Pairs with email_sync_worker: that one fetches headers; this one fetches
     # message bodies for rows with body_encrypted = ''. Both run by default
     # in dev so a fresh `docker compose up` produces a fully working inbox.
+    # `build:` mirrors email_sync_worker — see comment there.
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
     image: rwayve-backend:dev
     container_name: rwayve_email_body_worker_dev
     hostname: rwayve_email_body_worker_dev

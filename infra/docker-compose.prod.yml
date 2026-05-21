@@ -71,6 +71,14 @@ services:
 
   email_sync_worker:
     # Same image as backend (built once); RWAYVE_ROLE selects worker behaviour.
+    # `build:` is declared so `docker compose up` can produce the image on a
+    # host that doesn't already have it — without this, compose falls through
+    # to a Docker Hub pull of a non-existent `rwayve-backend` repository.
+    # Compose detects the identical build context and reuses cached layers, so
+    # no extra compile time. Same applies to email_body_worker below.
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
     image: rwayve-backend:prod
     container_name: rwayve_email_sync_worker_prod
     hostname: rwayve_email_sync_worker_prod
@@ -91,6 +99,10 @@ services:
 
   email_body_worker:
     # Same image as backend (built once); RWAYVE_ROLE selects worker behaviour.
+    # `build:` mirrors email_sync_worker above — see comment there.
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
     image: rwayve-backend:prod
     container_name: rwayve_email_body_worker_prod
     hostname: rwayve_email_body_worker_prod
