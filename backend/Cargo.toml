@@ -60,13 +60,13 @@ log = "0.4.29"
 actix-files = "0.6.10"
 dotenvy = "0.15.7"
 redis = { version = "0.25", features = ["tokio-comp"] }
-lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls-tls", "builder"] }
+lettre = { version = "0.11.22", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls-tls", "builder"] }
 moka = { version = "0.12", features = ["future"] }
 mimalloc = { version = "0.1", default-features = false }
 # MX lookups to map custom-domain mailboxes (Google Workspace / Microsoft 365)
 # to a provider in email::provider_lookup. tokio-runtime feature mirrors the
 # rest of the IO stack.
-hickory-resolver = { version = "0.24", default-features = false, features = ["tokio-runtime", "system-config"] }
+hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "system-config"] }
 # Lets `MailProviderClient` declare async methods through `dyn Trait` so the
 # registry can hand out `Arc<dyn MailProviderClient>` per provider. Already in
 # the transitive graph (Actix uses it); pinned here so we're explicit.

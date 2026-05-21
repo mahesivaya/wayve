@@ -19,8 +19,11 @@
 use crate::prelude::*;
 use crate::security::jwt::get_user_id_from_request;
 use actix_web::{HttpRequest, HttpResponse, post, web};
-use hickory_resolver::TokioAsyncResolver;
+use hickory_resolver::TokioResolver;
+use hickory_resolver::Resolver;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+use hickory_resolver::net::runtime::TokioRuntimeProvider;
+use hickory_resolver::proto::rr::RData;
 use std::time::Duration;
 use tracing::{info, instrument, warn};
 
@@ -40,7 +43,7 @@ pub struct ProviderLookupResponse {
 // One resolver per process. hickory has a built-in cache; reusing the
 // resolver lets repeated lookups (e.g. an enterprise re-trying after a typo)
 // hit the cache rather than the network.
-static RESOLVER: Lazy<TokioAsyncResolver> = Lazy::new(|| {
+static RESOLVER: Lazy<TokioResolver> = Lazy::new(|| {
     let mut opts = ResolverOpts::default();
     // Cap the per-query budget — a slow nameserver should never wedge a
     // user-facing request. Combined with the outer tokio::time::timeout
@@ -50,15 +53,23 @@ static RESOLVER: Lazy<TokioAsyncResolver> = Lazy::new(|| {
     // Prefer the system resolver (`/etc/resolv.conf`); Docker injects one
     // automatically, so this works in dev and in compose without extra
     // config. Falls back to a sensible default if reading the system config
-    // fails.
-    match hickory_resolver::system_conf::read_system_conf() {
+    // fails. The hickory 0.26 API replaced the `TokioAsyncResolver::tokio()`
+    // constructor with the builder-via-config pattern below.
+    let (cfg, builder_opts) = match hickory_resolver::system_conf::read_system_conf() {
         Ok((cfg, mut sys_opts)) => {
             sys_opts.timeout = opts.timeout;
             sys_opts.attempts = opts.attempts;
-            TokioAsyncResolver::tokio(cfg, sys_opts)
+            (cfg, sys_opts)
         }
-        Err(_) => TokioAsyncResolver::tokio(ResolverConfig::default(), opts),
-    }
+        Err(_) => (ResolverConfig::default(), opts),
+    };
+    let mut builder =
+        Resolver::builder_with_config(cfg, TokioRuntimeProvider::default());
+    *builder.options_mut() = builder_opts;
+    // `build()` only fails if the underlying runtime/dns plumbing can't
+    // initialize — at that point the process can't service mail lookups at
+    // all, so panicking here is as well-defined as any startup failure.
+    builder.build().unwrap_or_else(|e| panic!("hickory resolver init failed: {e}"))
 });
 
 #[post("/email/provider-lookup")]
@@ -142,9 +153,16 @@ async fn mx_provider(domain: &str) -> Option<&'static str> {
         .ok()? // outer timeout
         .ok()?; // resolver error (NXDOMAIN, etc.)
 
+    // 0.26's `Lookup` exposes records via `.answers()` instead of the older
+    // `Lookup::iter()` shortcut. Each record's rdata may be any RR type, so
+    // we filter for `RData::MX` and project to the exchange hostname.
     let targets: Vec<String> = lookup
+        .answers()
         .iter()
-        .map(|mx| mx.exchange().to_ascii().to_lowercase())
+        .filter_map(|r| match &r.data {
+            RData::MX(mx) => Some(mx.exchange.to_ascii().to_lowercase()),
+            _ => None,
+        })
         .collect();
     if targets.is_empty() {
         return None;
