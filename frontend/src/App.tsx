@@ -32,6 +32,8 @@ const EmailFiles = lazy(() => import("./files/EmailFiles"));
 const ServicePage = lazy(() => import("./services/ServicePage"));
 const Billing = lazy(() => import("./billing/Billing"));
 const Pricing = lazy(() => import("./pricing/Pricing"));
+const Enterprise = lazy(() => import("./marketing/Enterprise"));
+const Support = lazy(() => import("./marketing/Support"));
 const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
 
 export default function App() {
@@ -82,6 +84,8 @@ export default function App() {
             /login. The component renders its own header chrome, so no
             Layout wrapper is needed. */}
         <Route path="/pricing" element={<Pricing />} />
+        <Route path="/enterprise" element={<Enterprise />} />
+        <Route path="/support" element={<Support />} />
 
         {/* PROTECTED */}
         <Route element={<ProtectedRoute />}>

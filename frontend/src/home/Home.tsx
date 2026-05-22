@@ -59,8 +59,8 @@ export default function Home() {
             </div>
 
             <button onClick={() => navigate("/pricing")}>Pricing</button>
-            <button onClick={() => navigate("/#enterprise")}>Enterprise</button>
-            <button onClick={() => navigate("/#support")}>Support</button>
+            <button onClick={() => navigate("/enterprise")}>Enterprise</button>
+            <button onClick={() => navigate("/support")}>Support</button>
           </nav>
 
           <div className="public-home-actions">

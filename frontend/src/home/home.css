@@ -1,5 +1,10 @@
 .public-home {
-  min-height: 100vh;
+  /* The global index.css pins html/body/#root to 100svh with overflow:hidden,
+     so each top-level page has to be its own scroll container. Marketing
+     pages (Enterprise/Support/Pricing) overflow the viewport — without
+     the internal scroll here, the bottom of the page would be clipped. */
+  height: 100svh;
+  overflow-y: auto;
   background:
     linear-gradient(90deg, rgba(111, 92, 214, 0.25), rgba(235, 239, 246, 0.7) 34%, #f7f8fb 100%),
     #f4f6fb;

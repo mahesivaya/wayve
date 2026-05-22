@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { listPlans, type Plan } from "../api/billing";
 import { useAuth } from "../auth/useAuth";
 import Layout from "../components/Layout";
+import MarketingShell from "../marketing/MarketingShell";
 import "./pricing.css";
 
 const BYTES_IN_GB = 1024 * 1024 * 1024;
@@ -176,49 +177,45 @@ const PUBLIC_TIERS: PublicTier[] = [
 function PublicPricing() {
   const navigate = useNavigate();
   return (
-    <div className="pricing-page">
-      <header className="pricing-header">
-        <h1>Plans &amp; Pricing</h1>
-        <p>
-          One workspace for mail, chat, calls, files, notes, and AI — pick the
-          plan that fits.
-        </p>
-        <button
-          className="pricing-billing-link"
-          onClick={() => navigate("/")}
-        >
-          Back to home
-        </button>
-      </header>
+    <MarketingShell>
+      <div className="pricing-page">
+        <header className="pricing-header">
+          <h1>Plans &amp; Pricing</h1>
+          <p>
+            One workspace for mail, chat, calls, files, notes, and AI — pick the
+            plan that fits.
+          </p>
+        </header>
 
-      <section className="pricing-section">
-        <div className="pricing-grid">
-          {PUBLIC_TIERS.map((tier) => (
-            <article key={tier.id} className="pricing-plan">
-              <h3>{tier.name}</h3>
-              <p className="pricing-plan-price">
-                {tier.price}
-                {tier.interval && (
-                  <span className="pricing-plan-interval"> / {tier.interval}</span>
-                )}
-              </p>
-              <p className="pricing-plan-desc">{tier.tagline}</p>
-              <ul className="pricing-plan-features">
-                {tier.features.map((feature) => (
-                  <li key={feature}>{feature}</li>
-                ))}
-              </ul>
-              <button
-                className="pricing-plan-cta"
-                onClick={() => navigate("/register")}
-              >
-                {tier.cta}
-              </button>
-            </article>
-          ))}
-        </div>
-      </section>
-    </div>
+        <section className="pricing-section">
+          <div className="pricing-grid">
+            {PUBLIC_TIERS.map((tier) => (
+              <article key={tier.id} className="pricing-plan">
+                <h3>{tier.name}</h3>
+                <p className="pricing-plan-price">
+                  {tier.price}
+                  {tier.interval && (
+                    <span className="pricing-plan-interval"> / {tier.interval}</span>
+                  )}
+                </p>
+                <p className="pricing-plan-desc">{tier.tagline}</p>
+                <ul className="pricing-plan-features">
+                  {tier.features.map((feature) => (
+                    <li key={feature}>{feature}</li>
+                  ))}
+                </ul>
+                <button
+                  className="pricing-plan-cta"
+                  onClick={() => navigate("/register")}
+                >
+                  {tier.cta}
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+    </MarketingShell>
   );
 }
 

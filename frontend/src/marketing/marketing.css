@@ -1,0 +1,485 @@
+/* ============================================================
+   Marketing pages (Enterprise, Support) — shared styling
+   Layered on top of home.css's `public-home-*` classes.
+   ============================================================ */
+
+.marketing-hero {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 3rem;
+  align-items: center;
+  padding: 4rem 2rem;
+  background: linear-gradient(135deg, #f0f6ff 0%, #ffffff 60%);
+  border-radius: 16px;
+  margin: 2rem auto;
+  max-width: 1200px;
+}
+
+.marketing-hero-copy .marketing-eyebrow {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #3a6df0;
+  margin: 0 0 0.75rem 0;
+}
+
+.marketing-hero-copy h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.15;
+  margin: 0 0 1rem 0;
+  color: #0d1b2a;
+}
+
+.marketing-hero-copy p.lead {
+  font-size: 1.15rem;
+  color: #4a5568;
+  margin: 0 0 1.5rem 0;
+  line-height: 1.55;
+}
+
+.marketing-hero-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.marketing-hero-actions button {
+  padding: 0.7rem 1.4rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.marketing-hero-actions button:first-child {
+  background: #3a6df0;
+  color: white;
+}
+
+.marketing-hero-actions button:first-child:hover {
+  background: #2f5acb;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(58, 109, 240, 0.25);
+}
+
+.marketing-hero-actions button + button {
+  background: white;
+  color: #3a6df0;
+  border: 1px solid #d0d8e8;
+}
+
+.marketing-hero-actions button + button:hover {
+  background: #f0f6ff;
+  border-color: #3a6df0;
+}
+
+.marketing-hero-visual {
+  display: flex;
+  justify-content: center;
+}
+
+.marketing-hero-card {
+  background: white;
+  border-radius: 14px;
+  padding: 1.5rem;
+  box-shadow: 0 12px 40px rgba(13, 27, 42, 0.08);
+  border: 1px solid #e6ecf5;
+  width: 100%;
+  max-width: 340px;
+}
+
+.marketing-hero-card-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #f0f3f8;
+}
+
+.marketing-hero-card-row:last-child { border-bottom: none; }
+
+.marketing-hero-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  background: #f0f6ff;
+  color: #3a6df0;
+}
+
+.marketing-hero-card-text {
+  font-size: 0.9rem;
+  color: #2d3748;
+}
+
+.marketing-hero-card-meta {
+  font-size: 0.75rem;
+  color: #718096;
+  margin-left: auto;
+}
+
+/* ---- Stats strip ---- */
+.marketing-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 2rem;
+}
+
+.marketing-stat {
+  background: white;
+  border: 1px solid #e6ecf5;
+  border-radius: 12px;
+  padding: 1.25rem;
+  text-align: center;
+}
+
+.marketing-stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #0d1b2a;
+  margin: 0 0 0.25rem 0;
+}
+
+.marketing-stat-label {
+  font-size: 0.85rem;
+  color: #718096;
+  margin: 0;
+}
+
+/* ---- Section heading ---- */
+.marketing-section {
+  max-width: 1200px;
+  margin: 3rem auto;
+  padding: 0 2rem;
+}
+
+.marketing-section-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.marketing-section-header .marketing-eyebrow {
+  color: #3a6df0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.marketing-section-header h2 {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  margin: 0.5rem 0;
+  color: #0d1b2a;
+}
+
+.marketing-section-header p {
+  color: #4a5568;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* ---- Feature grid ---- */
+.marketing-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.marketing-feature {
+  background: white;
+  border: 1px solid #e6ecf5;
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.marketing-feature:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(13, 27, 42, 0.08);
+}
+
+.marketing-feature-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #f0f6ff;
+  color: #3a6df0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  margin-bottom: 0.85rem;
+}
+
+.marketing-feature h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.05rem;
+  color: #0d1b2a;
+}
+
+.marketing-feature p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #4a5568;
+  line-height: 1.55;
+}
+
+/* ---- Use case rows ---- */
+.marketing-usecase {
+  display: grid;
+  grid-template-columns: 0.4fr 1fr;
+  gap: 1.5rem;
+  align-items: center;
+  background: white;
+  border: 1px solid #e6ecf5;
+  border-radius: 14px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.marketing-usecase-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #3a6df0;
+  background: #f0f6ff;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.marketing-usecase h3 {
+  margin: 0 0 0.4rem 0;
+  color: #0d1b2a;
+}
+
+.marketing-usecase p {
+  margin: 0;
+  color: #4a5568;
+  line-height: 1.55;
+}
+
+/* ---- CTA banner ---- */
+.marketing-cta {
+  max-width: 1200px;
+  margin: 3rem auto;
+  padding: 2.5rem 2rem;
+  background: linear-gradient(135deg, #3a6df0 0%, #2f5acb 100%);
+  color: white;
+  border-radius: 16px;
+  text-align: center;
+}
+
+.marketing-cta h2 {
+  margin: 0 0 0.75rem 0;
+  font-size: clamp(1.6rem, 3vw, 2rem);
+}
+
+.marketing-cta p {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.05rem;
+  opacity: 0.9;
+}
+
+.marketing-cta-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.marketing-cta-actions button {
+  padding: 0.7rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+.marketing-cta-actions button:first-child {
+  background: white;
+  color: #2f5acb;
+}
+
+.marketing-cta-actions button + button {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* ---- FAQ ---- */
+.marketing-faq {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.marketing-faq details {
+  background: white;
+  border: 1px solid #e6ecf5;
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.marketing-faq summary {
+  cursor: pointer;
+  padding: 1rem 1.25rem;
+  font-weight: 600;
+  color: #0d1b2a;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.marketing-faq summary::after {
+  content: "+";
+  font-size: 1.3rem;
+  color: #3a6df0;
+}
+
+.marketing-faq details[open] summary::after { content: "−"; }
+
+.marketing-faq details > p {
+  margin: 0;
+  padding: 0 1.25rem 1.1rem 1.25rem;
+  color: #4a5568;
+  line-height: 1.6;
+}
+
+/* ---- Support contact cards ---- */
+.marketing-channels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.marketing-channel {
+  background: white;
+  border: 1px solid #e6ecf5;
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.marketing-channel-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #f0f6ff;
+  color: #3a6df0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.marketing-channel h3 {
+  margin: 0;
+  color: #0d1b2a;
+}
+
+.marketing-channel p {
+  margin: 0;
+  color: #4a5568;
+  font-size: 0.93rem;
+  line-height: 1.5;
+}
+
+.marketing-channel-link {
+  margin-top: auto;
+  background: transparent;
+  border: none;
+  color: #3a6df0;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.marketing-channel-link:hover { text-decoration: underline; }
+
+/* ---- Footer ---- */
+.marketing-footer {
+  margin-top: 4rem;
+  background: #0d1b2a;
+  color: #cbd5e0;
+  padding: 2.5rem 2rem 1.5rem 2rem;
+}
+
+.marketing-footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 2rem;
+}
+
+.marketing-footer-inner strong {
+  color: white;
+  font-size: 1.1rem;
+}
+
+.marketing-footer-inner p {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.9rem;
+  color: #94a3b8;
+  max-width: 320px;
+}
+
+.marketing-footer-inner h4 {
+  color: white;
+  font-size: 0.95rem;
+  margin: 0 0 0.75rem 0;
+}
+
+.marketing-footer-inner button {
+  background: transparent;
+  border: none;
+  color: #cbd5e0;
+  display: block;
+  padding: 0.3rem 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.marketing-footer-inner button:hover { color: white; }
+
+.marketing-footer-legal {
+  max-width: 1200px;
+  margin: 1.5rem auto 0 auto;
+  padding-top: 1.5rem;
+  border-top: 1px solid #1e2c3d;
+  font-size: 0.8rem;
+  color: #718096;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .marketing-hero {
+    grid-template-columns: 1fr;
+    padding: 2rem 1.25rem;
+  }
+  .marketing-usecase {
+    grid-template-columns: 1fr;
+  }
+  .marketing-footer-inner {
+    grid-template-columns: 1fr;
+  }
+}
