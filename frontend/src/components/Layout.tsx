@@ -5,6 +5,7 @@ import { Suspense, useState, useCallback, type ReactNode } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
+import ThemeToggle from "../theme/ThemeToggle";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import "./Layout.css";
 
@@ -194,25 +195,19 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </div>
 
         <div className="actions">
-          {/* Welcome message — shows the signed-in account (platform /
-              organization / personal) and its role; handy for RBAC testing. */}
-          <div className="header-welcome" title={`Role: ${user.role_label ?? "—"}`}>
-            <span className="header-welcome-text">
-              Welcome, <strong>{user.email}</strong>
-            </span>
-            {user.role_label && (
-              <span className="header-welcome-role">{user.role_label}</span>
-            )}
-            {isBasicPersonalUser && (
-              <button
-                type="button"
-                className="header-upgrade-btn"
-                onClick={goToUpgrade}
-              >
-                Upgrade
-              </button>
-            )}
-          </div>
+          {/* Welcome / role label removed — the signed-in identity is
+              already visible via the ProfileMenu avatar on the right.
+              Keep the Upgrade nudge here because it's the single most
+              clickable monetization surface for free personal accounts. */}
+          {isBasicPersonalUser && (
+            <button
+              type="button"
+              className="header-upgrade-btn"
+              onClick={goToUpgrade}
+            >
+              Upgrade
+            </button>
+          )}
 
           <button
             type="button"
@@ -231,6 +226,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               <path d="M12 8.5V20" />
             </svg>
           </button>
+
+          <ThemeToggle />
 
           <ProfileMenu />
         </div>

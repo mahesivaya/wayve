@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useState, useMemo } from "react";
 import { SERVICES } from "../services/serviceData";
+import ThemeToggle from "../theme/ThemeToggle";
 import "./home.css";
 
 const HOME_CARDS = [
@@ -64,6 +65,7 @@ export default function Home() {
           </nav>
 
           <div className="public-home-actions">
+            <ThemeToggle />
             <button className="home-login-btn" onClick={() => navigate("/login")}>
               Login
             </button>

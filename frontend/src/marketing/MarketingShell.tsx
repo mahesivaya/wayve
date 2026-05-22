@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { SERVICES } from "../services/serviceData";
+import ThemeToggle from "../theme/ThemeToggle";
 import "../home/home.css";
 import "./marketing.css";
 
@@ -42,6 +43,7 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="public-home-actions">
+          <ThemeToggle />
           {user ? (
             <>
               <button className="home-login-btn" onClick={() => navigate("/home")}>
