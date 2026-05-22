@@ -179,6 +179,39 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          ON drive_shares(resource_type, resource_id, scope, COALESCE(organization_id, 0))",
         "CREATE INDEX IF NOT EXISTS drive_shares_org_idx
          ON drive_shares(organization_id, resource_type, resource_id)",
+        // ────────────────────────────────────────────────────────────────
+        // Shared inboxes (multi-tenant). The email/account queries JOIN
+        // against these tables on every /api/emails and /api/accounts
+        // call — without the self-heal here those endpoints 500 on any
+        // pre-existing DB that hasn't had `db-reset` run since the
+        // feature shipped.
+        // ────────────────────────────────────────────────────────────────
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS organization_id INTEGER \
+         REFERENCES organizations(id) ON DELETE CASCADE",
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS shared_label TEXT",
+        "CREATE TABLE IF NOT EXISTS shared_inbox_members (
+            account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            can_reply BOOLEAN NOT NULL DEFAULT TRUE,
+            can_manage BOOLEAN NOT NULL DEFAULT FALSE,
+            added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (account_id, user_id)
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_shared_inbox_members_user \
+         ON shared_inbox_members(user_id)",
+        "CREATE TABLE IF NOT EXISTS shared_inbox_email_state (
+            email_id INTEGER PRIMARY KEY REFERENCES emails(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'pending', 'closed')),
+            assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_shared_inbox_state_assignee \
+         ON shared_inbox_email_state(assignee_id) WHERE assignee_id IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_shared_inbox_state_status \
+         ON shared_inbox_email_state(status)",
     ];
 
     for statement in statements {
