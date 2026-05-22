@@ -114,3 +114,24 @@
   .login-card .outlook-btn:hover {
     background: #0c578f;
   }
+
+  .login-card .sso-btn {
+    background: #1f1b4d;
+    color: var(--color-surface);
+    border: 1px solid #1f1b4d;
+    font-weight: 600;
+  }
+
+  .login-card .sso-btn:hover {
+    background: #2a256b;
+  }
+
+  .login-card .link-button {
+    background: none;
+    border: none;
+    color: var(--color-primary, #6f5cd6);
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+    text-decoration: underline;
+  }

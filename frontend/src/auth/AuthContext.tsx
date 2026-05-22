@@ -52,7 +52,13 @@ const resolveBootToken = (): string | null => {
   const hashParams = new URLSearchParams(window.location.hash.slice(1));
   const tokenFromHash = hashParams.get("token");
   const isOAuthLanding =
-    hashParams.has("signup") || hashParams.has("connected");
+    hashParams.has("signup") ||
+    hashParams.has("connected") ||
+    // SSO sign-in lands here with `#sso=true&token=...&new=true|false`.
+    // Treated identically to the OAuth landings above so the token is
+    // stored, the URL is cleaned, and the user enters /home in their
+    // signed-in state.
+    hashParams.has("sso");
 
   if (tokenFromHash && isOAuthLanding) {
     log.info("restoring token from OAuth redirect");

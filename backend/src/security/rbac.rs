@@ -152,10 +152,11 @@ pub enum Permission {
     AuditRead,
     SecurityManage,
     TicketsManage,
+    SsoManage,
 }
 
 impl Permission {
-    pub const ALL: [Permission; 20] = [
+    pub const ALL: [Permission; 21] = [
         AppsUse,
         AppsManage,
         ProfileManageSelf,
@@ -176,6 +177,7 @@ impl Permission {
         AuditRead,
         SecurityManage,
         TicketsManage,
+        SsoManage,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -200,6 +202,7 @@ impl Permission {
             AuditRead => "audit:read",
             SecurityManage => "security:manage",
             TicketsManage => "tickets:manage",
+            SsoManage => "sso:manage",
         }
     }
 }
@@ -226,6 +229,7 @@ const P_SUPER_ADMIN: &[Permission] = &[
     AuditRead,
     SecurityManage,
     TicketsManage,
+    SsoManage,
 ];
 const P_ADMIN: &[Permission] = &[
     AppsUse,
@@ -236,6 +240,7 @@ const P_ADMIN: &[Permission] = &[
     RolesAssignLimited,
     OrgSettings,
     UsageRead,
+    SsoManage,
 ];
 const P_SECURITY: &[Permission] = &[
     AppsUse,
@@ -245,6 +250,7 @@ const P_SECURITY: &[Permission] = &[
     LogsReadLimited,
     AuditRead,
     SecurityManage,
+    SsoManage,
 ];
 const P_BILLING: &[Permission] = &[
     AppsUse,

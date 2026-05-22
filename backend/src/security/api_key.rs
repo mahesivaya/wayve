@@ -7,10 +7,23 @@
 //! creation; only its SHA-256 hash is stored, so a leaked database exposes no
 //! usable keys.
 
+use crate::config;
 use chrono::{DateTime, Utc};
+use once_cell::sync::Lazy;
 use rand::RngCore;
+use reqwest::Client;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Row};
+use std::time::Duration;
+use tracing::warn;
+
+static SIEM_CLIENT: Lazy<Client> = Lazy::new(|| {
+    Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap_or_else(|_| Client::new())
+});
 
 /// Generate a cryptographically-random API key: `wv_sk_` + 48 hex chars
 /// (192 bits of entropy from the thread CSPRNG).
@@ -135,8 +148,8 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
                 "admin"
             }
         }
-        // Management surfaces — keys, RBAC, billing, org/platform admin.
-        "admin" | "keys" | "organizations" | "platform" | "billing" | "v1" => "admin",
+        // Management surfaces — keys, RBAC, audit, billing, org/platform admin.
+        "admin" | "keys" | "audit" | "organizations" | "platform" | "billing" | "v1" => "admin",
         _ => return None,
     };
     Some(scope)
@@ -262,14 +275,29 @@ pub struct AuditEntry {
     pub ip: Option<String>,
 }
 
+#[derive(Serialize)]
+struct SiemAuditEvent<'a> {
+    event_type: &'static str,
+    audit_id: i64,
+    api_key_id: Option<i32>,
+    user_id: Option<i32>,
+    method: &'a str,
+    path: &'a str,
+    status_code: i32,
+    outcome: &'static str,
+    ip: Option<&'a str>,
+    created_at: DateTime<Utc>,
+}
+
 /// Append one row to the API-key audit log (best-effort — never blocks or
 /// fails the request).
 pub async fn write_audit(pool: &PgPool, entry: &AuditEntry) {
-    let _ = sqlx::query(
+    let inserted = sqlx::query(
         r#"
         INSERT INTO api_key_audit_log
             (api_key_id, user_id, method, path, status_code, outcome, ip)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, created_at
         "#,
     )
     .bind(entry.api_key_id)
@@ -279,8 +307,55 @@ pub async fn write_audit(pool: &PgPool, entry: &AuditEntry) {
     .bind(entry.status_code)
     .bind(entry.outcome.as_str())
     .bind(entry.ip.as_deref())
-    .execute(pool)
+    .fetch_one(pool)
     .await;
+
+    let Ok(row) = inserted else {
+        return;
+    };
+
+    forward_audit_to_siem(entry, row.get("id"), row.get("created_at")).await;
+}
+
+async fn forward_audit_to_siem(entry: &AuditEntry, audit_id: i64, created_at: DateTime<Utc>) {
+    let siem = config::siem();
+    let Some(webhook_url) = siem.webhook_url else {
+        return;
+    };
+
+    let event = SiemAuditEvent {
+        event_type: "api_key_audit",
+        audit_id,
+        api_key_id: entry.api_key_id,
+        user_id: entry.user_id,
+        method: &entry.method,
+        path: &entry.path,
+        status_code: entry.status_code,
+        outcome: entry.outcome.as_str(),
+        ip: entry.ip.as_deref(),
+        created_at,
+    };
+
+    let mut request = SIEM_CLIENT.post(webhook_url).json(&event);
+    if let Some(token) = siem.webhook_token {
+        request = request.bearer_auth(token);
+    }
+
+    match request.send().await {
+        Ok(response) if response.status().is_success() => {}
+        Ok(response) => warn!(
+            target: "auth",
+            audit_id,
+            status = %response.status(),
+            "siem audit webhook returned non-success status"
+        ),
+        Err(error) => warn!(
+            target: "auth",
+            audit_id,
+            error = ?error,
+            "siem audit webhook request failed"
+        ),
+    }
 }
 
 #[cfg(test)]

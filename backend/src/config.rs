@@ -218,6 +218,18 @@ pub fn tracing_log_max_archives() -> usize {
         .unwrap_or(5)
 }
 
+pub struct SiemConfig {
+    pub webhook_url: Option<String>,
+    pub webhook_token: Option<String>,
+}
+
+pub fn siem() -> SiemConfig {
+    SiemConfig {
+        webhook_url: var_opt("SIEM_WEBHOOK_URL"),
+        webhook_token: var_opt("SIEM_WEBHOOK_TOKEN"),
+    }
+}
+
 // ---- SMTP ---------------------------------------------------
 
 pub struct SmtpConfig {

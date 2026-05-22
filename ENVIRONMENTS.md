@@ -178,6 +178,7 @@ environment.
 | Zoom | `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET` |
 | AI | `GEMINI_API_KEY`, `GEMINI_MODEL` (default `gemini-2.0-flash`) |
 | Billing | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY` |
+| SIEM audit forwarding | `SIEM_WEBHOOK_URL`, `SIEM_WEBHOOK_TOKEN` |
 
 ### External endpoint overrides (`external.rs`)
 

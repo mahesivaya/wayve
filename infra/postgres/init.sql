@@ -127,6 +127,55 @@ WHERE expires_at IS NULL;
 ALTER TABLE oauth_states ALTER COLUMN expires_at SET NOT NULL;
 ALTER TABLE oauth_states ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
+-- =========================================================================
+-- OIDC SSO (multi-tenant: each organization brings its own IdP)
+-- =========================================================================
+-- One IdP config per organization. The client_secret is AES-GCM encrypted at
+-- rest using the same security/encryption.rs helpers as everything else.
+-- `allowed_domain` is the email domain that routes users to this config
+-- (alice@acme.com -> Acme's IdP); it is UNIQUE so a domain can't be claimed
+-- by two organizations simultaneously.
+CREATE TABLE IF NOT EXISTS org_sso_configs (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+    issuer_url TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    client_secret_iv TEXT NOT NULL,
+    client_secret_encrypted TEXT NOT NULL,
+    allowed_domain TEXT NOT NULL UNIQUE,
+    enforce_sso BOOLEAN NOT NULL DEFAULT FALSE,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_org_sso_configs_domain
+    ON org_sso_configs(allowed_domain);
+
+-- In-flight authorization-code state for the OIDC redirect dance. PKCE
+-- verifier + nonce are bound to the state so a stolen `code` alone can't be
+-- exchanged. Single-use, 10-minute lifetime; the callback DELETEs the row
+-- after looking it up.
+CREATE TABLE IF NOT EXISTS sso_states (
+    state TEXT PRIMARY KEY,
+    sso_config_id INTEGER NOT NULL REFERENCES org_sso_configs(id) ON DELETE CASCADE,
+    pkce_verifier TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    return_to TEXT,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes'),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- SSO identity link on users. `sso_sub` is the IdP's stable subject claim,
+-- which is what we look up by (email can change in the IdP; sub doesn't).
+-- `sso_org_id` records which org's SSO this user authenticates via —
+-- enforced separately from `organization_id` so the link is auditable
+-- even if the user is later removed from the org's member list.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sso_sub TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sso_org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS users_sso_identity_unique_idx
+    ON users (sso_org_id, sso_sub)
+    WHERE sso_sub IS NOT NULL;
+
 
 
 CREATE TABLE IF NOT EXISTS email_accounts (

@@ -35,6 +35,7 @@ const Pricing = lazy(() => import("./pricing/Pricing"));
 const Enterprise = lazy(() => import("./marketing/Enterprise"));
 const Support = lazy(() => import("./marketing/Support"));
 const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
+const SsoSettings = lazy(() => import("./settings/SsoSettings"));
 
 export default function App() {
   const { user } = useAuth();
@@ -133,6 +134,7 @@ export default function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/billing" element={<Billing />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
+            <Route path="/settings/sso" element={<SsoSettings />} />
 
           </Route>
         </Route>

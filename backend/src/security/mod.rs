@@ -4,3 +4,4 @@ pub mod jwt;
 pub mod oauth;
 pub mod password;
 pub mod rbac;
+pub mod sso;

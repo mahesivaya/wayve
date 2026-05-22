@@ -1,9 +1,11 @@
 pub mod account;
 pub mod api_keys;
+pub mod audit;
 pub mod auth;
 pub mod config;
 pub mod email;
 pub mod health;
+pub mod sso;
 pub mod user;
 
 use actix_web::web;
@@ -33,11 +35,18 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(api_keys::list_api_keys)
         .service(api_keys::revoke_api_key)
         .service(api_keys::api_key_audit)
+        .service(audit::list_audit_logs)
         .service(account::get_accounts)
         .service(account::update_account_display_name)
         .service(user::get_user_by_email)
         .service(user::get_all_users)
         .service(user::get_profile)
         .service(user::update_profile)
-        .service(account::delete_account);
+        .service(account::delete_account)
+        .service(sso::get_sso_config)
+        .service(sso::upsert_sso_config)
+        .service(sso::delete_sso_config)
+        .service(sso::test_sso_config)
+        .service(sso::auth_sso_start)
+        .service(sso::auth_sso_callback);
 }

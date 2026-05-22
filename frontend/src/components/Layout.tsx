@@ -48,10 +48,24 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const rightApp = SPLIT_APPS.find((a) => a.key === rightView) ?? null;
   const RightComp = rightApp?.Comp ?? null;
   const rightLabel = rightApp?.label ?? null;
+  const leftApp = SPLIT_APPS.find((a) => a.key === appKeyFromPath(location.pathname)) ?? null;
+  const leftLabel = leftApp?.label ?? "Home";
+  const splitOpen = Boolean(middleView || rightView);
 
   function duplicateCurrentApp() {
     setRightView(appKeyFromPath(location.pathname));
     setSplitTarget("right");
+  }
+
+  function closeLeftPane() {
+    const nextApp = rightApp ?? middleApp;
+    if (!nextApp) return;
+    navigate(nextApp.path);
+    setRightView(null);
+    if (middleView === nextApp.key) {
+      setMiddleView(null);
+    }
+    setSplitTarget("left");
   }
 
   // When the split is open, header link clicks target the right pane instead
@@ -244,14 +258,40 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             className={`split-pane left ${splitTarget === "left" ? "active-target" : ""}`}
             onMouseDown={() => setSplitTarget("left")}
           >
-            {children ?? <Outlet />}
+            {splitOpen ? (
+              <>
+                <div className="split-pane-toolbar">
+                  <span className="split-pane-title">{leftLabel}</span>
+                  <button
+                    className="split-close-btn"
+                    onClick={closeLeftPane}
+                    title="Close pane"
+                    aria-label="Close left pane"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="split-pane-body">
+                  {children ?? <Outlet />}
+                </div>
+              </>
+            ) : (
+              children ?? <Outlet />
+            )}
           </div>
 
           {middleView && (
             <div className="split-pane center">
               <div className="split-pane-toolbar">
                 <span className="split-pane-title">{middleLabel}</span>
-                <button className="split-close-btn" onClick={() => setMiddleView(null)}>✕</button>
+                <button
+                  className="split-close-btn"
+                  onClick={() => setMiddleView(null)}
+                  title="Close pane"
+                  aria-label="Close center pane"
+                >
+                  ✕
+                </button>
               </div>
               <div className="split-pane-body">
                 {MiddleComp && (
@@ -270,10 +310,17 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             >
               <div className="split-pane-toolbar">
                 <span className="split-pane-title">{rightLabel}</span>
-                <button className="split-close-btn" onClick={() => {
-                  setRightView(null);
-                  setSplitTarget("left");
-                }}>✕</button>
+                <button
+                  className="split-close-btn"
+                  onClick={() => {
+                    setRightView(null);
+                    setSplitTarget("left");
+                  }}
+                  title="Close pane"
+                  aria-label="Close right pane"
+                >
+                  ✕
+                </button>
               </div>
               <div className="split-pane-body">
                 {RightComp && (
