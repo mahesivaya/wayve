@@ -202,6 +202,47 @@ CREATE TABLE IF NOT EXISTS email_accounts (
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'google';
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS display_name TEXT;
 
+-- =========================================================================
+-- Shared inboxes (org + platform).
+-- =========================================================================
+-- An email_account is "shared" when an admin marks it so. The owner-user
+-- (user_id) keeps their connection; additionally, other users listed in
+-- shared_inbox_members can read/reply on the account. `organization_id`
+-- distinguishes scope: NULL = platform-level shared inbox (only platform
+-- staff can be members); set = org-level (org members eligible).
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS organization_id INTEGER
+    REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE;
+-- Human label for the inbox (e.g. "Support", "Sales"). Falls back to the
+-- email address when unset.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS shared_label TEXT;
+
+CREATE TABLE IF NOT EXISTS shared_inbox_members (
+    account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    can_reply BOOLEAN NOT NULL DEFAULT TRUE,
+    can_manage BOOLEAN NOT NULL DEFAULT FALSE,
+    added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (account_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_shared_inbox_members_user ON shared_inbox_members(user_id);
+
+-- Per-email help-desk workflow state. Created lazily on first state
+-- mutation (status change or assignment) so we don't have to backfill rows
+-- for every existing email when an account becomes shared.
+CREATE TABLE IF NOT EXISTS shared_inbox_email_state (
+    email_id INTEGER PRIMARY KEY REFERENCES emails(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'pending', 'closed')),
+    assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_shared_inbox_state_assignee
+    ON shared_inbox_email_state(assignee_id) WHERE assignee_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_shared_inbox_state_status
+    ON shared_inbox_email_state(status);
+
 
 CREATE TABLE IF NOT EXISTS emails (
     id SERIAL PRIMARY KEY,
@@ -404,6 +445,24 @@ ALTER TABLE files
     REFERENCES folders(id) ON DELETE CASCADE;
 
 CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id);
+
+CREATE TABLE IF NOT EXISTS drive_shares (
+    id BIGSERIAL PRIMARY KEY,
+    resource_type TEXT NOT NULL,
+    resource_id BIGINT NOT NULL,
+    scope TEXT NOT NULL,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    permission TEXT NOT NULL DEFAULT 'view',
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT drive_shares_resource_chk CHECK (resource_type IN ('file', 'folder')),
+    CONSTRAINT drive_shares_scope_chk CHECK (scope IN ('organization', 'platform')),
+    CONSTRAINT drive_shares_permission_chk CHECK (permission IN ('view', 'edit'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS drive_shares_unique_idx
+    ON drive_shares(resource_type, resource_id, scope, COALESCE(organization_id, 0));
+CREATE INDEX IF NOT EXISTS drive_shares_org_idx
+    ON drive_shares(organization_id, resource_type, resource_id);
 
 -- Notes
 CREATE TABLE IF NOT EXISTS notes (
@@ -682,3 +741,29 @@ CREATE TABLE IF NOT EXISTS api_key_audit_log (
 );
 CREATE INDEX IF NOT EXISTS api_key_audit_key_idx
     ON api_key_audit_log(api_key_id, created_at DESC);
+
+-- Scope-aware SIEM forwarding settings. Tokens are AES-GCM encrypted using
+-- the backend AES_KEY; NULL token fields mean the webhook does not use bearer
+-- authentication.
+CREATE TABLE IF NOT EXISTS siem_webhook_configs (
+    id BIGSERIAL PRIMARY KEY,
+    scope TEXT NOT NULL,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    webhook_url TEXT NOT NULL,
+    token_iv TEXT,
+    token_encrypted TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT siem_webhook_scope_chk CHECK (scope IN ('platform', 'organization', 'personal'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS siem_webhook_platform_uniq
+    ON siem_webhook_configs(scope)
+    WHERE scope = 'platform';
+CREATE UNIQUE INDEX IF NOT EXISTS siem_webhook_org_uniq
+    ON siem_webhook_configs(organization_id)
+    WHERE scope = 'organization';
+CREATE UNIQUE INDEX IF NOT EXISTS siem_webhook_user_uniq
+    ON siem_webhook_configs(user_id)
+    WHERE scope = 'personal';

@@ -83,12 +83,18 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
 
       {accounts.map((acc) => {
         const isEditing = editingAccountId === acc.id;
-        const displayName = acc.display_name?.trim() || acc.email;
+        // For shared inboxes the human-friendly `shared_label` ("Support")
+        // is the most useful name; `display_name` is the personal nickname
+        // the owner-user gave it, which doesn't carry over for members.
+        const displayName =
+          (acc.is_shared && acc.shared_label?.trim()) ||
+          acc.display_name?.trim() ||
+          acc.email;
 
         return (
           <div
             key={acc.id}
-            className={`account-filter ${activeAccount === acc.id ? "active" : ""}`}
+            className={`account-filter ${activeAccount === acc.id ? "active" : ""} ${acc.is_shared ? "shared" : ""}`}
           >
             {isEditing ? (
               <div className="account-edit-row">
@@ -134,8 +140,16 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
                   type="button"
                   className="account-filter-main"
                   onClick={() => setActiveAccount(acc.id)}
+                  title={acc.is_shared ? `Shared inbox · ${acc.email}` : acc.email}
                 >
-                  <span className="account-filter-label">{displayName}</span>
+                  <span className="account-filter-label">
+                    {displayName}
+                    {acc.is_shared && (
+                      <span className="account-shared-chip" aria-label="Shared inbox">
+                        Shared
+                      </span>
+                    )}
+                  </span>
                   <span
                     className="account-unread-count"
                     aria-label={`${acc.unread_count ?? 0} unread emails`}
@@ -143,15 +157,18 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
                     {acc.unread_count ?? 0}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  className="account-icon-btn"
-                  onClick={() => startEditing(acc)}
-                  title="Edit account name"
-                  aria-label={`Edit name for ${acc.email}`}
-                >
-                  ✎
-                </button>
+                {/* Only the owner-user may rename. Members see no pencil. */}
+                {acc.is_owner !== false && (
+                  <button
+                    type="button"
+                    className="account-icon-btn"
+                    onClick={() => startEditing(acc)}
+                    title="Edit account name"
+                    aria-label={`Edit name for ${acc.email}`}
+                  >
+                    ✎
+                  </button>
+                )}
               </>
             )}
           </div>

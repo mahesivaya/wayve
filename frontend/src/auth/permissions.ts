@@ -27,6 +27,7 @@ export const PERMISSIONS = [
   "security:manage",
   "tickets:manage",
   "sso:manage",
+  "inbox:manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -66,6 +67,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "org:settings",
     "usage:read",
     "sso:manage",
+    "inbox:manage",
   ],
   security: [
     "apps:use",

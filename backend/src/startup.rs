@@ -140,6 +140,45 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          FROM users
          WHERE account_type = 'platform_admin'
          ON CONFLICT (user_id) DO NOTHING",
+        "CREATE TABLE IF NOT EXISTS siem_webhook_configs (
+            id BIGSERIAL PRIMARY KEY,
+            scope TEXT NOT NULL,
+            organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            webhook_url TEXT NOT NULL,
+            token_iv TEXT,
+            token_encrypted TEXT,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT siem_webhook_scope_chk CHECK (scope IN ('platform', 'organization', 'personal'))
+        )",
+        "CREATE UNIQUE INDEX IF NOT EXISTS siem_webhook_platform_uniq
+         ON siem_webhook_configs(scope)
+         WHERE scope = 'platform'",
+        "CREATE UNIQUE INDEX IF NOT EXISTS siem_webhook_org_uniq
+         ON siem_webhook_configs(organization_id)
+         WHERE scope = 'organization'",
+        "CREATE UNIQUE INDEX IF NOT EXISTS siem_webhook_user_uniq
+         ON siem_webhook_configs(user_id)
+         WHERE scope = 'personal'",
+        "CREATE TABLE IF NOT EXISTS drive_shares (
+            id BIGSERIAL PRIMARY KEY,
+            resource_type TEXT NOT NULL,
+            resource_id BIGINT NOT NULL,
+            scope TEXT NOT NULL,
+            organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+            permission TEXT NOT NULL DEFAULT 'view',
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT drive_shares_resource_chk CHECK (resource_type IN ('file', 'folder')),
+            CONSTRAINT drive_shares_scope_chk CHECK (scope IN ('organization', 'platform')),
+            CONSTRAINT drive_shares_permission_chk CHECK (permission IN ('view', 'edit'))
+        )",
+        "CREATE UNIQUE INDEX IF NOT EXISTS drive_shares_unique_idx
+         ON drive_shares(resource_type, resource_id, scope, COALESCE(organization_id, 0))",
+        "CREATE INDEX IF NOT EXISTS drive_shares_org_idx
+         ON drive_shares(organization_id, resource_type, resource_id)",
     ];
 
     for statement in statements {

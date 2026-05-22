@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-use crate::email::account::load_email_account_for_user;
+use crate::email::account::load_email_account_for_send;
 use crate::email::oauth::HTTP_CLIENT;
 use crate::email::outlook::send_outlook_mail;
 use crate::email::provider::refresh_and_persist_email_token;
@@ -29,8 +29,11 @@ pub async fn send(
 
     info!(target: "gmail", user_id, account_id = data.account_id, "send email request");
 
+    // Owner OR shared-inbox member with can_reply may send. The loader
+    // funnels both paths through the same return type so the rest of the
+    // handler stays identical regardless of which permission applies.
     let account =
-        match load_email_account_for_user(pool.get_ref(), data.account_id, user_id).await? {
+        match load_email_account_for_send(pool.get_ref(), data.account_id, user_id).await? {
             Some(account) => account,
             None => return Ok(HttpResponse::Unauthorized().body("Email account not found")),
         };

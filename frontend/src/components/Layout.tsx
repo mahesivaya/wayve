@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { canAccessApiKeyAdmin } from "../auth/permissions";
+import { canAccessApiKeyAdmin, hasPermission } from "../auth/permissions";
 import { Suspense, useState, useCallback, type ReactNode } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
@@ -100,6 +100,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   }
 
   const authedUser = user;
+  const canAccessSecurity =
+    hasPermission(user, "audit:read") || hasPermission(user, "webhooks:manage");
   const currentPlanCode = authedUser.current_plan?.code ?? "basic_user";
   const isBasicPersonalUser =
     authedUser.account_type === "personal" && currentPlanCode === "basic_user";
@@ -179,6 +181,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               API Keys
             </Link>
           )}
+          {canAccessSecurity && (
+            <Link
+              to="/security/audit"
+              className={location.pathname === "/security/audit" ? "active" : ""}
+              onClick={() => setNavOpen(false)}
+            >
+              Security
+            </Link>
+          )}
           {renderNavItem("/about", "about", "About")}
         </div>
 
@@ -247,6 +258,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <Link to="/notes">📝</Link>
           <Link to="/tasks">☑</Link>
           <Link to="/aichat">✨</Link>
+          {canAccessSecurity && <Link to="/security/audit">🔒</Link>}
           <Link to="/about">ⓘ</Link>
 
           <div className="icon-sidebar-spacer" />

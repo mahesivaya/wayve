@@ -1,5 +1,6 @@
 import { getApiBase } from "../config/env";
 import { apiFetch, apiFetchJson } from "./client";
+import { getAuthToken } from "../auth/token";
 
 export type UploadedFile = {
   id: number;
@@ -8,6 +9,8 @@ export type UploadedFile = {
   size: number;
   drive_url?: string;
   created_at: string;
+  shared?: boolean;
+  permission?: string | null;
 };
 
 export type Folder = {
@@ -15,6 +18,17 @@ export type Folder = {
   user_id: number;
   parent_folder_id: number | null;
   name: string;
+  created_at: string;
+};
+
+export type SharedDriveItem = {
+  id: number;
+  resource_type: "file" | "folder";
+  name: string;
+  file_type: string | null;
+  size: number | null;
+  permission: "view" | "edit";
+  owner_user_id: number;
   created_at: string;
 };
 
@@ -49,6 +63,29 @@ export const deleteFolder = async (folderId: number) => {
   if (!res.ok) throw new Error("Delete folder failed");
 };
 
+export const listSharedDriveItems = async () =>
+  apiFetchJson<SharedDriveItem[]>("/api/drive/shared");
+
+export const shareDriveFile = async (
+  fileId: number,
+  scope: "organization" | "platform",
+  permission: "view" | "edit",
+) =>
+  apiFetchJson<{ shared: boolean }>(`/api/files/${fileId}/share`, {
+    method: "POST",
+    body: JSON.stringify({ scope, permission }),
+  });
+
+export const shareDriveFolder = async (
+  folderId: number,
+  scope: "organization" | "platform",
+  permission: "view" | "edit",
+) =>
+  apiFetchJson<{ shared: boolean }>(`/api/folders/${folderId}/share`, {
+    method: "POST",
+    body: JSON.stringify({ scope, permission }),
+  });
+
 export const uploadDriveFiles = async (
   files: File[],
   folderId: number | null = null,
@@ -60,14 +97,24 @@ export const uploadDriveFiles = async (
   }
 
   // Raw fetch (not apiFetch) so the browser sets the multipart boundary.
+  const token = getAuthToken();
   const res = await fetch(`${getApiBase()}/api/files/upload`, {
     method: "POST",
     credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: formData,
   });
 
   if (!res.ok) {
-    throw new Error("Upload failed");
+    let message = "Upload failed";
+    try {
+      const data = await res.clone().json();
+      message = data?.message || data?.error || message;
+    } catch {
+      const text = await res.text();
+      if (text.trim()) message = text.trim();
+    }
+    throw new Error(message);
   }
 };
 
@@ -76,6 +123,21 @@ export const uploadDriveFiles = async (
 // a plain <a href> can't send the Authorization header.
 export const downloadDriveFile = async (fileId: number, fileName: string) => {
   const res = await apiFetch(`/api/files/${fileId}/download`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  URL.revokeObjectURL(url);
+};
+
+export const downloadSharedDriveFile = async (fileId: number, fileName: string) => {
+  const res = await apiFetch(`/api/drive/shared/files/${fileId}/download`);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
 

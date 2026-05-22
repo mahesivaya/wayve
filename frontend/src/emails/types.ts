@@ -5,6 +5,13 @@ export type EmailAccount = {
   email: string;
   display_name?: string | null;
   unread_count?: number;
+  // Shared-inbox surface. `is_shared` lights up the chip in the sidebar;
+  // `shared_label` is the friendly name (e.g. "Support"); `is_owner`
+  // distinguishes accounts the user connected themselves from ones
+  // they're a member of (controls "Disconnect", rename rights, etc.).
+  is_shared?: boolean;
+  shared_label?: string | null;
+  is_owner?: boolean;
 };
 
 export interface EmailItem {
@@ -21,6 +28,12 @@ export interface EmailItem {
   attachments_checked?: boolean;
   attachments?: EmailAttachment[];
   zoom_join_url?: string | null;
+  // Shared-inbox surface (populated when the row comes from a shared
+  // account). All optional — personal-inbox rows leave them undefined.
+  is_shared?: boolean;
+  shared_label?: string | null;
+  inbox_status?: "open" | "pending" | "closed" | null;
+  inbox_assignee_id?: number | null;
   _bodyLoading?: boolean;
   _bodyError?: unknown;
 }

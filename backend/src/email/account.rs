@@ -90,6 +90,38 @@ pub async fn load_email_account_for_user(
     Ok(account)
 }
 
+/// Like `load_email_account_for_user` but also accepts shared-inbox
+/// members with `can_reply = TRUE`. Used by the send-mail handler so
+/// teammates can reply from `support@`. Owner access still uses the
+/// same per-account cache; shared-member access bypasses the cache
+/// (membership is a server-of-truth check we want fresh).
+#[instrument(target = "db", skip(pool), fields(account_id, user_id))]
+pub async fn load_email_account_for_send(
+    pool: &PgPool,
+    account_id: i32,
+    user_id: i32,
+) -> Result<Option<EmailAccount>> {
+    if let Some(account) = load_email_account_for_user(pool, account_id, user_id).await? {
+        return Ok(Some(account));
+    }
+    let row = sqlx::query(
+        r#"
+        SELECT a.id, a.user_id, a.email, a.provider, a.refresh_token, a.last_sync
+          FROM email_accounts a
+          JOIN shared_inbox_members m
+            ON m.account_id = a.id
+           AND m.user_id = $2
+           AND m.can_reply = TRUE
+         WHERE a.id = $1
+        "#,
+    )
+    .bind(account_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(account_from_row))
+}
+
 #[instrument(target = "db", skip(pool))]
 pub async fn load_syncable_email_accounts(pool: &PgPool) -> Result<Vec<EmailAccount>> {
     let rows = sqlx::query(
@@ -127,6 +159,9 @@ pub async fn load_user_email_accounts_for_older_sync(
 
 #[instrument(target = "db", skip(pool), fields(user_id))]
 pub async fn load_account_summaries_for_user(pool: &PgPool, user_id: i32) -> Result<Vec<Account>> {
+    // Owner mailboxes AND shared inboxes the caller is a member of. The
+    // LEFT JOIN against shared_inbox_members is repeated in the WHERE so
+    // a single GROUP BY collapses everything to one row per account.
     let accounts = sqlx::query_as::<_, Account>(
         r#"
         SELECT
@@ -136,12 +171,17 @@ pub async fn load_account_summaries_for_user(pool: &PgPool, user_id: i32) -> Res
           COUNT(e.id) FILTER (
             WHERE e.is_read = false
               AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'
-          )::BIGINT AS unread_count
+          )::BIGINT AS unread_count,
+          a.is_shared,
+          a.shared_label,
+          (a.user_id = $1) AS is_owner
         FROM email_accounts a
         LEFT JOIN emails e ON e.account_id = a.id
-        WHERE a.user_id = $1
+        LEFT JOIN shared_inbox_members m
+               ON m.account_id = a.id AND m.user_id = $1
+        WHERE a.user_id = $1 OR m.user_id IS NOT NULL
         GROUP BY a.id, a.email
-        ORDER BY a.id DESC
+        ORDER BY a.is_shared, a.id DESC
         "#,
     )
     .bind(user_id)

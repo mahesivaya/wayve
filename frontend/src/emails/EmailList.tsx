@@ -32,6 +32,16 @@ export const EmailList: React.FC<EmailListProps> = ({
         >
           <div className="email-top">
             <span className="email-primary">
+              {/* Shared-inbox workflow chip. Only renders when the row
+                  came from a shared account AND has been touched at
+                  least once (no chip = no help-desk state yet, i.e.
+                  implicit "open" — surfaced by the row's unread style
+                  rather than a redundant green chip on every mail). */}
+              {email.is_shared && email.inbox_status && (
+                <span className={`inbox-status-chip ${email.inbox_status}`}>
+                  {email.inbox_status}
+                </span>
+              )}
               <span className="email-list-subject">{email.subject || "(No Subject)"}</span>
             </span>
             <span className="email-row-meta">

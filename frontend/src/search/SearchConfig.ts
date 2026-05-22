@@ -11,6 +11,7 @@ export const SEARCH_LABELS: Record<string, string> = {
   "/aichat": "AI chat",
   "/profile": "profile",
   "/settings": "settings",
+  "/security/audit": "security audit logs",
 };
 
 export const HIDE_SEARCH_PATHS = ["/scheduler"];

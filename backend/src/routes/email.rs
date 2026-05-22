@@ -21,6 +21,12 @@ pub struct EmailQuery {
     pub before_id: Option<i32>,
     pub folder: Option<String>,
     pub q: Option<String>,
+    /// Shared-inbox workflow filter:
+    ///   `open` | `pending` | `closed` — match `shared_inbox_email_state.status`
+    ///   `unassigned` — has a state row but no assignee
+    ///   `mine` — assigned to the calling user
+    /// Any other value is ignored.
+    pub inbox_status: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -64,7 +70,10 @@ pub async fn get_emails(
         warn!(target: "gmail", user_id, error = ?e, "older email page sync failed");
     }
 
-    // 🔥 Build query dynamically
+    // Build query dynamically. The LEFT JOINs against shared_inbox_members
+    // and shared_inbox_email_state are what extend the existing personal-
+    // mailbox query to also surface shared-inbox messages and their
+    // help-desk workflow state (status + assignee).
     let mut qb = QueryBuilder::new(
         r#"
         SELECT e.id, e.gmail_id, e.subject, e.sender, e.receiver,
@@ -72,19 +81,50 @@ pub async fn get_emails(
                EXISTS (
                    SELECT 1 FROM email_attachments ea WHERE ea.email_id = e.id
                ) AS has_attachments,
-               e.account_id, e.is_read, e.created_at
+               e.account_id, e.is_read, e.created_at,
+               a.is_shared, a.shared_label,
+               s.status AS inbox_status, s.assignee_id AS inbox_assignee_id
         FROM emails e
         JOIN email_accounts a ON e.account_id = a.id
-        WHERE a.user_id =
+        LEFT JOIN shared_inbox_members sm
+               ON sm.account_id = a.id AND sm.user_id =
         "#,
     );
-
     qb.push_bind(user_id);
+    qb.push(
+        r#"
+        LEFT JOIN shared_inbox_email_state s ON s.email_id = e.id
+        WHERE (a.user_id =
+        "#,
+    );
+    qb.push_bind(user_id);
+    qb.push(" OR sm.user_id IS NOT NULL)");
 
     // ✅ Optional account filter
     if let Some(account_id) = query.account_id {
         qb.push(" AND a.id = ");
         qb.push_bind(account_id);
+    }
+
+    // Shared-inbox status filter. Only meaningful when the calling user is
+    // looking at a shared inbox; on a personal mailbox there's no state
+    // row, so `open/pending/closed` simply returns nothing — which is
+    // exactly what we want.
+    if let Some(raw) = query.inbox_status.as_deref().map(str::trim) {
+        match raw {
+            "open" | "pending" | "closed" => {
+                qb.push(" AND s.status = ");
+                qb.push_bind(raw.to_string());
+            }
+            "unassigned" => {
+                qb.push(" AND s.email_id IS NOT NULL AND s.assignee_id IS NULL");
+            }
+            "mine" => {
+                qb.push(" AND s.assignee_id = ");
+                qb.push_bind(user_id);
+            }
+            _ => {}
+        }
     }
 
     // ✅ Folder filter (FIX)
@@ -157,6 +197,14 @@ pub async fn get_emails(
                 "account_id": row.get::<Option<i32>,_>("account_id"),
                 "is_read": row.get::<Option<bool>,_>("is_read").unwrap_or(true),
                 "created_at": created_at,
+                // Shared-inbox surface — `is_shared` lets the UI render
+                // the chip/avatar grouping; `shared_label` is the
+                // friendly inbox name (e.g. "Support"); the state pair
+                // drives the help-desk badges.
+                "is_shared": row.try_get::<bool,_>("is_shared").unwrap_or(false),
+                "shared_label": row.try_get::<Option<String>,_>("shared_label").unwrap_or(None),
+                "inbox_status": row.try_get::<Option<String>,_>("inbox_status").unwrap_or(None),
+                "inbox_assignee_id": row.try_get::<Option<i32>,_>("inbox_assignee_id").unwrap_or(None),
             })
         })
         .collect();

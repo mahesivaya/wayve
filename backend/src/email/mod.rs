@@ -12,6 +12,7 @@ pub mod provider;
 mod provider_lookup;
 mod send;
 pub mod sender;
+pub mod shared_inbox;
 pub mod sync;
 pub mod sync_older;
 pub mod utils;

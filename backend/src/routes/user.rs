@@ -1,3 +1,5 @@
+use crate::billing::entitlements::effective_entitlements;
+use crate::billing::models::BillingOwner;
 use crate::cache::TtlCache;
 use crate::email::profile::invalidate_me_cache;
 use crate::models::auth::ChangePasswordInput;
@@ -859,6 +861,26 @@ pub async fn admin_create_user(
     } else {
         None
     };
+
+    if let Some(org_id) = organization_id {
+        let entitlements =
+            effective_entitlements(pool.get_ref(), BillingOwner::Organization(org_id)).await;
+        if entitlements.seat_limit >= 0 {
+            let seats_used = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*)::BIGINT FROM users WHERE organization_id = $1",
+            )
+            .bind(org_id)
+            .fetch_one(pool.get_ref())
+            .await?;
+            if seats_used >= i64::from(entitlements.seat_limit) {
+                return Ok(HttpResponse::PaymentRequired().json(serde_json::json!({
+                    "message": "Organization seat limit reached. Upgrade the plan before adding more members.",
+                    "seat_limit": entitlements.seat_limit,
+                    "seats_used": seats_used
+                })));
+            }
+        }
+    }
 
     let hashed = hash_password(&data.password).await?;
 

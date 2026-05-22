@@ -389,6 +389,113 @@
   color: var(--color-surface);
 }
 
+/* Shared-inbox surface in the sidebar. The chip + soft purple bar are
+   the only differences from a personal mailbox — keeps the row scannable
+   when a user has both kinds. */
+.account-filter.shared {
+  border-left: 2px solid #6f5cd6;
+}
+.account-shared-chip {
+  background: #ecedf6;
+  color: #332379;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+  text-transform: uppercase;
+}
+
+/* Status badges for shared-inbox email rows. */
+.inbox-status-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-right: 6px;
+}
+.inbox-status-chip.open    { background: #e9f5e1; color: #2d6f1c; }
+.inbox-status-chip.pending { background: #fff4d6; color: #806000; }
+.inbox-status-chip.closed  { background: #e5e7eb; color: #4b5563; }
+
+/* Shared-inbox workflow controls (detail view). Single row of compact
+   fields, hidden entirely on personal mail. */
+.inbox-workflow-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  background: #fbfbff;
+  border: 1px solid #ecedf6;
+  border-radius: 10px;
+}
+.inbox-workflow-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #707b8e;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.inbox-workflow-field select {
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid #d0d8e8;
+  background: white;
+  font-size: 13px;
+  color: #262151;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.inbox-workflow-assignee {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inbox-workflow-pill {
+  background: #ecedf6;
+  color: #332379;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.inbox-workflow-assign,
+.inbox-workflow-unassign {
+  background: #6f5cd6;
+  color: white;
+  border: none;
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.inbox-workflow-unassign {
+  background: white;
+  color: #4a5568;
+  border: 1px solid #d0d8e8;
+}
+.inbox-workflow-assign:disabled,
+.inbox-workflow-unassign:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.inbox-workflow-error {
+  color: #c1272d;
+  font-size: 12px;
+}
+
 /* Hover */
 .filter-btn:hover {
   background: var(--color-email-control-bg);

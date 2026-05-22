@@ -5,6 +5,7 @@ pub mod auth;
 pub mod config;
 pub mod email;
 pub mod health;
+pub mod shared_inbox;
 pub mod sso;
 pub mod user;
 
@@ -36,6 +37,9 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(api_keys::revoke_api_key)
         .service(api_keys::api_key_audit)
         .service(audit::list_audit_logs)
+        .service(audit::get_siem_settings)
+        .service(audit::upsert_siem_settings)
+        .service(audit::test_siem_settings)
         .service(account::get_accounts)
         .service(account::update_account_display_name)
         .service(user::get_user_by_email)
@@ -48,5 +52,13 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(sso::delete_sso_config)
         .service(sso::test_sso_config)
         .service(sso::auth_sso_start)
-        .service(sso::auth_sso_callback);
+        .service(sso::auth_sso_callback)
+        .service(shared_inbox::list_shared_inboxes)
+        .service(shared_inbox::create_shared_inbox)
+        .service(shared_inbox::update_shared_inbox)
+        .service(shared_inbox::delete_shared_inbox)
+        .service(shared_inbox::list_inbox_members)
+        .service(shared_inbox::add_inbox_member)
+        .service(shared_inbox::remove_inbox_member)
+        .service(shared_inbox::update_email_state);
 }

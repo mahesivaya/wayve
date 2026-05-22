@@ -30,13 +30,19 @@ pub async fn get_email_by_id(
 
     let email_id = path.into_inner();
 
+    // Either the account's owner OR a shared_inbox_members entry grants
+    // read access. Same access rule as get_emails so the list and detail
+    // views agree.
     let row = sqlx::query(
         r#"
         SELECT e.id, e.account_id, e.subject, e.sender, e.receiver, e.body_encrypted, e.body_iv,
                e.attachments_checked
         FROM emails e
         JOIN email_accounts a ON e.account_id = a.id
-        WHERE e.id = $1 AND a.user_id = $2
+        LEFT JOIN shared_inbox_members m
+               ON m.account_id = a.id AND m.user_id = $2
+        WHERE e.id = $1
+          AND (a.user_id = $2 OR m.user_id IS NOT NULL)
         "#,
     )
     .bind(email_id)
@@ -107,13 +113,17 @@ pub async fn get_email_body(
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
     }
 
+    // Owner or shared-inbox member may fetch the body.
     let row = sqlx::query(
         r#"
         SELECT e.id, e.gmail_id, e.body_encrypted, e.body_iv, e.attachments_checked,
                a.id AS account_id, a.refresh_token
         FROM emails e
         JOIN email_accounts a ON e.account_id = a.id
-        WHERE e.id = $1 AND a.user_id = $2
+        LEFT JOIN shared_inbox_members m
+               ON m.account_id = a.id AND m.user_id = $2
+        WHERE e.id = $1
+          AND (a.user_id = $2 OR m.user_id IS NOT NULL)
         "#,
     )
     .bind(email_id)

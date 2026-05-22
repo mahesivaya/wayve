@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { downloadEmailAttachment, sendEmail } from "../api/email";
 import { formatFileSize, renderEmailBody } from "./renderUtils";
 import { EmailItem, EmailAttachment } from "./types";
+import { updateEmailState, type InboxState } from "../api/sharedInboxes";
+import { useAuth } from "../auth/useAuth";
 
 interface EmailDetailProps {
   selectedEmail: EmailItem | null;
@@ -24,12 +26,52 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   filesError,
   normalizedSearchQuery,
 }) => {
+  const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const [replySending, setReplySending] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+
+  // Local mirror of the shared-inbox workflow state so the UI updates
+  // optimistically without waiting for a refetch of the whole list.
+  // Seeded from the email row when it's a shared-inbox message; the
+  // backend's PATCH response replaces this on each change.
+  const [inboxState, setInboxState] = useState<InboxState | null>(null);
+  const [stateSaving, setStateSaving] = useState(false);
+  const [stateError, setStateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedEmail?.is_shared && selectedEmail.id) {
+      setInboxState({
+        email_id: selectedEmail.id,
+        status: (selectedEmail.inbox_status ?? "open") as InboxState["status"],
+        assignee_id: selectedEmail.inbox_assignee_id ?? null,
+        updated_at: null,
+        updated_by: null,
+      });
+      setStateError(null);
+    } else {
+      setInboxState(null);
+    }
+  }, [selectedEmail?.id, selectedEmail?.is_shared, selectedEmail?.inbox_status, selectedEmail?.inbox_assignee_id]);
+
+  async function patchInboxState(
+    patch: Parameters<typeof updateEmailState>[1]
+  ) {
+    if (!selectedEmail) return;
+    setStateSaving(true);
+    setStateError(null);
+    try {
+      const next = await updateEmailState(selectedEmail.id, patch);
+      setInboxState(next);
+    } catch (err) {
+      setStateError(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setStateSaving(false);
+    }
+  }
 
   const visibleFiles = useMemo(() => {
     if (!normalizedSearchQuery) return files;
@@ -178,6 +220,61 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       {deleteError && <p className="email-body-error">{deleteError}</p>}
       <p><b>From:</b> {selectedEmail.sender}</p>
       <p><b>To:</b> {selectedEmail.receiver}</p>
+
+      {/* Shared-inbox workflow controls. The bar only renders when this
+          email belongs to a shared account; for personal mail it's
+          invisible and the rest of the detail view is unchanged. */}
+      {selectedEmail.is_shared && inboxState && (
+        <div className="inbox-workflow-bar" role="group" aria-label="Shared inbox workflow">
+          <label className="inbox-workflow-field">
+            <span>Status</span>
+            <select
+              value={inboxState.status}
+              disabled={stateSaving}
+              onChange={(e) => {
+                const next = e.target.value as InboxState["status"];
+                void patchInboxState({ status: next });
+              }}
+            >
+              <option value="open">Open</option>
+              <option value="pending">Pending</option>
+              <option value="closed">Closed</option>
+            </select>
+          </label>
+          <div className="inbox-workflow-field">
+            <span>Assignee</span>
+            <div className="inbox-workflow-assignee">
+              {inboxState.assignee_id ? (
+                <>
+                  <span className="inbox-workflow-pill">
+                    User #{inboxState.assignee_id}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void patchInboxState({ clear_assignee: true })}
+                    disabled={stateSaving}
+                    className="inbox-workflow-unassign"
+                  >
+                    Unassign
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (user?.id) void patchInboxState({ assignee_id: user.id });
+                  }}
+                  disabled={stateSaving || !user?.id}
+                  className="inbox-workflow-assign"
+                >
+                  Assign to me
+                </button>
+              )}
+            </div>
+          </div>
+          {stateError && <span className="inbox-workflow-error">{stateError}</span>}
+        </div>
+      )}
 
       {replyOpen && (
         <div className="email-reply-box">

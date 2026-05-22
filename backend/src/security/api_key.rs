@@ -8,6 +8,7 @@
 //! usable keys.
 
 use crate::config;
+use crate::security::encryption::decrypt;
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rand::RngCore;
@@ -289,6 +290,11 @@ struct SiemAuditEvent<'a> {
     created_at: DateTime<Utc>,
 }
 
+struct SiemTarget {
+    webhook_url: String,
+    webhook_token: Option<String>,
+}
+
 /// Append one row to the API-key audit log (best-effort — never blocks or
 /// fails the request).
 pub async fn write_audit(pool: &PgPool, entry: &AuditEntry) {
@@ -314,12 +320,16 @@ pub async fn write_audit(pool: &PgPool, entry: &AuditEntry) {
         return;
     };
 
-    forward_audit_to_siem(entry, row.get("id"), row.get("created_at")).await;
+    forward_audit_to_siem(pool, entry, row.get("id"), row.get("created_at")).await;
 }
 
-async fn forward_audit_to_siem(entry: &AuditEntry, audit_id: i64, created_at: DateTime<Utc>) {
-    let siem = config::siem();
-    let Some(webhook_url) = siem.webhook_url else {
+async fn forward_audit_to_siem(
+    pool: &PgPool,
+    entry: &AuditEntry,
+    audit_id: i64,
+    created_at: DateTime<Utc>,
+) {
+    let Some(target) = load_siem_target(pool, entry.user_id).await else {
         return;
     };
 
@@ -336,8 +346,8 @@ async fn forward_audit_to_siem(entry: &AuditEntry, audit_id: i64, created_at: Da
         created_at,
     };
 
-    let mut request = SIEM_CLIENT.post(webhook_url).json(&event);
-    if let Some(token) = siem.webhook_token {
+    let mut request = SIEM_CLIENT.post(target.webhook_url).json(&event);
+    if let Some(token) = target.webhook_token {
         request = request.bearer_auth(token);
     }
 
@@ -355,6 +365,62 @@ async fn forward_audit_to_siem(entry: &AuditEntry, audit_id: i64, created_at: Da
             error = ?error,
             "siem audit webhook request failed"
         ),
+    }
+}
+
+async fn load_siem_target(pool: &PgPool, user_id: Option<i32>) -> Option<SiemTarget> {
+    if let Some(user_id) = user_id {
+        let row = sqlx::query(
+            r#"
+            SELECT c.webhook_url, c.token_iv, c.token_encrypted
+            FROM siem_webhook_configs c
+            JOIN users u ON u.id = $1
+            WHERE c.enabled = TRUE
+              AND (
+                (c.scope = 'platform' AND u.account_type = 'platform_admin')
+                OR (c.scope = 'organization' AND c.organization_id = u.organization_id)
+                OR (c.scope = 'personal' AND c.user_id = u.id)
+              )
+            ORDER BY CASE c.scope
+                WHEN 'personal' THEN 1
+                WHEN 'organization' THEN 2
+                WHEN 'platform' THEN 3
+                ELSE 4
+              END
+            LIMIT 1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+
+        if let Some(row) = row {
+            let webhook_url: String = row.get("webhook_url");
+            let token = decrypt_optional_token(&row);
+            return Some(SiemTarget {
+                webhook_url,
+                webhook_token: token,
+            });
+        }
+    }
+
+    let env = config::siem();
+    env.webhook_url.map(|webhook_url| SiemTarget {
+        webhook_url,
+        webhook_token: env.webhook_token,
+    })
+}
+
+fn decrypt_optional_token(row: &sqlx::postgres::PgRow) -> Option<String> {
+    let iv: Option<String> = row.try_get("token_iv").ok().flatten();
+    let encrypted: Option<String> = row.try_get("token_encrypted").ok().flatten();
+    match (iv, encrypted) {
+        (Some(iv), Some(encrypted)) if !iv.is_empty() && !encrypted.is_empty() => {
+            decrypt(&iv, &encrypted).ok()
+        }
+        _ => None,
     }
 }
 
