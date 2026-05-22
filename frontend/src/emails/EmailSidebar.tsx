@@ -164,7 +164,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
         aria-haspopup="dialog"
         aria-expanded={pickerOpen}
       >
-        ➕ Add more emails
+        ➕ Add more accounts
       </button>
 
       {/* Mount only while open — keeps the picker's state fresh each time
