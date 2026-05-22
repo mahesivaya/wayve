@@ -746,3 +746,73 @@
     min-width: 0;
   }
 }
+
+/* ============================================================
+   🌙 DARK MODE — Layout chrome
+   The header was originally `lightslategray` (a midgray) which reads
+   fine in dark mode but feels light. Bump it down to a charcoal so
+   it visually belongs with the dark surface.
+   ============================================================ */
+:root[data-theme="dark"] .header {
+  background: #14171f;
+  border-bottom: 1px solid #2c313d;
+  color: #e2e8f0;
+}
+:root[data-theme="dark"] .header .logo {
+  color: #f1f5f9;
+}
+:root[data-theme="dark"] .nav a {
+  color: #cbd5e1;
+}
+:root[data-theme="dark"] .nav a:hover,
+:root[data-theme="dark"] .nav a.active {
+  background: rgba(96, 165, 250, 0.15);
+  color: #ffffff;
+}
+:root[data-theme="dark"] .header-welcome {
+  color: #e2e8f0;
+}
+:root[data-theme="dark"] .header-welcome-role {
+  background: rgba(96, 165, 250, 0.2);
+  color: #93c5fd;
+}
+:root[data-theme="dark"] .icon-sidebar {
+  background: #14171f;
+  border-right: 1px solid #2c313d;
+}
+:root[data-theme="dark"] .icon-sidebar a {
+  color: #cbd5e1;
+}
+:root[data-theme="dark"] .icon-sidebar a:hover {
+  background: #232734;
+  color: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .header {
+    background: #14171f;
+    border-bottom: 1px solid #2c313d;
+    color: #e2e8f0;
+  }
+  :root:not([data-theme="light"]) .header .logo { color: #f1f5f9; }
+  :root:not([data-theme="light"]) .nav a { color: #cbd5e1; }
+  :root:not([data-theme="light"]) .nav a:hover,
+  :root:not([data-theme="light"]) .nav a.active {
+    background: rgba(96, 165, 250, 0.15);
+    color: #ffffff;
+  }
+  :root:not([data-theme="light"]) .header-welcome { color: #e2e8f0; }
+  :root:not([data-theme="light"]) .header-welcome-role {
+    background: rgba(96, 165, 250, 0.2);
+    color: #93c5fd;
+  }
+  :root:not([data-theme="light"]) .icon-sidebar {
+    background: #14171f;
+    border-right: 1px solid #2c313d;
+  }
+  :root:not([data-theme="light"]) .icon-sidebar a { color: #cbd5e1; }
+  :root:not([data-theme="light"]) .icon-sidebar a:hover {
+    background: #232734;
+    color: #ffffff;
+  }
+}

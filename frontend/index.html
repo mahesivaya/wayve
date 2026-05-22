@@ -5,6 +5,27 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>frontend</title>
+    <!--
+      Pre-paint theme bootstrap. Runs synchronously before React mounts so
+      the page never flashes light-then-dark. Source of truth ordering:
+        1. localStorage key `wayve-theme` (the user's saved choice)
+        2. If unset → leave `data-theme` empty so the CSS media query
+           `prefers-color-scheme: dark` picks the OS preference.
+      Keep this block tiny — it blocks first paint.
+    -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("wayve-theme");
+          if (saved === "dark" || saved === "light") {
+            document.documentElement.setAttribute("data-theme", saved);
+          }
+        } catch (e) {
+          /* Storage may be blocked (Safari private mode) — fall through
+             to the media query default. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
