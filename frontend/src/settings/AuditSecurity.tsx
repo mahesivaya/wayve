@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { hasPermission } from "../auth/permissions";
 import { useAuth } from "../auth/useAuth";
 import {
@@ -35,6 +36,13 @@ export default function AuditSecurity() {
   const { user } = useAuth();
   const canReadAudit = hasPermission(user, "audit:read");
   const canManageSiem = hasPermission(user, "webhooks:manage");
+
+  // Platform-team only. A non-platform user reaching this page via direct
+  // URL / stale bookmark gets bounced to /home rather than seeing an empty
+  // audit table powered by 403s from the backend.
+  if (user && user.scope !== "platform") {
+    return <Navigate to="/home" replace />;
+  }
 
   const [filters, setFilters] = useState<AuditLogFilters>({ limit: 100 });
   const [rows, setRows] = useState<AuditLogRow[]>([]);

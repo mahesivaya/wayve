@@ -166,8 +166,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   }
 
   const authedUser = user;
+  // Security/audit surface is platform-team-only. Even a non-platform user
+  // with a stray `audit:read` permission stays hidden from the nav — the
+  // page is for staff operating the platform, not customers of it.
   const canAccessSecurity =
-    hasPermission(user, "audit:read") || hasPermission(user, "webhooks:manage");
+    user.scope === "platform" &&
+    (hasPermission(user, "audit:read") || hasPermission(user, "webhooks:manage"));
   const currentPlanCode = authedUser.current_plan?.code ?? "basic_user";
   const isBasicPersonalUser =
     authedUser.account_type === "personal" && currentPlanCode === "basic_user";
