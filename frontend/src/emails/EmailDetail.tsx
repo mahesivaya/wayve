@@ -219,10 +219,47 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         </button>
         <button className="email-detail-back" onClick={onBack} title="Close" aria-label="Close">✕</button>
       </div>
-      <h2>{selectedEmail.subject}</h2>
+      <h2 className="email-detail-subject">
+        {selectedEmail.subject || "(No subject)"}
+      </h2>
       {deleteError && <p className="email-body-error">{deleteError}</p>}
-      <p><b>From:</b> {selectedEmail.sender}</p>
-      <p><b>To:</b> {selectedEmail.receiver}</p>
+
+      {(() => {
+        const { name: senderName, email: senderEmail } = splitSender(
+          selectedEmail.sender,
+        );
+        const initial = (senderName || senderEmail || "?")
+          .trim()
+          .charAt(0)
+          .toUpperCase() || "?";
+        return (
+          <div className="email-meta-row">
+            <div
+              className="email-meta-avatar"
+              aria-hidden="true"
+              style={{ background: avatarColor(senderName || senderEmail) }}
+            >
+              {initial}
+            </div>
+            <div className="email-meta-info">
+              <div className="email-meta-from">
+                <span className="email-meta-name">
+                  {senderName || senderEmail || "Unknown sender"}
+                </span>
+                {senderName && senderEmail && (
+                  <span className="email-meta-email">&lt;{senderEmail}&gt;</span>
+                )}
+              </div>
+              {selectedEmail.receiver && (
+                <div className="email-meta-to">to {selectedEmail.receiver}</div>
+              )}
+            </div>
+            <div className="email-meta-time">
+              {formatEmailDate(selectedEmail.created_at)}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Shared-inbox workflow controls. The bar only renders when this
           email belongs to a shared account; for personal mail it's
@@ -352,4 +389,51 @@ function emailAddress(value?: string | null) {
   const text = value?.trim() || "";
   const match = text.match(/<([^>]+)>/);
   return (match?.[1] || text).trim();
+}
+
+// Parse "Display Name <addr@example.com>" into separate parts. If only an
+// email address is provided (no angle brackets), name is empty.
+function splitSender(value?: string | null): { name: string; email: string } {
+  const raw = value?.trim() || "";
+  const match = raw.match(/^(.*?)<([^>]+)>\s*$/);
+  if (match) {
+    return { name: match[1].trim().replace(/^"|"$/g, ""), email: match[2].trim() };
+  }
+  return { name: "", email: raw };
+}
+
+// Gmail-style date: same-day shows time only ("3:42 PM"), this year shows
+// month+day ("May 23"), older shows full date.
+function formatEmailDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) {
+    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+  if (d.getFullYear() === now.getFullYear()) {
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+// Stable hash → palette for sender avatars. Same sender always gets the
+// same color so the inbox reads consistently across emails.
+const AVATAR_PALETTE = [
+  "#d7b29c", "#7c9eb2", "#a8c686", "#c89bb0",
+  "#8d8aaa", "#e0a36d", "#6d9eb8", "#b8857a",
+];
+function avatarColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length];
 }

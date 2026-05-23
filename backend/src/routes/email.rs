@@ -54,7 +54,7 @@ pub async fn get_emails(
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let page_size = 50;
+    let page_size = 75;
     let query_limit = page_size + 1;
 
     if let Some(before_ms) = query.before

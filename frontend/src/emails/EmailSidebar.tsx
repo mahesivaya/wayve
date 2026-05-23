@@ -72,16 +72,30 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
         Compose
       </button>
 
-      <div className="mail-section-title">Accounts</div>
+      <div className="mail-section-header">
+        <span className="mail-section-title">Accounts</span>
+        <button
+          type="button"
+          className="mail-section-action"
+          onClick={() => setPickerOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={pickerOpen}
+          aria-label="Add account"
+          title="Add account"
+        >
+          +
+        </button>
+      </div>
 
-      <button
-        className={`filter-btn ${activeAccount === null ? "active" : ""}`}
-        onClick={() => setActiveAccount(null)}
-      >
-        🌐 All Accounts
-      </button>
+      <nav className="mail-filters" aria-label="Mail accounts">
+        <button
+          className={`filter-btn ${activeAccount === null ? "active" : ""}`}
+          onClick={() => setActiveAccount(null)}
+        >
+          🌐 All Accounts
+        </button>
 
-      {accounts.map((acc) => {
+        {accounts.map((acc) => {
         const isEditing = editingAccountId === acc.id;
         // For shared inboxes the human-friendly `shared_label` ("Support")
         // is the most useful name; `display_name` is the personal nickname
@@ -174,15 +188,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           </div>
         );
       })}
-
-      <button
-        className="add-email-btn"
-        onClick={() => setPickerOpen(true)}
-        aria-haspopup="dialog"
-        aria-expanded={pickerOpen}
-      >
-        ➕ Add more accounts
-      </button>
+      </nav>
 
       {/* Mount only while open — keeps the picker's state fresh each time
           and avoids reset-on-close juggling. */}
@@ -196,18 +202,26 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
         />
       )}
 
-      <div className="mail-section-title">Folders</div>
-
-      <div className="mail-filters">
-        <button className={`filter-btn ${activeFolder === "inbox" && viewMode === "email" ? "active" : ""}`} onClick={() => setActiveFolder("inbox")}>📥 Inbox</button>
-        <button className={`filter-btn ${activeFolder === "sent" && viewMode === "email" ? "active" : ""}`} onClick={() => setActiveFolder("sent")}>📤 Sent</button>
+      <nav className="mail-filters" aria-label="Mail folders">
+        <button
+          className={`filter-btn ${activeFolder === "inbox" && viewMode === "email" ? "active" : ""}`}
+          onClick={() => setActiveFolder("inbox")}
+        >
+          📥 Inbox
+        </button>
+        <button
+          className={`filter-btn ${activeFolder === "sent" && viewMode === "email" ? "active" : ""}`}
+          onClick={() => setActiveFolder("sent")}
+        >
+          📤 Sent
+        </button>
         <button
           className={`filter-btn ${viewMode === "files" ? "active" : ""}`}
           onClick={onOpenFiles}
         >
           📎 Attachments
         </button>
-      </div>
+      </nav>
     </div>
   );
 };
