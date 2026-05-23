@@ -395,40 +395,9 @@ export default function Home() {
     );
   }
 
-  // Upgrade nudge: shown only when ALL three conditions hold:
-  //   1. The user is signed in (guaranteed — the `if (!user)` branch above
-  //      returns early for unauth visitors).
-  //   2. They are on a personal account (not an org/platform user — org
-  //      members' billing is covered by the organization subscription,
-  //      so showing them an upsell makes no sense).
-  //   3. They are currently on the free `basic_user` plan. Advance / More
-  //      Advance / Enterprise users don't see the nudge — only fresh
-  //      personal accounts that haven't subscribed yet.
-  // `current_plan` is hydrated from /api/me; if it's null (network issue
-  // or backend lookup error) we default-fail-closed and hide the nudge
-  // rather than show it speculatively.
-  const showUpgrade =
-    user.account_type === "personal" &&
-    user.current_plan?.code === "basic_user";
 
   return (
     <div className="dashboard u-page-shell">
-      {showUpgrade && (
-        <div className="dashboard-upgrade-banner">
-          <span className="dashboard-tier-badge">Basic</span>
-          <span className="dashboard-upgrade-copy">
-            You're on the free plan.
-          </span>
-          <button
-            type="button"
-            className="dashboard-upgrade-btn"
-            onClick={() => navigate("/pricing")}
-          >
-            Upgrade →
-          </button>
-        </div>
-      )}
-
       {/* GRID */}
       <div className="dashboard-grid">
         {visibleCards.map((card) => (
