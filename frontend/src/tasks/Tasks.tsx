@@ -1,12 +1,26 @@
 import { FormEvent, useMemo, useState } from "react";
+import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 import "./tasks.css";
+
+type Priority = 1 | 2 | 3 | 4 | 5;
 
 type Task = {
   id: number;
   name: string;
   description: string;
+  priority: Priority;
   createdAt: string;
+};
+
+const PRIORITY_OPTIONS: Priority[] = [5, 4, 3, 2, 1];
+
+const priorityLabel = (priority: Priority) => {
+  if (priority === 5) return "Highest";
+  if (priority === 4) return "High";
+  if (priority === 3) return "Medium";
+  if (priority === 2) return "Low";
+  return "Lowest";
 };
 
 export default function Tasks() {
@@ -15,16 +29,24 @@ export default function Tasks() {
   const [creating, setCreating] = useState(false);
   const [taskName, setTaskName] = useState("");
   const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState<Priority>(3);
   const [error, setError] = useState("");
 
   const visibleTasks = useMemo(() => {
-    if (!normalizedSearchQuery) return tasks;
+    const filtered = !normalizedSearchQuery
+      ? tasks
+      : tasks.filter((task) =>
+          [task.name, task.description]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalizedSearchQuery),
+        );
 
-    return tasks.filter((task) =>
-      [task.name, task.description]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedSearchQuery)
+    // Sort priority desc (5 = Highest at top); tie-break by newest first.
+    return [...filtered].sort(
+      (a, b) =>
+        b.priority - a.priority ||
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }, [normalizedSearchQuery, tasks]);
 
@@ -43,12 +65,14 @@ export default function Tasks() {
         id: Date.now(),
         name,
         description: details,
+        priority,
         createdAt: new Date().toISOString(),
       },
       ...prev,
     ]);
     setTaskName("");
     setDescription("");
+    setPriority(3);
     setError("");
     setCreating(false);
   };
@@ -102,6 +126,27 @@ export default function Tasks() {
                   placeholder="Add task details"
                 />
               </label>
+
+              <fieldset className="task-priority">
+                <legend>Priority</legend>
+                <div className="task-priority-options">
+                  {PRIORITY_OPTIONS.map((value) => (
+                    <label key={value} className="task-priority-option">
+                      <input
+                        type="radio"
+                        name="task-priority"
+                        value={value}
+                        checked={priority === value}
+                        onChange={() => setPriority(value)}
+                      />
+                      <span className="task-priority-num">{value}</span>
+                      <span className="task-priority-text">
+                        {priorityLabel(value)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
             </div>
 
             {error && <div className="task-error">{error}</div>}
@@ -113,6 +158,7 @@ export default function Tasks() {
                   setCreating(false);
                   setTaskName("");
                   setDescription("");
+                  setPriority(3);
                   setError("");
                 }}
               >
@@ -139,7 +185,15 @@ export default function Tasks() {
             visibleTasks.map((task) => (
               <article key={task.id} className="task-card">
                 <div>
-                  <h3>{task.name}</h3>
+                  <div className="task-card-title">
+                    <span
+                      className={`task-priority-badge priority-${task.priority}`}
+                      title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                    >
+                      P{task.priority}
+                    </span>
+                    <h3>{task.name}</h3>
+                  </div>
                   <p>{task.description || "No description added."}</p>
                 </div>
                 <time dateTime={task.createdAt}>
