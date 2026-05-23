@@ -46,7 +46,13 @@ http {
         add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-Vi7qArasfF0qOpumMGQa0m1H6Pynd8yml8w6qnJD568=' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ${CSP_CONNECT_SRC} https: wss:; frame-src https://js.stripe.com https://hooks.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        # `camera=(self)` and `microphone=(self)` let the WebRTC call code in
+        # the same-origin page (useCallSession.ts) invoke getUserMedia. The
+        # empty list `()` previously here blocked the API outright, with the
+        # browser reporting a "Permissions policy violation" before the OS
+        # mic/camera prompt could even show. Geolocation stays denied — no
+        # code on this origin uses it.
+        add_header Permissions-Policy "camera=(self), microphone=(self), geolocation=()" always;
 
         location /api/ {
             proxy_pass http://backend:8080;
