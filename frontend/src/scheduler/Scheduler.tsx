@@ -484,8 +484,8 @@ export default function Scheduler() {
         <div className="calendar-header">
           <button onClick={() => {
             setCurrentDate(new Date());
-            setView("week");
-            queueDefaultTimeScroll("week");
+            setView("day");
+            queueDefaultTimeScroll("day");
           }}>Today</button>
           <button onClick={() => changeMonth(-1)}>‹</button>
           <button onClick={() => changeMonth(1)}>›</button>
