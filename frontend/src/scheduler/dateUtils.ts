@@ -40,5 +40,12 @@ export function addMinutesToTime(time: string, minutes: number) {
 export function formatHour(mins: number) {
   const date = new Date();
   date.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
-  return date.toLocaleTimeString([], { hour: "numeric" });
+  // Show :MM only when non-zero so 3 PM stays compact but 3:30 PM
+  // doesn't silently round to "3 PM". Previously every minute portion
+  // was dropped, which made a 30-min event look like a 1-hour event
+  // ("3 PM - 4 PM") that then rendered as a half-height block.
+  return date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: mins % 60 === 0 ? undefined : "2-digit",
+  });
 }

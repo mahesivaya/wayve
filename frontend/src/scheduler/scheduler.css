@@ -24,9 +24,13 @@
   --danger: #ef4444;
   --danger-hover: #dc2626;
 
-  /* Scheduler-only sizing; not reused elsewhere. */
+  /* Scheduler-only sizing; not reused elsewhere. Slot height is now the
+     ONE-HOUR row height (1 row per hour, 24 rows per day) — used by
+     both the day view's `.day-slots` and the week view's `.week-row`.
+     Roughly double the previous half-hour value so the visual rhythm
+     stays the same; ~48px gives a comfortable click target. */
   --gutter: 72px;
-  --slot-h: 36px;
+  --slot-h: 48px;
 }
 
 /* ================= LAYOUT ================= */
@@ -340,7 +344,7 @@
 }
 .week-day-header {
   flex: 1;
-  padding: 8px 6px 10px;
+  padding: 4px 6px 6px;
   text-align: center;
   font-size: var(--text-xs);
   color: var(--text-muted);
@@ -349,27 +353,29 @@
   border-left: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   box-sizing: border-box;
 }
 .week-day-name { font-weight: 600; }
 .week-day-num {
-  font-size: 26px;
+  font-size: 16px;
   font-weight: 400;
   color: var(--text);
   text-transform: none;
   letter-spacing: 0;
+  line-height: 1.1;
 }
-.week-day-header.is-today .week-day-num {
+/* Today's column header is highlighted as a full-bleed rectangle that
+   fills the whole header slot (day name + date), instead of a small
+   pill around just the number. Both labels flip to the surface color
+   so they read against the accent background. */
+.week-day-header.is-today {
   background: var(--accent);
   color: var(--color-surface);
-  border-radius: var(--radius-pill);
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto;
+}
+.week-day-header.is-today .week-day-name,
+.week-day-header.is-today .week-day-num {
+  color: var(--color-surface);
 }
 .week-grid {
   flex: 1;
@@ -379,7 +385,7 @@
 }
 .week-row {
   display: flex;
-  min-height: 44px;
+  min-height: var(--slot-h);
   border-bottom: 1px solid var(--border-soft);
 }
 .week-row .time-label { flex: 0 0 72px; width: 72px; }
@@ -492,6 +498,12 @@
   transition: background 0.12s, transform 0.05s;
   white-space: nowrap;
   overflow: hidden;
+  /* Events span their duration by inline height (set in Scheduler.tsx).
+     `position: relative` + `z-index: 1` keeps a multi-slot event drawn
+     above the next row's empty cells so it doesn't get clipped. */
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
 }
 .event:hover, .event-block:hover { filter: brightness(0.94); }
 .event:active, .event-block:active { transform: translateY(1px); }

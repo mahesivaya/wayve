@@ -13,6 +13,7 @@ import {
   CALENDAR_COLORS,
   CALENDAR_STORAGE_KEY,
   DAY_SLOTS,
+  SLOT_MINUTES,
   DEFAULT_CALENDARS,
   DEFAULT_VISIBLE_START_HOUR,
   EVENT_CALENDAR_STORAGE_KEY,
@@ -481,7 +482,7 @@ export default function Scheduler() {
 
     <div className="day-slots" ref={daySlotsRef}>
       {slots.map((slot) => {
-        const mins = slot * 30;
+        const mins = slot * SLOT_MINUTES;
 
         const timeLabel = `${Math.floor(mins / 60)
           .toString()
@@ -495,7 +496,7 @@ export default function Scheduler() {
           (e) =>
             e.date === dayDate &&
             e.start >= mins &&
-            e.start < mins + 30
+            e.start < mins + SLOT_MINUTES
         );
 
         return (
@@ -510,11 +511,15 @@ export default function Scheduler() {
               {slotEvents.map((e) => (
                 (() => {
                   const calendar = getCalendarForEvent(e);
+                  const durationSlots = Math.max(1, (e.end - e.start) / SLOT_MINUTES);
                   return (
                 <div
                   key={e.id}
                   className={`event${e.source === "google" ? " from-google" : ""}`}
-                  style={{ background: calendar?.color }}
+                  style={{
+                    background: calendar?.color,
+                    height: `calc(${durationSlots} * var(--slot-h, 28px) - 4px)`,
+                  }}
                   onClick={(ev) => {
                     ev.stopPropagation();
                     openEdit(e);
@@ -562,7 +567,7 @@ export default function Scheduler() {
 
     <div className="week-grid" ref={weekGridRef}>
       {slots.map((slot) => {
-        const mins = slot * 30;
+        const mins = slot * SLOT_MINUTES;
 
         return (
           <div key={slot} className="week-row">
@@ -589,7 +594,7 @@ export default function Scheduler() {
                 (e) =>
                   e.date === dayDate &&
                   e.start >= mins &&
-                  e.start < mins + 30
+                  e.start < mins + SLOT_MINUTES
               );
 
               return (
@@ -601,11 +606,19 @@ export default function Scheduler() {
                   {slotEvents.map((e) => (
                     (() => {
                       const calendar = getCalendarForEvent(e);
+                      // Duration-proportional height: each slot is one hour
+                      // (--slot-h tall), so a 60-min event spans one slot
+                      // and a 90-min event spans 1.5. Subtract 4px to leave
+                      // a gutter against the row below.
+                      const durationSlots = Math.max(1, (e.end - e.start) / SLOT_MINUTES);
                       return (
                     <div
                       key={e.id}
                       className={`event${e.source === "google" ? " from-google" : ""}`}
-                      style={{ background: calendar?.color }}
+                      style={{
+                        background: calendar?.color,
+                        height: `calc(${durationSlots} * var(--slot-h, 28px) - 4px)`,
+                      }}
                       onClick={(ev) => {
                         ev.stopPropagation();
                         openEdit(e);
