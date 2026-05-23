@@ -105,6 +105,20 @@
   font-weight: 750;
 }
 
+.tasks-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.create-task-btn--inline {
+  width: auto;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 14px;
+  font-size: var(--text-md);
+}
+
 .task-create-form {
   margin-bottom: 16px;
   padding: 16px;

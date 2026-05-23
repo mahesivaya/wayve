@@ -25,6 +25,8 @@ const priorityLabel = (priority: Priority) => {
 
 export default function Tasks() {
   const { normalizedSearchQuery } = useGlobalSearch();
+  const { user } = useAuth();
+  const isPersonal = user?.scope === "personal";
   const [tasks, setTasks] = useState<Task[]>([]);
   const [creating, setCreating] = useState(false);
   const [taskName, setTaskName] = useState("");
@@ -78,23 +80,25 @@ export default function Tasks() {
   };
 
   return (
-    <div className="tasks-app">
-      <aside className="tasks-sidebar">
-        <button
-          className="create-task-btn"
-          onClick={() => {
-            setCreating(true);
-            setError("");
-          }}
-        >
-          + Create task
-        </button>
+    <div className={`tasks-app${isPersonal ? " tasks-app--personal" : ""}`}>
+      {!isPersonal && (
+        <aside className="tasks-sidebar">
+          <button
+            className="create-task-btn"
+            onClick={() => {
+              setCreating(true);
+              setError("");
+            }}
+          >
+            + Create task
+          </button>
 
-        <div className="task-filter-title">Tasks</div>
-        <button className="task-filter active">All tasks</button>
-        <button className="task-filter">Created by me</button>
-        <button className="task-filter">Recently added</button>
-      </aside>
+          <div className="task-filter-title">Tasks</div>
+          <button className="task-filter active">All tasks</button>
+          <button className="task-filter">Created by me</button>
+          <button className="task-filter">Recently added</button>
+        </aside>
+      )}
 
       <main className="tasks-main">
         <div className="tasks-header">
@@ -102,7 +106,20 @@ export default function Tasks() {
             <h2>Tasks</h2>
             <p>Create simple work items with a name and description.</p>
           </div>
-          <span className="tasks-count">{tasks.length} total</span>
+          <div className="tasks-header-actions">
+            <span className="tasks-count">{tasks.length} total</span>
+            {isPersonal && (
+              <button
+                className="create-task-btn create-task-btn--inline"
+                onClick={() => {
+                  setCreating(true);
+                  setError("");
+                }}
+              >
+                + Create task
+              </button>
+            )}
+          </div>
         </div>
 
         {creating && (
