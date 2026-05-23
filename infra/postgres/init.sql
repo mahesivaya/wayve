@@ -265,22 +265,6 @@ CREATE TABLE IF NOT EXISTS shared_inbox_members (
 );
 CREATE INDEX IF NOT EXISTS idx_shared_inbox_members_user ON shared_inbox_members(user_id);
 
--- Per-email help-desk workflow state. Created lazily on first state
--- mutation (status change or assignment) so we don't have to backfill rows
--- for every existing email when an account becomes shared.
-CREATE TABLE IF NOT EXISTS shared_inbox_email_state (
-    email_id INTEGER PRIMARY KEY REFERENCES emails(id) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'pending', 'closed')),
-    assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
-);
-CREATE INDEX IF NOT EXISTS idx_shared_inbox_state_assignee
-    ON shared_inbox_email_state(assignee_id) WHERE assignee_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_shared_inbox_state_status
-    ON shared_inbox_email_state(status);
-
-
 CREATE TABLE IF NOT EXISTS emails (
     id SERIAL PRIMARY KEY,
     gmail_id TEXT NOT NULL,
@@ -299,6 +283,21 @@ CREATE TABLE IF NOT EXISTS emails (
 );
 
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+
+-- Per-email help-desk workflow state. Created lazily on first state
+-- mutation (status change or assignment) so we don't have to backfill rows
+-- for every existing email when an account becomes shared.
+CREATE TABLE IF NOT EXISTS shared_inbox_email_state (
+    email_id INTEGER PRIMARY KEY REFERENCES emails(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'pending', 'closed')),
+    assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_shared_inbox_state_assignee
+    ON shared_inbox_email_state(assignee_id) WHERE assignee_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_shared_inbox_state_status
+    ON shared_inbox_email_state(status);
 
 CREATE TABLE IF NOT EXISTS email_attachments (
     id SERIAL PRIMARY KEY,
