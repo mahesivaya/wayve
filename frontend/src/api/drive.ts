@@ -86,12 +86,40 @@ export const shareDriveFolder = async (
     body: JSON.stringify({ scope, permission }),
   });
 
+/**
+ * Upload files to drive. When `userId` is provided, each file is wrapped
+ * in the WV1 binary envelope (E2E) before upload — the server only ever
+ * sees ciphertext. We keep the original filename in the form field (it's
+ * stored plaintext on the server today; encrypted-filename is a follow-up).
+ *
+ * `userId == null` is the legacy plaintext upload path; kept as an
+ * escape hatch for pre-keypair users, but the caller (DriveBox) always
+ * supplies userId once the key is set up.
+ */
 export const uploadDriveFiles = async (
   files: File[],
   folderId: number | null = null,
+  userId: number | null = null,
 ) => {
   const formData = new FormData();
-  files.forEach((file) => formData.append("files", file));
+
+  if (userId != null) {
+    const { encryptBlobForSelf } = await import("../crypto/fileEnvelope");
+    for (const file of files) {
+      // Encrypted blob is wrapped in a File with the original name so
+      // the multipart filename field still surfaces "report.pdf" to the
+      // backend handler (used for the DB row's name column). The bytes
+      // inside are opaque WV1 envelope.
+      const ciphertext = await encryptBlobForSelf(file, userId);
+      formData.append(
+        "files",
+        new File([ciphertext], file.name, { type: "application/octet-stream" }),
+      );
+    }
+  } else {
+    files.forEach((file) => formData.append("files", file));
+  }
+
   if (folderId != null) {
     formData.append("folder_id", String(folderId));
   }
@@ -118,14 +146,34 @@ export const uploadDriveFiles = async (
   }
 };
 
-// Downloads go through the authenticated, ownership-checked route. The file
-// is fetched with the auth header and handed to the browser as a blob, since
-// a plain <a href> can't send the Authorization header.
-export const downloadDriveFile = async (fileId: number, fileName: string) => {
+/**
+ * Download a drive file. When the bytes start with the WV1 envelope
+ * magic, decrypt client-side before handing the browser the blob.
+ * Pre-E2E plaintext files pass through unchanged so existing rows
+ * keep working through the migration.
+ */
+export const downloadDriveFile = async (
+  fileId: number,
+  fileName: string,
+  userId: number | null = null,
+) => {
   const res = await apiFetch(`/api/files/${fileId}/download`);
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
+  const ct = res.headers.get("content-type") ?? "application/octet-stream";
+  const raw = new Uint8Array(await res.arrayBuffer());
 
+  let blob: Blob;
+  if (userId != null) {
+    const { looksLikeEnvelope, decryptBlobForSelf } = await import(
+      "../crypto/fileEnvelope"
+    );
+    blob = looksLikeEnvelope(raw)
+      ? await decryptBlobForSelf(raw, userId, ct)
+      : new Blob([raw], { type: ct });
+  } else {
+    blob = new Blob([raw], { type: ct });
+  }
+
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = fileName;

@@ -1,0 +1,18 @@
+# Trivy config — auto-loaded by `trivy fs ...` when run from the repo root.
+#
+# Path skips here are intentionally narrow. The local developer workspace
+# carries SSH key material that lives only on this laptop (gitignored,
+# never committed, CI never sees it) — Trivy's secret scanner flags those
+# files on every run, drowning out the *real* signals we care about. By
+# silencing exactly those paths we keep secret detection enabled
+# everywhere else, including any pem file that ever lands outside these
+# paths (which would still be a real finding to investigate).
+scan:
+  skip-files:
+    # SSH deploy key sometimes copied here for `ssh -i` convenience. Should
+    # ideally live in ~/.ssh/ — see also .gitignore line 50 (`*.pem`).
+    - 'wayve_ec2.pem'
+    # `uploads/` is the Drive feature's local user-upload sink. In dev
+    # people occasionally drop test material here, including keys. Same
+    # rule applies: the directory is already gitignored at .gitignore:45.
+    - 'uploads/**'

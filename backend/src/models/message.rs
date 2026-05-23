@@ -35,4 +35,9 @@ pub struct ChatMessage {
     pub content: String,
     pub status: Option<MessageStatus>,
     pub message_id: Option<i32>,
+    // Set for threaded channel replies; the parent must live in the same
+    // channel. None for top-level messages and all direct messages (threads
+    // are channel-only).
+    #[serde(default)]
+    pub parent_message_id: Option<i32>,
 }

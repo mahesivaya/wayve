@@ -1,5 +1,6 @@
 import React from "react";
 import { EmailItem } from "./types";
+import { useGlobalSearch } from "../search/SearchContext";
 
 interface EmailListProps {
   emails: EmailItem[];
@@ -8,6 +9,21 @@ interface EmailListProps {
   hasMore: boolean;
   loadMore: () => void;
   loadingMore: boolean;
+  onCompose?: () => void;
+  width?: number;
+}
+
+function formatMobileTime(value: string) {
+  const date = new Date(value);
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  if (sameDay && now.getTime() - date.getTime() < 10 * 60 * 1000) {
+    return "Now";
+  }
+  return date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export const EmailList: React.FC<EmailListProps> = ({
@@ -17,9 +33,30 @@ export const EmailList: React.FC<EmailListProps> = ({
   hasMore,
   loadMore,
   loadingMore,
+  onCompose,
+  width,
 }) => {
+  const { searchQuery, setSearchQuery } = useGlobalSearch();
+
   return (
-    <div className="email-list">
+    <div className="email-list" style={width ? { width } : undefined}>
+      <div className="mobile-mail-topbar">
+        <button type="button" className="mobile-mail-menu" aria-label="Menu">
+          ☰
+        </button>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search in mail"
+          aria-label="Search in mail"
+        />
+        <div className="mobile-mail-avatar" aria-hidden="true">
+          M
+        </div>
+      </div>
+      <div className="mobile-mail-label">Inbox</div>
+
       {emails.map((email) => (
         <div
           key={email.id}
@@ -51,6 +88,34 @@ export const EmailList: React.FC<EmailListProps> = ({
               </span>
             </span>
           </div>
+          <div className="mobile-email-row">
+            <div className="mobile-email-avatar" aria-hidden="true">
+              {(email.sender || email.receiver || "?").trim().charAt(0).toUpperCase()}
+            </div>
+            <div className="mobile-email-content">
+              <div className="mobile-email-sender-line">
+                <span className="mobile-email-sender">
+                  {email.sender || email.receiver || "Unknown sender"}
+                </span>
+                <span className="mobile-email-time">
+                  {formatMobileTime(email.created_at)}
+                </span>
+              </div>
+              <div className="mobile-email-subject">{email.subject || "(No Subject)"}</div>
+              <div className="mobile-email-preview">
+                {email.preview || email.body || "No preview available"}
+              </div>
+              {email.has_attachments && (
+                <div className="mobile-email-attachment">
+                  <span aria-hidden="true">PDF</span>
+                  Attachment
+                </div>
+              )}
+            </div>
+            <button type="button" className="mobile-email-star" aria-label="Star email">
+              ☆
+            </button>
+          </div>
         </div>
       ))}
 
@@ -59,6 +124,18 @@ export const EmailList: React.FC<EmailListProps> = ({
           <button className="load-more-btn" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading..." : "Show more emails"}</button>
         </div>
       )}
+
+      {onCompose && (
+        <button type="button" className="mobile-compose-fab" onClick={onCompose}>
+          ✎ <span>Compose</span>
+        </button>
+      )}
+      <div className="mobile-mail-bottom-nav" aria-hidden="true">
+        <span className="active">✉</span>
+        <span>□</span>
+        <span>♚</span>
+        <span>▭</span>
+      </div>
     </div>
   );
 };

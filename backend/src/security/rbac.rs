@@ -251,6 +251,16 @@ const P_SECURITY: &[Permission] = &[
     AppsUse,
     ProfileManageSelf,
     MembersRead,
+    // Security can provision new accounts (guest/developer/member/support)
+    // through the admin "Create user" flow. Granting MembersManage also lets
+    // them change roles on existing members via the same gate; that's
+    // intentional — owner/super_admin still keep all permissions above it.
+    MembersManage,
+    // Paired with MembersManage so security can actually act on the accounts
+    // it provisions — change roles and delete users — but only for roles
+    // below admin. Without this, can_assign_role would return false for
+    // every target.
+    RolesAssignLimited,
     LogsRead,
     LogsReadLimited,
     AuditRead,

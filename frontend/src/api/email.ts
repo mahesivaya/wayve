@@ -148,12 +148,39 @@ export const getEmailAttachments = async (emailId: number) =>
 export const getAllEmailAttachments = async () =>
   apiFetchJson<EmailAttachment[]>("/api/emails/attachments");
 
-export const downloadEmailAttachment = async (attachment: EmailAttachment) => {
+/**
+ * Download an email attachment. If `userId` is provided AND the bytes
+ * start with the WV1 envelope magic (i.e. the attachment was originally
+ * a Wayve-encrypted file forwarded via email), decrypt client-side.
+ *
+ * Important limitation: outbound email attachments from Wayve to
+ * non-Wayve recipients are NOT E2E-encrypted — they go through the
+ * standard Gmail/Outlook SMTP path in plaintext, because the recipient's
+ * mail client can't decrypt our envelope format. End-to-end for
+ * attachments is only achievable inside the Wayve <-> Wayve loop today.
+ */
+export const downloadEmailAttachment = async (
+  attachment: EmailAttachment,
+  userId: number | null = null,
+) => {
   const res = await apiFetch(`/api/email-attachments/${attachment.id}/download`);
-  const blob = await res.blob();
+  const ct = res.headers.get("content-type") ?? "application/octet-stream";
+  const raw = new Uint8Array(await res.arrayBuffer());
+
+  let blob: Blob;
+  if (userId != null) {
+    const { looksLikeEnvelope, decryptBlobForSelf } = await import(
+      "../crypto/fileEnvelope"
+    );
+    blob = looksLikeEnvelope(raw)
+      ? await decryptBlobForSelf(raw, userId, ct)
+      : new Blob([raw], { type: ct });
+  } else {
+    blob = new Blob([raw], { type: ct });
+  }
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-
   link.href = url;
   link.download = attachment.filename || "attachment";
   document.body.appendChild(link);

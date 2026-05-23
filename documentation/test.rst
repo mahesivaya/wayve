@@ -1048,3 +1048,5 @@ SMTP_FROM=dev@example.local
 # ZOOM_CLIENT_SECRET=
 # GEMINI_API_KEY=
 # RUST_LOG=debug
+
+ 

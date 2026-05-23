@@ -10,9 +10,20 @@ const newReqId = (): string => {
   return Math.random().toString(36).slice(2, 10);
 };
 
-export async function register(email: string, password: string, confirm: string) {
+// Re-export from authContextValue so call sites can keep importing
+// `RecoveryMode` from a single place. The canonical union is the one
+// kept in sync with the backend CHECK constraint on `users.recovery_mode`.
+export type { RecoveryMode } from "../auth/authContextValue";
+import type { RecoveryMode as _RecoveryMode } from "../auth/authContextValue";
+
+export async function register(
+  email: string,
+  password: string,
+  confirm: string,
+  recoveryMode: _RecoveryMode = "full"
+) {
   const reqId = newReqId();
-  log.info(`[${reqId}] register attempt`, { email });
+  log.info(`[${reqId}] register attempt`, { email, recoveryMode });
   const start = performance.now();
 
   try {
@@ -22,7 +33,12 @@ export async function register(email: string, password: string, confirm: string)
       headers: {
         "X-Request-ID": reqId,
       },
-      body: JSON.stringify({ email, password, confirm_password: confirm }),
+      body: JSON.stringify({
+        email,
+        password,
+        confirm_password: confirm,
+        recovery_mode: recoveryMode,
+      }),
     });
 
     const ms = Math.round(performance.now() - start);
@@ -84,6 +100,51 @@ export async function resetPassword(token: string, newPassword: string) {
     method: "POST",
     body: JSON.stringify({ token,
       new_password: newPassword }),
+  });
+  return res.json();
+}
+
+// Mnemonic-based password reset for users who lost their password but kept
+// their 24-word recovery phrase. The phrase itself never crosses the wire;
+// the frontend converts it to 32-byte entropy first (see crypto/mnemonic.ts
+// :: mnemonicToEntropy). Backend verifies by attempting AES-GCM decrypt of
+// the user's stored envelope and only mutates the password if that
+// succeeds.
+//
+// For "full" accounts the response includes the envelope so the same page
+// can also unlock E2E keys client-side. For "password_only" accounts
+// `wrapped_envelope` is null — the server never held the user's real
+// private key, so no client-side restore is possible.
+export type RecoverWithMnemonicResponse = {
+  user_id: number;
+  recovery_mode?: _RecoveryMode;
+  wrapped_envelope:
+    | {
+        v: 1;
+        iv: string;
+        pub: string;
+        ct: string;
+      }
+    | null;
+};
+
+export async function recoverWithMnemonic(
+  email: string,
+  mnemonicEntropy: Uint8Array,
+  newPassword: string,
+): Promise<RecoverWithMnemonicResponse> {
+  const entropyB64 = btoa(
+    Array.from(mnemonicEntropy).map((b) => String.fromCharCode(b)).join(""),
+  );
+  const res = await apiFetch("/api/auth/recover-with-mnemonic", {
+    auth: false,
+    preserve401: true,
+    method: "POST",
+    body: JSON.stringify({
+      email,
+      mnemonic_entropy: entropyB64,
+      new_password: newPassword,
+    }),
   });
   return res.json();
 }

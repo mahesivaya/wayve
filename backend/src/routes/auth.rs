@@ -23,13 +23,29 @@ pub async fn register(pool: web::Data<PgPool>, data: web::Json<RegisterInput>) -
             .json(serde_json::json!({ "message": "Passwords do not match" })));
     }
 
+    // Recovery mode is opt-in; clients that don't send the field land on
+    // the legacy "full" path so we don't break existing flows.
+    let recovery_mode = match data.recovery_mode.as_deref() {
+        None | Some("full") => "full",
+        Some("password_only") => "password_only",
+        Some("basic") => "basic",
+        Some(other) => {
+            warn!(target: "auth", recovery_mode = other, "register rejected: invalid recovery_mode");
+            return Ok(HttpResponse::BadRequest()
+                .json(serde_json::json!({ "message": "Invalid recovery_mode" })));
+        }
+    };
+
     let hashed = hash_password(&data.password).await?;
 
-    let result = sqlx::query("INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id")
-        .bind(&data.email)
-        .bind(&hashed)
-        .fetch_one(pool.get_ref())
-        .await;
+    let result = sqlx::query(
+        "INSERT INTO users (email, password, recovery_mode) VALUES ($1, $2, $3) RETURNING id",
+    )
+    .bind(&data.email)
+    .bind(&hashed)
+    .bind(recovery_mode)
+    .fetch_one(pool.get_ref())
+    .await;
 
     match result {
         Ok(row) => {
@@ -252,4 +268,195 @@ pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>
 
     info!(target: "auth", user_id, "password reset successful");
     Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "Password updated" })))
+}
+
+// ---- Recover with mnemonic ------------------------------------------------
+//
+// A user who forgot their password but kept their 6-word recovery phrase can
+// reset their password directly here, no email round-trip. The server proves
+// the phrase is correct by trying to AES-GCM-decrypt the user's wrapped
+// envelope with the PBKDF2-derived key. If the auth tag passes, the
+// mnemonic must be right — no other branch can produce a valid tag.
+//
+// Wire shape (frontend computes entropy from words client-side so the
+// server doesn't need to embed the 2048-word BIP-39 list):
+//   { "email": "...", "mnemonic_entropy": "<b64 of 9 bytes>",
+//     "new_password": "..." }
+//
+// On success the response includes the wrapped envelope so the same page
+// can immediately unlock the user's E2E keys client-side — saves entering
+// the phrase twice.
+//
+// Note: this endpoint runs a 600,000-iteration PBKDF2 per request, which
+// is expensive on purpose. If you ever expose this without rate-limiting
+// you give attackers a free DoS surface — gate it at nginx or add a
+// per-email throttle table before opening it to the public internet.
+
+#[derive(Deserialize)]
+pub struct RecoverWithMnemonicInput {
+    pub email: String,
+    /// Base64 of the 9-byte BIP-39 entropy derived from the user's 6-word
+    /// phrase. Naming reflects what's actually on the wire — the words
+    /// never cross the network in this flow.
+    pub mnemonic_entropy: String,
+    pub new_password: String,
+}
+
+const PBKDF2_ITERATIONS: u32 = 600_000;
+const PBKDF2_SALT: &[u8] = b"wayve-recovery-v1";
+
+#[post("/auth/recover-with-mnemonic")]
+#[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
+pub async fn recover_with_mnemonic(
+    pool: web::Data<PgPool>,
+    data: web::Json<RecoverWithMnemonicInput>,
+) -> AppResult {
+    use aes_gcm::{
+        Aes256Gcm, Key, KeyInit, Nonce,
+        aead::{Aead, Payload},
+    };
+    use base64::{Engine, engine::general_purpose::STANDARD as B64};
+
+    info!(target: "auth", "recover-with-mnemonic attempt");
+
+    if data.new_password.len() < 6 {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Password must be at least 6 characters" })));
+    }
+
+    // Look up the user and their wrapped envelope in one query. Either
+    // missing → return the same generic 400 so probing for emails or
+    // for accounts-without-recovery yields the same answer.
+    let row = sqlx::query(
+        "SELECT u.id, u.recovery_mode, w.v, w.iv, w.ct, w.pub_key \
+         FROM users u \
+         LEFT JOIN user_wrapped_keys w ON w.user_id = u.id \
+         WHERE u.email = $1",
+    )
+    .bind(data.email.trim().to_lowercase())
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let row = match row {
+        Some(r) => r,
+        None => {
+            warn!(target: "auth", "recover-with-mnemonic: user not found");
+            return Ok(HttpResponse::BadRequest().json(
+                serde_json::json!({ "message": "Invalid email or recovery phrase" }),
+            ));
+        }
+    };
+
+    let user_id: i32 = row.get("id");
+    let recovery_mode: String = row
+        .try_get("recovery_mode")
+        .unwrap_or_else(|_| "full".to_string());
+    let envelope_version: Option<i32> = row.try_get("v").ok().flatten();
+    let envelope_iv: Option<String> = row.try_get("iv").ok().flatten();
+    let envelope_ct: Option<String> = row.try_get("ct").ok().flatten();
+    let envelope_pub: Option<String> = row.try_get("pub_key").ok().flatten();
+
+    let (Some(v), Some(iv_b64), Some(ct_b64), Some(pub_b64)) =
+        (envelope_version, envelope_iv, envelope_ct, envelope_pub)
+    else {
+        warn!(target: "auth", user_id, "recover-with-mnemonic: no wrapped envelope on file");
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Invalid email or recovery phrase" })));
+    };
+
+    if v != 1 {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Unsupported envelope version" })));
+    }
+
+    // Derive the same PBKDF2 wrapping key the frontend used. Same salt,
+    // same iteration count, same hash — see frontend/src/crypto/recovery.ts.
+    let entropy = match B64.decode(data.mnemonic_entropy.trim()) {
+        Ok(bytes) if !bytes.is_empty() => bytes,
+        _ => {
+            return Ok(HttpResponse::BadRequest()
+                .json(serde_json::json!({ "message": "Invalid recovery phrase" })));
+        }
+    };
+    let mut key_bytes = [0u8; 32];
+    pbkdf2::pbkdf2_hmac::<sha2::Sha256>(
+        &entropy,
+        PBKDF2_SALT,
+        PBKDF2_ITERATIONS,
+        &mut key_bytes,
+    );
+
+    // Try AES-GCM decrypt. Auth-tag mismatch == wrong mnemonic; no other
+    // failure mode produces a successful decrypt with a wrong key.
+    let iv = match B64.decode(&iv_b64) {
+        Ok(v) if v.len() == 12 => v,
+        _ => {
+            error!(target: "auth", user_id, "recover-with-mnemonic: stored IV is malformed");
+            return Ok(HttpResponse::InternalServerError()
+                .json(serde_json::json!({ "message": "Recovery payload is corrupted" })));
+        }
+    };
+    let ct = match B64.decode(&ct_b64) {
+        Ok(v) => v,
+        Err(_) => {
+            error!(target: "auth", user_id, "recover-with-mnemonic: stored ciphertext is malformed");
+            return Ok(HttpResponse::InternalServerError()
+                .json(serde_json::json!({ "message": "Recovery payload is corrupted" })));
+        }
+    };
+
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+    let nonce = Nonce::from_slice(&iv);
+    let decrypt_result = cipher.decrypt(
+        nonce,
+        Payload {
+            msg: &ct,
+            aad: &[],
+        },
+    );
+    if decrypt_result.is_err() {
+        warn!(
+            target: "auth",
+            user_id,
+            "recover-with-mnemonic: wrong phrase (AES-GCM auth tag mismatch)"
+        );
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Invalid email or recovery phrase" })));
+    }
+
+    // Mnemonic verified. Set the new password. The wrapped envelope is
+    // intentionally untouched — the phrase keeps wrapping the same private
+    // key, so the user's existing E2E data stays unlockable.
+    let hashed = hash_password(&data.new_password).await?;
+    sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
+        .bind(&hashed)
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
+
+    info!(target: "auth", user_id, recovery_mode = %recovery_mode, "recover-with-mnemonic: password reset via recovery phrase");
+
+    // For `full` users, return the envelope so the frontend can unlock
+    // E2E keys client-side immediately (avoids "enter the mnemonic
+    // twice" UX). For `password_only` users the envelope holds random
+    // throwaway bytes — withholding it is the whole point of the mode,
+    // so we only acknowledge the reset.
+    if recovery_mode == "password_only" {
+        Ok(HttpResponse::Ok().json(serde_json::json!({
+            "user_id": user_id,
+            "wrapped_envelope": null,
+            "recovery_mode": recovery_mode,
+        })))
+    } else {
+        Ok(HttpResponse::Ok().json(serde_json::json!({
+            "user_id": user_id,
+            "wrapped_envelope": {
+                "v": v,
+                "iv": iv_b64,
+                "pub": pub_b64,
+                "ct": ct_b64,
+            },
+            "recovery_mode": recovery_mode,
+        })))
+    }
 }

@@ -53,6 +53,8 @@ export default function ForgotPassword() {
 
         <p className="switch-auth">
           <Link to="/login">Back to login</Link>
+          {" · "}
+          <Link to="/recover-with-mnemonic">Have your recovery phrase?</Link>
         </p>
       </form>
     </div>

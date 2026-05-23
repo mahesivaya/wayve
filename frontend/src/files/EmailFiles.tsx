@@ -5,6 +5,7 @@ import {
   getAllEmailAttachments,
   type EmailAttachment,
 } from "../api/email";
+import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 import "./emailFiles.css";
 
@@ -17,6 +18,7 @@ function formatFileSize(size?: number | null) {
 
 export default function EmailFiles() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { normalizedSearchQuery } = useGlobalSearch();
   const [files, setFiles] = useState<EmailAttachment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,7 +81,7 @@ export default function EmailFiles() {
             <button
               key={file.id}
               className="email-files-row"
-              onClick={() => downloadEmailAttachment(file)}
+              onClick={() => downloadEmailAttachment(file, user?.id ?? null)}
             >
               <span className="email-files-icon">📎</span>
               <span className="email-files-main">

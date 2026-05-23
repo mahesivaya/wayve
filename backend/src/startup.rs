@@ -212,6 +212,32 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          ON shared_inbox_email_state(assignee_id) WHERE assignee_id IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS idx_shared_inbox_state_status \
          ON shared_inbox_email_state(status)",
+        // ────────────────────────────────────────────────────────────────
+        // Recovery seed: server-side wrapped private key. Encrypted with
+        // PBKDF2(mnemonic) → AES-GCM; opaque to the server. One row per
+        // user; PUT overwrites. See backend/src/routes/recovery.rs and
+        // frontend/src/crypto/recovery.ts for the wire format.
+        // ────────────────────────────────────────────────────────────────
+        "CREATE TABLE IF NOT EXISTS user_wrapped_keys (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            v INTEGER NOT NULL,
+            iv TEXT NOT NULL,
+            pub_key TEXT NOT NULL,
+            ct TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        // ────────────────────────────────────────────────────────────────
+        // Threaded channel replies: parent_message_id points at the top
+        // of a thread. Top-level messages have parent_message_id IS NULL.
+        // Indexed for fast reply-count and replies-of-parent fetches.
+        // ────────────────────────────────────────────────────────────────
+        "ALTER TABLE channel_messages \
+         ADD COLUMN IF NOT EXISTS parent_message_id INT \
+         REFERENCES channel_messages(id) ON DELETE CASCADE",
+        "CREATE INDEX IF NOT EXISTS idx_channel_messages_parent \
+         ON channel_messages (parent_message_id) \
+         WHERE parent_message_id IS NOT NULL",
     ];
 
     for statement in statements {

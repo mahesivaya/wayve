@@ -120,81 +120,12 @@
 /* ============================================================
    🌙 DARK MODE
    ------------------------------------------------------------
-   Two-layer activation:
-     1. `@media (prefers-color-scheme: dark)` on a :root with no explicit
-        `[data-theme]` — follows the OS preference for first-time visitors.
-     2. `:root[data-theme="dark"]` — the user has explicitly chosen dark
-        and we set the attribute from localStorage (or the toggle button).
-     3. `:root[data-theme="light"]` — the user chose light even though the
-        OS prefers dark. Wins by virtue of NOT being inside the media query.
-
-   Together: OS preference is the default; user choice wins forever after.
-   `useTheme` and the boot script in index.html drive `data-theme`.
+   Activation is explicit-only: the pre-paint script in index.html
+   sets `data-theme="light"` by default and `data-theme="dark"` only
+   if the user has clicked the toggle (localStorage `wayve-theme`).
+   The OS `prefers-color-scheme` preference is intentionally ignored.
    ============================================================ */
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --text: #cbd5e1;
-    --text-h: #f3f4f6;
-    --bg: #0f1117;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-
-    --color-surface: #1a1d26;
-    --color-surface-soft: #14171f;
-    --color-surface-hover: #232734;
-    --color-text-black: #f8fafc;
-    --color-text-primary: #f1f5f9;
-    --color-text-ink: #e2e8f0;
-    --color-text-secondary: #cbd5e1;
-    --color-text-slate: #9aa5b8;
-    --color-text-muted: #7b8597;
-    --color-border: #2c313d;
-    --color-border-soft: #353b48;
-    --color-border-muted: #3a414f;
-    --color-input-border: #3a414f;
-    --color-input-border-strong: #525c70;
-    --color-primary: #60a5fa;
-    --color-primary-hover: #93c5fd;
-    --color-primary-action: #3b82f6;
-    --color-primary-action-hover: #60a5fa;
-    --color-primary-soft: #1e293b;
-    --color-primary-hover-soft: #233048;
-    --color-primary-border: #3b4d70;
-    --color-primary-panel: #1e2a48;
-    --color-primary-panel-border: #2e3e62;
-    --color-danger: #f87171;
-    --color-danger-hover: #fca5a5;
-    --color-danger-soft: #3a1f23;
-    --color-danger-border: #5a2a30;
-    --color-email-bg: #14171f;
-    --color-email-list-bg: #1a1d26;
-    --color-email-control-bg: #232734;
-    --color-email-resizer-hover: #353b48;
-    --color-overlay-soft: rgba(20, 23, 31, 0.55);
-    --color-overlay-strong: rgba(20, 23, 31, 0.65);
-    --color-overlay-border: rgba(255, 255, 255, 0.08);
-    --color-panel-border: rgba(241, 245, 249, 0.10);
-    --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
-    --u-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-/* Explicit dark theme (user chose dark). Same vars as the media query
-   block above; duplicated so the user choice works regardless of OS
-   setting. Keep both copies in sync — any new variable goes in both. */
 :root[data-theme="dark"] {
   --text: #cbd5e1;
   --text-h: #f3f4f6;

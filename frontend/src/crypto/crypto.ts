@@ -96,6 +96,51 @@ export async function encryptMessage(
   };
 }
 
+/**
+ * Encrypts a File or Blob for Drive/Attachments.
+ * Returns a WAYVE_SECURE_V1 envelope containing the encrypted file data.
+ */
+export async function encryptFile(
+  file: File | Blob,
+  publicKey: CryptoKey
+) {
+  const arrayBuffer = await file.arrayBuffer();
+  
+  // 1. Generate AES-256-GCM key
+  const aesKey = await crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt"]
+  );
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  // 2. Encrypt the actual file content
+  const encryptedData = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: toArrayBuffer(iv) },
+    aesKey,
+    arrayBuffer
+  );
+
+  // 3. Export and wrap the AES key with the RSA public key
+  const rawAesKey = await crypto.subtle.exportKey("raw", aesKey);
+  const encryptedAesKey = await crypto.subtle.encrypt(
+    { name: "RSA-OAEP" },
+    publicKey,
+    rawAesKey
+  );
+
+  // 4. Return the standard envelope format
+  return "WAYVE_SECURE_V1\n" + JSON.stringify({
+    type: "wayve_encrypted_file",
+    name: (file as File).name || "encrypted_file",
+    mimeType: file.type,
+    data: Array.from(new Uint8Array(encryptedData)),
+    key: Array.from(new Uint8Array(encryptedAesKey)),
+    iv: Array.from(iv),
+  });
+}
+
 export async function decryptMessage(
   encryptedMessage: ArrayBuffer | SharedArrayBuffer | Uint8Array,
   encryptedKey: ArrayBuffer | SharedArrayBuffer | Uint8Array,

@@ -8,6 +8,7 @@ import Register from "./auth/Register";
 import Login from "./auth/Login";
 import ForgotPassword from "./auth/ForgotPassword";
 import ResetPassword from "./auth/ResetPassword";
+import RecoverWithMnemonicPage from "./auth/RecoverWithMnemonic";
 import { useAuth } from "./auth/useAuth";
 import { homePathForUser, normalizeAccountType } from "./auth/accountHome";
 
@@ -38,6 +39,7 @@ const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
 const SsoSettings = lazy(() => import("./settings/SsoSettings"));
 const SharedInboxes = lazy(() => import("./settings/SharedInboxes"));
 const AuditSecurity = lazy(() => import("./settings/AuditSecurity"));
+const RecoverPage = lazy(() => import("./recovery/RecoverPage"));
 
 export default function App() {
   const { user } = useAuth();
@@ -79,6 +81,10 @@ export default function App() {
         />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route
+          path="/recover-with-mnemonic"
+          element={<RecoverWithMnemonicPage />}
+        />
         <Route path="/organization" element={<Organization />} />
         <Route path="/services/:slug" element={<ServicePage />} />
         {/* Pricing is a public-facing page: anyone (logged out OR in) should
@@ -137,6 +143,7 @@ export default function App() {
             <Route path="/billing" element={<Billing />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
             <Route path="/security/audit" element={<AuditSecurity />} />
+            <Route path="/recover" element={<RecoverPage />} />
             <Route path="/settings/sso" element={<SsoSettings />} />
             <Route path="/settings/inboxes" element={<SharedInboxes />} />
 

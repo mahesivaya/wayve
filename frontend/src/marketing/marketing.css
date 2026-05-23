@@ -486,20 +486,11 @@
 
 /* ============================================================
    🌙 DARK MODE OVERRIDES
-   Hardcoded colors above are tuned for the light marketing pages.
-   Mirror them here so the same pages look right when the user has
-   chosen dark mode (or the OS prefers it and they haven't picked).
-   The selector pair below covers both activation paths — keep them
-   in sync if you add a new rule.
+   Apply only when <html data-theme="dark"> (set by the user via the
+   header toggle). OS dark preference is intentionally ignored — the
+   pre-paint script in index.html defaults every visitor to
+   data-theme="light" unless they've clicked the toggle.
    ============================================================ */
-.dark-marketing-patch { display: none; } /* anchor for tooling */
-
-:root[data-theme="dark"] .marketing-hero,
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .marketing-hero {
-    background: linear-gradient(135deg, #1a2236 0%, #14171f 60%);
-  }
-}
 :root[data-theme="dark"] .marketing-hero {
   background: linear-gradient(135deg, #1a2236 0%, #14171f 60%);
 }
@@ -562,63 +553,10 @@
   color: #93c5fd;
 }
 
-/* CTA banner stays purple — it reads fine in dark mode, just lift the
-   border slightly so it doesn't blend into the page. */
 :root[data-theme="dark"] .marketing-cta {
   border: 1px solid #4a5fb8;
 }
 
-/* Footer is already dark in light mode; ensure links don't get
-   over-tinted by the global dark text color. */
 :root[data-theme="dark"] .marketing-footer-inner button {
   color: #cbd5e1;
-}
-
-/* Mirror everything onto the prefers-color-scheme fallback so users who
-   never toggle still get dark mode on marketing pages. Same rules; the
-   selector wrapper is the only difference. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .marketing-hero {
-    background: linear-gradient(135deg, #1a2236 0%, #14171f 60%);
-  }
-  :root:not([data-theme="light"]) .marketing-hero-copy h1,
-  :root:not([data-theme="light"]) .marketing-section-header h2,
-  :root:not([data-theme="light"]) .marketing-usecase h3,
-  :root:not([data-theme="light"]) .marketing-feature h3,
-  :root:not([data-theme="light"]) .marketing-channel h3 { color: #f1f5f9; }
-  :root:not([data-theme="light"]) .marketing-hero-copy p.lead,
-  :root:not([data-theme="light"]) .marketing-section-header p,
-  :root:not([data-theme="light"]) .marketing-feature p,
-  :root:not([data-theme="light"]) .marketing-usecase p,
-  :root:not([data-theme="light"]) .marketing-faq details > p,
-  :root:not([data-theme="light"]) .marketing-channel p { color: #cbd5e1; }
-  :root:not([data-theme="light"]) .marketing-hero-card,
-  :root:not([data-theme="light"]) .marketing-stat,
-  :root:not([data-theme="light"]) .marketing-feature,
-  :root:not([data-theme="light"]) .marketing-usecase,
-  :root:not([data-theme="light"]) .marketing-faq details,
-  :root:not([data-theme="light"]) .marketing-channel {
-    background: #1a1d26;
-    border-color: #2c313d;
-  }
-  :root:not([data-theme="light"]) .marketing-hero-card-row { border-bottom-color: #2c313d; }
-  :root:not([data-theme="light"]) .marketing-hero-card-text { color: #e2e8f0; }
-  :root:not([data-theme="light"]) .marketing-hero-card-meta,
-  :root:not([data-theme="light"]) .marketing-stat-label { color: #9aa5b8; }
-  :root:not([data-theme="light"]) .marketing-hero-card-icon,
-  :root:not([data-theme="light"]) .marketing-feature-icon,
-  :root:not([data-theme="light"]) .marketing-channel-icon {
-    background: rgba(96, 165, 250, 0.12);
-    color: #93c5fd;
-  }
-  :root:not([data-theme="light"]) .marketing-usecase-label {
-    background: rgba(96, 165, 250, 0.14);
-    color: #93c5fd;
-  }
-  :root:not([data-theme="light"]) .marketing-stat-value,
-  :root:not([data-theme="light"]) .marketing-eyebrow { color: #93c5fd; }
-  :root:not([data-theme="light"]) .marketing-faq summary { color: #f1f5f9; }
-  :root:not([data-theme="light"]) .marketing-faq summary::after { color: #93c5fd; }
-  :root:not([data-theme="light"]) .marketing-cta { border: 1px solid #4a5fb8; }
-  :root:not([data-theme="light"]) .marketing-footer-inner button { color: #cbd5e1; }
 }

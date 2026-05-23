@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";
 import MarketingShell from "./MarketingShell";
 
 const CHANNELS = [
@@ -69,6 +70,7 @@ const FAQ = [
 
 export default function Support() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   return (
     <MarketingShell>
@@ -84,7 +86,9 @@ export default function Support() {
             <button onClick={() => (window.location.href = "mailto:support@rwayve.maheshg.me")}>
               Email support
             </button>
-            <button onClick={() => navigate("/pricing")}>See pricing</button>
+            {user?.account_type !== "platform_admin" && !user?.username?.startsWith("platform-") && (
+              <button onClick={() => navigate("/pricing")}>See pricing</button>
+            )}
           </div>
         </div>
 

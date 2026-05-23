@@ -5,6 +5,7 @@ import { Suspense, useState, useCallback, type ReactNode } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
+import SupportModal from "../support/SupportModal";
 import ThemeToggle from "../theme/ThemeToggle";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import "./Layout.css";
@@ -34,13 +35,17 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Three-pane state management
   const [middleView, setMiddleView] = useState<AppKey | null>(null);
   const [rightView, setRightView] = useState<AppKey | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   
   // Decides whether the next header-link click navigates or changes the duplicate pane.
   const [splitTarget, setSplitTarget] = useState<"left" | "right">("left");
 
   // On narrow viewports the header nav collapses behind a hamburger toggle.
   const [navOpen, setNavOpen] = useState(false);
+
+  // Support modal: opens from the header button, closes via the modal's own
+  // close action or Esc. Lives at layout scope so every signed-in page can
+  // reach support without each one re-wiring the affordance.
+  const [supportOpen, setSupportOpen] = useState(false);
 
   const middleApp = SPLIT_APPS.find((a) => a.key === middleView) ?? null;
   const MiddleComp = middleApp?.Comp ?? null;
@@ -123,20 +128,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   }
 
   return (
-    <div className={`app ${!sidebarOpen ? "sidebar-collapsed" : ""}`}>
+    <div className="app">
       {/* 🔝 HEADER */}
       <div className="header">
         <div className="header-brand">
-          {!sidebarOpen && (
-            <button
-              className="header-sidebar-toggle"
-              onClick={() => setSidebarOpen(true)}
-              title="Expand sidebar"
-              aria-label="Expand sidebar"
-            >
-              »
-            </button>
-          )}
           <div className="logo" onClick={() => navigate("/")}>Wayve </div>
           <button
             className="nav-toggle"
@@ -161,14 +156,17 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           {renderNavItem("/notes", "notes", "Notes")}
           {renderNavItem("/tasks", "tasks", "Tasks")}
           {renderNavItem("/aichat", "aichat", "AI Chat")}
-          {/* Pricing: shown to every signed-in user. */}
-          <Link
-            to="/pricing"
-            className={location.pathname === "/pricing" ? "active" : ""}
-            onClick={() => setNavOpen(false)}
-          >
-            Pricing
-          </Link>
+          {/* Pricing: hidden for platform members — they administer the
+              platform, not customers of it, so the upgrade CTA is noise. */}
+          {user.account_type !== "platform_admin" && (
+            <Link
+              to="/pricing"
+              className={location.pathname === "/pricing" ? "active" : ""}
+              onClick={() => setNavOpen(false)}
+            >
+              Pricing
+            </Link>
+          )}
           {/* API Keys admin surface: visible only to org/platform
               owner, super_admin, and admin. See [canAccessApiKeyAdmin](../auth/permissions.ts)
               for the rationale (intentionally stricter than the raw
@@ -227,11 +225,24 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             </svg>
           </button>
 
+          <button
+            type="button"
+            className="header-support-btn"
+            onClick={() => setSupportOpen(true)}
+            title="Contact support"
+            aria-label="Open support"
+          >
+            <span aria-hidden="true">💬</span>
+            <span>Support</span>
+          </button>
+
           <ThemeToggle />
 
           <ProfileMenu />
         </div>
       </div>
+
+      {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
 
       <SearchProvider>
         <SearchBar />
@@ -240,14 +251,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       <div className="body">
         {/* LEFT ICON BAR */}
         <div className="icon-sidebar">
-          <button
-            className="sidebar-collapse-btn"
-            onClick={() => setSidebarOpen(false)}
-            title="Collapse sidebar"
-            aria-label="Collapse sidebar"
-          >
-            «
-          </button>
           <Link to="/emails">📧</Link>
           <Link to="/chat">💬</Link>
           <Link to="/scheduler">📅</Link>

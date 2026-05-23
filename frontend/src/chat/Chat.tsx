@@ -5,6 +5,7 @@ import {
   approveChatChannelJoinRequest,
   createChatChannel,
   getChannelMessages,
+  getChannelThread,
   getChatMessages,
   joinChatChannel,
   removeChatChannelUser,
@@ -22,6 +23,7 @@ import ChannelSettingsPanel from "./components/ChannelSettingsPanel";
 import ConversationSidebar from "./components/ConversationSidebar";
 import MessageComposer from "./components/MessageComposer";
 import MessageThread from "./components/MessageThread";
+import ThreadPanel from "./components/ThreadPanel";
 import { useChatConversations } from "./hooks/useChatConversations";
 import { useChatSocket } from "./hooks/useChatSocket";
 import {
@@ -58,6 +60,28 @@ export default function Chat() {
   const [inviteRole, setInviteRole] = useState<ChannelRole>("user");
   const [inviteEmails, setInviteEmails] = useState("");
   const [channelError, setChannelError] = useState("");
+
+  // Thread side panel state. `activeThread` is the parent message the user
+  // clicked "Reply in thread" on; `threadReplies` is the decrypted list of
+  // replies under it. WS messages with parent_message_id matching the active
+  // thread get routed here; replies for other parents only bump reply_count
+  // on the corresponding main-feed message and otherwise stay hidden.
+  const [activeThread, setActiveThread] = useState<ChatMessage | null>(null);
+  const [threadReplies, setThreadReplies] = useState<ChatMessage[]>([]);
+  // Reset thread state when the user navigates to a different conversation.
+  // Tracked via a "previous value" state read during render so React can
+  // bail out of the stale render and re-run with the cleared values in the
+  // same pass — the equivalent of an effect that does the same thing
+  // without the extra commit / cascading render (see react.dev:
+  // "You Might Not Need an Effect → Adjusting state when a prop changes").
+  const [lastResetFor, setLastResetFor] = useState<Conversation | null>(
+    selectedConversation,
+  );
+  if (lastResetFor !== selectedConversation) {
+    setLastResetFor(selectedConversation);
+    setActiveThread(null);
+    setThreadReplies([]);
+  }
 
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -105,8 +129,26 @@ export default function Chat() {
       ...msg,
       content: await decryptChatContent(msg.content, user.id),
     };
+
+    // Threaded reply: keep it out of the main feed entirely. If the matching
+    // thread is open, append it to the panel; either way, bump the parent's
+    // reply_count so the "N replies →" indicator updates live.
+    if (decrypted.parent_message_id != null) {
+      setThreadReplies((prev) =>
+        activeThread?.message_id === decrypted.parent_message_id ? [...prev, decrypted] : prev,
+      );
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.message_id === decrypted.parent_message_id
+            ? { ...m, reply_count: (m.reply_count ?? 0) + 1 }
+            : m,
+        ),
+      );
+      return;
+    }
+
     setMessages((prev) => [...prev, decrypted]);
-  }, [user]);
+  }, [user, activeThread]);
 
   const { wsRef, isConnected: isChatSocketConnected } = useChatSocket(
     user,
@@ -141,6 +183,67 @@ export default function Chat() {
 
     return () => window.clearTimeout(timeout);
   }, [selectedChannel]);
+
+  const openThread = async (parent: ChatMessage) => {
+    if (!user || parent.message_id == null) return;
+    try {
+      const rawReplies = await getChannelThread(parent.message_id);
+      const decryptedReplies = await decryptChatMessages(rawReplies, user.id);
+      setActiveThread(parent);
+      setThreadReplies(decryptedReplies);
+    } catch (err) {
+      logger.error("Failed to load thread", err);
+    }
+  };
+
+  const closeThread = () => {
+    setActiveThread(null);
+    setThreadReplies([]);
+  };
+
+  // Mirrors sendMessage but pins `parent_message_id` on the WS payload so
+  // the backend writes the row as a thread reply. Optimistic local state:
+  // append decrypted reply + bump the parent's reply_count in the main feed
+  // (the WS echo for own messages is filtered out by useChatSocket).
+  const sendThreadReply = async (text: string) => {
+    if (!wsRef.current || !user || !activeThread || !selectedConversation) return;
+    if (selectedConversation.type !== "channel") return;
+    if (wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (activeThread.message_id == null) return;
+
+    const plaintext = text.trim();
+    if (!plaintext) return;
+
+    let encryptedContent: string;
+    try {
+      const recipientKeys = await recipientPublicKeysFor(selectedConversation);
+      if (!recipientKeys || recipientKeys.size === 0) {
+        throw new Error("No chat encryption keys are available");
+      }
+      encryptedContent = await encryptChatContent(plaintext, recipientKeys);
+    } catch (err) {
+      logger.error("Thread reply encryption failed", err);
+      return;
+    }
+
+    const parentId = activeThread.message_id;
+    const message: ChatMessage = {
+      sender_id: user.id,
+      content: encryptedContent,
+      status: "sent",
+      created_at: new Date().toISOString(),
+      channel_id: selectedConversation.channel.id,
+      parent_message_id: parentId,
+    };
+
+    wsRef.current.send(JSON.stringify(message));
+    setThreadReplies((prev) => [...prev, { ...message, content: plaintext }]);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.message_id === parentId ? { ...m, reply_count: (m.reply_count ?? 0) + 1 } : m,
+      ),
+    );
+  };
 
   const refreshChannels = async (activeChannelId?: number) => {
     const channelData = await fetchChannels();
@@ -432,13 +535,25 @@ export default function Chat() {
         <div
           className={`chat-content-row${
             channelSettingsOpen ? " settings-open" : ""
-          }`}
+          }${activeThread ? " thread-open" : ""}`}
         >
           <MessageThread
             messages={filteredMessages}
             selectedChannel={selectedChannel}
             currentUserId={user?.id}
+            onOpenThread={selectedChannel ? (msg) => void openThread(msg) : null}
           />
+
+          {selectedChannel && activeThread && (
+            <ThreadPanel
+              parent={activeThread}
+              replies={threadReplies}
+              currentUserId={user?.id}
+              isConnected={isChatSocketConnected}
+              onClose={closeThread}
+              onSendReply={sendThreadReply}
+            />
+          )}
 
           {selectedChannel && channelSettingsOpen && (
             <ChannelSettingsPanel

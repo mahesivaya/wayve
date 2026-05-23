@@ -197,24 +197,6 @@
   stroke-linejoin: round;
 }
 
-.header-sidebar-toggle {
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  font-size: var(--text-3xl);
-  cursor: pointer;
-  margin-right: 12px;
-  color: #2563eb;
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  transition: background 0.2s;
-}
-
-.header-sidebar-toggle:hover {
-  background: #e2e8f0;
-}
-
 /* =============================
    👤 PROFILE DROPDOWN
 ============================== */
@@ -459,35 +441,8 @@
   white-space: nowrap;
 }
 
-.sidebar-collapsed .icon-sidebar {
-  width: 0;
-  border-right-color: transparent;
-}
-
-.sidebar-collapse-btn {
-  background: transparent;
-  border: none;
-  font-size: var(--text-3xl);
-  color: #64748b;
-  cursor: pointer;
-  padding: 6px;
-  margin-bottom: 5px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-}
-
-.sidebar-collapse-btn:hover {
-  background: #e2e8f0;
-  color: #2563eb;
-}
-
 .icon-sidebar-spacer {
   flex: 1;
-}
-
-.sidebar-collapsed .global-search-row {
-  padding-left: 20px;
 }
 
 /* =============================
@@ -678,8 +633,6 @@
    Survival-mode responsive: keep the app usable down to ~360px.
    The header nav already collapses at ≤1100px (above). Below the
    --bp-tablet (768px) threshold we also:
-     - auto-hide the 60px icon sidebar (still openable via the «»
-       toggle so power users keep their entry point),
      - drop the textual welcome/role chip from the header to free
        horizontal space for the brand + actions,
      - collapse any second/third split pane (multi-pane on a phone
@@ -688,14 +641,6 @@
    button which is a desktop-first affordance.
 ============================== */
 @media (max-width: 768px) {
-  /* Auto-collapse the icon sidebar. The class can still be removed
-     by the user clicking the `»` toggle in the header brand, so we
-     don't override the open state — only the default. */
-  .app:not(.sidebar-collapsed) .icon-sidebar {
-    width: 0;
-    border-right-color: transparent;
-  }
-
   .header {
     padding: 0 12px;
     column-gap: 6px;
@@ -747,6 +692,12 @@
   }
 }
 
+@media (max-width: 700px) {
+  .global-search-row:has(.email-layout-actions) {
+    display: none;
+  }
+}
+
 /* ============================================================
    🌙 DARK MODE — Layout chrome
    The header was originally `lightslategray` (a midgray) which reads
@@ -788,31 +739,5 @@
   color: #ffffff;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .header {
-    background: #14171f;
-    border-bottom: 1px solid #2c313d;
-    color: #e2e8f0;
-  }
-  :root:not([data-theme="light"]) .header .logo { color: #f1f5f9; }
-  :root:not([data-theme="light"]) .nav a { color: #cbd5e1; }
-  :root:not([data-theme="light"]) .nav a:hover,
-  :root:not([data-theme="light"]) .nav a.active {
-    background: rgba(96, 165, 250, 0.15);
-    color: #ffffff;
-  }
-  :root:not([data-theme="light"]) .header-welcome { color: #e2e8f0; }
-  :root:not([data-theme="light"]) .header-welcome-role {
-    background: rgba(96, 165, 250, 0.2);
-    color: #93c5fd;
-  }
-  :root:not([data-theme="light"]) .icon-sidebar {
-    background: #14171f;
-    border-right: 1px solid #2c313d;
-  }
-  :root:not([data-theme="light"]) .icon-sidebar a { color: #cbd5e1; }
-  :root:not([data-theme="light"]) .icon-sidebar a:hover {
-    background: #232734;
-    color: #ffffff;
-  }
-}
+/* OS prefers-color-scheme blocks were removed — dark mode is now
+   explicit-only via [data-theme="dark"]. */

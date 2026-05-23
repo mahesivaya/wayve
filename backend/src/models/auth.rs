@@ -5,6 +5,14 @@ pub struct RegisterInput {
     pub email: String,
     pub password: String,
     pub confirm_password: String,
+    /// Recovery-phrase mode chosen at signup: "full" (server escrows a
+    /// wrapped private key so a new device can restore encrypted history)
+    /// or "password_only" (server only stores a credential blob for
+    /// mnemonic-based password reset; new devices start with fresh keys
+    /// and cannot decrypt history). Defaults to "full" when omitted so
+    /// older clients that don't send the field keep working.
+    #[serde(default)]
+    pub recovery_mode: Option<String>,
 }
 
 #[derive(Deserialize)]

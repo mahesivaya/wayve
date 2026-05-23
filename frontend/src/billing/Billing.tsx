@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import {
   cancelSubscription,
@@ -99,6 +99,7 @@ function loadStripeScript(): Promise<void> {
 export default function Billing() {
   const { user } = useAuth();
   const [params] = useSearchParams();
+  const navigate = useNavigate();
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [sub, setSub] = useState<SubscriptionResponse | null>(null);
@@ -110,7 +111,6 @@ export default function Billing() {
   const [autopay, setAutopay] = useState(true);
   const [paymentFormOpen, setPaymentFormOpen] = useState(false);
   const [paymentFormReady, setPaymentFormReady] = useState(false);
-  const [paymentZip, setPaymentZip] = useState("");
   const [paymentMessage, setPaymentMessage] = useState("");
   const [paymentSuccess, setPaymentSuccess] = useState("");
 
@@ -118,9 +118,8 @@ export default function Billing() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const setupClientSecret = useRef("");
-  const cardNumberRef = useRef<StripeCardElement | null>(null);
-  const cardExpiryRef = useRef<StripeCardElement | null>(null);
-  const cardCvcRef = useRef<StripeCardElement | null>(null);
+  const paymentElementRef = useRef<StripePaymentElement | null>(null);
+  const elementsRef = useRef<StripeElements | null>(null);
   const stripeRef = useRef<StripeInstance | null>(null);
 
   const checkoutStatus = params.get("checkout");
@@ -167,6 +166,12 @@ export default function Billing() {
 
   const ownerType = sub?.owner_type ?? "personal";
   const currentPlanCode = sub?.subscription?.plan_code ?? null;
+  // A personal account with no subscription row is implicitly on the free
+  // Basic tier — surface that explicitly so the card renders as "Active"
+  // instead of falling through to the generic "Included" placeholder.
+  const effectiveCurrentCode =
+    currentPlanCode ?? (ownerType === "personal" ? "basic_user" : null);
+  const hasPaidPlan = (sub?.subscription?.amount_cents ?? 0) > 0;
 
   const subscribe = async (code: string) => {
     setBusy(`plan:${code}`);
@@ -181,12 +186,9 @@ export default function Billing() {
   };
 
   const clearPaymentElements = useCallback(() => {
-    cardNumberRef.current?.destroy();
-    cardExpiryRef.current?.destroy();
-    cardCvcRef.current?.destroy();
-    cardNumberRef.current = null;
-    cardExpiryRef.current = null;
-    cardCvcRef.current = null;
+    paymentElementRef.current?.destroy();
+    paymentElementRef.current = null;
+    elementsRef.current = null;
     stripeRef.current = null;
     setupClientSecret.current = "";
     setPaymentFormReady(false);
@@ -210,6 +212,8 @@ export default function Billing() {
         throw new Error("Stripe publishable key is not configured");
       }
 
+      // SetupIntent's client_secret must be created once per Elements tree.
+      // Cancel + reopen creates a fresh one (clearPaymentElements resets it).
       const [{ client_secret: clientSecret }] = await Promise.all([
         createPaymentMethodSetupIntent(),
         loadStripeScript(),
@@ -217,36 +221,26 @@ export default function Billing() {
       const stripe = window.Stripe?.(publishableKey) ?? null;
       if (!stripe) throw new Error("Stripe could not initialize");
 
-      const elements = stripe.elements();
-      const elementOptions = {
-        style: {
-          base: {
-            color: "#111827",
-            fontSize: "15px",
-            "::placeholder": { color: "#94a3b8" },
-          },
-          invalid: { color: "#991b1b" },
-        },
-      };
-      const showElementError = (event: StripeElementChangeEvent) => {
+      const isDark =
+        document.documentElement.getAttribute("data-theme") === "dark";
+      const elements = stripe.elements({
+        clientSecret,
+        appearance: { theme: isDark ? "night" : "stripe" },
+      });
+      const paymentElement = elements.create("payment", {
+        layout: "tabs",
+        fields: { billingDetails: "auto" },
+      });
+      paymentElement.on("change", (event) => {
         setPaymentMessage(event.error?.message ?? "");
-      };
+      });
+      paymentElement.on("ready", () => setPaymentFormReady(true));
+      paymentElement.mount("#billing-payment-element");
 
       setupClientSecret.current = clientSecret;
       stripeRef.current = stripe;
-      cardNumberRef.current = elements.create("cardNumber", {
-        ...elementOptions,
-        placeholder: "Card number",
-      });
-      cardExpiryRef.current = elements.create("cardExpiry", elementOptions);
-      cardCvcRef.current = elements.create("cardCvc", elementOptions);
-      cardNumberRef.current.on("change", showElementError);
-      cardExpiryRef.current.on("change", showElementError);
-      cardCvcRef.current.on("change", showElementError);
-      cardNumberRef.current.mount("#billing-card-number");
-      cardExpiryRef.current.mount("#billing-card-expiry");
-      cardCvcRef.current.mount("#billing-card-cvc");
-      setPaymentFormReady(true);
+      elementsRef.current = elements;
+      paymentElementRef.current = paymentElement;
     } catch (err) {
       clearPaymentElements();
       setPaymentFormOpen(false);
@@ -264,21 +258,20 @@ export default function Billing() {
 
     try {
       const stripe = stripeRef.current;
-      const card = cardNumberRef.current;
-      const clientSecret = setupClientSecret.current;
-      if (!stripe || !card || !clientSecret) {
+      const elements = elementsRef.current;
+      if (!stripe || !elements) {
         throw new Error("Payment form is not ready yet");
       }
 
-      const result = await stripe.confirmCardSetup(clientSecret, {
-        payment_method: {
-          card,
-          billing_details: {
-            address: {
-              postal_code: paymentZip.trim(),
-            },
-          },
+      // redirect: "if_required" keeps us on the page when no 3DS challenge is
+      // needed; on a 3DS card Stripe bounces to return_url and the effect
+      // below reads ?setup_intent_client_secret to finish wiring the default.
+      const result = await stripe.confirmSetup({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/billing?pm=saved`,
         },
+        redirect: "if_required",
       });
 
       if (result.error) {
@@ -294,7 +287,6 @@ export default function Billing() {
 
       await setDefaultPaymentMethod(paymentMethodId);
       setPaymentSuccess("Payment method saved.");
-      setPaymentZip("");
       setPaymentFormOpen(false);
       clearPaymentElements();
       await reload();
@@ -306,6 +298,48 @@ export default function Billing() {
   };
 
   useEffect(() => () => clearPaymentElements(), [clearPaymentElements]);
+
+  // Post-return handler: after a 3DS challenge Stripe bounces back to
+  // return_url with ?setup_intent_client_secret in the URL. Retrieve the
+  // intent, attach the resulting payment method as default, then strip the
+  // query so refreshes don't re-trigger.
+  useEffect(() => {
+    const intentSecret = params.get("setup_intent_client_secret");
+    if (!intentSecret) return;
+    const publishableKey = stripeStatus?.publishable_key;
+    if (!publishableKey || !publishableKey.startsWith("pk_")) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        await loadStripeScript();
+        if (cancelled) return;
+        const stripe = window.Stripe?.(publishableKey) ?? null;
+        if (!stripe) return;
+        const result = await stripe.retrieveSetupIntent(intentSecret);
+        if (cancelled) return;
+        if (result.error) {
+          setError(result.error.message ?? "Could not finish saving payment method");
+          return;
+        }
+        const pm = result.setupIntent?.payment_method;
+        const pmId = typeof pm === "string" ? pm : pm?.id;
+        if (!pmId) return;
+        await setDefaultPaymentMethod(pmId);
+        if (cancelled) return;
+        setPaymentSuccess("Payment method saved.");
+        window.history.replaceState({}, "", "/billing");
+        await reload();
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Could not finish saving payment method");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params, stripeStatus, reload]);
 
   const cancel = async () => {
     setBusy("cancel");
@@ -366,31 +400,7 @@ export default function Billing() {
         <section className="billing-card">
           <h2>Payment method</h2>
           <form className="billing-payment-form" onSubmit={(event) => void savePaymentMethod(event)}>
-            <label>
-              <span>Card number</span>
-              <div id="billing-card-number" className="billing-stripe-field" />
-            </label>
-            <div className="billing-payment-row">
-              <label>
-                <span>Expiration</span>
-                <div id="billing-card-expiry" className="billing-stripe-field" />
-              </label>
-              <label>
-                <span>CVV</span>
-                <div id="billing-card-cvc" className="billing-stripe-field" />
-              </label>
-              <label>
-                <span>ZIP code</span>
-                <input
-                  value={paymentZip}
-                  onChange={(event) => setPaymentZip(event.target.value)}
-                  autoComplete="postal-code"
-                  inputMode="numeric"
-                  placeholder="12345"
-                  required
-                />
-              </label>
-            </div>
+            <div id="billing-payment-element" className="billing-stripe-field" />
             {paymentMessage && <p className="billing-payment-error">{paymentMessage}</p>}
             <div className="billing-payment-actions">
               <button
@@ -478,11 +488,13 @@ export default function Billing() {
         </label>
         <div className="billing-plan-grid">
           {visiblePlans.map((plan) => {
-            const isCurrent = plan.code === currentPlanCode;
+            const isCurrent = plan.code === effectiveCurrentCode;
             const isFree = plan.amount_cents === 0;
             const copy = PLAN_COPY[plan.code];
             const isEnterprise = plan.code === "enterprise";
-            const canBuy = plan.audience === ownerType && !isFree && !isEnterprise;
+            const isForOwner = plan.audience === ownerType;
+            const canBuy = isForOwner && !isCurrent && !isFree && !isEnterprise;
+            const busyHere = busy === `plan:${plan.code}`;
             return (
               <article
                 key={plan.id}
@@ -504,20 +516,23 @@ export default function Billing() {
                   ]).map((feature) => <li key={feature}>{feature}</li>)}
                 </ul>
                 {isCurrent ? (
-                  <span className="billing-plan-tag">Current plan</span>
-                ) : isFree ? (
-                  <span className="billing-plan-tag muted">Included</span>
+                  <button type="button" disabled>Active</button>
+                ) : isEnterprise ? (
+                  <button type="button" onClick={() => navigate("/support")}>
+                    Contact sales
+                  </button>
                 ) : canBuy ? (
                   <button
+                    type="button"
                     onClick={() => void subscribe(plan.code)}
-                    disabled={busy === `plan:${plan.code}`}
+                    disabled={busyHere}
                   >
-                    {busy === `plan:${plan.code}` ? "Redirecting…" : "Subscribe"}
+                    {busyHere ? "Redirecting…" : hasPaidPlan ? "Switch plan" : "Subscribe"}
                   </button>
                 ) : (
-                  <span className="billing-plan-tag muted">
-                    {isEnterprise ? "Discussed" : `Requires ${plan.audience} account`}
-                  </span>
+                  <button type="button" disabled>
+                    {isForOwner ? "Free tier" : `Requires ${plan.audience} account`}
+                  </button>
                 )}
               </article>
             );

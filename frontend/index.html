@@ -7,23 +7,24 @@
     <title>frontend</title>
     <!--
       Pre-paint theme bootstrap. Runs synchronously before React mounts so
-      the page never flashes light-then-dark. Source of truth ordering:
-        1. localStorage key `wayve-theme` (the user's saved choice)
-        2. If unset → leave `data-theme` empty so the CSS media query
-           `prefers-color-scheme: dark` picks the OS preference.
-      Keep this block tiny — it blocks first paint.
+      the page never flashes. Light is the default for every visitor —
+      OS dark preference is intentionally ignored. Dark mode only happens
+      when the user explicitly clicks the toggle (which persists
+      `wayve-theme=dark` in localStorage).
     -->
     <script>
       (function () {
+        var saved = null;
         try {
-          var saved = localStorage.getItem("wayve-theme");
-          if (saved === "dark" || saved === "light") {
-            document.documentElement.setAttribute("data-theme", saved);
-          }
+          saved = localStorage.getItem("wayve-theme");
         } catch (e) {
-          /* Storage may be blocked (Safari private mode) — fall through
-             to the media query default. */
+          /* Storage may be blocked (Safari private mode) — that's fine,
+             we just fall back to the light default. */
         }
+        document.documentElement.setAttribute(
+          "data-theme",
+          saved === "dark" ? "dark" : "light"
+        );
       })();
     </script>
   </head>

@@ -188,7 +188,9 @@ export default function Drive() {
     }
     setUploading(true);
     try {
-      await uploadDriveFiles(files, currentFolderId);
+      // Pass the user id so uploadDriveFiles wraps each blob in the
+      // WV1 envelope before sending. Server stores opaque ciphertext.
+      await uploadDriveFiles(files, currentFolderId, user.id);
       setFiles([]);
       void fetchFiles();
     } catch (err) {
@@ -202,10 +204,17 @@ export default function Drive() {
   const downloadFile = async (file: UploadedFile) => {
     try {
       setError(null);
-      await downloadDriveFile(file.id, file.name);
+      // Same user id contract — download path auto-detects the WV1
+      // envelope and decrypts client-side. Pre-E2E plaintext files
+      // pass through unchanged.
+      await downloadDriveFile(file.id, file.name, user?.id ?? null);
     } catch (err) {
       logger.error("Download error:", err);
-      setError("Download failed.");
+      setError(
+        err instanceof Error
+          ? `Download failed: ${err.message}`
+          : "Download failed."
+      );
     }
   };
 

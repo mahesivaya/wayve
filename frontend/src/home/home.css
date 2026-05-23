@@ -880,57 +880,8 @@
   border-top: 1px solid #4a5fb8;
 }
 
-/* Mirror onto prefers-color-scheme so visitors who never toggle still
-   see dark on the home page. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .public-home {
-    background:
-      linear-gradient(90deg, rgba(96, 165, 250, 0.10), rgba(15, 17, 23, 0.7) 34%, #0f1117 100%),
-      #0f1117;
-    color: #cbd5e1;
-  }
-  :root:not([data-theme="light"]) .public-home-nav {
-    background: rgba(20, 23, 31, 0.94);
-    border-bottom-color: rgba(255, 255, 255, 0.08);
-  }
-  :root:not([data-theme="light"]) .public-home-brand,
-  :root:not([data-theme="light"]) .public-home-links button { color: #e2e8f0; }
-  :root:not([data-theme="light"]) .public-home-hero {
-    background:
-      linear-gradient(90deg, rgba(15, 17, 23, 0.85), rgba(15, 17, 23, 0.5)),
-      url("../assets/hero.png") center / cover;
-  }
-  :root:not([data-theme="light"]) .home-pillars,
-  :root:not([data-theme="light"]) .home-stats,
-  :root:not([data-theme="light"]) .home-roles-grid {
-    background: #2c313d;
-    border-top-color: #2c313d;
-  }
-  :root:not([data-theme="light"]) .home-pillar,
-  :root:not([data-theme="light"]) .home-roles-grid article,
-  :root:not([data-theme="light"]) .home-info-band,
-  :root:not([data-theme="light"]) .home-info-grid article {
-    background: #1a1d26;
-    border-top-color: #2c313d;
-  }
-  :root:not([data-theme="light"]) .home-pillar h3,
-  :root:not([data-theme="light"]) .home-pillar-features li strong,
-  :root:not([data-theme="light"]) .home-roles-grid h3,
-  :root:not([data-theme="light"]) .home-info-band h2,
-  :root:not([data-theme="light"]) .home-info-grid h2 { color: #f1f5f9; }
-  :root:not([data-theme="light"]) .home-pillar > p,
-  :root:not([data-theme="light"]) .home-pillar-features li,
-  :root:not([data-theme="light"]) .home-roles-grid p,
-  :root:not([data-theme="light"]) .home-info-band p,
-  :root:not([data-theme="light"]) .home-info-grid p { color: #cbd5e1; }
-  :root:not([data-theme="light"]) .home-pillar-features li::before { color: #c084fc; }
-  :root:not([data-theme="light"]) .home-stats > div {
-    background: linear-gradient(180deg, #1a1d26 0%, #14171f 100%);
-  }
-  :root:not([data-theme="light"]) .home-stat-value { color: #c084fc; }
-  :root:not([data-theme="light"]) .home-stat-label { color: #9aa5b8; }
-  :root:not([data-theme="light"]) .home-comparison { border-top: 1px solid #4a5fb8; }
-}
+/* OS prefers-color-scheme blocks were removed — dark mode is now
+   explicit-only via [data-theme="dark"]. See index.html pre-paint. */
 
 /* Dashboard grid cards on the authenticated Home use white backgrounds
    inherited from `.u-card`. The card var already responds to dark mode
@@ -944,15 +895,4 @@
 :root[data-theme="dark"] .dashboard-upgrade-banner .dashboard-tier-badge {
   background: rgba(192, 132, 252, 0.25);
   color: #f3e8ff;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .dashboard-upgrade-banner {
-    background: rgba(192, 132, 252, 0.12);
-    border: 1px solid rgba(192, 132, 252, 0.30);
-    color: #e2e8f0;
-  }
-  :root:not([data-theme="light"]) .dashboard-upgrade-banner .dashboard-tier-badge {
-    background: rgba(192, 132, 252, 0.25);
-    color: #f3e8ff;
-  }
 }

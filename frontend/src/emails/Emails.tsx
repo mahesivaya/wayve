@@ -13,6 +13,7 @@ import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 
 const ACCOUNT_NAME_STORAGE_KEY = "rwayve.emailAccountNames";
+const EMAIL_LIST_WIDTH_STORAGE_KEY = "rwayve.emailList.width";
 
 export default function Emails() {
   const { user } = useAuth();
@@ -42,11 +43,17 @@ export default function Emails() {
   // size, so this also responds correctly to a resized split.
   const mainRef = useRef<HTMLDivElement>(null);
   const sidebarDraggingRef = useRef(false);
+  const emailListDraggingRef = useRef(false);
   const [isNarrow, setIsNarrow] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const stored = localStorage.getItem("rwayve.emailSidebar.width");
     const parsed = stored ? Number(stored) : NaN;
     return Number.isFinite(parsed) ? Math.min(360, Math.max(180, parsed)) : 220;
+  });
+  const [emailListWidth, setEmailListWidth] = useState<number>(() => {
+    const stored = localStorage.getItem(EMAIL_LIST_WIDTH_STORAGE_KEY);
+    const parsed = stored ? Number(stored) : NaN;
+    return Number.isFinite(parsed) ? Math.min(620, Math.max(220, parsed)) : 360;
   });
 
   useEffect(() => {
@@ -67,16 +74,32 @@ export default function Emails() {
   }, [sidebarWidth]);
 
   useEffect(() => {
+    localStorage.setItem(EMAIL_LIST_WIDTH_STORAGE_KEY, String(emailListWidth));
+  }, [emailListWidth]);
+
+  useEffect(() => {
     function onMove(e: MouseEvent) {
-      if (!sidebarDraggingRef.current || !mainRef.current) return;
+      if (!mainRef.current) return;
       const rect = mainRef.current.getBoundingClientRect();
-      const nextWidth = e.clientX - rect.left;
-      setSidebarWidth(Math.min(360, Math.max(180, nextWidth)));
+      if (sidebarDraggingRef.current) {
+        const nextWidth = e.clientX - rect.left;
+        setSidebarWidth(Math.min(360, Math.max(180, nextWidth)));
+        return;
+      }
+      if (emailListDraggingRef.current) {
+        const sidebarResizerWidth = 8;
+        const minDetailWidth = 320;
+        const available = rect.width - sidebarWidth - sidebarResizerWidth - minDetailWidth;
+        const maxListWidth = Math.min(620, Math.max(220, available));
+        const nextWidth = e.clientX - rect.left - sidebarWidth - sidebarResizerWidth;
+        setEmailListWidth(Math.min(maxListWidth, Math.max(220, nextWidth)));
+      }
     }
 
     function onUp() {
-      if (!sidebarDraggingRef.current) return;
+      if (!sidebarDraggingRef.current && !emailListDraggingRef.current) return;
       sidebarDraggingRef.current = false;
+      emailListDraggingRef.current = false;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     }
@@ -87,10 +110,16 @@ export default function Emails() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, []);
+  }, [sidebarWidth]);
 
   function startSidebarResize() {
     sidebarDraggingRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  function startEmailListResize() {
+    emailListDraggingRef.current = true;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   }
@@ -106,6 +135,8 @@ export default function Emails() {
     viewMode === "files" ||
     (emailViewLayout === "list" && selectedEmail !== null) ||
     (emailViewLayout === "split" && (!useSingleColumn || selectedEmail !== null));
+  const showEmailListResizer =
+    viewMode === "email" && showList && showDetail && !useSingleColumn;
 
   const composeAccountId =
     activeAccount ?? accounts.find((account) => account?.id !== undefined)?.id ?? null;
@@ -285,6 +316,19 @@ export default function Emails() {
           hasMore={hasMore}
           loadMore={loadMore}
           loadingMore={loadingMore}
+          onCompose={() => setComposeOpen(true)}
+          width={showEmailListResizer ? emailListWidth : undefined}
+        />
+      )}
+
+      {showEmailListResizer && (
+        <div
+          className="email-list-resizer"
+          onMouseDown={startEmailListResize}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize email list"
+          title="Drag to resize email list"
         />
       )}
 

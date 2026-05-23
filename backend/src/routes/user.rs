@@ -322,11 +322,26 @@ pub struct ApiKeyRow {
 
 #[derive(Deserialize)]
 pub struct AdminCreateUserInput {
-    pub username: String,
+    // Both username and password are now optional. When the caller is using
+    // the simple "Create user" admin flow (provide an email + role), we
+    // derive `username` from the email's local-part and generate a strong
+    // random `password` on the server. The plaintext is returned to the
+    // admin exactly once in the response so they can share it with the new
+    // user out-of-band.
+    #[serde(default)]
+    pub username: Option<String>,
     pub email: String,
-    pub password: String,
+    #[serde(default)]
+    pub password: Option<String>,
     pub account_type: Option<String>,
     pub organization_name: Option<String>,
+    // Optional role override. When omitted, the existing
+    // `default_role_for_account_type` rules apply (owner for admin scopes,
+    // member for organization). The DB CHECK constraint on
+    // organization_members.role / platform_members.role is the final filter
+    // for invalid strings.
+    #[serde(default)]
+    pub role: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -783,8 +798,25 @@ pub async fn admin_create_user(
     };
     let admin_id = ctx.user_id;
 
-    let username = data.username.trim();
     let email = data.email.trim().to_lowercase();
+    // Username defaults to the email local-part so admins can create a user
+    // with just an email. Existing callers that still send `username` keep
+    // working.
+    let username_owned = data
+        .username
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            email
+                .split('@')
+                .next()
+                .filter(|value| !value.is_empty())
+                .unwrap_or(&email)
+                .to_string()
+        });
+    let username = username_owned.as_str();
     let requested_account_type = data
         .account_type
         .as_deref()
@@ -804,15 +836,28 @@ pub async fn admin_create_user(
         Scope::Personal => "personal",
     };
 
-    if username.is_empty() || email.is_empty() || data.password.is_empty() {
+    if username.is_empty() || email.is_empty() {
         return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Username, email, and password are required" })));
+            .json(serde_json::json!({ "message": "Email is required" })));
     }
 
-    if data.password.len() < 6 {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Password must be at least 6 characters" })));
-    }
+    // Decide the working password before hashing:
+    //   - If the admin supplied a non-empty value, use it (minimum 6 chars).
+    //   - Otherwise, generate a 16-char alphanumeric temp password and
+    //     return it in the response so the admin can share it once.
+    let supplied_password = data
+        .password
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let (plaintext_password, generated) = match supplied_password {
+        Some(value) if value.len() < 6 => {
+            return Ok(HttpResponse::BadRequest()
+                .json(serde_json::json!({ "message": "Password must be at least 6 characters" })));
+        }
+        Some(value) => (value.to_string(), false),
+        None => (generate_temp_password(), true),
+    };
 
     let organization_id: Option<i32> = if account_type == "organization_admin" {
         let organization_name = data
@@ -882,7 +927,7 @@ pub async fn admin_create_user(
         }
     }
 
-    let hashed = hash_password(&data.password).await?;
+    let hashed = hash_password(&plaintext_password).await?;
 
     let result = sqlx::query(
         r#"
@@ -917,7 +962,23 @@ pub async fn admin_create_user(
             let email: String = row.get("email");
             let account_type: String = row.get("account_type");
             let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
-            let role = default_role_for_account_type(&account_type);
+            // Role precedence: explicit input -> account-type default. The DB
+            // CHECK constraints on platform_members / organization_members
+            // reject anything outside the 9-role catalog, so a bad string
+            // from a misbehaving client surfaces as a 500 below rather than
+            // a silent default. That's intentional — the frontend dropdown
+            // is restricted to the 4 roles we expose for this flow
+            // (guest/developer/member/support) and only legitimate misuse
+            // would land here.
+            let role_owned = data
+                .role
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            let role: &str = role_owned
+                .as_deref()
+                .unwrap_or_else(|| default_role_for_account_type(&account_type));
 
             if normalized_account_type(&account_type) == "platform_admin" {
                 sqlx::query(
@@ -951,14 +1012,21 @@ pub async fn admin_create_user(
             }
 
             info!(target: "auth", admin_id, user_id = id, "admin created user");
-            Ok(HttpResponse::Created().json(serde_json::json!({
+            // `temp_password` is only present when the server generated it.
+            // Existing callers that supplied a password get the same response
+            // they did before, just without the plaintext echoed back.
+            let mut body = serde_json::json!({
                 "id": id,
                 "username": username,
                 "email": email,
                 "account_type": account_type,
                 "organization_id": organization_id,
-                "role": role
-            })))
+                "role": role,
+            });
+            if generated {
+                body["temp_password"] = serde_json::Value::String(plaintext_password);
+            }
+            Ok(HttpResponse::Created().json(body))
         }
         Err(e) => {
             if e.to_string().contains("duplicate key") {
@@ -968,6 +1036,161 @@ pub async fn admin_create_user(
             Err(AppError::Db(e))
         }
     }
+}
+
+fn generate_temp_password() -> String {
+    use rand::{distributions::Alphanumeric, Rng};
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect()
+}
+
+// Hard-delete a user account. Almost every related table has ON DELETE
+// CASCADE on its user_id FK, so the single DELETE on `users` cleans up
+// memberships, messages, files, billing customers, etc. The `notes` table
+// has a `user_id` column but no FK constraint (init.sql:469), so it gets
+// an explicit DELETE first to avoid orphan rows after the cascade.
+//
+// Authorization:
+//   * Gate: `members:manage` (owner, super_admin, admin, security via the
+//     RBAC change in this same PR).
+//   * Role-level: actor must be able to assign the target's role
+//     (`can_assign_role`). Without this an admin/security could delete the
+//     org owner, which would be a privilege escalation.
+//   * Scope: org-scoped actors can only delete users in their own org;
+//     platform-scoped actors can delete anyone subject to the role check.
+//   * Self-delete blocked — an admin removing themselves mid-session is
+//     almost always a mistake, and the JWT remains valid until expiry so
+//     they would lock themselves out of their own session.
+//   * Last-owner: cannot delete the sole owner of an org/platform.
+#[delete("/admin/users/{id}")]
+#[instrument(target = "auth", skip(req, pool))]
+pub async fn admin_delete_user(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    let ctx =
+        match rbac::require_permission(&req, pool.get_ref(), Permission::MembersManage).await {
+            Ok(ctx) => ctx,
+            Err(response) => return Ok(response),
+        };
+    let target_user_id = path.into_inner();
+
+    if ctx.user_id == target_user_id {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "You cannot delete your own account" })));
+    }
+
+    // Resolve the target's effective role + scope so we can apply the same
+    // assign-role gate that the role-change endpoint uses.
+    let target_ctx = match rbac::resolve_role_context(pool.get_ref(), target_user_id).await {
+        Ok(target_ctx) => target_ctx,
+        Err(sqlx::Error::RowNotFound) => {
+            return Ok(HttpResponse::NotFound()
+                .json(serde_json::json!({ "message": "User not found" })));
+        }
+        Err(e) => return Err(AppError::Db(e)),
+    };
+
+    // Scope boundary: org admins cannot reach across orgs or into the
+    // platform tenant. Platform admins are unconstrained by scope (but
+    // still constrained by the role check below).
+    match ctx.scope {
+        Scope::Organization => {
+            if target_ctx.scope != Scope::Organization
+                || target_ctx.organization_id != ctx.organization_id
+            {
+                return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                    "message": "User is not a member of your organization"
+                })));
+            }
+        }
+        Scope::Platform => {}
+        Scope::Personal => {
+            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "Personal accounts cannot delete other users"
+            })));
+        }
+    }
+
+    // Role check: same predicate as role assignment. RolesManage holders
+    // can delete anyone; RolesAssignLimited can only delete users whose
+    // current role is below admin.
+    if !rbac::can_assign_role(&ctx, target_ctx.role, target_ctx.role) {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Your role cannot manage that account"
+        })));
+    }
+
+    let mut tx = pool.begin().await?;
+
+    // Last-owner protection. Lock the owner rows with FOR UPDATE so two
+    // concurrent deletes can't both pass this check.
+    if target_ctx.role == Role::Owner {
+        let owner_count: i64 = match target_ctx.scope {
+            Scope::Organization => {
+                let org_id = target_ctx.organization_id.unwrap_or(-1);
+                sqlx::query_scalar(
+                    "SELECT COUNT(*)::BIGINT FROM organization_members \
+                     WHERE organization_id = $1 AND role = 'owner' FOR UPDATE",
+                )
+                .bind(org_id)
+                .fetch_one(&mut *tx)
+                .await?
+            }
+            Scope::Platform => {
+                sqlx::query_scalar(
+                    "SELECT COUNT(*)::BIGINT FROM platform_members \
+                     WHERE role = 'owner' FOR UPDATE",
+                )
+                .fetch_one(&mut *tx)
+                .await?
+            }
+            Scope::Personal => 0,
+        };
+        if owner_count <= 1 {
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "message": "Cannot delete the last owner"
+            })));
+        }
+    }
+
+    // Notes has user_id but no FK (see init.sql:469) — clean explicitly so
+    // it doesn't leave orphan rows after the users-row cascade. Every other
+    // user-owned table has ON DELETE CASCADE on its FK.
+    sqlx::query("DELETE FROM notes WHERE user_id = $1")
+        .bind(target_user_id)
+        .execute(&mut *tx)
+        .await?;
+
+    let result = sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(target_user_id)
+        .execute(&mut *tx)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        // Race: target existed at resolve_role_context time, gone now.
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "User not found" }))
+        );
+    }
+
+    tx.commit().await?;
+
+    invalidate_me_cache(target_user_id).await;
+    invalidate_profile_cache(target_user_id).await;
+    info!(
+        target: "auth",
+        actor = ctx.user_id,
+        target_user_id,
+        scope = ?target_ctx.scope,
+        "admin deleted user"
+    );
+
+    Ok(HttpResponse::NoContent().finish())
 }
 
 #[get("/profile")]
@@ -984,8 +1207,8 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
 
     let result = sqlx::query(
         r#"
-        SELECT 
-            u.id, u.email, u.first_name, u.last_name, u.auth_provider, u.account_type, u.organization_id,
+        SELECT
+            u.id, u.email, u.first_name, u.last_name, u.auth_provider, u.account_type, u.organization_id, u.username, u.recovery_mode,
             o.name as organization_name,
             (SELECT COUNT(*)::BIGINT FROM emails e JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id) as total_emails,
             (SELECT COALESCE(SUM(octet_length(body_encrypted)), 0)::BIGINT FROM emails e JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id) as email_storage_bytes,
@@ -1018,6 +1241,10 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
             let drive_storage_bytes: i64 = row.get("drive_storage_bytes");
             let chat_storage_bytes: i64 = row.get("chat_storage_bytes");
             let notes_storage_bytes: i64 = row.get("notes_storage_bytes");
+            let username: Option<String> = row.try_get("username").ok();
+            let recovery_mode: String = row
+                .try_get("recovery_mode")
+                .unwrap_or_else(|_| "full".to_string());
             let total_used = email_storage_bytes
                 + drive_storage_bytes
                 + chat_storage_bytes
@@ -1063,12 +1290,14 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 "organization_id": organization_id,
                 "organization_name": organization_name,
                 "current_plan": current_plan,
+                "username": username,
                 "total_emails": total_emails,
                 "email_storage_bytes": email_storage_bytes,
                 "drive_storage_bytes": drive_storage_bytes,
                 "other_storage_bytes": chat_storage_bytes + notes_storage_bytes,
                 "memory_used_bytes": total_used,
                 "memory_limit_bytes": 10_737_418_240_i64, // 10 GB limit
+                "recovery_mode": recovery_mode,
             });
 
             PROFILE_CACHE.insert(user_id, response.clone()).await;

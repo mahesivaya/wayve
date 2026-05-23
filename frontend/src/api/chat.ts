@@ -15,6 +15,14 @@ export type ChatMessage = {
   content: string;
   status: "sent" | "delivered" | "read";
   created_at: string;
+  // Threaded channel replies set this to the parent (top-level) message id.
+  // Null/undefined = top-level. Threads are channel-only on the wire — the
+  // backend rejects DMs with parent_message_id set.
+  parent_message_id?: number | null;
+  // Server-computed count of replies under a top-level message. Only present
+  // on top-level rows returned by the main channel history fetch; replies
+  // themselves carry 0.
+  reply_count?: number;
 };
 
 export type ChatChannel = {
@@ -181,3 +189,8 @@ export const getChannelMessages = async (channelId: number) => {
     `/api/chat/channel-messages?${params.toString()}`,
   );
 };
+
+export const getChannelThread = async (parentMessageId: number) =>
+  apiFetchJson<ChatMessage[]>(
+    `/api/chat/channel-messages/${parentMessageId}/thread`,
+  );

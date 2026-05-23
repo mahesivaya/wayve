@@ -36,7 +36,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
 
     let row = sqlx::query(
         r#"
-        SELECT u.id, u.email, u.account_type, u.organization_id,
+        SELECT u.id, u.email, u.account_type, u.organization_id, u.recovery_mode,
                o.slug AS organization_slug, o.name AS organization_name
         FROM users u
         LEFT JOIN organizations o ON o.id = u.organization_id
@@ -61,6 +61,12 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let account_type: String = row.get("account_type");
     let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
     let organization_slug: Option<String> = row.try_get("organization_slug").ok().flatten();
+    // Legacy rows (created before recovery_mode existed) shouldn't happen
+    // — the column has a NOT NULL default — but treat any unknown value
+    // as "full" to keep the safer-default semantics.
+    let recovery_mode: String = row
+        .try_get::<String, _>("recovery_mode")
+        .unwrap_or_else(|_| "full".to_string());
 
     let organization_name = display_organization_name(
         &account_type,
@@ -98,7 +104,8 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "organization_id": organization_id,
         "organization_slug": organization_slug,
         "organization_name": organization_name,
-        "current_plan": current_plan
+        "current_plan": current_plan,
+        "recovery_mode": recovery_mode,
     });
 
     ME_CACHE.insert(user_id, response.clone()).await;

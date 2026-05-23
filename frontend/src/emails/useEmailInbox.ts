@@ -91,7 +91,17 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
         before,
         beforeId: last.id,
       });
-      setEmails((prev) => [...prev, ...data]);
+      // Defensive de-dup on append. The backend's keyset pagination
+       // `(created_at, id) < (before, beforeId)` is usually strict, but a
+       // background sync writing a row between the initial fetch and this
+       // loadMore — or two emails sharing the same created_at second — can
+       // produce an id overlap. React keys must be unique, so drop rows we
+       // already have rather than rendering a duplicate.
+       setEmails((prev) => {
+         const seen = new Set(prev.map((email) => email.id));
+         const fresh = data.filter((email) => !seen.has(email.id));
+         return fresh.length === data.length ? [...prev, ...data] : [...prev, ...fresh];
+       });
       // The backend's `hasMore` reflects only whether *this* SQL page hit the
       // 51-row LIMIT — it doesn't know whether the provider (Gmail/Outlook)
       // still has more older mail past what was pulled in this tick. Treat

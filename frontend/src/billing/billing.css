@@ -346,6 +346,15 @@
   box-sizing: border-box;
 }
 
+/* PaymentElement renders its own iframe with internal padding, so the
+   outer container only needs to reserve vertical space and stay border-less. */
+#billing-payment-element {
+  min-height: 280px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
 .billing-payment-form input {
   color: var(--color-text-primary);
   font: inherit;

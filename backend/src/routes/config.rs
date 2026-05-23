@@ -14,5 +14,14 @@ pub async fn public_config() -> impl Responder {
         "ws_base": config::public_ws_url(),
         "stripe_publishable_key": config::stripe().publishable_key,
         "environment": config::app_environment(),
+        "auth": {
+            "google_client_id": std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default(),
+            "allow_registration": std::env::var("ALLOW_REGISTRATION").map(|v| v == "true").unwrap_or(true),
+        },
+        "features": {
+            "ai_chat_enabled": std::env::var("ENABLE_AI_CHAT").map(|v| v == "true").unwrap_or(false),
+            "e2ee_enabled": true,
+        },
+        "version": env!("CARGO_PKG_VERSION"),
     }))
 }

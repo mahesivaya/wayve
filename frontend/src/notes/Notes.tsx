@@ -9,10 +9,17 @@ import {
   type Note,
 } from "../api/notes";
 import { useGlobalSearch } from "../search/SearchContext";
+import { useAuth } from "../auth/useAuth";
+import {
+  decryptForSelf,
+  encryptForSelf,
+} from "../crypto/selfEncrypt";
 
 
 export default function Notes() {
   const { normalizedSearchQuery } = useGlobalSearch();
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedId, setSelectedId] = useState<number | "new" | null>(null);
   const [title, setTitle] = useState("");
@@ -36,14 +43,26 @@ export default function Notes() {
   }, []);
 
   // ================= LOAD =================
+  // The backend stores notes as opaque WAYVE_SECURE_V1 envelopes; decrypt
+  // each row's title and content client-side before they ever reach React
+  // state. Pre-E2E plaintext rows pass through untouched (see
+  // `isSelfEncrypted` short-circuit in decryptForSelf).
   const fetchNotes = useCallback(async () => {
+    if (!userId) return;
     try {
-      setNotes(await getNotes());
-    } catch(err)
-    {
+      const raw = await getNotes();
+      const decrypted = await Promise.all(
+        raw.map(async (note) => ({
+          ...note,
+          title: note.title ? await decryptForSelf(note.title, userId) : note.title,
+          content: note.content ? await decryptForSelf(note.content, userId) : note.content,
+        }))
+      );
+      setNotes(decrypted);
+    } catch (err) {
       console.error(err);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -88,15 +107,31 @@ export default function Notes() {
 
       setSaving(true);
     try {
+      if (!userId) {
+        setStatus("Sign-in required");
+        return;
+      }
+      // Wrap title and content in WAYVE_SECURE_V1 envelopes so the
+      // server only ever sees ciphertext. `encryptForSelf` returns ""
+      // for empty input, which the backend handler stores as the empty
+      // string — matches the pre-E2E behavior of `data.content.unwrap_or("")`.
+      const cipherTitle = await encryptForSelf(title, userId);
+      const cipherContent = await encryptForSelf(content, userId);
+
       const isNew = selectedId === "new" || selectedId === null;
       const saved = isNew
-        ? await createNoteApi({ title, content })
-        : await updateNoteApi(selectedId, { title, content });
+        ? await createNoteApi({ title: cipherTitle, content: cipherContent })
+        : await updateNoteApi(selectedId, { title: cipherTitle, content: cipherContent });
       setSelectedId(saved.id);
       setStatus(isNew ? "Created ✓" : "Saved ✓");
       await fetchNotes();
-    } catch {
-      setStatus("Save failed");
+    } catch (err) {
+      console.error(err);
+      setStatus(
+        err instanceof Error && err.message.includes("public key")
+          ? "Generate an encryption key first (see chat setup)"
+          : "Save failed"
+      );
     } finally {
       setSaving(false);
     }

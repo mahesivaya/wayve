@@ -46,6 +46,10 @@ aes-gcm = "0.10.3"
 hmac = "0.12"
 hkdf = "0.12"
 sha2 = "0.10"
+# Mirrors the WebCrypto PBKDF2-SHA256 the frontend uses for the recovery
+# wrap (frontend/src/crypto/recovery.ts). Used by the recover-with-mnemonic
+# endpoint to verify a submitted phrase by decrypting the wrapped envelope.
+pbkdf2 = "0.12"
 rand = { version = "0.8", features = ["std"] }
 actix-multipart = "0.6"
 futures-util = "0.3"

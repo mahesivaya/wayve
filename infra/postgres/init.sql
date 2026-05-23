@@ -17,6 +17,43 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT '
 ALTER TABLE users ADD COLUMN IF NOT EXISTS account_type TEXT NOT NULL DEFAULT 'personal';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
 
+-- Recovery-phrase mode chosen at signup.
+--   'basic'          — easy mode. Server holds an AES-GCM(AES_KEY)
+--                      encrypted copy of the user's RSA private key
+--                      (users.private_key_encrypted/_iv) and ships it
+--                      back to the browser on login over TLS, so the
+--                      user can sign in from any device with just
+--                      email + password. No mnemonic, no recovery
+--                      page. Server-trust tier: the server CAN read
+--                      the user's content.
+--   'full'           — server stores an AES-GCM envelope of the user's RSA
+--                      private key, wrapped by a 24-word mnemonic. New-
+--                      device restore via /recover unlocks chat/notes/
+--                      files history. Server cannot read the user's
+--                      content.
+--   'password_only'  — server only stores a credential blob (random
+--                      bytes wrapped by the mnemonic) used to verify
+--                      mnemonic possession for /recover-with-mnemonic
+--                      password reset. The user's private key never
+--                      leaves the device; encrypted history does NOT
+--                      follow them to new devices.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_mode TEXT NOT NULL DEFAULT 'full';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS private_key_encrypted TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS private_key_iv TEXT;
+-- Drop any older CHECK before re-adding, so re-running init.sql after
+-- adding 'basic' to the allowed set doesn't fail with "constraint
+-- already exists" or "value violates check constraint".
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'users_recovery_mode_check'
+  ) THEN
+    ALTER TABLE users DROP CONSTRAINT users_recovery_mode_check;
+  END IF;
+END $$;
+ALTER TABLE users
+  ADD CONSTRAINT users_recovery_mode_check
+  CHECK (recovery_mode IN ('basic', 'full', 'password_only'));
+
 -- Account-type renames: the role strings were renamed
 --   project_admin  -> platform_admin
 --   business_admin -> organization_admin
@@ -395,6 +432,7 @@ CREATE TABLE IF NOT EXISTS channel_messages (
     sender_id INT REFERENCES users(id) ON DELETE CASCADE,
     content_encrypted TEXT,
     content_iv TEXT,
+    parent_message_id INT REFERENCES channel_messages(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -506,6 +544,9 @@ ON channel_invites (channel_id, email);
 
 CREATE INDEX IF NOT EXISTS idx_channel_messages_channel_created
 ON channel_messages (channel_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_channel_messages_parent
+ON channel_messages (parent_message_id) WHERE parent_message_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_emails_account_created
 ON emails (account_id, created_at DESC, id DESC);

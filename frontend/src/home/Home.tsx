@@ -6,19 +6,30 @@ import { SERVICES } from "../services/serviceData";
 import ThemeToggle from "../theme/ThemeToggle";
 import "./home.css";
 
+type AppPermission = "apps:use";
+
+// `requiredPermission` is checked against `user.permissions[]` — the
+// catalog is in backend/src/security/rbac.rs::Permission. Granular
+// per-app strings like `email:read` are NOT in that catalog (they'd
+// silently hide every card for every user). The right gate today is
+// `apps:use`, which every authed user from Member upward holds.
+// /call is intentionally absent — calls live inside Chat's conversation
+// header (audio + video icons on a 1:1 DM). The /call route is still
+// reachable directly for legacy bookmarks.
 const HOME_CARDS = [
-  { path: "/emails", title: "📧 Emails", description: "View and send emails" },
-  { path: "/chat", title: "💬 Chat", description: "Real-time messaging" },
-  // /call removed from the home grid — calls live inside [Chat](../chat/Chat.tsx)'s
-  // conversation header (audio + video icons on a 1:1 DM). The /call route is
-  // still reachable directly for any existing bookmarks.
-  { path: "/scheduler", title: "📅 Scheduler", description: "Manage your meetings" },
-  { path: "/drive", title: "📁 Drive", description: "Store and manage files" },
-  { path: "/notes", title: "📝 Notes", description: "Store and manage notes" },
-  { path: "/tasks", title: "☑ Tasks", description: "Create and track tasks" },
-  { path: "/aichat", title: "✨ AI Chat", description: "Chat with AI" },
-  { path: "/about", title: "ⓘ About", description: "Learn how Wayve fits together" },
-];
+  { path: "/emails", title: "📧 Emails", description: "View and send emails", requiredPermission: "apps:use" },
+  { path: "/chat", title: "💬 Chat", description: "Real-time messaging", requiredPermission: "apps:use" },
+  { path: "/scheduler", title: "📅 Scheduler", description: "Manage your meetings", requiredPermission: "apps:use" },
+  { path: "/drive", title: "📁 Drive", description: "Store and manage files", requiredPermission: "apps:use" },
+  { path: "/notes", title: "📝 Notes", description: "Store and manage notes", requiredPermission: "apps:use" },
+  { path: "/tasks", title: "☑ Tasks", description: "Create and track tasks", requiredPermission: "apps:use" },
+  { path: "/aichat", title: "✨ AI Chat", description: "Chat with AI", requiredPermission: "apps:use" },
+] satisfies Array<{
+  path: string;
+  title: string;
+  description: string;
+  requiredPermission?: AppPermission;
+}>;
 
 export default function Home() {
   const { user } = useAuth();
@@ -27,14 +38,20 @@ export default function Home() {
   const [servicesOpen, setServicesOpen] = useState(false);
 
   const visibleCards = useMemo(() => {
-    if (!normalizedSearchQuery) return HOME_CARDS;
-    return HOME_CARDS.filter((card) =>
+    // Filter by permissions first (if user exists), then by search query
+    const allowedCards = HOME_CARDS.filter((card) => {
+      if (!card.requiredPermission) return true;
+      return user?.permissions?.includes(card.requiredPermission);
+    });
+
+    if (!normalizedSearchQuery) return allowedCards;
+    return allowedCards.filter((card) =>
       [card.title, card.description]
         .join(" ")
         .toLowerCase()
         .includes(normalizedSearchQuery)
     );
-  }, [normalizedSearchQuery]);
+  }, [normalizedSearchQuery, user?.permissions]);
 
   if (!user) {
     return (

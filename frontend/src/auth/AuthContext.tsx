@@ -5,12 +5,30 @@ import {
   loadPrivateKey,
   loadPublicKey,
 } from "../crypto/keyStore";
+import { generateMnemonic, mnemonicToEntropy } from "../crypto/mnemonic";
+import {
+  wrapKeysForRecovery,
+  wrapCredentialForRecovery,
+} from "../crypto/recovery";
+import {
+  uploadWrappedKey,
+  fetchBasicKey,
+  uploadBasicKey,
+} from "../api/recovery";
+import RecoverySeedModal from "../recovery/RecoverySeedModal";
 import { getMe, logout as logoutRequest, saveUserPublicKey } from "../api/Auth";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./token";
 import { logger } from "../utils/logger";
 import { normalizeAccountType } from "./accountHome";
 import { permissionsForRole } from "./permissions";
-import { AuthContext, type UserType } from "./authContextValue";
+import {
+  AuthContext,
+  type RecoveryMode,
+  type UserType,
+} from "./authContextValue";
+
+const normalizeRecoveryMode = (value: unknown): RecoveryMode =>
+  value === "password_only" ? "password_only" : "full";
 
 const log = logger.scope("auth");
 
@@ -144,7 +162,105 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [initializing, setInitializing] = useState(() => !getAuthToken());
 
-  const setupEncryption = async (userId: number) => {
+  // ============================================================
+  // Recovery seed orchestration
+  // ============================================================
+  // When `pendingMnemonic` is set, the modal is rendered at the bottom of
+  // the provider. `pendingWrapJob` is the closure the modal calls after
+  // the user has verified the words — wrapping the private key + uploading
+  // the envelope happens THEN, so a user who never confirms doesn't end
+  // up with a recovery copy they don't know exists.
+  const [pendingMnemonic, setPendingMnemonic] = useState<string | null>(null);
+  const [pendingWrapJob, setPendingWrapJob] = useState<(() => Promise<void>) | null>(null);
+  // Track the user's recovery_mode at modal-open time so the seed-modal
+  // copy can adapt (full = "restore on a new device too"; password_only
+  // = "this resets a forgotten password only").
+  const [pendingRecoveryMode, setPendingRecoveryMode] = useState<RecoveryMode>("full");
+  const [wrapBusy, setWrapBusy] = useState(false);
+  const [wrapError, setWrapError] = useState<string | null>(null);
+
+  // No `needsRestore` banner here anymore. On a "new device" (no local
+  // key, server envelope present) the user can navigate to /recover on
+  // their own — auto-nagging caused too many false positives in dev
+  // (port switching) and confused real users. Lazy restore wins.
+
+  // Basic mode (server-trust tier): the server holds an at-rest-
+  // encrypted copy of the RSA private key. On a new device or freshly-
+  // wiped IndexedDB we fetch the plaintext PKCS8 over TLS and load it
+  // locally. On first login after registration the server has nothing
+  // yet, so we generate a keypair, save locally, and upload the PKCS8
+  // for future logins. No mnemonic ceremony at all in this mode.
+  const setupBasicEncryption = async (userId: number) => {
+    const serverPkcs8 = await fetchBasicKey().catch((err) => {
+      log.warn("basic-key fetch failed", err);
+      return null;
+    });
+
+    if (serverPkcs8) {
+      log.info("basic: importing server-held private key");
+      const privateKey = await crypto.subtle.importKey(
+        "pkcs8",
+        serverPkcs8,
+        { name: "RSA-OAEP", hash: "SHA-256" },
+        true,
+        ["decrypt"]
+      );
+      // Re-derive the SPKI public key from the imported private key by
+      // exporting/importing the JWK form — WebCrypto can't extract a
+      // public key directly from a private CryptoKey, but the JWK round-
+      // trip yields a usable RSA-OAEP encrypt key.
+      const jwk = await crypto.subtle.exportKey("jwk", privateKey);
+      const pubJwk: JsonWebKey = {
+        kty: jwk.kty,
+        n: jwk.n,
+        e: jwk.e,
+        alg: "RSA-OAEP-256",
+        ext: true,
+      };
+      const publicCryptoKey = await crypto.subtle.importKey(
+        "jwk",
+        pubJwk,
+        { name: "RSA-OAEP", hash: "SHA-256" },
+        true,
+        ["encrypt"]
+      );
+      const publicKey = await crypto.subtle.exportKey("spki", publicCryptoKey);
+
+      await savePrivateKey(privateKey, userId);
+      await savePublicKey(publicKey, userId);
+      await publishPublicKey(publicKey);
+      return;
+    }
+
+    log.info("basic: no server-held key — generating + uploading fresh keypair");
+    const keyPair = await crypto.subtle.generateKey(
+      {
+        name: "RSA-OAEP",
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-256",
+      },
+      true,
+      ["encrypt", "decrypt"]
+    );
+    await savePrivateKey(keyPair.privateKey, userId);
+    const publicKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
+    await savePublicKey(publicKey, userId);
+    await publishPublicKey(publicKey);
+
+    // Upload the PKCS8 plaintext to the server. Best-effort: failure
+    // here means cross-device login won't work yet, but local
+    // encryption is fine. Surface the error in the log and continue.
+    try {
+      const pkcs8 = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+      await uploadBasicKey(pkcs8);
+      log.info("basic: PKCS8 uploaded to /api/me/basic-key");
+    } catch (err) {
+      log.error("basic: PKCS8 upload failed; cross-device login will not work until next setup", err);
+    }
+  };
+
+  const setupEncryption = async (userId: number, recoveryMode: RecoveryMode) => {
     try {
       const existingKey = await loadPrivateKey(userId);
       const existingPublicKey = await loadPublicKey(userId);
@@ -155,7 +271,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      log.info("generating new RSA key pair");
+      // No local key. The recovery_mode chosen at signup decides what
+      // happens next.
+      //
+      // basic            → server holds an at-rest-encrypted copy of the
+      //                    private key. Try to fetch it; if absent (first
+      //                    login after register), generate fresh + upload.
+      //                    No mnemonic, no seed modal.
+      // full             → generate fresh keys, wrap the real private key
+      //                    with a mnemonic, upload the envelope, show
+      //                    the seed modal.
+      // password_only    → generate fresh keys, wrap a random throwaway
+      //                    payload with a mnemonic (just a credential
+      //                    for /recover-with-mnemonic), upload, show
+      //                    the seed modal.
+
+      if (recoveryMode === "basic") {
+        await setupBasicEncryption(userId);
+        return;
+      }
+
+      log.info("generating new RSA key pair", { recoveryMode });
 
       const keyPair = await crypto.subtle.generateKey(
         {
@@ -175,9 +311,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await publishPublicKey(publicKey);
 
-      log.info("encryption setup complete");
+      // Generate a recovery mnemonic, prepare the wrap closure, and let
+      // the modal drive the rest. Critical: we generate the mnemonic
+      // here (in the browser) and only the user ever sees it.
+      const mnemonic = await generateMnemonic();
+      const wrapJob = async () => {
+        const entropy = await mnemonicToEntropy(mnemonic);
+        const envelope =
+          recoveryMode === "password_only"
+            ? await wrapCredentialForRecovery(publicKey, entropy)
+            : await wrapKeysForRecovery(keyPair.privateKey, publicKey, entropy);
+        await uploadWrappedKey(envelope);
+      };
+
+      setPendingWrapJob(() => wrapJob);
+      setPendingRecoveryMode(recoveryMode);
+      setPendingMnemonic(mnemonic);
+
+      log.info("encryption setup complete; awaiting recovery-seed confirmation", {
+        recoveryMode,
+      });
     } catch (err) {
       log.error("encryption setup failed", err);
+    }
+  };
+
+  const handleRecoveryConfirmed = async () => {
+    if (!pendingWrapJob) return;
+    setWrapBusy(true);
+    setWrapError(null);
+    try {
+      await pendingWrapJob();
+      setPendingMnemonic(null);
+      setPendingWrapJob(null);
+    } catch (err) {
+      log.error("recovery key upload failed", err);
+      setWrapError(
+        err instanceof Error
+          ? `Couldn't save recovery copy: ${err.message}`
+          : "Couldn't save recovery copy. Try again."
+      );
+    } finally {
+      setWrapBusy(false);
     }
   };
 
@@ -215,6 +390,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const nextUser: UserType = {
           email: data.email,
           id: data.id,
+          username: data.username ?? null,
           account_type: normalizeAccountType(data.account_type),
           effective_role: data.effective_role ?? null,
           role_label: data.role_label ?? null,
@@ -224,6 +400,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           organization_slug: data.organization_slug ?? null,
           organization_name: data.organization_name ?? null,
           current_plan: data.current_plan ?? null,
+          recovery_mode: normalizeRecoveryMode(data.recovery_mode),
         };
         // Only patch state if the server sees a different user — avoids a
         // pointless re-render when the optimistic claims already matched.
@@ -240,6 +417,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           prev.organization_id === nextUser.organization_id &&
           prev.organization_slug === nextUser.organization_slug &&
           prev.organization_name === nextUser.organization_name &&
+          (prev.username ?? null) === (nextUser.username ?? null) &&
+          prev.recovery_mode === nextUser.recovery_mode &&
           // Plan changes (upgrade / downgrade / new subscription) need to
           // trigger a re-render so the tier badge + Upgrade affordance
           // refresh. Comparing the `code` is enough — other plan fields
@@ -249,8 +428,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             : nextUser
         );
 
-        setupEncryption(nextUser.id).catch((err) =>
-          log.error("background encryption setup failed", err)
+        setupEncryption(nextUser.id, nextUser.recovery_mode ?? "full").catch(
+          (err) => log.error("background encryption setup failed", err)
         );
       } catch (err) {
         if ((err as { name?: string }).name === "AbortError") return;
@@ -276,6 +455,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser({
         email: decoded.email,
         id: decoded.sub,
+        username: null, // Will be filled by the post-login /api/me fetch
         account_type: normalizedAccountType,
         effective_role: access.effective_role,
         role_label: access.role_label,
@@ -285,20 +465,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         organization_slug: null,
         organization_name: null,
       });
-      setupEncryption(decoded.sub).catch((err) =>
-        log.error("background encryption setup failed", err)
-      );
-
       // The AuthProvider /api/me effect only runs once at mount, so a fresh
       // login needs its own profile fetch to learn the org slug/name that
-      // drive organization routing.
+      // drive organization routing AND the recovery_mode that decides
+      // which envelope shape setupEncryption uploads.
       getMe(token)
         .then(async (res) => {
           if (!res.ok) return;
           const data = await res.json();
+          const recoveryMode = normalizeRecoveryMode(data.recovery_mode);
           setUser({
             email: data.email,
             id: data.id,
+            username: data.username ?? null,
             account_type: normalizeAccountType(data.account_type),
             effective_role: data.effective_role ?? null,
             role_label: data.role_label ?? null,
@@ -308,7 +487,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             organization_slug: data.organization_slug ?? null,
             organization_name: data.organization_name ?? null,
             current_plan: data.current_plan ?? null,
+            recovery_mode: recoveryMode,
           });
+          setupEncryption(decoded.sub, recoveryMode).catch((err) =>
+            log.error("background encryption setup failed", err)
+          );
         })
         .catch((err) => log.error("post-login profile fetch failed", err));
     }
@@ -325,6 +508,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ user, initializing, login, logout }}>
       {children}
+      {pendingMnemonic && (
+        <RecoverySeedModal
+          mnemonic={pendingMnemonic}
+          recoveryMode={pendingRecoveryMode}
+          busy={wrapBusy}
+          error={wrapError}
+          onConfirmed={handleRecoveryConfirmed}
+        />
+      )}
     </AuthContext.Provider>
   );
 }

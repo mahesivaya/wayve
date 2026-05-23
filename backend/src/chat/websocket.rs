@@ -159,7 +159,21 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                     let sender_id = self.user_id;
                     let receiver_id = data.receiver_id;
                     let channel_id = data.channel_id;
+                    let parent_message_id = data.parent_message_id;
                     let content = data.content.clone();
+
+                    // Threads are channel-only. A DM with parent_message_id set
+                    // is malformed — drop it rather than silently storing the
+                    // reference on a DM row (which has no such column).
+                    if parent_message_id.is_some() && channel_id.is_none() {
+                        warn!(
+                            target: "ws",
+                            sender_id,
+                            parent_message_id = ?parent_message_id,
+                            "rejected DM with parent_message_id (threads are channel-only)"
+                        );
+                        return;
+                    }
 
                     if !content.starts_with(CHAT_E2E_PREFIX) {
                         error!(
@@ -205,11 +219,37 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     return Err(sqlx::Error::RowNotFound);
                                 }
 
+                                // Parent must (a) exist, (b) live in this same
+                                // channel, and (c) itself be top-level — flat
+                                // threads, no thread-of-thread nesting.
+                                if let Some(parent_id) = parent_message_id {
+                                    let parent_ok = sqlx::query_scalar::<_, bool>(
+                                        r#"
+                                        SELECT EXISTS(
+                                            SELECT 1
+                                            FROM channel_messages
+                                            WHERE id = $1
+                                              AND channel_id = $2
+                                              AND parent_message_id IS NULL
+                                        )
+                                        "#,
+                                    )
+                                    .bind(parent_id)
+                                    .bind(channel_id)
+                                    .fetch_one(&pool)
+                                    .await?;
+
+                                    if !parent_ok {
+                                        return Err(sqlx::Error::RowNotFound);
+                                    }
+                                }
+
                                 let row = sqlx::query(
                                     r#"
                                     INSERT INTO channel_messages
-                                    (channel_id, sender_id, content_encrypted, content_iv)
-                                    VALUES ($1, $2, $3, $4)
+                                    (channel_id, sender_id, content_encrypted,
+                                     content_iv, parent_message_id)
+                                    VALUES ($1, $2, $3, $4, $5)
                                     RETURNING id, created_at
                                     "#,
                                 )
@@ -217,6 +257,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 .bind(sender_id)
                                 .bind(encrypted)
                                 .bind(iv)
+                                .bind(parent_message_id)
                                 .fetch_one(&pool)
                                 .await?;
 
@@ -249,7 +290,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                         "sender_id": sender_id,
                                         "content": content,
                                         "status": "sent",
-                                        "created_at": created_at.to_rfc3339()
+                                        "created_at": created_at.to_rfc3339(),
+                                        "parent_message_id": parent_message_id,
                                     })
                                     .to_string();
 

@@ -43,18 +43,21 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const [stateError, setStateError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (selectedEmail?.is_shared && selectedEmail.id) {
-      setInboxState({
-        email_id: selectedEmail.id,
-        status: (selectedEmail.inbox_status ?? "open") as InboxState["status"],
-        assignee_id: selectedEmail.inbox_assignee_id ?? null,
-        updated_at: null,
-        updated_by: null,
-      });
-      setStateError(null);
-    } else {
-      setInboxState(null);
-    }
+    const timer = window.setTimeout(() => {
+      if (selectedEmail?.is_shared && selectedEmail.id) {
+        setInboxState({
+          email_id: selectedEmail.id,
+          status: (selectedEmail.inbox_status ?? "open") as InboxState["status"],
+          assignee_id: selectedEmail.inbox_assignee_id ?? null,
+          updated_at: null,
+          updated_by: null,
+        });
+        setStateError(null);
+      } else {
+        setInboxState(null);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [selectedEmail?.id, selectedEmail?.is_shared, selectedEmail?.inbox_status, selectedEmail?.inbox_assignee_id]);
 
   async function patchInboxState(
@@ -105,7 +108,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           ) : (
             <div className="email-files-list">
               {visibleFiles.map((file) => (
-                <button key={file.id} className="email-files-row" onClick={() => downloadEmailAttachment(file)}>
+                <button key={file.id} className="email-files-row" onClick={() => downloadEmailAttachment(file, user?.id ?? null)}>
                   <span className="email-files-icon">📎</span>
                   <span className="email-files-main">
                     <span className="email-files-name">{file.filename}</span>
@@ -332,7 +335,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             <button
               key={attachment.id}
               className="email-attachment"
-              onClick={() => downloadEmailAttachment(attachment)}
+              onClick={() => downloadEmailAttachment(attachment, user?.id ?? null)}
             >
               <span className="email-attachment-icon">📎</span>
               <span className="email-attachment-name">{attachment.filename}</span>

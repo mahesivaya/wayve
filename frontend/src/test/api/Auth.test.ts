@@ -46,6 +46,10 @@ describe("api/Auth", () => {
         email: "a@b.c",
         password: "pw",
         confirm_password: "pw",
+        // Defaults to "full" inside the api/Auth.ts client when the
+        // caller doesn't pass a value. Register.tsx supplies its own
+        // (currently defaulting to "basic" — see that test).
+        recovery_mode: "full",
       });
     });
 

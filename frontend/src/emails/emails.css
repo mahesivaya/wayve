@@ -35,6 +35,20 @@
   background: var(--color-email-resizer-hover);
 }
 
+.email-list-resizer {
+  flex: 0 0 8px;
+  cursor: col-resize;
+  background: var(--color-email-bg);
+  border-left: 1px solid var(--color-border-soft);
+  border-right: 1px solid var(--color-border);
+  transition: background 0.15s;
+}
+
+.email-list-resizer:hover,
+.email-list-resizer:active {
+  background: var(--color-email-resizer-hover);
+}
+
 /* ================= BUTTONS ================= */
 .compose-btn {
   background: var(--color-primary);
@@ -623,6 +637,14 @@
   height: 100%;
 }
 
+.mobile-mail-topbar,
+.mobile-mail-label,
+.mobile-email-row,
+.mobile-compose-fab,
+.mobile-mail-bottom-nav {
+  display: none;
+}
+
 /* ================= EMAIL ITEM ================= */
 .email-item {
   min-height: 42px;
@@ -1007,4 +1029,265 @@
 .email-detail::-webkit-scrollbar-thumb {
   background: var(--color-border-muted);
   border-radius: var(--radius-sm);
+}
+
+@media (max-width: 700px) {
+  .main {
+    background: #e8eef7;
+  }
+
+  .main .sidebar,
+  .main .email-sidebar-resizer,
+  .main .email-list-resizer {
+    display: none;
+  }
+
+  .main.narrow .email-list,
+  .main.email-list-view .email-list,
+  .email-list {
+    width: 100%;
+    flex: 1;
+    border-right: none;
+    background: #ffffff;
+    padding: 10px 12px 76px;
+    gap: 0;
+    box-sizing: border-box;
+  }
+
+  .mobile-mail-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 42px;
+    margin: 2px 0 12px;
+    padding: 0 10px;
+    border-radius: 22px;
+    background: #f5f7fb;
+    color: #273244;
+  }
+
+  .mobile-mail-menu {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: #374151;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .mobile-mail-topbar input {
+    min-width: 0;
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #111827;
+    font-size: 14px;
+  }
+
+  .mobile-mail-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #2563eb;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 13px;
+    box-shadow: inset 0 0 0 2px #ffffff;
+  }
+
+  .mobile-mail-label {
+    display: block;
+    margin: 0 0 8px;
+    color: #4b5563;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .email-item,
+  .main.email-list-view .email-item {
+    min-height: 0;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 8px 0;
+    border-bottom: none;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .email-item:hover,
+  .email-item.unread,
+  .email-item.unread:hover,
+  .email-item.active,
+  .email-item.unread.active,
+  .email-item.active:hover,
+  .email-item.unread.active:hover {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .email-top {
+    display: none;
+  }
+
+  .mobile-email-row {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 24px;
+    gap: 10px;
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .mobile-email-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #d7b29c;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 13px;
+    overflow: hidden;
+  }
+
+  .mobile-email-content {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .mobile-email-sender-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .mobile-email-sender,
+  .mobile-email-subject {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #111827;
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .mobile-email-sender {
+    font-weight: 800;
+  }
+
+  .mobile-email-subject {
+    font-weight: 700;
+  }
+
+  .mobile-email-time {
+    flex: 0 0 auto;
+    color: #4b5563;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .mobile-email-preview {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: #4b5563;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .mobile-email-attachment {
+    align-self: flex-start;
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 180px;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    padding: 3px 8px;
+    color: #4b5563;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .mobile-email-attachment span {
+    color: #b91c1c;
+    font-size: 10px;
+  }
+
+  .mobile-email-star {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: #6b7280;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .load-more-wrap {
+    margin: 12px 0;
+  }
+
+  .mobile-compose-fab {
+    position: sticky;
+    bottom: 58px;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    align-self: flex-end;
+    border: none;
+    border-radius: 18px;
+    background: #c7e3ee;
+    color: #0f172a;
+    padding: 13px 18px;
+    font-weight: 800;
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+    cursor: pointer;
+    z-index: 3;
+  }
+
+  .mobile-mail-bottom-nav {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    height: 48px;
+    margin: 10px -12px -76px;
+    background: #ffffff;
+    color: #3f4652;
+    border-top: 1px solid #edf1f6;
+    z-index: 2;
+  }
+
+  .mobile-mail-bottom-nav span {
+    width: 42px;
+    height: 28px;
+    border-radius: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+  }
+
+  .mobile-mail-bottom-nav .active {
+    background: #d9eef7;
+    color: #0f172a;
+  }
 }

@@ -5,6 +5,7 @@ pub mod auth;
 pub mod config;
 pub mod email;
 pub mod health;
+pub mod recovery;
 pub mod shared_inbox;
 pub mod sso;
 pub mod user;
@@ -20,10 +21,12 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(auth::logout)
         .service(auth::forgot_password)
         .service(auth::reset_password)
+        .service(auth::recover_with_mnemonic)
         .service(user::change_password)
         .service(user::admin_list_organizations)
         .service(user::admin_create_organization)
         .service(user::admin_create_user)
+        .service(user::admin_delete_user)
         .service(user::admin_generate_api_key)
         .service(user::admin_list_api_keys)
         .service(user::admin_revoke_api_key)
@@ -60,5 +63,10 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(shared_inbox::list_inbox_members)
         .service(shared_inbox::add_inbox_member)
         .service(shared_inbox::remove_inbox_member)
-        .service(shared_inbox::update_email_state);
+        .service(shared_inbox::update_email_state)
+        .service(recovery::get_wrapped_key)
+        .service(recovery::put_wrapped_key)
+        .service(recovery::delete_wrapped_key)
+        .service(recovery::get_basic_key)
+        .service(recovery::put_basic_key);
 }
