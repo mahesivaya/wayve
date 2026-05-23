@@ -118,6 +118,44 @@
 }
 
 /* ============================================================
+   🔀 VIEW TOGGLE (list / grid)
+   Shared between Tasks and Notes headers.
+   ============================================================ */
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.view-toggle-btn {
+  min-width: 32px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-slate);
+  font-size: var(--text-md);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.view-toggle-btn + .view-toggle-btn {
+  border-left: 1px solid #cbd5e1;
+}
+
+.view-toggle-btn:hover {
+  background: #f1f5f9;
+  color: var(--color-text-primary);
+}
+
+.view-toggle-btn.active {
+  background: #2563eb;
+  color: var(--color-surface);
+}
+
+/* ============================================================
    🌙 DARK MODE
    ------------------------------------------------------------
    Activation is explicit-only: the pre-paint script in index.html

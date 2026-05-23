@@ -317,6 +317,37 @@
   gap: 10px;
 }
 
+.task-list--list {
+  grid-template-columns: 1fr;
+}
+
+.task-list--grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.task-list--grid .task-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.task-list--grid .task-card-meta {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+.task-list--grid .task-card-actions {
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.task-list--grid .task-status-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .task-card {
   display: flex;
   justify-content: space-between;

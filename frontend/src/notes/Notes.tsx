@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./notes.css";
 
 import {
@@ -10,11 +10,13 @@ import {
 } from "../api/notes";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useAuth } from "../auth/useAuth";
-import {
-  decryptForSelf,
-  encryptForSelf,
-} from "../crypto/selfEncrypt";
+import { decryptForSelf, encryptForSelf } from "../crypto/selfEncrypt";
 
+const formatDate = (iso: string | null | undefined) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString();
+};
 
 export default function Notes() {
   const { normalizedSearchQuery } = useGlobalSearch();
@@ -26,27 +28,15 @@ export default function Notes() {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "grid">(() => {
+    const saved = window.localStorage.getItem("wayve.notes.view");
+    return saved === "grid" ? "grid" : "list";
+  });
 
-  // Narrow mode (split pane / small viewport): stack list + editor.
-  const mainRef = useRef<HTMLDivElement>(null);
-  const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
-    const el = mainRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setIsNarrow(entry.contentRect.width < 700);
-      }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    window.localStorage.setItem("wayve.notes.view", view);
+  }, [view]);
 
-  // ================= LOAD =================
-  // The backend stores notes as opaque WAYVE_SECURE_V1 envelopes; decrypt
-  // each row's title and content client-side before they ever reach React
-  // state. Pre-E2E plaintext rows pass through untouched (see
-  // `isSelfEncrypted` short-circuit in decryptForSelf).
   const fetchNotes = useCallback(async () => {
     if (!userId) return;
     try {
@@ -54,9 +44,13 @@ export default function Notes() {
       const decrypted = await Promise.all(
         raw.map(async (note) => ({
           ...note,
-          title: note.title ? await decryptForSelf(note.title, userId) : note.title,
-          content: note.content ? await decryptForSelf(note.content, userId) : note.content,
-        }))
+          title: note.title
+            ? await decryptForSelf(note.title, userId)
+            : note.title,
+          content: note.content
+            ? await decryptForSelf(note.content, userId)
+            : note.content,
+        })),
       );
       setNotes(decrypted);
     } catch (err) {
@@ -72,14 +66,12 @@ export default function Notes() {
     return () => window.clearTimeout(timeout);
   }, [fetchNotes]);
 
-  // Drop transient status banners after a moment.
   useEffect(() => {
     if (!status) return;
     const t = setTimeout(() => setStatus(null), 1500);
     return () => clearTimeout(t);
   }, [status]);
 
-  // ================= SELECT =================
   const openNew = () => {
     setSelectedId("new");
     setTitle("");
@@ -98,46 +90,49 @@ export default function Notes() {
     setContent("");
   };
 
-  // ================= SAVE =================
   const save = async () => {
     if (!title.trim() && !content.trim()) {
       setStatus("Note is empty");
       return;
     }
 
-      setSaving(true);
+    setSaving(true);
     try {
       if (!userId) {
         setStatus("Sign-in required");
         return;
       }
-      // Wrap title and content in WAYVE_SECURE_V1 envelopes so the
-      // server only ever sees ciphertext. `encryptForSelf` returns ""
-      // for empty input, which the backend handler stores as the empty
-      // string — matches the pre-E2E behavior of `data.content.unwrap_or("")`.
+      // Wrap title + content in WAYVE_SECURE_V1 envelopes so the server
+      // only ever sees ciphertext (see decryptForSelf in fetchNotes).
       const cipherTitle = await encryptForSelf(title, userId);
       const cipherContent = await encryptForSelf(content, userId);
 
       const isNew = selectedId === "new" || selectedId === null;
       const saved = isNew
-        ? await createNoteApi({ title: cipherTitle, content: cipherContent })
-        : await updateNoteApi(selectedId, { title: cipherTitle, content: cipherContent });
+        ? await createNoteApi({
+            title: cipherTitle,
+            content: cipherContent,
+          })
+        : await updateNoteApi(selectedId, {
+            title: cipherTitle,
+            content: cipherContent,
+          });
       setSelectedId(saved.id);
       setStatus(isNew ? "Created ✓" : "Saved ✓");
       await fetchNotes();
+      closeEditor();
     } catch (err) {
       console.error(err);
       setStatus(
         err instanceof Error && err.message.includes("public key")
           ? "Generate an encryption key first (see chat setup)"
-          : "Save failed"
+          : "Save failed",
       );
     } finally {
       setSaving(false);
     }
   };
 
-  // ================= DELETE =================
   const remove = async () => {
     if (selectedId === null || selectedId === "new") {
       closeEditor();
@@ -146,119 +141,183 @@ export default function Notes() {
     if (!confirm("Delete this note?")) return;
     try {
       await deleteNoteApi(selectedId);
-
-    closeEditor();
-    setStatus("Deleted");
-    await fetchNotes();
-    } catch
-    {
-      setStatus("Delete failed")
+      closeEditor();
+      setStatus("Deleted");
+      await fetchNotes();
+    } catch {
+      setStatus("Delete failed");
     }
   };
 
   const editorOpen = selectedId !== null;
-  const showList = !isNarrow || !editorOpen;
-  const showEditor = !isNarrow || editorOpen;
-  const visibleNotes = normalizedSearchQuery
-    ? notes.filter((note) =>
-        [note.title ?? "", note.content ?? "", note.updated_at ?? ""]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedSearchQuery)
-      )
-    : notes;
+  const isEditing = typeof selectedId === "number";
 
-  // ================= UI =================
+  const visibleNotes = useMemo(() => {
+    if (!normalizedSearchQuery) return notes;
+    return notes.filter((note) =>
+      [note.title ?? "", note.content ?? "", note.updated_at ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSearchQuery),
+    );
+  }, [normalizedSearchQuery, notes]);
+
   return (
-    <div ref={mainRef} className={`notes ${isNarrow ? "narrow" : ""}`}>
-      {/* LIST */}
-      {showList && (
-        <div className="notes-list">
-          <button className="notes-new-btn" onClick={openNew}>
-            + New Note
-          </button>
-
-          {visibleNotes.length === 0 && (
-            <div className="notes-empty">
-              {normalizedSearchQuery ? "No notes match your search" : "No notes yet"}
-            </div>
-          )}
-
-          {visibleNotes.map((n) => (
-            <div
-              key={n.id}
-              className={`notes-item ${selectedId === n.id ? "active" : ""}`}
-              onClick={() => openNote(n)}
-            >
-              <div className="notes-item-title">
-                {n.title?.trim() || "Untitled"}
-              </div>
-              <div className="notes-item-preview">
-                {(n.content ?? "").slice(0, 80)}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* EDITOR */}
-      {showEditor && (
-        <div className="notes-editor">
-          {!editorOpen ? (
-            <div className="notes-editor-empty">
-              <div className="notes-editor-empty-icon">📝</div>
-              <div>Select a note or create a new one</div>
-            </div>
-          ) : (
-            <>
-              <div className="notes-editor-header">
-                {isNarrow && (
-                  <button
-                    className="notes-back-btn"
-                    onClick={closeEditor}
-                    title="Back to list"
-                    aria-label="Back to list"
-                  >
-                    ←
-                  </button>
-                )}
-                <input
-                  className="notes-title-input"
-                  placeholder="Title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
-                {status && <span className="notes-status">{status}</span>}
-              </div>
-
-              <textarea
-                className="notes-body-input"
-                placeholder="Start writing…"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-              />
-
-              <div className="notes-editor-actions">
+    <div className="notes-app">
+      <main className="notes-main">
+        <div className="notes-header">
+          <div>
+            <h2>Notes</h2>
+            <p>Quick personal notes, encrypted on your device.</p>
+          </div>
+          <div className="notes-header-actions">
+            <span className="notes-count">{notes.length} total</span>
+            {status && <span className="notes-status">{status}</span>}
+            {!editorOpen && (
+              <div className="view-toggle" role="group" aria-label="View mode">
                 <button
-                  className="notes-save-btn"
-                  onClick={save}
+                  type="button"
+                  className={`view-toggle-btn${view === "list" ? " active" : ""}`}
+                  onClick={() => setView("list")}
+                  aria-pressed={view === "list"}
+                  aria-label="List view"
+                  title="List view"
+                >
+                  ☰
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-btn${view === "grid" ? " active" : ""}`}
+                  onClick={() => setView("grid")}
+                  aria-pressed={view === "grid"}
+                  aria-label="Grid view"
+                  title="Grid view"
+                >
+                  ▦
+                </button>
+              </div>
+            )}
+            {!editorOpen && (
+              <button
+                className="notes-new-btn notes-new-btn--inline"
+                onClick={openNew}
+              >
+                + New note
+              </button>
+            )}
+          </div>
+        </div>
+
+        {editorOpen && (
+          <form
+            className="notes-edit-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save();
+            }}
+          >
+            <div className="notes-form-grid">
+              <label>
+                <span>Title</span>
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Enter note title"
+                  autoFocus
+                />
+              </label>
+
+              <label>
+                <span>Body</span>
+                <textarea
+                  value={content}
+                  onChange={(event) => setContent(event.target.value)}
+                  placeholder="Start writing…"
+                />
+              </label>
+            </div>
+
+            <div className="notes-form-actions">
+              <button
+                type="button"
+                onClick={closeEditor}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              {isEditing && (
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => void remove()}
                   disabled={saving}
                 >
-                  {saving ? "Saving…" : "Save"}
+                  Delete
                 </button>
-                {selectedId !== "new" && (
-                  <button className="notes-delete-btn" onClick={remove}>
-                    Delete
-                  </button>
-                )}
-                <button className="notes-cancel-btn" onClick={closeEditor}>
-                  Close
-                </button>
+              )}
+              <button type="submit" className="primary" disabled={saving}>
+                {saving
+                  ? isEditing
+                    ? "Saving…"
+                    : "Creating…"
+                  : isEditing
+                    ? "Save changes"
+                    : "Create note"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {!editorOpen && (
+          <div className={`notes-list notes-list--${view}`}>
+            {visibleNotes.length === 0 ? (
+              <div className="notes-empty">
+                <strong>
+                  {notes.length === 0 ? "No notes yet" : "No matching notes"}
+                </strong>
+                <span>
+                  {notes.length === 0
+                    ? "Use + New note to add your first note."
+                    : "Try a different search term."}
+                </span>
               </div>
-            </>
-          )}
-        </div>
-      )}
+            ) : (
+              visibleNotes.map((note) => (
+                <article
+                  key={note.id}
+                  className="note-card"
+                  onClick={() => openNote(note)}
+                >
+                  <div className="note-card-body">
+                    <h3>{note.title?.trim() || "Untitled"}</h3>
+                    <p>{(note.content ?? "").slice(0, 160) || "No content."}</p>
+                  </div>
+                  <div className="note-card-meta">
+                    {note.updated_at && (
+                      <time dateTime={note.updated_at}>
+                        {formatDate(note.updated_at)}
+                      </time>
+                    )}
+                    <div className="note-card-actions">
+                      <button
+                        type="button"
+                        className="note-edit-btn"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openNote(note);
+                        }}
+                        aria-label={`Edit ${note.title || "note"}`}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }

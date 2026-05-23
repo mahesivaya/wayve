@@ -58,6 +58,14 @@ export default function Tasks() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [view, setView] = useState<"list" | "grid">(() => {
+    const saved = window.localStorage.getItem("wayve.tasks.view");
+    return saved === "grid" ? "grid" : "list";
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem("wayve.tasks.view", view);
+  }, [view]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [taskName, setTaskName] = useState("");
   const [description, setDescription] = useState("");
@@ -275,6 +283,28 @@ export default function Tasks() {
           </div>
           <div className="tasks-header-actions">
             <span className="tasks-count">{tasks.length} total</span>
+            <div className="view-toggle" role="group" aria-label="View mode">
+              <button
+                type="button"
+                className={`view-toggle-btn${view === "list" ? " active" : ""}`}
+                onClick={() => setView("list")}
+                aria-pressed={view === "list"}
+                aria-label="List view"
+                title="List view"
+              >
+                ☰
+              </button>
+              <button
+                type="button"
+                className={`view-toggle-btn${view === "grid" ? " active" : ""}`}
+                onClick={() => setView("grid")}
+                aria-pressed={view === "grid"}
+                aria-label="Grid view"
+                title="Grid view"
+              >
+                ▦
+              </button>
+            </div>
             {isPersonal && (
               <button
                 className="create-task-btn create-task-btn--inline"
@@ -358,7 +388,7 @@ export default function Tasks() {
         )}
 
         {!creating && (
-        <div className="task-list">
+        <div className={`task-list task-list--${view}`}>
           {loading ? (
             <div className="tasks-empty">
               <strong>Loading tasks…</strong>
@@ -464,7 +494,7 @@ export default function Tasks() {
                 {completedTasks.length}
               </span>
             </h3>
-            <div className="task-list">
+            <div className={`task-list task-list--${view}`}>
               {completedTasks.map((task) => (
                 <article
                   key={task.id}
