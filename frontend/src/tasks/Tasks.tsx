@@ -1,21 +1,19 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createTaskApi,
+  deleteTaskApi,
+  getTasks,
+  updateTaskApi,
+  type Task,
+  type TaskPriority,
+} from "../api/tasks";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 import "./tasks.css";
 
-type Priority = 1 | 2 | 3 | 4 | 5;
+const PRIORITY_OPTIONS: TaskPriority[] = [5, 4, 3, 2, 1];
 
-type Task = {
-  id: number;
-  name: string;
-  description: string;
-  priority: Priority;
-  createdAt: string;
-};
-
-const PRIORITY_OPTIONS: Priority[] = [5, 4, 3, 2, 1];
-
-const priorityLabel = (priority: Priority) => {
+const priorityLabel = (priority: TaskPriority) => {
   if (priority === 5) return "Highest";
   if (priority === 4) return "High";
   if (priority === 3) return "Medium";
@@ -23,19 +21,63 @@ const priorityLabel = (priority: Priority) => {
   return "Lowest";
 };
 
+const normalizePriority = (value: unknown): TaskPriority => {
+  const n = Number(value);
+  if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) return n;
+  return 3;
+};
+
+const sortTasks = (list: Task[]) =>
+  [...list].sort(
+    (a, b) =>
+      b.priority - a.priority ||
+      new Date(b.created_at ?? 0).getTime() -
+        new Date(a.created_at ?? 0).getTime(),
+  );
+
+const formatDate = (iso: string | null | undefined) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString();
+};
+
 export default function Tasks() {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
   const isPersonal = user?.scope === "personal";
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [taskName, setTaskName] = useState("");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<Priority>(3);
+  const [priority, setPriority] = useState<TaskPriority>(3);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const isEditing = editingId !== null;
+
+  const loadTasks = useCallback(async () => {
+    setLoadError("");
+    setLoading(true);
+    try {
+      const list = await getTasks();
+      setTasks(
+        sortTasks(
+          list.map((t) => ({ ...t, priority: normalizePriority(t.priority) })),
+        ),
+      );
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load tasks");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTasks();
+  }, [loadTasks]);
 
   const resetForm = () => {
     setTaskName("");
@@ -54,40 +96,39 @@ export default function Tasks() {
     setEditingId(task.id);
     setTaskName(task.name);
     setDescription(task.description);
-    setPriority(task.priority);
+    setPriority(normalizePriority(task.priority));
     setError("");
     setCreating(true);
   };
 
-  const deleteTask = (task: Task) => {
-    const ok = window.confirm(`Delete task "${task.name}"? This cannot be undone.`);
+  const deleteTask = async (task: Task) => {
+    const ok = window.confirm(
+      `Delete task "${task.name}"? This cannot be undone.`,
+    );
     if (!ok) return;
-    setTasks((prev) => prev.filter((t) => t.id !== task.id));
-    if (editingId === task.id) {
-      resetForm();
-      setCreating(false);
+    try {
+      await deleteTaskApi(task.id);
+      setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      if (editingId === task.id) {
+        resetForm();
+        setCreating(false);
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to delete task");
     }
   };
 
   const visibleTasks = useMemo(() => {
-    const filtered = !normalizedSearchQuery
-      ? tasks
-      : tasks.filter((task) =>
-          [task.name, task.description]
-            .join(" ")
-            .toLowerCase()
-            .includes(normalizedSearchQuery),
-        );
-
-    // Sort priority desc (5 = Highest at top); tie-break by newest first.
-    return [...filtered].sort(
-      (a, b) =>
-        b.priority - a.priority ||
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    if (!normalizedSearchQuery) return tasks;
+    return tasks.filter((task) =>
+      [task.name, task.description]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSearchQuery),
     );
   }, [normalizedSearchQuery, tasks]);
 
-  const saveTask = (event: FormEvent<HTMLFormElement>) => {
+  const saveTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const name = taskName.trim();
     const details = description.trim();
@@ -97,29 +138,44 @@ export default function Tasks() {
       return;
     }
 
-    if (editingId !== null) {
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === editingId
-            ? { ...task, name, description: details, priority }
-            : task,
-        ),
-      );
-    } else {
-      setTasks((prev) => [
-        {
-          id: Date.now(),
+    setSubmitting(true);
+    setError("");
+    try {
+      if (editingId !== null) {
+        const updated = await updateTaskApi(editingId, {
           name,
           description: details,
           priority,
-          createdAt: new Date().toISOString(),
-        },
-        ...prev,
-      ]);
+        });
+        setTasks((prev) =>
+          sortTasks(
+            prev.map((t) =>
+              t.id === updated.id
+                ? { ...updated, priority: normalizePriority(updated.priority) }
+                : t,
+            ),
+          ),
+        );
+      } else {
+        const created = await createTaskApi({
+          name,
+          description: details,
+          priority,
+        });
+        setTasks((prev) =>
+          sortTasks([
+            ...prev,
+            { ...created, priority: normalizePriority(created.priority) },
+          ]),
+        );
+      }
+      resetForm();
+      setCreating(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save task");
+    } finally {
+      setSubmitting(false);
     }
-
-    resetForm();
-    setCreating(false);
   };
 
   return (
@@ -205,6 +261,7 @@ export default function Tasks() {
             <div className="task-form-actions">
               <button
                 type="button"
+                disabled={submitting}
                 onClick={() => {
                   resetForm();
                   setCreating(false);
@@ -212,17 +269,41 @@ export default function Tasks() {
               >
                 Cancel
               </button>
-              <button type="submit" className="primary">
-                {isEditing ? "Save changes" : "Create task"}
+              <button type="submit" className="primary" disabled={submitting}>
+                {submitting
+                  ? isEditing
+                    ? "Saving…"
+                    : "Creating…"
+                  : isEditing
+                    ? "Save changes"
+                    : "Create task"}
               </button>
             </div>
           </form>
         )}
 
         <div className="task-list">
-          {visibleTasks.length === 0 ? (
+          {loading ? (
             <div className="tasks-empty">
-              <strong>{tasks.length === 0 ? "No tasks yet" : "No matching tasks"}</strong>
+              <strong>Loading tasks…</strong>
+            </div>
+          ) : loadError ? (
+            <div className="tasks-empty">
+              <strong>Couldn&apos;t load tasks</strong>
+              <span>{loadError}</span>
+              <button
+                type="button"
+                className="task-edit-btn"
+                onClick={() => void loadTasks()}
+              >
+                Try again
+              </button>
+            </div>
+          ) : visibleTasks.length === 0 ? (
+            <div className="tasks-empty">
+              <strong>
+                {tasks.length === 0 ? "No tasks yet" : "No matching tasks"}
+              </strong>
               <span>
                 {tasks.length === 0
                   ? "Use + Create task to add your first task."
@@ -245,9 +326,11 @@ export default function Tasks() {
                   <p>{task.description || "No description added."}</p>
                 </div>
                 <div className="task-card-meta">
-                  <time dateTime={task.createdAt}>
-                    {new Date(task.createdAt).toLocaleDateString()}
-                  </time>
+                  {task.created_at && (
+                    <time dateTime={task.created_at}>
+                      {formatDate(task.created_at)}
+                    </time>
+                  )}
                   <div className="task-card-actions">
                     <button
                       type="button"

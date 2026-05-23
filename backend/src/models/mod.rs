@@ -7,4 +7,5 @@ pub mod email_request;
 pub mod message;
 pub mod note;
 pub mod scheduler;
+pub mod task;
 pub mod user;

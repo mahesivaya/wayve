@@ -6,6 +6,7 @@ use crate::email;
 use crate::notes;
 use crate::routes;
 use crate::scheduler;
+use crate::tasks;
 use actix_web::web;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
@@ -285,6 +286,17 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes'),
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )",
+        "CREATE TABLE IF NOT EXISTS tasks (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            priority SMALLINT NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_user_priority \
+         ON tasks(user_id, priority DESC, created_at DESC)",
     ];
 
     for statement in statements {
@@ -305,6 +317,7 @@ pub fn configure_app(cfg: &mut web::ServiceConfig) {
             .configure(scheduler::routes)
             .configure(drive::routes)
             .configure(notes::routes)
+            .configure(tasks::routes)
             .configure(ai::routes),
     )
     .configure(email::public_routes)

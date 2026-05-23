@@ -20,6 +20,7 @@ mod routes;
 mod scheduler;
 pub mod security;
 mod startup;
+mod tasks;
 mod workers;
 mod ws_registry;
 
@@ -66,6 +67,7 @@ fn app_routes(cfg: &mut web::ServiceConfig) {
                 .configure(scheduler::routes)
                 .configure(drive::routes)
                 .configure(notes::routes)
+                .configure(tasks::routes)
                 .configure(ai::routes)
                 .configure(billing::routes),
         )
