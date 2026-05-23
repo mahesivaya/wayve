@@ -381,6 +381,21 @@ export function useCallSession(
     };
   }, [handleSignal]);
 
+  // Attach the local stream to the preview <video> the moment the active
+  // call UI mounts the element. `attachLocalMedia` runs BEFORE setCallState
+  // flips to "active", so `localVideoRef.current` is null at capture time
+  // and the inline `srcObject = stream` assignment there silently no-ops.
+  // Without this effect, the user sees a black self-preview rectangle for
+  // the whole call even though their camera is being captured and sent.
+  useEffect(() => {
+    if (callState.kind !== "active" || callState.media !== "video") return;
+    const el = localVideoRef.current;
+    const stream = localStreamRef.current;
+    if (el && stream) {
+      el.srcObject = stream;
+    }
+  }, [callState]);
+
   return {
     callState,
     connected,
