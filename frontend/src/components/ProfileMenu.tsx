@@ -33,7 +33,6 @@ export default function ProfileMenu() {
         <span className="profile-avatar">
           {(user.email?.[0] ?? "?").toUpperCase()}
         </span>
-        <span className="profile-trigger-caret">▾</span>
       </button>
 
       {menuOpen && (
