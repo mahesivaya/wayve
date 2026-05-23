@@ -12,6 +12,7 @@
 // [ws_registry.rs](../../../backend/src/ws_registry.rs).
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getIceServers } from "../api/turn";
 import { getWsBase } from "../config/env";
 import { logger } from "../utils/logger";
 
@@ -67,7 +68,11 @@ export interface CallSession {
   localVideoRef: React.RefObject<HTMLVideoElement | null>;
 }
 
-const ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+// ICE servers (STUN + TURN) are fetched per-call from `/api/turn/credentials`
+// — see [getIceServers](../api/turn.ts). The backend proxies Cloudflare's
+// `generate-ice-servers` so the long-lived API token never reaches the
+// browser. If the endpoint is unreachable or unconfigured, the helper
+// returns a STUN-only fallback so calls still work between permissive NATs.
 
 // Outgoing calls auto-cancel after this if the callee never picks up.
 const RING_TIMEOUT_MS = 30_000;
@@ -117,8 +122,12 @@ export function useCallSession(
   }, []);
 
   const buildPeerConnection = useCallback(
-    (peerId: number, media: CallMedia): RTCPeerConnection => {
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    async (peerId: number, media: CallMedia): Promise<RTCPeerConnection> => {
+      // Fetch fresh ICE config (includes Cloudflare TURN credentials when
+      // configured) before instantiating the PC — required for relay
+      // candidates to be discovered during the initial ICE gather pass.
+      const iceServers = await getIceServers();
+      const pc = new RTCPeerConnection({ iceServers });
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
@@ -188,7 +197,7 @@ export function useCallSession(
     if (callState.kind !== "incoming") return;
     const { peerId, peerEmail, media } = callState;
     try {
-      const pc = buildPeerConnection(peerId, media);
+      const pc = await buildPeerConnection(peerId, media);
       await attachLocalMedia(pc, media);
       sendSignal({ type: "call-accept", to: peerId });
       setCallState({ kind: "active", peerId, peerEmail, media, muted: false });
@@ -254,7 +263,7 @@ export function useCallSession(
             ringTimerRef.current = null;
           }
           try {
-            const pc = buildPeerConnection(from, callState.media);
+            const pc = await buildPeerConnection(from, callState.media);
             await attachLocalMedia(pc, callState.media);
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);

@@ -68,6 +68,7 @@ fn app_routes(cfg: &mut web::ServiceConfig) {
                 .configure(drive::routes)
                 .configure(notes::routes)
                 .configure(tasks::routes)
+                .configure(call::api_routes)
                 .configure(ai::routes)
                 .configure(billing::routes),
         )
