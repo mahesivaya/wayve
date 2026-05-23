@@ -300,12 +300,18 @@
   border-right: 1px solid var(--border-soft);
   box-sizing: border-box;
 }
+/* When two or more events share the same slot they render side-by-side
+   instead of stacking, so the visual overlap matches the time conflict.
+   `flex-wrap` lets >3 conflicts wrap into a second row rather than
+   crushing each event below readable width. */
 .time-events {
   flex: 1;
   padding: 4px 8px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 4px;
+  align-items: flex-start;
 }
 
 /* ================= WEEK VIEW ================= */
@@ -393,9 +399,14 @@
   flex: 1;
   border-left: 1px solid var(--border-soft);
   padding: 2px 5px;
+  /* Events that start in the same slot render side-by-side (row) so
+     conflicting times are visually obvious. `flex-wrap` keeps >3
+     conflicts from being crushed below readable width. */
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 2px;
+  align-items: flex-start;
   box-sizing: border-box;
   transition: background 0.12s;
   min-width: 0;
@@ -504,6 +515,18 @@
   position: relative;
   z-index: 1;
   box-sizing: border-box;
+  /* When multiple events share a slot the cell switches to flex-row, so
+     each event shares the available width equally. `min-width: 0` lets
+     the text-overflow ellipsis kick in instead of the event refusing
+     to shrink and overflowing the cell. */
+  flex: 1 1 0;
+  min-width: 0;
+}
+.event-title,
+.event-time {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .event:hover, .event-block:hover { filter: brightness(0.94); }
 .event:active, .event-block:active { transform: translateY(1px); }

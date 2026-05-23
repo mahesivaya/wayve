@@ -233,6 +233,27 @@ export default function Scheduler() {
       return;
     }
 
+    // Conflict check: warn (but allow override) if the proposed window
+    // overlaps any existing event on the same date. When editing, the
+    // event being edited is excluded so it doesn't conflict with itself.
+    // Two intervals [a1,a2) and [b1,b2) overlap iff a1 < b2 && b1 < a2.
+    const conflicts = events.filter((existing) => {
+      if (editingEvent && existing.id === editingEvent.id) return false;
+      if (existing.date !== selectedDate) return false;
+      return startMins < existing.end && existing.start < endMins;
+    });
+    if (conflicts.length > 0) {
+      const summary = conflicts
+        .map((c) => `• "${c.title}" (${formatHour(c.start)} – ${formatHour(c.end)})`)
+        .join("\n");
+      const proceed = window.confirm(
+        `This meeting conflicts with ${
+          conflicts.length === 1 ? "an existing event" : `${conflicts.length} existing events`
+        }:\n\n${summary}\n\nCreate anyway?`,
+      );
+      if (!proceed) return;
+    }
+
     const finalParticipants = [...participants];
 
     // auto-add typed email if not added
