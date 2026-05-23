@@ -58,6 +58,13 @@ echo "    docker compose up -d $BUILD_FLAG..."
 # shellcheck disable=SC2086
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d $BUILD_FLAG
 
+# nginx uses a stock image with a bind-mounted template processed by
+# envsubst at container start. `up -d --build` doesn't recreate it on
+# template changes, so force-recreate every deploy. ~2s nginx restart,
+# no data loss.
+echo "    Force-recreating nginx so envsubst picks up template changes..."
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --force-recreate --no-deps nginx
+
 echo "    Services:"
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
 REMOTE
