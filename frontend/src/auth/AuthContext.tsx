@@ -28,7 +28,9 @@ import {
 } from "./authContextValue";
 
 const normalizeRecoveryMode = (value: unknown): RecoveryMode =>
-  value === "password_only" ? "password_only" : "full";
+  value === "basic" ? "basic"
+    : value === "password_only" ? "password_only"
+    : "full";
 
 const log = logger.scope("auth");
 
