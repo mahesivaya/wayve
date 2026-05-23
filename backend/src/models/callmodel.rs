@@ -20,7 +20,15 @@ pub struct SignalMessage {
     pub from_email: Option<String>,
 }
 
+// `rename_all = "camelCase"` is load-bearing: the browser's
+// `RTCIceCandidate.toJSON()` produces camelCase keys (`sdpMid`,
+// `sdpMLineIndex`, `usernameFragment`). Without this rename the Rust
+// deserializer silently drops them as missing, then re-serializes them as
+// snake_case for the peer — `addIceCandidate` on the receiving side throws
+// "Candidate missing values for both sdpMid and sdpMLineIndex" and the call
+// connects but never gets remote ICE candidates, so media never flows.
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct IceCandidate {
     pub candidate: String,
     pub sdp_mid: Option<String>,
