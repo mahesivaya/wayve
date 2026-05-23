@@ -57,12 +57,15 @@ pub async fn get_emails(
     let page_size = 50;
     let query_limit = page_size + 1;
 
-    if let Some(before) = query.before
+    if let Some(before_ms) = query.before
         && let Err(e) = sync_older_page(
             pool.get_ref(),
             user_id,
             query.account_id,
-            before,
+            // sync_older_page (and the upstream Gmail/Outlook providers)
+            // expect Unix seconds; the wire format is milliseconds for
+            // sub-second precision on the DB keyset cursor.
+            before_ms / 1000,
             query_limit,
         )
         .await
@@ -160,11 +163,13 @@ pub async fn get_emails(
         qb.push(") ");
     }
 
-    // ✅ Pagination filter
-    if let (Some(before), Some(before_id)) = (query.before, query.before_id) {
+    // ✅ Pagination filter. `before` is Unix milliseconds (wire format) so
+    // the cursor keeps sub-second precision; otherwise emails sharing the
+    // cursor's second would be dropped from the next page.
+    if let (Some(before_ms), Some(before_id)) = (query.before, query.before_id) {
         qb.push(" AND (e.created_at, e.id) < (to_timestamp(");
-        qb.push_bind(before);
-        qb.push("), ");
+        qb.push_bind(before_ms);
+        qb.push("::double precision / 1000.0), ");
         qb.push_bind(before_id);
         qb.push(")");
     }

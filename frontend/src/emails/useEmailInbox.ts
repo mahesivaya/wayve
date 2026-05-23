@@ -83,7 +83,11 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
     setLoadingMore(true);
     try {
       const last = emails[emails.length - 1];
-      const before = Math.floor(new Date(last.created_at).getTime() / 1000);
+      // Pass cursor as milliseconds so the backend can preserve sub-second
+      // ordering. Flooring to whole seconds (the old behavior) would skip
+      // any email sharing the cursor's second on the next page, causing
+      // load-more to return empty and the button to vanish.
+      const before = new Date(last.created_at).getTime();
       const { emails: data } = await getEmails<EmailItem>({
         folder: activeFolder,
         accountId: activeAccount,

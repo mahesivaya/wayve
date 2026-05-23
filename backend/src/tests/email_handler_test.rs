@@ -74,10 +74,11 @@ mod tests {
         let last_id = last_email["id"].as_i64().unwrap();
         let last_created_str = last_email["created_at"].as_str().unwrap();
 
-        // Parse the RFC3339 timestamp returned by the API
+        // Parse the RFC3339 timestamp returned by the API. `before` is sent
+        // as Unix milliseconds so the keyset cursor keeps sub-second precision.
         let last_created_ts = chrono::DateTime::parse_from_rfc3339(last_created_str)
             .unwrap()
-            .timestamp();
+            .timestamp_millis();
 
         let uri = format!(
             "/emails?folder=inbox&before={}&before_id={}",
