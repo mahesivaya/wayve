@@ -1,7 +1,7 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { canAccessApiKeyAdmin, hasPermission } from "../auth/permissions";
-import { Suspense, useState, useCallback, type ReactNode } from "react";
+import { Suspense, useState, useCallback, useEffect, type ReactNode } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
@@ -27,17 +27,77 @@ function appKeyFromPath(pathname: string): AppKey {
 // same chrome — used by the Pricing page which lives outside the routing
 // tree's ProtectedRoute branch but still wants the standard header/sidebar
 // for signed-in visitors.
+// Persist the split layout across Layout unmounts. Some routes
+// (/pricing, /enterprise, /support, /services/:slug, /organization,
+// /forgot-password, /reset-password, /recover-with-mnemonic) live
+// OUTSIDE the Layout wrapper in App.tsx — visiting them unmounts the
+// whole Layout component, which would otherwise reset the split to
+// closed. Round-tripping through localStorage keeps the split intact
+// when the user returns to a Layout-wrapped route.
+const SPLIT_STORAGE_KEY = "rwayve.layout.split";
+
+function isValidAppKey(value: unknown): value is AppKey {
+  return (
+    typeof value === "string" &&
+    SPLIT_APPS.some((a) => a.key === value)
+  );
+}
+
+type PersistedSplit = {
+  middleView: AppKey | null;
+  rightView: AppKey | null;
+  splitTarget: "left" | "right";
+};
+
+function loadPersistedSplit(): PersistedSplit {
+  try {
+    const raw = localStorage.getItem(SPLIT_STORAGE_KEY);
+    if (!raw) return { middleView: null, rightView: null, splitTarget: "left" };
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return { middleView: null, rightView: null, splitTarget: "left" };
+    }
+    const obj = parsed as Record<string, unknown>;
+    return {
+      middleView: isValidAppKey(obj.middleView) ? obj.middleView : null,
+      rightView: isValidAppKey(obj.rightView) ? obj.rightView : null,
+      splitTarget: obj.splitTarget === "right" ? "right" : "left",
+    };
+  } catch {
+    return { middleView: null, rightView: null, splitTarget: "left" };
+  }
+}
+
 export default function Layout({ children }: { children?: ReactNode } = {}) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Three-pane state management
-  const [middleView, setMiddleView] = useState<AppKey | null>(null);
-  const [rightView, setRightView] = useState<AppKey | null>(null);
-  
+  // Three-pane state management. Lazy init reads any persisted split
+  // from a previous visit; the effect below mirrors changes back.
+  const [middleView, setMiddleView] = useState<AppKey | null>(
+    () => loadPersistedSplit().middleView,
+  );
+  const [rightView, setRightView] = useState<AppKey | null>(
+    () => loadPersistedSplit().rightView,
+  );
+
   // Decides whether the next header-link click navigates or changes the duplicate pane.
-  const [splitTarget, setSplitTarget] = useState<"left" | "right">("left");
+  const [splitTarget, setSplitTarget] = useState<"left" | "right">(
+    () => loadPersistedSplit().splitTarget,
+  );
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        SPLIT_STORAGE_KEY,
+        JSON.stringify({ middleView, rightView, splitTarget }),
+      );
+    } catch {
+      // Storage quota / private mode — silently ignore, split just
+      // won't persist across reloads for this session.
+    }
+  }, [middleView, rightView, splitTarget]);
 
   // On narrow viewports the header nav collapses behind a hamburger toggle.
   const [navOpen, setNavOpen] = useState(false);
