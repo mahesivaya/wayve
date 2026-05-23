@@ -238,6 +238,53 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "CREATE INDEX IF NOT EXISTS idx_channel_messages_parent \
          ON channel_messages (parent_message_id) \
          WHERE parent_message_id IS NOT NULL",
+        // ────────────────────────────────────────────────────────────────
+        // Recovery mode + envelope. Same ALTERs live in init.sql, but
+        // init.sql only runs on a fresh Postgres volume — populated
+        // prod DBs need the self-heal here or /api/me + registration
+        // 500 on the new column reference.
+        // ────────────────────────────────────────────────────────────────
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_mode TEXT NOT NULL DEFAULT 'full'",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS private_key_encrypted TEXT",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS private_key_iv TEXT",
+        "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_recovery_mode_check",
+        "ALTER TABLE users ADD CONSTRAINT users_recovery_mode_check \
+         CHECK (recovery_mode IN ('basic', 'full', 'password_only'))",
+        // ────────────────────────────────────────────────────────────────
+        // OIDC SSO (multi-tenant). One IdP config row per org;
+        // allowed_domain routes alice@acme.com → Acme's IdP. The
+        // sso_states row binds PKCE + nonce to the in-flight code so a
+        // stolen `code` alone can't be exchanged.
+        // ────────────────────────────────────────────────────────────────
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS sso_sub TEXT",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS sso_org_id INTEGER \
+         REFERENCES organizations(id) ON DELETE SET NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS users_sso_identity_unique_idx \
+         ON users (sso_org_id, sso_sub) WHERE sso_sub IS NOT NULL",
+        "CREATE TABLE IF NOT EXISTS org_sso_configs (
+            id SERIAL PRIMARY KEY,
+            organization_id INTEGER NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+            issuer_url TEXT NOT NULL,
+            client_id TEXT NOT NULL,
+            client_secret_iv TEXT NOT NULL,
+            client_secret_encrypted TEXT NOT NULL,
+            allowed_domain TEXT NOT NULL UNIQUE,
+            enforce_sso BOOLEAN NOT NULL DEFAULT FALSE,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_org_sso_configs_domain \
+         ON org_sso_configs(allowed_domain)",
+        "CREATE TABLE IF NOT EXISTS sso_states (
+            state TEXT PRIMARY KEY,
+            sso_config_id INTEGER NOT NULL REFERENCES org_sso_configs(id) ON DELETE CASCADE,
+            pkce_verifier TEXT NOT NULL,
+            nonce TEXT NOT NULL,
+            return_to TEXT,
+            expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes'),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
     ];
 
     for statement in statements {
