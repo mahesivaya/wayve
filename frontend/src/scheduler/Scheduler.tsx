@@ -1,6 +1,7 @@
 import { logger } from "../utils/logger";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./scheduler.css";
+import { computeLanes } from "./eventLayout";
 import Modal from "../components/Modal";
 import {
   createMeetingApi,
@@ -354,6 +355,23 @@ export default function Scheduler() {
     const calendar = getCalendarForEvent(event);
     return calendar?.visible ?? true;
   });
+  // Per-day lane assignment for overlapping events. Each event's id maps
+  // to its `lane` (0-indexed column) and `laneCount` (max concurrent
+  // events in its overlap cluster). Used to position events side-by-side
+  // when their times conflict, matching Google / Outlook column splits.
+  const lanesByDay = useMemo(() => {
+    const byDate = new Map<string, typeof calendarVisibleEvents>();
+    for (const event of calendarVisibleEvents) {
+      const list = byDate.get(event.date) ?? [];
+      list.push(event);
+      byDate.set(event.date, list);
+    }
+    const map = new Map<string, ReturnType<typeof computeLanes>>();
+    for (const [date, list] of byDate) {
+      map.set(date, computeLanes(list));
+    }
+    return map;
+  }, [calendarVisibleEvents]);
 
   // ================= MINI CALENDAR =================
   const year = currentDate.getFullYear();
@@ -532,14 +550,27 @@ export default function Scheduler() {
               {slotEvents.map((e) => (
                 (() => {
                   const calendar = getCalendarForEvent(e);
-                  const durationSlots = Math.max(1, (e.end - e.start) / SLOT_MINUTES);
+                  // Time-accurate block + lane positioning for overlap
+                  // resolution: a 30-min event spans half a slot, a 90-min
+                  // event spans 1.5 slots. `top` is the sub-hour offset;
+                  // `left`/`width` split the day column into N columns
+                  // when N events overlap, matching Google / Outlook.
+                  const durationSlots = (e.end - e.start) / SLOT_MINUTES;
+                  const topFraction = (e.start % SLOT_MINUTES) / SLOT_MINUTES;
+                  const layout = lanesByDay.get(e.date)?.get(e.id)
+                    ?? { lane: 0, laneCount: 1 };
+                  const leftPct = (layout.lane / layout.laneCount) * 100;
+                  const widthPct = 100 / layout.laneCount;
                   return (
                 <div
                   key={e.id}
                   className={`event${e.source === "google" ? " from-google" : ""}`}
                   style={{
                     background: calendar?.color,
-                    height: `calc(${durationSlots} * var(--slot-h, 28px) - 4px)`,
+                    top: `calc(${topFraction} * var(--slot-h, 48px))`,
+                    height: `calc(${durationSlots} * var(--slot-h, 48px) - 4px)`,
+                    left: `calc(${leftPct}% + 2px)`,
+                    width: `calc(${widthPct}% - 4px)`,
                   }}
                   onClick={(ev) => {
                     ev.stopPropagation();
@@ -627,18 +658,27 @@ export default function Scheduler() {
                   {slotEvents.map((e) => (
                     (() => {
                       const calendar = getCalendarForEvent(e);
-                      // Duration-proportional height: each slot is one hour
-                      // (--slot-h tall), so a 60-min event spans one slot
-                      // and a 90-min event spans 1.5. Subtract 4px to leave
-                      // a gutter against the row below.
-                      const durationSlots = Math.max(1, (e.end - e.start) / SLOT_MINUTES);
+                      // Time-accurate block + lane positioning for overlap
+                      // resolution: a 30-min event spans half a slot; a
+                      // 90-min event spans 1.5 slots. `top` is the sub-hour
+                      // offset; `left`/`width` split the day column into N
+                      // columns when N events overlap.
+                      const durationSlots = (e.end - e.start) / SLOT_MINUTES;
+                      const topFraction = (e.start % SLOT_MINUTES) / SLOT_MINUTES;
+                      const layout = lanesByDay.get(e.date)?.get(e.id)
+                        ?? { lane: 0, laneCount: 1 };
+                      const leftPct = (layout.lane / layout.laneCount) * 100;
+                      const widthPct = 100 / layout.laneCount;
                       return (
                     <div
                       key={e.id}
                       className={`event${e.source === "google" ? " from-google" : ""}`}
                       style={{
                         background: calendar?.color,
-                        height: `calc(${durationSlots} * var(--slot-h, 28px) - 4px)`,
+                        top: `calc(${topFraction} * var(--slot-h, 48px))`,
+                        height: `calc(${durationSlots} * var(--slot-h, 48px) - 4px)`,
+                        left: `calc(${leftPct}% + 2px)`,
+                        width: `calc(${widthPct}% - 4px)`,
                       }}
                       onClick={(ev) => {
                         ev.stopPropagation();

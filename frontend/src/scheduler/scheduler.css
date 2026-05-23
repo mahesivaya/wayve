@@ -300,18 +300,14 @@
   border-right: 1px solid var(--border-soft);
   box-sizing: border-box;
 }
-/* When two or more events share the same slot they render side-by-side
-   instead of stacking, so the visual overlap matches the time conflict.
-   `flex-wrap` lets >3 conflicts wrap into a second row rather than
-   crushing each event below readable width. */
+/* Events are absolutely positioned within their containing slot cell
+   so they can sit at their real start time inside the hour (a 15:30
+   event sits at the bottom half of the 15:00 cell, not the top).
+   The cell remains a clickable backdrop. */
 .time-events {
   flex: 1;
   padding: 4px 8px;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: flex-start;
+  position: relative;
 }
 
 /* ================= WEEK VIEW ================= */
@@ -398,15 +394,10 @@
 .week-cell {
   flex: 1;
   border-left: 1px solid var(--border-soft);
-  padding: 2px 5px;
-  /* Events that start in the same slot render side-by-side (row) so
-     conflicting times are visually obvious. `flex-wrap` keeps >3
-     conflicts from being crushed below readable width. */
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 2px;
-  align-items: flex-start;
+  /* `position: relative` lets the absolutely-positioned event block
+     sit at its true start-time offset inside the cell. No padding so
+     the inline `top` is measured from the cell's content-box edge. */
+  position: relative;
   box-sizing: border-box;
   transition: background 0.12s;
   min-width: 0;
@@ -509,18 +500,16 @@
   transition: background 0.12s, transform 0.05s;
   white-space: nowrap;
   overflow: hidden;
-  /* Events span their duration by inline height (set in Scheduler.tsx).
-     `position: relative` + `z-index: 1` keeps a multi-slot event drawn
-     above the next row's empty cells so it doesn't get clipped. */
-  position: relative;
-  z-index: 1;
   box-sizing: border-box;
-  /* When multiple events share a slot the cell switches to flex-row, so
-     each event shares the available width equally. `min-width: 0` lets
-     the text-overflow ellipsis kick in instead of the event refusing
-     to shrink and overflowing the cell. */
-  flex: 1 1 0;
-  min-width: 0;
+  /* Absolutely positioned inside `.week-cell` / `.time-events`. The
+     inline `top` (set in Scheduler.tsx) is the offset within the hour
+     so a 15:30 event sits halfway down the 15:00 cell. `left` / `width`
+     are also inline — they split the cell into N columns when N events
+     overlap (lane assignment). The duration is the inline `height`,
+     set to `(end-start)/SLOT_MINUTES × --slot-h` so a 90-min meeting
+     spans 1.5 slots in one contiguous block. */
+  position: absolute;
+  z-index: 1;
 }
 .event-title,
 .event-time {
