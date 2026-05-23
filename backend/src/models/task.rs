@@ -6,6 +6,7 @@ pub struct Task {
     pub name: String,
     pub description: String,
     pub priority: i16,
+    pub status: String,
     pub created_at: Option<NaiveDateTime>,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -15,4 +16,5 @@ pub struct TaskInput {
     pub name: String,
     pub description: Option<String>,
     pub priority: Option<i16>,
+    pub status: Option<String>,
 }

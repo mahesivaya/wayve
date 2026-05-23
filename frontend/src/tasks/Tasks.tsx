@@ -6,6 +6,7 @@ import {
   updateTaskApi,
   type Task,
   type TaskPriority,
+  type TaskStatus,
 } from "../api/tasks";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
@@ -27,6 +28,9 @@ const normalizePriority = (value: unknown): TaskPriority => {
   return 3;
 };
 
+const normalizeStatus = (value: unknown): TaskStatus =>
+  value === "done" ? "done" : "in_progress";
+
 const sortTasks = (list: Task[]) =>
   [...list].sort(
     (a, b) =>
@@ -34,6 +38,11 @@ const sortTasks = (list: Task[]) =>
       new Date(b.created_at ?? 0).getTime() -
         new Date(a.created_at ?? 0).getTime(),
   );
+
+const STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
+  { value: "in_progress", label: "In progress" },
+  { value: "done", label: "Done" },
+];
 
 const formatDate = (iso: string | null | undefined) => {
   if (!iso) return "";
@@ -65,7 +74,11 @@ export default function Tasks() {
       const list = await getTasks();
       setTasks(
         sortTasks(
-          list.map((t) => ({ ...t, priority: normalizePriority(t.priority) })),
+          list.map((t) => ({
+            ...t,
+            priority: normalizePriority(t.priority),
+            status: normalizeStatus(t.status),
+          })),
         ),
       );
     } catch (err) {
@@ -101,6 +114,46 @@ export default function Tasks() {
     setCreating(true);
   };
 
+  const changeStatus = async (task: Task, nextStatus: TaskStatus) => {
+    if (task.status === nextStatus) return;
+    // Optimistic flip — visual cost of a request-then-update lag is jarring
+    // when the user toggles status repeatedly. We roll back on failure.
+    const prev = tasks;
+    setTasks((current) =>
+      sortTasks(
+        current.map((t) =>
+          t.id === task.id ? { ...t, status: nextStatus } : t,
+        ),
+      ),
+    );
+    try {
+      const updated = await updateTaskApi(task.id, {
+        name: task.name,
+        description: task.description,
+        priority: task.priority,
+        status: nextStatus,
+      });
+      setTasks((current) =>
+        sortTasks(
+          current.map((t) =>
+            t.id === updated.id
+              ? {
+                  ...updated,
+                  priority: normalizePriority(updated.priority),
+                  status: normalizeStatus(updated.status),
+                }
+              : t,
+          ),
+        ),
+      );
+    } catch (err) {
+      setTasks(prev);
+      window.alert(
+        err instanceof Error ? err.message : "Failed to update status",
+      );
+    }
+  };
+
   const deleteTask = async (task: Task) => {
     const ok = window.confirm(
       `Delete task "${task.name}"? This cannot be undone.`,
@@ -128,6 +181,16 @@ export default function Tasks() {
     );
   }, [normalizedSearchQuery, tasks]);
 
+  const activeTasks = useMemo(
+    () => visibleTasks.filter((t) => t.status !== "done"),
+    [visibleTasks],
+  );
+
+  const completedTasks = useMemo(
+    () => visibleTasks.filter((t) => t.status === "done"),
+    [visibleTasks],
+  );
+
   const saveTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const name = taskName.trim();
@@ -142,16 +205,22 @@ export default function Tasks() {
     setError("");
     try {
       if (editingId !== null) {
+        const existing = tasks.find((t) => t.id === editingId);
         const updated = await updateTaskApi(editingId, {
           name,
           description: details,
           priority,
+          status: existing?.status ?? "in_progress",
         });
         setTasks((prev) =>
           sortTasks(
             prev.map((t) =>
               t.id === updated.id
-                ? { ...updated, priority: normalizePriority(updated.priority) }
+                ? {
+                    ...updated,
+                    priority: normalizePriority(updated.priority),
+                    status: normalizeStatus(updated.status),
+                  }
                 : t,
             ),
           ),
@@ -161,11 +230,16 @@ export default function Tasks() {
           name,
           description: details,
           priority,
+          status: "in_progress",
         });
         setTasks((prev) =>
           sortTasks([
             ...prev,
-            { ...created, priority: normalizePriority(created.priority) },
+            {
+              ...created,
+              priority: normalizePriority(created.priority),
+              status: normalizeStatus(created.status),
+            },
           ]),
         );
       }
@@ -254,6 +328,7 @@ export default function Tasks() {
                   ))}
                 </div>
               </fieldset>
+
             </div>
 
             {error && <div className="task-error">{error}</div>}
@@ -282,6 +357,7 @@ export default function Tasks() {
           </form>
         )}
 
+        {!creating && (
         <div className="task-list">
           {loading ? (
             <div className="tasks-empty">
@@ -310,8 +386,15 @@ export default function Tasks() {
                   : "Try a different search term."}
               </span>
             </div>
+          ) : activeTasks.length === 0 ? (
+            <div className="tasks-empty">
+              <strong>All caught up</strong>
+              <span>
+                Every task is done. See the Completed tasks section below.
+              </span>
+            </div>
           ) : (
-            visibleTasks.map((task) => (
+            activeTasks.map((task) => (
               <article key={task.id} className="task-card">
                 <div className="task-card-body">
                   <div className="task-card-title">
@@ -348,12 +431,87 @@ export default function Tasks() {
                     >
                       Delete
                     </button>
+                    <select
+                      className={`task-status-select task-status-select--${task.status}`}
+                      value={task.status}
+                      onChange={(event) =>
+                        void changeStatus(
+                          task,
+                          event.target.value as TaskStatus,
+                        )
+                      }
+                      aria-label={`Status of ${task.name}`}
+                    >
+                      {STATUS_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </article>
             ))
           )}
         </div>
+        )}
+
+        {!creating && !loading && !loadError && completedTasks.length > 0 && (
+          <section className="task-completed-section">
+            <h3 className="task-completed-title">
+              Completed tasks
+              <span className="task-completed-count">
+                {completedTasks.length}
+              </span>
+            </h3>
+            <div className="task-list">
+              {completedTasks.map((task) => (
+                <article
+                  key={task.id}
+                  className="task-card task-card--completed"
+                >
+                  <div className="task-card-body">
+                    <div className="task-card-title">
+                      <span
+                        className={`task-priority-badge priority-${task.priority}`}
+                        title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                      >
+                        P{task.priority}
+                      </span>
+                      <h3>{task.name}</h3>
+                    </div>
+                    <p>{task.description || "No description added."}</p>
+                  </div>
+                  <div className="task-card-meta">
+                    {task.created_at && (
+                      <time dateTime={task.created_at}>
+                        {formatDate(task.created_at)}
+                      </time>
+                    )}
+                    <div className="task-card-actions">
+                      <button
+                        type="button"
+                        className="task-edit-btn"
+                        onClick={() => openEdit(task)}
+                        aria-label={`Edit ${task.name}`}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="task-delete-btn"
+                        onClick={() => deleteTask(task)}
+                        aria-label={`Delete ${task.name}`}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
     </div>
   );

@@ -2,11 +2,14 @@ import { apiFetch, apiFetchJson } from "./client";
 
 export type TaskPriority = 1 | 2 | 3 | 4 | 5;
 
+export type TaskStatus = "in_progress" | "done";
+
 export type Task = {
   id: number;
   name: string;
   description: string;
   priority: TaskPriority;
+  status: TaskStatus;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -15,6 +18,7 @@ export type SaveTaskPayload = {
   name: string;
   description: string;
   priority: TaskPriority;
+  status: TaskStatus;
 };
 
 export const getTasks = async () => apiFetchJson<Task[]>("/api/tasks");

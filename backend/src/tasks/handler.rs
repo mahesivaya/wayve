@@ -11,6 +11,7 @@ fn task_from_row(row: sqlx::postgres::PgRow) -> Task {
         name: row.get("name"),
         description: row.get("description"),
         priority: row.get("priority"),
+        status: row.get("status"),
         created_at: row.try_get("created_at").ok(),
         updated_at: row.try_get("updated_at").ok(),
     }
@@ -21,13 +22,20 @@ fn normalize_priority(value: Option<i16>) -> i16 {
     p.clamp(1, 5)
 }
 
+fn normalize_status(value: Option<&str>) -> &'static str {
+    match value.map(|s| s.trim()) {
+        Some("done") => "done",
+        _ => "in_progress",
+    }
+}
+
 #[get("/tasks")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let rows = sqlx::query(
-        "SELECT id, name, description, priority, created_at, updated_at
+        "SELECT id, name, description, priority, status, created_at, updated_at
          FROM tasks
          WHERE user_id = $1
          ORDER BY priority DESC, created_at DESC",
@@ -54,16 +62,18 @@ pub async fn create_task(
     }
     let description = data.description.as_deref().unwrap_or("").trim();
     let priority = normalize_priority(data.priority);
+    let status = normalize_status(data.status.as_deref());
 
     let row = sqlx::query(
-        "INSERT INTO tasks (user_id, name, description, priority)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, name, description, priority, created_at, updated_at",
+        "INSERT INTO tasks (user_id, name, description, priority, status)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, name, description, priority, status, created_at, updated_at",
     )
     .bind(user_id)
     .bind(name)
     .bind(description)
     .bind(priority)
+    .bind(status)
     .fetch_one(pool.get_ref())
     .await?;
 
@@ -87,18 +97,20 @@ pub async fn update_task(
     }
     let description = data.description.as_deref().unwrap_or("").trim();
     let priority = normalize_priority(data.priority);
+    let status = normalize_status(data.status.as_deref());
 
     // Owner-scoped UPDATE — returns 404 if the row belongs to another user,
     // so we never leak the existence of an id outside this user's scope.
     let row = sqlx::query(
         "UPDATE tasks
-         SET name = $1, description = $2, priority = $3, updated_at = NOW()
-         WHERE id = $4 AND user_id = $5
-         RETURNING id, name, description, priority, created_at, updated_at",
+         SET name = $1, description = $2, priority = $3, status = $4, updated_at = NOW()
+         WHERE id = $5 AND user_id = $6
+         RETURNING id, name, description, priority, status, created_at, updated_at",
     )
     .bind(name)
     .bind(description)
     .bind(priority)
+    .bind(status)
     .bind(id)
     .bind(user_id)
     .fetch_optional(pool.get_ref())
