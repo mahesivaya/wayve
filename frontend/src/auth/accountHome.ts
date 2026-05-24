@@ -45,13 +45,23 @@ type AccountLike = {
 // dashboard surfaces: personal, organization, and platform. Role-specific
 // panels are handled inside the dashboard with RBAC permissions.
 //
-// Platform `billing` lands directly on the billing console — their generic
-// admin home has no panels they can act on, so the extra hop is wasted.
+// Platform team roles land on their own console — the generic platform admin
+// home only has the org-management surface, so anything role-specific gets
+// its own page. Owner / super_admin / admin still land on the generic home.
+const PLATFORM_ROLE_HOMES: Record<string, string> = {
+  billing: "/platform/billing",
+  security: "/security/audit",
+  developer: "/platform/developer",
+  support: "/platform/support",
+  member: "/platform/welcome",
+  guest: "/platform/welcome",
+};
+
 export function homePathForUser(user?: AccountLike | null): string {
   const normalized = normalizeAccountType(user?.account_type);
   if (normalized === "platform_admin") {
-    if (user?.effective_role === "billing") return "/platform/billing";
-    return "/platform-admin-home";
+    const role = user?.effective_role ?? "";
+    return PLATFORM_ROLE_HOMES[role] ?? "/platform-admin-home";
   }
   if (normalized === "organization_admin" || normalized === "organization") {
     return "/organization-home";

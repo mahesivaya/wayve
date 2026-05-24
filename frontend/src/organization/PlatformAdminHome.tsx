@@ -22,6 +22,13 @@ export default function PlatformAdminHome() {
   const canManageApiKeys = hasPermission(user, "api_keys:manage");
   const canSeePlatformBilling =
     hasPermission(user, "billing:read") || hasPermission(user, "billing:manage");
+  const canSeeDeveloper =
+    hasPermission(user, "logs:read") ||
+    hasPermission(user, "logs:read_limited") ||
+    hasPermission(user, "api_keys:manage");
+  const canSeeSupport = hasPermission(user, "members:read");
+  const canSeeSecurity =
+    hasPermission(user, "audit:read") || hasPermission(user, "security:manage");
   const [organizationName, setOrganizationName] = useState("");
   const [adminHandle, setAdminHandle] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
@@ -393,19 +400,43 @@ export default function PlatformAdminHome() {
       </section>
       )}
 
-      {canSeePlatformBilling && (
+      {(canSeePlatformBilling || canSeeDeveloper || canSeeSupport || canSeeSecurity) && (
         <section className="platform-admin-panel u-panel">
           <div className="platform-admin-section-header">
             <div>
-              <h2>Platform billing</h2>
-              <p>
-                Revenue, user and organization subscriptions, invoices and payroll
-                — aggregated across the whole platform.
-              </p>
+              <h2>Platform consoles</h2>
+              <p>Role-specific dashboards across the platform team.</p>
             </div>
-            <Link to="/platform/billing" className="u-btn-primary">
-              Open billing console →
-            </Link>
+          </div>
+          <div className="organization-name-list">
+            {canSeePlatformBilling && (
+              <article>
+                <strong>Billing</strong>
+                <span>Revenue, customer subscriptions, invoices and payroll.</span>
+                <Link to="/platform/billing" className="u-btn-primary">Open →</Link>
+              </article>
+            )}
+            {canSeeSupport && (
+              <article>
+                <strong>Support</strong>
+                <span>Customer activity, signups and shared-inbox queue.</span>
+                <Link to="/platform/support" className="u-btn-primary">Open →</Link>
+              </article>
+            )}
+            {canSeeDeveloper && (
+              <article>
+                <strong>Developer</strong>
+                <span>API keys, audit traffic, webhooks and integrations.</span>
+                <Link to="/platform/developer" className="u-btn-primary">Open →</Link>
+              </article>
+            )}
+            {canSeeSecurity && (
+              <article>
+                <strong>Security</strong>
+                <span>Audit logs, outcome filters and SIEM webhook forwarding.</span>
+                <Link to="/security/audit" className="u-btn-primary">Open →</Link>
+              </article>
+            )}
           </div>
         </section>
       )}

@@ -33,6 +33,9 @@ const EmailFiles = lazy(() => import("./files/EmailFiles"));
 const ServicePage = lazy(() => import("./services/ServicePage"));
 const Billing = lazy(() => import("./billing/Billing"));
 const PlatformBilling = lazy(() => import("./platformBilling/PlatformBilling"));
+const PlatformDeveloper = lazy(() => import("./platformTeam/PlatformDeveloper"));
+const PlatformSupport = lazy(() => import("./platformTeam/PlatformSupport"));
+const PlatformWelcome = lazy(() => import("./platformTeam/PlatformWelcome"));
 const Pricing = lazy(() => import("./pricing/Pricing"));
 const Enterprise = lazy(() => import("./marketing/Enterprise"));
 const Support = lazy(() => import("./marketing/Support"));
@@ -148,6 +151,9 @@ export default function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/billing" element={<Billing />} />
             <Route path="/platform/billing" element={<PlatformBilling />} />
+            <Route path="/platform/developer" element={<PlatformDeveloper />} />
+            <Route path="/platform/support" element={<PlatformSupport />} />
+            <Route path="/platform/welcome" element={<PlatformWelcome />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
             <Route path="/security/audit" element={<AuditSecurity />} />
             <Route path="/recover" element={<RecoverPage />} />

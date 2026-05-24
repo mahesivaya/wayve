@@ -178,6 +178,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const canAccessPlatformBilling =
     user.scope === "platform" &&
     (hasPermission(user, "billing:read") || hasPermission(user, "billing:manage"));
+  const canAccessPlatformDeveloper =
+    user.scope === "platform" &&
+    (hasPermission(user, "logs:read") ||
+      hasPermission(user, "logs:read_limited") ||
+      hasPermission(user, "api_keys:manage"));
+  const canAccessPlatformSupport =
+    user.scope === "platform" && hasPermission(user, "members:read");
   const currentPlanCode = authedUser.current_plan?.code ?? "basic_user";
   const isBasicPersonalUser =
     authedUser.account_type === "personal" && currentPlanCode === "basic_user";
@@ -268,6 +275,24 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               Billing
             </Link>
           )}
+          {canAccessPlatformDeveloper && (
+            <Link
+              to="/platform/developer"
+              className={location.pathname === "/platform/developer" ? "active" : ""}
+              onClick={() => setNavOpen(false)}
+            >
+              Developer
+            </Link>
+          )}
+          {canAccessPlatformSupport && (
+            <Link
+              to="/platform/support"
+              className={location.pathname === "/platform/support" ? "active" : ""}
+              onClick={() => setNavOpen(false)}
+            >
+              Support
+            </Link>
+          )}
           {renderNavItem("/about", "about", "About")}
         </div>
 
@@ -339,6 +364,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <Link to="/aichat">✨</Link>
           {canAccessSecurity && <Link to="/security/audit">🔒</Link>}
           {canAccessPlatformBilling && <Link to="/platform/billing" title="Platform billing">💳</Link>}
+          {canAccessPlatformDeveloper && <Link to="/platform/developer" title="Developer console">⚙</Link>}
+          {canAccessPlatformSupport && <Link to="/platform/support" title="Support console">🛟</Link>}
           <Link to="/about">ⓘ</Link>
 
           <div className="icon-sidebar-spacer" />
