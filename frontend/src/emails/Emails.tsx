@@ -318,6 +318,7 @@ export default function Emails() {
           loadingMore={loadingMore}
           onCompose={() => setComposeOpen(true)}
           width={showEmailListResizer ? emailListWidth : undefined}
+          isListView={emailViewLayout === "list"}
         />
       )}
 

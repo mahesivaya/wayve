@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { EmailItem } from "./types";
 import { useGlobalSearch } from "../search/SearchContext";
 
@@ -11,6 +11,7 @@ interface EmailListProps {
   loadingMore: boolean;
   onCompose?: () => void;
   width?: number;
+  isListView?: boolean;
 }
 
 function formatMobileTime(value: string) {
@@ -35,8 +36,40 @@ export const EmailList: React.FC<EmailListProps> = ({
   loadingMore,
   onCompose,
   width,
+  isListView = false,
 }) => {
   const { searchQuery, setSearchQuery } = useGlobalSearch();
+
+  // Per-row bulk-select state for list view. Lives locally because no
+  // upstream action consumes it yet — the checkboxes are visual + provide
+  // a count so future bulk-action buttons (delete, mark-read) can hook in
+  // without restructuring this component.
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(() => new Set());
+
+  const toggleChecked = (id: number) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearChecked = () => setCheckedIds(new Set());
+
+  const toggleAll = () => {
+    setCheckedIds((prev) =>
+      prev.size === emails.length && emails.length > 0
+        ? new Set()
+        : new Set(emails.map((e) => e.id)),
+    );
+  };
+
+  const allChecked = useMemo(
+    () => emails.length > 0 && checkedIds.size === emails.length,
+    [emails.length, checkedIds.size],
+  );
+  const someChecked = checkedIds.size > 0 && !allChecked;
 
   return (
     <div className="email-list" style={width ? { width } : undefined}>
@@ -57,6 +90,35 @@ export const EmailList: React.FC<EmailListProps> = ({
       </div>
       <div className="mobile-mail-label">Inbox</div>
 
+      {isListView && (
+        <div className="email-bulk-bar" role="toolbar" aria-label="Bulk email selection">
+          <input
+            type="checkbox"
+            className="email-bulk-master"
+            checked={allChecked}
+            ref={(el) => {
+              if (el) el.indeterminate = someChecked;
+            }}
+            onChange={toggleAll}
+            aria-label={allChecked ? "Clear selection" : "Select all emails"}
+          />
+          {checkedIds.size > 0 ? (
+            <>
+              <span className="email-bulk-count">{checkedIds.size} selected</span>
+              <button
+                type="button"
+                className="email-bulk-clear"
+                onClick={clearChecked}
+              >
+                Clear
+              </button>
+            </>
+          ) : (
+            <span className="email-bulk-hint">Select all emails</span>
+          )}
+        </div>
+      )}
+
       {emails.map((email) => (
         <div
           key={email.id}
@@ -68,6 +130,16 @@ export const EmailList: React.FC<EmailListProps> = ({
           onClick={() => onOpenEmail(email)}
         >
           <div className="email-top">
+            {isListView && (
+              <input
+                type="checkbox"
+                className="email-row-checkbox"
+                checked={checkedIds.has(email.id)}
+                onChange={() => toggleChecked(email.id)}
+                onClick={(event) => event.stopPropagation()}
+                aria-label={`Select email "${email.subject || "(No Subject)"}"`}
+              />
+            )}
             <span className="email-primary">
               {/* Shared-inbox workflow chip. Only renders when the row
                   came from a shared account AND has been touched at
