@@ -597,8 +597,14 @@ where
          labels = EXCLUDED.labels",
     );
 
+    // RETURNING with `xmax = 0` lets us distinguish a true INSERT (xmax stays
+    // 0 on fresh tuples) from an UPDATE triggered by ON CONFLICT (xmax gets
+    // stamped with the inserting xid). Without this filter we'd fire
+    // `email.received` on every sync tick for every existing row.
+    query.push_str(
+        " RETURNING id, sender, subject, created_at, gmail_id, (xmax = 0) AS is_new",
+    );
     let mut q = sqlx::query(&query);
-
     for (gmail_id, sender, receiver, subject, gmail_timestamp, is_read, labels) in batch.iter() {
         q = q
             .bind(gmail_id)
@@ -612,8 +618,54 @@ where
             .bind(is_read)
             .bind(labels);
     }
+    let returned = q.fetch_all(pool).await?;
 
-    q.execute(pool).await?;
+    // Webhook fan-out. Resolve the owner once per batch (the account's
+    // user_id never changes during a sync tick).
+    let owner_row = sqlx::query(
+        "SELECT user_id, (SELECT organization_id FROM users WHERE id = ea.user_id) AS organization_id
+           FROM email_accounts ea WHERE id = $1",
+    )
+    .bind(account_id)
+    .fetch_optional(pool)
+    .await?;
+    if let Some(row) = owner_row {
+        use crate::webhooks::events::EventOwner;
+        use crate::webhooks::{Event, emit};
+        let user_id: i32 = row.try_get("user_id").unwrap_or(0);
+        let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
+        let owner = match organization_id {
+            Some(org) => EventOwner::user_in_org(user_id, org),
+            None => EventOwner::user(user_id),
+        };
+        for r in &returned {
+            let is_new: bool = r.try_get("is_new").unwrap_or(false);
+            if !is_new {
+                continue;
+            }
+            let email_id: i32 = r.try_get("id").unwrap_or(0);
+            let sender: Option<String> = r.try_get("sender").ok();
+            let subject: Option<String> = r.try_get("subject").ok();
+            let received_at: Option<chrono::NaiveDateTime> = r.try_get("created_at").ok();
+            // Subject + sender only — never the body. Body fetches happen
+            // asynchronously via body_worker and may carry sensitive content
+            // that customers should pull explicitly via /api/emails/{id} if
+            // they need it and have the email:read scope.
+            emit(
+                pool,
+                owner,
+                Event::EmailReceived,
+                serde_json::json!({
+                    "id": email_id,
+                    "account_id": account_id,
+                    "sender": sender,
+                    "subject": subject,
+                    "received_at": received_at,
+                }),
+            )
+            .await;
+        }
+    }
 
     Ok(())
 }

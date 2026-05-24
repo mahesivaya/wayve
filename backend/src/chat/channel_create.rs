@@ -122,6 +122,25 @@ pub async fn create_channel(
     let created_naive: chrono::NaiveDateTime = row.get("created_at");
     let created_at =
         chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(created_naive, chrono::Utc);
+
+    // Webhook fan-out — strictly after commit. emit() opens its own
+    // transaction; firing before commit would risk webhook_deliveries
+    // referencing a channel that doesn't exist if the surrounding
+    // transaction later rolls back.
+    let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
+    crate::webhooks::emit(
+        pool.get_ref(),
+        owner,
+        crate::webhooks::Event::ChatChannelCreated,
+        serde_json::json!({
+            "id": channel_id,
+            "name": name,
+            "created_by": user_id,
+            "created_at": created_at,
+            "member_ids": member_ids,
+        }),
+    )
+    .await;
     // A failed member-email read is non-fatal: the channel already exists, so
     // we log and fall back to empty lists rather than failing the request.
     let member_rows = match sqlx::query(

@@ -1,6 +1,7 @@
 use crate::models::task::{Task, TaskInput};
 use crate::prelude::*;
 use crate::security::jwt::get_user_id_from_request;
+use crate::webhooks::{Event, emit, handler::owner_for_user};
 use actix_web::{delete, put};
 use sqlx::Row;
 use tracing::instrument;
@@ -77,7 +78,11 @@ pub async fn create_task(
     .fetch_one(pool.get_ref())
     .await?;
 
-    Ok(HttpResponse::Ok().json(task_from_row(row)))
+    let task = task_from_row(row);
+    let owner = owner_for_user(pool.get_ref(), user_id).await;
+    emit(pool.get_ref(), owner, Event::TaskCreated, serde_json::to_value(&task).unwrap_or_default()).await;
+
+    Ok(HttpResponse::Ok().json(task))
 }
 
 #[put("/tasks/{id}")]
@@ -117,7 +122,11 @@ pub async fn update_task(
     .await?
     .ok_or(AppError::NotFound("task"))?;
 
-    Ok(HttpResponse::Ok().json(task_from_row(row)))
+    let task = task_from_row(row);
+    let owner = owner_for_user(pool.get_ref(), user_id).await;
+    emit(pool.get_ref(), owner, Event::TaskUpdated, serde_json::to_value(&task).unwrap_or_default()).await;
+
+    Ok(HttpResponse::Ok().json(task))
 }
 
 #[delete("/tasks/{id}")]
@@ -139,6 +148,15 @@ pub async fn delete_task(
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("task"));
     }
+
+    let owner = owner_for_user(pool.get_ref(), user_id).await;
+    emit(
+        pool.get_ref(),
+        owner,
+        Event::TaskDeleted,
+        serde_json::json!({ "id": id }),
+    )
+    .await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }

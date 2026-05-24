@@ -78,7 +78,8 @@ fn build_spec() -> serde_json::Value {
             { "name": "Drive",     "description": "Files & folders, with sharing." },
             { "name": "Notes",     "description": "Personal notes." },
             { "name": "Tasks",     "description": "To-do items with priority & status." },
-            { "name": "AI",        "description": "Assistant chat." }
+            { "name": "AI",        "description": "Assistant chat." },
+            { "name": "Webhooks",  "description": "Subscribe to events delivered to your own HTTP endpoint." }
         ],
         "paths": paths(),
         "components": {
@@ -258,6 +259,53 @@ fn paths() -> serde_json::Value {
                 "ai:use",
                 json!({ "$ref": "#/components/schemas/AiChatInput" }),
                 json!({ "$ref": "#/components/schemas/AiChatOutput" })),
+        },
+
+        "/api/webhooks": {
+            "get": op("Webhooks", "listWebhooks",
+                "Your subscribed webhook endpoints",
+                "profile:read",
+                json!({ "type": "array", "items": { "$ref": "#/components/schemas/WebhookEndpoint" } })),
+            "post": op_with_body("Webhooks", "createWebhook",
+                "Register a new endpoint (returns the signing secret exactly once)",
+                "profile:read",
+                json!({ "$ref": "#/components/schemas/CreateWebhookInput" }),
+                json!({ "$ref": "#/components/schemas/CreatedWebhookEndpoint" })),
+        },
+        "/api/webhooks/{id}": {
+            "parameters": [path_param("id", "integer", "Webhook endpoint id")],
+            "put": op_with_body("Webhooks", "updateWebhook",
+                "Update url / events / enabled",
+                "profile:read",
+                json!({ "$ref": "#/components/schemas/UpdateWebhookInput" }),
+                json!({ "$ref": "#/components/schemas/WebhookEndpoint" })),
+            "delete": op("Webhooks", "deleteWebhook", "Delete the endpoint and stop deliveries",
+                "profile:read",
+                json!({ "$ref": "#/components/schemas/Ack" })),
+        },
+        "/api/webhooks/{id}/test": {
+            "parameters": [path_param("id", "integer", "Webhook endpoint id")],
+            "post": op("Webhooks", "testWebhook",
+                "Enqueue a synthetic wayve.ping delivery for the endpoint",
+                "profile:read",
+                json!({ "$ref": "#/components/schemas/Ack" })),
+        },
+        "/api/webhooks/{id}/deliveries": {
+            "parameters": [path_param("id", "integer", "Webhook endpoint id")],
+            "get": op("Webhooks", "listDeliveries",
+                "Recent delivery attempts (audit + debugging)",
+                "profile:read",
+                json!({ "type": "array", "items": { "$ref": "#/components/schemas/WebhookDelivery" } })),
+        },
+        "/api/webhooks/events": {
+            "get": op("Webhooks", "listEventCatalog",
+                "The frozen catalog of event types we promise to keep stable",
+                "profile:read",
+                json!({ "type": "object",
+                        "properties": {
+                            "events": { "type": "array", "items": { "type": "string" } },
+                            "api_version": { "type": "string" }
+                        }})),
         }
     })
 }
@@ -279,6 +327,7 @@ fn op(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn op_with_query(
     tag: &str,
     op_id: &str,
@@ -310,6 +359,7 @@ fn op_with_query(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn op_with_body(
     tag: &str,
     op_id: &str,
@@ -563,6 +613,71 @@ fn schemas() -> serde_json::Value {
             "properties": {
                 "reply": { "type": "string" },
                 "conversation_id": { "type": "string" }
+            }
+        },
+        "WebhookEndpoint": {
+            "type": "object",
+            "properties": {
+                "id": { "type": "integer" },
+                "url": { "type": "string", "format": "uri" },
+                "description": { "type": "string", "nullable": true },
+                "events": { "type": "array", "items": { "type": "string" } },
+                "enabled": { "type": "boolean" },
+                "org_wide": { "type": "boolean" },
+                "organization_id": { "type": "integer", "nullable": true },
+                "secret_preview": { "type": "string" },
+                "consecutive_failures": { "type": "integer" },
+                "last_success_at": { "type": "string", "format": "date-time", "nullable": true },
+                "last_failure_at": { "type": "string", "format": "date-time", "nullable": true },
+                "created_at": { "type": "string", "format": "date-time" }
+            }
+        },
+        "CreatedWebhookEndpoint": {
+            "allOf": [
+                { "$ref": "#/components/schemas/WebhookEndpoint" },
+                { "type": "object",
+                  "required": ["secret"],
+                  "properties": {
+                    "secret": { "type": "string",
+                                "description": "HMAC signing secret. Shown ONLY at creation; store it now." }
+                  }}
+            ]
+        },
+        "CreateWebhookInput": {
+            "type": "object",
+            "required": ["url", "events"],
+            "properties": {
+                "url": { "type": "string", "format": "uri" },
+                "events": { "type": "array", "items": { "type": "string" },
+                            "description": "Event types to subscribe to, or \"*\" for all." },
+                "description": { "type": "string", "nullable": true },
+                "org_wide": { "type": "boolean",
+                              "description": "Fire on events from every member of the caller's organization (requires an org-scoped account)." }
+            }
+        },
+        "UpdateWebhookInput": {
+            "type": "object",
+            "properties": {
+                "url": { "type": "string", "format": "uri" },
+                "events": { "type": "array", "items": { "type": "string" } },
+                "description": { "type": "string", "nullable": true },
+                "enabled": { "type": "boolean" }
+            }
+        },
+        "WebhookDelivery": {
+            "type": "object",
+            "properties": {
+                "id": { "type": "integer" },
+                "event_id": { "type": "string" },
+                "event_type": { "type": "string" },
+                "attempt_count": { "type": "integer" },
+                "status": { "type": "string",
+                            "enum": ["pending", "delivered", "failed", "abandoned"] },
+                "http_status": { "type": "integer", "nullable": true },
+                "response_excerpt": { "type": "string", "nullable": true },
+                "next_attempt_at": { "type": "string", "format": "date-time", "nullable": true },
+                "delivered_at": { "type": "string", "format": "date-time", "nullable": true },
+                "created_at": { "type": "string", "format": "date-time" }
             }
         }
     })

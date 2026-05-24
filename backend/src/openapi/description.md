@@ -111,6 +111,87 @@ oapi-codegen -package wayve https://rwayve.maheshg.me/api/openapi.json > wayve.g
 A spec change updates the ETag so generators with caching can short-circuit
 regeneration when nothing has changed.
 
+## Outbound webhooks
+
+In addition to calling Wayve, your app can have Wayve push events to **you**.
+Register an endpoint at `POST /api/webhooks` with a list of subscribed event
+types; Wayve will deliver every matching event as a signed JSON payload.
+
+### Subscribing
+
+```bash
+curl https://rwayve.maheshg.me/api/webhooks \
+  -H "X-API-KEY: $WAYVE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/wayve/webhook",
+    "events": ["task.created", "meeting.created"],
+    "description": "CRM sync"
+  }'
+```
+
+The response body contains a `secret` shown **exactly once** — store it
+securely.
+
+### Event envelope
+
+```json
+{
+  "id":          "evt_<uuid>",
+  "type":        "task.created",
+  "api_version": "2026.05",
+  "created_at":  "2026-05-24T13:45:00Z",
+  "owner":       { "type": "user", "user_id": 42, "organization_id": null },
+  "data":        { /* event-specific payload */ }
+}
+```
+
+### Verifying the signature
+
+Every delivery carries `Wayve-Signature: t=<timestamp>,v1=<hmac>`.
+Verify by recomputing `HMAC_SHA256(secret, "<timestamp>.<raw_body>")` and
+comparing in constant time. Reject anything older than ~5 minutes to prevent
+replay attacks.
+
+### Event types (v1)
+
+| Type | Fires when | Payload notes |
+| --- | --- | --- |
+| `task.created` | A task is created. | Full task row. |
+| `task.updated` | A task is edited. | Full task row. |
+| `task.deleted` | A task is deleted. | `{ id }` only. |
+| `meeting.created` | A meeting is scheduled. | Title, date, start/end, participants, optional Zoom URL. |
+| `meeting.updated` | A meeting is edited. | Same shape + `content_changed` flag. |
+| `meeting.deleted` | A meeting is cancelled. | `{ id }` only. |
+| `email.received` | Sync ingests a row that was *not* previously in the mailbox. NOT fired on body backfills or label updates. | `id`, `account_id`, `sender`, `subject`, `received_at`. **Body is intentionally omitted** — fetch via `GET /api/emails/{id}` if you have `email:read`. |
+| `email.sent` | `/api/email/send` returns 2xx from the upstream provider. | `account_id`, `from`, `to`, `subject`, `sent_at`. Body omitted. |
+| `chat.message.sent` | A direct or channel message is persisted. | `message_id`, `sender_id`, plus `channel_id` *or* `recipient_id`, `is_direct`. **Content is end-to-end encrypted; the server cannot include it** in the payload. Subscribers wanting message bodies need an integration that holds the recipient's private key. |
+| `chat.channel.created` | A new chat channel is created. | `id`, `name`, `created_by`, `created_at`, `member_ids`. |
+| `wayve.ping` | Test event fired by `POST /api/webhooks/{id}/test`. | `{ message }`. |
+
+Subscribe to `"*"` to receive every event.
+
+### Throughput characteristics
+
+`email.received` can fan out tens of events per sync tick when an active
+mailbox is connected. Plan for ~30 events per minute per active mailbox in
+the worst case. If you only need *unread* mail, filter on the row you fetch
+in your handler rather than asking us to filter — we don't promise to add
+event subtypes.
+
+`chat.message.sent` fires per message. For a busy organization this is the
+highest-volume event; if your endpoint can't keep up, the dispatcher will
+back off (see Delivery semantics below) but will eventually mark the
+endpoint abandoned. Consider running a queue between Wayve and your
+business logic.
+
+### Delivery semantics
+
+- HTTP `2xx` → delivered.
+- HTTP `4xx` (other than `408`/`429`) → abandoned; payload was rejected.
+- HTTP `5xx` / network errors / `429` → retried 3 times at 0s, 1m, 5m.
+- After 20 consecutive failed deliveries Wayve disables the endpoint.
+
 ## Tutorials
 
 Worked end-to-end examples (send your first email, create a task, schedule a

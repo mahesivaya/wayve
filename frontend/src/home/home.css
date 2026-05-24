@@ -4,11 +4,30 @@
      pages (Enterprise/Support/Pricing) overflow the viewport — without
      the internal scroll here, the bottom of the page would be clipped. */
   height: 100svh;
-  overflow-y: auto;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
   background:
     linear-gradient(90deg, rgba(111, 92, 214, 0.25), rgba(235, 239, 246, 0.7) 34%, #f7f8fb 100%),
     #f4f6fb;
   color: #262151;
+}
+
+.public-home::-webkit-scrollbar {
+  width: 10px;
+}
+
+.public-home::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.public-home::-webkit-scrollbar-thumb {
+  background: #8c91a8;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-radius: var(--radius-pill);
+}
+
+.public-home::-webkit-scrollbar-thumb:hover {
+  background: #6f748b;
 }
 
 .public-home-nav {
@@ -361,6 +380,110 @@
   grid-template-columns: repeat(3, 1fr);
 }
 
+.public-home-footer {
+  padding: 64px 56px 44px;
+  background: #ffffff;
+  border-top: 1px solid #e1e5ef;
+  color: #292c35;
+}
+
+.public-home-footer-grid {
+  display: grid;
+  grid-template-columns: 1.15fr repeat(3, minmax(150px, 0.8fr)) 0.85fr;
+  gap: 56px;
+  align-items: start;
+}
+
+.public-home-footer-brand button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #20243f;
+  font-size: 30px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.public-home-footer-logo {
+  width: 28px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #6975f5;
+  color: #ffffff;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.public-home-footer-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.public-home-footer-column button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #2f3138;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+
+.public-home-footer-column button:hover,
+.public-home-footer-brand button:hover {
+  color: #6f5cd6;
+}
+
+.public-home-footer-social h2 {
+  margin: 0 0 16px;
+  color: #2f3138;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.public-home-social-links {
+  display: grid;
+  grid-template-columns: repeat(4, 28px);
+  gap: 14px 16px;
+}
+
+.public-home-social-links a {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: #4d5057;
+  text-decoration: none;
+  font-size: 18px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.public-home-social-links a:hover {
+  background: #f0edff;
+  color: #6f5cd6;
+}
+
+.public-home-footer-legal {
+  margin: 96px 0 0;
+  color: #9aa0aa;
+  font-size: 18px;
+  font-weight: 650;
+}
+
 .dashboard-topbar {
   min-height: 46px;
   display: flex;
@@ -535,6 +658,24 @@
   .home-info-band,
   .home-info-grid article {
     padding: 28px 22px;
+  }
+
+  .public-home-footer {
+    padding: 42px 22px 34px;
+  }
+
+  .public-home-footer-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .public-home-footer-column {
+    gap: 16px;
+  }
+
+  .public-home-footer-legal {
+    margin-top: 42px;
+    font-size: 15px;
   }
 
   .dashboard {
@@ -793,7 +934,8 @@
 :root[data-theme="dark"] .home-pillar,
 :root[data-theme="dark"] .home-roles-grid article,
 :root[data-theme="dark"] .home-info-band,
-:root[data-theme="dark"] .home-info-grid article {
+:root[data-theme="dark"] .home-info-grid article,
+:root[data-theme="dark"] .public-home-footer {
   background: #1a1d26;
   border-top-color: #2c313d;
 }
@@ -801,7 +943,8 @@
 :root[data-theme="dark"] .home-pillar-features li strong,
 :root[data-theme="dark"] .home-roles-grid h3,
 :root[data-theme="dark"] .home-info-band h2,
-:root[data-theme="dark"] .home-info-grid h2 {
+:root[data-theme="dark"] .home-info-grid h2,
+:root[data-theme="dark"] .public-home-footer-social h2 {
   color: #f1f5f9;
 }
 :root[data-theme="dark"] .home-pillar > p,
@@ -823,6 +966,18 @@
 :root[data-theme="dark"] .home-stat-label {
   color: #9aa5b8;
 }
+:root[data-theme="dark"] .public-home-footer-brand button,
+:root[data-theme="dark"] .public-home-footer-column button {
+  color: #e2e8f0;
+}
+:root[data-theme="dark"] .public-home-social-links a,
+:root[data-theme="dark"] .public-home-footer-legal {
+  color: #9aa5b8;
+}
+:root[data-theme="dark"] .public-home-social-links a:hover {
+  background: #24283a;
+  color: #c084fc;
+}
 /* Comparison banner already uses dark indigo gradient — fine in dark mode,
    but tweak the contrast a touch so it doesn't blend into the page. */
 :root[data-theme="dark"] .home-comparison {
@@ -831,4 +986,3 @@
 
 /* OS prefers-color-scheme blocks were removed — dark mode is now
    explicit-only via [data-theme="dark"]. See index.html pre-paint. */
-

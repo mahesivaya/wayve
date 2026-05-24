@@ -380,6 +380,61 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         )",
         "CREATE INDEX IF NOT EXISTS idx_payroll_run_items_run \
          ON payroll_run_items(payroll_run_id)",
+        // ────────────────────────────────────────────────────────────────
+        // Outbound webhooks. Customers subscribe to platform events; the
+        // dispatcher worker delivers signed JSON envelopes with retry.
+        //
+        // `secret` is opaque high-entropy bytes used as the HMAC-SHA256
+        // key. Stored hex; revealed exactly once at creation.
+        //
+        // `org_wide = true` requires `organization_id` to be set and
+        // delivers events for ALL members of that org, not just the
+        // creator. Mirrors how api_keys work for shared org integrations.
+        // ────────────────────────────────────────────────────────────────
+        "CREATE TABLE IF NOT EXISTS webhook_endpoints (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+            org_wide BOOLEAN NOT NULL DEFAULT FALSE,
+            url TEXT NOT NULL,
+            secret TEXT NOT NULL,
+            secret_preview TEXT NOT NULL,
+            events TEXT[] NOT NULL DEFAULT '{}',
+            description TEXT,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            consecutive_failures INTEGER NOT NULL DEFAULT 0,
+            last_success_at TIMESTAMPTZ,
+            last_failure_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT webhook_endpoints_org_wide_chk
+                CHECK (org_wide = false OR organization_id IS NOT NULL)
+        )",
+        "CREATE INDEX IF NOT EXISTS webhook_endpoints_user_idx ON webhook_endpoints(user_id)",
+        "CREATE INDEX IF NOT EXISTS webhook_endpoints_org_idx ON webhook_endpoints(organization_id) WHERE organization_id IS NOT NULL",
+        // Delivery queue + audit. `next_attempt_at` drives the dispatcher
+        // poll; `status = pending AND next_attempt_at <= NOW()` is the
+        // worker's pickup predicate. Partial index keeps it cheap.
+        "CREATE TABLE IF NOT EXISTS webhook_deliveries (
+            id BIGSERIAL PRIMARY KEY,
+            endpoint_id INTEGER NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
+            event_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            payload JSONB NOT NULL,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending','delivered','failed','abandoned')),
+            http_status INTEGER,
+            response_excerpt TEXT,
+            next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            delivered_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS webhook_deliveries_pending_idx \
+         ON webhook_deliveries(next_attempt_at) WHERE status = 'pending'",
+        "CREATE INDEX IF NOT EXISTS webhook_deliveries_endpoint_idx \
+         ON webhook_deliveries(endpoint_id, created_at DESC)",
     ];
 
     for statement in statements {

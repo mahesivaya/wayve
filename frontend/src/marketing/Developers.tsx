@@ -100,6 +100,51 @@ const TUTORIALS: Tutorial[] = [
     ],
   },
   {
+    id: "subscribe-webhook",
+    title: "Subscribe to webhooks",
+    goal: "Receive signed events when tasks or meetings change.",
+    scopes: ["account login"],
+    steps: [
+      {
+        caption: "POST /api/webhooks with your endpoint and the events you care about. The response carries the signing secret exactly once.",
+        code: `curl https://rwayve.maheshg.me/api/webhooks \\
+  -H "Authorization: Bearer $WAYVE_JWT" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "url": "https://example.com/wayve/webhook",
+    "events": ["task.created", "meeting.created"],
+    "description": "CRM sync"
+  }'
+
+# { "id": 1, "secret": "whsec_...", "events": [...], ... }`,
+      },
+      {
+        caption: "Verify each delivery by recomputing the HMAC. Pseudocode:",
+        code: `// Node / Express receiver
+import crypto from "node:crypto";
+
+app.post("/wayve/webhook", express.raw({ type: "*/*" }), (req, res) => {
+  const sig = req.header("Wayve-Signature") || "";
+  const [tPart, vPart] = sig.split(",");
+  const timestamp = tPart.split("=")[1];
+  const provided  = vPart.split("=")[1];
+
+  const expected = crypto
+    .createHmac("sha256", process.env.WAYVE_WEBHOOK_SECRET)
+    .update(\`\${timestamp}.\${req.body.toString()}\`)
+    .digest("hex");
+
+  if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(provided))) {
+    return res.status(400).send("bad signature");
+  }
+  const event = JSON.parse(req.body.toString());
+  // handle event.type / event.data ...
+  res.sendStatus(200);
+});`,
+      },
+    ],
+  },
+  {
     id: "ai-chat",
     title: "Run an AI prompt",
     goal: "Send a prompt to the assistant and continue the conversation.",
@@ -217,6 +262,26 @@ export default function Developers() {
 
   return (
     <div className="dev-portal">
+      <header className="dev-header">
+        <Link to="/" className="dev-header-brand">
+          <span className="dev-header-logo">✉</span>
+          <span>Wayve</span>
+        </Link>
+        <nav className="dev-header-nav" aria-label="Developers navigation">
+          <Link to="/">Home</Link>
+          <Link to="/pricing">Pricing</Link>
+          <Link to="/enterprise">Enterprise</Link>
+          <Link to="/support">Support</Link>
+          <Link to="/developers" aria-current="page">Developers</Link>
+        </nav>
+        <div className="dev-header-actions">
+          <Link to="/login">Sign in</Link>
+          <Link to={dashboardLink} className="dev-header-primary">
+            {user ? "API keys" : "Get started"}
+          </Link>
+        </div>
+      </header>
+
       <header className="dev-hero">
         <div className="dev-hero-inner">
           <h1>Wayve Developers</h1>
@@ -333,10 +398,57 @@ export default function Developers() {
       </section>
 
       <footer className="dev-footer">
-        <p>
-          Need higher rate limits, dedicated tenancy, or a custom SLA?{" "}
-          <Link to="/enterprise">Talk to sales →</Link>
-        </p>
+        <div className="dev-footer-grid">
+          <div className="dev-footer-brand">
+            <Link to="/">
+              <span className="dev-header-logo">✉</span>
+              <span>Wayve</span>
+            </Link>
+            <p>Secure workspace APIs for mail, chat, scheduling, files, notes, tasks, and AI.</p>
+          </div>
+
+          <nav className="dev-footer-column" aria-label="Developer resources">
+            <h2>Developers</h2>
+            <Link to="/developers#tutorials">Tutorials</Link>
+            <a href={SPEC_URL}>OpenAPI spec</a>
+            <Link to={dashboardLink}>API keys</Link>
+            <Link to="/support">Support</Link>
+          </nav>
+
+          <nav className="dev-footer-column" aria-label="Platform">
+            <h2>Platform</h2>
+            <Link to="/enterprise">Enterprise</Link>
+            <Link to="/pricing">Pricing</Link>
+            <Link to="/services/email">Email</Link>
+            <Link to="/services/scheduler">Scheduler</Link>
+          </nav>
+
+          <nav className="dev-footer-column" aria-label="Company">
+            <h2>Company</h2>
+            <Link to="/about">About</Link>
+            <Link to="/support">Contact</Link>
+            <Link to="/security/audit">Transparency Report</Link>
+            <Link to="/enterprise">Technical white paper</Link>
+          </nav>
+
+          <div className="dev-footer-social" aria-label="Follow us">
+            <h2>Follow us</h2>
+            <div className="dev-social-links">
+              <a href="https://www.linkedin.com" aria-label="LinkedIn">in</a>
+              <a href="https://x.com" aria-label="X">x</a>
+              <a href="https://www.youtube.com" aria-label="YouTube">▶</a>
+              <a href="https://github.com" aria-label="GitHub">gh</a>
+            </div>
+          </div>
+        </div>
+
+        <div className="dev-footer-bottom">
+          <p>© Wayve B.V. {new Date().getFullYear()}</p>
+          <p>
+            Need higher rate limits, dedicated tenancy, or a custom SLA?{" "}
+            <Link to="/enterprise">Talk to sales →</Link>
+          </p>
+        </div>
       </footer>
     </div>
   );

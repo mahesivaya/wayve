@@ -44,6 +44,7 @@ const Developers = lazy(() => import("./marketing/Developers"));
 const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
 const SsoSettings = lazy(() => import("./settings/SsoSettings"));
 const SharedInboxes = lazy(() => import("./settings/SharedInboxes"));
+const Webhooks = lazy(() => import("./settings/Webhooks"));
 const AuditSecurity = lazy(() => import("./settings/AuditSecurity"));
 const RecoverPage = lazy(() => import("./recovery/RecoverPage"));
 
@@ -163,6 +164,7 @@ export default function App() {
             <Route path="/recover" element={<RecoverPage />} />
             <Route path="/settings/sso" element={<SsoSettings />} />
             <Route path="/settings/inboxes" element={<SharedInboxes />} />
+            <Route path="/settings/webhooks" element={<Webhooks />} />
 
           </Route>
         </Route>

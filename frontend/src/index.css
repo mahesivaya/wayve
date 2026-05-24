@@ -228,6 +228,130 @@
   background: var(--color-email-bg);
 }
 
+/* Route-level pages live inside a fixed-height app shell. Normal document
+   pages must own vertical overflow; fixed apps like Email/Scheduler/Chat
+   keep their specialized inner scroll containers. */
+:is(
+  .about-page,
+  .api-keys-page,
+  .audit-security-page,
+  .call-page,
+  .drive-container,
+  .email-files-page,
+  .pb-page,
+  .pt-page,
+  .service-page,
+  .shared-inboxes,
+  .settings-page,
+  .sso-settings,
+  .webhooks-page
+) {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  box-sizing: border-box;
+}
+
+:is(
+  .u-page-shell,
+  .about-page,
+  .api-keys-page,
+  .audit-security-page,
+  .billing-page,
+  .call-page,
+  .dev-portal,
+  .drive-container,
+  .email-files-page,
+  .pb-page,
+  .profile-page,
+  .pricing-page,
+  .pt-page,
+  .public-home,
+  .service-page,
+  .shared-inboxes,
+  .settings-page,
+  .sso-settings,
+  .webhooks-page
+)::-webkit-scrollbar {
+  width: 10px;
+}
+
+:is(
+  .u-page-shell,
+  .about-page,
+  .api-keys-page,
+  .audit-security-page,
+  .billing-page,
+  .call-page,
+  .dev-portal,
+  .drive-container,
+  .email-files-page,
+  .pb-page,
+  .profile-page,
+  .pricing-page,
+  .pt-page,
+  .public-home,
+  .service-page,
+  .shared-inboxes,
+  .settings-page,
+  .sso-settings,
+  .webhooks-page
+)::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+:is(
+  .u-page-shell,
+  .about-page,
+  .api-keys-page,
+  .audit-security-page,
+  .billing-page,
+  .call-page,
+  .dev-portal,
+  .drive-container,
+  .email-files-page,
+  .pb-page,
+  .profile-page,
+  .pricing-page,
+  .pt-page,
+  .public-home,
+  .service-page,
+  .shared-inboxes,
+  .settings-page,
+  .sso-settings,
+  .webhooks-page
+)::-webkit-scrollbar-thumb {
+  background: #7f93ad;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--radius-pill);
+}
+
+:is(
+  .u-page-shell,
+  .about-page,
+  .api-keys-page,
+  .audit-security-page,
+  .billing-page,
+  .call-page,
+  .dev-portal,
+  .drive-container,
+  .email-files-page,
+  .pb-page,
+  .profile-page,
+  .pricing-page,
+  .pt-page,
+  .public-home,
+  .service-page,
+  .shared-inboxes,
+  .settings-page,
+  .sso-settings,
+  .webhooks-page
+)::-webkit-scrollbar-thumb:hover {
+  background: #60758f;
+}
+
 .u-flex-between {
   display: flex;
   align-items: center;

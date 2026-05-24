@@ -24,6 +24,7 @@ mod scheduler;
 pub mod security;
 mod startup;
 mod tasks;
+mod webhooks;
 mod workers;
 mod ws_registry;
 
@@ -76,7 +77,8 @@ fn app_routes(cfg: &mut web::ServiceConfig) {
                 .configure(billing::routes)
                 .configure(platform_billing::routes)
                 .configure(platform_team::routes)
-                .configure(openapi::routes),
+                .configure(openapi::routes)
+                .configure(webhooks::routes),
         )
         // 🔥 AUTH / GOOGLE
         .configure(email::public_routes)
@@ -154,8 +156,22 @@ async fn main() -> std::io::Result<()> {
             tokio::spawn(async move {
                 billing::spawn_billing_worker(billing_pool).await;
             });
+            let webhook_pool = pool.clone();
+            tokio::spawn(async move {
+                webhooks::spawn_dispatcher(webhook_pool).await;
+            });
         }
-        RuntimeRole::Api => {}
+        RuntimeRole::Api => {
+            // The webhook dispatcher is a cheap DB poller; spawning it
+            // here means the API container can deliver subscribed events
+            // without depending on a separate worker container. Safe to
+            // run concurrently with the `All` variant — claim uses
+            // FOR UPDATE SKIP LOCKED.
+            let webhook_pool = pool.clone();
+            tokio::spawn(async move {
+                webhooks::spawn_dispatcher(webhook_pool).await;
+            });
+        }
     }
 
     let redis_cache = match crate::cache::Cache::connect().await {

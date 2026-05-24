@@ -240,6 +240,26 @@ pub async fn create_meeting(
         }
     });
 
+    // ================= WEBHOOK FAN-OUT =================
+    // Plaintext title/date/time only — encrypted-at-rest columns are an
+    // internal storage concern, not part of the public event contract.
+    let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
+    crate::webhooks::emit(
+        pool.get_ref(),
+        owner,
+        crate::webhooks::Event::MeetingCreated,
+        serde_json::json!({
+            "id": meeting_id,
+            "title": data.title,
+            "date": date,
+            "start_time": start_time,
+            "end_time": end_time,
+            "zoom_join_url": zoom_join_url,
+            "participants": participants,
+        }),
+    )
+    .await;
+
     // ================= RESPONSE =================
     Ok(HttpResponse::Ok().json(MeetingResponse {
         message: "Meeting created successfully".into(),
@@ -521,6 +541,23 @@ pub async fn update_meeting(
         });
     }
 
+    // ================= WEBHOOK FAN-OUT =================
+    let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
+    crate::webhooks::emit(
+        pool.get_ref(),
+        owner,
+        crate::webhooks::Event::MeetingUpdated,
+        serde_json::json!({
+            "id": id,
+            "title": data.title,
+            "date": date,
+            "start_time": start_time,
+            "end_time": end_time,
+            "content_changed": content_changed,
+        }),
+    )
+    .await;
+
     // ================= RESPONSE =================
     Ok(HttpResponse::Ok().json(json!({
         "message": "Meeting updated successfully"
@@ -634,6 +671,17 @@ pub async fn delete_meeting(
         });
     }
     info!("Meeting deleted: id={} user_id={}", id, user_id);
+
+    // ================= WEBHOOK FAN-OUT =================
+    let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
+    crate::webhooks::emit(
+        pool.get_ref(),
+        owner,
+        crate::webhooks::Event::MeetingDeleted,
+        serde_json::json!({ "id": id }),
+    )
+    .await;
+
     Ok(HttpResponse::Ok().json(json!({
         "message": "Meeting deleted"
     })))

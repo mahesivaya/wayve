@@ -268,6 +268,27 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 .fetch_all(&pool)
                                 .await?;
 
+                                // Webhook fan-out. Metadata only — the
+                                // content envelope is end-to-end encrypted
+                                // and the server cannot reveal it.
+                                let message_id: i32 = row.get("id");
+                                let owner =
+                                    crate::webhooks::handler::owner_for_user(&pool, sender_id)
+                                        .await;
+                                crate::webhooks::emit(
+                                    &pool,
+                                    owner,
+                                    crate::webhooks::Event::ChatMessageSent,
+                                    serde_json::json!({
+                                        "message_id": message_id,
+                                        "channel_id": channel_id,
+                                        "sender_id": sender_id,
+                                        "is_direct": false,
+                                        "parent_message_id": parent_message_id,
+                                    }),
+                                )
+                                .await;
+
                                 Ok::<_, sqlx::Error>((row, members))
                             }
                         };
@@ -357,7 +378,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                             return Err(sqlx::Error::RowNotFound);
                         }
 
-                        sqlx::query(
+                        let row = sqlx::query(
                             r#"
                             INSERT INTO messages
                             (sender_id, receiver_id, content_encrypted, content_iv, status)
@@ -370,7 +391,27 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         .bind(encrypted)
                         .bind(iv)
                         .fetch_one(&pool)
-                        .await
+                        .await?;
+
+                        // Webhook fan-out. Metadata only — content stays
+                        // end-to-end encrypted.
+                        let message_id: i32 = row.get("id");
+                        let owner =
+                            crate::webhooks::handler::owner_for_user(&pool, sender_id).await;
+                        crate::webhooks::emit(
+                            &pool,
+                            owner,
+                            crate::webhooks::Event::ChatMessageSent,
+                            serde_json::json!({
+                                "message_id": message_id,
+                                "sender_id": sender_id,
+                                "recipient_id": receiver_id,
+                                "is_direct": true,
+                            }),
+                        )
+                        .await;
+
+                        Ok::<_, sqlx::Error>(row)
                     };
 
                     let sender_addr = ctx.address();

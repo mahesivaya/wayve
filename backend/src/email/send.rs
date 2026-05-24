@@ -68,7 +68,7 @@ pub async fn send(
         }
     };
 
-    Ok(account
+    let response = account
         .provider
         .send(
             &token.access_token,
@@ -77,7 +77,29 @@ pub async fn send(
             &data,
             user_id,
         )
-        .await)
+        .await;
+
+    // email.sent fans out only on a 2xx from the upstream provider. If
+    // Gmail/Graph rejected the send (4xx/5xx), the customer hasn't
+    // delivered a message and shouldn't get the webhook.
+    if response.status().is_success() {
+        let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
+        crate::webhooks::emit(
+            pool.get_ref(),
+            owner,
+            crate::webhooks::Event::EmailSent,
+            serde_json::json!({
+                "account_id": account.id,
+                "from": account.email,
+                "to": data.to,
+                "subject": data.subject,
+                "sent_at": chrono::Utc::now(),
+            }),
+        )
+        .await;
+    }
+
+    Ok(response)
 }
 
 pub(super) async fn send_via_gmail(

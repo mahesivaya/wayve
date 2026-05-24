@@ -390,6 +390,57 @@ export default function Home() {
               <p>Organized collaboration across files, schedules, and notes.</p>
             </article>
           </section>
+
+          <footer className="public-home-footer">
+            <div className="public-home-footer-grid">
+              <div className="public-home-footer-brand">
+                <button type="button" onClick={() => navigate("/")}>
+                  <span className="public-home-footer-logo">✉</span>
+                  <span>Wayve</span>
+                </button>
+              </div>
+
+              <nav className="public-home-footer-column" aria-label="Company">
+                <button type="button" onClick={() => navigate("/support")}>Support</button>
+                <button type="button" onClick={() => navigate("/pricing")}>Pricing</button>
+                <button type="button" onClick={() => navigate("/about")}>Privacy Policy</button>
+                <button type="button" onClick={() => navigate("/developers")}>Developers</button>
+                <button type="button" onClick={() => navigate("/enterprise")}>Technical white paper</button>
+              </nav>
+
+              <nav className="public-home-footer-column" aria-label="Product">
+                <button type="button" onClick={() => navigate("/enterprise")}>Wayve for Business</button>
+                <button type="button" onClick={() => navigate("/services/email")}>Email Aliases</button>
+                <button type="button" onClick={() => navigate("/developers")}>Release notes</button>
+                <button type="button" onClick={() => navigate("/services/email")}>Encrypted Email</button>
+                <button type="button" onClick={() => navigate("/support")}>Status</button>
+              </nav>
+
+              <nav className="public-home-footer-column" aria-label="Resources">
+                <button type="button" onClick={() => navigate("/about")}>Terms of service</button>
+                <button type="button" onClick={() => navigate("/about")}>Press</button>
+                <button type="button" onClick={() => navigate("/services/email")}>Private Email</button>
+                <button type="button" onClick={() => navigate("/support")}>Contact</button>
+                <button type="button" onClick={() => navigate("/security/audit")}>Transparency Report</button>
+              </nav>
+
+              <div className="public-home-footer-social" aria-label="Follow us">
+                <h2>Follow us</h2>
+                <div className="public-home-social-links">
+                  <a href="https://www.facebook.com" aria-label="Facebook">f</a>
+                  <a href="https://www.instagram.com" aria-label="Instagram">◎</a>
+                  <a href="https://www.linkedin.com" aria-label="LinkedIn">in</a>
+                  <a href="https://mastodon.social" aria-label="Mastodon">m</a>
+                  <a href="https://x.com" aria-label="X">x</a>
+                  <a href="https://www.youtube.com" aria-label="YouTube">▶</a>
+                </div>
+              </div>
+            </div>
+
+            <p className="public-home-footer-legal">
+              © Wayve B.V. {new Date().getFullYear()}
+            </p>
+          </footer>
         </main>
       </div>
     );
