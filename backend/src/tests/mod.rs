@@ -26,3 +26,9 @@ mod scheduler_handler_test;
 mod scheduler_jwt_test;
 mod scheduler_zoom_test;
 mod security_encryption_test;
+// Added in the test-cleanup pass: cover the enterprise surfaces that
+// previously had no dedicated test files.
+mod embed_tokens_test;
+mod quotas_test;
+mod scim_tokens_test;
+mod webhooks_test;

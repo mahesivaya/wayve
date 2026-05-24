@@ -84,7 +84,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let (id, from, to, subject, created_at, _is_read) =
+        let (id, from, to, subject, created_at, _is_read, _labels) =
             fetch_headers_only("token", "msg-1").await.unwrap();
         assert_eq!(id, "msg-1");
         assert_eq!(from, "Alice <a@x.com>");

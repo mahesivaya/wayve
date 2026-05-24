@@ -92,7 +92,7 @@ There are two paths:
 
 Test helpers in `backend/src/test_support.rs` (`test_pool`, `insert_local_user`, `insert_google_user`, `jwt_for`, `random_email`, `next_synthetic_user_id`).
 
-> ⚠️ The files under `backend/src/tests/*.rs` each declare `#[cfg(test)] mod tests { ... }` with `use super::*;`, but they are **not wired into any parent module** in `main.rs` or the feature `mod.rs` files. As written they will not be compiled by `cargo test`. If you add or rely on a test in `src/tests/`, also add the inclusion (either `#[cfg(test)] #[path = "..."] mod foo_test;` in the parent module, or move the file next to its target). Don't trust a green local run unless you've confirmed the test actually executed.
+Backend integration tests live in `backend/src/tests/*.rs` and are wired in via `backend/src/tests/mod.rs`, which is itself declared `#[cfg(test)] mod tests;` from `backend/src/main.rs`. Adding a new test file means appending a `mod foo_test;` line to `tests/mod.rs` — the file itself uses the pattern `#[cfg(test)] mod tests { ... }` with explicit `use crate::...` paths into the items it exercises. `cargo test` compiles and runs them.
 
 Tests that mutate env vars use `#[serial_test::serial]`; CI runs `--test-threads=1` for the same reason. OAuth flows are mocked with `wiremock` and `external::gmail_api_base()` indirection (set the env var to point at the mock server). MailHog-dependent tests skip themselves when `MAILHOG_API` is unset.
 
