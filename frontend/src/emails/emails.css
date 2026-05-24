@@ -804,9 +804,11 @@
 }
 
 .main.email-list-view .email-item {
-  min-height: 42px;
+  /* 30px row + 1px border ≈ same density as the narrow split view, so
+     ~25 emails fit on a 768px viewport instead of ~18. */
+  min-height: 30px;
   align-items: stretch;
-  padding: 4px 7px;
+  padding: 2px 7px;
 }
 
 .main.email-list-view .email-top {
@@ -1275,7 +1277,9 @@
     min-height: 0;
     align-items: stretch;
     justify-content: flex-start;
-    padding: 8px 0;
+    /* Tightened from 8px → 4px so ~14 rows fit on a 640px phone screen
+       instead of ~9; subject + sender are still legible on 13px font. */
+    padding: 4px 0;
     border-bottom: none;
     background: transparent;
     box-shadow: none;
@@ -1298,15 +1302,15 @@
 
   .mobile-email-row {
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) 24px;
-    gap: 10px;
+    grid-template-columns: 28px minmax(0, 1fr) 20px;
+    gap: 8px;
     width: 100%;
-    align-items: flex-start;
+    align-items: center;
   }
 
   .mobile-email-avatar {
-    width: 32px;
-    height: 32px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     display: inline-flex;
     align-items: center;
@@ -1314,7 +1318,7 @@
     background: #d7b29c;
     color: #ffffff;
     font-weight: 800;
-    font-size: 13px;
+    font-size: 11px;
     overflow: hidden;
   }
 
@@ -1322,7 +1326,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 0;
   }
 
   .mobile-email-sender-line {
