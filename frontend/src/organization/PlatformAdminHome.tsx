@@ -443,6 +443,13 @@ export default function PlatformAdminHome() {
                 <Link to="/security/audit" className="u-btn-primary">Open →</Link>
               </article>
             )}
+            {hasPermission(user, "webhooks:manage") && (
+              <article>
+                <strong>SCIM provisioning</strong>
+                <span>Mint bearer tokens so Okta / Entra can provision users.</span>
+                <Link to="/settings/scim" className="u-btn-primary">Open →</Link>
+              </article>
+            )}
           </div>
         </section>
       )}

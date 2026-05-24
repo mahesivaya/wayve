@@ -301,6 +301,9 @@ export default function Developers() {
             <Link to="/developers/quotas" className="dev-btn">
               Compare rate-limit tiers →
             </Link>
+            <Link to="/docs" className="dev-btn">
+              Browse guides →
+            </Link>
           </div>
         </div>
       </header>

@@ -42,10 +42,12 @@ const Enterprise = lazy(() => import("./marketing/Enterprise"));
 const Support = lazy(() => import("./marketing/Support"));
 const Developers = lazy(() => import("./marketing/Developers"));
 const Quotas = lazy(() => import("./marketing/Quotas"));
+const Docs = lazy(() => import("./marketing/Docs"));
 const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
 const SsoSettings = lazy(() => import("./settings/SsoSettings"));
 const SharedInboxes = lazy(() => import("./settings/SharedInboxes"));
 const Webhooks = lazy(() => import("./settings/Webhooks"));
+const ScimTokens = lazy(() => import("./settings/ScimTokens"));
 const AuditSecurity = lazy(() => import("./settings/AuditSecurity"));
 const RecoverPage = lazy(() => import("./recovery/RecoverPage"));
 
@@ -105,6 +107,8 @@ export default function App() {
         <Route path="/support" element={<Support />} />
         <Route path="/developers" element={<Developers />} />
         <Route path="/developers/quotas" element={<Quotas />} />
+        <Route path="/docs" element={<Docs />} />
+        <Route path="/docs/:slug" element={<Docs />} />
 
         {/* PROTECTED */}
         <Route element={<ProtectedRoute />}>
@@ -167,6 +171,7 @@ export default function App() {
             <Route path="/settings/sso" element={<SsoSettings />} />
             <Route path="/settings/inboxes" element={<SharedInboxes />} />
             <Route path="/settings/webhooks" element={<Webhooks />} />
+            <Route path="/settings/scim" element={<ScimTokens />} />
 
           </Route>
         </Route>

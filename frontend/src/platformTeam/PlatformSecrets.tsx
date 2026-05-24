@@ -8,8 +8,26 @@ import {
   type ApiScope,
   type KeyType,
 } from "../api/apiKeys";
+import { apiFetchJson } from "../api/client";
 import { getApiBase } from "../config/env";
 import "./platformTeam.css";
+
+const EMBED_SCOPES = [
+  "profile:read",
+  "email:read",
+  "chat:read",
+  "scheduler:read",
+  "drive:read",
+  "notes:read",
+  "tasks:read",
+];
+
+type EmbedMintResponse = {
+  token: string;
+  expires_in: number;
+  origin: string;
+  scopes: string[];
+};
 
 // Test endpoints — read-only paths so testing a key never mutates state.
 // Each one is annotated with the scope it needs so the owner can predict
@@ -56,6 +74,45 @@ export default function PlatformSecrets() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testError, setTestError] = useState("");
+
+  // ── Embed token mint ──────────────────────────────────────────────
+  const [embedOrigin, setEmbedOrigin] = useState("https://customer.example");
+  const [embedScopes, setEmbedScopes] = useState<Set<string>>(
+    () => new Set(["profile:read"]),
+  );
+  const [embedMinting, setEmbedMinting] = useState(false);
+  const [embedError, setEmbedError] = useState("");
+  const [embedResult, setEmbedResult] = useState<EmbedMintResponse | null>(null);
+
+  const toggleEmbedScope = (scope: string) => {
+    setEmbedScopes((prev) => {
+      const next = new Set(prev);
+      if (next.has(scope)) next.delete(scope);
+      else next.add(scope);
+      return next;
+    });
+  };
+
+  const mintEmbedToken = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setEmbedError("");
+    setEmbedResult(null);
+    setEmbedMinting(true);
+    try {
+      const result = await apiFetchJson<EmbedMintResponse>("/api/embed/tokens", {
+        method: "POST",
+        body: JSON.stringify({
+          origin: embedOrigin.trim(),
+          scopes: [...embedScopes],
+        }),
+      });
+      setEmbedResult(result);
+    } catch (err) {
+      setEmbedError(err instanceof Error ? err.message : "Failed to mint embed token");
+    } finally {
+      setEmbedMinting(false);
+    }
+  };
 
   const toggleScope = (scope: string) => {
     setScopes((prev) => {
@@ -312,6 +369,63 @@ export default function PlatformSecrets() {
           next to the endpoint. <strong>429</strong> means the per-key rate
           limit was hit.
         </p>
+      </section>
+
+      <section className="pt-panel">
+        <div className="pt-panel-head">
+          <h2>3. Embed token (read-only iframe)</h2>
+          <span className="pt-stat-sub">
+            5-minute TTL · origin-pinned · GET only · sent as{" "}
+            <code>X-EMBED-TOKEN</code>
+          </span>
+        </div>
+        <form className="api-secrets-form" onSubmit={(e) => void mintEmbedToken(e)}>
+          <label>
+            Embedding origin
+            <input
+              required
+              value={embedOrigin}
+              onChange={(e) => setEmbedOrigin(e.target.value)}
+              placeholder="https://customer.example"
+            />
+          </label>
+          <fieldset className="api-secrets-scopes">
+            <legend>Read scopes</legend>
+            {EMBED_SCOPES.map((scope) => (
+              <label key={scope} className="api-secrets-checkbox">
+                <input
+                  type="checkbox"
+                  checked={embedScopes.has(scope)}
+                  onChange={() => toggleEmbedScope(scope)}
+                />
+                <span>{scope}</span>
+              </label>
+            ))}
+          </fieldset>
+          <div className="api-secrets-actions">
+            <button type="submit" className="pt-link-btn" disabled={embedMinting}>
+              {embedMinting ? "Minting…" : "Mint embed token"}
+            </button>
+          </div>
+        </form>
+
+        {embedError && <div className="pt-banner">{embedError}</div>}
+
+        {embedResult && (
+          <div className="api-secrets-reveal">
+            <strong>
+              Embed token (expires in {embedResult.expires_in}s, pinned to{" "}
+              <code>{embedResult.origin}</code>):
+            </strong>
+            <code className="api-secrets-raw">{embedResult.token}</code>
+            <p className="pt-stat-sub">
+              Pass this in <code>X-EMBED-TOKEN</code> header from the embedding
+              origin. Wayve rejects the request if{" "}
+              <code>Origin: {embedResult.origin}</code> is missing or the method
+              is not GET/HEAD.
+            </p>
+          </div>
+        )}
       </section>
     </div>
   );

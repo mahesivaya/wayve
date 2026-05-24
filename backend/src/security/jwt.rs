@@ -113,6 +113,16 @@ pub fn get_user_id_from_request(req: &HttpRequest) -> Option<i32> {
         return Some(principal.user_id);
     }
 
+    // Embed-token requests come through the EmbedMiddleware which has
+    // already verified the signature, origin, and method. Trust the
+    // principal it stamped.
+    if let Some(principal) = req
+        .extensions()
+        .get::<crate::embed::middleware::EmbedPrincipal>()
+    {
+        return Some(principal.user_id);
+    }
+
     let token = token_from_request(req)?;
     let claims = decode_jwt(&token)?;
     Some(claims.sub)

@@ -7,8 +7,10 @@ mod cache;
 mod call;
 mod chat;
 mod config;
+mod docs;
 mod drive;
 mod email;
+mod embed;
 mod error;
 mod external;
 mod middleware;
@@ -21,6 +23,7 @@ mod platform_team;
 mod prelude;
 mod routes;
 mod scheduler;
+mod scim;
 pub mod security;
 mod startup;
 mod tasks;
@@ -78,12 +81,18 @@ fn app_routes(cfg: &mut web::ServiceConfig) {
                 .configure(platform_billing::routes)
                 .configure(platform_team::routes)
                 .configure(openapi::routes)
-                .configure(webhooks::routes),
+                .configure(webhooks::routes)
+                .configure(docs::routes)
+                .configure(embed::routes)
+                .configure(scim::api_routes),
         )
         // 🔥 AUTH / GOOGLE
         .configure(email::public_routes)
         // 🔥 STRIPE WEBHOOK (unauthenticated, signature-verified)
         .configure(billing::public_routes)
+        // 🔥 SCIM 2.0 — mounted at /scim/v2 per RFC 7644 (NOT under /api).
+        // Authenticates with its own bearer token, not the session JWT.
+        .configure(scim::routes)
         // 🔥 WEBSOCKETS
         .configure(chat::ws_routes)
         .configure(call::routes);
@@ -207,6 +216,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(TracingLogger::default()) // 🚧
             .wrap(ApiKeyMiddleware)
+            .wrap(embed::middleware::EmbedMiddleware)
             .wrap(RateLimitMiddleware)
             .wrap(cors)
             .app_data(web::Data::new(pool.clone()))

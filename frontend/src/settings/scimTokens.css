@@ -1,0 +1,242 @@
+.scim-tokens-page {
+  padding: 24px;
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--text-color, #111827);
+}
+
+.scim-tokens-header h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.scim-tokens-header p {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.6;
+  max-width: 640px;
+}
+
+.scim-tokens-header code {
+  background: #e5e7eb;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.scim-banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.scim-banner.error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.scim-banner.success {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #bbf7d0;
+}
+
+.scim-reveal {
+  padding: 14px 16px;
+  background: #fef9c3;
+  color: #713f12;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scim-reveal code {
+  display: block;
+  background: #ffffff;
+  border: 1px dashed #ca8a04;
+  padding: 8px 10px;
+  border-radius: 6px;
+  word-break: break-all;
+  user-select: all;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.scim-reveal small {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.scim-reveal button {
+  align-self: flex-start;
+  background: #ffffff;
+  border: 1px solid #ca8a04;
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.scim-create {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.scim-create form {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.scim-create label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: #6b7280;
+  gap: 4px;
+}
+
+.scim-create input {
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.scim-create button {
+  padding: 8px 14px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scim-create button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.scim-list,
+.scim-fineprint {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+.scim-list h2,
+.scim-fineprint h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.scim-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.scim-table th,
+.scim-table td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.scim-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+  background: #f9fafb;
+}
+
+.scim-table code {
+  background: #f3f4f6;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.scim-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.scim-pill.ok { background: #dcfce7; color: #166534; }
+.scim-pill.error { background: #fee2e2; color: #991b1b; }
+
+.scim-btn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.scim-btn.danger {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.scim-empty,
+.scim-muted {
+  padding: 20px 12px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.scim-fineprint ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.scim-fineprint li {
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.scim-fineprint code {
+  background: #e5e7eb;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+html[data-theme="dark"] .scim-tokens-page {
+  --text-color: #e5e7eb;
+}
+html[data-theme="dark"] .scim-create,
+html[data-theme="dark"] .scim-list,
+html[data-theme="dark"] .scim-fineprint {
+  background: #1f2937;
+  border-color: #374151;
+}
+html[data-theme="dark"] .scim-table th { background: #111827; color: #9ca3af; }
+html[data-theme="dark"] .scim-table code,
+html[data-theme="dark"] .scim-fineprint code,
+html[data-theme="dark"] .scim-tokens-header code {
+  background: #111827;
+  color: #e5e7eb;
+}

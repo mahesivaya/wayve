@@ -40,6 +40,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(api_keys::revoke_api_key)
         .service(api_keys::api_key_audit)
         .service(audit::list_audit_logs)
+        .service(audit::export_audit_logs)
         .service(audit::get_siem_settings)
         .service(audit::upsert_siem_settings)
         .service(audit::test_siem_settings)

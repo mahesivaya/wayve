@@ -455,6 +455,30 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          WHERE code = 'organization'",
         "UPDATE plans SET rate_limit_per_min = 6000,  monthly_quota = -1        \
          WHERE code = 'enterprise'",
+        // ────────────────────────────────────────────────────────────────
+        // SCIM 2.0 provisioning.
+        //
+        // Each organization that wants IdP-driven provisioning mints a
+        // bearer token here. The token's `token_hash` is SHA-256; the raw
+        // value is shown once at creation. `external_id` lives on `users`
+        // (sparse — only IdP-managed users carry one) and is the
+        // SCIM-spec stable identifier the IdP keys on.
+        // ────────────────────────────────────────────────────────────────
+        "CREATE TABLE IF NOT EXISTS scim_tokens (
+            id SERIAL PRIMARY KEY,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            token_preview TEXT NOT NULL,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            last_used_at TIMESTAMPTZ,
+            revoked_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS scim_tokens_org_idx ON scim_tokens(organization_id) WHERE revoked_at IS NULL",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS external_id TEXT",
+        "CREATE UNIQUE INDEX IF NOT EXISTS users_external_id_org_idx \
+         ON users(organization_id, external_id) WHERE external_id IS NOT NULL",
     ];
 
     for statement in statements {

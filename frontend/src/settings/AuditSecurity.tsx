@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { hasPermission } from "../auth/permissions";
 import { useAuth } from "../auth/useAuth";
 import {
+  downloadAuditExport,
   getSiemSettings,
   listAuditLogs,
   saveSiemSettings,
@@ -142,6 +143,23 @@ export default function AuditSecurity() {
     }
   }
 
+  async function downloadServerExport(format: "jsonl" | "csv") {
+    try {
+      const { blob, count } = await downloadAuditExport(format);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `audit-log-${new Date().toISOString().slice(0, 10)}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setAuditError(`Exported ${count} rows. Re-run with X-Audit-Next-Cursor for the next page.`);
+    } catch (err) {
+      setAuditError(err instanceof Error ? err.message : "Bulk export failed");
+    }
+  }
+
   function exportCsv() {
     const header = [
       "created_at",
@@ -211,9 +229,17 @@ export default function AuditSecurity() {
         <section className="audit-security-panel">
           <div className="audit-security-panel-head">
             <h2>Audit log</h2>
-            <button type="button" onClick={exportCsv} disabled={rows.length === 0}>
-              Export CSV
-            </button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button type="button" onClick={exportCsv} disabled={rows.length === 0}>
+                Export view (CSV)
+              </button>
+              <button type="button" onClick={() => void downloadServerExport("jsonl")}>
+                Bulk JSONL
+              </button>
+              <button type="button" onClick={() => void downloadServerExport("csv")}>
+                Bulk CSV
+              </button>
+            </div>
           </div>
 
           <form

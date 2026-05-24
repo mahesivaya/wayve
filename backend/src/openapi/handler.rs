@@ -79,7 +79,8 @@ fn build_spec() -> serde_json::Value {
             { "name": "Notes",     "description": "Personal notes." },
             { "name": "Tasks",     "description": "To-do items with priority & status." },
             { "name": "AI",        "description": "Assistant chat." },
-            { "name": "Webhooks",  "description": "Subscribe to events delivered to your own HTTP endpoint." }
+            { "name": "Webhooks",  "description": "Subscribe to events delivered to your own HTTP endpoint." },
+            { "name": "Audit",     "description": "Pull-mode export of API-key activity for your SIEM." }
         ],
         "paths": paths(),
         "components": {
@@ -296,6 +297,19 @@ fn paths() -> serde_json::Value {
                 "Recent delivery attempts (audit + debugging)",
                 "profile:read",
                 json!({ "type": "array", "items": { "$ref": "#/components/schemas/WebhookDelivery" } })),
+        },
+        "/api/audit/export": {
+            "get": op_with_query("Audit", "exportAudit",
+                "Cursor-paginated audit log export (JSONL or CSV) for SIEM ingestion",
+                "admin",
+                json!({ "type": "string",
+                        "description": "Newline-delimited JSON (default) or CSV depending on `format`." }),
+                vec![
+                    ("since", "string", "Only include rows created at or after this ISO-8601 timestamp.", false),
+                    ("before_id", "integer", "Cursor — return rows with id < this value. Pass the last id of the previous response.", false),
+                    ("limit", "integer", "Max rows per response (default 1000, max 10,000).", false),
+                    ("format", "string", "`jsonl` (default) or `csv`.", false),
+                ]),
         },
         "/api/webhooks/events": {
             "get": op("Webhooks", "listEventCatalog",

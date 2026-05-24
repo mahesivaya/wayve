@@ -40,8 +40,10 @@ paths = [
   # The same notes lived at the repo root in early commits before being
   # moved into documentation/ (see commits f02b5fe, bf74102, e8c42a0).
   # gitleaks scans history, so it still flags the old paths. Any .rst
-  # file is by definition one of these notes — this project doesn't use
-  # reStructuredText for code, only for personal docs.
+  # file is by definition one of these historical notes — going forward
+  # docs live under documentation/*.md (already covered by the rule
+  # above); the .rst pattern stays here purely to suppress historical
+  # scan hits.
   '''\.rst$''',
 
   # Likewise, a handful of historical root-level markdown notes carried

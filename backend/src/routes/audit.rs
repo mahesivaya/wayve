@@ -181,6 +181,179 @@ pub async fn list_audit_logs(
     Ok(HttpResponse::Ok().json(rows))
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Audit export — cursor-paginated stream for customer SIEMs that want to
+// pull (not be pushed via the SIEM webhook). Emits JSONL (one row per
+// line) or CSV depending on `format=`. Cursor is `before_id`: callers pull
+// the next page by passing the last `id` of the previous response.
+// ──────────────────────────────────────────────────────────────────────
+
+const AUDIT_EXPORT_PAGE: i64 = 1_000;
+const AUDIT_EXPORT_MAX: i64 = 10_000;
+
+#[derive(Deserialize)]
+pub struct AuditExportQuery {
+    /// Only include rows created at or after this ISO-8601 timestamp.
+    pub since: Option<DateTime<Utc>>,
+    /// Cursor — return rows with id < this value. Pass the last `id` from
+    /// the previous response to get the next page.
+    pub before_id: Option<i64>,
+    /// Max rows in this response. Capped at `AUDIT_EXPORT_MAX`.
+    pub limit: Option<i64>,
+    /// `jsonl` (default) or `csv`.
+    pub format: Option<String>,
+}
+
+#[get("/audit/export")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn export_audit_logs(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<AuditExportQuery>,
+) -> AppResult {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::AuditRead).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+
+    let limit = query
+        .limit
+        .unwrap_or(AUDIT_EXPORT_PAGE)
+        .clamp(1, AUDIT_EXPORT_MAX);
+    let format = query
+        .format
+        .as_deref()
+        .map(str::trim)
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_else(|| "jsonl".to_string());
+    if !matches!(format.as_str(), "jsonl" | "csv") {
+        return Err(AppError::BadRequest(
+            "format must be 'jsonl' or 'csv'".into(),
+        ));
+    }
+    let is_csv = format == "csv";
+
+    // Scope visibility same as /audit/logs: platform sees all, org sees
+    // its own org, personal sees keys they minted or acted as.
+    let rows = match ctx.scope {
+        Scope::Platform => sqlx::query_as::<_, AuditLogView>(
+            r#"
+            SELECT l.id, l.api_key_id, ak.name AS api_key_name, ak.key_preview,
+                   l.user_id, l.method, l.path, l.status_code, l.outcome, l.ip, l.created_at
+            FROM api_key_audit_log l
+            LEFT JOIN api_keys ak ON ak.id = l.api_key_id
+            WHERE ($1::TIMESTAMPTZ IS NULL OR l.created_at >= $1)
+              AND ($2::BIGINT IS NULL OR l.id < $2)
+            ORDER BY l.id DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(query.since)
+        .bind(query.before_id)
+        .bind(limit)
+        .fetch_all(pool.get_ref())
+        .await?,
+        Scope::Organization => sqlx::query_as::<_, AuditLogView>(
+            r#"
+            SELECT l.id, l.api_key_id, ak.name AS api_key_name, ak.key_preview,
+                   l.user_id, l.method, l.path, l.status_code, l.outcome, l.ip, l.created_at
+            FROM api_key_audit_log l
+            LEFT JOIN api_keys ak ON ak.id = l.api_key_id
+            WHERE ($1::TIMESTAMPTZ IS NULL OR l.created_at >= $1)
+              AND ($2::BIGINT IS NULL OR l.id < $2)
+              AND (
+                ak.user_id IN (SELECT id FROM users WHERE organization_id = $3)
+                OR l.user_id IN (SELECT id FROM users WHERE organization_id = $3)
+                OR ak.created_by = $4
+              )
+            ORDER BY l.id DESC
+            LIMIT $5
+            "#,
+        )
+        .bind(query.since)
+        .bind(query.before_id)
+        .bind(ctx.organization_id)
+        .bind(ctx.user_id)
+        .bind(limit)
+        .fetch_all(pool.get_ref())
+        .await?,
+        Scope::Personal => sqlx::query_as::<_, AuditLogView>(
+            r#"
+            SELECT l.id, l.api_key_id, ak.name AS api_key_name, ak.key_preview,
+                   l.user_id, l.method, l.path, l.status_code, l.outcome, l.ip, l.created_at
+            FROM api_key_audit_log l
+            LEFT JOIN api_keys ak ON ak.id = l.api_key_id
+            WHERE ($1::TIMESTAMPTZ IS NULL OR l.created_at >= $1)
+              AND ($2::BIGINT IS NULL OR l.id < $2)
+              AND (ak.created_by = $3 OR ak.user_id = $3 OR l.user_id = $3)
+            ORDER BY l.id DESC
+            LIMIT $4
+            "#,
+        )
+        .bind(query.since)
+        .bind(query.before_id)
+        .bind(ctx.user_id)
+        .bind(limit)
+        .fetch_all(pool.get_ref())
+        .await?,
+    };
+
+    let next_cursor = rows.last().map(|r| r.id);
+    let count = rows.len();
+
+    let body = if is_csv {
+        let mut out =
+            String::from("id,api_key_id,api_key_name,user_id,method,path,status_code,outcome,ip,created_at\n");
+        for r in &rows {
+            out.push_str(&format!(
+                "{},{},{},{},{},{},{},{},{},{}\n",
+                r.id,
+                r.api_key_id.map(|v| v.to_string()).unwrap_or_default(),
+                csv_escape(r.api_key_name.as_deref().unwrap_or("")),
+                r.user_id.map(|v| v.to_string()).unwrap_or_default(),
+                r.method,
+                csv_escape(&r.path),
+                r.status_code,
+                r.outcome,
+                csv_escape(r.ip.as_deref().unwrap_or("")),
+                r.created_at.to_rfc3339(),
+            ));
+        }
+        out
+    } else {
+        let mut out = String::with_capacity(rows.len() * 220);
+        for r in &rows {
+            if let Ok(line) = serde_json::to_string(r) {
+                out.push_str(&line);
+                out.push('\n');
+            }
+        }
+        out
+    };
+
+    let mut resp = HttpResponse::Ok();
+    resp.content_type(if is_csv {
+        "text/csv; charset=utf-8"
+    } else {
+        "application/x-ndjson"
+    });
+    // Next-cursor + count travel as response headers so a `curl -o file.jsonl`
+    // pipeline can read them with `-D /tmp/headers` without polluting the body.
+    resp.insert_header(("X-Audit-Count", count.to_string()));
+    if let Some(cursor) = next_cursor {
+        resp.insert_header(("X-Audit-Next-Cursor", cursor.to_string()));
+    }
+    Ok(resp.body(body))
+}
+
+fn csv_escape(value: &str) -> String {
+    if value.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
 #[get("/audit/siem-settings")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_siem_settings(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {

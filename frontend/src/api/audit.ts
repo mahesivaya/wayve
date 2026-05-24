@@ -64,6 +64,22 @@ export async function saveSiemSettings(input: SiemSettingsInput): Promise<SiemSe
   });
 }
 
+export async function downloadAuditExport(
+  format: "jsonl" | "csv",
+  since?: string,
+): Promise<{ blob: Blob; nextCursor: string | null; count: number }> {
+  const params = new URLSearchParams({ format, limit: "1000" });
+  if (since) params.set("since", since);
+  const res = await apiFetch(`/api/audit/export?${params.toString()}`, {
+    preserve401: true,
+  });
+  return {
+    blob: await res.blob(),
+    nextCursor: res.headers.get("X-Audit-Next-Cursor"),
+    count: Number(res.headers.get("X-Audit-Count") ?? 0),
+  };
+}
+
 export async function testSiemSettings(): Promise<{ ok: boolean; status: number }> {
   const res = await apiFetch("/api/audit/siem-settings/test", {
     method: "POST",
