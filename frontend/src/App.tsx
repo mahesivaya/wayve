@@ -36,9 +36,11 @@ const PlatformBilling = lazy(() => import("./platformBilling/PlatformBilling"));
 const PlatformDeveloper = lazy(() => import("./platformTeam/PlatformDeveloper"));
 const PlatformSupport = lazy(() => import("./platformTeam/PlatformSupport"));
 const PlatformWelcome = lazy(() => import("./platformTeam/PlatformWelcome"));
+const PlatformSecrets = lazy(() => import("./platformTeam/PlatformSecrets"));
 const Pricing = lazy(() => import("./pricing/Pricing"));
 const Enterprise = lazy(() => import("./marketing/Enterprise"));
 const Support = lazy(() => import("./marketing/Support"));
+const Developers = lazy(() => import("./marketing/Developers"));
 const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
 const SsoSettings = lazy(() => import("./settings/SsoSettings"));
 const SharedInboxes = lazy(() => import("./settings/SharedInboxes"));
@@ -99,6 +101,7 @@ export default function App() {
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/enterprise" element={<Enterprise />} />
         <Route path="/support" element={<Support />} />
+        <Route path="/developers" element={<Developers />} />
 
         {/* PROTECTED */}
         <Route element={<ProtectedRoute />}>
@@ -154,6 +157,7 @@ export default function App() {
             <Route path="/platform/developer" element={<PlatformDeveloper />} />
             <Route path="/platform/support" element={<PlatformSupport />} />
             <Route path="/platform/welcome" element={<PlatformWelcome />} />
+            <Route path="/platform/secrets" element={<PlatformSecrets />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
             <Route path="/security/audit" element={<AuditSecurity />} />
             <Route path="/recover" element={<RecoverPage />} />

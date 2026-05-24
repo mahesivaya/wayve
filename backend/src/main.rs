@@ -15,6 +15,7 @@ mod middleware;
 mod models;
 mod notes;
 mod observability;
+mod openapi;
 mod platform_billing;
 mod platform_team;
 mod prelude;
@@ -74,7 +75,8 @@ fn app_routes(cfg: &mut web::ServiceConfig) {
                 .configure(ai::routes)
                 .configure(billing::routes)
                 .configure(platform_billing::routes)
-                .configure(platform_team::routes),
+                .configure(platform_team::routes)
+                .configure(openapi::routes),
         )
         // 🔥 AUTH / GOOGLE
         .configure(email::public_routes)

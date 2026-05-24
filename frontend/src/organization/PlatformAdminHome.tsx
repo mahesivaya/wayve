@@ -29,6 +29,7 @@ export default function PlatformAdminHome() {
   const canSeeSupport = hasPermission(user, "members:read");
   const canSeeSecurity =
     hasPermission(user, "audit:read") || hasPermission(user, "security:manage");
+  const isPlatformOwner = user?.effective_role === "owner";
   const [organizationName, setOrganizationName] = useState("");
   const [adminHandle, setAdminHandle] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
@@ -182,6 +183,11 @@ export default function PlatformAdminHome() {
           <h1>Welcome {user?.role_label ?? "Platform member"}</h1>
           <p>{user?.email}</p>
         </div>
+        {isPlatformOwner && (
+          <Link to="/platform/secrets" className="u-btn-primary">
+            Create secrets
+          </Link>
+        )}
       </div>
 
       {canManageMembers && (

@@ -254,3 +254,132 @@ html[data-theme="dark"] .pt-page {
   --panel-border: #374151;
   --panel-subtle: #111827;
 }
+
+/* Secrets page */
+.api-secrets-form,
+.api-secrets-test {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.api-secrets-form > label,
+.api-secrets-test > label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted, #6b7280);
+}
+
+.api-secrets-form input,
+.api-secrets-form select,
+.api-secrets-test input,
+.api-secrets-test select {
+  padding: 8px 10px;
+  border: 1px solid var(--panel-border, #d1d5db);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--panel-bg, #ffffff);
+  color: var(--text-color, #111827);
+}
+
+.api-secrets-checkbox {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400 !important;
+  color: var(--text-color, #111827) !important;
+}
+
+.api-secrets-scopes {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 6px;
+  border: 1px solid var(--panel-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.api-secrets-scopes legend {
+  font-size: 12px;
+  color: var(--text-muted, #6b7280);
+  padding: 0 4px;
+}
+
+.api-secrets-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.api-secrets-reveal {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: #fef9c3;
+  color: #713f12;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.api-secrets-raw {
+  display: block;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px dashed #ca8a04;
+  border-radius: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.api-secrets-result {
+  margin-top: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border, #e5e7eb);
+  overflow: hidden;
+}
+
+.api-secrets-result.ok {
+  border-color: #86efac;
+}
+.api-secrets-result.fail {
+  border-color: #fca5a5;
+}
+
+.api-secrets-result-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--panel-subtle, #f9fafb);
+  border-bottom: 1px solid var(--panel-border, #e5e7eb);
+}
+
+.api-secrets-result-body {
+  margin: 0;
+  padding: 12px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  background: var(--panel-bg, #ffffff);
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+html[data-theme="dark"] .api-secrets-reveal {
+  background: #422006;
+  color: #fde68a;
+  border-color: #92400e;
+}
+html[data-theme="dark"] .api-secrets-raw {
+  background: #1f2937;
+  color: #fde68a;
+}

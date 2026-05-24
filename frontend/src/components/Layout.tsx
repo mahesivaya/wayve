@@ -244,6 +244,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               Pricing
             </Link>
           )}
+          <Link
+            to="/developers"
+            className={location.pathname === "/developers" ? "active" : ""}
+            onClick={() => setNavOpen(false)}
+          >
+            Developers
+          </Link>
           {/* API Keys admin surface: visible only to org/platform
               owner, super_admin, and admin. See [canAccessApiKeyAdmin](../auth/permissions.ts)
               for the rationale (intentionally stricter than the raw
