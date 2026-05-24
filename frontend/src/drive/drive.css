@@ -1,139 +1,29 @@
-/* 🔥 FULL PAGE FIX */
 .drive-container {
-    padding: 20px;
-    background: #f8f9fa;
-  
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-  
-  /* Upload Section */
-  .upload-section {
-    background: var(--color-email-bg);
-    padding: 20px;
-    border-radius: 10px;
-    margin-bottom: 20px;
-    width: 100%;
-  }
-  
-  /* Header */
-  .drive-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-  }
-  
-  .upload-btn {
-    background: #1a73e8;
-    color: var(--color-surface);
-    border: none;
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-  }
-  
-  .upload-btn:hover {
-    background: #1558b0;
-  }
-  
-  /* Drop Zone */
-  .drop-zone {
-    border: 2px dashed #ccc;
-    border-radius: 10px;
-    padding: 30px;
-    text-align: center;
-  }
-  
-  .drop-zone:hover {
-    border-color: #1a73e8;
-    background: #f1f6ff;
-  }
-  
-  /* Browse */
-  .browse-btn {
-    display: inline-block;
-    margin-top: 10px;
-    padding: 8px 14px;
-    background: #e8f0fe;
-    color: #1a73e8;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-  }
-  
-  /* Selected Files */
-  .selected-files {
-    margin-top: 15px;
-  }
-  
-  /* 🔥 FULL WIDTH FILE SECTION */
-  .files-section {
-    background: var(--color-surface);
-    padding: 20px;
-    border-radius: 10px;
-  
-    width: 100%;
-  }
-  
-  /* File List */
-  .file-list {
-    width: 100%;
-  }
-  
-  /* File Row */
-  .file-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  
-    padding: 12px;
-    border-bottom: 1px solid #eee;
-  }
-  
-  .file-row:hover {
-    background: #f5f7fa;
-  }
-  
-  /* Left */
-  .file-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  
-  .file-icon {
-    font-size: var(--text-3xl);
-  }
-  
-  .file-main {
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .file-name {
-    font-weight: 500;
-  }
-  
-  .file-meta {
-    font-size: var(--text-sm);
-    color: gray;
-  }
-  
-  /* Right */
-  .file-right a {
-    text-decoration: none;
-    color: #007bff;
-  }
-/* Folder navigation chrome — added with v1 folder feature. */
+  width: 100%;
+  max-width: 960px;
+  height: 100%;
+  min-height: 0;
+  margin: 0 auto;
+  padding: 24px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  background: var(--color-email-bg);
+  color: var(--color-text-primary);
+  text-align: left;
+  font-size: var(--text-md);
+}
+
 .drive-breadcrumb {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 16px;
   flex-wrap: wrap;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border, #e5e7eb);
-  background: var(--color-surface, #fff);
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: var(--radius-md);
+  background: var(--color-email-list-bg);
 }
 
 .drive-crumb {
@@ -142,70 +32,345 @@
 }
 
 .drive-crumb-sep {
-  color: var(--text-muted, #6b7280);
+  color: var(--color-text-muted);
 }
 
 .drive-crumb-link {
-  background: none;
   border: none;
-  padding: 2px 4px;
-  color: var(--color-primary, #2563eb);
+  background: none;
+  color: var(--color-primary);
   cursor: pointer;
   font: inherit;
+  font-size: var(--text-md);
+  font-weight: 700;
+  padding: 0;
 }
 
 .drive-crumb-link:disabled {
-  color: var(--text-h, #111827);
+  color: var(--color-text-primary);
   cursor: default;
-  font-weight: 600;
+  font-size: var(--text-xl);
+  font-weight: 800;
 }
 
 .drive-breadcrumb-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .drive-folder-input {
-  padding: 4px 8px;
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 4px);
-  font-size: var(--text-sm, 0.875rem);
+  min-height: 34px;
+  width: 180px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-md);
+  box-sizing: border-box;
+}
+
+.drive-folder-input:focus {
+  outline: 2px solid #bfdbfe;
+  border-color: #2563eb;
 }
 
 .drive-folder-new-btn,
 .drive-folder-create-btn,
-.drive-folder-cancel-btn {
-  padding: 4px 10px;
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 4px);
-  background: var(--color-surface, #fff);
+.drive-folder-cancel-btn,
+.upload-btn,
+.file-download-btn {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
   cursor: pointer;
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-md);
+  font-weight: 700;
 }
 
-.drive-folder-create-btn {
-  background: var(--color-primary, #2563eb);
-  color: #fff;
-  border-color: var(--color-primary, #2563eb);
+.drive-folder-new-btn,
+.drive-folder-create-btn,
+.upload-btn {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: var(--color-surface);
 }
 
-/* Folder rows reuse the file-row layout — only the "open" affordance
-   differs (left side is a clickable button instead of a static div). */
-.drive-folder-open {
+.drive-folder-new-btn:hover,
+.drive-folder-create-btn:hover,
+.upload-btn:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.drive-folder-cancel-btn:hover,
+.file-download-btn:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.upload-section,
+.files-section {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius-md);
+  background: var(--color-email-list-bg);
+  box-sizing: border-box;
+}
+
+.drive-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  background: none;
-  border: none;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.drive-header h2,
+.files-section h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-xl);
+  font-weight: 800;
+}
+
+.files-section h3 {
+  margin-bottom: 12px;
+}
+
+.drop-zone {
+  display: flex;
+  min-height: 140px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  border: 2px dashed #cbd5e1;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  text-align: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.drop-zone:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.drop-zone p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.drop-zone span {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.browse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-md);
+  background: #eff6ff;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: var(--text-md);
+  font-weight: 800;
+}
+
+.browse-btn:hover {
+  background: #dbeafe;
+}
+
+.drive-error-msg {
+  margin: 12px 0 0;
+  color: #dc2626;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.selected-files {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.selected-files h4 {
+  margin: 0 0 10px;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+}
+
+.selected-files ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
   padding: 0;
+  list-style: none;
+}
+
+.selected-files li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.selected-files button {
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: #dc2626;
+  cursor: pointer;
+}
+
+.file-list {
+  display: grid;
+  gap: 10px;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 62px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.file-row:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  box-shadow: inset 4px 0 0 #1a73e8, 0 3px 10px rgba(15, 23, 42, 0.08);
+}
+
+.file-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.drive-folder-open {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
   cursor: pointer;
   font: inherit;
   text-align: left;
-  flex: 1;
+  padding: 0;
 }
 
 .drive-folder-open:hover .file-name {
-  color: var(--color-primary, #2563eb);
+  color: #2563eb;
+}
+
+.file-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: #eff6ff;
+  font-size: var(--text-xl);
+}
+
+.file-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.file-name {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.file-right {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.files-section > p {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed #cbd5e1;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  .drive-container {
+    padding: 16px;
+  }
+
+  .drive-breadcrumb,
+  .drive-header,
+  .file-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .drive-breadcrumb-actions,
+  .file-right {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .drive-folder-input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .file-left {
+    width: 100%;
+  }
+
+  .file-download-btn {
+    flex: 1 1 120px;
+  }
 }

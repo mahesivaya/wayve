@@ -356,7 +356,7 @@ export default function Drive() {
           )}
         </div>
 
-        {error && <p className="drive-error-msg" style={{ color: 'red', fontSize: '0.9rem' }}>{error}</p>}
+        {error && <p className="drive-error-msg">{error}</p>}
 
         {files.length > 0 && (
           <div className="selected-files">
