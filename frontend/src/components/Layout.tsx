@@ -172,6 +172,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const canAccessSecurity =
     user.scope === "platform" &&
     (hasPermission(user, "audit:read") || hasPermission(user, "webhooks:manage"));
+  // Platform-wide billing console: aggregates revenue, customer subscriptions
+  // and payroll across the whole platform. Distinct from the per-tenant
+  // [/billing](../billing/Billing.tsx) self-service view; staff-only.
+  const canAccessPlatformBilling =
+    user.scope === "platform" &&
+    (hasPermission(user, "billing:read") || hasPermission(user, "billing:manage"));
   const currentPlanCode = authedUser.current_plan?.code ?? "basic_user";
   const isBasicPersonalUser =
     authedUser.account_type === "personal" && currentPlanCode === "basic_user";
@@ -253,6 +259,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               Security
             </Link>
           )}
+          {canAccessPlatformBilling && (
+            <Link
+              to="/platform/billing"
+              className={location.pathname === "/platform/billing" ? "active" : ""}
+              onClick={() => setNavOpen(false)}
+            >
+              Billing
+            </Link>
+          )}
           {renderNavItem("/about", "about", "About")}
         </div>
 
@@ -323,6 +338,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <Link to="/tasks">☑</Link>
           <Link to="/aichat">✨</Link>
           {canAccessSecurity && <Link to="/security/audit">🔒</Link>}
+          {canAccessPlatformBilling && <Link to="/platform/billing" title="Platform billing">💳</Link>}
           <Link to="/about">ⓘ</Link>
 
           <div className="icon-sidebar-spacer" />

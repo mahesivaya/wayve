@@ -442,6 +442,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
 
     return () => ctrl.abort();
+    // `setupEncryption` is intentionally omitted from the dep array: it's
+    // defined in the component body (not memoized) and we want this effect
+    // to run once on mount only. Adding it would re-run the entire auth
+    // bootstrap on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = (token: string, accountType?: string) => {

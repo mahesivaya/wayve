@@ -38,14 +38,21 @@ type AccountLike = {
   account_type?: string | null;
   organization_id?: number | null;
   permissions?: string[] | null;
+  effective_role?: string | null;
 };
 
 // Landing route for a fully-resolved user. The app intentionally has three
 // dashboard surfaces: personal, organization, and platform. Role-specific
 // panels are handled inside the dashboard with RBAC permissions.
+//
+// Platform `billing` lands directly on the billing console — their generic
+// admin home has no panels they can act on, so the extra hop is wasted.
 export function homePathForUser(user?: AccountLike | null): string {
   const normalized = normalizeAccountType(user?.account_type);
-  if (normalized === "platform_admin") return "/platform-admin-home";
+  if (normalized === "platform_admin") {
+    if (user?.effective_role === "billing") return "/platform/billing";
+    return "/platform-admin-home";
+  }
   if (normalized === "organization_admin" || normalized === "organization") {
     return "/organization-home";
   }

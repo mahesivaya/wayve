@@ -80,7 +80,6 @@ export default function RecoverWithMnemonicPage() {
           // Non-fatal: password is already reset. The user can finish the
           // E2E restore at /recover after they log in. Surface a soft
           // notice via console.
-          // eslint-disable-next-line no-console
           console.warn("E2E keys were not unlocked locally:", err);
         }
       }

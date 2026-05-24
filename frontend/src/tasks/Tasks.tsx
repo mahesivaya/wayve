@@ -96,8 +96,14 @@ export default function Tasks() {
     }
   }, []);
 
+  // Deferred to a microtask so the effect body doesn't synchronously call
+  // setState — the React 19 "set-state-in-effect" rule flags the direct
+  // pattern as cascading-render risk. Same wrapper as `AuditSecurity.tsx`.
   useEffect(() => {
-    void loadTasks();
+    const timer = window.setTimeout(() => {
+      void loadTasks();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadTasks]);
 
   const resetForm = () => {

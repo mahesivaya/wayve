@@ -53,12 +53,22 @@ pub async fn run_body_worker(pool: PgPool) -> ! {
 
 #[instrument(target = "worker", skip(pool))]
 async fn run_iteration(pool: &PgPool) -> Result<usize> {
+    // Pick accounts that have ANY work pending:
+    //   - body_encrypted = '' / IS NULL → headers synced but body never fetched
+    //   - attachments_checked = false  → fetched but the per-attachment save
+    //     either errored or was never attempted (legacy rows where the
+    //     `update_body` SQL stamped this flag prematurely)
+    // The body fetcher already deduplicates work-per-row inside
+    // `run_body_worker_for_account` so picking an account once per tick
+    // covers both axes.
     let accounts = sqlx::query(
         r#"
         SELECT DISTINCT a.id, a.refresh_token
         FROM email_accounts a
         JOIN emails e ON e.account_id = a.id
-        WHERE e.body_encrypted = ''
+        WHERE (e.body_encrypted = ''
+            OR e.body_encrypted IS NULL
+            OR e.attachments_checked = false)
           AND a.refresh_token IS NOT NULL
           AND a.refresh_token <> ''
         LIMIT $1
@@ -134,11 +144,19 @@ pub(crate) async fn process_account(
         .execute(pool)
         .await?;
 
+    // Same widened predicate as `run_iteration`: any row where the body is
+    // missing OR where attachments still need verification. Re-fetching a
+    // row that already has a body is cheap (single Gmail metadata call) and
+    // is the only way to back-fill attachments for rows the legacy
+    // update_body logic mistakenly marked checked.
     let rows = sqlx::query(
         r#"
         SELECT id, gmail_id
         FROM emails
-        WHERE account_id = $1 AND body_encrypted = ''
+        WHERE account_id = $1
+          AND (body_encrypted = ''
+            OR body_encrypted IS NULL
+            OR attachments_checked = false)
         ORDER BY id DESC
         LIMIT $2
         "#,
@@ -189,6 +207,13 @@ pub(crate) async fn process_account(
                         &fetched.attachments,
                     )
                     .await;
+                    // Only now mark the row as fully checked. If the save
+                    // call swallowed an error, the flag stays false and the
+                    // next worker tick (which now also picks up
+                    // attachments_checked=false rows) will retry.
+                    if let Err(e) = mark_attachments_checked(pool, fetched.id).await {
+                        println!("body_worker mark_attachments_checked {} failed: {:?}", fetched.id, e);
+                    }
                     count += 1;
                 }
             }
@@ -238,14 +263,27 @@ async fn fetch_one(token: &str, account_id: i32, id: i32, gmail_id: &str) -> Res
 async fn update_body(pool: &PgPool, id: i32, body: &str) -> Result<()> {
     let (iv, encrypted) = encrypt(body)?;
 
-    sqlx::query(
-        "UPDATE emails SET body_encrypted = $1, body_iv = $2, attachments_checked = true WHERE id = $3",
-    )
+    // Note: `attachments_checked` is NOT stamped here. We used to flip it
+    // alongside the body update, but a transient failure inside
+    // `save_email_attachments` then permanently stranded the email with the
+    // checked-flag set and zero attachment rows — never re-fetched, so the
+    // attachments were silently lost. Stamping moved to `mark_attachments_checked`
+    // which only fires after the save returns successfully.
+    sqlx::query("UPDATE emails SET body_encrypted = $1, body_iv = $2 WHERE id = $3")
         .bind(encrypted)
         .bind(iv)
         .bind(id)
         .execute(pool)
         .await?;
 
+    Ok(())
+}
+
+#[instrument(target = "db", skip(pool), fields(email_id = id))]
+async fn mark_attachments_checked(pool: &PgPool, id: i32) -> Result<()> {
+    sqlx::query("UPDATE emails SET attachments_checked = true WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }

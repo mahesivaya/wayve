@@ -345,6 +345,41 @@ pub async fn oauth_callback(
         }
     }
 
+    // Block cross-user duplicate connection: if this Gmail address is
+    // already attached to a different Wayve user's account_id, refuse the
+    // connect and bounce the user back to the UI with a friendly error.
+    // Without this, user A can OAuth-connect user B's Gmail (if A has the
+    // grant) and silently get a parallel synced copy of every email —
+    // see [account::email_owned_by_other_user] for the rationale.
+    match crate::email::account::email_owned_by_other_user(pool.get_ref(), email, user_id).await {
+        Ok(Some(other_user_id)) => {
+            warn!(
+                target: "gmail",
+                email,
+                attempted_user = user_id,
+                existing_user = other_user_id,
+                "rejecting Gmail connect — already connected to another Wayve user"
+            );
+            let frontend = crate::config::frontend_url();
+            return HttpResponse::Found()
+                .insert_header((
+                    actix_web::http::header::LOCATION,
+                    format!("{}/emails?error=email_in_use", frontend),
+                ))
+                .finish();
+        }
+        Ok(None) => {}
+        Err(e) => {
+            error!(
+                target: "gmail",
+                error = %e,
+                "duplicate-account precheck failed; failing open to existing upsert"
+            );
+            // Fall through — the upsert will succeed with the existing
+            // duplicate behaviour. We log so an operator can investigate.
+        }
+    }
+
     let account_id = match upsert_connected_email_account(
         pool.get_ref(),
         ConnectedEmailAccount {

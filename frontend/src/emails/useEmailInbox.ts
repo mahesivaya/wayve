@@ -11,14 +11,14 @@ import {
 } from "../api/email";
 import { logger } from "../utils/logger";
 import { decryptWayveBodyIfNeeded, emailBodyErrorMessage } from "./bodyUtils";
-import { EmailAccount, EmailItem, EmailAttachment } from "./types";
+import { EmailAccount, EmailFolder, EmailItem, EmailAttachment } from "./types";
 
 export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery: string) {
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<EmailItem | null>(null);
   const [activeAccount, setActiveAccount] = useState<number | null>(null);
-  const [activeFolder, setActiveFolder] = useState<"inbox" | "sent">("inbox");
+  const [activeFolder, setActiveFolder] = useState<EmailFolder>("inbox");
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);

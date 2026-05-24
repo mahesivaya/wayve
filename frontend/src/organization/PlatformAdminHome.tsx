@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   createAdminOrganization,
   generateOrganizationApiKey,
@@ -19,6 +20,8 @@ export default function PlatformAdminHome() {
   const { user } = useAuth();
   const canManageMembers = hasPermission(user, "members:manage");
   const canManageApiKeys = hasPermission(user, "api_keys:manage");
+  const canSeePlatformBilling =
+    hasPermission(user, "billing:read") || hasPermission(user, "billing:manage");
   const [organizationName, setOrganizationName] = useState("");
   const [adminHandle, setAdminHandle] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
@@ -388,6 +391,23 @@ export default function PlatformAdminHome() {
           </>
         )}
       </section>
+      )}
+
+      {canSeePlatformBilling && (
+        <section className="platform-admin-panel u-panel">
+          <div className="platform-admin-section-header">
+            <div>
+              <h2>Platform billing</h2>
+              <p>
+                Revenue, user and organization subscriptions, invoices and payroll
+                — aggregated across the whole platform.
+              </p>
+            </div>
+            <Link to="/platform/billing" className="u-btn-primary">
+              Open billing console →
+            </Link>
+          </div>
+        </section>
       )}
 
       <MembersRolesPanel scope="platform" />

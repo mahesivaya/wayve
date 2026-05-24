@@ -131,15 +131,38 @@ pub async fn get_emails(
     }
 
     // ✅ Folder filter (FIX)
+    //
+    // Sidebar category folders translate to provider label lookups against
+    // `emails.labels` (Gmail labelIds + Outlook categories + synthetic
+    // IMPORTANT / SPAM / DRAFT injected at parse time so both providers
+    // share one filter shape). Inbox excludes SPAM + DRAFT so a spam
+    // message never bleeds into the main list, even if Gmail tags it both
+    // INBOX and SPAM during a race.
     if let Some(folder) = &query.folder {
         match folder.as_str() {
             "inbox" => {
                 qb.push(
-                    " AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%' ",
+                    " AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%' \
+                       AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)) ",
                 );
             }
             "sent" => {
                 qb.push(" AND lower(coalesce(e.sender, '')) LIKE '%' || lower(a.email) || '%' ");
+            }
+            "important" => {
+                qb.push(" AND 'IMPORTANT' = ANY(e.labels) ");
+            }
+            "updates" => {
+                qb.push(" AND 'CATEGORY_UPDATES' = ANY(e.labels) ");
+            }
+            "social" => {
+                qb.push(" AND 'CATEGORY_SOCIAL' = ANY(e.labels) ");
+            }
+            "spam" => {
+                qb.push(" AND 'SPAM' = ANY(e.labels) ");
+            }
+            "drafts" => {
+                qb.push(" AND 'DRAFT' = ANY(e.labels) ");
             }
             _ => {}
         }

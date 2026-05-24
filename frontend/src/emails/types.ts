@@ -47,3 +47,24 @@ export interface WayveEncryptedBody {
 }
 
 export type { EmailAttachment };
+
+// Every folder is now wired to real data. Inbox + Sent come from the
+// `emails` table directly; the rest filter on `emails.labels` which the
+// sync worker populates with Gmail labelIds, Outlook categories, and
+// synthetic IMPORTANT / SPAM / DRAFT injected at parse time so one
+// filter shape works across both providers.
+//
+// `STUB_EMAIL_FOLDERS` stays around (empty) so future iterations can
+// re-introduce a coming-soon placeholder for any new folder without
+// reshuffling EmailList — drop a name in and the existing placeholder
+// branch picks it up.
+export type EmailFolder =
+  | "inbox"
+  | "sent"
+  | "important"
+  | "updates"
+  | "spam"
+  | "drafts"
+  | "social";
+
+export const STUB_EMAIL_FOLDERS: ReadonlyArray<EmailFolder> = [];

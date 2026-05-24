@@ -1,3 +1,44 @@
+/* ================= OAUTH ERROR BANNER =================
+   Shown above the sidebar+list when the OAuth callback redirected back
+   with ?error=... (currently only `email_in_use` from the cross-user
+   duplicate-account gate in `email::account::email_owned_by_other_user`).
+   `position: absolute` keeps it from displacing the flex layout below. */
+.oauth-error-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(640px, calc(100% - 32px));
+  padding: 10px 14px;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-md);
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.oauth-error-dismiss {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: #991b1b;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+}
+
+.oauth-error-dismiss:hover {
+  background: #fee2e2;
+}
+
 /* ================= MAIN (FIXED HEIGHT ISSUE) ================= */
 /* Use 100% (not 100vh) — Layout's .content already constrains us to
    viewport-minus-header. 100vh here makes the panel taller than its
@@ -901,6 +942,55 @@
   text-align: center;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+/* "Soon" pill on Gmail-style category folder buttons (Important, Updates,
+   etc.). Sits on the right of the filter-btn label since `.filter-btn` is
+   already a flex row. */
+.filter-soon-pill {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Placeholder shown in the list area when the user selects one of the
+   stub folders. Mirrors the look of `.tasks-empty` and `.notes-empty`. */
+.email-folder-placeholder {
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px;
+  padding: 24px;
+  border: 1px dashed #cbd5e1;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.email-folder-placeholder-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.email-folder-placeholder strong {
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+}
+
+.email-folder-placeholder span {
+  max-width: 320px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
 }
 
 .email-bulk-action:disabled,

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { EmailItem } from "./types";
+import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { useGlobalSearch } from "../search/SearchContext";
 
 interface EmailListProps {
@@ -14,7 +14,16 @@ interface EmailListProps {
   isListView?: boolean;
   onBulkMarkRead?: (ids: number[]) => Promise<void> | void;
   onBulkDelete?: (ids: number[]) => Promise<void> | void;
+  activeFolder?: EmailFolder;
 }
+
+const STUB_FOLDER_LABELS: Record<string, string> = {
+  important: "Important",
+  updates: "Updates",
+  spam: "Spam",
+  drafts: "Drafts",
+  social: "Social",
+};
 
 function formatMobileTime(value: string) {
   const date = new Date(value);
@@ -41,7 +50,11 @@ export const EmailList: React.FC<EmailListProps> = ({
   isListView = false,
   onBulkMarkRead,
   onBulkDelete,
+  activeFolder,
 }) => {
+  const isStubFolder = activeFolder
+    ? (STUB_EMAIL_FOLDERS as ReadonlyArray<string>).includes(activeFolder)
+    : false;
   const { searchQuery, setSearchQuery } = useGlobalSearch();
 
   // Per-row bulk-select state for list view. Bulk action callbacks are
@@ -218,11 +231,25 @@ export const EmailList: React.FC<EmailListProps> = ({
         </div>
       )}
 
-      {visibleEmails.length === 0 && isListView && showUnreadOnly && (
-        <div className="email-bulk-empty">No unread emails in this list.</div>
-      )}
+      {isStubFolder ? (
+        <div className="email-folder-placeholder" role="status">
+          <div className="email-folder-placeholder-icon" aria-hidden="true">🛠️</div>
+          <strong>
+            {(activeFolder && STUB_FOLDER_LABELS[activeFolder]) || "This folder"} —
+            coming soon
+          </strong>
+          <span>
+            Gmail-label and Outlook-category sync isn&apos;t wired up yet.
+            Switch back to <em>Inbox</em> or <em>Sent</em> to keep working.
+          </span>
+        </div>
+      ) : (
+        <>
+          {visibleEmails.length === 0 && isListView && showUnreadOnly && (
+            <div className="email-bulk-empty">No unread emails in this list.</div>
+          )}
 
-      {visibleEmails.map((email) => (
+          {visibleEmails.map((email) => (
         <div
           key={email.id}
           className={[
@@ -293,8 +320,10 @@ export const EmailList: React.FC<EmailListProps> = ({
           </div>
         </div>
       ))}
+        </>
+      )}
 
-      {hasMore && (
+      {!isStubFolder && hasMore && (
         <div className="load-more-wrap">
           <button className="load-more-btn" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading..." : "Show more emails"}</button>
         </div>

@@ -1,6 +1,19 @@
 import { apiFetch, apiFetchJson } from "./client";
 
-export type EmailFolder = "inbox" | "sent";
+// Mirrors `EmailFolder` in `../emails/types.ts`. Kept in sync by convention
+// rather than imported — this module is the lowest layer of the API client
+// and we don't want it to depend on the feature folder. The backend's
+// `routes/email.rs::get_emails` ignores unknown folder values today
+// (returns all), so the stub folders are safe to pass over the wire until
+// the sync worker starts ingesting Gmail labels / Outlook categories.
+export type EmailFolder =
+  | "inbox"
+  | "sent"
+  | "important"
+  | "updates"
+  | "spam"
+  | "drafts"
+  | "social";
 
 export type EmailListParams = {
   folder: EmailFolder;

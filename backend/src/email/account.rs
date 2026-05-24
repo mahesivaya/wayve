@@ -167,6 +167,11 @@ pub async fn load_account_summaries_for_user(pool: &PgPool, user_id: i32) -> Res
     // COUNT for the brief window between account-add and first successful
     // sync, so the badge is never blank — and for shared inboxes whose
     // provider count we don't refresh from the member's perspective.
+    // The fallback excludes SPAM and DRAFT so the badge mirrors what an
+    // inbox-only view shows, matching what Gmail's labels.get returns for
+    // INBOX. We also keep the legacy "sender is self" exclusion so
+    // outbound mail Gmail mistakenly leaves marked unread doesn't inflate
+    // the count.
     let accounts = sqlx::query_as::<_, Account>(
         r#"
         SELECT
@@ -178,6 +183,8 @@ pub async fn load_account_summaries_for_user(pool: &PgPool, user_id: i32) -> Res
             COUNT(e.id) FILTER (
               WHERE e.is_read = false
                 AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'
+                AND NOT ('SPAM' = ANY(e.labels))
+                AND NOT ('DRAFT' = ANY(e.labels))
             )::BIGINT
           ) AS unread_count,
           a.is_shared,
@@ -216,6 +223,39 @@ pub struct ConnectedEmailAccount<'a> {
     pub access_token: &'a str,
     pub refresh_token: Option<&'a str>,
     pub expires_in: i64,
+}
+
+/// Returns `Some(owner_user_id)` if `email` is already connected as a
+/// non-shared mailbox under a Wayve user OTHER than `requesting_user_id`.
+/// OAuth callbacks call this before insert so the same Gmail/Outlook can't
+/// silently end up as a duplicate `email_accounts` row across users —
+/// previously this let user_5 connect user_1's mailbox and sync a parallel
+/// copy of every message, which inflated the DB and split visibility.
+///
+/// Shared inboxes are intentionally excluded: those are designed to surface
+/// the same provider mailbox to multiple users via `shared_inbox_members`,
+/// which is the right multi-user path.
+pub async fn email_owned_by_other_user(
+    pool: &PgPool,
+    email: &str,
+    requesting_user_id: i32,
+) -> Result<Option<i32>, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT user_id
+        FROM email_accounts
+        WHERE lower(email) = lower($1)
+          AND COALESCE(is_shared, false) = false
+          AND user_id <> $2
+        LIMIT 1
+        "#,
+    )
+    .bind(email)
+    .bind(requesting_user_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| r.get::<i32, _>("user_id")))
 }
 
 #[instrument(

@@ -47,6 +47,21 @@ pub async fn establish_db_connection(db_url: &str, max_conns: u32) -> PgPool {
 pub async fn ensure_email_schema(pool: &PgPool) {
     let statements = [
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT TRUE",
+        // Provider labels (Gmail labelIds + Outlook categories + synthetic
+        // IMPORTANT for Outlook importance=high). Used by the sidebar
+        // category folders. Backfills as `{}` for legacy rows; new syncs
+        // populate. GIN index keeps `<label> = ANY(labels)` index-scanned.
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS labels TEXT[] NOT NULL DEFAULT '{}'",
+        "CREATE INDEX IF NOT EXISTS idx_emails_labels ON emails USING GIN (labels)",
+        // Widen the body-worker partial index to match the worker's full
+        // predicate: missing body OR pending attachment verification. The
+        // CREATE INDEX IF NOT EXISTS clause is a no-op when the index
+        // already exists with the old predicate, so we DROP first. Safe
+        // to re-run; takes a few ms on any inbox.
+        "DROP INDEX IF EXISTS idx_emails_pending_body",
+        "CREATE INDEX IF NOT EXISTS idx_emails_pending_body \
+         ON emails (account_id, id) \
+         WHERE body_encrypted = '' OR body_encrypted IS NULL OR attachments_checked = false",
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS display_name TEXT",
         // Provider-reported unread count for the inbox label/folder. NULL
         // until the first sync writes it; the SELECT in `load_account_summaries_for_user`
@@ -305,6 +320,66 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('in_progress', 'done'))",
         "CREATE INDEX IF NOT EXISTS idx_tasks_user_priority \
          ON tasks(user_id, priority DESC, created_at DESC)",
+        // ────────────────────────────────────────────────────────────────
+        // Payroll. Lives next to the Stripe billing projection but is
+        // independent of it — employees aren't always Wayve users
+        // (contractors, hires before account creation) so user_id is
+        // nullable. `payroll_run_items.employee_name` denormalizes the
+        // employee name at run time so a historical run still reads
+        // correctly even if the employee row is later renamed or
+        // terminated.
+        // ────────────────────────────────────────────────────────────────
+        "CREATE TABLE IF NOT EXISTS employees (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            full_name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            job_title TEXT,
+            department TEXT,
+            employment_type TEXT NOT NULL DEFAULT 'full_time'
+                CHECK (employment_type IN ('full_time','part_time','contractor')),
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active','on_leave','terminated')),
+            base_salary_cents BIGINT NOT NULL DEFAULT 0,
+            currency TEXT NOT NULL DEFAULT 'USD',
+            pay_frequency TEXT NOT NULL DEFAULT 'monthly'
+                CHECK (pay_frequency IN ('monthly','biweekly','weekly','annual')),
+            hire_date DATE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE UNIQUE INDEX IF NOT EXISTS employees_email_uniq \
+         ON employees(lower(email))",
+        "CREATE INDEX IF NOT EXISTS idx_employees_status_dept \
+         ON employees(status, department)",
+        "CREATE TABLE IF NOT EXISTS payroll_runs (
+            id SERIAL PRIMARY KEY,
+            period_start DATE NOT NULL,
+            period_end DATE NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft'
+                CHECK (status IN ('draft','approved','paid','cancelled')),
+            total_gross_cents BIGINT NOT NULL DEFAULT 0,
+            total_tax_cents BIGINT NOT NULL DEFAULT 0,
+            total_net_cents BIGINT NOT NULL DEFAULT 0,
+            currency TEXT NOT NULL DEFAULT 'USD',
+            notes TEXT,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            paid_at TIMESTAMPTZ,
+            UNIQUE (period_start, period_end)
+        )",
+        "CREATE TABLE IF NOT EXISTS payroll_run_items (
+            id SERIAL PRIMARY KEY,
+            payroll_run_id INTEGER NOT NULL REFERENCES payroll_runs(id) ON DELETE CASCADE,
+            employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+            employee_name TEXT NOT NULL,
+            gross_cents BIGINT NOT NULL DEFAULT 0,
+            tax_cents BIGINT NOT NULL DEFAULT 0,
+            net_cents BIGINT NOT NULL DEFAULT 0,
+            UNIQUE (payroll_run_id, employee_id)
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_payroll_run_items_run \
+         ON payroll_run_items(payroll_run_id)",
     ];
 
     for statement in statements {

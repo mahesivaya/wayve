@@ -7,8 +7,19 @@ use crate::email::provider::refresh_and_persist_email_token;
 use serde_json::Value;
 use tracing::{debug, error, info, instrument, warn};
 
-// (msg_id, sender, receiver, subject, gmail_timestamp, is_read) — body is fetched later by body_worker
-pub type EmailHeader = (String, String, String, String, NaiveDateTime, bool);
+// (msg_id, sender, receiver, subject, gmail_timestamp, is_read, labels) — body
+// is fetched later by body_worker. `labels` carries the message's full Gmail
+// `labelIds` (e.g. `["INBOX","IMPORTANT","CATEGORY_UPDATES"]`) so the sidebar
+// category folders can filter without an extra round-trip to Gmail.
+pub type EmailHeader = (
+    String,
+    String,
+    String,
+    String,
+    NaiveDateTime,
+    bool,
+    Vec<String>,
+);
 
 /// Fetch the authoritative unread count for the INBOX label and stamp it on
 /// `email_accounts.provider_unread_count`. Without this, the sidebar's unread
@@ -70,10 +81,16 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
 
     let (sender, receiver, subject) = extract_headers(&res);
     let gmail_timestamp = extract_gmail_timestamp(&res);
-    let is_read = !res["labelIds"]
+    let label_ids: Vec<String> = res["labelIds"]
         .as_array()
-        .map(|labels| labels.iter().any(|label| label.as_str() == Some("UNREAD")))
-        .unwrap_or(false);
+        .map(|labels| {
+            labels
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let is_read = !label_ids.iter().any(|label| label == "UNREAD");
     Ok((
         msg_id.to_string(),
         sender,
@@ -81,6 +98,7 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
         subject,
         gmail_timestamp,
         is_read,
+        label_ids,
     ))
 }
 
@@ -217,6 +235,46 @@ pub async fn fetch_recent_ids(token: &str, max_results: usize) -> Result<Vec<Str
     Ok(ids)
 }
 
+/// Fetch the N most-recent message IDs that carry a specific label
+/// (e.g. `SPAM`, `DRAFT`). `includeSpamTrash=true` is required for SPAM
+/// because Gmail's default `messages.list` hides spam & trash even when
+/// the `labelIds` filter explicitly asks for them. The full `labelIds`
+/// array — including the requested label — is extracted by
+/// `fetch_headers_only` and persisted into `emails.labels`, so the sidebar
+/// filter `'<LABEL>' = ANY(e.labels)` lights up automatically.
+pub async fn fetch_recent_ids_with_label(
+    token: &str,
+    label: &str,
+    max_results: usize,
+) -> Result<Vec<String>> {
+    let url = format!(
+        "{}/gmail/v1/users/me/messages?maxResults={}&labelIds={}&includeSpamTrash=true",
+        crate::external::gmail_api_base(),
+        max_results,
+        label
+    );
+
+    let res: Value = HTTP_CLIENT
+        .get(&url)
+        .bearer_auth(token)
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let ids = res["messages"]
+        .as_array()
+        .map(|messages| {
+            messages
+                .iter()
+                .filter_map(|m| m["id"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(ids)
+}
+
 pub async fn fetch_ids_before(
     token: &str,
     before_timestamp: i64,
@@ -297,6 +355,46 @@ pub fn extract_headers(res: &Value) -> (String, String, String) {
     (sender, receiver, subject)
 }
 
+/// Side-pull for messages that don't live in the INBOX scan: SPAM and DRAFT.
+/// Walks the same `fetch_headers_only` → `process_batch` path so the rows
+/// land in `emails` with their full `labelIds`, including SPAM/DRAFT, which
+/// makes the sidebar filter (`'SPAM' = ANY(e.labels)`) light up. Best-effort
+/// per label — a 4xx on one (e.g. the user revoked a scope) doesn't break
+/// the others or the main sync.
+async fn sync_account_label_recent(
+    pool: &PgPool,
+    account_id: i32,
+    token: &str,
+    label: &str,
+    max_results: usize,
+) -> anyhow::Result<()> {
+    let ids = fetch_recent_ids_with_label(token, label, max_results).await?;
+    if ids.is_empty() {
+        return Ok(());
+    }
+    debug!(target: "worker", account_id, label, count = ids.len(), "fetched gmail label ids");
+
+    let mut tasks = FuturesUnordered::new();
+    for id in ids {
+        let token = token.to_string();
+        tasks.push(async move { fetch_headers_only(&token, &id).await });
+        if tasks.len() >= MAX_EMAIL_CONCURRENCY {
+            process_batch(pool, account_id, &mut tasks).await?;
+        }
+    }
+    while !tasks.is_empty() {
+        process_batch(pool, account_id, &mut tasks).await?;
+    }
+    Ok(())
+}
+
+// Cap the side-pulls. Spam fills the table fast and serves zero engagement
+// purpose past the "is it there" check; drafts are usually a handful. Both
+// are pulled on every sync tick so the user sees fresh state without
+// pagination support for these folders.
+const GMAIL_SPAM_RECENT_CAP: usize = 50;
+const GMAIL_DRAFT_RECENT_CAP: usize = 25;
+
 #[instrument(target = "worker", skip(pool, token), fields(account_id))]
 pub async fn sync_account(
     pool: &PgPool,
@@ -334,6 +432,16 @@ pub async fn sync_account(
     // hasn't paginated all the way back through their mailbox.
     if let Err(err) = refresh_provider_unread_count(pool, account_id, token).await {
         warn!(target: "worker", account_id, error = ?err, "refresh_provider_unread_count failed");
+    }
+
+    // Pull recent SPAM + DRAFT alongside the INBOX scan so the sidebar's
+    // Spam/Drafts folders show real data. Errors are warned-then-ignored
+    // so a 4xx on one label doesn't poison the whole tick.
+    if let Err(err) = sync_account_label_recent(pool, account_id, token, "SPAM", GMAIL_SPAM_RECENT_CAP).await {
+        warn!(target: "worker", account_id, error = ?err, "spam sync failed");
+    }
+    if let Err(err) = sync_account_label_recent(pool, account_id, token, "DRAFT", GMAIL_DRAFT_RECENT_CAP).await {
+        warn!(target: "worker", account_id, error = ?err, "draft sync failed");
     }
 
     Ok(())
@@ -382,6 +490,16 @@ pub async fn sync_account_recent(
     // catching up after a full sync.
     if let Err(err) = refresh_provider_unread_count(pool, account_id, token).await {
         warn!(target: "worker", account_id, error = ?err, "refresh_provider_unread_count failed");
+    }
+
+    // Also pull the first page of SPAM and DRAFT so the sidebar Spam/Drafts
+    // folders aren't blank for the first 30s after connect. Same
+    // best-effort error handling as sync_account.
+    if let Err(err) = sync_account_label_recent(pool, account_id, token, "SPAM", GMAIL_SPAM_RECENT_CAP).await {
+        warn!(target: "worker", account_id, error = ?err, "spam first-sync failed");
+    }
+    if let Err(err) = sync_account_label_recent(pool, account_id, token, "DRAFT", GMAIL_DRAFT_RECENT_CAP).await {
+        warn!(target: "worker", account_id, error = ?err, "draft first-sync failed");
     }
 
     Ok(())
@@ -448,13 +566,13 @@ where
 
     // Insert headers with empty body sentinel — body_worker will fill these in.
     let mut query = String::from(
-        "INSERT INTO emails(gmail_id, sender, receiver, subject, created_at, body_encrypted, body_iv, account_id, is_read) VALUES ",
+        "INSERT INTO emails(gmail_id, sender, receiver, subject, created_at, body_encrypted, body_iv, account_id, is_read, labels) VALUES ",
     );
 
     for (i, _) in batch.iter().enumerate() {
-        let idx = i * 9;
+        let idx = i * 10;
         query.push_str(&format!(
-            "(${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}),",
+            "(${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}),",
             idx + 1,
             idx + 2,
             idx + 3,
@@ -463,7 +581,8 @@ where
             idx + 6,
             idx + 7,
             idx + 8,
-            idx + 9
+            idx + 9,
+            idx + 10
         ));
     }
 
@@ -474,12 +593,13 @@ where
          receiver = EXCLUDED.receiver, \
          subject = EXCLUDED.subject, \
          created_at = EXCLUDED.created_at, \
-         is_read = EXCLUDED.is_read",
+         is_read = EXCLUDED.is_read, \
+         labels = EXCLUDED.labels",
     );
 
     let mut q = sqlx::query(&query);
 
-    for (gmail_id, sender, receiver, subject, gmail_timestamp, is_read) in batch.iter() {
+    for (gmail_id, sender, receiver, subject, gmail_timestamp, is_read, labels) in batch.iter() {
         q = q
             .bind(gmail_id)
             .bind(sender)
@@ -489,7 +609,8 @@ where
             .bind("") // body_encrypted — empty until body_worker fills it
             .bind("") // body_iv
             .bind(account_id)
-            .bind(is_read);
+            .bind(is_read)
+            .bind(labels);
     }
 
     q.execute(pool).await?;

@@ -248,6 +248,39 @@ async fn finalize_oauth_session(pool: &PgPool, ctx: OAuthCompletion<'_>) -> Http
         },
     };
 
+    // Cross-user duplicate gate — see `email_owned_by_other_user` for why.
+    // Only applies when the caller already has a session (i.e. they're
+    // *adding* an account); for fresh sign-up flows the user_id was just
+    // created in `resolve_user_for_oauth` and uniqueness is implicit.
+    if ctx.session_user_id.is_some() {
+        match crate::email::account::email_owned_by_other_user(pool, ctx.email, user_id).await {
+            Ok(Some(other_user_id)) => {
+                warn!(
+                    target: "auth",
+                    email = ctx.email,
+                    attempted_user = user_id,
+                    existing_user = other_user_id,
+                    provider = ctx.provider,
+                    "rejecting OAuth connect — already connected to another Wayve user"
+                );
+                return HttpResponse::Found()
+                    .append_header((
+                        "Location",
+                        format!("{}/emails?error=email_in_use", ctx.frontend),
+                    ))
+                    .finish();
+            }
+            Ok(None) => {}
+            Err(e) => {
+                error!(
+                    target: "auth",
+                    error = %e,
+                    "duplicate-account precheck failed; falling through to upsert"
+                );
+            }
+        }
+    }
+
     match upsert_email_account(pool, user_id, ctx.email, ctx.tokens).await {
         Ok(account_id) => {
             info!(target: "auth", user_id, account_id, provider = ctx.provider, "mailbox linked");

@@ -139,6 +139,11 @@ struct OutlookMessage {
     body: String,
     has_attachments: bool,
     is_read: bool,
+    // Mirrors Gmail's labelIds shape so `emails.labels` is uniform across
+    // providers: user categories + a synthetic `IMPORTANT` when the message
+    // has `importance == "high"`. Filtered against the sidebar category
+    // folders alongside the Gmail labels.
+    labels: Vec<String>,
 }
 
 fn parse_message(m: &Value) -> Option<OutlookMessage> {
@@ -167,6 +172,22 @@ fn parse_message(m: &Value) -> Option<OutlookMessage> {
         .map(|dt| dt.naive_utc())
         .unwrap_or_else(|| chrono::Utc::now().naive_utc());
     let body = m["body"]["content"].as_str().unwrap_or("").to_string();
+
+    // Build labels from user categories + a synthetic IMPORTANT for
+    // importance=high so the same filter (`'IMPORTANT' = ANY(labels)`)
+    // works for both Gmail and Outlook rows.
+    let mut labels: Vec<String> = m["categories"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    if m["importance"].as_str() == Some("high") {
+        labels.push("IMPORTANT".to_string());
+    }
+
     Some(OutlookMessage {
         id,
         sender,
@@ -176,6 +197,7 @@ fn parse_message(m: &Value) -> Option<OutlookMessage> {
         body,
         has_attachments: m["hasAttachments"].as_bool().unwrap_or(false),
         is_read: m["isRead"].as_bool().unwrap_or(false),
+        labels,
     })
 }
 
@@ -189,9 +211,13 @@ fn first_page_url(last_sync: Option<i64>) -> String {
     let mut url = reqwest::Url::parse(&base).unwrap_or_else(|e| panic!("valid Graph URL: {e}"));
     {
         let mut q = url.query_pairs_mut();
+        // `categories` carries the user's Outlook category strings; `importance`
+        // is "high|normal|low". Both feed `OutlookMessage.labels` so the sidebar
+        // category folders can filter (Important = `importance == "high"`,
+        // Updates/Social = matching `categories`).
         q.append_pair(
             "$select",
-            "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead",
+            "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance",
         );
         q.append_pair("$orderby", "receivedDateTime desc");
         q.append_pair("$top", &OUTLOOK_PAGE_SIZE.to_string());
@@ -218,9 +244,13 @@ fn first_before_page_url(before_timestamp: i64, limit: usize) -> String {
             .format("%Y-%m-%dT%H:%M:%SZ")
             .to_string();
         let mut q = url.query_pairs_mut();
+        // `categories` carries the user's Outlook category strings; `importance`
+        // is "high|normal|low". Both feed `OutlookMessage.labels` so the sidebar
+        // category folders can filter (Important = `importance == "high"`,
+        // Updates/Social = matching `categories`).
         q.append_pair(
             "$select",
-            "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead",
+            "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance",
         );
         q.append_pair("$orderby", "receivedDateTime desc");
         q.append_pair("$top", &limit.min(OUTLOOK_PAGE_SIZE).to_string());
@@ -297,8 +327,8 @@ async fn upsert_messages(
             r#"
             INSERT INTO emails
               (gmail_id, sender, receiver, subject, created_at,
-               body_encrypted, body_iv, account_id, attachments_checked, is_read)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9)
+               body_encrypted, body_iv, account_id, attachments_checked, is_read, labels)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10)
             ON CONFLICT (account_id, gmail_id) DO UPDATE SET
               sender = EXCLUDED.sender,
               receiver = EXCLUDED.receiver,
@@ -306,7 +336,8 @@ async fn upsert_messages(
               created_at = EXCLUDED.created_at,
               body_encrypted = EXCLUDED.body_encrypted,
               body_iv = EXCLUDED.body_iv,
-              is_read = EXCLUDED.is_read
+              is_read = EXCLUDED.is_read,
+              labels = EXCLUDED.labels
             RETURNING id
             "#,
         )
@@ -319,6 +350,7 @@ async fn upsert_messages(
         .bind(&iv)
         .bind(account_id)
         .bind(m.is_read)
+        .bind(&m.labels)
         .fetch_one(pool)
         .await?;
 
@@ -460,7 +492,104 @@ pub async fn sync_outlook_account(
         warn!(target: "worker", account_id, error = ?err, "refresh_outlook_unread_count failed");
     }
 
+    // Pull recent Junk Email + Drafts so the sidebar Spam/Drafts folders
+    // show real data. Each is stamped with a synthetic label ("SPAM" or
+    // "DRAFT") so the same `'<LABEL>' = ANY(e.labels)` filter that powers
+    // the Gmail case works unchanged for Outlook rows.
+    if let Err(err) = sync_outlook_folder_recent(
+        pool,
+        account_id,
+        access_token,
+        ("junkemail", "SPAM", OUTLOOK_SPAM_RECENT_CAP),
+    )
+    .await
+    {
+        warn!(target: "worker", account_id, error = ?err, "outlook spam sync failed");
+    }
+    if let Err(err) = sync_outlook_folder_recent(
+        pool,
+        account_id,
+        access_token,
+        ("drafts", "DRAFT", OUTLOOK_DRAFT_RECENT_CAP),
+    )
+    .await
+    {
+        warn!(target: "worker", account_id, error = ?err, "outlook draft sync failed");
+    }
+
     debug!(target: "worker", account_id, synced = total, "outlook sync done");
+    Ok(())
+}
+
+// Cap the spam/drafts side-pulls. Spam fills fast and is low-value; drafts
+// are usually a handful. Both are pulled on every sync tick, no pagination.
+const OUTLOOK_SPAM_RECENT_CAP: usize = 50;
+const OUTLOOK_DRAFT_RECENT_CAP: usize = 25;
+
+/// Side-pull from `/me/mailFolders/{folder_id}/messages` for non-inbox
+/// folders (Junk Email, Drafts). The `(folder_id, synthetic_label, cap)`
+/// tuple keeps the function under the project-wide 5-arg cap while
+/// expressing what's actually one logical "folder spec" knob — the caller
+/// always varies all three together. Stamps each row with `synthetic_label`
+/// so the unified `emails.labels` array works for both providers.
+async fn sync_outlook_folder_recent(
+    pool: &PgPool,
+    account_id: i32,
+    access_token: &str,
+    spec: (&str, &str, usize),
+) -> Result<()> {
+    let (folder_id, synthetic_label, cap) = spec;
+    let url = format!(
+        "{}/v1.0/me/mailFolders/{}/messages?$select=id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance&$orderby=receivedDateTime desc&$top={}",
+        crate::external::microsoft_graph_base(),
+        folder_id,
+        cap
+    );
+
+    let resp = HTTP_CLIENT.get(&url).bearer_auth(access_token).send().await?;
+    let status = resp.status();
+    if !status.is_success() {
+        // 404 happens when the folder doesn't exist on the user's mailbox
+        // — fine for newer Microsoft accounts that lack a legacy Drafts
+        // folder. Treat as no-op; do not propagate.
+        let body = resp.text().await.unwrap_or_default();
+        warn!(
+            target: "worker",
+            account_id,
+            folder = folder_id,
+            status = %status,
+            body = body.trim(),
+            "Graph mailFolders/<folder>/messages non-success — skipping"
+        );
+        return Ok(());
+    }
+
+    let res: Value = resp.json().await?;
+    if let Some(err) = res.get("error") {
+        return Err(anyhow::anyhow!(
+            "Graph mailFolders/{folder_id}/messages error: {err}"
+        ));
+    }
+
+    let mut messages: Vec<OutlookMessage> = res["value"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(parse_message).collect())
+        .unwrap_or_default();
+
+    if messages.is_empty() {
+        return Ok(());
+    }
+
+    // Stamp the synthetic label so the rows are pickable by the same
+    // `'SPAM' = ANY(e.labels)` / `'DRAFT' = ANY(e.labels)` filter used
+    // for Gmail. Append to whatever categories/importance produced.
+    for m in messages.iter_mut() {
+        if !m.labels.iter().any(|l| l == synthetic_label) {
+            m.labels.push(synthetic_label.to_string());
+        }
+    }
+
+    upsert_messages(pool, account_id, access_token, &messages).await?;
     Ok(())
 }
 

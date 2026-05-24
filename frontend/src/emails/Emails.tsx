@@ -146,6 +146,13 @@ export default function Emails() {
   // After /oauth/callback redirects back with #connected=true, refresh the
   // account list so the newly linked account shows up immediately. The 30s
   // sync worker will import its emails on the next tick.
+  //
+  // On the other side, the callback can redirect back with `?error=...`
+  // when the connect was rejected — currently the only such error is
+  // `email_in_use` (the requested Gmail/Outlook is already attached to a
+  // different Wayve user; see `email::account::email_owned_by_other_user`).
+  // We surface it as a dismissible banner above the layout.
+  const [oauthError, setOauthError] = useState<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.slice(1));
@@ -168,6 +175,15 @@ export default function Emails() {
       }, 2000);
 
       return () => window.clearInterval(poll);
+    }
+
+    const errorParam = params.get("error") ?? hashParams.get("error");
+    if (errorParam === "email_in_use") {
+      setOauthError(
+        "That email is already connected to another Wayve account. " +
+          "Disconnect it from that account first, or sign in there instead.",
+      );
+      window.history.replaceState({}, "", "/emails");
     }
   }, [fetchAccounts, setRefreshTick]);
 
@@ -285,6 +301,19 @@ export default function Emails() {
         emailViewLayout === "list" ? "email-list-view" : "email-split-view",
       ].filter(Boolean).join(" ")}
     >
+      {oauthError && (
+        <div className="oauth-error-banner" role="alert">
+          <span>{oauthError}</span>
+          <button
+            type="button"
+            className="oauth-error-dismiss"
+            onClick={() => setOauthError(null)}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <EmailSidebar
         accounts={displayedAccounts}
         activeAccount={activeAccount}
@@ -322,6 +351,7 @@ export default function Emails() {
           isListView={emailViewLayout === "list"}
           onBulkMarkRead={bulkMarkRead}
           onBulkDelete={bulkDelete}
+          activeFolder={activeFolder}
         />
       )}
 

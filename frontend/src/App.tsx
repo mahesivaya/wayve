@@ -32,6 +32,7 @@ const OrganizationHome = lazy(() => import("./organization/OrganizationHome"));
 const EmailFiles = lazy(() => import("./files/EmailFiles"));
 const ServicePage = lazy(() => import("./services/ServicePage"));
 const Billing = lazy(() => import("./billing/Billing"));
+const PlatformBilling = lazy(() => import("./platformBilling/PlatformBilling"));
 const Pricing = lazy(() => import("./pricing/Pricing"));
 const Enterprise = lazy(() => import("./marketing/Enterprise"));
 const Support = lazy(() => import("./marketing/Support"));
@@ -117,7 +118,12 @@ export default function App() {
             <Route
               path="/platform-admin-home"
               element={
-                accountType === "platform_admin" ? (
+                // A platform user whose role-derived home is NOT this page
+                // (currently: billing → /platform/billing) gets bounced out.
+                // Keeps /platform-admin-home from being the landing surface
+                // for roles that have no actionable panels on it.
+                accountType === "platform_admin" &&
+                accountHome === "/platform-admin-home" ? (
                   <PlatformAdminHome />
                 ) : (
                   redirectToAccountHome ?? <PlatformAdminHome />
@@ -141,6 +147,7 @@ export default function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/billing" element={<Billing />} />
+            <Route path="/platform/billing" element={<PlatformBilling />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
             <Route path="/security/audit" element={<AuditSecurity />} />
             <Route path="/recover" element={<RecoverPage />} />

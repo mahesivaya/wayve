@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { EmailAccount } from "./types";
+import { EmailAccount, EmailFolder } from "./types";
 import ProviderPicker from "./ProviderPicker";
 import type { ProviderId } from "./providers";
 
@@ -7,8 +7,8 @@ interface EmailSidebarProps {
   accounts: EmailAccount[];
   activeAccount: number | null;
   setActiveAccount: (id: number | null) => void;
-  activeFolder: "inbox" | "sent";
-  setActiveFolder: (folder: "inbox" | "sent") => void;
+  activeFolder: EmailFolder;
+  setActiveFolder: (folder: EmailFolder) => void;
   viewMode: "email" | "files";
   onOpenFiles: () => void;
   // Single dispatcher — the parent decides what to do per provider id, so
@@ -214,6 +214,39 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           onClick={() => setActiveFolder("sent")}
         >
           📤 Sent
+        </button>
+        {/* Gmail-style category folders. All wired to `emails.labels`
+            (Gmail labelIds + Outlook categories + synthetic SPAM/DRAFT
+            from the side-pull sync paths). */}
+        <button
+          className={`filter-btn ${activeFolder === "important" && viewMode === "email" ? "active" : ""}`}
+          onClick={() => setActiveFolder("important")}
+        >
+          ⭐ Important
+        </button>
+        <button
+          className={`filter-btn ${activeFolder === "updates" && viewMode === "email" ? "active" : ""}`}
+          onClick={() => setActiveFolder("updates")}
+        >
+          🔔 Updates
+        </button>
+        <button
+          className={`filter-btn ${activeFolder === "social" && viewMode === "email" ? "active" : ""}`}
+          onClick={() => setActiveFolder("social")}
+        >
+          👥 Social
+        </button>
+        <button
+          className={`filter-btn ${activeFolder === "drafts" && viewMode === "email" ? "active" : ""}`}
+          onClick={() => setActiveFolder("drafts")}
+        >
+          📝 Drafts
+        </button>
+        <button
+          className={`filter-btn ${activeFolder === "spam" && viewMode === "email" ? "active" : ""}`}
+          onClick={() => setActiveFolder("spam")}
+        >
+          🚫 Spam
         </button>
         <button
           className={`filter-btn ${viewMode === "files" ? "active" : ""}`}

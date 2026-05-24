@@ -39,10 +39,10 @@ export default function AuditSecurity() {
 
   // Platform-team only. A non-platform user reaching this page via direct
   // URL / stale bookmark gets bounced to /home rather than seeing an empty
-  // audit table powered by 403s from the backend.
-  if (user && user.scope !== "platform") {
-    return <Navigate to="/home" replace />;
-  }
+  // audit table powered by 403s from the backend. We compute the redirect
+  // flag here but DON'T early-return — the hooks below must run on every
+  // render to keep the call order stable (Rules of Hooks).
+  const shouldRedirect = Boolean(user) && user!.scope !== "platform";
 
   const [filters, setFilters] = useState<AuditLogFilters>({ limit: 100 });
   const [rows, setRows] = useState<AuditLogRow[]>([]);
@@ -178,6 +178,10 @@ export default function AuditSecurity() {
     link.download = "audit-log.csv";
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  if (shouldRedirect) {
+    return <Navigate to="/home" replace />;
   }
 
   if (!canReadAudit && !canManageSiem) {

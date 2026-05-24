@@ -291,6 +291,14 @@ CREATE TABLE IF NOT EXISTS emails (
 
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
 
+-- Provider labels attached to the message (Gmail labelIds, Outlook
+-- categories, plus a synthetic IMPORTANT for Outlook importance=high).
+-- Filtered by the inbox sidebar's category folders (Important / Updates /
+-- Social). Empty array `'{}'` for pre-existing rows; sync populates new
+-- ones. The GIN index makes `<label> = ANY(labels)` lookups index-scans.
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS labels TEXT[] NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS idx_emails_labels ON emails USING GIN (labels);
+
 -- Per-email help-desk workflow state. Created lazily on first state
 -- mutation (status change or assignment) so we don't have to backfill rows
 -- for every existing email when an account becomes shared.
@@ -575,8 +583,14 @@ ON channel_messages (parent_message_id) WHERE parent_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_emails_account_created
 ON emails (account_id, created_at DESC, id DESC);
 
+-- Partial index that backs `body_worker`'s scan for unprocessed rows.
+-- The predicate matches the worker's widened scan: any row with a missing
+-- body OR pending attachment verification. Once the worker stamps both
+-- flags, the row drops out of the index (partial) so steady-state size
+-- stays proportional to backlog, not total mail.
 CREATE INDEX IF NOT EXISTS idx_emails_pending_body
-ON emails (account_id, id) WHERE body_encrypted = '';
+ON emails (account_id, id)
+WHERE body_encrypted = '' OR body_encrypted IS NULL OR attachments_checked = false;
 
 CREATE INDEX IF NOT EXISTS idx_meetings_user_date
 ON meetings (user_id, date, start_time);
