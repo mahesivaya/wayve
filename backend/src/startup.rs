@@ -435,6 +435,26 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          ON webhook_deliveries(next_attempt_at) WHERE status = 'pending'",
         "CREATE INDEX IF NOT EXISTS webhook_deliveries_endpoint_idx \
          ON webhook_deliveries(endpoint_id, created_at DESC)",
+        // ────────────────────────────────────────────────────────────────
+        // Rate-limit tiers. Each plan now carries its own API rate ceiling
+        // and a rolling 30-day monthly request budget. -1 = unlimited. The
+        // middleware reads these per request through a short Redis cache.
+        //
+        // Backfill uses INSERT … ON CONFLICT to land the v1 tier numbers
+        // (basic / advance / organization / enterprise) without disturbing
+        // any operator-edited rows.
+        // ────────────────────────────────────────────────────────────────
+        "ALTER TABLE plans ADD COLUMN IF NOT EXISTS rate_limit_per_min \
+         INTEGER NOT NULL DEFAULT 60",
+        "ALTER TABLE plans ADD COLUMN IF NOT EXISTS monthly_quota \
+         INTEGER NOT NULL DEFAULT 50000",
+        // basic_user keeps the column DEFAULTs (60, 50000) — skipped here.
+        "UPDATE plans SET rate_limit_per_min = 300,   monthly_quota = 500000    \
+         WHERE code = 'advance_user'",
+        "UPDATE plans SET rate_limit_per_min = 600,   monthly_quota = 5000000   \
+         WHERE code = 'organization'",
+        "UPDATE plans SET rate_limit_per_min = 6000,  monthly_quota = -1        \
+         WHERE code = 'enterprise'",
     ];
 
     for statement in statements {

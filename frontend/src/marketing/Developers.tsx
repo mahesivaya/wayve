@@ -298,6 +298,9 @@ export default function Developers() {
             <a href={SPEC_URL} className="dev-btn" download="wayve-openapi.json">
               Download OpenAPI 3.1 spec
             </a>
+            <Link to="/developers/quotas" className="dev-btn">
+              Compare rate-limit tiers →
+            </Link>
           </div>
         </div>
       </header>

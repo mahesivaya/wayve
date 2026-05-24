@@ -18,6 +18,7 @@ interface EmailSidebarProps {
   composeDisabled: boolean;
   width: number;
   onRenameAccount: (id: number, displayName: string | null) => Promise<void>;
+  showAccountControls?: boolean;
 }
 
 export const EmailSidebar: React.FC<EmailSidebarProps> = ({
@@ -33,6 +34,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
   composeDisabled,
   width,
   onRenameAccount,
+  showAccountControls = true,
 }) => {
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -67,35 +69,37 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
         className="compose-btn"
         onClick={onCompose}
         disabled={composeDisabled}
-        title={composeDisabled ? "Add an account first" : "Compose"}
+        title={composeDisabled ? "No inbox available" : "Compose"}
       >
         Compose
       </button>
 
-      <div className="mail-section-header">
-        <span className="mail-section-title">Accounts</span>
-        <button
-          type="button"
-          className="mail-section-action"
-          onClick={() => setPickerOpen(true)}
-          aria-haspopup="dialog"
-          aria-expanded={pickerOpen}
-          aria-label="Add account"
-          title="Add account"
-        >
-          +
-        </button>
-      </div>
+      {showAccountControls && (
+        <>
+          <div className="mail-section-header">
+            <span className="mail-section-title">Accounts</span>
+            <button
+              type="button"
+              className="mail-section-action"
+              onClick={() => setPickerOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={pickerOpen}
+              aria-label="Add account"
+              title="Add account"
+            >
+              +
+            </button>
+          </div>
 
-      <nav className="mail-filters" aria-label="Mail accounts">
-        <button
-          className={`filter-btn ${activeAccount === null ? "active" : ""}`}
-          onClick={() => setActiveAccount(null)}
-        >
-          🌐 All Accounts
-        </button>
+          <nav className="mail-filters" aria-label="Mail accounts">
+            <button
+              className={`filter-btn ${activeAccount === null ? "active" : ""}`}
+              onClick={() => setActiveAccount(null)}
+            >
+              🌐 All Accounts
+            </button>
 
-        {accounts.map((acc) => {
+            {accounts.map((acc) => {
         const isEditing = editingAccountId === acc.id;
         // For shared inboxes the human-friendly `shared_label` ("Support")
         // is the most useful name; `display_name` is the personal nickname
@@ -188,11 +192,13 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           </div>
         );
       })}
-      </nav>
+          </nav>
+        </>
+      )}
 
       {/* Mount only while open — keeps the picker's state fresh each time
           and avoids reset-on-close juggling. */}
-      {pickerOpen && (
+      {showAccountControls && pickerOpen && (
         <ProviderPicker
           onClose={() => setPickerOpen(false)}
           onSelect={(provider) => {

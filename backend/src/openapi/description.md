@@ -34,6 +34,35 @@ Keys are issued with prefix `wv_sk_` so leak detectors (TruffleHog, GitGuardian)
 recognise them. If you spot a key in source control, revoke it from the
 dashboard — revocation is effective on the next request.
 
+## Rate limits & quotas
+
+Two ceilings apply to every API-key request:
+
+| Tier | Plan code | Price | Rate limit | Monthly requests |
+| --- | --- | --- | --- | --- |
+| Free | `basic_user` | $0 | 60 / min | 50,000 |
+| Advance | `advance_user` | $7 / month | 300 / min | 500,000 |
+| Organization | `organization` | $10 / seat / month | 600 / min | 5,000,000 |
+| Enterprise | `enterprise` | Custom | 6,000 / min | Unlimited |
+
+Behaviour:
+
+- A request that exceeds the rate limit returns **`429 Too Many Requests`** —
+  retry safely after the next 60-second window.
+- A request that exhausts the monthly request budget returns
+  `429 Too Many Requests` with a message naming the plan. The cycle resets
+  at `00:00 UTC` on the first of every calendar month (separate from your
+  Stripe billing anniversary).
+- The monthly counter aggregates across **every** API key you own. Splitting
+  workload across multiple keys does not multiply your budget.
+- Issuing a key with a `rate_limit_per_min` stricter than the plan cap keeps
+  the stricter value. The plan cap is a ceiling, not a floor.
+
+Compare tiers and current usage in the dashboard at
+[/developers/quotas](/developers/quotas), or query
+`GET /api/billing/tiers` (public) and `GET /api/billing/quota`
+(authenticated) directly.
+
 ## Choosing scopes
 
 | If your integration… | Use scope(s) |

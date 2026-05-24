@@ -166,14 +166,25 @@ where
                 ));
             }
 
-            // 3. Per-key rate limit. Fails open if Redis is unavailable —
-            //    availability is preferred over strictness for the data API.
+            // 3. Rate limit + monthly quota. Both fail open if Redis is
+            //    unavailable — availability beats strictness for the data
+            //    API. The *effective* rate limit is the MIN of the key's own
+            //    cap and the plan-tier cap, so issuing a key with
+            //    `rate_limit_per_min = 6000` on a Free plan still caps at
+            //    the plan's 60/min — the operator can't accidentally give
+            //    away the farm. The monthly quota aggregates across every
+            //    key belonging to the same user, so spreading load across
+            //    multiple keys does not bypass the plan budget.
             if let Some(cache_data) = req.app_data::<web::Data<Option<Cache>>>()
                 && let Some(cache) = cache_data.get_ref().clone()
             {
+                let tier = crate::billing::quotas::effective_for_user(&pool, resolved.user_id).await;
+                let effective_rl =
+                    i32::min(resolved.rate_limit_per_min, tier.rate_limit_per_min);
+
                 let rl_key = format!("apikey_rl:{}", resolved.id);
                 match cache.increment_with_ttl(&rl_key, 60).await {
-                    Ok(count) if count > i64::from(resolved.rate_limit_per_min) => {
+                    Ok(count) if count > i64::from(effective_rl) => {
                         audit(
                             &pool,
                             make_entry(
@@ -190,6 +201,36 @@ where
                     Ok(_) => {}
                     Err(e) => {
                         warn!(target: "api_key", error = ?e, "rate limit check failed; allowing");
+                    }
+                }
+
+                // Monthly quota. -1 = unlimited (enterprise).
+                if tier.monthly_quota >= 0 {
+                    let q_key = crate::billing::quotas::monthly_quota_key(resolved.user_id);
+                    let ttl = crate::billing::quotas::monthly_quota_ttl_secs();
+                    match cache.increment_with_ttl(&q_key, ttl).await {
+                        Ok(count) if count > i64::from(tier.monthly_quota) => {
+                            audit(
+                                &pool,
+                                make_entry(
+                                    Some(resolved.id),
+                                    Some(resolved.user_id),
+                                    429,
+                                    AuditOutcome::RateLimited,
+                                ),
+                            );
+                            return Ok(req.into_response(
+                                deny(
+                                    429,
+                                    "Monthly request quota exceeded for this plan. Upgrade or wait for the next cycle.",
+                                )
+                                .map_into_right_body(),
+                            ));
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            warn!(target: "api_key", error = ?e, "quota check failed; allowing");
+                        }
                     }
                 }
             }

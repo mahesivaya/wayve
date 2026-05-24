@@ -290,6 +290,26 @@ export default function Emails() {
     ...account,
     display_name: accountNameOverrides[account.id] ?? account.display_name,
   }));
+  const showAccountControls = user?.scope
+    ? user.scope === "personal"
+    : user?.account_type === "personal";
+
+  useEffect(() => {
+    if (showAccountControls) return;
+
+    const firstAccountId = displayedAccounts[0]?.id ?? null;
+    if (firstAccountId === null) {
+      if (activeAccount !== null) setActiveAccount(null);
+      return;
+    }
+
+    const activeAccountVisible = displayedAccounts.some(
+      (account) => account.id === activeAccount,
+    );
+    if (!activeAccountVisible) {
+      setActiveAccount(firstAccountId);
+    }
+  }, [activeAccount, displayedAccounts, setActiveAccount, showAccountControls]);
 
   // ================= UI =================
   return (
@@ -327,6 +347,7 @@ export default function Emails() {
         composeDisabled={accounts.length === 0}
         width={sidebarWidth}
         onRenameAccount={renameAccount}
+        showAccountControls={showAccountControls}
       />
 
       <div

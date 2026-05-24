@@ -3,8 +3,8 @@
 // Stripe webhook and is mounted at the root.
 
 use super::{
-    checkout, entitlements, invoices, organization_billing, plans, subscriptions, usage_metering,
-    webhook_handler,
+    checkout, entitlements, invoices, organization_billing, plans, subscriptions, tiers,
+    usage_metering, webhook_handler,
 };
 use actix_web::web;
 
@@ -23,7 +23,9 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(entitlements::get_entitlements)
         .service(usage_metering::record_usage)
         .service(usage_metering::get_usage)
-        .service(organization_billing::get_organization_billing);
+        .service(organization_billing::get_organization_billing)
+        .service(tiers::list_tiers)
+        .service(tiers::get_quota);
 }
 
 pub fn public_routes(cfg: &mut web::ServiceConfig) {

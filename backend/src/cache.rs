@@ -74,6 +74,17 @@ impl Cache {
         res.is_ok()
     }
 
+    /// Read a counter key (set by `increment_with_ttl`) without incrementing
+    /// it. Returns `None` if the key doesn't exist or the value isn't a
+    /// parseable integer. Used by the quota-view endpoint so the dashboard
+    /// can show "used / limit" without spending a quota slot itself.
+    #[instrument(target = "cache", skip(self), fields(key))]
+    pub async fn get_counter(&self, key: &str) -> Option<i64> {
+        let mut conn = self.conn.clone();
+        let raw: Option<String> = conn.get(key).await.ok()?;
+        raw?.parse::<i64>().ok()
+    }
+
     #[instrument(target = "cache", skip(self), fields(key, ttl_secs))]
     pub async fn increment_with_ttl(&self, key: &str, ttl_secs: u64) -> redis::RedisResult<i64> {
         let mut conn = self.conn.clone();

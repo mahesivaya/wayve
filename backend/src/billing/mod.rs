@@ -10,8 +10,10 @@ pub mod models;
 pub mod organization_billing;
 pub mod plans;
 pub mod provider;
+pub mod quotas;
 pub mod routes;
 pub mod subscriptions;
+pub mod tiers;
 pub mod usage_metering;
 pub mod webhook_handler;
 

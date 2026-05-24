@@ -41,6 +41,7 @@ const Pricing = lazy(() => import("./pricing/Pricing"));
 const Enterprise = lazy(() => import("./marketing/Enterprise"));
 const Support = lazy(() => import("./marketing/Support"));
 const Developers = lazy(() => import("./marketing/Developers"));
+const Quotas = lazy(() => import("./marketing/Quotas"));
 const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
 const SsoSettings = lazy(() => import("./settings/SsoSettings"));
 const SharedInboxes = lazy(() => import("./settings/SharedInboxes"));
@@ -103,6 +104,7 @@ export default function App() {
         <Route path="/enterprise" element={<Enterprise />} />
         <Route path="/support" element={<Support />} />
         <Route path="/developers" element={<Developers />} />
+        <Route path="/developers/quotas" element={<Quotas />} />
 
         {/* PROTECTED */}
         <Route element={<ProtectedRoute />}>
