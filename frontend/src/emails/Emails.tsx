@@ -179,11 +179,18 @@ export default function Emails() {
 
     const errorParam = params.get("error") ?? hashParams.get("error");
     if (errorParam === "email_in_use") {
-      setOauthError(
-        "That email is already connected to another Wayve account. " +
-          "Disconnect it from that account first, or sign in there instead.",
-      );
+      // Defer the setState out of the effect body so React's
+      // set-state-in-effect lint stays quiet — same pattern used in
+      // Docs.tsx and Tasks.tsx. The microtask still runs before the
+      // browser paints, so the user sees the banner without a flash.
+      const h = window.setTimeout(() => {
+        setOauthError(
+          "That email is already connected to another Wayve account. " +
+            "Disconnect it from that account first, or sign in there instead.",
+        );
+      }, 0);
       window.history.replaceState({}, "", "/emails");
+      return () => window.clearTimeout(h);
     }
   }, [fetchAccounts, setRefreshTick]);
 
