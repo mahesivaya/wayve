@@ -74,8 +74,8 @@ export default function Login() {
       // Org slug isn't known yet at login; routing settles to /organization/<slug>
       // once AuthContext's post-login /api/me fetch resolves.
       navigate(homePathForUser({ account_type: data.account_type }));
-    } catch (err) {
-      logger.error(err);
+    } catch {
+      logger.warn("Login failed. Check your credentials.");
       setError("Login failed. Check your credentials.");
     }
   };

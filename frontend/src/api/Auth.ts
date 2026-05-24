@@ -80,7 +80,10 @@ export async function login(email: string, password: string) {
 
     return data;
   } catch (err) {
-    log.error(`[${reqId}] login error`, err);
+    log.warn(`[${reqId}] login failed`, {
+      email,
+      message: err instanceof Error ? err.message : "Login failed",
+    });
     throw err;
   }
 }
