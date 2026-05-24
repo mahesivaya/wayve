@@ -98,9 +98,11 @@ mod tests {
         assert_eq!(ctx.organization_id, Some(org_id));
         assert!(ctx.has(Permission::AuditRead));
         assert!(ctx.has(Permission::SecurityManage));
-        // Security must not back-door into billing or members management.
+        // Security must not back-door into billing.
+        // (NB: Security DOES now hold MembersManage by design — see the
+        // rationale comment on P_SECURITY in rbac.rs::permissions_for.
+        // That permission lets security provision the accounts it manages.)
         assert!(!ctx.has(Permission::BillingManage));
-        assert!(!ctx.has(Permission::MembersManage));
 
         cleanup_user(&pool, user_id).await;
         cleanup_org(&pool, org_id).await;

@@ -111,18 +111,21 @@ mod tests {
         // even with parallel-but-serial tests sharing the audit table.
         let path = format!("/api/notes/audit-{}", uuid::Uuid::new_v4());
 
-        let good = "wv_sk_audit_outcome_good_key_value_for_test_suite";
-        let wrong = "wv_sk_audit_outcome_wrong_scope_key_for_tests_v2";
-        let expired = "wv_sk_audit_outcome_expired_key_value_for_tests";
-        let revoked = "wv_sk_audit_outcome_revoked_key_value_for_tests";
+        // UUID-tag every raw key so api_keys.key_hash UNIQUE doesn't
+        // reject re-runs against the same DB.
+        let tag = uuid::Uuid::new_v4().simple().to_string();
+        let good = format!("wv_sk_audit_outcome_good_{tag}");
+        let wrong = format!("wv_sk_audit_outcome_wrong_scope_{tag}");
+        let expired = format!("wv_sk_audit_outcome_expired_{tag}");
+        let revoked = format!("wv_sk_audit_outcome_revoked_{tag}");
 
         let future = Utc::now() + Duration::hours(1);
         let past = Utc::now() - Duration::hours(1);
 
-        let good_id = insert_key(&pool, user_id, good, &["notes:read"], future, false).await;
-        let wrong_id = insert_key(&pool, user_id, wrong, &["email:read"], future, false).await;
-        let expired_id = insert_key(&pool, user_id, expired, &["notes:read"], past, false).await;
-        let revoked_id = insert_key(&pool, user_id, revoked, &["notes:read"], future, true).await;
+        let good_id = insert_key(&pool, user_id, &good, &["notes:read"], future, false).await;
+        let wrong_id = insert_key(&pool, user_id, &wrong, &["email:read"], future, false).await;
+        let expired_id = insert_key(&pool, user_id, &expired, &["notes:read"], past, false).await;
+        let revoked_id = insert_key(&pool, user_id, &revoked, &["notes:read"], future, true).await;
 
         let route_path = path.clone();
         let app = actix_test::init_service(
@@ -142,19 +145,19 @@ mod tests {
         };
 
         // Allowed.
-        let resp = actix_test::call_service(&app, call(good)).await;
+        let resp = actix_test::call_service(&app, call(&good)).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
         // Denied for missing scope.
-        let resp = actix_test::call_service(&app, call(wrong)).await;
+        let resp = actix_test::call_service(&app, call(&wrong)).await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
         // Denied — expired.
-        let resp = actix_test::call_service(&app, call(expired)).await;
+        let resp = actix_test::call_service(&app, call(&expired)).await;
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 
         // Denied — revoked.
-        let resp = actix_test::call_service(&app, call(revoked)).await;
+        let resp = actix_test::call_service(&app, call(&revoked)).await;
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 
         // Invalid — completely unknown key. api_key_id is NULL on this row.
@@ -169,12 +172,42 @@ mod tests {
             wait_for_outcome(&pool, Some(wrong_id), "denied_scope").await >= 1,
             "no 'denied_scope' audit row written"
         );
+        // For revoked + expired outcomes, the middleware does NOT have a
+        // ResolvedKey (the failure short-circuits resolution), so it writes
+        // the audit row with api_key_id = NULL. Query by path instead of by
+        // key id. This asymmetry vs denied_scope is intentional: surfacing
+        // the key id on a revoked/expired failure would let a caller probe
+        // for valid-but-expired keys.
+        let _ = expired_id;
+        let _ = revoked_id;
+        let by_path_outcome = |outcome: &'static str| {
+            let pool = pool.clone();
+            let path = path.clone();
+            async move {
+                for _ in 0..40 {
+                    let count: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(*) FROM api_key_audit_log \
+                         WHERE api_key_id IS NULL AND outcome = $1 AND path = $2",
+                    )
+                    .bind(outcome)
+                    .bind(&path)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap_or(0);
+                    if count > 0 {
+                        return count;
+                    }
+                    tokio::time::sleep(StdDuration::from_millis(50)).await;
+                }
+                0
+            }
+        };
         assert!(
-            wait_for_outcome(&pool, Some(expired_id), "denied_expired").await >= 1,
+            by_path_outcome("denied_expired").await >= 1,
             "no 'denied_expired' audit row written"
         );
         assert!(
-            wait_for_outcome(&pool, Some(revoked_id), "denied_revoked").await >= 1,
+            by_path_outcome("denied_revoked").await >= 1,
             "no 'denied_revoked' audit row written"
         );
         // Invalid-key rows have NULL api_key_id; scope the wait by path instead.

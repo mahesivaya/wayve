@@ -144,7 +144,9 @@ mod tests {
             exp: usize,
             jti: String,
         }
-        let exp = (Utc::now() - ChronoDuration::seconds(60)).timestamp() as usize;
+        // 1 hour in the past — well outside jsonwebtoken's default 60-second
+        // leeway window, so verify() must classify as Expired (not just decode).
+        let exp = (Utc::now() - ChronoDuration::hours(1)).timestamp() as usize;
         let expired = Expired {
             sub: 1,
             iss: EMBED_ISSUER.to_string(),

@@ -1,22 +1,30 @@
 #[cfg(test)]
 mod ws_tests {
     use crate::call::handler::call_ws;
-    use crate::test_support::{jwt_for, next_synthetic_user_id};
+    use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
     use actix_web::{App, web};
     use awc::ws as awsm;
     use futures_util::{SinkExt, StreamExt};
+    use sqlx::PgPool;
     use std::time::Duration;
 
-    /// Build a `?token=<jwt>` query string for a synthetic user_id. The JWT
-    /// signs with the default test secret ("secret"); call_ws will validate
-    /// against the same secret because no test sets JWT_SECRET differently.
+    /// Build a `?token=<jwt>` query string for `user_id`.
     fn token_query(user_id: i32) -> String {
         let jwt = jwt_for(user_id, &format!("ws-{user_id}@test.local"));
         format!("token={jwt}")
     }
 
+    /// Spin up a real test server with `call_ws` + the DB pool the handler
+    /// requires for RBAC scope resolution.
+    fn start_call_server(pool: PgPool) -> actix_test::TestServer {
+        actix_test::start(move || {
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .route("/ws/call", web::get().to(call_ws))
+        })
+    }
+
     /// Wait for the next text frame on `framed`, with a 2s timeout.
-    /// Macro form so callers don't have to name the framed type.
     macro_rules! next_text {
         ($framed:expr) => {{
             let timed = tokio::time::timeout(Duration::from_secs(2), $framed.next()).await;
@@ -30,12 +38,13 @@ mod ws_tests {
     }
 
     #[actix_web::test]
+    #[serial_test::serial]
     async fn call_ws_forwards_signal_between_two_clients() {
-        let srv = actix_test::start(|| App::new().route("/ws/call", web::get().to(call_ws)));
+        let pool = test_pool().await;
+        let id_a = insert_local_user(&pool, &random_email(), "p").await;
+        let id_b = insert_local_user(&pool, &random_email(), "p").await;
 
-        let id_a = next_synthetic_user_id();
-        let id_b = next_synthetic_user_id();
-
+        let srv = start_call_server(pool.clone());
         let url_a = srv.url(&format!("/ws/call?{}", token_query(id_a)));
         let url_b = srv.url(&format!("/ws/call?{}", token_query(id_b)));
         let (_, mut a) = awc::Client::default().ws(&url_a).connect().await.unwrap();
@@ -64,28 +73,33 @@ mod ws_tests {
     }
 
     #[actix_web::test]
+    #[serial_test::serial]
     async fn call_ws_forwards_ice_candidate() {
-        let srv = actix_test::start(|| App::new().route("/ws/call", web::get().to(call_ws)));
+        let pool = test_pool().await;
+        let id_a = insert_local_user(&pool, &random_email(), "p").await;
+        let id_b = insert_local_user(&pool, &random_email(), "p").await;
 
-        let id_a = next_synthetic_user_id();
-        let id_b = next_synthetic_user_id();
-
+        let srv = start_call_server(pool.clone());
         let url_a = srv.url(&format!("/ws/call?{}", token_query(id_a)));
         let url_b = srv.url(&format!("/ws/call?{}", token_query(id_b)));
         let (_, mut a) = awc::Client::default().ws(&url_a).connect().await.unwrap();
         let (_, mut b) = awc::Client::default().ws(&url_b).connect().await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
 
+        // IceCandidate is `#[serde(rename_all = "camelCase")]` so browsers
+        // can send sdpMid / sdpMLineIndex unchanged. The signal MUST use
+        // camelCase keys here too or serde silently drops the fields and
+        // addIceCandidate fails at the peer ("Candidate missing values
+        // for both sdpMid and sdpMLineIndex").
         let signal = serde_json::json!({
             "type": "ice",
             "to": id_b,
             "from": null,
             "sdp": null,
             "candidate": {
-                "candidate": "candidate:0 1 UDP 2122252543 192.168.1.1 50000 typ host",
-                "sdp_mid": "0",
-                "sdp_m_line_index": 0,
-                "username_fragment": "abc"
+                "candidate": "candidate:1 1 udp 2122252543 192.0.2.1 60001 typ host",
+                "sdpMid": "0",
+                "sdpMLineIndex": 0
             }
         });
         a.send(awsm::Message::Text(signal.to_string().into()))
@@ -96,20 +110,22 @@ mod ws_tests {
         let v: serde_json::Value = serde_json::from_str(&received).unwrap();
         assert_eq!(v["type"], "ice");
         assert_eq!(v["from"], id_a);
-        assert_eq!(v["candidate"]["sdp_mid"], "0");
+        assert_eq!(v["candidate"]["sdpMid"], "0");
     }
 
     #[actix_web::test]
+    #[serial_test::serial]
     async fn call_ws_silently_drops_signal_when_target_offline() {
-        let srv = actix_test::start(|| App::new().route("/ws/call", web::get().to(call_ws)));
+        let pool = test_pool().await;
+        let id_a = insert_local_user(&pool, &random_email(), "p").await;
 
-        let id_a = next_synthetic_user_id();
+        let srv = start_call_server(pool.clone());
         let url_a = srv.url(&format!("/ws/call?{}", token_query(id_a)));
         let (_, mut a) = awc::Client::default().ws(&url_a).connect().await.unwrap();
 
         let signal = serde_json::json!({
             "type": "offer",
-            "to": 999_999_999,
+            "to": 999_999_999,  // user_id that doesn't exist; sender should get no echo
             "from": null,
             "sdp": "v=0",
             "candidate": null,
@@ -126,22 +142,27 @@ mod ws_tests {
     }
 
     #[actix_web::test]
+    #[serial_test::serial]
     async fn call_ws_ignores_non_json_text_and_keeps_session_open() {
-        let srv = actix_test::start(|| App::new().route("/ws/call", web::get().to(call_ws)));
+        let pool = test_pool().await;
+        let id_a = insert_local_user(&pool, &random_email(), "p").await;
+        let id_b = insert_local_user(&pool, &random_email(), "p").await;
 
-        let id_a = next_synthetic_user_id();
-        let id_b = next_synthetic_user_id();
-
+        let srv = start_call_server(pool.clone());
         let url_a = srv.url(&format!("/ws/call?{}", token_query(id_a)));
         let url_b = srv.url(&format!("/ws/call?{}", token_query(id_b)));
         let (_, mut a) = awc::Client::default().ws(&url_a).connect().await.unwrap();
         let (_, mut b) = awc::Client::default().ws(&url_b).connect().await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
 
+        // First send: garbage non-JSON. The handler must shrug and stay
+        // connected.
         a.send(awsm::Message::Text("not json at all".into()))
             .await
             .unwrap();
 
+        // Second send: a valid signal. It must arrive — proving the session
+        // survived the bad frame.
         let signal = serde_json::json!({
             "type": "answer",
             "to": id_b,
@@ -159,10 +180,16 @@ mod ws_tests {
     }
 
     // ----- Auth regression tests -----
+    //
+    // These two don't need DB users — the handler should reject at the
+    // JWT validation step, before any RBAC lookup. The pool is attached
+    // anyway because Actix's extractor system needs the type to resolve.
 
     #[actix_web::test]
+    #[serial_test::serial]
     async fn call_ws_rejects_connection_without_token() {
-        let srv = actix_test::start(|| App::new().route("/ws/call", web::get().to(call_ws)));
+        let pool = test_pool().await;
+        let srv = start_call_server(pool);
 
         let url = srv.url("/ws/call");
         let res = awc::Client::default().ws(&url).connect().await;
@@ -181,8 +208,10 @@ mod ws_tests {
     }
 
     #[actix_web::test]
+    #[serial_test::serial]
     async fn call_ws_rejects_invalid_token() {
-        let srv = actix_test::start(|| App::new().route("/ws/call", web::get().to(call_ws)));
+        let pool = test_pool().await;
+        let srv = start_call_server(pool);
 
         let url = srv.url("/ws/call?token=not-a-real-jwt");
         let res = awc::Client::default().ws(&url).connect().await;
@@ -208,11 +237,12 @@ mod ws_tests {
     #[actix_web::test]
     #[serial_test::serial]
     async fn call_ws_user_id_comes_from_jwt_not_query_param() {
-        let srv = actix_test::start(|| App::new().route("/ws/call", web::get().to(call_ws)));
+        let pool = test_pool().await;
+        let id_a = insert_local_user(&pool, &random_email(), "p").await;
+        let id_b = insert_local_user(&pool, &random_email(), "p").await;
+        let victim = insert_local_user(&pool, &random_email(), "p").await;
 
-        let id_a = next_synthetic_user_id();
-        let id_b = next_synthetic_user_id();
-        let victim = next_synthetic_user_id();
+        let srv = start_call_server(pool.clone());
 
         // Attacker A connects with their own JWT but tries to spoof
         // user_id=victim via the legacy query parameter.

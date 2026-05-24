@@ -25,9 +25,11 @@ mod tests {
         .unwrap()
         .get("id");
 
-        // 2. Setup: Insert 52 emails with descending timestamps
+        // 2. Setup: insert 80 emails so the handler's hardcoded
+        // page_size=75 ([routes/email.rs::get_emails]) produces page 1 =
+        // 75 + has_more=true, page 2 = 5 + has_more=false.
         let base_time = chrono::Utc::now().naive_utc();
-        for i in 0..52 {
+        for i in 0..80 {
             sqlx::query(
                 "INSERT INTO emails (gmail_id, account_id, subject, sender, receiver, created_at, body_encrypted, body_iv)
                  VALUES ($1, $2, $3, $4, $5, $6, '', '')"
@@ -65,12 +67,12 @@ mod tests {
         assert_eq!(has_more, "true");
 
         let body: Vec<Value> = test::read_body_json(resp).await;
-        assert_eq!(body.len(), 50, "First page should respect 50 item limit");
+        assert_eq!(body.len(), 75, "First page should respect 75 item page_size");
         assert_eq!(body[0]["subject"], "Email #0");
 
         // --- STEP 2: FETCH PAGE 2 USING KEYSET ---
-        // Get markers from the 50th email (index 49)
-        let last_email = &body[49];
+        // Get markers from the 75th email (index 74)
+        let last_email = &body[74];
         let last_id = last_email["id"].as_i64().unwrap();
         let last_created_str = last_email["created_at"].as_str().unwrap();
 
@@ -105,11 +107,11 @@ mod tests {
         let body_2: Vec<Value> = test::read_body_json(resp_p2).await;
         assert_eq!(
             body_2.len(),
-            2,
-            "Second page should contain the remaining 2 items"
+            5,
+            "Second page should contain the remaining 5 items (80 inserted - 75 on page 1)"
         );
-        assert_eq!(body_2[0]["subject"], "Email #50");
-        assert_eq!(body_2[1]["subject"], "Email #51");
+        assert_eq!(body_2[0]["subject"], "Email #75");
+        assert_eq!(body_2[4]["subject"], "Email #79");
 
         sqlx::query("DELETE FROM emails WHERE account_id = $1")
             .bind(account_id)

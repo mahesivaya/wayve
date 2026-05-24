@@ -1824,31 +1824,34 @@ mod auth_regression_tests {
         use crate::test_support::test_pool;
         let pool = test_pool().await;
 
-        // 1. Setup: Create an organization
-        let org_id: i32 =
-            sqlx::query_scalar("INSERT INTO organizations (name) VALUES ('Test Org') RETURNING id")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        // 1. Setup: Create an organization with a UUID-suffixed name so
+        // repeated test runs don't trip the orgs.name UNIQUE constraint.
+        let unique = uuid::Uuid::new_v4().simple().to_string();
+        let org_id: i32 = sqlx::query_scalar(
+            "INSERT INTO organizations (name) VALUES ($1) RETURNING id",
+        )
+        .bind(format!("Test Org {unique}"))
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
-        // 2. Generate Key (Logic Check)
-        let raw_key = "wv_sk_test_secret_123";
-        // Store the key the same way the code does — SHA-256, not bcrypt —
-        // so validate_api_key's indexed lookup on key_hash finds it.
-        let key_hash = hash_api_key(raw_key);
+        // 2. Generate Key. raw_key must also be UUID-tagged so the
+        // api_keys.key_hash UNIQUE constraint doesn't reject re-runs.
+        let raw_key = format!("wv_sk_test_secret_{unique}");
+        let key_hash = hash_api_key(&raw_key);
 
         sqlx::query("INSERT INTO api_keys (organization_id, name, key_hash, key_preview) VALUES ($1, $2, $3, $4)")
             .bind(org_id)
             .bind("Test Key")
             .bind(&key_hash)
-            .bind("wv_sk_..._123")
+            .bind(format!("wv_sk_..._{unique}"))
             .execute(&pool)
             .await
             .unwrap();
 
         // 3. Test Validation Helper
         let req = actix_test::TestRequest::default()
-            .insert_header(("X-API-KEY", raw_key))
+            .insert_header(("X-API-KEY", raw_key.as_str()))
             .to_http_request();
 
         let validated_org_id = validate_api_key(&req, &pool).await;
