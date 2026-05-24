@@ -885,6 +885,24 @@
   background: var(--color-danger-soft);
 }
 
+.email-bulk-action.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-surface);
+}
+
+.email-bulk-action.is-active:hover:not(:disabled) {
+  background: var(--color-primary-hover, #1d4ed8);
+  color: var(--color-surface);
+}
+
+.email-bulk-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 .email-bulk-action:disabled,
 .email-bulk-clear:disabled {
   opacity: 0.5;

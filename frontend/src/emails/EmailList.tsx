@@ -52,6 +52,15 @@ export const EmailList: React.FC<EmailListProps> = ({
   // Inline toast shown when the user clicks Mark read / Delete with no
   // selection. Auto-dismisses after ~2s so the bar settles back to normal.
   const [bulkHint, setBulkHint] = useState<string | null>(null);
+  // Client-side filter; doesn't trigger a backend re-fetch. Filters over
+  // the already-loaded `emails` so Show more still pulls older mail in
+  // chronological order — toggling Unread later applies to the full set.
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+
+  const visibleEmails = useMemo(
+    () => (showUnreadOnly ? emails.filter((e) => e.is_read === false) : emails),
+    [emails, showUnreadOnly],
+  );
 
   useEffect(() => {
     if (!bulkHint) return;
@@ -72,15 +81,15 @@ export const EmailList: React.FC<EmailListProps> = ({
 
   const toggleAll = () => {
     setCheckedIds((prev) =>
-      prev.size === emails.length && emails.length > 0
+      prev.size === visibleEmails.length && visibleEmails.length > 0
         ? new Set()
-        : new Set(emails.map((e) => e.id)),
+        : new Set(visibleEmails.map((e) => e.id)),
     );
   };
 
   const allChecked = useMemo(
-    () => emails.length > 0 && checkedIds.size === emails.length,
-    [emails.length, checkedIds.size],
+    () => visibleEmails.length > 0 && checkedIds.size === visibleEmails.length,
+    [visibleEmails.length, checkedIds.size],
   );
   const someChecked = checkedIds.size > 0 && !allChecked;
 
@@ -152,7 +161,7 @@ export const EmailList: React.FC<EmailListProps> = ({
           {checkedIds.size > 0 ? (
             <span className="email-bulk-count">{checkedIds.size} selected</span>
           ) : (
-            <span className="email-bulk-hint">Select emails</span>
+            <span className="email-bulk-hint">Select all emails</span>
           )}
           {onBulkMarkRead && (
             <button
@@ -165,6 +174,21 @@ export const EmailList: React.FC<EmailListProps> = ({
               Mark read
             </button>
           )}
+          <button
+            type="button"
+            className={`email-bulk-action${showUnreadOnly ? " is-active" : ""}`}
+            onClick={() => {
+              setShowUnreadOnly((prev) => !prev);
+              // Drop selections that the new filter would hide so the count
+              // displayed in the bar always matches what the user can see.
+              setCheckedIds(new Set());
+            }}
+            aria-pressed={showUnreadOnly}
+            title={showUnreadOnly ? "Show all emails" : "Show only unread emails"}
+            disabled={bulkBusy}
+          >
+            {showUnreadOnly ? "Showing unread" : "Show unread"}
+          </button>
           {onBulkDelete && (
             <button
               type="button"
@@ -194,7 +218,11 @@ export const EmailList: React.FC<EmailListProps> = ({
         </div>
       )}
 
-      {emails.map((email) => (
+      {visibleEmails.length === 0 && isListView && showUnreadOnly && (
+        <div className="email-bulk-empty">No unread emails in this list.</div>
+      )}
+
+      {visibleEmails.map((email) => (
         <div
           key={email.id}
           className={[
