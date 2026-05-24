@@ -1212,7 +1212,7 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
             o.name as organization_name,
             (SELECT COUNT(*)::BIGINT FROM emails e JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id) as total_emails,
             (SELECT COALESCE(SUM(octet_length(body_encrypted)), 0)::BIGINT FROM emails e JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id) as email_storage_bytes,
-            (SELECT COALESCE(SUM(size), 0)::BIGINT FROM files f WHERE f.user_id = u.id) as drive_storage_bytes,
+            (SELECT COALESCE(SUM(size), 0)::BIGINT FROM drive_files f WHERE f.user_id = u.id) as drive_storage_bytes,
             (SELECT COALESCE(SUM(octet_length(content_encrypted)), 0)::BIGINT FROM messages m WHERE m.sender_id = u.id) as chat_storage_bytes,
             (SELECT COALESCE(SUM(octet_length(coalesce(content_encrypted, content, ''))), 0)::BIGINT FROM notes n WHERE n.user_id = u.id) as notes_storage_bytes
         FROM users u 

@@ -205,7 +205,7 @@ pub async fn upload_file(
 
         sqlx::query(
             r#"
-            INSERT INTO files (name, file_path, file_iv, size, file_type, user_id, folder_id)
+            INSERT INTO drive_files (name, file_path, file_iv, size, file_type, user_id, folder_id)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
         )
@@ -254,7 +254,7 @@ pub async fn get_files(
 
     let rows = sqlx::query_as::<_, FileRecord>(
         "SELECT id, name, file_path, file_iv, size, created_at \
-           FROM files \
+           FROM drive_files \
           WHERE user_id = $1 \
             AND folder_id IS NOT DISTINCT FROM $2 \
           ORDER BY created_at DESC",
@@ -311,7 +311,7 @@ pub async fn shared_drive_items(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
                COALESCE(f.user_id, fo.user_id) AS owner_user_id,
                ds.created_at
           FROM drive_shares ds
-          LEFT JOIN files f ON ds.resource_type = 'file' AND f.id = ds.resource_id
+          LEFT JOIN drive_files f ON ds.resource_type = 'file' AND f.id = ds.resource_id
           LEFT JOIN folders fo ON ds.resource_type = 'folder' AND fo.id = ds.resource_id
          WHERE (
              ($1 = 'organization' AND ds.scope = 'organization' AND ds.organization_id = $2)
@@ -385,7 +385,7 @@ async fn share_resource(
 
     let owns = match resource_type {
         "file" => sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT id FROM files WHERE id = $1 AND user_id = $2",
+            "SELECT id FROM drive_files WHERE id = $1 AND user_id = $2",
         )
         .bind(resource_id)
         .bind(ctx.user_id)
@@ -448,7 +448,7 @@ pub async fn download_shared_file(
     let row = sqlx::query(
         r#"
         SELECT f.name, f.file_path, f.file_iv
-          FROM files f
+          FROM drive_files f
           JOIN drive_shares ds ON ds.resource_type = 'file' AND ds.resource_id = f.id
          WHERE f.id = $1
            AND f.user_id <> $2
@@ -489,7 +489,7 @@ pub async fn download_file(
     // Ownership check: the row is only returned when it belongs to the caller,
     // so a 404 leaks nothing about other users' files.
     let row =
-        sqlx::query("SELECT name, file_path, file_iv FROM files WHERE id = $1 AND user_id = $2")
+        sqlx::query("SELECT name, file_path, file_iv FROM drive_files WHERE id = $1 AND user_id = $2")
             .bind(file_id)
             .bind(user_id)
             .fetch_optional(pool.get_ref())
@@ -549,7 +549,7 @@ async fn drive_storage_used(pool: &PgPool, owner: BillingOwner) -> sqlx::Result<
     sqlx::query_scalar::<_, i64>(
         r#"
         SELECT COALESCE(SUM(f.size), 0)::BIGINT
-          FROM files f
+          FROM drive_files f
           JOIN users u ON u.id = f.user_id
          WHERE ($1::int IS NOT NULL AND f.user_id = $1)
             OR ($2::int IS NOT NULL AND u.organization_id = $2)

@@ -451,7 +451,7 @@ CREATE TABLE IF NOT EXISTS channel_messages (
 );
 
 
-CREATE TABLE IF NOT EXISTS files (
+CREATE TABLE IF NOT EXISTS drive_files (
     id BIGSERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
@@ -470,12 +470,12 @@ CREATE TABLE IF NOT EXISTS files (
         ON DELETE CASCADE
 );
 
-ALTER TABLE files ADD COLUMN IF NOT EXISTS file_iv TEXT;
+ALTER TABLE drive_files ADD COLUMN IF NOT EXISTS file_iv TEXT;
 
 -- Drive folders. One row per user-created folder. `parent_folder_id` is
 -- NULL for folders at the user's drive root; otherwise it points at the
 -- containing folder. Deleting a parent cascades to all children + files
--- (see the `files.folder_id` FK below).
+-- (see the `drive_files.folder_id` FK below).
 CREATE TABLE IF NOT EXISTS folders (
     id BIGSERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -492,11 +492,11 @@ CREATE INDEX IF NOT EXISTS idx_folders_user_parent
 -- removes the file row when its containing folder is deleted; the
 -- on-disk blob is then garbage-collected on next sweep (or left orphan
 -- until a maintenance pass — fine for v1).
-ALTER TABLE files
+ALTER TABLE drive_files
     ADD COLUMN IF NOT EXISTS folder_id BIGINT
     REFERENCES folders(id) ON DELETE CASCADE;
 
-CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id);
+CREATE INDEX IF NOT EXISTS idx_drive_files_folder ON drive_files(folder_id);
 
 CREATE TABLE IF NOT EXISTS drive_shares (
     id BIGSERIAL PRIMARY KEY,
@@ -602,7 +602,7 @@ CREATE INDEX IF NOT EXISTS idx_email_accounts_user_id
 ON email_accounts(user_id);
 
 -- Speed up the per-user storage SUMs in GET /api/profile.
-CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id);
+CREATE INDEX IF NOT EXISTS idx_drive_files_user_id ON drive_files(user_id);
 CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);
 
 -- ============================================================

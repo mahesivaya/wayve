@@ -46,6 +46,21 @@ pub async fn establish_db_connection(db_url: &str, max_conns: u32) -> PgPool {
 #[instrument(target = "startup", skip(pool))]
 pub async fn ensure_email_schema(pool: &PgPool) {
     let statements = [
+        // Rename the legacy `files` table to `drive_files`. Idempotent:
+        // only fires when the old table is present and the new one isn't.
+        // PK, sequence, and indexes are renamed alongside since
+        // ALTER TABLE RENAME doesn't propagate to owned objects.
+        "DO $$ BEGIN \
+           IF EXISTS (SELECT 1 FROM pg_class WHERE relname='files' AND relkind='r') \
+           AND NOT EXISTS (SELECT 1 FROM pg_class WHERE relname='drive_files' AND relkind='r') \
+           THEN \
+             EXECUTE 'ALTER TABLE files RENAME TO drive_files'; \
+             EXECUTE 'ALTER SEQUENCE IF EXISTS files_id_seq RENAME TO drive_files_id_seq'; \
+             EXECUTE 'ALTER INDEX IF EXISTS files_pkey RENAME TO drive_files_pkey'; \
+             EXECUTE 'ALTER INDEX IF EXISTS idx_files_folder RENAME TO idx_drive_files_folder'; \
+             EXECUTE 'ALTER INDEX IF EXISTS idx_files_user_id RENAME TO idx_drive_files_user_id'; \
+           END IF; \
+         END $$",
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT TRUE",
         // Provider labels (Gmail labelIds + Outlook categories + synthetic
         // IMPORTANT for Outlook importance=high). Used by the sidebar
@@ -67,9 +82,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // until the first sync writes it; the SELECT in `load_account_summaries_for_user`
         // falls back to a local COUNT during that window.
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS provider_unread_count INTEGER",
-        // Drive folders. The new table + the FK column on files self-heal
-        // existing DBs on backend startup so a deployed instance picks up
-        // the v1 folder feature without a manual psql step.
+        // Drive folders. The new table + the FK column on drive_files
+        // self-heal existing DBs on backend startup so a deployed instance
+        // picks up the v1 folder feature without a manual psql step.
         "CREATE TABLE IF NOT EXISTS folders (
             id BIGSERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -80,9 +95,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         )",
         "CREATE INDEX IF NOT EXISTS idx_folders_user_parent \
          ON folders(user_id, parent_folder_id)",
-        "ALTER TABLE files ADD COLUMN IF NOT EXISTS folder_id BIGINT \
+        "ALTER TABLE drive_files ADD COLUMN IF NOT EXISTS folder_id BIGINT \
          REFERENCES folders(id) ON DELETE CASCADE",
-        "CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id)",
+        "CREATE INDEX IF NOT EXISTS idx_drive_files_folder ON drive_files(folder_id)",
         // Partial unique indexes that prevent duplicate active subscriptions
         // for the same user or organization. Stripe webhooks can race during
         // plan upgrades; without this guard `current_plan_for_user` would
@@ -111,7 +126,7 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE notes ADD COLUMN IF NOT EXISTS title_iv TEXT",
         "ALTER TABLE notes ADD COLUMN IF NOT EXISTS content_encrypted TEXT",
         "ALTER TABLE notes ADD COLUMN IF NOT EXISTS content_iv TEXT",
-        "ALTER TABLE files ADD COLUMN IF NOT EXISTS file_iv TEXT",
+        "ALTER TABLE drive_files ADD COLUMN IF NOT EXISTS file_iv TEXT",
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS title_encrypted TEXT",
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS title_iv TEXT",
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS zoom_join_url_encrypted TEXT",
