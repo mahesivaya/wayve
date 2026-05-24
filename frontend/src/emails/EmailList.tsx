@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { EmailItem } from "./types";
 import { useGlobalSearch } from "../search/SearchContext";
 
@@ -12,6 +12,8 @@ interface EmailListProps {
   onCompose?: () => void;
   width?: number;
   isListView?: boolean;
+  onBulkMarkRead?: (ids: number[]) => Promise<void> | void;
+  onBulkDelete?: (ids: number[]) => Promise<void> | void;
 }
 
 function formatMobileTime(value: string) {
@@ -37,14 +39,25 @@ export const EmailList: React.FC<EmailListProps> = ({
   onCompose,
   width,
   isListView = false,
+  onBulkMarkRead,
+  onBulkDelete,
 }) => {
   const { searchQuery, setSearchQuery } = useGlobalSearch();
 
-  // Per-row bulk-select state for list view. Lives locally because no
-  // upstream action consumes it yet — the checkboxes are visual + provide
-  // a count so future bulk-action buttons (delete, mark-read) can hook in
-  // without restructuring this component.
+  // Per-row bulk-select state for list view. Bulk action callbacks are
+  // optional — when provided, Mark read / Delete buttons appear in the
+  // bar. Selection is cleared on successful action completion.
   const [checkedIds, setCheckedIds] = useState<Set<number>>(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // Inline toast shown when the user clicks Mark read / Delete with no
+  // selection. Auto-dismisses after ~2s so the bar settles back to normal.
+  const [bulkHint, setBulkHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!bulkHint) return;
+    const timer = window.setTimeout(() => setBulkHint(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [bulkHint]);
 
   const toggleChecked = (id: number) => {
     setCheckedIds((prev) => {
@@ -70,6 +83,40 @@ export const EmailList: React.FC<EmailListProps> = ({
     [emails.length, checkedIds.size],
   );
   const someChecked = checkedIds.size > 0 && !allChecked;
+
+  const runBulkMarkRead = async () => {
+    if (!onBulkMarkRead) return;
+    if (checkedIds.size === 0) {
+      setBulkHint("Select at least one email to mark as read.");
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      await onBulkMarkRead(Array.from(checkedIds));
+      setCheckedIds(new Set());
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const runBulkDelete = async () => {
+    if (!onBulkDelete) return;
+    if (checkedIds.size === 0) {
+      setBulkHint("Select at least one email to delete.");
+      return;
+    }
+    const ok = window.confirm(
+      `Delete ${checkedIds.size} email${checkedIds.size === 1 ? "" : "s"}? This cannot be undone.`,
+    );
+    if (!ok) return;
+    setBulkBusy(true);
+    try {
+      await onBulkDelete(Array.from(checkedIds));
+      setCheckedIds(new Set());
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   return (
     <div className="email-list" style={width ? { width } : undefined}>
@@ -103,18 +150,46 @@ export const EmailList: React.FC<EmailListProps> = ({
             aria-label={allChecked ? "Clear selection" : "Select all emails"}
           />
           {checkedIds.size > 0 ? (
-            <>
-              <span className="email-bulk-count">{checkedIds.size} selected</span>
-              <button
-                type="button"
-                className="email-bulk-clear"
-                onClick={clearChecked}
-              >
-                Clear
-              </button>
-            </>
+            <span className="email-bulk-count">{checkedIds.size} selected</span>
           ) : (
-            <span className="email-bulk-hint">Select all emails</span>
+            <span className="email-bulk-hint">Select emails</span>
+          )}
+          {onBulkMarkRead && (
+            <button
+              type="button"
+              className="email-bulk-action"
+              onClick={runBulkMarkRead}
+              disabled={bulkBusy}
+              title="Mark selected as read"
+            >
+              Mark read
+            </button>
+          )}
+          {onBulkDelete && (
+            <button
+              type="button"
+              className="email-bulk-action email-bulk-action--danger"
+              onClick={runBulkDelete}
+              disabled={bulkBusy}
+              title="Delete selected"
+            >
+              Delete
+            </button>
+          )}
+          {checkedIds.size > 0 && (
+            <button
+              type="button"
+              className="email-bulk-clear"
+              onClick={clearChecked}
+              disabled={bulkBusy}
+            >
+              Clear
+            </button>
+          )}
+          {bulkHint && (
+            <span className="email-bulk-toast" role="status">
+              {bulkHint}
+            </span>
           )}
         </div>
       )}

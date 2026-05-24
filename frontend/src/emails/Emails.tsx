@@ -23,7 +23,8 @@ export default function Emails() {
     accounts, emails, selectedEmail, setSelectedEmail, activeAccount, 
     setActiveAccount, activeFolder, setActiveFolder, hasMore, loadingMore,
     viewMode, setViewMode, files, filesLoading, filesError, 
-    fetchAccounts, setRefreshTick, loadMore, openFiles, openEmail, deleteEmail
+    fetchAccounts, setRefreshTick, loadMore, openFiles, openEmail, deleteEmail,
+    bulkMarkRead, bulkDelete
   } = useEmailInbox(user?.id, normalizedSearchQuery);
 
   const [composeOpen, setComposeOpen] = useState(false);
@@ -319,6 +320,8 @@ export default function Emails() {
           onCompose={() => setComposeOpen(true)}
           width={showEmailListResizer ? emailListWidth : undefined}
           isListView={emailViewLayout === "list"}
+          onBulkMarkRead={bulkMarkRead}
+          onBulkDelete={bulkDelete}
         />
       )}
 

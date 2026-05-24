@@ -211,6 +211,65 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
     setSelectedEmail((cur) => (cur?.id === emailId ? null : cur));
   };
 
+  // Apply mark-read to many ids at once. Optimistic UI is the source of
+  // truth in this render; failed POSTs log but don't roll back so a flaky
+  // network mid-batch doesn't make rows pop back to "unread" — the next
+  // provider sync reconciles. Decrements the per-account unread badge by
+  // however many were actually unread.
+  const bulkMarkRead = async (ids: number[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const unreadByAccount = new Map<number, number>();
+    setEmails((prev) =>
+      prev.map((email) => {
+        if (!idSet.has(email.id)) return email;
+        if (email.is_read === false && email.account_id != null) {
+          unreadByAccount.set(
+            email.account_id,
+            (unreadByAccount.get(email.account_id) ?? 0) + 1,
+          );
+        }
+        return { ...email, is_read: true };
+      }),
+    );
+    setAccounts((prev) =>
+      prev.map((acc) => {
+        const drop = unreadByAccount.get(acc.id) ?? 0;
+        if (drop === 0) return acc;
+        return { ...acc, unread_count: Math.max(0, (acc.unread_count ?? 0) - drop) };
+      }),
+    );
+    // Also patch the cache so a subsequent open() doesn't repaint as unread.
+    for (const id of ids) {
+      const cached = emailCache.current[id];
+      if (cached) emailCache.current[id] = { ...cached, is_read: true };
+    }
+    await Promise.allSettled(ids.map((id) => markEmailRead(id))).then((results) => {
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        logger.warn("bulkMarkRead: some calls failed", { failed, total: ids.length });
+      }
+    });
+  };
+
+  // Optimistic remove from the list, then fire deletes in parallel. On any
+  // failure the row is gone from the UI but the next refresh will pull it
+  // back if the backend still has it — acceptable for the bulk action since
+  // the user can re-delete.
+  const bulkDelete = async (ids: number[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setEmails((prev) => prev.filter((email) => !idSet.has(email.id)));
+    setSelectedEmail((cur) => (cur && idSet.has(cur.id) ? null : cur));
+    for (const id of ids) delete emailCache.current[id];
+    await Promise.allSettled(ids.map((id) => deleteEmailRequest(id))).then((results) => {
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        logger.warn("bulkDelete: some calls failed", { failed, total: ids.length });
+      }
+    });
+  };
+
   return {
     accounts,
     emails,
@@ -233,5 +292,7 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
     openFiles,
     openEmail,
     deleteEmail,
+    bulkMarkRead,
+    bulkDelete,
   };
 }
