@@ -239,6 +239,13 @@ CREATE TABLE IF NOT EXISTS email_accounts (
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'google';
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS display_name TEXT;
 
+-- Authoritative unread count fetched from the provider (Gmail INBOX label or
+-- Outlook inbox mailFolder). Reflects ALL unread mail in the user's inbox,
+-- not just what's been synced into our `emails` table. NULL until the first
+-- successful sync — `load_account_summaries_for_user` falls back to a local
+-- COUNT in that window so the badge isn't blank.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS provider_unread_count INTEGER;
+
 -- =========================================================================
 -- Shared inboxes (org + platform).
 -- =========================================================================

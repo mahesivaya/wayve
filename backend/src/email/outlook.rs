@@ -354,6 +354,43 @@ async fn upsert_messages(
     Ok(())
 }
 
+/// Outlook equivalent of `email::sync::refresh_provider_unread_count`. Fetches
+/// the inbox folder's `unreadItemCount` (the authoritative provider total)
+/// and stamps it on `email_accounts.provider_unread_count`. Best-effort:
+/// a failed Graph call logs and returns Ok so the rest of the sync runs.
+pub async fn refresh_outlook_unread_count(
+    pool: &PgPool,
+    account_id: i32,
+    access_token: &str,
+) -> Result<()> {
+    let url = format!(
+        "{}/v1.0/me/mailFolders/inbox?$select=unreadItemCount",
+        crate::external::microsoft_graph_base()
+    );
+    let resp = HTTP_CLIENT.get(&url).bearer_auth(access_token).send().await?;
+    if !resp.status().is_success() {
+        warn!(
+            target: "worker",
+            account_id,
+            status = %resp.status(),
+            "Graph mailFolders/inbox returned non-success — skipping unread-count update"
+        );
+        return Ok(());
+    }
+    let body: Value = resp.json().await?;
+    let unread = body
+        .get("unreadItemCount")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let unread_i32 = i32::try_from(unread.clamp(0, i32::MAX as i64)).unwrap_or(0);
+    sqlx::query("UPDATE email_accounts SET provider_unread_count = $1 WHERE id = $2")
+        .bind(unread_i32)
+        .bind(account_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Pulls recent messages for one connected Outlook mailbox and upserts them
 /// (body included, encrypted) into `emails`, then advances `last_sync`.
 #[instrument(target = "worker", skip(pool, access_token), fields(account_id))]
@@ -418,6 +455,10 @@ pub async fn sync_outlook_account(
         .bind(account_id)
         .execute(pool)
         .await?;
+
+    if let Err(err) = refresh_outlook_unread_count(pool, account_id, access_token).await {
+        warn!(target: "worker", account_id, error = ?err, "refresh_outlook_unread_count failed");
+    }
 
     debug!(target: "worker", account_id, synced = total, "outlook sync done");
     Ok(())

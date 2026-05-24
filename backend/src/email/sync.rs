@@ -10,6 +10,49 @@ use tracing::{debug, error, info, instrument, warn};
 // (msg_id, sender, receiver, subject, gmail_timestamp, is_read) — body is fetched later by body_worker
 pub type EmailHeader = (String, String, String, String, NaiveDateTime, bool);
 
+/// Fetch the authoritative unread count for the INBOX label and stamp it on
+/// `email_accounts.provider_unread_count`. Without this, the sidebar's unread
+/// badge only reflects emails Wayve has already synced into Postgres, which
+/// grows over time as the user paginates older mail — making the count look
+/// like it's "increasing" on every Show More click.
+///
+/// Best-effort: a failed labels.get is logged and ignored so the rest of the
+/// sync still proceeds. The stale count is better than a sync hard-fail.
+pub async fn refresh_provider_unread_count(
+    pool: &PgPool,
+    account_id: i32,
+    token: &str,
+) -> anyhow::Result<()> {
+    let url = format!(
+        "{}/gmail/v1/users/me/labels/INBOX",
+        crate::external::gmail_api_base()
+    );
+    let res = HTTP_CLIENT.get(&url).bearer_auth(token).send().await?;
+    if !res.status().is_success() {
+        warn!(
+            target: "worker",
+            account_id,
+            status = %res.status(),
+            "labels.get returned non-success — skipping unread-count update"
+        );
+        return Ok(());
+    }
+    let body: Value = res.json().await?;
+    let unread = body
+        .get("messagesUnread")
+        .and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
+        .unwrap_or(0);
+    // Clamp to i32::MAX — unlikely for any real inbox but protects the
+    // INTEGER column from a malformed payload.
+    let unread_i32 = i32::try_from(unread.clamp(0, i32::MAX as i64)).unwrap_or(0);
+    sqlx::query("UPDATE email_accounts SET provider_unread_count = $1 WHERE id = $2")
+        .bind(unread_i32)
+        .bind(account_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader> {
     let url = format!(
         "{}/gmail/v1/users/me/messages/{}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject",
@@ -287,6 +330,12 @@ pub async fn sync_account(
         .execute(pool)
         .await?;
 
+    // Best-effort — sidebar unread badge reflects truth even when the user
+    // hasn't paginated all the way back through their mailbox.
+    if let Err(err) = refresh_provider_unread_count(pool, account_id, token).await {
+        warn!(target: "worker", account_id, error = ?err, "refresh_provider_unread_count failed");
+    }
+
     Ok(())
 }
 
@@ -325,6 +374,15 @@ pub async fn sync_account_recent(
         .bind(account_id)
         .execute(pool)
         .await?;
+
+    // First-sync hook fires through this path right after a Gmail account
+    // connects (see oauth_flow::oauth_callback). Stamping the provider
+    // unread count here makes the sidebar badge instantly accurate instead
+    // of starting at "however many of the recent 51 are unread" and only
+    // catching up after a full sync.
+    if let Err(err) = refresh_provider_unread_count(pool, account_id, token).await {
+        warn!(target: "worker", account_id, error = ?err, "refresh_provider_unread_count failed");
+    }
 
     Ok(())
 }

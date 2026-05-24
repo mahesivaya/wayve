@@ -162,16 +162,24 @@ pub async fn load_account_summaries_for_user(pool: &PgPool, user_id: i32) -> Res
     // Owner mailboxes AND shared inboxes the caller is a member of. The
     // LEFT JOIN against shared_inbox_members is repeated in the WHERE so
     // a single GROUP BY collapses everything to one row per account.
+    // `provider_unread_count` is the truth (Gmail labels.get / Outlook
+    // mailFolders/inbox), refreshed every sync tick. Falls back to a local
+    // COUNT for the brief window between account-add and first successful
+    // sync, so the badge is never blank — and for shared inboxes whose
+    // provider count we don't refresh from the member's perspective.
     let accounts = sqlx::query_as::<_, Account>(
         r#"
         SELECT
           a.id,
           a.email,
           a.display_name,
-          COUNT(e.id) FILTER (
-            WHERE e.is_read = false
-              AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'
-          )::BIGINT AS unread_count,
+          COALESCE(
+            a.provider_unread_count::BIGINT,
+            COUNT(e.id) FILTER (
+              WHERE e.is_read = false
+                AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'
+            )::BIGINT
+          ) AS unread_count,
           a.is_shared,
           a.shared_label,
           (a.user_id = $1) AS is_owner

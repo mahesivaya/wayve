@@ -422,6 +422,20 @@ pub async fn mark_email_read(
     if let Some(row) = updated {
         let provider_message_id: String = row.get("gmail_id");
         let account_id: i32 = row.get("account_id");
+
+        // Decrement the cached provider unread count optimistically so the
+        // sidebar badge matches the user's local action without waiting for
+        // the next 30-second sync to re-query Gmail/Outlook. GREATEST clamps
+        // at zero in case our count is stale and would otherwise go negative.
+        sqlx::query(
+            "UPDATE email_accounts \
+             SET provider_unread_count = GREATEST(COALESCE(provider_unread_count, 0) - 1, 0) \
+             WHERE id = $1",
+        )
+        .bind(account_id)
+        .execute(pool.get_ref())
+        .await
+        .ok();
         let provider = row
             .try_get::<String, _>("provider")
             .map(|value| MailProvider::from_db(&value))

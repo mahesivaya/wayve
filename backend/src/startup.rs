@@ -48,6 +48,10 @@ pub async fn ensure_email_schema(pool: &PgPool) {
     let statements = [
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT TRUE",
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS display_name TEXT",
+        // Provider-reported unread count for the inbox label/folder. NULL
+        // until the first sync writes it; the SELECT in `load_account_summaries_for_user`
+        // falls back to a local COUNT during that window.
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS provider_unread_count INTEGER",
         // Drive folders. The new table + the FK column on files self-heal
         // existing DBs on backend startup so a deployed instance picks up
         // the v1 folder feature without a manual psql step.
