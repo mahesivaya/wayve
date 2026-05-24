@@ -50,7 +50,10 @@ documentation/
 frontend/src/**/*.js
 frontend/src/**/*.jsx
 *.pem
-docs/
+# Anchor to repo root only — was previously `docs/` which matched ANY
+# directory named docs anywhere, accidentally suppressing
+# backend/src/docs/ from git tracking and breaking prod builds.
+/docs/
 client_secret.json
 
 # k6 stress test artifacts (generated; the .js script is committed)
