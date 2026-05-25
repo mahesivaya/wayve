@@ -567,10 +567,47 @@
 
 .chat-input {
   display: flex;
+  flex-direction: column;
   gap: 10px;
   padding: 12px;
   border-top: 1px solid #e5e7eb;
   background: var(--color-email-list-bg);
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.chat-compose-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md);
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.chat-compose-error-dismiss {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #991b1b;
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-compose-error-dismiss:hover {
+  background: rgba(153, 27, 27, 0.12);
 }
 
 .chat-input textarea {

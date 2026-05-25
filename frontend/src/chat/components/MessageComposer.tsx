@@ -8,6 +8,8 @@ type Props = {
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
+  error?: string;
+  onDismissError?: () => void;
 };
 
 export default function MessageComposer({
@@ -18,6 +20,8 @@ export default function MessageComposer({
   input,
   onInputChange,
   onSend,
+  error,
+  onDismissError,
 }: Props) {
   if (!conversation || !canChat) return null;
 
@@ -25,21 +29,38 @@ export default function MessageComposer({
 
   return (
     <div className="chat-input">
-      <textarea
-        value={input}
-        onChange={(e) => onInputChange(e.target.value)}
-        disabled={disabled}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            if (!disabled) onSend();
-          }
-        }}
-        placeholder={disabled ? "Connecting to chat..." : `Message ${title}`}
-      />
-      <button type="button" onClick={onSend} disabled={disabled}>
-        Send
-      </button>
+      {error && (
+        <div className="chat-compose-error" role="alert">
+          <span>{error}</span>
+          {onDismissError && (
+            <button
+              type="button"
+              className="chat-compose-error-dismiss"
+              onClick={onDismissError}
+              aria-label="Dismiss error"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+      <div className="chat-input-row">
+        <textarea
+          value={input}
+          onChange={(e) => onInputChange(e.target.value)}
+          disabled={disabled}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (!disabled) onSend();
+            }
+          }}
+          placeholder={disabled ? "Connecting to chat..." : `Message ${title}`}
+        />
+        <button type="button" onClick={onSend} disabled={disabled}>
+          Send
+        </button>
+      </div>
     </div>
   );
 }

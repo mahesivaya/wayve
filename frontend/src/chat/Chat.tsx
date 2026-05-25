@@ -77,10 +77,17 @@ export default function Chat() {
   const [lastResetFor, setLastResetFor] = useState<Conversation | null>(
     selectedConversation,
   );
+  // Surfaced inline above the composer when a send fails (typically because
+  // a channel member hasn't finished encryption setup). Distinct from
+  // `settingsError`, which lives behind the channel-settings panel and is
+  // invisible to a user who's just trying to send. Declared early so the
+  // conversation-change block below can reset it.
+  const [composeError, setComposeError] = useState("");
   if (lastResetFor !== selectedConversation) {
     setLastResetFor(selectedConversation);
     setActiveThread(null);
     setThreadReplies([]);
+    setComposeError("");
   }
 
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
@@ -307,19 +314,23 @@ export default function Chat() {
       return keys;
     }
 
-    const missingMembers: number[] = [];
+    const missingEmails: string[] = [];
     for (const memberId of conversation.channel.member_ids) {
       if (memberId === user.id) continue;
       const member = users.find((candidate) => candidate.id === memberId);
       if (member?.public_key?.length) {
         keys.set(memberId, member.public_key);
       } else {
-        missingMembers.push(memberId);
+        missingEmails.push(member?.email ?? `user #${memberId}`);
       }
     }
 
-    if (missingMembers.length > 0) {
-      throw new Error("Some channel members do not have chat encryption keys");
+    if (missingEmails.length > 0) {
+      const list = missingEmails.join(", ");
+      throw new Error(
+        `Can't send — ${list} ${missingEmails.length === 1 ? "hasn't" : "haven't"} ` +
+        `finished encryption setup. Ask them to log out and back in once.`,
+      );
     }
 
     return keys;
@@ -345,7 +356,7 @@ export default function Chat() {
       encryptedContent = await encryptChatContent(plaintext, recipientKeys);
     } catch (err) {
       logger.error("Chat encryption failed", err);
-      setSettingsError(err instanceof Error ? err.message : "Chat encryption failed");
+      setComposeError(err instanceof Error ? err.message : "Chat encryption failed");
       return;
     }
 
@@ -362,6 +373,7 @@ export default function Chat() {
     wsRef.current.send(JSON.stringify(message));
     setMessages((prev) => [...prev, { ...message, content: plaintext }]);
     setInput("");
+    setComposeError("");
   };
 
   const createChannel = async () => {
@@ -585,10 +597,15 @@ export default function Chat() {
           isConnected={isChatSocketConnected}
           title={selectedTitle}
           input={input}
-          onInputChange={setInput}
+          onInputChange={(value) => {
+            setInput(value);
+            if (composeError) setComposeError("");
+          }}
           onSend={() => {
             void sendMessage();
           }}
+          error={composeError}
+          onDismissError={() => setComposeError("")}
         />
       </section>
     </div>
