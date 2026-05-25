@@ -46,6 +46,17 @@ const PLAN_COPY: Record<string, { price: string; features: string[]; action?: st
   },
 };
 
+const PLAN_DISPLAY_ORDER = ["basic_user", "advance_user", "organization", "enterprise"];
+
+function planDisplayRank(plan: Plan): number {
+  const codeRank = PLAN_DISPLAY_ORDER.indexOf(plan.code);
+  if (codeRank >= 0) return codeRank;
+  const nameRank = PLAN_DISPLAY_ORDER.findIndex((code) =>
+    plan.name.toLowerCase().replace(/\s+/g, "_") === code
+  );
+  return nameRank >= 0 ? nameRank : PLAN_DISPLAY_ORDER.length;
+}
+
 const STRIPE_TEST_CARDS = [
   { label: "Visa credit", number: "4242 4242 4242 4242", result: "Successful payment" },
   { label: "Visa debit", number: "4000 0566 5566 5556", result: "Successful debit payment" },
@@ -358,7 +369,10 @@ export default function Billing() {
     return <div className="billing-page">Loading billing…</div>;
   }
 
-  const visiblePlans = plans;
+  const visiblePlans = [...plans].sort((a, b) => {
+    const rankDelta = planDisplayRank(a) - planDisplayRank(b);
+    return rankDelta || a.name.localeCompare(b.name);
+  });
   const activeSub = sub?.subscription ?? null;
   const canViewStripeDetails =
     user?.account_type === "platform_admin" && user?.effective_role === "owner";
