@@ -296,7 +296,7 @@ export default function PlatformAdminHome() {
         ) : organizations.length === 0 ? (
           <div className="platform-admin-empty">No organizations created yet.</div>
         ) : (
-          <div className="organization-name-list">
+          <div className="organization-name-list platform-organization-list">
             {organizations.map((org) => (
               <article key={org.id}>
                 <strong>{org.name}</strong>
@@ -414,7 +414,7 @@ export default function PlatformAdminHome() {
               <p>Role-specific dashboards across the platform team.</p>
             </div>
           </div>
-          <div className="organization-name-list">
+          <div className="organization-name-list platform-console-list">
             {canSeePlatformBilling && (
               <article>
                 <strong>Billing</strong>
