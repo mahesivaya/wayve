@@ -152,7 +152,7 @@ export default function Home() {
           <section className="public-home-hero">
             <div className="hero-copy">
               <p className="hero-kicker">Private workspace for modern teams</p>
-              <h1>One home for mail, chat, calls, files, notes, and AI.</h1>
+              <h1>One home for email, chat, calls, files, notes, and AI.</h1>
               <p>
                 Wayve brings daily work tools into a single secure app, with fast
                 switching between personal productivity and team collaboration.
