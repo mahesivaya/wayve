@@ -271,42 +271,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               API Keys
             </Link>
           )}
-          {canAccessSecurity && (
-            <Link
-              to="/security/audit"
-              className={location.pathname === "/security/audit" ? "active" : ""}
-              onClick={() => setNavOpen(false)}
-            >
-              Security
-            </Link>
-          )}
-          {canAccessPlatformBilling && (
-            <Link
-              to="/platform/billing"
-              className={location.pathname === "/platform/billing" ? "active" : ""}
-              onClick={() => setNavOpen(false)}
-            >
-              Billing
-            </Link>
-          )}
-          {canAccessPlatformDeveloper && (
-            <Link
-              to="/platform/developer"
-              className={location.pathname === "/platform/developer" ? "active" : ""}
-              onClick={() => setNavOpen(false)}
-            >
-              Developer
-            </Link>
-          )}
-          {canAccessPlatformSupport && (
-            <Link
-              to="/platform/support"
-              className={location.pathname === "/platform/support" ? "active" : ""}
-              onClick={() => setNavOpen(false)}
-            >
-              Support
-            </Link>
-          )}
           {renderNavItem("/about", "about", "About")}
         </div>
 
