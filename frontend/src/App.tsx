@@ -28,6 +28,8 @@ const Settings = lazy(() => import("./profile/Settings"));
 const Organization = lazy(() => import("./organization/Organization"));
 const OrganizationAdminHome = lazy(() => import("./organization/OrganizationAdminHome"));
 const PlatformAdminHome = lazy(() => import("./organization/PlatformAdminHome"));
+const PlatformOrganizations = lazy(() => import("./organization/PlatformOrganizations"));
+const PlatformMembers = lazy(() => import("./organization/PlatformMembers"));
 const OrganizationHome = lazy(() => import("./organization/OrganizationHome"));
 const EmailFiles = lazy(() => import("./files/EmailFiles"));
 const ServicePage = lazy(() => import("./services/ServicePage"));
@@ -160,6 +162,8 @@ export default function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/billing" element={<Billing />} />
+            <Route path="/platform/organizations" element={<PlatformOrganizations />} />
+            <Route path="/platform/members" element={<PlatformMembers />} />
             <Route path="/platform/billing" element={<PlatformBilling />} />
             <Route path="/platform/developer" element={<PlatformDeveloper />} />
             <Route path="/platform/support" element={<PlatformSupport />} />
