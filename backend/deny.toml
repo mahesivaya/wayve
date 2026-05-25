@@ -1,0 +1,80 @@
+# cargo-deny config for the rwayve workspace.
+#
+# Run from `backend/`:
+#   cargo deny check          # full sweep
+#   cargo deny check advisories
+#   cargo deny check licenses
+#
+# The ignores below cover vulnerabilities reachable ONLY through the
+# `actix-test` dev-dependency chain (tests and middleware unit tests).
+# None of them compile into the release binary. Re-evaluate whenever
+# actix-web/actix-test ships a release built on rustls >=0.23.
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+yanked = "warn"
+ignore = [
+    # ring 0.16 — AES panic in QUIC / 64GB chunks. Pulled in by
+    # awc 3.8.2 → actix-tls 3.5 → tokio-rustls 0.23 → rustls 0.20,
+    # which only enters the build through `actix-test` (dev-dep).
+    # Not in `cargo build --release`. Drop once actix-test upgrades
+    # its TLS stack to rustls 0.23.
+    { id = "RUSTSEC-2025-0009", reason = "dev-only via actix-test → awc → rustls 0.20" },
+    # ring 0.16 unmaintained — same path as above.
+    { id = "RUSTSEC-2025-0010", reason = "dev-only via actix-test → awc → rustls 0.20" },
+    # rustls 0.20 complete_io infinite loop on close_notify. Same
+    # dev-only path; we never call complete_io and don't ship this
+    # rustls in the release binary (our prod path uses rustls 0.23
+    # via reqwest/lettre/sqlx-rustls).
+    { id = "RUSTSEC-2024-0336", reason = "dev-only via actix-test → awc → rustls 0.20; complete_io unused" },
+    # rsa 0.9 Marvin attack (timing sidechannel). Pulled in by
+    # sqlx-macros-core → sqlx-mysql so the compile-time `query!`
+    # macros can typecheck against any backend. We use Postgres
+    # exclusively at runtime; the rsa code path (MySQL TLS handshake)
+    # is never executed. No upstream fix exists.
+    { id = "RUSTSEC-2023-0071", reason = "rsa reachable only via sqlx-mysql; we run Postgres only" },
+]
+
+[licenses]
+version = 2
+# Standard permissive set we already ship under.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "0BSD",
+    "BSL-1.0",
+    # Data-only permissive license used by `webpki-roots` to ship
+    # Mozilla's CA trust store. Equivalent to public-domain data
+    # distribution; not a code license.
+    "CDLA-Permissive-2.0",
+]
+# Our own workspace crates (rwayve, wayve-security) are marked
+# `publish = false` in their manifests; this lets cargo-deny skip
+# them when checking license requirements.
+[licenses.private]
+ignore = true
+# zstd-sys still declares the legacy `MIT/Apache-2.0` slash form
+# instead of the SPDX `MIT OR Apache-2.0` expression. Both halves
+# are in the allow list above; this exception just lets
+# cargo-deny accept the legacy syntax until upstream fixes it.
+[[licenses.exceptions]]
+name = "zstd-sys"
+allow = ["MIT", "Apache-2.0"]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

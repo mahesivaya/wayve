@@ -2,13 +2,14 @@
 name = "rwayve"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [[bin]]
 name = "rwayve"
 path = "src/main.rs"
 
 [dependencies]
-wayve-security = { path = "../wayve-security" }
+wayve-security = { path = "../wayve-security", version = "0.1" }
 
 actix.workspace = true
 actix-web.workspace = true

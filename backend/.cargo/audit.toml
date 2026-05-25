@@ -1,0 +1,17 @@
+# cargo-audit config for the rwayve workspace.
+#
+# Mirrors the dev-only ignore list documented in `backend/deny.toml`.
+# Both tools must be kept in sync — `cargo audit` reads this file,
+# `cargo deny check` reads deny.toml. The reasoning notes live in
+# deny.toml; this file just lists the advisory IDs.
+#
+# Re-evaluate whenever actix-test ships a release built on
+# rustls >=0.23, which is the root cause of three of these.
+
+[advisories]
+ignore = [
+    "RUSTSEC-2025-0009",  # ring 0.16 AES panic — dev-only via actix-test
+    "RUSTSEC-2025-0010",  # ring 0.16 unmaintained — dev-only via actix-test
+    "RUSTSEC-2024-0336",  # rustls 0.20 complete_io loop — dev-only via actix-test
+    "RUSTSEC-2023-0071",  # rsa Marvin attack — only via sqlx-mysql build deps; we use Postgres
+]

@@ -2,6 +2,7 @@
 name = "wayve-security"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 # Web framework — needed for HttpRequest extraction in jwt.rs and the
