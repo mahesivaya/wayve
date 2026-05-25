@@ -293,6 +293,14 @@ pub async fn oauth_callback(
     }
 
     let frontend_for_errors = crate::config::frontend_url();
+    // Tracks whether this OAuth round actually CREATED a user row, vs.
+    // logged an existing user in. The signup flow doubles as the sign-in
+    // entry point (the "Sign in with Google" button on /login also hits
+    // `?mode=signup`), so `is_signup=true` is not by itself proof of a
+    // new account. We surface the distinction to the frontend via
+    // `&new=true` so it only triggers fresh-keypair setup when the user
+    // is genuinely new.
+    let mut was_new_user = false;
     if is_signup {
         let existing =
             sqlx::query("SELECT id, auth_provider, account_type FROM users WHERE email = $1")
@@ -329,6 +337,7 @@ pub async fn oauth_callback(
                 match insert {
                     Ok(row) => {
                         user_id = row.get("id");
+                        was_new_user = true;
                         info!(target: "auth", user_id, email, "Google signup created user");
                     }
                     Err(e) => {
@@ -456,7 +465,11 @@ pub async fn oauth_callback(
         } else {
             "home"
         };
-        format!("{}/{landing_path}#signup=true", frontend)
+        if was_new_user {
+            format!("{}/{landing_path}#signup=true&new=true", frontend)
+        } else {
+            format!("{}/{landing_path}#signup=true", frontend)
+        }
     } else {
         format!("{}/emails#connected=true", frontend)
     };

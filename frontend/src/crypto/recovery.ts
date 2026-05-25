@@ -137,7 +137,8 @@ export async function wrapCredentialForRecovery(
 export async function unwrapKeysFromRecovery(
   envelope: WrappedKeyEnvelope,
   mnemonicEntropy: Uint8Array,
-  userId: number
+  userId: number,
+  email?: string | null,
 ): Promise<{ privateKey: CryptoKey; publicKeyBytes: ArrayBuffer }> {
   if (envelope.v !== 1) {
     throw new Error(`Unsupported wrapped-key version: ${envelope.v}`);
@@ -169,9 +170,11 @@ export async function unwrapKeysFromRecovery(
   const publicKeyBytes = b64ToBytes(envelope.pub).slice().buffer;
 
   // Persist locally so chat/notes/drive/attachments all find the keypair
-  // in the same place a normal first-login flow puts it.
-  await savePrivateKey(privateKey, userId);
-  await savePublicKey(publicKeyBytes, userId);
+  // in the same place a normal first-login flow puts it. Email alias is
+  // also written so a later userId reshuffle (dev DB reset) doesn't
+  // orphan these keys.
+  await savePrivateKey(privateKey, userId, email);
+  await savePublicKey(publicKeyBytes, userId, email);
 
   return { privateKey, publicKeyBytes };
 }

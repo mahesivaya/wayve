@@ -49,7 +49,11 @@ export type UserType = {
 export type AuthType = {
   user: UserType | null;
   initializing: boolean;
-  login: (token: string, accountType?: string) => void;
+  // `isFreshRegistration` flips the encryption-setup path. Only the
+  // register flow generates new keys + shows the 24-word seed modal.
+  // Regular login leaves the server's wrapped envelope alone — if local
+  // keys are missing, the user recovers via /recover-with-mnemonic.
+  login: (token: string, accountType?: string, isFreshRegistration?: boolean) => void;
   logout: () => void;
 };
 

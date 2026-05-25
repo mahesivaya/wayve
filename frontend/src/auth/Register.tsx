@@ -12,11 +12,10 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  // Default to "basic" — the lowest-friction tier for new users. They
-  // get cross-device login with email + password and no mnemonic to
-  // memorize. Privacy-conscious users can opt into the stronger modes
-  // explicitly via the radio group below.
-  const [recoveryMode, setRecoveryMode] = useState<RecoveryMode>("basic");
+  // Default to "full" — every personal user gets a 24-word recovery
+  // phrase at signup. They're shown the words once, then never again
+  // (RecoverPromptModal asks them to re-enter on a new device).
+  const [recoveryMode, setRecoveryMode] = useState<RecoveryMode>("full");
   const [error, setError] = useState(() =>
     params.get("error") === "email_exists"
       ? "This email is already registered. Please log in instead."
@@ -47,7 +46,7 @@ export default function Register() {
         throw new Error("No token returned from server");
       }
 
-      login(data.token, data.account_type ?? "personal");
+      login(data.token, data.account_type ?? "personal", true);
 
       const target = homePathForAccount(data.account_type);
       navigate(target.startsWith("/") ? target : `/${target}`);

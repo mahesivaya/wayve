@@ -16,6 +16,7 @@ import {
   uploadBasicKey,
 } from "../api/recovery";
 import RecoverySeedModal from "../recovery/RecoverySeedModal";
+import RecoverPromptModal from "../recovery/RecoverPromptModal";
 import { getMe, logout as logoutRequest, saveUserPublicKey } from "../api/Auth";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./token";
 import { logger } from "../utils/logger";
@@ -68,31 +69,55 @@ const parseJwt = (token: string): Claims | null => {
 // Resolve the boot-time token: prefer the OAuth redirect token from the URL
 // fragment, otherwise reuse the stored one. The fragment keeps the token out of
 // server logs, referrers, and browser request history.
-const resolveBootToken = (): string | null => {
+//
+// `isFreshSignup` mirrors the `#signup=true` (Google) and `#sso=true&new=true`
+// (enterprise SSO) markers the backend writes on fresh-account landings. The
+// bootstrap useEffect threads this into setupEncryption so a brand-new
+// OAuth/SSO user gets the 24-word seed modal — instead of being prompted to
+// enter a phrase they were never given.
+const resolveBootToken = (): { token: string | null; isFreshSignup: boolean } => {
   const hashParams = new URLSearchParams(window.location.hash.slice(1));
   const tokenFromHash = hashParams.get("token");
+  const isSignup = hashParams.has("signup");
   const isOAuthLanding =
-    hashParams.has("signup") ||
-    hashParams.has("connected") ||
-    // SSO sign-in lands here with `#sso=true&token=...&new=true|false`.
-    // Treated identically to the OAuth landings above so the token is
-    // stored, the URL is cleaned, and the user enters /home in their
-    // signed-in state.
-    hashParams.has("sso");
+    isSignup || hashParams.has("connected") || hashParams.has("sso");
+  // `signup=true` is set on every signup-FLOW landing (the same backend
+  // handler serves both new signups and existing-user re-signins because
+  // the "Sign in with Google" button on /login also uses
+  // ?mode=signup). The `&new=true` add-on is set only when the OAuth
+  // round actually inserted a new user row — that's the one case where
+  // we want to generate fresh keys + show the 24-word seed modal.
+  const isOAuthNewUser =
+    (isSignup && hashParams.get("new") === "true") ||
+    (hashParams.has("sso") && hashParams.get("new") === "true");
+  const isFreshSignup = isOAuthNewUser;
 
-  if (tokenFromHash && isOAuthLanding) {
-    log.info("restoring token from OAuth redirect");
-    setAuthToken(tokenFromHash);
+  // Two OAuth-landing shapes:
+  //   1. `#signup=true&token=...` — older flows put the JWT in the
+  //      fragment so it stays out of server logs.
+  //   2. `#signup=true` (no token) — newer flows set the JWT via an
+  //      HttpOnly cookie at the OAuth callback and only use the
+  //      fragment to carry UI markers like `signup`/`connected`/`sso`.
+  // Either way we want to clean the fragment from the URL and surface
+  // `isFreshSignup` so the bootstrap setupEncryption knows to show
+  // the seed modal instead of asking for an existing recovery phrase.
+  if (isOAuthLanding) {
+    if (tokenFromHash) {
+      log.info("restoring token from OAuth redirect (hash-token)");
+      setAuthToken(tokenFromHash);
+    } else {
+      log.info("OAuth redirect (cookie-token); cleaning fragment");
+    }
     const path = window.location.pathname || "/home";
     window.history.replaceState(
       {},
       document.title,
-      `${path}${window.location.search}`
+      `${path}${window.location.search}`,
     );
-    return tokenFromHash;
+    return { token: tokenFromHash ?? getAuthToken(), isFreshSignup };
   }
 
-  return getAuthToken();
+  return { token: getAuthToken(), isFreshSignup: false };
 };
 
 async function publishPublicKey(publicKey: ArrayBuffer) {
@@ -139,12 +164,18 @@ function defaultAccessForAccount(accountType?: string | null) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const authVersion = useRef(0);
 
+  // Captured once at AuthProvider mount. resolveBootToken cleans the URL
+  // hash as a side effect, so the `signup`/`sso&new=true` markers are
+  // gone by the time the bootstrap useEffect runs. Stashing the parsed
+  // result in state lets both the optimistic-user initializer and the
+  // effect see the same snapshot.
+  const [boot] = useState(resolveBootToken);
+
   // Optimistic init: trust a non-expired JWT immediately so the app renders
   // without a round-trip. /api/me below confirms it and logs us out on 401.
   const [user, setUser] = useState<UserType | null>(() => {
-    const token = resolveBootToken();
-    if (!token) return null;
-    const claims = parseJwt(token);
+    if (!boot.token) return null;
+    const claims = parseJwt(boot.token);
     const access = claims ? defaultAccessForAccount(claims.account_type) : null;
     return claims
       ? {
@@ -180,6 +211,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [pendingRecoveryMode, setPendingRecoveryMode] = useState<RecoveryMode>("full");
   const [wrapBusy, setWrapBusy] = useState(false);
   const [wrapError, setWrapError] = useState<string | null>(null);
+  // True when a "full"-mode user logs in on a device without local
+  // encryption keys. Blocks the UI behind RecoverPromptModal until they
+  // enter their 24-word recovery phrase (the one shown once at register).
+  const [needsRecovery, setNeedsRecovery] = useState(false);
 
   // No `needsRestore` banner here anymore. On a "new device" (no local
   // key, server envelope present) the user can navigate to /recover on
@@ -192,7 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // locally. On first login after registration the server has nothing
   // yet, so we generate a keypair, save locally, and upload the PKCS8
   // for future logins. No mnemonic ceremony at all in this mode.
-  const setupBasicEncryption = async (userId: number) => {
+  const setupBasicEncryption = async (userId: number, email: string) => {
     const serverPkcs8 = await fetchBasicKey().catch((err) => {
       log.warn("basic-key fetch failed", err);
       return null;
@@ -228,8 +263,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
       const publicKey = await crypto.subtle.exportKey("spki", publicCryptoKey);
 
-      await savePrivateKey(privateKey, userId);
-      await savePublicKey(publicKey, userId);
+      await savePrivateKey(privateKey, userId, email);
+      await savePublicKey(publicKey, userId, email);
       await publishPublicKey(publicKey);
       return;
     }
@@ -245,9 +280,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       true,
       ["encrypt", "decrypt"]
     );
-    await savePrivateKey(keyPair.privateKey, userId);
+    await savePrivateKey(keyPair.privateKey, userId, email);
     const publicKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
-    await savePublicKey(publicKey, userId);
+    await savePublicKey(publicKey, userId, email);
     await publishPublicKey(publicKey);
 
     // Upload the PKCS8 plaintext to the server. Best-effort: failure
@@ -262,15 +297,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const setupEncryption = async (userId: number, recoveryMode: RecoveryMode) => {
+  const setupEncryption = async (
+    userId: number,
+    recoveryMode: RecoveryMode,
+    email: string,
+    isFreshRegistration: boolean,
+  ) => {
     try {
-      const existingKey = await loadPrivateKey(userId);
-      const existingPublicKey = await loadPublicKey(userId);
+      // A fresh registration always wants brand-new keys, even if
+      // IndexedDB still has stale entries from a previous test run
+      // (common in dev after `just db-reset` re-issues the same email
+      // with a new user_id). Short-circuiting here would skip the seed
+      // modal AND leave the user with keys that don't match the server's
+      // new wrapped envelope.
+      if (!isFreshRegistration) {
+        const existingKey = await loadPrivateKey(userId, email);
+        const existingPublicKey = await loadPublicKey(userId, email);
 
-      if (existingKey && existingPublicKey) {
-        await publishPublicKey(existingPublicKey);
-        log.debug("encryption key already in IndexedDB; public key refreshed");
-        return;
+        if (existingKey && existingPublicKey) {
+          await publishPublicKey(existingPublicKey);
+          log.debug("encryption key already in IndexedDB; public key refreshed");
+          return;
+        }
       }
 
       // No local key. The recovery_mode chosen at signup decides what
@@ -289,7 +337,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       //                    the seed modal.
 
       if (recoveryMode === "basic") {
-        await setupBasicEncryption(userId);
+        await setupBasicEncryption(userId, email);
+        return;
+      }
+
+      // Local keys missing for a full/password_only account. The seed
+      // modal only ever fires during registration. On a regular login we
+      // leave the server's wrapped envelope alone — regenerating here
+      // would overwrite it with a fresh mnemonic, orphaning the 24
+      // words the user already saved.
+      //
+      // For "full" mode we then surface RecoverPromptModal so the user
+      // can paste the original 24 words and unwrap the envelope into
+      // local IndexedDB. "password_only" envelopes don't contain the
+      // real private key, so the prompt would do nothing useful — log
+      // and skip silently for that mode.
+      if (!isFreshRegistration) {
+        if (recoveryMode === "full") {
+          log.info("encryption keys missing — prompting for recovery mnemonic");
+          setNeedsRecovery(true);
+        } else {
+          log.warn(
+            "encryption keys missing on this device; password_only accounts " +
+              "can't restore via mnemonic. Encrypted content will be unavailable.",
+            { recoveryMode },
+          );
+        }
         return;
       }
 
@@ -430,9 +503,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             : nextUser
         );
 
-        setupEncryption(nextUser.id, nextUser.recovery_mode ?? "full").catch(
-          (err) => log.error("background encryption setup failed", err)
-        );
+        // Bootstrap effect normally runs for already-signed-in users on
+        // every page load, so isFreshRegistration is false. The exception
+        // is a Google/SSO landing where the URL hash carried `signup=true`
+        // (or `sso=true&new=true`) — those users skip Register.tsx
+        // entirely and would otherwise be asked for a 24-word phrase they
+        // were never given.
+        setupEncryption(
+          nextUser.id,
+          nextUser.recovery_mode ?? "full",
+          nextUser.email,
+          boot.isFreshSignup,
+        ).catch((err) => log.error("background encryption setup failed", err));
       } catch (err) {
         if ((err as { name?: string }).name === "AbortError") return;
         log.error("auth init network error", err);
@@ -449,7 +531,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = (token: string, accountType?: string) => {
+  const login = (token: string, accountType?: string, isFreshRegistration = false) => {
     authVersion.current += 1;
     setAuthToken(token);
     setInitializing(false);
@@ -496,7 +578,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             current_plan: data.current_plan ?? null,
             recovery_mode: recoveryMode,
           });
-          setupEncryption(decoded.sub, recoveryMode).catch((err) =>
+          setupEncryption(decoded.sub, recoveryMode, data.email, isFreshRegistration).catch((err) =>
             log.error("background encryption setup failed", err)
           );
         })
@@ -506,9 +588,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     authVersion.current += 1;
+    logoutRequest().catch((err) => log.error("logout request failed", err));
     clearAuthToken();
     setUser(null);
-    logoutRequest().catch((err) => log.error("logout request failed", err));
+    setNeedsRecovery(false);
+    // Hard-nav to the public landing page. Skipping this lets
+    // ProtectedRoute re-render after `setUser(null)` and bounce the
+    // user to /login (because every page they could be on right now
+    // is protected). The reload also clears all in-memory state so
+    // nothing leaks across sessions.
     window.location.href = "/";
   };
 
@@ -522,6 +610,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           busy={wrapBusy}
           error={wrapError}
           onConfirmed={handleRecoveryConfirmed}
+        />
+      )}
+      {needsRecovery && user && (
+        <RecoverPromptModal
+          userId={user.id}
+          email={user.email}
+          onUnlocked={() => setNeedsRecovery(false)}
+          onLogout={logout}
         />
       )}
     </AuthContext.Provider>

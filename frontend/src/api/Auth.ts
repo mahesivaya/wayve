@@ -195,5 +195,6 @@ export async function getMe(token?: string | null, signal?: AbortSignal) {
 export async function logout() {
   await apiFetch("/api/logout", {
     method: "POST",
+    preserve401: true,
   });
 }
