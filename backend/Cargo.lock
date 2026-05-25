@@ -3040,6 +3040,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "uuid",
+ "wayve-security",
  "wiremock",
 ]
 
@@ -4229,6 +4230,32 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap",
  "semver",
+]
+
+[[package]]
+name = "wayve-security"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "aes-gcm",
+ "anyhow",
+ "base64 0.21.7",
+ "bcrypt",
+ "chrono",
+ "hkdf",
+ "hmac",
+ "jsonwebtoken",
+ "moka",
+ "once_cell",
+ "rand 0.8.6",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

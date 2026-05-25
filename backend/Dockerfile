@@ -13,24 +13,23 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Step 1: prime the dependency cache with a stub crate. This makes the heavy
-# deps (actix-web, sqlx, tracing-*, reqwest, ...) compile once and stay cached
-# in BuildKit's mount; later edits to src/ no longer recompile them.
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
-    cargo build --release && rm -rf src
-
-# Step 2: copy real sources and rebuild. Only our crate recompiles — deps
-# are already in the cache mount.
+# Copy the whole workspace and build in one pass. The previous Dockerfile
+# tried a stub-then-real-source trick to prime the dep cache; that pattern
+# is fragile with Cargo workspaces because the stub `lib.rs` caches empty
+# rmeta files that the real build then picks up, producing spurious
+# "unresolved import" errors. BuildKit's cargo-registry/git cache mount
+# below preserves the heavy downloads between builds; that's where the
+# real speedup comes from on an active dev loop.
 COPY . .
+# `id=` qualifies the cache mount so historical entries from the old
+# single-crate layout (when this image had just `rwayve` in the root
+# Cargo.toml) don't get reused with the workspace layout. Bump the
+# version suffix any time the workspace's crate set changes in a way
+# that would invalidate cached rmeta.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
-    touch src/main.rs \
-    && cargo build --release \
+    --mount=type=cache,id=rwayve-workspace-target-v1,target=/app/target \
+    cargo build --release --workspace \
     && cp /app/target/release/rwayve /app/rwayve.bin
 
 # ---- Runtime ----------------------------------------------------------------

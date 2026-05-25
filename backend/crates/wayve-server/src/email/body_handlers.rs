@@ -1,0 +1,294 @@
+use crate::prelude::*;
+
+use crate::cache::TtlCache;
+use crate::email::attachments::save_email_attachments;
+use crate::email::oauth::{HTTP_CLIENT, refresh_access_token, try_load_google_secrets};
+use crate::email::utils::{extract_attachments, extract_body};
+use wayve_security::encryption::{decrypt, encrypt};
+use wayve_security::jwt::get_user_id_from_request;
+use actix_web::{HttpResponse, get};
+use sqlx::PgPool;
+use tracing::{error, info, instrument, warn};
+
+const EMAIL_BODY_CACHE_TTL_SECS: u64 = 300;
+const EMAIL_BODY_CACHE_MAX_CAPACITY: u64 = 10_000;
+
+static EMAIL_BODY_CACHE: Lazy<TtlCache<(i32, i32), String>> =
+    Lazy::new(|| TtlCache::new(EMAIL_BODY_CACHE_MAX_CAPACITY, EMAIL_BODY_CACHE_TTL_SECS));
+
+#[get("/emails/{id}")]
+#[instrument(target = "http", skip(pool))]
+pub async fn get_email_by_id(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => return Ok(HttpResponse::Unauthorized().finish()),
+    };
+
+    let email_id = path.into_inner();
+
+    // Either the account's owner OR a shared_inbox_members entry grants
+    // read access. Same access rule as get_emails so the list and detail
+    // views agree.
+    let row = sqlx::query(
+        r#"
+        SELECT e.id, e.account_id, e.subject, e.sender, e.receiver, e.body_encrypted, e.body_iv,
+               e.attachments_checked
+        FROM emails e
+        JOIN email_accounts a ON e.account_id = a.id
+        LEFT JOIN shared_inbox_members m
+               ON m.account_id = a.id AND m.user_id = $2
+        WHERE e.id = $1
+          AND (a.user_id = $2 OR m.user_id IS NOT NULL)
+        "#,
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let row = match row {
+        Some(row) => row,
+        None => return Ok(HttpResponse::NotFound().body("Email not found")),
+    };
+
+    let body_iv: String = row.get("body_iv");
+    let body_encrypted: String = row.get("body_encrypted");
+    let attachments_checked = row
+        .get::<Option<bool>, _>("attachments_checked")
+        .unwrap_or(false);
+
+    let body = if body_encrypted.is_empty() || body_iv.is_empty() {
+        String::new()
+    } else {
+        match wayve_security::encryption::decrypt(&body_iv, &body_encrypted) {
+            Ok(text) => text,
+            Err(e) => {
+                warn!(
+                    target: "gmail",
+                    email_id,
+                    error = %e,
+                    "email body decrypt failed; returning empty body so client can refetch"
+                );
+                String::new()
+            }
+        }
+    };
+    if attachments_checked && !body.is_empty() {
+        EMAIL_BODY_CACHE
+            .insert((user_id, row.get::<i32, _>("id")), body.clone())
+            .await;
+    }
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "id": row.get::<i32, _>("id"),
+        "account_id": row.get::<Option<i32>, _>("account_id"),
+        "subject": row.get::<Option<String>, _>("subject").unwrap_or_default(),
+        "sender": row.get::<Option<String>, _>("sender").unwrap_or_default(),
+        "receiver": row.get::<Option<String>, _>("receiver").unwrap_or_default(),
+        "body": body,
+        "attachments_checked": attachments_checked
+    })))
+}
+
+#[get("/emails/{id}/body")]
+#[instrument(target = "gmail", skip(req, path, pool))]
+pub async fn get_email_body(
+    req: HttpRequest,
+    path: web::Path<i32>,
+    pool: web::Data<PgPool>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => return Ok(HttpResponse::Unauthorized().finish()),
+    };
+
+    let email_id = path.into_inner();
+    let cache_key = (user_id, email_id);
+
+    if let Some(body) = EMAIL_BODY_CACHE.get(&cache_key).await {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
+    }
+
+    // Owner or shared-inbox member may fetch the body.
+    let row = sqlx::query(
+        r#"
+        SELECT e.id, e.gmail_id, e.body_encrypted, e.body_iv, e.attachments_checked,
+               a.id AS account_id, a.refresh_token
+        FROM emails e
+        JOIN email_accounts a ON e.account_id = a.id
+        LEFT JOIN shared_inbox_members m
+               ON m.account_id = a.id AND m.user_id = $2
+        WHERE e.id = $1
+          AND (a.user_id = $2 OR m.user_id IS NOT NULL)
+        "#,
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let row = match row {
+        Some(r) => r,
+        None => return Ok(HttpResponse::NotFound().finish()),
+    };
+
+    let body_encrypted: String = row.get("body_encrypted");
+    let body_iv: String = row.get("body_iv");
+    let attachments_checked: Option<bool> = row.get("attachments_checked");
+
+    if !body_encrypted.is_empty() && !body_iv.is_empty() {
+        match decrypt(&body_iv, &body_encrypted) {
+            Ok(body) => {
+                if attachments_checked.unwrap_or(false) {
+                    EMAIL_BODY_CACHE.insert(cache_key, body.clone()).await;
+                    return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
+                }
+
+                info!(
+                    target: "gmail",
+                    email_id,
+                    "cached email body has no attachment metadata; refreshing Gmail payload"
+                );
+            }
+            Err(e) => {
+                warn!(
+                    target: "gmail",
+                    email_id,
+                    error = %e,
+                    "cached email body decrypt failed; refetching from Gmail"
+                );
+            }
+        }
+    }
+
+    let gmail_id: Option<String> = row.get("gmail_id");
+    let account_id: i32 = row.get("account_id");
+    let refresh_token: Option<String> = row.get("refresh_token");
+
+    let gmail_id = match gmail_id.filter(|value| !value.trim().is_empty()) {
+        Some(value) => value,
+        None => {
+            error!(target: "gmail", email_id, "email body request missing gmail_id");
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "error": "Email is missing its Gmail message id. Re-sync this account."
+            })));
+        }
+    };
+
+    let refresh_token = match refresh_token.filter(|value| !value.trim().is_empty()) {
+        Some(value) => value,
+        None => {
+            error!(target: "gmail", account_id, "email account missing refresh_token");
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "error": "This Gmail account needs to be reconnected before Wayve can load message bodies."
+            })));
+        }
+    };
+
+    let secrets = match try_load_google_secrets() {
+        Ok(secrets) => secrets,
+        Err(e) => {
+            error!(target: "gmail", error = %e, "google secrets unavailable for body fetch");
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Google OAuth client secret is not configured"
+            })));
+        }
+    };
+
+    let client_id = match secrets["web"]["client_id"].as_str() {
+        Some(value) if !value.trim().is_empty() => value.to_string(),
+        _ => {
+            error!(target: "gmail", "google client_id missing for body fetch");
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Google OAuth client id is not configured"
+            })));
+        }
+    };
+
+    let client_secret = match secrets["web"]["client_secret"].as_str() {
+        Some(value) if !value.trim().is_empty() => value.to_string(),
+        _ => {
+            error!(target: "gmail", "google client_secret missing for body fetch");
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Google OAuth client secret is not configured"
+            })));
+        }
+    };
+
+    let token = match refresh_access_token(&client_id, &client_secret, &refresh_token).await {
+        Ok(t) => t,
+        Err(e) => {
+            error!(target: "gmail", account_id, error = ?e, "refresh_access_token failed");
+            return Ok(HttpResponse::BadGateway().finish());
+        }
+    };
+
+    let _ = sqlx::query("UPDATE email_accounts SET access_token = $1 WHERE id = $2")
+        .bind(&token)
+        .bind(account_id)
+        .execute(pool.get_ref())
+        .await;
+
+    let url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full",
+        gmail_id
+    );
+
+    let res: Value = match HTTP_CLIENT.get(&url).bearer_auth(&token).send().await {
+        Ok(r) => match r.json().await {
+            Ok(v) => v,
+            Err(e) => {
+                error!(target: "gmail", email_id, error = %e, "gmail body json parse failed");
+                return Ok(HttpResponse::BadGateway().finish());
+            }
+        },
+        Err(e) => {
+            error!(target: "gmail", email_id, error = %e, "gmail body request failed");
+            return Ok(HttpResponse::BadGateway().finish());
+        }
+    };
+
+    let body = extract_body(&res["payload"])
+        .unwrap_or_else(|| res["snippet"].as_str().unwrap_or("").to_string());
+    let attachments = extract_attachments(&res["payload"]);
+
+    match encrypt(&body) {
+        Ok((iv, encrypted)) => {
+            if let Err(e) =
+                sqlx::query(
+                    "UPDATE emails SET body_encrypted = $1, body_iv = $2, attachments_checked = true WHERE id = $3",
+                )
+                    .bind(&encrypted)
+                    .bind(&iv)
+                    .bind(email_id)
+                    .execute(pool.get_ref())
+                    .await
+            {
+                error!(target: "db", email_id, error = ?e, "persisting email body failed");
+            }
+        }
+        Err(e) => {
+            error!(target: "gmail", email_id, error = %e, "email body encrypt failed");
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": format!("Failed to secure email body: {}", e)
+            })));
+        }
+    }
+
+    save_email_attachments(
+        pool.get_ref(),
+        email_id,
+        account_id,
+        &gmail_id,
+        &attachments,
+    )
+    .await;
+
+    EMAIL_BODY_CACHE.insert(cache_key, body.clone()).await;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })))
+}

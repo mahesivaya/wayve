@@ -1,0 +1,42 @@
+[package]
+name = "wayve-security"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Web framework — needed for HttpRequest extraction in jwt.rs and the
+# Cookie helpers, plus the api_key middleware's request inspection.
+actix-web.workspace = true
+
+# password.rs hashes off the async runtime via spawn_blocking; thiserror
+# is for the local PasswordError enum.
+tokio.workspace = true
+thiserror.workspace = true
+
+# Database — rbac.rs and api_key.rs query Postgres for role/scope and
+# audit-log writes.
+sqlx.workspace = true
+
+# Crypto primitives
+aes-gcm.workspace = true
+bcrypt.workspace = true
+hkdf.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+jsonwebtoken.workspace = true
+base64.workspace = true
+rand.workspace = true
+
+# Caching for API key validation
+moka.workspace = true
+
+# OAuth + SSO helpers reach external providers
+reqwest.workspace = true
+
+# General-purpose
+anyhow.workspace = true
+chrono.workspace = true
+once_cell.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
