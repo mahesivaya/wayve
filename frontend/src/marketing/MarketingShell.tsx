@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { SERVICES } from "../services/serviceData";
@@ -14,6 +14,25 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [servicesOpen, setServicesOpen] = useState(false);
+  const servicesMenuRef = useRef<HTMLDivElement | null>(null);
+  const servicesDropdownRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!servicesOpen) return;
+
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (servicesMenuRef.current?.contains(target)) return;
+      if (servicesDropdownRef.current?.contains(target)) return;
+      setServicesOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
+    };
+  }, [servicesOpen]);
 
   return (
     <div className="public-home">
@@ -23,7 +42,7 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
         </button>
 
         <nav className="public-home-links" aria-label="Main navigation">
-          <div className="services-menu">
+          <div className="services-menu" ref={servicesMenuRef}>
             <button
               className={`services-trigger ${servicesOpen ? "active" : ""}`}
               onClick={() => setServicesOpen((open) => !open)}
@@ -31,9 +50,7 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
               aria-controls="services-dropdown"
             >
               Products
-              <span className="services-caret" aria-hidden="true">
-                {servicesOpen ? "⌃" : "⌄"}
-              </span>
+              <span className="services-caret" aria-hidden="true" />
             </button>
           </div>
 
@@ -70,6 +87,7 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
         {servicesOpen && (
           <section
             id="services-dropdown"
+            ref={servicesDropdownRef}
             className="services-dropdown-panel"
             aria-label="Available services"
           >

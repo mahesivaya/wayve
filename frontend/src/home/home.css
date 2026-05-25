@@ -95,11 +95,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  font-size: var(--text-xl);
-  line-height: 1;
-  transform: translateY(-1px);
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.services-trigger.active .services-caret {
+  transform: translateY(2px) rotate(225deg);
 }
 
 .public-home-actions {
