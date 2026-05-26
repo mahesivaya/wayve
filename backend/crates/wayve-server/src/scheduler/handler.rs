@@ -1,6 +1,7 @@
 use crate::models::scheduler::{CreateMeeting, Meeting};
 use crate::prelude::*;
 use crate::scheduler::auth::get_user_id;
+use crate::scheduler::create_meeting::{ValidatedMeetingInput, validate_create_meeting};
 use crate::scheduler::email_notifications::{
     MeetingEmailKind, MeetingEmailRequest, send_meeting_emails,
 };
@@ -8,14 +9,12 @@ use crate::scheduler::time::minutes_to_time;
 use crate::scheduler::zoom::create_zoom_meeting;
 use wayve_security::encryption::{decrypt, encrypt};
 use actix_web::{HttpRequest, HttpResponse, delete, post, put, web};
-use chrono::{TimeZone, Utc};
-use chrono_tz::Tz;
+use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
-use std::str::FromStr;
 use tracing::{info, instrument, warn};
 
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{NaiveDate, NaiveTime};
 use sqlx::{PgPool, Row};
 
 fn decrypt_text_field(
@@ -83,59 +82,23 @@ pub async fn create_meeting(
     };
 
     // ================= VALIDATION =================
-    if data.title.trim().is_empty() {
-        return Ok(HttpResponse::BadRequest().body("Title is required"));
-    }
-
-    // Participants are optional. If the user sends none, the meeting is
-    // created without invites — useful for personal blocks (focus time,
-    // hold a slot). If the array contains garbage entries we silently
-    // filter them; we don't reject the whole request.
-    let participants: Vec<String> = data
-        .participants
-        .iter()
-        .map(|e| e.trim().to_lowercase())
-        .filter(|e| e.contains("@") && e.contains("."))
-        .collect();
-
-    // ================= TIME =================
-    let start_time: NaiveTime = minutes_to_time(data.start);
-    let end_time: NaiveTime = minutes_to_time(data.end);
-
-    if start_time >= end_time {
-        return Ok(HttpResponse::BadRequest().body("Invalid time range"));
-    }
-
-    // ================= DATE =================
-    let date = match NaiveDate::parse_from_str(&data.date, "%Y-%m-%d") {
-        Ok(d) => d,
-        Err(_) => return Ok(HttpResponse::BadRequest().body("Invalid date")),
+    let ValidatedMeetingInput {
+        title,
+        participants,
+        date,
+        start_time,
+        end_time,
+        meeting_utc,
+        duration_min,
+    } = match validate_create_meeting(&data, Utc::now()) {
+        Ok(v) => v,
+        Err(e) => return Ok(HttpResponse::BadRequest().body(e.message())),
     };
-
-    // Prevent past meetings — interpret date+start as wall-clock time in the
-    // client's IANA timezone. Default to UTC if the client didn't send one
-    // (or sent something unparseable) — UTC is a neutral fallback that won't
-    // spuriously reject future meetings the way a hardcoded NY zone did.
-    let tz: Tz = data
-        .tz
-        .as_deref()
-        .and_then(|s| Tz::from_str(s).ok())
-        .unwrap_or(Tz::UTC);
-
-    let naive = NaiveDateTime::new(date, start_time);
-    let meeting_utc = match tz.from_local_datetime(&naive).single() {
-        Some(dt) => dt.with_timezone(&Utc),
-        None => return Ok(HttpResponse::BadRequest().body("Invalid date/time")),
-    };
-    if meeting_utc <= Utc::now() {
-        return Ok(HttpResponse::BadRequest().body("Meeting cannot be in the past"));
-    }
 
     // ================= ZOOM MEETING =================
     // Tolerant: if Zoom is misconfigured or fails, still create the meeting
     // without a join link rather than blocking the user.
-    let duration_min = (end_time - start_time).num_minutes();
-    let zoom_join_url = match create_zoom_meeting(&data.title, meeting_utc, duration_min).await {
+    let zoom_join_url = match create_zoom_meeting(&title, meeting_utc, duration_min).await {
         Ok(url) => Some(url),
         Err(e) => {
             warn!(
@@ -146,7 +109,7 @@ pub async fn create_meeting(
         }
     };
 
-    let (title_iv, title_encrypted) = encrypt_required_field(&data.title)?;
+    let (title_iv, title_encrypted) = encrypt_required_field(&title)?;
     let (zoom_join_url_iv, zoom_join_url_encrypted) =
         encrypt_optional_field(zoom_join_url.as_deref())?;
     let encrypted_participants: Vec<(String, String)> = participants
@@ -217,7 +180,7 @@ pub async fn create_meeting(
     tx.commit().await?;
     info!(
         "Meeting created: id={} user_id={} title=\"{}\"",
-        meeting_id, user_id, data.title
+        meeting_id, user_id, title
     );
 
     // ================= BACKGROUND EMAIL =================
@@ -226,7 +189,7 @@ pub async fn create_meeting(
     let email_req = MeetingEmailRequest {
         user_id,
         participants: participants.clone(),
-        title: data.title.clone(),
+        title: title.clone(),
         date,
         start: start_time,
         end: end_time,
@@ -250,7 +213,7 @@ pub async fn create_meeting(
         crate::webhooks::Event::MeetingCreated,
         serde_json::json!({
             "id": meeting_id,
-            "title": data.title,
+            "title": title,
             "date": date,
             "start_time": start_time,
             "end_time": end_time,
