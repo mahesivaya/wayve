@@ -215,6 +215,13 @@ jobs:
           exit-code: "1"
           format: sarif
           output: trivy-fs.sarif
+          # Without this, the action unsets TRIVY_SEVERITY when format=sarif
+          # and the exit-code gate fires on ANY severity (including MEDIUM).
+          # We want the gate to honor the `severity` filter declared above
+          # so MEDIUM-only findings still land in Code Scanning for triage
+          # but don't fail the build. cargo-audit / npm-audit catch the
+          # MEDIUM Rust + npm dep issues with their own gating.
+          limit-severities-for-sarif: true
 
       - name: Upload SARIF to GitHub code scanning
         if: always()
@@ -297,6 +304,10 @@ jobs:
           exit-code: "1"
           format: sarif
           output: trivy-image-${{ matrix.name }}.sarif
+          # See trivy-fs above for the explanation — without this flag
+          # the SARIF mode strips the severity filter and exit-code 1
+          # fires on any finding.
+          limit-severities-for-sarif: true
 
       - name: Upload SARIF to GitHub code scanning
         if: always()
