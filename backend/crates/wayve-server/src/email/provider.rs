@@ -6,20 +6,21 @@
 // completely different wire format. This module is where that polymorphism
 // lives.
 //
-// The pattern is a `MailProviderClient` trait with one struct impl per
-// provider. The `MailProvider` enum is the discriminator we store in
-// `email_accounts.provider`; calling `mail_provider_client(provider)` returns
-// the right `Arc<dyn MailProviderClient>` (or `None` if that provider's OAuth
-// is not configured).
+// Operations are split across four narrow traits — TokenRefresher, MailSync,
+// MailSender, MailRead — so callers and tests can depend on just the slice
+// they use. `MailProviderClient` is the umbrella supertrait the registry
+// returns; per-provider structs implement all four small traits plus the
+// umbrella, and existing call sites that go through the umbrella keep working.
 //
 // Adding a new provider — say, Yahoo Mail — touches three places:
 //   1. Add the variant + matching `from_db`/`as_db`/`display_name` arms on
 //      `MailProvider` below.
-//   2. Implement `MailProviderClient` for a new `YahooMailClient` struct.
+//   2. Add `YahooMailClient` with impls for TokenRefresher / MailSync /
+//      MailSender / MailRead / MailProviderClient.
 //   3. Add one arm in `mail_provider_client(..)`.
 // No edits needed in `routes/email.rs`, `sync.rs`, or anywhere a handler
 // calls `provider.sync(..)` / `provider.send(..)` — those go through the
-// enum shims at the bottom of this file, which dispatch through the trait.
+// enum shims at the bottom of this file.
 
 use crate::email::account::invalidate_email_account_cache;
 use crate::email::oauth::{HTTP_CLIENT, refresh_access_token, try_load_google_secrets};
@@ -74,19 +75,16 @@ impl MailProvider {
 }
 
 // ============================================================================
-// Trait: every operation that varies by provider.
+// Narrow traits — one capability each. Callers and tests depend on just the
+// slice they use.
 // ============================================================================
 #[async_trait]
-pub trait MailProviderClient: Send + Sync {
-    // Implementations expose their `MailProvider` so callers can use the
-    // client polymorphically and still log/branch on the underlying provider
-    // (e.g. when adding metrics, request-id correlation, or per-provider
-    // retry policy). Currently nothing reads it.
-    #[allow(dead_code)]
-    fn provider(&self) -> MailProvider;
-
+pub trait TokenRefresher: Send + Sync {
     async fn refresh_token(&self, refresh_token: &str) -> Result<RefreshedEmailToken>;
+}
 
+#[async_trait]
+pub trait MailSync: Send + Sync {
     async fn sync(
         &self,
         pool: &PgPool,
@@ -104,7 +102,10 @@ pub trait MailProviderClient: Send + Sync {
         before_timestamp: i64,
         limit: usize,
     ) -> Result<()>;
+}
 
+#[async_trait]
+pub trait MailSender: Send + Sync {
     #[allow(clippy::too_many_arguments)]
     async fn send(
         &self,
@@ -114,8 +115,23 @@ pub trait MailProviderClient: Send + Sync {
         data: &SendEmailRequest,
         user_id: i32,
     ) -> HttpResponse;
+}
 
+#[async_trait]
+pub trait MailRead: Send + Sync {
     async fn mark_read(&self, access_token: &str, provider_message_id: &str) -> Result<()>;
+}
+
+// Umbrella the registry returns. Existing call sites that hold an
+// `Arc<dyn MailProviderClient>` keep working — supertrait method dispatch
+// resolves `.sync(..)`, `.send(..)`, etc. through the narrow traits.
+pub trait MailProviderClient: TokenRefresher + MailSync + MailSender + MailRead {
+    // Implementations expose their `MailProvider` so callers can use the
+    // client polymorphically and still log/branch on the underlying provider
+    // (e.g. when adding metrics, request-id correlation, or per-provider
+    // retry policy). Currently nothing reads it.
+    #[allow(dead_code)]
+    fn provider(&self) -> MailProvider;
 }
 
 // ============================================================================
@@ -145,11 +161,7 @@ pub struct GoogleMailClient {
 }
 
 #[async_trait]
-impl MailProviderClient for GoogleMailClient {
-    fn provider(&self) -> MailProvider {
-        MailProvider::Google
-    }
-
+impl TokenRefresher for GoogleMailClient {
     async fn refresh_token(&self, refresh_token: &str) -> Result<RefreshedEmailToken> {
         let access_token = refresh_access_token(
             &self.oauth.client_id,
@@ -165,7 +177,10 @@ impl MailProviderClient for GoogleMailClient {
             refresh_token: None,
         })
     }
+}
 
+#[async_trait]
+impl MailSync for GoogleMailClient {
     async fn sync(
         &self,
         pool: &PgPool,
@@ -186,7 +201,10 @@ impl MailProviderClient for GoogleMailClient {
     ) -> Result<()> {
         sync_account_before(pool, account_id, access_token, before_timestamp, limit).await
     }
+}
 
+#[async_trait]
+impl MailSender for GoogleMailClient {
     async fn send(
         &self,
         access_token: &str,
@@ -197,7 +215,10 @@ impl MailProviderClient for GoogleMailClient {
     ) -> HttpResponse {
         send_via_gmail(access_token, from_email, data, user_id).await
     }
+}
 
+#[async_trait]
+impl MailRead for GoogleMailClient {
     async fn mark_read(&self, access_token: &str, provider_message_id: &str) -> Result<()> {
         // Gmail uses labels: removing `UNREAD` flips the read flag.
         let url = format!(
@@ -220,6 +241,12 @@ impl MailProviderClient for GoogleMailClient {
     }
 }
 
+impl MailProviderClient for GoogleMailClient {
+    fn provider(&self) -> MailProvider {
+        MailProvider::Google
+    }
+}
+
 // ============================================================================
 // Microsoft (Outlook / Graph) implementation.
 // ============================================================================
@@ -228,11 +255,7 @@ pub struct OutlookMailClient {
 }
 
 #[async_trait]
-impl MailProviderClient for OutlookMailClient {
-    fn provider(&self) -> MailProvider {
-        MailProvider::Microsoft
-    }
-
+impl TokenRefresher for OutlookMailClient {
     async fn refresh_token(&self, refresh_token: &str) -> Result<RefreshedEmailToken> {
         let tokens = refresh_outlook_token(&self.creds, refresh_token, OUTLOOK_MAIL_SCOPE).await?;
         Ok(RefreshedEmailToken {
@@ -242,7 +265,10 @@ impl MailProviderClient for OutlookMailClient {
             refresh_token: tokens.refresh_token,
         })
     }
+}
 
+#[async_trait]
+impl MailSync for OutlookMailClient {
     async fn sync(
         &self,
         pool: &PgPool,
@@ -263,7 +289,10 @@ impl MailProviderClient for OutlookMailClient {
     ) -> Result<()> {
         sync_outlook_account_before(pool, account_id, access_token, before_timestamp, limit).await
     }
+}
 
+#[async_trait]
+impl MailSender for OutlookMailClient {
     async fn send(
         &self,
         access_token: &str,
@@ -274,7 +303,10 @@ impl MailProviderClient for OutlookMailClient {
     ) -> HttpResponse {
         send_via_outlook(access_token, account_id, data).await
     }
+}
 
+#[async_trait]
+impl MailRead for OutlookMailClient {
     async fn mark_read(&self, access_token: &str, provider_message_id: &str) -> Result<()> {
         // Graph: PATCH the message with isRead=true. `path_segments_mut`
         // safely URL-encodes the message id (which contains `/` and `+`).
@@ -297,6 +329,12 @@ impl MailProviderClient for OutlookMailClient {
             anyhow::bail!("Outlook mark-read failed: {} {}", status, body);
         }
         Ok(())
+    }
+}
+
+impl MailProviderClient for OutlookMailClient {
+    fn provider(&self) -> MailProvider {
+        MailProvider::Microsoft
     }
 }
 
