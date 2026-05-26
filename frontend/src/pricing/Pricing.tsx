@@ -231,6 +231,7 @@ function AuthenticatedPricing() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const upgradePlanCode = params.get("plan") ?? user?.current_plan?.code ?? "basic_user";
+  const isPersonal = user?.account_type === "personal";
   const accountLabel =
     user?.account_type === "personal"
       ? "Personal account"
@@ -308,59 +309,69 @@ function AuthenticatedPricing() {
             </div>
           </section>
 
-          <section className="pricing-section">
-            <h2>Organization</h2>
-            <p className="pricing-section-sub">
-              One subscription that covers every member of the organization.
-            </p>
-            <div className="pricing-grid">
-              {organizationPlans.map((plan) => (
-                <PlanCard
-                  key={plan.id}
-                  plan={plan}
-                  onChoose={() => navigate("/billing")}
-                />
-              ))}
-              {organizationPlans.length === 0 && (
-                <p className="pricing-empty">
-                  No organization plans available.
-                </p>
-              )}
-            </div>
-          </section>
-
-          {plans.length > 0 && (
+          {!isPersonal && (
             <section className="pricing-section">
-              <h2>Compare all plans</h2>
-              <table className="pricing-table">
-                <thead>
-                  <tr>
-                    <th>Plan</th>
-                    <th>For</th>
-                    <th>Price</th>
-                    <th>Storage</th>
-                    <th>Seats</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plans.map((plan) => (
-                    <tr key={plan.id}>
-                      <td>{plan.name}</td>
-                      <td className="pricing-cap">{plan.audience}</td>
-                      <td>
-                        {priceLabel(plan)}
-                        {plan.amount_cents > 0
-                          ? ` / ${plan.billing_interval}`
-                          : ""}
-                      </td>
-                      <td>{formatBytes(plan.storage_limit_bytes)}</td>
-                      <td>{plan.seat_limit}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <h2>Organization</h2>
+              <p className="pricing-section-sub">
+                One subscription that covers every member of the organization.
+              </p>
+              <div className="pricing-grid">
+                {organizationPlans.map((plan) => (
+                  <PlanCard
+                    key={plan.id}
+                    plan={plan}
+                    onChoose={() => navigate("/billing")}
+                  />
+                ))}
+                {organizationPlans.length === 0 && (
+                  <p className="pricing-empty">
+                    No organization plans available.
+                  </p>
+                )}
+              </div>
             </section>
           )}
+
+          {(() => {
+            // Personal users can't act on org/enterprise plans, so the
+            // comparison table is filtered to personal rows for them.
+            const visiblePlans = isPersonal
+              ? plans.filter((plan) => plan.audience === "personal")
+              : plans;
+            if (visiblePlans.length === 0) return null;
+            return (
+              <section className="pricing-section">
+                <h2>Compare all plans</h2>
+                <table className="pricing-table">
+                  <thead>
+                    <tr>
+                      <th>Plan</th>
+                      <th>For</th>
+                      <th>Price</th>
+                      <th>Storage</th>
+                      <th>Seats</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visiblePlans.map((plan) => (
+                      <tr key={plan.id}>
+                        <td>{plan.name}</td>
+                        <td className="pricing-cap">{plan.audience}</td>
+                        <td>
+                          {priceLabel(plan)}
+                          {plan.amount_cents > 0
+                            ? ` / ${plan.billing_interval}`
+                            : ""}
+                        </td>
+                        <td>{formatBytes(plan.storage_limit_bytes)}</td>
+                        <td>{plan.seat_limit}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            );
+          })()}
         </>
       )}
 

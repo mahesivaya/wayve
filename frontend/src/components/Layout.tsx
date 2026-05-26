@@ -126,7 +126,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   function closeLeftPane() {
     const nextApp = rightApp ?? middleApp;
     if (!nextApp) return;
-    navigate(nextApp.path);
+    void navigate(nextApp.path);
     setRightView(null);
     if (middleView === nextApp.key) {
       setMiddleView(null);
@@ -194,7 +194,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       account: authedUser.account_type,
       plan: currentPlanCode,
     });
-    navigate(`/pricing?${params.toString()}`, {
+    void navigate(`/pricing?${params.toString()}`, {
       state: {
         accountType: authedUser.account_type,
         currentPlan: authedUser.current_plan,
@@ -233,31 +233,41 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           {renderNavItem("/notes", "notes", "Notes")}
           {renderNavItem("/tasks", "tasks", "Tasks")}
           {renderNavItem("/aichat", "aichat", "AI Chat")}
-          {/* Pricing: hidden for platform members — they administer the
-              platform, not customers of it, so the upgrade CTA is noise. */}
-          {user.account_type !== "platform_admin" && (
-            <Link
-              to="/pricing"
-              className={location.pathname === "/pricing" ? "active" : ""}
-              onClick={() => setNavOpen(false)}
-            >
-              Pricing
-            </Link>
+          {/* Pricing: hidden for platform members (they administer the
+              platform, not customers of it) and for personal accounts
+              (they reach the upgrade flow via Settings → "Manage billing
+              & upgrade", which is the canonical path for them). */}
+          {user.account_type !== "platform_admin" &&
+            user.account_type !== "personal" && (
+              <Link
+                to="/pricing"
+                className={location.pathname === "/pricing" ? "active" : ""}
+                onClick={() => setNavOpen(false)}
+              >
+                Pricing
+              </Link>
+            )}
+          {/* Developers + Docs are dev-tooling surfaces — hidden for
+              personal accounts where they're noise (no API keys, no
+              webhooks, no integrations to read about). */}
+          {user.account_type !== "personal" && (
+            <>
+              <Link
+                to="/developers"
+                className={location.pathname === "/developers" ? "active" : ""}
+                onClick={() => setNavOpen(false)}
+              >
+                Developers
+              </Link>
+              <Link
+                to="/docs"
+                className={location.pathname.startsWith("/docs") ? "active" : ""}
+                onClick={() => setNavOpen(false)}
+              >
+                Docs
+              </Link>
+            </>
           )}
-          <Link
-            to="/developers"
-            className={location.pathname === "/developers" ? "active" : ""}
-            onClick={() => setNavOpen(false)}
-          >
-            Developers
-          </Link>
-          <Link
-            to="/docs"
-            className={location.pathname.startsWith("/docs") ? "active" : ""}
-            onClick={() => setNavOpen(false)}
-          >
-            Docs
-          </Link>
           {/* API Keys admin surface: visible only to org/platform
               owner, super_admin, and admin. See [canAccessApiKeyAdmin](../auth/permissions.ts)
               for the rationale (intentionally stricter than the raw

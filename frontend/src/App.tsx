@@ -4,6 +4,7 @@ import { lazy, Suspense } from "react";
 
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RedirectIfPersonal from "./components/RedirectIfPersonal";
 import Register from "./auth/Register";
 import Login from "./auth/Login";
 import ForgotPassword from "./auth/ForgotPassword";
@@ -105,13 +106,52 @@ export default function App() {
             ProtectedRoute branch so unauth visitors aren't bounced to
             /login. The component renders its own header chrome, so no
             Layout wrapper is needed. */}
-        <Route path="/pricing" element={<Pricing />} />
+        {/* Personal accounts bounce off these surfaces: Pricing redirects
+            to Settings (where "Manage billing & upgrade" lives); Developers
+            and Docs fall back to the account home. Public visitors and
+            organization / platform users pass through unchanged. */}
+        <Route
+          path="/pricing"
+          element={
+            <RedirectIfPersonal to="/settings">
+              <Pricing />
+            </RedirectIfPersonal>
+          }
+        />
         <Route path="/enterprise" element={<Enterprise />} />
         <Route path="/support" element={<Support />} />
-        <Route path="/developers" element={<Developers />} />
-        <Route path="/developers/quotas" element={<Quotas />} />
-        <Route path="/docs" element={<Docs />} />
-        <Route path="/docs/:slug" element={<Docs />} />
+        <Route
+          path="/developers"
+          element={
+            <RedirectIfPersonal>
+              <Developers />
+            </RedirectIfPersonal>
+          }
+        />
+        <Route
+          path="/developers/quotas"
+          element={
+            <RedirectIfPersonal>
+              <Quotas />
+            </RedirectIfPersonal>
+          }
+        />
+        <Route
+          path="/docs"
+          element={
+            <RedirectIfPersonal>
+              <Docs />
+            </RedirectIfPersonal>
+          }
+        />
+        <Route
+          path="/docs/:slug"
+          element={
+            <RedirectIfPersonal>
+              <Docs />
+            </RedirectIfPersonal>
+          }
+        />
 
         {/* PROTECTED */}
         <Route element={<ProtectedRoute />}>
