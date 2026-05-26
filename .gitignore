@@ -30,6 +30,7 @@ backend/target/
 node_modules/
 .env
 .env.*
+!.env.example
 !.env.development.example
 !.env.production.example
 !.env.secrets.example
