@@ -11,6 +11,7 @@ import { useEmailInbox } from "./useEmailInbox";
 import { getGmailConnectUrl, getOutlookConnectUrl, updateAccountDisplayName } from "../api/email";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
+import { logger } from "../utils/logger";
 
 const ACCOUNT_NAME_STORAGE_KEY = "rwayve.emailAccountNames";
 const EMAIL_LIST_WIDTH_STORAGE_KEY = "rwayve.emailList.width";
@@ -160,7 +161,7 @@ export default function Emails() {
       params.get("connected") === "true" ||
       hashParams.get("connected") === "true"
     ) {
-      fetchAccounts();
+      void fetchAccounts();
       setRefreshTick((tick) => tick + 1);
       window.history.replaceState({}, "", "/emails");
 
@@ -289,7 +290,7 @@ export default function Emails() {
       await updateAccountDisplayName(accountId, displayName);
       await fetchAccounts();
     } catch (err) {
-      console.warn("Account name saved locally; backend update failed", err);
+      logger.warn("Account name saved locally; backend update failed", err);
     }
   };
 

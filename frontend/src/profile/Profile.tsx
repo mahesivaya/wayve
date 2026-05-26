@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { changePassword } from "../api/Auth";
 import { getProfile, updateProfile, type ProfileData } from "../api/profile";
+import { logger } from "../utils/logger";
 import "./profile.css";
 
 export default function Profile() {
@@ -25,7 +26,7 @@ export default function Profile() {
       setFirstName(data.first_name ?? "");
       setLastName(data.last_name ?? "");
     } catch(err) {
-      console.error(err);
+      logger.error(err);
     }
     };
     void load();

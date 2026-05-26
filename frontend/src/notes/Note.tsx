@@ -9,6 +9,7 @@ import {
   updateNoteApi,
   type Note,
 } from "../api/notes";
+import { logger } from "../utils/logger";
 
 type EditableNote = Note & {
   title: string;
@@ -34,7 +35,7 @@ export default function Notes() {
         );
 
       } catch (err) {
-        console.error(err);
+        logger.error(err);
       }
     };
     void loadNotes();
@@ -59,7 +60,7 @@ export default function Notes() {
       ]);
       setSelected(newNote);
     } catch (err) {
-      console.error(err);
+      logger.error(err);
     }
   };
 
@@ -92,7 +93,7 @@ export default function Notes() {
         title: note.title,
         content: note.content,
       }).catch((err) => {
-        console.error(err);
+        logger.error(err);
       });
     }, 800);
     return () => clearTimeout(timeout);
@@ -117,7 +118,7 @@ export default function Notes() {
       }
 
     } catch (err) {
-      console.error(err);
+      logger.error(err);
     }
   };
 

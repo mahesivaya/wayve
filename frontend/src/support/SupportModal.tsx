@@ -82,7 +82,7 @@ export default function SupportModal({ onClose }: Props) {
                   className="support-link-btn"
                   onClick={() => {
                     onClose();
-                    navigate("/support");
+                    void navigate("/support");
                   }}
                 >
                   Open the support center →

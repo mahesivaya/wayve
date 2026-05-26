@@ -142,7 +142,7 @@ export default function Support() {
               <button
                 className="marketing-channel-link"
                 onClick={() => {
-                  if (channel.route) navigate(channel.route);
+                  if (channel.route) void navigate(channel.route);
                   else if (channel.href) window.location.href = channel.href;
                 }}
               >

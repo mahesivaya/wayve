@@ -1,5 +1,6 @@
 import { getApiBase } from "../config/env";
 import { clearAuthToken, getAuthToken } from "../auth/token";
+import { logger } from "../utils/logger";
 
 type ApiOptions =
   RequestInit & {
@@ -101,7 +102,7 @@ export async function apiFetch(
       );
     }
 
-    console.error(
+    logger.error(
       "Unauthorized"
     );
 

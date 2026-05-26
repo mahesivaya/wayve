@@ -25,7 +25,7 @@ export function useChatConversations(currentUserId?: number) {
       }
     };
 
-    if (currentUserId) fetchConversations();
+    if (currentUserId) void fetchConversations();
   }, [currentUserId]);
 
   const refreshChannels = async () => {

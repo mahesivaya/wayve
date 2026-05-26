@@ -78,7 +78,7 @@ export default function Docs() {
         // First visit lands at /docs (no slug) → redirect to the first
         // available doc so the right-hand pane is never blank.
         if (!slug && items.length > 0) {
-          navigate(`/docs/${items[0].slug}`, { replace: true });
+          void navigate(`/docs/${items[0].slug}`, { replace: true });
         }
       })
       .catch((err) => {

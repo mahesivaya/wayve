@@ -27,6 +27,7 @@ import {
   normalizeMnemonicInput,
 } from "../crypto/mnemonic";
 import { unwrapKeysFromRecovery } from "../crypto/recovery";
+import { logger } from "../utils/logger";
 import "./login.css";
 
 export default function RecoverWithMnemonicPage() {
@@ -79,8 +80,8 @@ export default function RecoverWithMnemonicPage() {
         } catch (err) {
           // Non-fatal: password is already reset. The user can finish the
           // E2E restore at /recover after they log in. Surface a soft
-          // notice via console.
-          console.warn("E2E keys were not unlocked locally:", err);
+          // notice via logger.
+          logger.warn("E2E keys were not unlocked locally:", err);
         }
       }
 

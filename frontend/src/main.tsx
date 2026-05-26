@@ -13,7 +13,7 @@ installDevLog();
 // Resolve runtime config (API/WS base) before rendering so the first request
 // uses the right origin. `loadRuntimeConfig` never rejects — it falls back to
 // build-time / same-origin defaults — so the app always boots.
-loadRuntimeConfig().finally(() => {
+void loadRuntimeConfig().finally(() => {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <AuthProvider>

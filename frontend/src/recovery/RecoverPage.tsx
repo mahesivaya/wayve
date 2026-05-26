@@ -51,7 +51,7 @@ export default function RecoverPage() {
       }
 
       await unwrapKeysFromRecovery(envelope, entropy, user.id);
-      navigate("/home", { replace: true });
+      void navigate("/home", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Recovery failed");
     } finally {

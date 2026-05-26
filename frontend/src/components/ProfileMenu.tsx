@@ -45,7 +45,7 @@ export default function ProfileMenu() {
             className="profile-dropdown-item"
             onClick={() => {
               setMenuOpen(false);
-              navigate("/profile");
+              void navigate("/profile");
             }}
           >
             <span className="profile-dropdown-icon">👤</span>
@@ -56,7 +56,7 @@ export default function ProfileMenu() {
             className="profile-dropdown-item"
             onClick={() => {
               setMenuOpen(false);
-              navigate("/settings");
+              void navigate("/settings");
             }}
           >
             <span className="profile-dropdown-icon">⚙️</span>
@@ -70,7 +70,7 @@ export default function ProfileMenu() {
             onClick={() => {
               setMenuOpen(false);
               logout();
-              navigate("/");
+              void navigate("/");
             }}
           >
             <span className="profile-dropdown-icon">⏻</span>

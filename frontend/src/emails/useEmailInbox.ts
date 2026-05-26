@@ -34,7 +34,7 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
       const data = await getAccounts<EmailAccount>();
       setAccounts(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("Fetch accounts failed", err);
+      logger.error("Fetch accounts failed", err);
     }
   }, []);
 

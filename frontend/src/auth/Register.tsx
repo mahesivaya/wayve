@@ -49,7 +49,7 @@ export default function Register() {
       login(data.token, data.account_type ?? "personal", true);
 
       const target = homePathForAccount(data.account_type);
-      navigate(target.startsWith("/") ? target : `/${target}`);
+      void navigate(target.startsWith("/") ? target : `/${target}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     }

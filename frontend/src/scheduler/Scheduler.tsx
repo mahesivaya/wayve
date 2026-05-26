@@ -108,7 +108,7 @@ export default function Scheduler() {
   
       setShowModal(false);
       setEditingEvent(null);
-      fetchMeetings();
+      await fetchMeetings();
     } catch (err) {
       logger.log("❌ Delete error", err);
     }

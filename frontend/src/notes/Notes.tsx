@@ -10,6 +10,7 @@ import {
 } from "../api/notes";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useAuth } from "../auth/useAuth";
+import { logger } from "../utils/logger";
 import { decryptForSelf, encryptForSelf } from "../crypto/selfEncrypt";
 
 const formatDate = (iso: string | null | undefined) => {
@@ -54,7 +55,7 @@ export default function Notes() {
       );
       setNotes(decrypted);
     } catch (err) {
-      console.error(err);
+      logger.error(err);
     }
   }, [userId]);
 
@@ -122,7 +123,7 @@ export default function Notes() {
       await fetchNotes();
       closeEditor();
     } catch (err) {
-      console.error(err);
+      logger.error(err);
       setStatus(
         err instanceof Error && err.message.includes("public key")
           ? "Generate an encryption key first (see chat setup)"

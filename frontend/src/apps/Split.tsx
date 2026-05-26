@@ -16,24 +16,24 @@ export default function Split() {
 
   function pickRight(key: AppKey) {
     if (key === leftKey) return;
-    navigate(`/split/${leftKey}/${key}`, { replace: true });
+    void navigate(`/split/${leftKey}/${key}`, { replace: true });
   }
 
   function pickLeft(key: AppKey) {
     if (key === rightKey) return;
-    navigate(`/split/${key}/${rightKey ?? ""}`, { replace: true });
+    void navigate(`/split/${key}/${rightKey ?? ""}`, { replace: true });
   }
 
   function closeLeft() {
     if (rightKey) {
-      navigate(`/${rightKey}`);
+      void navigate(`/${rightKey}`);
     } else {
-      navigate("/home");
+      void navigate("/home");
     }
   }
 
   function closeRight() {
-    navigate(`/${leftKey}`);
+    void navigate(`/${leftKey}`);
   }
 
   return (
