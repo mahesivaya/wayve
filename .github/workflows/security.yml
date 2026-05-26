@@ -1,34 +1,82 @@
 name: security
 
-# Runs on every PR / push to main, and on a weekly cron so a brand-new
-# advisory for an unchanged dependency still pages someone. Jobs run in
-# parallel — each one is the single source of truth for its slice of the
-# supply chain.
+# One consolidated security pipeline. Stages run sequentially via `needs:`
+# so the run reads top-to-bottom like a single ordered pipeline. A failure
+# in any stage short-circuits the rest — cheaper checks intentionally come
+# first (gitleaks, advisories) so we fail fast before paying for image
+# builds and DAST.
+#
+# Stage order:
+#   1.  secret-scan      gitleaks on full history
+#   2.  deps-rust        cargo audit + cargo deny
+#   3.  deps-frontend    npm audit
+#   4.  sast             semgrep auto-rules + owasp-top-ten
+#   5.  sbom             syft CycloneDX SBOMs (backend + frontend)
+#   6.  trivy-fs         filesystem CVE scan (Rust/npm lockfiles + Docker)
+#   7.  build-images     docker buildx for backend + frontend
+#   8.  trivy-image      OS-layer CVE scan on the built images
+#   9.  dast             stack-up → OWASP ZAP baseline → TLS/headers →
+#                        Schemathesis auth fuzz → teardown (one job because
+#                        the docker stack only lives within a single runner)
+#   10. summary          aggregate to the GitHub job summary
+#
+# Triggers:
+#   - PR and push to main: full pipeline
+#   - Mondays 06:00 UTC: cron, catches new advisories on unchanged deps
+#   - Manual: workflow_dispatch
 on:
   push:
     branches: [main]
   pull_request:
   schedule:
-    # Mondays 06:00 UTC. The point is to catch advisories filed against
-    # code that hasn't been touched recently.
     - cron: "0 6 * * 1"
   workflow_dispatch:
 
-# Cancel an in-flight run if the same ref pushes again — saves minutes on
-# rapid-fire PR updates without losing signal (the latest commit still runs).
+# Cancel an in-flight run if the same ref pushes again.
 concurrency:
   group: security-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
-  security-events: write  # for uploading SARIF (trivy)
+  security-events: write   # SARIF uploads (trivy, semgrep)
+  actions: read
 
 jobs:
-  # 🦀 Rust supply chain — RustSec advisory DB. Catches CVEs in jsonwebtoken,
-  # aes-gcm, lettre, redis, etc. before they reach prod.
-  cargo-audit:
+  # ─────────────────────────────────────────────────────────────────────
+  # 1. SECRET SCAN — gitleaks on full history. Cheapest gate, runs first.
+  # ─────────────────────────────────────────────────────────────────────
+  secret-scan:
+    name: 1 · Secret scan (gitleaks)
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so gitleaks sees every commit
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          version="8.21.2"
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          sudo mv gitleaks /usr/local/bin/
+          gitleaks version
+
+      - name: gitleaks detect
+        run: gitleaks detect --source . --no-banner --redact --verbose
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 2. RUST SUPPLY CHAIN — cargo audit + cargo deny.
+  #    Ignores live in backend/.cargo/audit.toml and backend/deny.toml so
+  #    the workflow stays terse and the reasoning is co-located with
+  #    the code it justifies.
+  # ─────────────────────────────────────────────────────────────────────
+  deps-rust:
+    name: 2 · Rust deps (audit + deny)
+    runs-on: ubuntu-latest
+    needs: secret-scan
     steps:
       - uses: actions/checkout@v4
 
@@ -37,44 +85,29 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
-          # cargo-audit lives in ~/.cargo/bin; let the action cache it.
           cache-all-crates: true
 
-      - name: Install cargo-audit
-        run: cargo install --locked cargo-audit || true
+      - name: Install cargo-audit and cargo-deny
+        run: |
+          cargo install --locked cargo-audit || true
+          cargo install --locked cargo-deny || true
 
       - name: cargo audit
         working-directory: backend
-        # --deny warnings turns informational advisories into failures too —
-        # appropriate for a security-sensitive service. Drop to --deny vulnerabilities
-        # if the noise floor gets too high.
-        #
-        # Ignored advisories. Each one has been triaged; the comment captures
-        # why we can't / shouldn't fix it from our side. The reqwest 0.11 →
-        # 0.12 migration cleared four advisories that used to live here
-        # (RUSTSEC-2025-0134 + RUSTSEC-2026-0098 / 0099 / 0104). What's left
-        # all rides the actix-tls / sqlx-mysql chain and needs an upstream
-        # release to fully clear.
-        run: |
-          cargo audit --deny warnings \
-            --ignore RUSTSEC-2023-0071 \
-            --ignore RUSTSEC-2024-0336 \
-            --ignore RUSTSEC-2025-0009 \
-            --ignore RUSTSEC-2025-0010
-        # RUSTSEC-2023-0071 — rsa 0.9 Marvin timing sidechannel. Reached via
-        #   sqlx-mysql's proc macro. We use the postgres driver only, but
-        #   sqlx-macros pulls every driver impl unconditionally. No fix exists.
-        # RUSTSEC-2024-0336 — rustls 0.20 infinite loop. Pinned by
-        #   actix-tls 3.5; awaits an actix-web release with newer rustls.
-        # RUSTSEC-2025-0009 / 0010 — ring 0.16 panic / unmaintained. Same
-        #   transitive chain as above (actix-tls). Cleared from reqwest's
-        #   side after the 0.12 bump.
+        # Honors backend/.cargo/audit.toml ignore list.
+        run: cargo audit --deny warnings
 
-  # 📦 Frontend supply chain — npm audit. The --audit-level=high gate matches
-  # what most enterprises consider blocking; moderate findings are tracked but
-  # do not fail the build.
-  npm-audit:
+      - name: cargo deny check
+        working-directory: backend
+        run: cargo deny check
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 3. FRONTEND SUPPLY CHAIN — npm audit. Gates on high+critical only.
+  # ─────────────────────────────────────────────────────────────────────
+  deps-frontend:
+    name: 3 · Frontend deps (npm audit)
     runs-on: ubuntu-latest
+    needs: deps-rust
     defaults:
       run:
         working-directory: frontend
@@ -92,37 +125,83 @@ jobs:
       - name: npm audit (high & critical)
         run: npm audit --audit-level=high
 
-  # 🔑 Secret scanning — runs gitleaks against the full history on PRs and
-  # against the new commits on push. Catches an accidentally-committed AES_KEY,
-  # JWT_SECRET, Stripe key, or Google client_secret.json before it lands in
-  # main where it would need rotation (and AES_HKDF_SALT can't be rotated).
-  gitleaks:
+  # ─────────────────────────────────────────────────────────────────────
+  # 4. SAST — Semgrep auto-rules + OWASP Top Ten. Runs over Rust + TS.
+  #    Findings go to GitHub Code Scanning so the team can triage in the
+  #    Security tab.
+  # ─────────────────────────────────────────────────────────────────────
+  sast:
+    name: 4 · SAST (Semgrep)
     runs-on: ubuntu-latest
+    needs: deps-frontend
+    container:
+      image: semgrep/semgrep:latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          # Full history so gitleaks can scan all commits, not just HEAD.
-          fetch-depth: 0
 
-      - name: Install gitleaks
+      - name: semgrep ci
+        # `--config auto` pulls Semgrep's curated baseline + language packs.
+        # OWASP top-ten is layered on explicitly so a noisy auto-rule
+        # change can't drop OWASP coverage silently.
         run: |
-          set -euo pipefail
-          version="8.21.2"
-          curl -sSfL \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
-            | tar -xz gitleaks
-          sudo mv gitleaks /usr/local/bin/
-          gitleaks version
+          semgrep ci \
+            --config auto \
+            --config p/owasp-top-ten \
+            --sarif \
+            --output semgrep.sarif || true
+          # `|| true` keeps SARIF upload reachable; we still fail the job
+          # below if any high-severity finding is present.
 
-      - name: gitleaks detect
-        run: gitleaks detect --source . --no-banner --redact --verbose
+      - name: Upload SARIF to GitHub code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
 
-  # 🐳 Container & filesystem CVE scan — Trivy. The fs scan picks up the Rust
-  # and npm lockfiles AND any vulnerable system packages referenced in the
-  # Dockerfiles. We gate on HIGH/CRITICAL and ignore unfixed advisories
-  # (there's nothing to patch).
-  trivy-fs:
+      - name: Fail on high-severity findings
+        run: |
+          high=$(jq '[.runs[].results[] | select(.level == "error")] | length' semgrep.sarif)
+          echo "high-severity findings: $high"
+          test "$high" -eq 0
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 5. SBOM — Syft generates CycloneDX SBOMs for backend (workspace) and
+  #    frontend (npm). Artifacts attach to the run so compliance / audit
+  #    can pull them without re-running tools locally.
+  # ─────────────────────────────────────────────────────────────────────
+  sbom:
+    name: 5 · SBOM (Syft)
     runs-on: ubuntu-latest
+    needs: sast
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SBOM (backend)
+        uses: anchore/sbom-action@v0
+        with:
+          path: backend
+          format: cyclonedx-json
+          artifact-name: sbom-backend.cdx.json
+          upload-artifact: true
+
+      - name: Generate SBOM (frontend)
+        uses: anchore/sbom-action@v0
+        with:
+          path: frontend
+          format: cyclonedx-json
+          artifact-name: sbom-frontend.cdx.json
+          upload-artifact: true
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 6. TRIVY FILESYSTEM — picks up vulnerable system packages referenced
+  #    by Dockerfiles and lockfile findings Trivy can spot before we even
+  #    build the images.
+  # ─────────────────────────────────────────────────────────────────────
+  trivy-fs:
+    name: 6 · Trivy filesystem
+    runs-on: ubuntu-latest
+    needs: sbom
     steps:
       - uses: actions/checkout@v4
 
@@ -144,10 +223,12 @@ jobs:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
 
-  # 🐳 Image scan — build each service image once and let Trivy inspect the
-  # OS layer for CVEs the fs scan can't see. Runs after fs to fail fast on the
-  # cheaper check.
-  trivy-image:
+  # ─────────────────────────────────────────────────────────────────────
+  # 7. BUILD IMAGES — produce backend + frontend images. Cached via
+  #    GitHub Actions cache so warm runs are minutes, not tens of minutes.
+  # ─────────────────────────────────────────────────────────────────────
+  build-images:
+    name: 7 · Build images
     runs-on: ubuntu-latest
     needs: trivy-fs
     strategy:
@@ -165,7 +246,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build ${{ matrix.name }} image
+      - name: Build ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -173,10 +254,39 @@ jobs:
           push: false
           load: true
           tags: rwayve-${{ matrix.name }}:scan
-          # Buildx layer cache via GitHub Actions cache — keeps image scans
-          # under a couple of minutes on warm runs.
+          outputs: type=docker,dest=/tmp/rwayve-${{ matrix.name }}.tar
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+      - name: Upload image tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.name }}
+          path: /tmp/rwayve-${{ matrix.name }}.tar
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 8. TRIVY IMAGE — OS-layer CVE scan on the images built in stage 7.
+  # ─────────────────────────────────────────────────────────────────────
+  trivy-image:
+    name: 8 · Trivy image
+    runs-on: ubuntu-latest
+    needs: build-images
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download image tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: image-${{ matrix.name }}
+          path: /tmp
+
+      - name: Load image
+        run: docker load --input /tmp/rwayve-${{ matrix.name }}.tar
 
       - name: Trivy image scan (${{ matrix.name }})
         uses: aquasecurity/trivy-action@v0.36.0
@@ -194,3 +304,156 @@ jobs:
         with:
           sarif_file: trivy-image-${{ matrix.name }}.sarif
           category: trivy-image-${{ matrix.name }}
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 9. DAST — Dynamic scans against a live stack. One job because the
+  #    docker stack is bound to a single runner: bring it up, run all
+  #    dynamic checks in order, tear it down on completion.
+  #
+  #    Sub-steps:
+  #      a. Compose up (postgres + redis + backend + frontend + nginx)
+  #      b. Wait for /api/health
+  #      c. OWASP ZAP baseline (passive scan, no exploitation)
+  #      d. TLS / security headers check via curl
+  #      e. Schemathesis auth fuzz against /api/openapi.json
+  #      f. Compose down (always, even on failure)
+  # ─────────────────────────────────────────────────────────────────────
+  dast:
+    name: 9 · DAST (ZAP + headers + Schemathesis)
+    runs-on: ubuntu-latest
+    needs: trivy-image
+    env:
+      COMPOSE_FILE: infra/docker-compose.yml
+      APP_URL: http://localhost:8080
+      WEB_URL: http://localhost
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Materialize CI env files
+        # The smoke script already writes throwaway .env values for CI.
+        # We reuse that here so this workflow and smoke.yml don't drift.
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=rwayve
+          POSTGRES_PASSWORD=rwayve_password
+          POSTGRES_DB=rwayve_test
+          POSTGRES_PORT=5432
+          EOF
+          cat > backend/.env <<'EOF'
+          ENV=ci
+          PORT=8080
+          FRONTEND_URL=http://localhost
+          DATABASE_URL=postgres://rwayve:rwayve_password@postgres:5432/rwayve_test
+          REDIS_URL=redis://redis:6379
+          JWT_SECRET=ci-jwt-secret
+          AES_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          EOF
+
+      - name: Bring stack up
+        run: docker compose -f "$COMPOSE_FILE" up -d --build
+
+      - name: Wait for backend health
+        run: |
+          set -e
+          for i in $(seq 1 60); do
+            if curl -fs "$APP_URL/api/health" >/dev/null; then
+              echo "backend healthy after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "backend never became healthy"
+          docker compose -f "$COMPOSE_FILE" logs --tail=200 backend
+          exit 1
+
+      # 9a. OWASP ZAP baseline — passive scan, follows links from /,
+      # checks for common misconfigurations (missing headers, cookie
+      # flags, info disclosure). `cmd_options: -I` ignores warnings so
+      # the job only fails on confirmed alerts.
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.13.0
+        with:
+          target: ${{ env.WEB_URL }}
+          cmd_options: "-I -j -a"
+          fail_action: true
+          allow_issue_writing: false
+          artifact_name: zap-baseline
+
+      # 9b. Security headers — quick curl check on the public surface.
+      # Fail-fast on the load-bearing headers, warn-only on the rest.
+      - name: Security headers
+        run: |
+          set -e
+          required=(content-security-policy x-content-type-options x-frame-options referrer-policy)
+          headers=$(curl -sI "$WEB_URL/" | tr '[:upper:]' '[:lower:]')
+          echo "--- response headers ---"; echo "$headers"
+          missing=0
+          for h in "${required[@]}"; do
+            if ! grep -q "^$h:" <<<"$headers"; then
+              echo "::error::missing required header: $h"
+              missing=$((missing+1))
+            fi
+          done
+          test "$missing" -eq 0
+
+      # 9c. Schemathesis — generates payloads against every endpoint in
+      # the OpenAPI spec and verifies the server doesn't 5xx, leak data,
+      # or accept requests it should reject. Checks `--checks all`
+      # catches auth bypass on protected routes.
+      - name: Schemathesis auth fuzz
+        run: |
+          pip install --quiet schemathesis
+          schemathesis run \
+            --base-url "$APP_URL" \
+            --checks all \
+            --hypothesis-max-examples 30 \
+            --hypothesis-deadline 5000 \
+            "$APP_URL/api/openapi.json"
+
+      - name: Dump backend logs on failure
+        if: failure()
+        run: docker compose -f "$COMPOSE_FILE" logs --tail=400 backend
+
+      - name: Tear stack down
+        if: always()
+        run: docker compose -f "$COMPOSE_FILE" down --volumes --remove-orphans
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 10. SUMMARY — aggregate stage outcomes to the GitHub run summary so
+  #     the reviewer sees a single dashboard per run.
+  # ─────────────────────────────────────────────────────────────────────
+  summary:
+    name: 10 · Summary
+    runs-on: ubuntu-latest
+    # All stage IDs are listed so `needs.<id>.result` resolves below.
+    # `if: always()` ensures the summary still publishes when an earlier
+    # stage failed (and downstream stages were skipped).
+    needs:
+      - secret-scan
+      - deps-rust
+      - deps-frontend
+      - sast
+      - sbom
+      - trivy-fs
+      - build-images
+      - trivy-image
+      - dast
+    if: always()
+    steps:
+      - name: Write summary
+        run: |
+          {
+            echo "# Security pipeline"
+            echo
+            echo "| Stage | Result |"
+            echo "|---|---|"
+            echo "| 1 · Secret scan | ${{ needs.secret-scan.result || '—' }} |"
+            echo "| 2 · Rust deps | ${{ needs.deps-rust.result || '—' }} |"
+            echo "| 3 · Frontend deps | ${{ needs.deps-frontend.result || '—' }} |"
+            echo "| 4 · SAST | ${{ needs.sast.result || '—' }} |"
+            echo "| 5 · SBOM | ${{ needs.sbom.result || '—' }} |"
+            echo "| 6 · Trivy fs | ${{ needs.trivy-fs.result || '—' }} |"
+            echo "| 7 · Build images | ${{ needs.build-images.result || '—' }} |"
+            echo "| 8 · Trivy image | ${{ needs.trivy-image.result || '—' }} |"
+            echo "| 9 · DAST | ${{ needs.dast.result || '—' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
