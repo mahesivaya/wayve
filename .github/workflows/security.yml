@@ -374,6 +374,12 @@ jobs:
           cat > frontend/.env.development <<'EOF'
           VITE_API_URL=http://localhost:8080
           EOF
+          # nginx service (line 208 of docker-compose.dev.yml) reads
+          # `./.env.development` relative to the compose file location.
+          cat > infra/.env.development <<'EOF'
+          CSP_CONNECT_SRC=http://localhost:8080 http://127.0.0.1:8080
+          NGINX_HOST=localhost
+          EOF
 
       - name: Bring stack up
         run: docker compose -f "$COMPOSE_FILE" up -d --build
