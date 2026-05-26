@@ -2,6 +2,7 @@ pub mod auth;
 pub mod email_notifications;
 pub mod google_calendar;
 pub mod handler;
+pub mod mail_delivery;
 pub mod time;
 pub mod zoom;
 

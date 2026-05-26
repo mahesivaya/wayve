@@ -14,6 +14,7 @@
 mod rbac_authorization_test;
 mod rbac_resolution_test;
 mod scheduler_jwt_test;
+mod scheduler_mail_delivery_test;
 mod security_encryption_test;
 
 // Long-term API contracts — adding/changing these has customer-visible
