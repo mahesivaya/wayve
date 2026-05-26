@@ -3040,6 +3040,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "uuid",
+ "wayve-db",
  "wayve-security",
  "wiremock",
 ]
@@ -4230,6 +4231,15 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap",
  "semver",
+]
+
+[[package]]
+name = "wayve-db"
+version = "0.1.0"
+dependencies = [
+ "sqlx",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

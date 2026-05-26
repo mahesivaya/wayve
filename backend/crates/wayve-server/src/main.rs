@@ -56,9 +56,6 @@ use crate::workers::run_sync_worker;
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, web};
 pub use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use sqlx::postgres::PgPoolOptions;
-use tokio::time::Duration;
-
 use tracing::{info, warn};
 use tracing_actix_web::TracingLogger;
 
@@ -115,36 +112,11 @@ async fn main() -> std::io::Result<()> {
     let db_url = database_url();
     let max_db_connections = db_max_connections(role);
     info!(max_db_connections, "Database pool size selected");
-    // Log the first failure verbosely; subsequent identical failures get a
-    // compact dot-counter so dev.log doesn't fill with the same line.
-    let pool = {
-        let mut attempts: u32 = 0;
-        loop {
-            match PgPoolOptions::new()
-                .max_connections(max_db_connections)
-                .connect(&db_url)
-                .await
-            {
-                Ok(pool) => {
-                    if attempts > 0 {
-                        info!("Connected to Postgres after {} retries", attempts);
-                    } else {
-                        info!("Connected to Postgres");
-                    }
-                    break pool;
-                }
-                Err(e) => {
-                    if attempts == 0 {
-                        warn!("Postgres unavailable, retrying... ({e:?})");
-                    } else if attempts.is_power_of_two() {
-                        warn!("Postgres still unavailable after {} retries", attempts);
-                    }
-                    attempts += 1;
-                    tokio::time::sleep(Duration::from_secs(2)).await;
-                }
-            }
-        }
-    };
+    // Connect with the dot-counter retry loop wayve-db owns. Logging
+    // policy and pool-options selection live in wayve-db so they apply
+    // uniformly to anything else that ever needs a pool (test_pool,
+    // future workers, etc.).
+    let pool = wayve_db::pool::connect_with_retries(&db_url, max_db_connections).await;
 
     crate::startup::ensure_email_schema(&pool).await;
 

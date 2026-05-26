@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/wayve-server", "crates/wayve-security"]
+members = ["crates/wayve-server", "crates/wayve-security", "crates/wayve-db"]
 resolver = "2"
 
 [workspace.package]

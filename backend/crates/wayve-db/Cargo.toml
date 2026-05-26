@@ -1,0 +1,21 @@
+[package]
+name = "wayve-db"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Centralised Postgres connection plumbing. Every workspace crate that
+# needs a `PgPool` (currently just wayve-server, but tests too) flows
+# through this crate so the connect-retry behavior and pool-size
+# defaults live in exactly one place.
+#
+# Intentionally narrow: no per-feature queries, no models, no migration
+# logic — those stay close to the feature module that owns the table.
+
+[dependencies]
+# sqlx is the only mandatory dep. `runtime-tokio` matches the rest of
+# the workspace; we keep this list aligned with the leaf crate that
+# uses the pool (wayve-server) so the lockfile doesn't fork features.
+sqlx.workspace = true
+tokio.workspace = true
+tracing.workspace = true

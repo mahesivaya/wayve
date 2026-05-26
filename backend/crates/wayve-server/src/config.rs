@@ -43,20 +43,14 @@ pub fn load_env_files() {
 }
 
 pub fn db_max_connections(role: RuntimeRole) -> u32 {
-    if let Ok(value) = env::var("DATABASE_MAX_CONNECTIONS") {
-        if let Ok(parsed) = value.parse::<u32>() {
-            return parsed;
-        }
-        warn!(
-            value,
-            "Invalid DATABASE_MAX_CONNECTIONS value; using role default"
-        );
-    }
-
-    match role {
+    // RuntimeRole policy stays here (server concern); the env override
+    // and parse handling live in wayve-db so wayve-server's only DB
+    // logic is the per-role default.
+    let default = match role {
         RuntimeRole::Api | RuntimeRole::All => 10,
         RuntimeRole::EmailSyncWorker | RuntimeRole::EmailBodyWorker => 5,
-    }
+    };
+    wayve_db::config::database_max_connections(default)
 }
 
 pub fn listen_port() -> u16 {
@@ -74,27 +68,11 @@ pub fn listen_port() -> u16 {
 /// being duplicated inside a `DATABASE_URL` string. `POSTGRES_HOST` defaults
 /// to `localhost` for a local `cargo run`; docker sets it to `postgres_db`.
 pub fn database_url() -> String {
-    if let Ok(url) = env::var("DATABASE_URL") {
-        let url = url.trim();
-        if !url.is_empty() {
-            return url.to_string();
-        }
-    }
-
-    let part = |key: &str, default: &str| -> String {
-        env::var(key)
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| default.to_string())
-    };
-
-    let user = part("POSTGRES_USER", "wayve_user");
-    let password = part("POSTGRES_PASSWORD", "");
-    let host = part("POSTGRES_HOST", "localhost");
-    let port = part("POSTGRES_PORT", "5432");
-    let db = part("POSTGRES_DB", "wayve_dev");
-    format!("postgres://{user}:{password}@{host}:{port}/{db}")
+    // Forwards to wayve-db so the connection-string assembly lives in
+    // one place. Kept as a wrapper rather than a re-export so existing
+    // `crate::config::database_url` call sites in wayve-server stay
+    // unchanged.
+    wayve_db::config::database_url()
 }
 
 // ============================================================
