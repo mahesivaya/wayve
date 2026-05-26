@@ -20,9 +20,12 @@ RUN npm run build
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 
 # /etc/nginx and /usr/share/nginx/html are root-owned in the base image,
-# so we briefly switch to root to drop the config + bundle, then return
-# to the `nginx` user the base image already configured.
+# so we briefly switch to root to apply the latest Alpine patches, drop
+# the config + bundle, then return to the `nginx` user the base image
+# already configured. `apk upgrade` clears the OS-package CVEs Trivy
+# flags against this layer.
 USER root
+RUN apk upgrade --no-cache
 COPY nginx.prod.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 USER nginx

@@ -37,7 +37,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM debian:bookworm-slim AS runtime
 
 # ca-certificates for outbound TLS; curl for the container healthcheck.
+# `apt-get upgrade` pulls the latest patches Debian has released for
+# the slim image's pinned packages (Trivy flags base-image CVEs here).
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 

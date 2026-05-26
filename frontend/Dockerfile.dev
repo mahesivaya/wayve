@@ -6,6 +6,9 @@ ENV CI=true
 
 WORKDIR /app
 
+# Pull the latest Debian patches into the slim base — see Dockerfile.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci

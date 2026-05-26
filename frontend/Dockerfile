@@ -3,6 +3,10 @@ FROM node:20-bookworm-slim
 
 WORKDIR /app
 
+# Pull the latest Debian patches into the slim base so the trivy-image
+# stage doesn't trip on stale glibc/openssl CVEs.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 # Use BuildKit's npm cache so re-installs reuse the cache between builds.
 COPY package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
