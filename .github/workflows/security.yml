@@ -368,19 +368,22 @@ jobs:
       # audit stages above are the load-bearing gates; this stage is
       # exploratory.
       - name: OWASP ZAP baseline scan
+        # continue-on-error swallows the action's broken artifact-upload
+        # step. The v0.13.0 action hard-wires a `Create Artifact
+        # Container` call against the v6.0-preview API which Azure
+        # Pipelines has decommissioned, so the upload errors after a
+        # successful scan no matter what `artifact_name` we pass
+        # (empty string just falls back to the default `zap_scan`).
+        # The scan's PASS/WARN/FAIL summary is already in the job log
+        # for triage; ZAP itself reported FAIL-NEW: 0 on the last run.
+        continue-on-error: true
         uses: zaproxy/action-baseline@v0.13.0
         with:
           target: ${{ env.WEB_URL }}
           cmd_options: "-I -j -a"
           fail_action: false
           allow_issue_writing: false
-          # `artifact_name` left blank — the action's bundled artifact
-          # upload uses an older GitHub artifacts API (v6.0-preview)
-          # that fails on the current ubuntu-latest runner. ZAP
-          # findings are already in the job log; if we ever want them
-          # as a downloadable file, upload separately with
-          # actions/upload-artifact@v4 after the scan step.
-          artifact_name: ""
+          artifact_name: zap-baseline
 
       # 9b. Security headers — quick curl check on the public surface.
       # Fail-fast on the load-bearing headers, warn-only on the rest.
