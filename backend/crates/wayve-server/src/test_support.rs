@@ -10,11 +10,22 @@ pub async fn test_pool() -> PgPool {
         .or_else(|| std::env::var("DATABASE_URL").ok())
         .unwrap_or_else(|| panic!("Set TEST_DATABASE_URL or DATABASE_URL to run tests"));
 
-    PgPoolOptions::new()
+    let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&url)
         .await
-        .unwrap_or_else(|err| panic!("connect to test DB: {err}"))
+        .unwrap_or_else(|err| panic!("connect to test DB: {err}"));
+
+    // Mirror what main.rs does at boot. init.sql is the canonical schema
+    // for the tables compose loads on first-boot, but tables added later
+    // (scim_tokens, webhook_endpoints, ...) live in ensure_email_schema
+    // and are idempotent. CI ran into "relation does not exist" errors
+    // because the fresh CI Postgres had only init.sql applied; test_pool
+    // now closes that gap so tests are self-sufficient regardless of
+    // whether the DB started fresh or was reused.
+    crate::startup::ensure_email_schema(&pool).await;
+
+    pool
 }
 
 pub fn random_email() -> String {

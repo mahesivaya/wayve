@@ -47,11 +47,11 @@ describe("Register page", () => {
       expect(getAuthToken()).toBe("jwt-x");
     });
     expect(localStorage.getItem("token")).toBeNull();
-    // Default recovery_mode = "basic" — the radio group on the form
-    // lands on the lowest-friction tier so users can sign in from any
-    // device with just email + password. The other two modes are
-    // opt-in.
-    expect(apiRegister).toHaveBeenCalledWith("x@y.z", "secret123", "secret123", "basic");
+    // Default recovery_mode = "full" — registration always provisions
+    // the 24-word mnemonic so a user can recover on a fresh device.
+    // The form previously defaulted to "basic" (lowest-friction) but
+    // that meant new-device sign-ins couldn't decrypt prior content.
+    expect(apiRegister).toHaveBeenCalledWith("x@y.z", "secret123", "secret123", "full");
   });
 
   it("rejects mismatched passwords without calling API", async () => {

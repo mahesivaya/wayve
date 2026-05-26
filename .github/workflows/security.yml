@@ -340,63 +340,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Materialize CI env files
-        # docker-compose.dev.yml reads three env files (.env.secrets,
-        # backend/.env.development, frontend/.env.development) plus the
-        # root .env for compose interpolation. Write throwaway CI values
-        # for all of them so the stack boots without leaking real creds.
-        run: |
-          cat > .env <<'EOF'
-          POSTGRES_USER=rwayve
-          POSTGRES_PASSWORD=rwayve_password
-          POSTGRES_DB=rwayve_test
-          POSTGRES_PORT=5432
-          EOF
-          cat > .env.secrets <<'EOF'
-          POSTGRES_USER=rwayve
-          POSTGRES_PASSWORD=rwayve_password
-          POSTGRES_DB=rwayve_test
-          POSTGRES_PORT=5432
-          JWT_SECRET=ci-jwt-secret
-          AES_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-          EOF
-          cat > backend/.env.development <<'EOF'
-          ENV=ci
-          RWAYVE_ENV=ci
-          RWAYVE_ROLE=api
-          PORT=8080
-          FRONTEND_URL=http://localhost
-          BACKEND_URL=http://localhost:8080
-          DATABASE_URL=postgres://rwayve:rwayve_password@postgres:5432/rwayve_test
-          REDIS_URL=redis://redis:6379
-          RUST_LOG=info
-          EOF
-          cat > frontend/.env.development <<'EOF'
-          VITE_API_URL=http://localhost:8080
-          EOF
-          # nginx service (line 208 of docker-compose.dev.yml) reads
-          # `./.env.development` relative to the compose file location.
-          cat > infra/.env.development <<'EOF'
-          CSP_CONNECT_SRC=http://localhost:8080 http://127.0.0.1:8080
-          NGINX_HOST=localhost
-          EOF
-
-      - name: Bring stack up
-        run: docker compose -f "$COMPOSE_FILE" up -d --build
-
-      - name: Wait for backend health
-        run: |
-          set -e
-          for i in $(seq 1 60); do
-            if curl -fs "$APP_URL/api/health" >/dev/null; then
-              echo "backend healthy after ${i}s"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "backend never became healthy"
-          docker compose -f "$COMPOSE_FILE" logs --tail=200 backend
-          exit 1
+      - name: Bring up the stack via smoke.sh
+        # smoke.sh already does the heavy lifting: populates the six
+        # .env / .env.secrets / .env.development files from their
+        # .example templates (compose hard-fails on missing env_file),
+        # waits for /api/ready, and runs a batch of HTTP probes. We set
+        # KEEP_RUNNING=1 so the stack stays up for the ZAP / headers /
+        # Schemathesis steps that follow (matches the pattern in
+        # .github/workflows/e2e.yml).
+        env:
+          KEEP_RUNNING: "1"
+          COMPOSE_FILE: infra/docker-compose.yml
+        run: ./scripts/smoke.sh
 
       # 9a. OWASP ZAP baseline — passive scan, follows links from /,
       # checks for common misconfigurations (missing headers, cookie
