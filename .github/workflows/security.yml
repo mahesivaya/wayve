@@ -1,24 +1,31 @@
 name: security
 
-# One consolidated security pipeline. Stages run sequentially via `needs:`
-# so the run reads top-to-bottom like a single ordered pipeline. A failure
-# in any stage short-circuits the rest — cheaper checks intentionally come
-# first (gitleaks, advisories) so we fail fast before paying for image
-# builds and DAST.
+# One consolidated security pipeline. Gates run in parallel except where
+# a real data dependency forces ordering, so the GHA graph fits on one
+# screen (3 columns wide) and the wall-clock runtime is bounded by the
+# slowest single gate (build-images ~4 min) rather than the sum of all
+# of them. Each numbered job is its own independent check — its name
+# encodes the *category*, not the *order* it ran in.
 #
-# Stage order:
-#   1.  secret-scan      gitleaks on full history
-#   2.  deps-rust        cargo audit + cargo deny
-#   3.  deps-frontend    npm audit
-#   4.  sast             semgrep auto-rules + owasp-top-ten
-#   5.  sbom             syft CycloneDX SBOMs (backend + frontend)
-#   6.  trivy-fs         filesystem CVE scan (Rust/npm lockfiles + Docker)
-#   7.  build-images     docker buildx for backend + frontend
-#   8.  trivy-image      OS-layer CVE scan on the built images
-#   9.  dast             stack-up → OWASP ZAP baseline → TLS/headers →
-#                        Schemathesis auth fuzz → teardown (one job because
-#                        the docker stack only lives within a single runner)
-#   10. summary          aggregate to the GitHub job summary
+# Dependency DAG:
+#   secret-scan ─┐
+#   deps-rust ───┤
+#   deps-frontend┤
+#   sast ────────┤────────────────────────────────────────→ summary
+#   sbom ────────┤
+#   trivy-fs ────┤
+#   build-images ┴─→ trivy-image ───────────────────────────→ ↑
+#   dast ──────────────────────────────────────────────────→ ┘
+#
+# The only "real" needs: declarations are:
+#   trivy-image → build-images   (consumes the image tarball artifact)
+#   summary     → [every other]  (reads each job's .result for the table)
+#
+# Trade-off vs sequential: we lose fail-fast (a failing secret-scan
+# won't stop the slow build-images), but the cheap checks finish in
+# seconds anyway — worst-case extra spend is ~30s of wasted runner time.
+# In exchange the pipeline runs in ~5-6 min instead of ~13 min and the
+# graph is readable without scrolling.
 #
 # Triggers:
 #   - PR and push to main: full pipeline
@@ -76,7 +83,6 @@ jobs:
   deps-rust:
     name: 2 · Rust deps (audit + deny)
     runs-on: ubuntu-latest
-    needs: secret-scan
     steps:
       - uses: actions/checkout@v4
 
@@ -107,7 +113,6 @@ jobs:
   deps-frontend:
     name: 3 · Frontend deps (npm audit)
     runs-on: ubuntu-latest
-    needs: deps-rust
     defaults:
       run:
         working-directory: frontend
@@ -133,7 +138,6 @@ jobs:
   sast:
     name: 4 · SAST (Semgrep)
     runs-on: ubuntu-latest
-    needs: deps-frontend
     container:
       image: semgrep/semgrep:latest
     steps:
@@ -173,7 +177,6 @@ jobs:
   sbom:
     name: 5 · SBOM (Syft)
     runs-on: ubuntu-latest
-    needs: sast
     steps:
       - uses: actions/checkout@v4
 
@@ -201,7 +204,6 @@ jobs:
   trivy-fs:
     name: 6 · Trivy filesystem
     runs-on: ubuntu-latest
-    needs: sbom
     steps:
       - uses: actions/checkout@v4
 
@@ -237,7 +239,6 @@ jobs:
   build-images:
     name: 7 · Build images
     runs-on: ubuntu-latest
-    needs: trivy-fs
     strategy:
       fail-fast: false
       matrix:
@@ -332,7 +333,11 @@ jobs:
   dast:
     name: 9 · DAST (ZAP + headers + Schemathesis)
     runs-on: ubuntu-latest
-    needs: trivy-image
+    # No `needs:` — dast brings up its own compose stack via the
+    # setup-docker-stack composite action, so it doesn't actually
+    # consume any artifact from build-images / trivy-image. Running
+    # it in parallel with the other gates cuts ~9 min off the
+    # wall-clock pipeline runtime.
     env:
       COMPOSE_FILE: infra/docker-compose.yml
       APP_URL: http://localhost:8080
