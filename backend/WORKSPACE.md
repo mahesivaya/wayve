@@ -1,12 +1,16 @@
 # Backend Cargo Workspace
 
 This document captures the process of converting the backend from a single
-crate into a Cargo workspace, and extracting `wayve-security` as the first
-sub-crate. It exists so the next extraction (`wayve-core` is the obvious
-candidate) can follow the same well-trodden path without rediscovering the
-traps.
+crate into a Cargo workspace, then extracting `wayve-security` (auth +
+crypto primitives) and `wayve-db` (Postgres pool + retry loop) as the
+first two sub-crates. It exists so the next extraction (`wayve-core` is
+the obvious candidate) can follow the same well-trodden path without
+rediscovering the traps.
 
-The refactor was completed on **2026-05-25**, on a branch off `main`.
+| Milestone | Date |
+|---|---|
+| Workspace shell + wayve-security extraction | **2026-05-25** |
+| wayve-db extraction | **2026-05-25** (same day, second pass) |
 
 ---
 
@@ -28,24 +32,33 @@ backend/
     │       ├── embed/              (embed-token middleware — re-exports
     │       │                        EmbedPrincipal from wayve-security)
     │       └── tests/              (integration tests; need a real DB)
-    └── wayve-security/             ← extracted crate
+    ├── wayve-security/             ← extracted crate (auth + crypto)
+    │   ├── Cargo.toml
+    │   └── src/
+    │       ├── lib.rs              ← declares the public module tree
+    │       ├── config.rs           ← env-var helpers (jwt_secret, aes_key,
+    │       │                        aes_hkdf_salt, auth_cookie_secure, siem)
+    │       ├── api_key.rs          ← X-API-KEY validation, scope catalog
+    │       ├── encryption.rs       ← AES-256-GCM + HKDF-SHA512
+    │       ├── jwt.rs              ← HS256 + cookie/header extraction +
+    │       │                        get_user_id_from_request chokepoint
+    │       ├── oauth.rs            ← Google OAuth state store/consume
+    │       ├── password.rs         ← bcrypt off the async runtime
+    │       ├── rbac.rs             ← role matrix + permission catalog
+    │       ├── sso.rs              ← OIDC/SSO client
+    │       └── embed/
+    │           ├── mod.rs
+    │           └── middleware.rs   ← EmbedPrincipal struct (TypeId-shared
+    │                                with the wayve-server middleware)
+    └── wayve-db/                   ← extracted crate (Postgres plumbing)
         ├── Cargo.toml
         └── src/
-            ├── lib.rs              ← declares the public module tree
-            ├── config.rs           ← env-var helpers (jwt_secret, aes_key,
-            │                        aes_hkdf_salt, auth_cookie_secure, siem)
-            ├── api_key.rs          ← X-API-KEY validation, scope catalog
-            ├── encryption.rs       ← AES-256-GCM + HKDF-SHA512
-            ├── jwt.rs              ← HS256 + cookie/header extraction +
-            │                        get_user_id_from_request chokepoint
-            ├── oauth.rs            ← Google OAuth state store/consume
-            ├── password.rs         ← bcrypt off the async runtime
-            ├── rbac.rs             ← role matrix + permission catalog
-            ├── sso.rs              ← OIDC/SSO client
-            └── embed/
-                ├── mod.rs
-                └── middleware.rs   ← EmbedPrincipal struct (TypeId-shared
-                                     with the wayve-server middleware)
+            ├── lib.rs              ← declares config + pool modules
+            ├── config.rs           ← database_url(),
+            │                        database_max_connections(default)
+            └── pool.rs             ← connect_with_retries(url, max) — the
+                                     dot-counter retry loop main.rs used
+                                     to embed inline
 ```
 
 The compiled binary still lands at `target/release/rwayve`. Operationally
@@ -532,6 +545,105 @@ container is healthy in 6s.
 
 ---
 
+## The second extraction — `wayve-db`
+
+Done later the same day, on `main` (workspace shell already existed,
+branch protection allows admin pushes). Took ~25 minutes start to
+finish. Worth a separate section because it confirmed which parts of
+the playbook are essential and which were specific to the wayve-security
+case.
+
+### Scope
+
+Deliberately narrow — just the Postgres connection plumbing:
+
+- `config::database_url()` — env-driven connection-string assembly
+  (`DATABASE_URL` wins, otherwise derived from `POSTGRES_*` parts)
+- `config::database_max_connections(default: u32)` —
+  `DATABASE_MAX_CONNECTIONS` env override + caller-supplied default
+- `pool::connect_with_retries(url, max)` — the 30-line dot-counter
+  retry loop main.rs used to embed inline
+
+Per-feature queries, models, migrations, `startup::ensure_email_schema`,
+and the `From<sqlx::Error> for AppError` impl all stayed in
+wayve-server. The boundary the crate enforces is "pool plumbing should
+live in exactly one place"; everything else is feature-coupled.
+
+### What was different from wayve-security
+
+| Aspect | wayve-security | wayve-db |
+|---|---|---|
+| Crate count when starting | 1 (wayve-server only) | 2 (security already out) |
+| Phase 2 (workspace shell) | Had to do it | Skipped — already done |
+| Caller imports rewritten | 47 files via `sed` | **0 files** — see below |
+| Cross-crate dependency traps | 3 (config, AppError, EmbedPrincipal) | 0 |
+| Total time | ~3.5 hours | ~25 minutes |
+
+The 0-caller-rewrites result came from the **wrapper pattern**: instead
+of replacing every `crate::config::database_url()` call site with
+`wayve_db::config::database_url()`, the wayve-server function was
+turned into a one-line forwarder:
+
+```rust
+// crates/wayve-server/src/config.rs — after extraction
+pub fn database_url() -> String {
+    wayve_db::config::database_url()
+}
+
+pub fn db_max_connections(role: RuntimeRole) -> u32 {
+    // RuntimeRole policy stays here (server concern); env parse goes
+    // through wayve-db.
+    let default = match role {
+        RuntimeRole::Api | RuntimeRole::All => 10,
+        RuntimeRole::EmailSyncWorker | RuntimeRole::EmailBodyWorker => 5,
+    };
+    wayve_db::config::database_max_connections(default)
+}
+```
+
+Every existing call site (`crate::config::database_url()`) still
+compiles. The diff stayed contained to the two files we wanted to
+change (config.rs, main.rs) plus the three new files in wayve-db.
+
+When extracting `wayve-security` we considered the wrapper pattern too,
+but `crate::security::X` had a richer surface (47 callers, ~10 distinct
+functions) — re-exporting each one would have been more work than the
+`sed` rewrite. For small focused extractions, wrappers win; for big
+extractions, rewrite the call sites.
+
+### Validation cycle
+
+Same four checks as wayve-security:
+
+| Check | Result |
+|---|---|
+| `cargo check --workspace` | clean |
+| `cargo clippy --workspace -- -D warnings` | clean |
+| `cargo test --workspace -- --test-threads=1` | 100 passed (82 + 18) |
+| Docker build + `/api/health` | 200 OK |
+
+No Dockerfile changes were needed because the cache-mount id
+(`rwayve-workspace-target-v1`) was already in place and the wayve-db
+crate was additive — it didn't change any existing rmeta shapes.
+
+### Lessons that confirmed (not extended) the playbook
+
+- **The "Should it go in?" filter from wayve-security holds.** Pool
+  plumbing fit cleanly because it had a small surface, no per-feature
+  coupling, and one obvious chokepoint (main.rs). The same filter
+  rejected adding test_pool() helpers (test-coupled deps) and
+  `From<sqlx::Error> for AppError` (HTTP-coupled error type).
+- **Keep policy where the enum lives, push mechanics to the new crate.**
+  `RuntimeRole` is a wayve-server concern; the per-role default
+  (10 for api, 5 for workers) stayed there. wayve-db only knows
+  "parse `DATABASE_MAX_CONNECTIONS`, fall back to caller default" —
+  generic and reusable.
+- **No new BuildKit cache traps.** The first extraction taught us to
+  version the cache mount; the second extraction benefited from that
+  prep without paying the price again.
+
+---
+
 ## Lessons learned
 
 | Lesson | What to do |
@@ -543,33 +655,44 @@ container is healthy in 6s.
 | Local `cargo check` passing doesn't guarantee Docker build passes | Always run a clean Docker build before pushing — caching can hide real issues. |
 | `pub(crate)` becomes a leak on extraction | Audit visibility when moving — items needed by callers in a different crate must be `pub`. |
 | The error-type extraction (PasswordError) is worth doing properly | Keeping AppError out of the extracted crate forces the consumer to add `impl From` — minimal pain, big payoff in independence. |
+| For small focused extractions, **wrapper functions beat call-site rewrites** | wayve-db used 1-line wrappers in the original config.rs that forward to the new crate; 0 callers needed `sed`. wayve-security was too wide for this — 47 callers, ~10 functions — so rewriting was cheaper. |
+| **Keep policy where the enum lives, push mechanics to the new crate** | RuntimeRole stayed in wayve-server; wayve-db just parses an env var and falls back to a caller-supplied default. The new crate ends up generic and reusable. |
 
 ---
 
 ## How to do the next extraction (`wayve-core`)
 
 The natural next crate is `wayve-core` — `prelude.rs`, `models/`,
-`config.rs`, `external.rs`, `observability/devlog.rs`. It's bigger than
-wayve-security but follows the same four-phase pattern.
+the remaining bits of `config.rs`, `external.rs`,
+`observability/devlog.rs`, and `RuntimeRole`. It's bigger than both
+prior extractions but follows the same four-phase pattern.
 
-1. **Audit**: list what's in `models/`, `prelude.rs`, `config.rs`,
-   `external.rs`, `observability/`. Grep for callers. The caller count
-   will be much higher than security's 47 — models are referenced
-   everywhere.
+1. **Audit**: list what's in `models/`, `prelude.rs`, `config.rs`
+   (minus the DB helpers, which are already in wayve-db), `external.rs`,
+   `observability/`. Grep for callers. The caller count will be much
+   higher than security's 47 — models are referenced everywhere. The
+   wrapper-vs-rewrite call from wayve-db kicks in: at this scale,
+   rewrite the call sites.
 2. **Workspace shell already exists** — skip phase 2 entirely.
 3. **Extract**:
    - Move the files into `crates/wayve-core/src/`
    - The prelude re-exports become wayve-core's public surface
-   - Collapse `wayve-security/src/config.rs` and `wayve-server/src/config.rs`
-     into `wayve-core/src/config.rs`
-   - Update wayve-security to depend on wayve-core
+   - Collapse `wayve-security/src/config.rs`, `wayve-db/src/config.rs`,
+     and `wayve-server/src/config.rs` into `wayve-core/src/config.rs`
+     (or keep crate-local stubs that forward to wayve-core if the
+     surface areas are too divergent)
+   - `RuntimeRole` moves into wayve-core so wayve-db can take it
+     directly instead of a `u32 default` — the policy can move down
+     once both server and db know the enum
+   - Update wayve-security and wayve-db to depend on wayve-core
    - Update wayve-server to depend on wayve-core
    - `sed` rewrite all `crate::{prelude,models,config,external}` →
      `wayve_core::*` in wayve-server
-4. **Validate** + remember to bump the Dockerfile cache mount id from
-   `v1` to `v2`.
+4. **Validate** + **bump the Dockerfile cache mount id from `v1` to
+   `v2`**. wayve-db didn't change rmeta shapes; wayve-core will, because
+   it touches `prelude.rs` which is imported nearly everywhere.
 
-After wayve-core, **stop**. Three crates is enough to capture the real
+After wayve-core, **stop**. Four crates is enough to capture the real
 benefits. Going further (wayve-mail, wayve-chat, wayve-drive) tends to
 churn cross-crate boundaries every PR without enforcing anything useful.
 
@@ -595,9 +718,13 @@ churn cross-crate boundaries every PR without enforcing anything useful.
 
 ## Files changed (snapshot)
 
-The refactor touched ~150 files across the backend, dominated by import
-rewrites (`crate::security::X` → `wayve_security::X`). The conceptually
+The first refactor (wayve-security) touched ~150 files across the
+backend, dominated by import rewrites
+(`crate::security::X` → `wayve_security::X`). The second (wayve-db)
+touched only 9 because of the wrapper pattern. The conceptually
 significant changes are concentrated in:
+
+### wayve-security extraction
 
 | File | Why it mattered |
 |---|---|
@@ -613,3 +740,16 @@ significant changes are concentrated in:
 | `backend/crates/wayve-server/src/config.rs` | Dropped helpers that only security/ used |
 | `backend/crates/wayve-server/src/main.rs` | Removed `pub mod security;` |
 | `backend/Dockerfile` | Workspace-aware, versioned cache-mount id |
+
+### wayve-db extraction
+
+| File | Why it mattered |
+|---|---|
+| `backend/Cargo.toml` | Added `crates/wayve-db` to workspace `members` |
+| `backend/crates/wayve-db/Cargo.toml` (new) | sqlx + tokio + tracing workspace deps |
+| `backend/crates/wayve-db/src/lib.rs` (new) | `pub mod config; pub mod pool;` |
+| `backend/crates/wayve-db/src/config.rs` (new) | `database_url()`, `database_max_connections(default)` |
+| `backend/crates/wayve-db/src/pool.rs` (new) | `connect_with_retries(url, max)` — moved from main.rs |
+| `backend/crates/wayve-server/Cargo.toml` | Added `wayve-db = { path = "../wayve-db", version = "0.1" }` |
+| `backend/crates/wayve-server/src/config.rs` | `database_url()` + `db_max_connections()` shrunk to one-line forwarders |
+| `backend/crates/wayve-server/src/main.rs` | 30-line retry loop collapsed to `wayve_db::pool::connect_with_retries(&db_url, max).await` |
