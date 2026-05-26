@@ -13,6 +13,7 @@
 // (webhooks event catalog, embed tokens, SCIM, rate-limit tiers).
 mod email_provider_isp_test;
 mod rbac_authorization_test;
+mod rbac_permissions_golden_test;
 mod rbac_resolution_test;
 mod scheduler_jwt_test;
 mod scheduler_mail_delivery_test;

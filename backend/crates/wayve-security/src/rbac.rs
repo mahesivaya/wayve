@@ -37,7 +37,7 @@ impl Scope {
 /// The nine roles, most-privileged first. `owner` implies the full permission
 /// catalog; `super_admin` implies everything except the two billing
 /// permissions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Role {
     Owner,
     SuperAdmin,
@@ -213,102 +213,130 @@ impl Permission {
 // The role→permission matrix. `owner` is the whole catalog; every other role
 // lists its grants explicitly (a `logs:read` holder also gets the limited form,
 // so both are listed — there is no implication logic).
-const P_SUPER_ADMIN: &[Permission] = &[
-    AppsUse,
-    AppsManage,
-    ProfileManageSelf,
-    MembersRead,
-    MembersManage,
-    RolesManage,
-    RolesAssignLimited,
-    OrgSettings,
-    OrgDelete,
-    UsageRead,
-    ApiKeysManage,
-    WebhooksManage,
-    IntegrationsManage,
-    LogsRead,
-    LogsReadLimited,
-    AuditRead,
-    SecurityManage,
-    TicketsManage,
-    SsoManage,
-    InboxManage,
-];
-const P_ADMIN: &[Permission] = &[
-    AppsUse,
-    AppsManage,
-    ProfileManageSelf,
-    MembersRead,
-    MembersManage,
-    RolesAssignLimited,
-    OrgSettings,
-    UsageRead,
-    SsoManage,
-    InboxManage,
-];
-const P_SECURITY: &[Permission] = &[
-    AppsUse,
-    ProfileManageSelf,
-    MembersRead,
-    // Security can provision new accounts (guest/developer/member/support)
-    // through the admin "Create user" flow. Granting MembersManage also lets
-    // them change roles on existing members via the same gate; that's
-    // intentional — owner/super_admin still keep all permissions above it.
-    MembersManage,
-    // Paired with MembersManage so security can actually act on the accounts
-    // it provisions — change roles and delete users — but only for roles
-    // below admin. Without this, can_assign_role would return false for
-    // every target.
-    RolesAssignLimited,
-    LogsRead,
-    LogsReadLimited,
-    AuditRead,
-    SecurityManage,
-    SsoManage,
-];
-const P_BILLING: &[Permission] = &[
-    AppsUse,
-    ProfileManageSelf,
-    MembersRead,
-    BillingManage,
-    BillingRead,
-    UsageRead,
-];
-const P_DEVELOPER: &[Permission] = &[
-    AppsUse,
-    ProfileManageSelf,
-    ApiKeysManage,
-    WebhooksManage,
-    IntegrationsManage,
-    LogsRead,
-    LogsReadLimited,
-];
-const P_SUPPORT: &[Permission] = &[
-    AppsUse,
-    ProfileManageSelf,
-    MembersRead,
-    UsageRead,
-    LogsReadLimited,
-    TicketsManage,
-];
+//
+// One declarative source of truth: adding a permission to a role means editing
+// exactly one Vec below. The map is built lazily on first lookup and held for
+// the lifetime of the process, so `permissions_for` stays O(1) with stable
+// 'static slice references for callers that iterate or expose them upward.
+//
 // `member` and `guest` share the baseline capability bundle; `guest`'s real
 // limitation (visibility scoped to explicitly-shared resources) is a data-layer
 // concern, not a permission.
-const P_BASELINE: &[Permission] = &[AppsUse, ProfileManageSelf];
+static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Vec<Permission>>> =
+    std::sync::LazyLock::new(|| {
+        let baseline = vec![AppsUse, ProfileManageSelf];
+        std::collections::HashMap::from([
+            (Role::Owner, Permission::ALL.to_vec()),
+            (
+                Role::SuperAdmin,
+                vec![
+                    AppsUse,
+                    AppsManage,
+                    ProfileManageSelf,
+                    MembersRead,
+                    MembersManage,
+                    RolesManage,
+                    RolesAssignLimited,
+                    OrgSettings,
+                    OrgDelete,
+                    UsageRead,
+                    ApiKeysManage,
+                    WebhooksManage,
+                    IntegrationsManage,
+                    LogsRead,
+                    LogsReadLimited,
+                    AuditRead,
+                    SecurityManage,
+                    TicketsManage,
+                    SsoManage,
+                    InboxManage,
+                ],
+            ),
+            (
+                Role::Admin,
+                vec![
+                    AppsUse,
+                    AppsManage,
+                    ProfileManageSelf,
+                    MembersRead,
+                    MembersManage,
+                    RolesAssignLimited,
+                    OrgSettings,
+                    UsageRead,
+                    SsoManage,
+                    InboxManage,
+                ],
+            ),
+            (
+                Role::Security,
+                vec![
+                    AppsUse,
+                    ProfileManageSelf,
+                    MembersRead,
+                    // Security can provision new accounts (guest/developer/
+                    // member/support) through the admin "Create user" flow.
+                    // Granting MembersManage also lets them change roles on
+                    // existing members via the same gate; that's intentional —
+                    // owner/super_admin still keep all permissions above it.
+                    MembersManage,
+                    // Paired with MembersManage so security can actually act on
+                    // the accounts it provisions — change roles and delete
+                    // users — but only for roles below admin. Without this,
+                    // can_assign_role would return false for every target.
+                    RolesAssignLimited,
+                    LogsRead,
+                    LogsReadLimited,
+                    AuditRead,
+                    SecurityManage,
+                    SsoManage,
+                ],
+            ),
+            (
+                Role::Billing,
+                vec![
+                    AppsUse,
+                    ProfileManageSelf,
+                    MembersRead,
+                    BillingManage,
+                    BillingRead,
+                    UsageRead,
+                ],
+            ),
+            (
+                Role::Developer,
+                vec![
+                    AppsUse,
+                    ProfileManageSelf,
+                    ApiKeysManage,
+                    WebhooksManage,
+                    IntegrationsManage,
+                    LogsRead,
+                    LogsReadLimited,
+                ],
+            ),
+            (
+                Role::Support,
+                vec![
+                    AppsUse,
+                    ProfileManageSelf,
+                    MembersRead,
+                    UsageRead,
+                    LogsReadLimited,
+                    TicketsManage,
+                ],
+            ),
+            (Role::Member, baseline.clone()),
+            (Role::Guest, baseline),
+        ])
+    });
 
 /// The permissions granted by a role.
 pub fn permissions_for(role: Role) -> &'static [Permission] {
-    match role {
-        Role::Owner => &Permission::ALL,
-        Role::SuperAdmin => P_SUPER_ADMIN,
-        Role::Admin => P_ADMIN,
-        Role::Security => P_SECURITY,
-        Role::Billing => P_BILLING,
-        Role::Developer => P_DEVELOPER,
-        Role::Support => P_SUPPORT,
-        Role::Member | Role::Guest => P_BASELINE,
-    }
+    static EMPTY: &[Permission] = &[];
+    PERMISSION_MATRIX
+        .get(&role)
+        .map(Vec::as_slice)
+        .unwrap_or(EMPTY)
 }
 
 /// Whether `role` grants `perm`.
