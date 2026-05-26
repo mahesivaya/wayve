@@ -341,8 +341,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Materialize CI env files
-        # The smoke script already writes throwaway .env values for CI.
-        # We reuse that here so this workflow and smoke.yml don't drift.
+        # docker-compose.dev.yml reads three env files (.env.secrets,
+        # backend/.env.development, frontend/.env.development) plus the
+        # root .env for compose interpolation. Write throwaway CI values
+        # for all of them so the stack boots without leaking real creds.
         run: |
           cat > .env <<'EOF'
           POSTGRES_USER=rwayve
@@ -350,14 +352,27 @@ jobs:
           POSTGRES_DB=rwayve_test
           POSTGRES_PORT=5432
           EOF
-          cat > backend/.env <<'EOF'
-          ENV=ci
-          PORT=8080
-          FRONTEND_URL=http://localhost
-          DATABASE_URL=postgres://rwayve:rwayve_password@postgres:5432/rwayve_test
-          REDIS_URL=redis://redis:6379
+          cat > .env.secrets <<'EOF'
+          POSTGRES_USER=rwayve
+          POSTGRES_PASSWORD=rwayve_password
+          POSTGRES_DB=rwayve_test
+          POSTGRES_PORT=5432
           JWT_SECRET=ci-jwt-secret
           AES_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          EOF
+          cat > backend/.env.development <<'EOF'
+          ENV=ci
+          RWAYVE_ENV=ci
+          RWAYVE_ROLE=api
+          PORT=8080
+          FRONTEND_URL=http://localhost
+          BACKEND_URL=http://localhost:8080
+          DATABASE_URL=postgres://rwayve:rwayve_password@postgres:5432/rwayve_test
+          REDIS_URL=redis://redis:6379
+          RUST_LOG=info
+          EOF
+          cat > frontend/.env.development <<'EOF'
+          VITE_API_URL=http://localhost:8080
           EOF
 
       - name: Bring stack up
