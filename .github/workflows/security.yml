@@ -374,7 +374,13 @@ jobs:
           cmd_options: "-I -j -a"
           fail_action: false
           allow_issue_writing: false
-          artifact_name: zap-baseline
+          # `artifact_name` left blank — the action's bundled artifact
+          # upload uses an older GitHub artifacts API (v6.0-preview)
+          # that fails on the current ubuntu-latest runner. ZAP
+          # findings are already in the job log; if we ever want them
+          # as a downloadable file, upload separately with
+          # actions/upload-artifact@v4 after the scan step.
+          artifact_name: ""
 
       # 9b. Security headers — quick curl check on the public surface.
       # Fail-fast on the load-bearing headers, warn-only on the rest.
