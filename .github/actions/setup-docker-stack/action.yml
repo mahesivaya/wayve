@@ -1,0 +1,32 @@
+name: Set up Docker stack
+description: |
+  Brings the full rwayve docker-compose stack up on the runner and waits
+  for `/api/ready` to return 200. Shared by every workflow that needs a
+  live stack — smoke, e2e, security DAST. The actual lifting happens in
+  scripts/smoke.sh, which:
+    1. Materializes .env / .env.secrets / *.env.development / etc. from
+       their .example templates if missing (compose hard-fails on
+       missing env_file directives).
+    2. `docker compose up -d --build`.
+    3. Polls /api/ready + the nginx-fronted root until both respond.
+    4. Runs a short batch of HTTP probes — duplicate but cheap, and
+       acts as a free smoke layer for callers that don't run probes
+       themselves.
+  KEEP_RUNNING=1 short-circuits smoke.sh's `trap cleanup EXIT` so the
+  stack stays up for downstream steps.
+
+inputs:
+  health-timeout-seconds:
+    description: "How long smoke.sh waits for /api/ready before giving up."
+    required: false
+    default: "90"
+
+runs:
+  using: composite
+  steps:
+    - name: Boot stack via scripts/smoke.sh
+      shell: bash
+      env:
+        KEEP_RUNNING: "1"
+        HEALTH_TIMEOUT_S: ${{ inputs.health-timeout-seconds }}
+      run: ./scripts/smoke.sh

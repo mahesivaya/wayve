@@ -19,60 +19,21 @@ jobs:
     runs-on: ubuntu-latest
     # Cap the whole job — a wedged docker stack would otherwise burn an hour.
     timeout-minutes: 25
+    env:
+      COMPOSE_FILE: infra/docker-compose.yml
 
     steps:
       - uses: actions/checkout@v4
 
-      # ---- Bring up the docker stack (matches scripts/smoke.sh and the
-      #      docker-smoke job in smoke.yml). Keep this in sync if you change
-      #      the env contract in compose.
-      - name: Generate .env files for docker-compose
-        run: |
-          cat <<EOF > backend/.env
-          DATABASE_URL=postgres://postgres:postgres@postgres_db:5432/rwayve
-          FRONTEND_URL=http://localhost
-          JWT_SECRET=ci-secret
-          AES_KEY=0123456789abcdef0123456789abcdef
-          REDIS_URL=redis://redis:6379
-          SMTP_HOST=smtp.example.com
-          SMTP_PORT=587
-          SMTP_USER=ci@example.com
-          SMTP_PASS=ci-pass
-          EOF
+      # ---- 1 · Stack-up (env files + compose up + wait for /api/ready).
+      # Single composite action — same setup as smoke and security DAST.
+      - name: Set up Docker stack
+        uses: ./.github/actions/setup-docker-stack
 
-          cat <<EOF > .env.secrets
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=postgres
-          POSTGRES_DB=rwayve
-          POSTGRES_PORT=5432
-          JWT_SECRET=ci-secret
-          AES_KEY=0123456789abcdef0123456789abcdef
-          SMTP_USER=ci@example.com
-          SMTP_PASS=ci-pass
-          EOF
-
-          cat <<EOF > frontend/.env
-          VITE_API_URL=http://localhost:8080
-          EOF
-
-          cat <<EOF > .env
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=postgres
-          POSTGRES_DB=rwayve
-          EOF
-
-          cat <<EOF > client_secret.json
-          {"web":{"client_id":"ci","client_secret":"ci","redirect_uris":["http://localhost:8080/oauth/callback"]}}
-          EOF
-
-      - name: Bring up stack (keep running for the Playwright run)
-        env:
-          KEEP_RUNNING: "1"
-        run: ./scripts/smoke.sh
-
-      # ---- Playwright setup. Cache npm + the browser binary (~300MB) so
-      #      warm runs skip the 1-2 min download.
-      - uses: actions/setup-node@v4
+      # ---- 2 · Node + Playwright preparation. Cache npm + the browser
+      # binary (~300MB) so warm runs skip the 1-2 min download.
+      - name: Install Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
@@ -86,8 +47,9 @@ jobs:
         id: pw
         working-directory: e2e
         run: |
-          # Match the cache key to the *resolved* Playwright version, not the
-          # range in package.json, so a minor bump invalidates the cache.
+          # Match the cache key to the *resolved* Playwright version, not
+          # the range in package.json, so a minor bump invalidates the
+          # cache.
           version=$(node -p "require('@playwright/test/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -98,28 +60,29 @@ jobs:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers (cold cache)
         if: steps.pw-cache.outputs.cache-hit != 'true'
         working-directory: e2e
         run: npx playwright install --with-deps chromium
 
-      - name: Install system deps for cached browser
+      - name: Install Playwright system deps (warm cache)
         if: steps.pw-cache.outputs.cache-hit == 'true'
         working-directory: e2e
         run: npx playwright install-deps chromium
 
-      # ---- Run the suite. Base URL points at the nginx-fronted frontend
-      #      brought up by smoke.sh.
-      - name: Run Playwright
+      # ---- 3 · Run the suite. Base URL points at the nginx-fronted
+      # frontend brought up by the composite action above.
+      - name: Run Playwright tests
         working-directory: e2e
         env:
           E2E_BASE_URL: http://localhost:80
           CI: "true"
         run: npx playwright test
 
-      # ---- Artifacts: HTML report (always) + raw test-results (on failure).
-      #      The report is what an engineer opens to triage a red build.
-      - name: Upload Playwright report
+      # ---- 4 · Artifacts: HTML report (always) + raw test-results
+      # (on failure). The report is what an engineer opens to triage a
+      # red build.
+      - name: Upload Playwright HTML report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -135,11 +98,11 @@ jobs:
           path: e2e/test-results/
           retention-days: 14
 
-      # ---- Debug aid: compose logs on failure.
+      # ---- 5 · Debug aid + teardown.
       - name: Dump compose logs on failure
         if: failure()
-        run: docker compose -f infra/docker-compose.yml logs --tail=200 || true
+        run: docker compose -f "$COMPOSE_FILE" logs --tail=200 || true
 
       - name: Tear down stack
         if: always()
-        run: docker compose -f infra/docker-compose.yml down -v --remove-orphans || true
+        run: docker compose -f "$COMPOSE_FILE" down -v --remove-orphans || true

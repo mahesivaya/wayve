@@ -86,58 +86,55 @@ jobs:
     runs-on: ubuntu-latest
     # Smoke depends on the unit/integration suites passing first.
     needs: [backend-tests, frontend-tests]
+    env:
+      COMPOSE_FILE: infra/docker-compose.yml
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate .env files needed by docker-compose
+      # Set up the stack via the shared composite action. env-files are
+      # auto-populated from .example templates, stack comes up under
+      # KEEP_RUNNING=1 so we can run probes against it afterwards.
+      - name: Set up Docker stack
+        uses: ./.github/actions/setup-docker-stack
+
+      # Each probe is its own step so the GHA UI shows per-check timing
+      # and `failure()` annotations point at the exact failing probe.
+      # Probes mirror what scripts/smoke.sh already runs internally;
+      # they're cheap and act as a second-line check on top of the
+      # in-script verification.
+      - name: Probe /api/health (liveness)
         run: |
-          # Backend .env (consumed by the backend service)
-          cat <<EOF > backend/.env
-          DATABASE_URL=postgres://postgres:postgres@postgres_db:5432/rwayve
-          FRONTEND_URL=http://localhost
-          JWT_SECRET=ci-secret
-          AES_KEY=0123456789abcdef0123456789abcdef
-          REDIS_URL=redis://redis:6379
-          SMTP_HOST=smtp.example.com
-          SMTP_PORT=587
-          SMTP_USER=ci@example.com
-          SMTP_PASS=ci-pass
-          EOF
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/health)
+          test "$status" = "200" || { echo "::error::expected 200, got $status"; exit 1; }
 
-          # Centralized secrets — consumed by postgres_db + backend + workers
-          # (docker-compose hard-fails if this env_file is missing).
-          cat <<EOF > .env.secrets
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=postgres
-          POSTGRES_DB=rwayve
-          POSTGRES_PORT=5432
-          JWT_SECRET=ci-secret
-          AES_KEY=0123456789abcdef0123456789abcdef
-          SMTP_USER=ci@example.com
-          SMTP_PASS=ci-pass
-          EOF
+      - name: Probe /api/ready (readiness — Postgres + Redis reachable)
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/ready)
+          test "$status" = "200" || { echo "::error::expected 200, got $status"; exit 1; }
 
-          # Frontend .env baked into the build
-          cat <<EOF > frontend/.env
-          VITE_API_URL=http://localhost:8080
-          EOF
+      - name: Probe /api/me without token returns 401
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/me)
+          test "$status" = "401" || { echo "::error::expected 401, got $status"; exit 1; }
 
-          # Postgres credentials for compose (root .env)
-          cat <<EOF > .env
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=postgres
-          POSTGRES_DB=rwayve
-          EOF
+      - name: Probe /api/login with bad creds returns 401
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST -H "Content-Type: application/json" \
+            --data '{"email":"nobody@nowhere.test","password":"x"}' \
+            http://localhost:8080/api/login)
+          test "$status" = "401" || { echo "::error::expected 401, got $status"; exit 1; }
 
-          # client_secret.json placeholder (volume-mounted; backend won't crash on it)
-          cat <<EOF > client_secret.json
-          {"web":{"client_id":"ci","client_secret":"ci","redirect_uris":["http://localhost:8080/oauth/callback"]}}
-          EOF
-
-      - name: Run docker smoke
-        run: ./scripts/smoke.sh
+      - name: Probe / served by nginx
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/)
+          [[ "$status" =~ ^(200|301|302)$ ]] || { echo "::error::expected 2xx/3xx, got $status"; exit 1; }
 
       - name: Dump compose logs on failure
         if: failure()
-        run: docker compose -f infra/docker-compose.yml logs --tail=200 || true
+        run: docker compose -f "$COMPOSE_FILE" logs --tail=200 || true
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f "$COMPOSE_FILE" down --volumes --remove-orphans || true

@@ -340,18 +340,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Bring up the stack via smoke.sh
-        # smoke.sh already does the heavy lifting: populates the six
-        # .env / .env.secrets / .env.development files from their
-        # .example templates (compose hard-fails on missing env_file),
-        # waits for /api/ready, and runs a batch of HTTP probes. We set
-        # KEEP_RUNNING=1 so the stack stays up for the ZAP / headers /
-        # Schemathesis steps that follow (matches the pattern in
-        # .github/workflows/e2e.yml).
-        env:
-          KEEP_RUNNING: "1"
-          COMPOSE_FILE: infra/docker-compose.yml
-        run: ./scripts/smoke.sh
+      # Shared composite action — env-files + compose up + wait-healthy.
+      # Same setup used by smoke.yml and e2e.yml so the stack-up logic
+      # lives in exactly one place (.github/actions/setup-docker-stack).
+      - name: Set up Docker stack
+        uses: ./.github/actions/setup-docker-stack
 
       # 9a. OWASP ZAP baseline — passive scan, follows links from /,
       # checks for common misconfigurations (missing headers, cookie
