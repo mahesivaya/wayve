@@ -63,9 +63,9 @@ export interface CallSession {
   rejectCall: () => void;
   endCall: () => void;
   toggleMute: () => void;
-  remoteAudioRef: React.RefObject<HTMLAudioElement | null>;
-  remoteVideoRef: React.RefObject<HTMLVideoElement | null>;
-  localVideoRef: React.RefObject<HTMLVideoElement | null>;
+  remoteAudioRef: React.RefObject<HTMLAudioElement>;
+  remoteVideoRef: React.RefObject<HTMLVideoElement>;
+  localVideoRef: React.RefObject<HTMLVideoElement>;
 }
 
 // ICE servers (STUN + TURN) are fetched per-call from `/api/turn/credentials`
@@ -84,9 +84,9 @@ export function useCallSession(
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
-  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
   const ringTimerRef = useRef<number | null>(null);
 
   const [connected, setConnected] = useState(false);
