@@ -417,6 +417,34 @@
   padding: 4px;
 }
 
+.github-actions-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 8px 4px;
+}
+
+.github-actions-load-more button {
+  padding: 7px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.github-actions-load-more button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary-action);
+}
+
+.github-actions-load-more button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .github-actions-node {
   min-width: 0;
 }
@@ -761,12 +789,26 @@
 }
 
 .github-flow-job-head {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--color-border);
   background: var(--color-surface-tint);
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: background 0.12s ease;
+}
+
+.github-flow-job-head:hover {
+  background: var(--color-surface-hover);
+}
+
+.github-flow-job.is-open .github-flow-job-head {
+  border-bottom: 1px solid var(--color-border);
 }
 
 .github-flow-job-title {
@@ -811,33 +853,31 @@
   flex-direction: column;
 }
 
+/* GitHub-style step row inside an expanded job. Each row is:
+ *   [chevron 12]  [status icon 16]  [step name]
+ * with comfortable vertical padding and a hover tint. No rail, no
+ * inline duration — matches the user-supplied reference screenshot
+ * exactly. The chevron is non-functional today (we don't fetch per-step
+ * logs from the API) but kept as visual parity with GitHub's UI. */
 .github-flow-step {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) auto;
+  grid-template-columns: 12px 16px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
-  padding: 7px 12px 7px 18px;
-  font-size: 12.5px;
-  position: relative;
+  gap: 14px;
+  padding: 8px 16px;
+  font-size: 13px;
+  border-radius: 6px;
+  margin: 0 6px;
 }
 
-/* Vertical connector rail between consecutive step dots — like the
-   "pipeline" lines GitHub draws on the run page. The rail sits behind
-   the dot so it appears as a continuous line punctuated by status
-   pips. We draw it on all but the last step. */
-.github-flow-step:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  left: 22px;
-  top: 22px;
-  bottom: -4px;
-  width: 1px;
-  background: var(--color-border);
+.github-flow-step:hover {
+  background: var(--color-surface-hover);
 }
 
-.github-flow-step .github-status-dot {
-  position: relative;
-  z-index: 1;
+.github-flow-step .github-tree-toggle {
+  color: var(--color-text-muted);
+  width: 12px;
+  height: 12px;
 }
 
 .github-flow-step-name {
@@ -847,13 +887,6 @@
   color: var(--color-text-primary);
 }
 
-.github-flow-step-dur {
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
 .github-flow-step.is-empty {
   grid-template-columns: minmax(0, 1fr);
   color: var(--color-text-muted);
@@ -861,6 +894,51 @@
   padding-left: 18px;
 }
 
-.github-flow-step.is-empty::after {
-  display: none;
+/* ── Status icon colors (used by <StatusIcon /> SVGs via currentColor) ── */
+.github-status-icon {
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.github-status-icon.status-success {
+  color: var(--color-success, #2da44e);
+}
+
+.github-status-icon.status-failure,
+.github-status-icon.status-timed_out,
+.github-status-icon.status-startup_failure {
+  color: var(--color-danger-strong, #cf222e);
+}
+
+.github-status-icon.status-cancelled {
+  color: var(--color-text-slate, #57606a);
+}
+
+.github-status-icon.status-skipped,
+.github-status-icon.status-neutral {
+  color: var(--color-text-slate-light, #8c959f);
+}
+
+.github-status-icon.status-in_progress,
+.github-status-icon.status-waiting,
+.github-status-icon.status-requested {
+  color: var(--color-warning, #bf8700);
+}
+
+.github-status-icon.status-queued,
+.github-status-icon.status-pending,
+.github-status-icon.status-unknown {
+  color: var(--color-text-slate-light, #8c959f);
+}
+
+/* CSS spin for in-progress dashed circle */
+.github-status-icon.is-spinning {
+  animation: github-spin 1.4s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes github-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

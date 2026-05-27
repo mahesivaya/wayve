@@ -3,7 +3,17 @@ import "./githubRepo.css";
 
 const OWNER = "mahesivaya";
 const REPO = "wayve";
-const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
+// All GitHub calls go through our own backend proxy at /api/github/*.
+// The proxy:
+//   * gates on a logged-in Wayve session (no anon access),
+//   * attaches the server-held GITHUB_TOKEN PAT, lifting the rate
+//     limit from 60/hr to 5000/hr without ever exposing the token to
+//     the browser,
+//   * caches GET responses for 60s, so the N-calls-per-mount we do
+//     here don't compound across reloads.
+// The path shape (`/repos/{owner}/{repo}/...`) matches GitHub's API
+// 1:1, so request URLs from this file read the same as before.
+const API_BASE = `/api/github/repos/${OWNER}/${REPO}`;
 
 type Repo = {
   full_name: string;
@@ -64,7 +74,13 @@ type CommitItem = {
 
 type RunsResponse = {
   workflow_runs: WorkflowRun[];
+  total_count: number;
 };
+
+// How many runs we pull per `/actions/runs` page. 30 is a comfortable
+// initial load (covers a few days for an active repo without flooding
+// the UI). 100 is the GitHub API max if we ever want to bump this.
+const RUNS_PER_PAGE = 30;
 
 // Individual step inside a job — what GitHub renders as the bullet list
 // under each job header on the run page. The `number` field is the
@@ -268,13 +284,97 @@ function ChevronIcon() {
   );
 }
 
+/**
+ * GitHub-style round status icon for a job or step. Inlined SVG so colors
+ * theme through CSS `currentColor` via the `.status-<state>` class.
+ *
+ *   success         — filled circle + white check
+ *   failure/timed_out/startup_failure — filled red circle + white x
+ *   cancelled       — outlined circle + diagonal stroke (corner-to-corner)
+ *   skipped/neutral — outlined circle + opposite diagonal slash
+ *   in_progress     — dashed outlined circle (CSS spin)
+ *   queued/pending  — plain outlined circle
+ */
+function StatusIcon({ state }: { state: string }) {
+  const cls = `github-status-icon status-${state}`;
+  switch (state) {
+    case "success":
+      return (
+        <svg className={cls} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <circle cx="8" cy="8" r="7.25" fill="currentColor" />
+          <path
+            fill="none"
+            stroke="#fff"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M4.5 8.5l2.4 2.4 4.7-4.8"
+          />
+        </svg>
+      );
+    case "failure":
+    case "timed_out":
+    case "startup_failure":
+      return (
+        <svg className={cls} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <circle cx="8" cy="8" r="7.25" fill="currentColor" />
+          <path
+            fill="none"
+            stroke="#fff"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            d="M5.5 5.5l5 5M10.5 5.5l-5 5"
+          />
+        </svg>
+      );
+    case "cancelled":
+      return (
+        <svg className={cls} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <line x1="4.5" y1="4.5" x2="11.5" y2="11.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      );
+    case "skipped":
+    case "neutral":
+      return (
+        <svg className={cls} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <line x1="4.5" y1="11.5" x2="11.5" y2="4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      );
+    case "in_progress":
+    case "waiting":
+    case "requested":
+      return (
+        <svg className={`${cls} is-spinning`} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <circle
+            cx="8"
+            cy="8"
+            r="6.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeDasharray="6 4"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "queued":
+    case "pending":
+    default:
+      return (
+        <svg className={cls} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
+      );
+  }
+}
+
 async function githubJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  });
+  // The proxy attaches the Accept + X-GitHub-Api-Version headers
+  // server-side, so the browser only needs to send the auth cookie
+  // (handled automatically because the URL is same-origin /api/...).
+  const response = await fetch(url, { credentials: "include" });
 
   if (!response.ok) {
     throw new Error(`GitHub request failed (${response.status})`);
@@ -314,6 +414,17 @@ export default function GitHubRepo() {
   const [jobsByRunId, setJobsByRunId] = useState<Record<number, Job[]>>({});
   const [loadingRunIds, setLoadingRunIds] = useState<Set<number>>(new Set());
   const [errorByRunId, setErrorByRunId] = useState<Record<number, string>>({});
+  // Second-level expansion inside the run-detail flow. Clicking a job
+  // header reveals/hides its step checklist — GitHub-style. State is
+  // keyed by job id (globally unique) so multiple jobs across multiple
+  // runs can stay open independently.
+  const [expandedJobIds, setExpandedJobIds] = useState<Set<number>>(new Set());
+  // Paginated history of workflow runs. `runsPage` is the most-recent
+  // page we've fetched; `runsTotal` comes from GitHub's total_count
+  // header so we know when to hide the "Load more" affordance.
+  const [runsPage, setRunsPage] = useState(1);
+  const [runsTotal, setRunsTotal] = useState(0);
+  const [runsLoadingMore, setRunsLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [fileLoading, setFileLoading] = useState(false);
   const [error, setError] = useState("");
@@ -322,22 +433,61 @@ export default function GitHubRepo() {
     setError("");
     setLoading(true);
     try {
-      const [repoData, branchData, runsData] = await Promise.all([
+      const [repoData, branchData] = await Promise.all([
         githubJson<Repo>(API_BASE),
         githubJson<Branch[]>(`${API_BASE}/branches?per_page=50`),
-        githubJson<RunsResponse>(`${API_BASE}/actions/runs?per_page=8`),
       ]);
 
       setRepo(repoData);
       setBranches(branchData);
       setBranch(repoData.default_branch);
-      setRuns(runsData.workflow_runs);
+      // Runs are fetched by the branch-driven effect below (so the list
+      // re-filters when the user switches branches).
     } catch (err) {
       setError(err instanceof Error ? err.message : "GitHub data failed to load");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  /**
+   * Fetch a page of workflow runs filtered to `nextBranch`. `append`
+   * means we're paging through history (preserves runs already loaded);
+   * otherwise the result REPLACES the list (used on branch change or
+   * the initial load). Updates the pagination counters so the "Load
+   * more" affordance knows whether there's anything left to fetch.
+   */
+  const loadRuns = useCallback(
+    async (nextBranch: string, page: number, append: boolean) => {
+      if (append) setRunsLoadingMore(true);
+      try {
+        const url =
+          `${API_BASE}/actions/runs` +
+          `?branch=${encodeURIComponent(nextBranch)}` +
+          `&per_page=${RUNS_PER_PAGE}` +
+          `&page=${page}`;
+        const data = await githubJson<RunsResponse>(url);
+        setRunsTotal(data.total_count ?? 0);
+        setRunsPage(page);
+        setRuns((current) =>
+          append ? [...current, ...data.workflow_runs] : data.workflow_runs,
+        );
+      } catch (err) {
+        // Surface the error but don't blow up the rest of the page —
+        // the user still has files / commits / workflows on screen.
+        setError(
+          err instanceof Error ? err.message : "Action runs failed to load",
+        );
+        if (!append) {
+          setRuns([]);
+          setRunsTotal(0);
+        }
+      } finally {
+        setRunsLoadingMore(false);
+      }
+    },
+    [],
+  );
 
   const loadDirectory = useCallback(async (nextPath: string, nextBranch: string) => {
     setError("");
@@ -451,7 +601,16 @@ export default function GitHubRepo() {
     if (!repo) return;
     void loadWorkflows(branch);
     void loadCommits(branch);
-  }, [branch, loadCommits, loadWorkflows, repo]);
+    // Branch change resets the runs history so we don't show mixed-
+    // branch results. The Run-detail caches stay valid (keyed by run
+    // id, which is global), but the per-job expansion state and the
+    // expanded-runs set lose their visual context, so clear them.
+    setRunsPage(1);
+    setRunsTotal(0);
+    setExpandedRunIds(new Set());
+    setExpandedJobIds(new Set());
+    void loadRuns(branch, 1, false);
+  }, [branch, loadCommits, loadRuns, loadWorkflows, repo]);
 
   async function openFile(item: ContentItem) {
     setSelectedFile(item);
@@ -680,7 +839,15 @@ export default function GitHubRepo() {
         <div className="github-panel">
           <div className="github-panel-head">
             <h2>Actions</h2>
-            <span>{runs.length}</span>
+            <span>
+              {/* Show "loaded / total" so the user can see how much
+                  history is still available behind "Load more". When
+                  the API hasn't returned a total yet, just show the
+                  loaded count. */}
+              {runsTotal > 0 && runsTotal > runs.length
+                ? `${runs.length} of ${runsTotal}`
+                : runs.length}
+            </span>
           </div>
 
           {/* Tree view of workflow runs:
@@ -783,16 +950,32 @@ export default function GitHubRepo() {
                                   <div className="github-flow-jobs">
                                     {runJobs.map((job) => {
                                       const jobState = job.conclusion ?? job.status ?? "unknown";
+                                      const isJobOpen = expandedJobIds.has(job.id);
                                       return (
                                         <article
                                           key={job.id}
-                                          className={`github-flow-job state-${jobState}`}
+                                          className={`github-flow-job state-${jobState} ${isJobOpen ? "is-open" : ""}`}
                                         >
-                                          <header className="github-flow-job-head">
+                                          <button
+                                            type="button"
+                                            className="github-flow-job-head"
+                                            onClick={() => {
+                                              setExpandedJobIds((current) => {
+                                                const next = new Set(current);
+                                                if (next.has(job.id)) next.delete(job.id);
+                                                else next.add(job.id);
+                                                return next;
+                                              });
+                                            }}
+                                            aria-expanded={isJobOpen}
+                                          >
                                             <span
-                                              className={`github-status-dot status-${jobState}`}
+                                              className={`github-tree-toggle ${isJobOpen ? "open" : ""}`}
                                               aria-hidden="true"
-                                            />
+                                            >
+                                              <ChevronIcon />
+                                            </span>
+                                            <StatusIcon state={jobState} />
                                             <span className="github-flow-job-title">
                                               <strong>{job.name}</strong>
                                               <small>
@@ -807,45 +990,45 @@ export default function GitHubRepo() {
                                               rel="noreferrer"
                                               aria-label={`Open ${job.name} on GitHub`}
                                               title="Open on GitHub"
+                                              onClick={(event) => event.stopPropagation()}
                                             >
                                               ↗
                                             </a>
-                                          </header>
+                                          </button>
 
-                                          <ol className="github-flow-steps">
-                                            {job.steps
-                                              .slice()
-                                              .sort((a, b) => a.number - b.number)
-                                              .map((step) => {
-                                                const stepState =
-                                                  step.conclusion ?? step.status ?? "unknown";
-                                                return (
-                                                  <li
-                                                    key={`${job.id}-${step.number}`}
-                                                    className="github-flow-step"
-                                                  >
-                                                    <span
-                                                      className={`github-status-dot status-${stepState}`}
-                                                      aria-hidden="true"
-                                                    />
-                                                    <span className="github-flow-step-name">
-                                                      {step.name}
-                                                    </span>
-                                                    <span className="github-flow-step-dur">
-                                                      {formatDuration(
-                                                        step.started_at,
-                                                        step.completed_at,
-                                                      )}
-                                                    </span>
-                                                  </li>
-                                                );
-                                              })}
-                                            {job.steps.length === 0 && (
-                                              <li className="github-flow-step is-empty">
-                                                No steps reported.
-                                              </li>
-                                            )}
-                                          </ol>
+                                          {isJobOpen && (
+                                            <ol className="github-flow-steps">
+                                              {job.steps
+                                                .slice()
+                                                .sort((a, b) => a.number - b.number)
+                                                .map((step) => {
+                                                  const stepState =
+                                                    step.conclusion ?? step.status ?? "unknown";
+                                                  return (
+                                                    <li
+                                                      key={`${job.id}-${step.number}`}
+                                                      className="github-flow-step"
+                                                    >
+                                                      <span
+                                                        className="github-tree-toggle"
+                                                        aria-hidden="true"
+                                                      >
+                                                        <ChevronIcon />
+                                                      </span>
+                                                      <StatusIcon state={stepState} />
+                                                      <span className="github-flow-step-name">
+                                                        {step.name}
+                                                      </span>
+                                                    </li>
+                                                  );
+                                                })}
+                                              {job.steps.length === 0 && (
+                                                <li className="github-flow-step is-empty">
+                                                  No steps reported.
+                                                </li>
+                                              )}
+                                            </ol>
+                                          )}
                                         </article>
                                       );
                                     })}
@@ -862,6 +1045,24 @@ export default function GitHubRepo() {
               );
             })}
             {runs.length === 0 && <div className="github-empty">No runs found.</div>}
+
+            {/* "Load more" — fetches the next page of workflow_runs
+                filtered to the current branch. Hidden when we've
+                already loaded everything GitHub knows about, or when
+                the initial fetch hasn't returned a total yet. */}
+            {runsTotal > runs.length && (
+              <div className="github-actions-load-more">
+                <button
+                  type="button"
+                  onClick={() => void loadRuns(branch, runsPage + 1, true)}
+                  disabled={runsLoadingMore}
+                >
+                  {runsLoadingMore
+                    ? "Loading…"
+                    : `Load more (${runsTotal - runs.length} remaining)`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </section>
