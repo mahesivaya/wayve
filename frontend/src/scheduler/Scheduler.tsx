@@ -58,6 +58,75 @@ type CreatedMeeting = {
   meeting_id?: number;
 };
 
+type TimeOption = { value: string; label: string };
+
+function TimeSelect({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: TimeOption[];
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // When the popup opens, scroll the currently-selected row into view so
+  // the user lands near their existing pick instead of at midnight.
+  useEffect(() => {
+    if (!open || !listRef.current) return;
+    const selected = listRef.current.querySelector<HTMLLIElement>("li.is-selected");
+    selected?.scrollIntoView({ block: "nearest" });
+  }, [open]);
+
+  const current = options.find((opt) => opt.value === value);
+
+  return (
+    <div className="time-select" ref={wrapRef}>
+      <button
+        type="button"
+        className="time-select-button"
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <span>{current?.label ?? value}</span>
+        <span className="time-select-caret">▾</span>
+      </button>
+      {open && (
+        <ul className="time-select-list" role="listbox" ref={listRef}>
+          {options.map((opt) => (
+            <li
+              key={opt.value}
+              role="option"
+              aria-selected={opt.value === value}
+              className={opt.value === value ? "is-selected" : ""}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(opt.value);
+                setOpen(false);
+              }}
+            >
+              {opt.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function Scheduler() {
   const { normalizedSearchQuery } = useGlobalSearch();
   const daySlotsRef = useRef<HTMLDivElement>(null);
@@ -304,13 +373,21 @@ export default function Scheduler() {
   };
 
   // ================= EDIT =================
+  // Snap a time string to the nearest 15-min boundary so it always
+  // matches one of the dropdown options.
+  const snap15 = (time: string) => {
+    const mins = toMinutes(time);
+    const snapped = Math.min(Math.round(mins / 15) * 15, 23 * 60 + 45);
+    return toTime(snapped);
+  };
+
   const openEdit = (event: SchedulerEvent) => {
     setEditingEvent(event);
 
     setTitle(event.title);
     setSelectedDate(event.date);
-    setStart(toTime(event.start));
-    setEnd(toTime(event.end));
+    setStart(snap15(toTime(event.start)));
+    setEnd(snap15(toTime(event.end)));
     setSelectedCalendarId(getCalendarIdForEvent(event));
     setParticipants(event.participants ?? []);
     setEmailInput("");
@@ -324,7 +401,7 @@ export default function Scheduler() {
     setParticipants([]);
     setSelectedCalendarId(calendars.find((calendar) => calendar.visible)?.id ?? "office");
     setEmailInput("");
-    const baseStart = startTime ?? addMinutesToTime(nowTimeStr(), 0);
+    const baseStart = snap15(startTime ?? nowTimeStr());
     setSelectedDate(date ?? todayStr());
     setStart(baseStart);
     setEnd(addMinutesToTime(baseStart, startTime ? 30 : 60));
@@ -372,6 +449,35 @@ export default function Scheduler() {
     }
     return map;
   }, [calendarVisibleEvents]);
+
+  // ================= TIME DROPDOWNS =================
+  // 15-min slots across the day, rendered in 12-hour format. Start filters
+  // out past slots when scheduling for today; end filters to slots strictly
+  // after the chosen start so the End dropdown can't produce an invalid
+  // range. Current start/end are always included so the controlled select
+  // never loses its value.
+  const timeSlots = useMemo(() => {
+    const slots: { value: string; label: string; mins: number }[] = [];
+    for (let m = 0; m < 24 * 60; m += 15) {
+      slots.push({ value: toTime(m), label: formatHour(m), mins: m });
+    }
+    return slots;
+  }, []);
+
+  const startOptions = useMemo(() => {
+    const minMins =
+      !editingEvent && selectedDate === todayStr()
+        ? toMinutes(nowTimeStr())
+        : -1;
+    const startMins = toMinutes(start);
+    return timeSlots.filter((s) => s.mins > minMins || s.mins === startMins);
+  }, [timeSlots, editingEvent, selectedDate, start]);
+
+  const endOptions = useMemo(() => {
+    const startMins = toMinutes(start);
+    const endMins = toMinutes(end);
+    return timeSlots.filter((s) => s.mins > startMins || s.mins === endMins);
+  }, [timeSlots, start, end]);
 
   // ================= MINI CALENDAR =================
   const year = currentDate.getFullYear();
@@ -832,44 +938,29 @@ export default function Scheduler() {
             </div>
           </div>
 
-          <div className="form-group">
-            <label>Start</label>
-            <input
-              type="time"
-              value={start}
-              min={
-                !editingEvent && selectedDate === todayStr()
-                  ? nowTimeStr()
-                  : undefined
-              }
-              onChange={(e) => {
-                let v = e.target.value;
-                if (!editingEvent && selectedDate === todayStr() && v < nowTimeStr()) {
-                  v = nowTimeStr();
-                }
-                setStart(v);
-                if (toMinutes(end) <= toMinutes(v)) {
-                  setEnd(addMinutesToTime(v, 30));
-                }
-              }}
-            />
-          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Start</label>
+              <TimeSelect
+                value={start}
+                options={startOptions}
+                onChange={(v) => {
+                  setStart(v);
+                  if (toMinutes(end) <= toMinutes(v)) {
+                    setEnd(addMinutesToTime(v, 30));
+                  }
+                }}
+              />
+            </div>
 
-          <div className="form-group">
-            <label>End</label>
-            <input
-              type="time"
-              value={end}
-              min={addMinutesToTime(start, 1)}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (toMinutes(v) <= toMinutes(start)) {
-                  setEnd(addMinutesToTime(start, 30));
-                } else {
-                  setEnd(v);
-                }
-              }}
-            />
+            <div className="form-group">
+              <label>End</label>
+              <TimeSelect
+                value={end}
+                options={endOptions}
+                onChange={(v) => setEnd(v)}
+              />
+            </div>
           </div>
 
           {editingEvent?.zoom_join_url && (

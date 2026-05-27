@@ -575,6 +575,8 @@
 
 .form { display: flex; flex-direction: column; gap: 12px; }
 .form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-row { display: flex; gap: 12px; }
+.form-row > .form-group { flex: 1; min-width: 0; }
 .form-group label {
   font-size: var(--text-xs);
   font-weight: 600;
@@ -597,6 +599,65 @@
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgb(26, 115, 232, 0.18);
+}
+
+.time-select {
+  position: relative;
+}
+.time-select-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: var(--text-md);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.time-select-button:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(26, 115, 232, 0.18);
+}
+.time-select-caret {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-left: 8px;
+}
+.time-select-list {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  max-height: 168px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 2px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
+  z-index: 20;
+}
+.time-select-list li {
+  padding: 4px 10px;
+  font-size: var(--text-sm, 13px);
+  line-height: 1.4;
+  color: var(--text);
+  cursor: pointer;
+}
+.time-select-list li:hover {
+  background: var(--surface-alt);
+}
+.time-select-list li.is-selected {
+  background: var(--accent);
+  color: white;
 }
 
 .modal-actions {

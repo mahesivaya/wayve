@@ -474,12 +474,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearAuthToken();
     setUser(null);
     setNeedsRecovery(false);
-    // Hard-nav to the public landing page. Skipping this lets
-    // ProtectedRoute re-render after `setUser(null)` and bounce the
-    // user to /login (because every page they could be on right now
-    // is protected). The reload also clears all in-memory state so
+    // Hard-nav to /login so the user lands on the sign-in screen
+    // immediately. The reload also clears all in-memory state so
     // nothing leaks across sessions.
-    window.location.href = "/";
+    window.location.href = "/login";
   };
 
   return (
