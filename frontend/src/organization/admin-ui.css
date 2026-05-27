@@ -41,12 +41,12 @@
 
 :is(.platform-admin-hint, .organization-admin-hint) {
   margin: -4px 0 0;
-  color: #475569;
+  color: var(--color-text-slate-medium);
   font-size: var(--text-sm);
 }
 
 :is(.platform-admin-hint, .organization-admin-hint) strong {
-  color: #1d4ed8;
+  color: var(--color-primary-action-hover);
 }
 
 :is(.platform-admin-error, .platform-admin-success, .organization-admin-error, .organization-admin-success) {
@@ -58,13 +58,13 @@
 }
 
 :is(.platform-admin-error, .organization-admin-error) {
-  border: 1px solid #fecaca;
-  background: #fee2e2;
-  color: #991b1b;
+  border: 1px solid var(--color-danger-border);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
 }
 
 :is(.platform-admin-success, .organization-admin-success) {
-  border: 1px solid #bbf7d0;
-  background: #dcfce7;
-  color: #166534;
+  border: 1px solid var(--color-success-border);
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }

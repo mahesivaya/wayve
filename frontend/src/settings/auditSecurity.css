@@ -23,7 +23,7 @@
 
 .audit-security-header button,
 .audit-security-panel button {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-muted);
   background: var(--color-surface);
   border-radius: var(--radius-sm);
   padding: 8px 12px;
@@ -32,14 +32,14 @@
 }
 
 .audit-security-header button:disabled,
-.audit-security-panel button:disabled {
+.audit-security-panel button:disabled{
   opacity: 0.55;
   cursor: not-allowed;
 }
 
 .audit-security-panel {
   background: var(--color-surface);
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 18px;
   margin-bottom: 18px;
@@ -82,7 +82,7 @@
 .audit-filters input,
 .audit-filters select,
 .siem-form input {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-muted);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
   font-size: var(--text-md);
@@ -97,7 +97,7 @@
 
 .audit-summary span,
 .siem-meta span {
-  background: #f3f4f6;
+  background: var(--color-surface-hover);
   border-radius: var(--radius-pill);
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
@@ -119,7 +119,7 @@
 .audit-table td {
   text-align: left;
   padding: 8px 9px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-surface-tint-cool);
   vertical-align: top;
 }
 
@@ -136,28 +136,28 @@
 
 .audit-outcome {
   border-radius: var(--radius-pill);
-  background: #eef2ff;
-  color: #3730a3;
+  background: var(--color-accent-indigo-mist);
+  color: var(--color-accent-indigo-deep);
   padding: 2px 8px;
   font-weight: 700;
 }
 
 .audit-outcome.allowed {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .audit-outcome.invalid,
 .audit-outcome.denied_scope,
 .audit-outcome.denied_expired,
 .audit-outcome.denied_revoked {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
 }
 
 .audit-outcome.rate_limited {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .audit-security-empty {
@@ -173,13 +173,13 @@
 }
 
 .audit-security-error {
-  background: #fef2f2;
+  background: var(--color-danger-soft-strong);
   color: var(--color-danger);
 }
 
 .audit-security-success {
-  background: #ecfdf5;
-  color: #047857;
+  background: var(--color-success-soft-tint);
+  color: var(--color-success-text-emerald);
 }
 
 .siem-form {
@@ -202,13 +202,13 @@
   gap: 8px;
 }
 
-.siem-actions button:first-child {
-  background: #4338ca;
-  border-color: #4338ca;
+.siem-actions button:first-child{
+  background: var(--color-accent-indigo-mid);
+  border-color: var(--color-accent-indigo-mid);
   color: var(--color-surface);
 }
 
-@media (max-width: 860px) {
+@media (max-width: 860px){
   .audit-security-header,
   .audit-security-panel-head {
     flex-direction: column;

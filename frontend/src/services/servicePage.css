@@ -1,7 +1,7 @@
 .service-page {
   min-height: 100vh;
-  background: #f4f6fb;
-  color: #262151;
+  background: var(--color-surface-cool-pale);
+  color: var(--color-accent-indigo-darkest);
 }
 
 .service-page-nav {
@@ -11,22 +11,22 @@
   justify-content: space-between;
   gap: 18px;
   padding: 0 22px;
-  background: rgba(245, 246, 250, 0.96);
-  border-bottom: 1px solid rgba(121, 116, 146, 0.22);
+  background: rgb(245, 246, 250, 0.96);
+  border-bottom: 1px solid rgb(121, 116, 146, 0.22);
 }
 
 .service-page-brand,
 .service-page-nav button {
   border: 0;
   background: transparent;
-  color: #2f286f;
+  color: var(--color-accent-indigo-bridge);
   font: inherit;
   font-weight: 750;
   cursor: pointer;
 }
 
 .service-page-brand {
-  color: #5140d7;
+  color: var(--color-brand-purple);
   font-size: 26px;
   font-weight: 850;
 }
@@ -46,7 +46,7 @@
 
 .service-page-register {
   border-radius: var(--radius-md) !important;
-  background: #563ee0 !important;
+  background: var(--color-accent-indigo-strong) !important;
   color: var(--color-surface) !important;
 }
 
@@ -59,9 +59,9 @@
 .service-page-hero {
   padding: 56px;
   background:
-    linear-gradient(120deg, rgba(86, 62, 224, 0.12), rgba(37, 198, 239, 0.1)),
-    #fff;
-  border: 1px solid #e1e5ef;
+    linear-gradient(120deg, rgb(86, 62, 224, 0.12), rgb(37, 198, 239, 0.1)),
+    var(--color-surface);
+  border: 1px solid var(--color-surface-tint-cloud);
   border-radius: var(--radius-md);
 }
 
@@ -75,46 +75,46 @@
   color: var(--color-surface);
   font-size: 17px;
   font-weight: 850;
-  background: linear-gradient(135deg, #7857ff, #37c6ef);
-  box-shadow: inset 0 0 0 9px rgba(255, 255, 255, 0.18), 0 3px 12px rgba(37, 31, 77, 0.18);
+  background: linear-gradient(135deg, var(--color-accent-purple-vivid), var(--gradient-card-1-to));
+  box-shadow: inset 0 0 0 9px rgb(255, 255, 255, 0.18), 0 3px 12px rgb(37, 31, 77, 0.18);
 }
 
 .service-page-icon.mail {
-  background: linear-gradient(135deg, #8a67ff, #5a44d8);
+  background: linear-gradient(135deg, var(--gradient-card-2-from), var(--gradient-card-2-to));
 }
 
 .service-page-icon.chat {
-  background: linear-gradient(135deg, #1ecca1, #2b77ff);
+  background: linear-gradient(135deg, var(--gradient-card-3-from), var(--gradient-card-3-to));
 }
 
 .service-page-icon.meet {
-  background: linear-gradient(135deg, #77ddf0, #8155ed);
+  background: linear-gradient(135deg, var(--gradient-card-4-from), var(--gradient-card-4-to));
 }
 
 .service-page-icon.calendar {
-  background: linear-gradient(135deg, #376bff, #8dd6ff);
+  background: linear-gradient(135deg, var(--gradient-card-5-from), var(--gradient-card-5-to));
 }
 
 .service-page-icon.drive {
-  background: linear-gradient(135deg, #8e5af7, #ea4aa2);
+  background: linear-gradient(135deg, var(--gradient-card-6-from), var(--gradient-card-6-to));
 }
 
 .service-page-icon.notes {
-  background: linear-gradient(135deg, #1bc772, #93f2b4);
+  background: linear-gradient(135deg, var(--gradient-card-7-from), var(--gradient-card-7-to));
 }
 
 .service-page-icon.tasks {
-  background: linear-gradient(135deg, #1a73e8, #63b3ed);
+  background: linear-gradient(135deg, var(--color-primary), var(--gradient-card-8-to));
 }
 
 .service-page-icon.ai {
-  background: linear-gradient(135deg, #7c5bff, #ffc857);
+  background: linear-gradient(135deg, var(--gradient-card-9-from), var(--gradient-card-9-to));
 }
 
 .service-page-eyebrow,
 .service-page-section-label {
   margin: 22px 0 10px;
-  color: #563ee0;
+  color: var(--color-accent-indigo-strong);
   font-size: var(--text-md);
   font-weight: 850;
   text-transform: uppercase;
@@ -122,7 +122,7 @@
 
 .service-page-hero h1 {
   margin: 0;
-  color: #2f286f;
+  color: var(--color-accent-indigo-bridge);
   font-size: 52px;
   line-height: 1.05;
 }
@@ -130,7 +130,7 @@
 .service-page-summary {
   max-width: 760px;
   margin: 18px 0 0;
-  color: #384152;
+  color: var(--color-text-cool-strong);
   font-size: 24px;
   line-height: 1.35;
 }
@@ -138,7 +138,7 @@
 .service-page-description {
   max-width: 820px;
   margin: 18px 0 0;
-  color: #566171;
+  color: var(--color-text-slate-soft-deep);
   font-size: var(--text-3xl);
   line-height: 1.65;
 }
@@ -153,9 +153,9 @@
 .service-page-actions button {
   min-height: 42px;
   padding: 0 16px;
-  border: 1px solid #563ee0;
+  border: 1px solid var(--color-accent-indigo-strong);
   border-radius: var(--radius-md);
-  background: #563ee0;
+  background: var(--color-accent-indigo-strong);
   color: var(--color-surface);
   font-size: var(--text-xl);
   font-weight: 800;
@@ -164,7 +164,7 @@
 
 .service-page-actions button + button {
   background: var(--color-surface);
-  color: #563ee0;
+  color: var(--color-accent-indigo-strong);
 }
 
 .service-page-section {
@@ -174,13 +174,13 @@
   margin-top: 26px;
   padding: 34px;
   background: var(--color-surface);
-  border: 1px solid #e1e5ef;
+  border: 1px solid var(--color-surface-tint-cloud);
   border-radius: var(--radius-md);
 }
 
 .service-page-section h2 {
   margin: 0;
-  color: #2f286f;
+  color: var(--color-accent-indigo-bridge);
   font-size: 30px;
 }
 
@@ -200,7 +200,7 @@
   gap: 12px;
   padding: 16px;
   border-radius: var(--radius-md);
-  background: #f7f8fc;
+  background: var(--color-surface-cool-light);
 }
 
 .feature-check {
@@ -210,8 +210,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #e8e3ff;
-  color: #563ee0;
+  background: var(--color-brand-purple-pale-strong);
+  color: var(--color-accent-indigo-strong);
   font-size: var(--text-md);
   font-weight: 900;
   flex: 0 0 auto;
@@ -220,7 +220,7 @@
 .service-feature-grid p,
 .service-usecase-list p {
   margin: 0;
-  color: #4d5667;
+  color: var(--color-text-slate-deeper);
   font-size: var(--text-2xl);
   line-height: 1.5;
 }
@@ -232,11 +232,11 @@
 
 .service-usecase-list p {
   padding: 14px 16px;
-  border-left: 3px solid #563ee0;
-  background: #f7f8fc;
+  border-left: 3px solid var(--color-accent-indigo-strong);
+  background: var(--color-surface-cool-light);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px){
   .service-page-nav {
     align-items: flex-start;
     flex-direction: column;

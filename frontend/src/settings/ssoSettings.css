@@ -2,17 +2,17 @@
   max-width: 720px;
   margin: 32px auto;
   padding: 0 24px 64px;
-  color: #262151;
+  color: var(--color-accent-indigo-darkest);
 }
 
 .sso-settings-header h1 {
   margin: 0 0 8px;
-  color: #332379;
+  color: var(--color-accent-indigo-darker);
 }
 
 .sso-settings-header p {
   margin: 0 0 24px;
-  color: #4a5568;
+  color: var(--color-text-slate-deep);
   line-height: 1.55;
 }
 
@@ -26,7 +26,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  border: 1px solid #e1e5ef;
+  border: 1px solid var(--color-surface-tint-cloud);
   border-radius: 12px;
   padding: 20px;
   background: white;
@@ -42,7 +42,7 @@
 
 .sso-form label > span {
   font-weight: 600;
-  color: #262151;
+  color: var(--color-accent-indigo-darkest);
 }
 
 .sso-form input[type="text"],
@@ -50,28 +50,28 @@
 .sso-form input[type="password"] {
   padding: 9px 12px;
   border-radius: 8px;
-  border: 1px solid #d0d8e8;
-  background: #fbfbff;
+  border: 1px solid var(--color-surface-tint-steel);
+  background: var(--color-surface-near-white);
   font-size: 14px;
-  color: #262151;
+  color: var(--color-accent-indigo-darkest);
 }
 
-.sso-form input:focus {
+.sso-form input:focus{
   outline: none;
-  border-color: #6f5cd6;
+  border-color: var(--color-accent-indigo);
   background: white;
-  box-shadow: 0 0 0 3px rgba(111, 92, 214, 0.18);
+  box-shadow: 0 0 0 3px rgb(111, 92, 214, 0.18);
 }
 
 .sso-form small {
-  color: #707b8e;
+  color: var(--color-text-slate-soft-deeper);
   font-size: 12.5px;
   line-height: 1.45;
 }
 
 .sso-form code {
-  background: #efeefc;
-  color: #3f3294;
+  background: var(--color-brand-purple-text-pale);
+  color: var(--color-brand-purple-text-mid);
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 12.5px;
@@ -101,30 +101,30 @@
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
-  background: #6f5cd6;
+  background: var(--color-accent-indigo);
   color: white;
 }
 
-.sso-form-actions button:disabled {
+.sso-form-actions button:disabled{
   opacity: 0.55;
   cursor: not-allowed;
 }
 
 .sso-form-actions .sso-secondary {
   background: white;
-  color: #6f5cd6;
-  border: 1px solid #d0d8e8;
+  color: var(--color-accent-indigo);
+  border: 1px solid var(--color-surface-tint-steel);
 }
 
 .sso-form-actions .sso-danger {
   background: white;
-  color: #c1272d;
-  border: 1px solid #f1c5c7;
+  color: var(--color-danger-vivid);
+  border: 1px solid var(--color-danger-soft-border);
 }
 
 .sso-callback-info {
-  background: #f0f6ff;
-  border: 1px solid #cdd9f0;
+  background: var(--color-surface-tint-blue);
+  border: 1px solid var(--color-info-soft-border);
   border-radius: 10px;
   padding: 16px 18px;
   margin-top: 8px;
@@ -133,7 +133,7 @@
 .sso-callback-info h3 {
   margin: 0 0 8px;
   font-size: 14px;
-  color: #1f3576;
+  color: var(--color-info-text-deep);
 }
 
 .sso-callback-info code {
@@ -148,20 +148,20 @@
 .sso-callback-info p {
   margin: 8px 0 0;
   font-size: 13px;
-  color: #4a5680;
+  color: var(--color-info-text-medium);
   line-height: 1.5;
 }
 
 .sso-test-result {
-  background: #ecf9f1;
-  border: 1px solid #c5e7d2;
+  background: var(--color-success-soft-tint-cool);
+  border: 1px solid var(--color-success-soft-border-cool);
   border-radius: 10px;
   padding: 14px 18px;
 }
 
 .sso-test-result h3 {
   margin: 0 0 8px;
-  color: #1d6435;
+  color: var(--color-success-text-deep);
   font-size: 14px;
 }
 
@@ -174,22 +174,22 @@
 }
 
 .sso-test-result dt {
-  color: #345a45;
+  color: var(--color-success-text-medium);
   font-weight: 600;
 }
 
 .sso-test-result dd {
   margin: 0;
   word-break: break-all;
-  color: #1b3a26;
+  color: var(--color-success-text-strong);
 }
 
 .sso-status {
-  color: #1d6435;
+  color: var(--color-success-text-deep);
   margin: 0;
 }
 
 .sso-error {
-  color: #c1272d;
+  color: var(--color-danger-vivid);
   margin: 0;
 }

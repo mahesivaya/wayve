@@ -4,13 +4,13 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: #f9fafb;
-  color: #111827;
+  background: var(--color-surface-tint);
+  color: var(--color-text-primary);
 }
 
 .docs-sidebar {
-  border-right: 1px solid #e5e7eb;
-  background: #ffffff;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
   padding: 24px 20px;
   overflow-y: auto;
   display: flex;
@@ -26,13 +26,13 @@
 
 .docs-back {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   text-decoration: none;
   font-weight: 600;
 }
 
-.docs-back:hover {
-  color: #2563eb;
+.docs-back:hover{
+  color: var(--color-primary-action);
 }
 
 .docs-sidebar h2 {
@@ -58,7 +58,7 @@
 
 .docs-sidebar a {
   font-size: 13px;
-  color: #111827;
+  color: var(--color-text-primary);
   text-decoration: none;
   font-weight: 600;
   padding: 6px 8px;
@@ -66,19 +66,19 @@
   border-left: 3px solid transparent;
 }
 
-.docs-sidebar a:hover {
-  background: #f3f4f6;
+.docs-sidebar a:hover{
+  background: var(--color-surface-hover);
 }
 
 .docs-sidebar a.active {
-  color: #1d4ed8;
-  background: #eff6ff;
-  border-left-color: #2563eb;
+  color: var(--color-primary-action-hover);
+  background: var(--color-primary-soft);
+  border-left-color: var(--color-primary-action);
 }
 
 .docs-sidebar small {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   padding: 0 8px 0 11px;
   line-height: 1.4;
 }
@@ -86,12 +86,12 @@
 .docs-sidebar footer {
   margin-top: auto;
   padding-top: 16px;
-  border-top: 1px dashed #e5e7eb;
+  border-top: 1px dashed var(--color-border);
 }
 
 .docs-sidebar footer a {
   font-size: 12px;
-  color: #2563eb;
+  color: var(--color-primary-action);
   font-weight: 600;
 }
 
@@ -114,20 +114,20 @@
 .docs-content-head p {
   margin: 0 0 24px;
   font-size: 14px;
-  color: #4b5563;
+  color: var(--color-text-slate-mid);
   line-height: 1.6;
 }
 
 .docs-muted {
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
 .docs-banner {
   padding: 10px 14px;
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+  border: 1px solid var(--color-danger-border);
   border-radius: 8px;
   font-size: 13px;
   margin-bottom: 16px;
@@ -137,7 +137,7 @@
 .docs-rendered {
   font-size: 14.5px;
   line-height: 1.7;
-  color: #1f2937;
+  color: var(--color-text-ink);
 }
 
 .docs-rendered h1,
@@ -147,7 +147,7 @@
   font-weight: 800;
   margin-top: 1.6em;
   margin-bottom: 0.6em;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 .docs-rendered h1 {
@@ -155,7 +155,7 @@
 }
 .docs-rendered h2 {
   font-size: 20px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
   padding-bottom: 6px;
 }
 .docs-rendered h3 {
@@ -180,7 +180,7 @@
 }
 
 .docs-rendered code {
-  background: #e5e7eb;
+  background: var(--color-border);
   padding: 1px 6px;
   border-radius: 4px;
   font-size: 12.5px;
@@ -188,8 +188,8 @@
 }
 
 .docs-rendered pre {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--color-surface-deep);
+  color: var(--color-surface-tint-slate);
   padding: 14px 18px;
   border-radius: 8px;
   overflow: auto;
@@ -207,9 +207,9 @@
 .docs-rendered blockquote {
   margin: 1em 0;
   padding: 8px 14px;
-  border-left: 4px solid #2563eb;
-  color: #1e3a8a;
-  background: #eff6ff;
+  border-left: 4px solid var(--color-primary-action);
+  color: var(--color-accent-blue-deep);
+  background: var(--color-primary-soft);
   border-radius: 4px;
 }
 
@@ -224,39 +224,39 @@
 .docs-rendered td {
   text-align: left;
   padding: 8px 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
   vertical-align: top;
 }
 
 .docs-rendered th {
-  background: #f3f4f6;
+  background: var(--color-surface-hover);
   font-weight: 700;
-  color: #111827;
+  color: var(--color-text-primary);
 }
 
 .docs-rendered hr {
   border: none;
-  border-top: 1px dashed #e5e7eb;
+  border-top: 1px dashed var(--color-border);
   margin: 2em 0;
 }
 
 .docs-rendered a {
-  color: #2563eb;
+  color: var(--color-primary-action);
   text-decoration: underline;
 }
 
-.docs-rendered a:hover {
+.docs-rendered a:hover{
   text-decoration: none;
 }
 
 /* Mobile collapse */
-@media (max-width: 720px) {
+@media (max-width: 720px){
   .docs-page {
     grid-template-columns: 1fr;
   }
   .docs-sidebar {
     border-right: none;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--color-border);
     max-height: 240px;
   }
   .docs-content {
@@ -266,24 +266,24 @@
 
 /* Dark mode */
 html[data-theme="dark"] .docs-page {
-  background: #0b1220;
-  color: #e5e7eb;
+  background: var(--color-surface-deepest);
+  color: var(--color-border);
 }
 html[data-theme="dark"] .docs-sidebar {
-  background: #111827;
-  border-right-color: #1f2937;
+  background: var(--color-text-primary);
+  border-right-color: var(--color-text-ink);
 }
 html[data-theme="dark"] .docs-sidebar h2,
 html[data-theme="dark"] .docs-sidebar a {
-  color: #e5e7eb;
+  color: var(--color-border);
 }
 html[data-theme="dark"] .docs-sidebar a.active {
-  background: #1e3a8a;
-  color: #ffffff;
+  background: var(--color-accent-blue-deep);
+  color: var(--color-on-primary);
 }
 html[data-theme="dark"] .docs-sidebar small,
 html[data-theme="dark"] .docs-muted {
-  color: #94a3b8;
+  color: var(--color-text-slate-soft);
 }
 html[data-theme="dark"] .docs-content-head h1,
 html[data-theme="dark"] .docs-rendered h1,
@@ -291,22 +291,22 @@ html[data-theme="dark"] .docs-rendered h2,
 html[data-theme="dark"] .docs-rendered h3,
 html[data-theme="dark"] .docs-rendered h4,
 html[data-theme="dark"] .docs-rendered {
-  color: #e5e7eb;
+  color: var(--color-border);
 }
 html[data-theme="dark"] .docs-rendered code {
-  background: #1f2937;
-  color: #e5e7eb;
+  background: var(--color-text-ink);
+  color: var(--color-border);
 }
 html[data-theme="dark"] .docs-rendered th {
-  background: #1f2937;
-  color: #e5e7eb;
+  background: var(--color-text-ink);
+  color: var(--color-border);
 }
 html[data-theme="dark"] .docs-rendered td,
 html[data-theme="dark"] .docs-rendered th {
-  border-bottom-color: #1f2937;
+  border-bottom-color: var(--color-text-ink);
 }
 html[data-theme="dark"] .docs-rendered blockquote {
-  background: #1e3a8a33;
-  color: #93c5fd;
-  border-left-color: #60a5fa;
+  background: var(--color-info-doc-bg);
+  color: var(--color-primary-border);
+  border-left-color: var(--color-info-doc-border);
 }

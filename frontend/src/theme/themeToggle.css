@@ -13,13 +13,13 @@
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.theme-toggle:hover {
+.theme-toggle:hover{
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
   border-color: var(--color-border-soft);
 }
 
-.theme-toggle:focus-visible {
+.theme-toggle:focus-visible{
   outline: 2px solid var(--color-primary-action);
   outline-offset: 2px;
 }
@@ -29,11 +29,11 @@
    `.header .theme-toggle` selector is intentionally narrow so this
    doesn't bleed into the marketing pages. */
 .header .theme-toggle {
-  border-color: rgba(255, 255, 255, 0.25);
-  color: rgba(255, 255, 255, 0.85);
+  border-color: rgb(255, 255, 255, 0.25);
+  color: rgb(255, 255, 255, 0.85);
 }
-.header .theme-toggle:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.4);
+.header .theme-toggle:hover{
+  background: rgb(255, 255, 255, 0.12);
+  color: var(--color-on-primary);
+  border-color: rgb(255, 255, 255, 0.4);
 }

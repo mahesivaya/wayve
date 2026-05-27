@@ -10,19 +10,19 @@
  */
 .scheduler {
   --bg: lightsteelblue;
-  --surface: #d7e4f4;
-  --surface-alt: #eef4fb;
-  --border: rgba(255, 255, 255, 0.7);
-  --border-soft: rgba(255, 255, 255, 0.55);
-  --text: #111827;
-  --text-muted: #6b7280;
-  --text-faint: #9ca3af;
-  --accent: #1a73e8;
-  --accent-hover: #1669c1;
-  --accent-soft: #eff6ff;
-  --today: #dbeafe;
-  --danger: #ef4444;
-  --danger-hover: #dc2626;
+  --surface: var(--color-email-list-bg);
+  --surface-alt: var(--color-surface-cool-mist);
+  --border: rgb(255, 255, 255, 0.7);
+  --border-soft: rgb(255, 255, 255, 0.55);
+  --text: var(--color-text-primary);
+  --text-muted: var(--color-text-muted);
+  --text-faint: var(--color-input-border-strong);
+  --accent: var(--color-primary);
+  --accent-hover: var(--color-primary-hover);
+  --accent-soft: var(--color-primary-soft);
+  --today: var(--color-primary-panel);
+  --danger: var(--color-danger-bright);
+  --danger-hover: var(--color-danger-hover);
 
   /* Scheduler-only sizing; not reused elsewhere. Slot height is now the
      ONE-HOUR row height (1 row per hour, 24 rows per day) — used by
@@ -68,19 +68,19 @@
   background: var(--surface-alt);
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.2);
+  box-shadow: 0 1px 2px rgb(60, 64, 67, 0.2);
   cursor: pointer;
 }
 
 .scheduler-create-main span {
   font-size: 24px;
-  color: #1a73e8;
+  color: var(--color-primary);
   line-height: 1;
 }
 
-.scheduler-create-main:hover {
+.scheduler-create-main:hover{
   background: var(--color-surface);
-  box-shadow: 0 2px 6px rgba(60, 64, 67, 0.24);
+  box-shadow: 0 2px 6px rgb(60, 64, 67, 0.24);
 }
 
 .mini-header {
@@ -103,7 +103,7 @@
   align-items: center;
   justify-content: center;
 }
-.mini-header button:hover { background: var(--surface-alt); }
+.mini-header button:hover{ background: var(--surface-alt); }
 
 .mini-weekdays {
   display: grid;
@@ -132,7 +132,7 @@
   color: var(--text);
   transition: background 0.12s, color 0.12s;
 }
-.mini-day:hover { background: var(--surface-alt); color: var(--text); }
+.mini-day:hover{ background: var(--surface-alt); color: var(--text); }
 .mini-day.active {
   background: var(--accent);
   color: var(--color-surface);
@@ -164,7 +164,7 @@
   font-size: var(--text-3xl);
 }
 
-.calendar-create-box button:hover {
+.calendar-create-box button:hover{
   background: var(--color-surface);
 }
 
@@ -197,7 +197,7 @@
 .calendar-color {
   width: 14px;
   height: 14px;
-  border: 2px solid currentColor;
+  border: 2px solid currentcolor;
   border-radius: 4px;
   box-sizing: border-box;
 }
@@ -238,7 +238,7 @@
   color: var(--text);
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.calendar-header button:hover {
+.calendar-header button:hover{
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent-hover);
@@ -248,7 +248,7 @@
   color: var(--color-surface);
   border-color: var(--accent);
 }
-.calendar-header .create-btn:hover {
+.calendar-header .create-btn:hover{
   background: var(--accent-hover);
   border-color: var(--accent-hover);
   color: var(--color-surface);
@@ -288,7 +288,7 @@
   min-height: var(--slot-h);
   cursor: pointer;
 }
-.time-row:hover { background: #e8f0fe; }
+.time-row:hover{ background: var(--color-primary-hover-soft); }
 .time-label {
   width: 72px;
   flex: 0 0 72px;
@@ -304,7 +304,7 @@
    so they can sit at their real start time inside the hour (a 15:30
    event sits at the bottom half of the 15:00 cell, not the top).
    The cell remains a clickable backdrop. */
-.time-events {
+.time-events{
   flex: 1;
   padding: 4px 8px;
   position: relative;
@@ -403,7 +403,7 @@
   min-width: 0;
   cursor: pointer;
 }
-.week-cell:hover { background: #e8f0fe; }
+.week-cell:hover{ background: var(--color-primary-hover-soft); }
 
 /* ================= MONTH VIEW ================= */
 .month-view {
@@ -452,7 +452,7 @@
   transition: background 0.12s;
   cursor: pointer;
 }
-.day-cell:hover { background: var(--surface-alt); }
+.day-cell:hover{ background: var(--surface-alt); }
 .day-cell.empty {
   background: var(--surface-alt);
   pointer-events: none;
@@ -496,7 +496,7 @@
   flex-direction: column;
   gap: 6px;
   line-height: 1.3;
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.18);
+  box-shadow: 0 1px 2px rgb(37, 99, 235, 0.18);
   transition: background 0.12s, transform 0.05s;
   white-space: nowrap;
   overflow: hidden;
@@ -517,10 +517,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.event:hover, .event-block:hover { filter: brightness(0.94); }
-.event:active, .event-block:active { transform: translateY(1px); }
-.event.from-google { background: #16a34a; box-shadow: 0 1px 2px rgba(22, 163, 74, 0.25); }
-.event.from-google:hover { background: #15803d; }
+.event:hover, .event-block:hover{ filter: brightness(0.94); }
+.event:active, .event-block:active{ transform: translateY(1px); }
+.event.from-google { background: var(--color-success-emerald); box-shadow: 0 1px 2px rgb(22, 163, 74, 0.25); }
+.event.from-google:hover{ background: var(--color-success-deep); }
 .event-time {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -537,7 +537,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgb(15, 23, 42, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -551,7 +551,7 @@
   background: var(--surface);
   padding: 22px 22px 18px;
   border-radius: var(--radius-lg);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 12px 32px rgb(0, 0, 0, 0.18);
 }
 .modal h3 {
   margin: 0 0 14px;
@@ -571,7 +571,7 @@
   height: 28px;
   border-radius: var(--radius-sm);
 }
-.close-btn:hover { color: var(--text); background: var(--bg); }
+.close-btn:hover{ color: var(--text); background: var(--bg); }
 
 .form { display: flex; flex-direction: column; gap: 12px; }
 .form-group { display: flex; flex-direction: column; gap: 4px; }
@@ -593,10 +593,10 @@
   font-family: inherit;
 }
 .form-group input:focus,
-.form-group select:focus {
+.form-group select:focus{
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.18);
+  box-shadow: 0 0 0 3px rgb(26, 115, 232, 0.18);
 }
 
 .modal-actions {
@@ -616,13 +616,13 @@
   color: var(--text);
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.modal-actions button:hover { background: var(--bg); }
-.modal-actions button:nth-last-of-type(2) {
+.modal-actions button:hover{ background: var(--bg); }
+.modal-actions button:nth-last-of-type(2){
   background: var(--accent);
   color: var(--color-surface);
   border-color: var(--accent);
 }
-.modal-actions button:nth-last-of-type(2):hover {
+.modal-actions button:nth-last-of-type(2):hover{
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
@@ -632,7 +632,7 @@
   color: var(--danger) !important;
   border-color: var(--danger) !important;
 }
-.delete-btn:hover {
+.delete-btn:hover{
   background: var(--danger) !important;
   color: var(--color-surface) !important;
 }
@@ -660,7 +660,7 @@
   font-weight: 700;
   opacity: 0.65;
 }
-.chip span:hover { opacity: 1; }
+.chip span:hover{ opacity: 1; }
 
 .participant-input { display: flex; gap: 6px; }
 .participant-input input { flex: 1; }
@@ -674,7 +674,7 @@
   font-weight: 500;
   cursor: pointer;
 }
-.participant-input button:hover {
+.participant-input button:hover{
   background: var(--accent);
   color: var(--color-surface);
   border-color: var(--accent);
@@ -685,7 +685,7 @@
    fixed sidebar is dropped (Today / month nav / view switch / Schedule all
    live in the header anyway) and the time gutter slims down; below 560px
    everything tightens further for phone widths. */
-@media (max-width: 900px) {
+@media (max-width: 900px){
   .scheduler-sidebar {
     display: none;
   }
@@ -725,7 +725,7 @@
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 560px){
   .calendar-header {
     padding: 8px;
   }

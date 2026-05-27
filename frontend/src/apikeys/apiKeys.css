@@ -16,7 +16,7 @@
 
 .api-keys-panel {
   background: var(--color-surface);
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 20px;
   margin-bottom: 20px;
@@ -46,7 +46,7 @@
 .api-keys-form input,
 .api-keys-form select {
   padding: 8px 10px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-muted);
   border-radius: var(--radius-sm);
   font-size: var(--text-lg);
 }
@@ -63,7 +63,7 @@
 }
 
 .api-keys-scopes {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 10px 12px;
   display: grid;
@@ -81,7 +81,7 @@
 .api-keys-form button[type="submit"] {
   align-self: flex-start;
   padding: 9px 18px;
-  background: #4338ca;
+  background: var(--color-accent-indigo-mid);
   color: var(--color-surface);
   border: none;
   border-radius: var(--radius-sm);
@@ -103,8 +103,8 @@
 .api-keys-reveal {
   margin-top: 14px;
   padding: 12px;
-  background: #ecfdf5;
-  border: 1px solid #6ee7b7;
+  background: var(--color-success-soft-tint);
+  border: 1px solid var(--color-success-bright);
   border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
@@ -131,7 +131,7 @@
 }
 
 .api-keys-row {
-  border: 1px solid #eef0f3;
+  border: 1px solid var(--color-surface-cool-pale-bordered);
   border-radius: var(--radius-md);
   padding: 12px;
   display: flex;
@@ -154,17 +154,17 @@
 }
 
 .api-keys-tag.external {
-  background: #e0e7ff;
-  color: #4338ca;
+  background: var(--color-accent-indigo-soft);
+  color: var(--color-accent-indigo-mid);
 }
 
 .api-keys-tag.internal {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .api-keys-tag.revoked {
-  background: #fee2e2;
+  background: var(--color-danger-soft);
   color: var(--color-danger);
 }
 
@@ -176,7 +176,7 @@
 
 .api-keys-scope-tag {
   font-size: var(--text-xs);
-  background: #f3f4f6;
+  background: var(--color-surface-hover);
   border-radius: 4px;
   padding: 1px 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -197,7 +197,7 @@
 
 .api-keys-actions button {
   padding: 5px 12px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-muted);
   background: var(--color-surface);
   border-radius: var(--radius-sm);
   font-size: var(--text-md);
@@ -206,7 +206,7 @@
 
 .api-keys-actions .api-keys-revoke {
   color: var(--color-danger);
-  border-color: #fecaca;
+  border-color: var(--color-danger-border);
 }
 
 .api-keys-audit-head {
@@ -225,7 +225,7 @@
 .api-keys-audit td {
   text-align: left;
   padding: 6px 8px;
-  border-bottom: 1px solid #f1f1f1;
+  border-bottom: 1px solid var(--color-surface-cool-divider);
 }
 
 .api-keys-audit th {

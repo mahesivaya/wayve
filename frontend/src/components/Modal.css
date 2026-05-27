@@ -1,7 +1,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgb(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -15,7 +15,7 @@
   width: 520px;
   max-width: 90vw;
   max-height: 90vh;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 20px 40px rgb(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -23,7 +23,7 @@
 
 .modal-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--color-border-generic-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -32,7 +32,7 @@
 .modal-title {
   margin: 0;
   font-size: 1.1rem;
-  color: #333;
+  color: var(--color-text-generic-dark);
 }
 
 .modal-close-btn {
@@ -40,7 +40,7 @@
   border: none;
   font-size: 1.2rem;
   cursor: pointer;
-  color: #999;
+  color: var(--color-text-generic-light);
 }
 
 .modal-body {

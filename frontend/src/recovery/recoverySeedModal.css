@@ -1,7 +1,7 @@
 .recovery-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(13, 27, 42, 0.62);
+  background: rgb(13, 27, 42, 0.62);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -16,7 +16,7 @@
   background: var(--color-surface);
   border-radius: 14px;
   padding: 28px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 24px 60px rgb(0, 0, 0, 0.35);
   color: var(--color-text-primary);
 }
 
@@ -114,7 +114,7 @@
 
 .recovery-copy-btn:disabled,
 .recovery-primary-btn:disabled,
-.recovery-secondary-btn:disabled {
+.recovery-secondary-btn:disabled{
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -161,7 +161,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.recovery-verify-grid input:focus {
+.recovery-verify-grid input:focus{
   outline: 2px solid var(--color-primary-panel-border);
   border-color: var(--color-primary-action);
 }
@@ -172,7 +172,7 @@
   font-size: 0.92rem;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 640px){
   .recovery-grid {
     grid-template-columns: repeat(2, 1fr);
   }

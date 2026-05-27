@@ -25,7 +25,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 9px 10px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
 
@@ -58,9 +58,9 @@
     cursor: pointer;
 
     &:hover {
-      background: #eff6ff;
-      border-color: #bfdbfe;
-      box-shadow: inset 4px 0 0 #1a73e8, 0 3px 10px rgba(15, 23, 42, 0.08);
+      background: var(--color-primary-soft);
+      border-color: var(--color-primary-panel-border);
+      box-shadow: inset 4px 0 0 var(--color-primary), 0 3px 10px rgb(15, 23, 42, 0.08);
     }
   }
 
@@ -78,7 +78,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 900px){
   .organization-admin-form {
     grid-template-columns: 1fr;
 

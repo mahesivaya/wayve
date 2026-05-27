@@ -12,6 +12,10 @@
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
   --color-surface: #ffffff;
+  /* Text/border color for elements that sit on a brand-colored fill
+     (primary button, danger button, etc.). Stays white in both light and
+     dark mode — unlike --color-surface which flips. */
+  --color-on-primary: #ffffff;
   --color-surface-soft: #f8fafc;
   --color-surface-hover: #f3f4f6;
   --color-text-black: black;
@@ -37,7 +41,89 @@
   --color-danger: #b91c1c;
   --color-danger-hover: #dc2626;
   --color-danger-soft: #fee2e2;
+  --color-danger-soft-strong: #fef2f2;
   --color-danger-border: #fecaca;
+  --color-danger-strong: #991b1b;
+
+  /* Success / warning tokens — paired with their dark-mode counterparts
+     in the [data-theme="dark"] block below. */
+  --color-success: #166534;
+  --color-success-soft: #dcfce7;
+  --color-success-border: #bbf7d0;
+  --color-warning: #92400e;
+  --color-warning-soft: #fef3c7;
+
+  /* Extended slate scale for elements that need a step between
+     --color-text-muted (#6b7280) and --color-text-slate (#334155). */
+  --color-text-slate-light: #64748b;
+  --color-text-slate-mid: #4b5563;
+  --color-text-slate-medium: #475569;
+  --color-text-slate-soft: #94a3b8;
+
+  /* Indigo / accent palette for brand secondary surfaces (org/team UI,
+     security panels). */
+  --color-accent-indigo: #6f5cd6;
+  --color-accent-indigo-strong: #563ee0;
+  --color-accent-indigo-deep: #3730a3;
+  --color-accent-indigo-darker: #332379;
+  --color-accent-indigo-darkest: #262151;
+  --color-accent-blue-vivid: #3a6df0;
+  --color-accent-blue-deep: #1e3a8a;
+  --color-accent-indigo-soft: #e0e7ff;
+
+  /* Extended success / warning / danger ramps for status badges. */
+  --color-success-emerald: #16a34a;
+  --color-success-deep: #15803d;
+  --color-success-darker: #065f46;
+  --color-success-soft-tint: #ecfdf5;
+  --color-success-soft-mint: #d1fae5;
+  --color-success-pale: #f0fdf4;
+  --color-success-bright: #6ee7b7;
+  --color-warning-deep: #ca8a04;
+  --color-warning-darker: #713f12;
+  --color-warning-soft-amber: #fde68a;
+  --color-warning-soft-pale: #fef9c3;
+  --color-danger-vivid: #c1272d;
+  --color-danger-strong-soft: #fca5a5;
+
+  /* Indigo / purple secondary ramp. */
+  --color-accent-purple: #c084fc;
+  --color-accent-purple-vivid: #7857ff;
+  --color-accent-indigo-mid: #4338ca;
+  --color-accent-indigo-bridge: #2f286f;
+  --color-accent-indigo-pale: #ecedf6;
+  --color-accent-indigo-mist: #eef2ff;
+  --color-accent-indigo-mist-strong: #e6ecf5;
+
+  /* Additional slate steps for hairline borders / dim icon strokes. */
+  --color-text-slate-deep: #4a5568;
+  --color-text-slate-deeper: #4d5667;
+  --color-text-slate-soft-deep: #566171;
+  --color-text-slate-soft-deeper: #707b8e;
+  --color-text-slate-soft-mid: #718096;
+  --color-text-slate-foggy: #9aa5b8;
+
+  /* Component-local dark overrides reuse these so feature CSS files don't
+     hardcode the surface palette inside their own [data-theme="dark"]
+     blocks. */
+  --color-surface-darken: #14171f;
+  --color-surface-darken-mid: #172033;
+  --color-border-dark: #2c313d;
+  --color-surface-near-white: #fbfbff;
+
+  /* Subtle background tints (forms, hover states, table stripes). */
+  --color-surface-tint: #f9fafb;
+  --color-surface-tint-cool: #f1f5f9;
+  --color-surface-tint-blue: #f0f6ff;
+  --color-surface-tint-slate: #e2e8f0;
+  --color-surface-tint-steel: #d0d8e8;
+  --color-surface-tint-cloud: #e1e5ef;
+
+  /* Dark surfaces used by elements that stay dark in both themes
+     (modals overlay, hero/footer with dark fill). */
+  --color-surface-deep: #0f172a;
+  --color-surface-deepest: #0B1220;
+  --color-surface-deep-navy: #0d1b2a;
   --color-email-bg: lightsteelblue;
   --color-email-list-bg: #d7e4f4;
   --color-email-control-bg: lightslategray;
@@ -101,6 +187,202 @@
      ============================================================ */
   --bp-tablet: 768px;
   --bp-phone: 480px;
+
+  /* ============================================================
+     🎨 EXTENDED BRAND PALETTE
+     ------------------------------------------------------------
+     These tokens cover the marketing pages, login hero, admin
+     badges, and decorative gradient cards. They were previously
+     hardcoded hex literals scattered across feature CSS files;
+     consolidating them here lets a future theme customizer
+     override the visual identity at runtime.
+
+     Categories:
+       • brand-purple-*  — admin/marketing purple cluster
+       • brand-indigo-*  — login hero classics
+       • brand-blue-*    — Microsoft-style strong blue
+       • surface-dark-*  — marketing dark-mode surfaces/dividers
+       • surface-cool-*  — service-page grays
+       • surface-warm-*  — earth/tan accents
+       • divider-cool-*  — cool-gray hairlines
+       • text-cool-*     — cool-gray text steps
+       • text-generic-* / border-generic-* / surface-generic-*
+                         — legacy black/gray/white literals
+       • provider-*      — third-party brand colors (Gmail/Outlook/IMAP)
+       • gradient-card-* — 11 numbered decorative card gradients
+       • status-open-*, status-pending-* — kanban-style chip palette
+       • success-soft-tint-cool / info-soft-* / danger-soft-border
+                         — SSO panel status variants
+       • text-marketing-* / divider-marketing
+                         — marketing-only typography colors
+     ============================================================ */
+
+  /* Brand purple cluster */
+  --color-brand-purple: #5140d7;
+  --color-brand-purple-deep: #322778;
+  --color-brand-purple-mid: #42348d;
+  --color-brand-purple-bright: #6948ef;
+  --color-brand-purple-light: #6975f5;
+  --color-brand-purple-strong: #5441e0;
+  --color-brand-purple-link: #1d57c8;
+  --color-brand-purple-soft: #f6f4ff;
+  --color-brand-purple-soft-mid: #f0edff;
+  --color-brand-purple-soft-strong: #ded3ff;
+  --color-brand-purple-pale: #f3eefe;
+  --color-brand-purple-pale-strong: #e8e3ff;
+  --color-brand-purple-text-pale: #efeefc;
+  --color-brand-purple-text-mid: #3f3294;
+
+  /* Brand indigo (login hero, classic CTA) */
+  --color-brand-indigo-from: #667eea;
+  --color-brand-indigo-to: #764ba2;
+  --color-brand-indigo-hover: #5a67d8;
+  --color-brand-indigo-deep: #1f1b4d;
+  --color-brand-indigo-deep-hover: #2a256b;
+
+  /* Brand strong blue (Microsoft-style CTA) */
+  --color-brand-blue-strong: #0f6cbd;
+  --color-brand-blue-strong-hover: #0c578f;
+  --color-brand-blue-marketing: #2f5acb;
+
+  /* Dark marketing surfaces */
+  --color-surface-dark-hero: #0f1117;
+  --color-surface-dark-card: #1a1d26;
+  --color-surface-dark-card-strong: #24283a;
+  --color-surface-dark-tinted: #1a2236;
+  --color-surface-dark-divider: #1e2c3d;
+  --color-surface-dark-border: #4a5fb8;
+
+  /* Cool gray surface scale (service pages, scheduler, emails) */
+  --color-surface-cool: #8c91a8;
+  --color-surface-cool-strong: #6f748b;
+  --color-surface-cool-pale: #f4f6fb;
+  --color-surface-cool-light: #f7f8fc;
+  --color-surface-cool-faint: #f5f7fb;
+  --color-surface-cool-mist: #eef4fb;
+  --color-surface-cool-haze: #eef2f7;
+  --color-surface-cool-blue: #c8d6e9;
+  --color-surface-cool-blue-light: #c7dafd;
+  --color-surface-cool-blue-mist: #c7e3ee;
+  --color-surface-cool-blue-pale: #d9eef7;
+  --color-surface-cool-blue-mid: #e8eef7;
+
+  /* Warm/earth accent */
+  --color-surface-warm-tan: #d7b29c;
+
+  /* Cool dividers */
+  --color-divider-cool: #d9dde8;
+  --color-divider-cool-light: #dbe3ee;
+  --color-divider-cool-soft: #edf1f6;
+  --color-divider-cool-strong: #d8dde8;
+  --color-divider-marketing: #f0f3f8;
+
+  /* Cool text steps */
+  --color-text-cool-strong: #384152;
+  --color-text-cool-medium: #4d5057;
+  --color-text-cool-mid: #2f3138;
+  --color-text-cool-dark: #292c35;
+  --color-text-cool-darker: #20243f;
+  --color-text-cool-foggy: #273244;
+  --color-text-cool-foggy-mid: #3f4652;
+  --color-text-marketing-strong: #2d3748;
+  --color-text-marketing-light: #cbd5e0;
+
+  /* Generic legacy neutrals (kept for inherited login.css / Modal.css) */
+  --color-text-generic-dark: #333;
+  --color-text-generic-mid: #666;
+  --color-text-generic-light: #999;
+  --color-text-generic-mute: #9aa0aa;
+  --color-border-generic: #ddd;
+  --color-border-generic-light: #eee;
+  --color-surface-generic-pale: #f7f7f7;
+  --color-surface-generic-faint: #fafafa;
+  --color-surface-generic-mid: #e5e5e5;
+
+  /* Third-party provider brands */
+  --color-provider-gmail: #d44638;
+  --color-provider-outlook: #0078d4;
+  --color-provider-imap: #6001d2;
+
+  /* Status chip palette (kanban-style) */
+  --color-status-open-bg: #e9f5e1;
+  --color-status-open-text: #2d6f1c;
+  --color-status-pending-bg: #fff4d6;
+  --color-status-pending-text: #806000;
+
+  /* SSO panel status variants */
+  --color-success-soft-tint-cool: #ecf9f1;
+  --color-success-soft-border-cool: #c5e7d2;
+  --color-success-text-deep: #1d6435;
+  --color-success-text-medium: #345a45;
+  --color-success-text-strong: #1b3a26;
+  --color-info-soft-border: #cdd9f0;
+  --color-info-text-deep: #1f3576;
+  --color-info-text-medium: #4a5680;
+  --color-danger-soft-border: #f1c5c7;
+
+  /* Misc one-offs (admin badges, dark indigo chips, task urgency) */
+  --color-admin-badge-bg: #ede9fe;
+  --color-admin-badge-text: #4c1d95;
+  --color-admin-badge-shadow: #7c3aed;
+  --color-admin-badge-border: #ddd6fe;
+  --color-admin-badge-ring: #818cf8;
+  --color-dark-indigo-chip-bg: #312e81;
+  --color-dark-indigo-chip-text: #c7d2fe;
+  --color-dark-red-chip-bg: #3f1d1d;
+  --color-dark-red-chip-border: #7f1d1d;
+  --color-dark-green-chip-bg: #14422e;
+  --color-dark-green-chip-deep: #052e1a;
+  --color-dark-amber-chip-bg: #422006;
+  --color-success-text-emerald: #047857;
+  --color-success-text-emerald-soft: #059669;
+  --color-success-border-emerald: #86efac;
+  --color-warning-amber: #f59e0b;
+  --color-task-urgent: #ea580c;
+  --color-danger-bright: #ef4444;
+  --color-info-doc-bg: #1e3a8a33;
+  --color-info-doc-border: #60a5fa;
+  --color-marketing-card-purple-deep: #25215f;
+  --color-marketing-card-purple-hero: #2a1f6f;
+  --color-billing-empty: #7f93ad;
+  --color-billing-empty-strong: #60758f;
+  --color-surface-cool-divider: #f1f1f1;
+  --color-surface-cool-pale-bordered: #eef0f3;
+
+  /* Decorative gradient cards (11 numbered pairs, used in home + service pages).
+     Some pairs use existing semantic tokens for the "from" stop. */
+  --gradient-card-1-to: #37c6ef;
+  --gradient-card-2-from: #8a67ff;
+  --gradient-card-2-to: #5a44d8;
+  --gradient-card-3-from: #1ecca1;
+  --gradient-card-3-to: #2b77ff;
+  --gradient-card-4-from: #77ddf0;
+  --gradient-card-4-to: #8155ed;
+  --gradient-card-5-from: #376bff;
+  --gradient-card-5-to: #8dd6ff;
+  --gradient-card-6-from: #8e5af7;
+  --gradient-card-6-to: #ea4aa2;
+  --gradient-card-7-from: #1bc772;
+  --gradient-card-7-to: #93f2b4;
+  --gradient-card-8-to: #63b3ed;
+  --gradient-card-9-from: #7c5bff;
+  --gradient-card-9-to: #ffc857;
+  --gradient-card-10-from: #1d78e9;
+  --gradient-card-10-to: #7de5ef;
+  --gradient-card-11-from: #e43f7a;
+  --gradient-card-11-to: #f4a261;
+  --gradient-card-12-from: #1fac7a;
+  --gradient-card-12-to: #75dd9f;
+  --gradient-card-13-from: #6c5ce7;
+
+  /* Marketing hero gradient stops */
+  --color-hero-stop-purple: #6f5cd6;
+  --color-hero-stop-blue: #60a5fa;
+  --color-hero-gradient-stop: #f7f8fb;
+  --color-hero-stat-stop: #fbfafe;
+
+  /* Apps page accent */
+  --color-accent-indigo-bright: #6366f1;
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
@@ -178,6 +460,8 @@
     rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
 
   --color-surface: #1a1d26;
+  /* See light-mode definition: always white, both modes. */
+  --color-on-primary: #ffffff;
   --color-surface-soft: #14171f;
   --color-surface-hover: #232734;
   --color-text-black: #f8fafc;
@@ -203,7 +487,84 @@
   --color-danger: #f87171;
   --color-danger-hover: #fca5a5;
   --color-danger-soft: #3a1f23;
+  --color-danger-soft-strong: #2d1518;
   --color-danger-border: #5a2a30;
+  --color-danger-strong: #fca5a5;
+
+  /* Success / warning — dark-mode equivalents (subtle, not loud). */
+  --color-success: #6ee7b7;
+  --color-success-soft: rgba(16, 185, 129, 0.12);
+  --color-success-border: rgba(16, 185, 129, 0.30);
+  --color-warning: #fcd34d;
+  --color-warning-soft: rgba(234, 179, 8, 0.14);
+
+  /* Slate scale — keeps the same conceptual order (light→soft) but tuned
+     for the dark surface so contrast stays readable. */
+  --color-text-slate-light: #94a3b8;
+  --color-text-slate-mid: #b1bccd;
+  --color-text-slate-medium: #a3aebf;
+  --color-text-slate-soft: #6e788a;
+
+  /* Indigo accents — slightly brighter so they read on dark surfaces. */
+  --color-accent-indigo: #a78bfa;
+  --color-accent-indigo-strong: #8b5cf6;
+  --color-accent-indigo-deep: #6d5dd6;
+  --color-accent-indigo-darker: #4c3da3;
+  --color-accent-indigo-darkest: #322864;
+  --color-accent-blue-vivid: #60a5fa;
+  --color-accent-blue-deep: #1e40af;
+  --color-accent-indigo-soft: rgba(167, 139, 250, 0.16);
+
+  /* Round-3 token dark-mode counterparts. Values target readable contrast on
+     the dark surface; literal hex stays for elements (deep dark surfaces,
+     near-white tints) that intentionally do not flip. */
+  --color-success-emerald: #4ade80;
+  --color-success-deep: #34d399;
+  --color-success-darker: #064e3b;
+  --color-success-soft-tint: rgba(74, 222, 128, 0.10);
+  --color-success-soft-mint: rgba(110, 231, 183, 0.14);
+  --color-success-pale: rgba(74, 222, 128, 0.06);
+  --color-success-bright: #6ee7b7;
+  --color-warning-deep: #facc15;
+  --color-warning-darker: #fbbf24;
+  --color-warning-soft-amber: rgba(250, 204, 21, 0.16);
+  --color-warning-soft-pale: rgba(250, 204, 21, 0.08);
+  --color-danger-vivid: #f87171;
+  --color-danger-strong-soft: #fca5a5;
+
+  --color-accent-purple: #c084fc;
+  --color-accent-purple-vivid: #a78bfa;
+  --color-accent-indigo-mid: #6366f1;
+  --color-accent-indigo-bridge: #4338ca;
+  --color-accent-indigo-pale: rgba(167, 139, 250, 0.16);
+  --color-accent-indigo-mist: rgba(167, 139, 250, 0.10);
+  --color-accent-indigo-mist-strong: rgba(167, 139, 250, 0.18);
+
+  --color-text-slate-deep: #cbd5e1;
+  --color-text-slate-deeper: #b1bccd;
+  --color-text-slate-soft-deep: #94a3b8;
+  --color-text-slate-soft-deeper: #6e788a;
+  --color-text-slate-soft-mid: #7b8597;
+  --color-text-slate-foggy: #6e788a;
+
+  --color-surface-darken: #14171f;
+  --color-surface-darken-mid: #172033;
+  --color-border-dark: #2c313d;
+  --color-surface-near-white: #1a1d26;
+
+  /* Subtle tints flip toward darker shades on the dark theme. */
+  --color-surface-tint: #1f2330;
+  --color-surface-tint-cool: #1c2030;
+  --color-surface-tint-blue: #182137;
+  --color-surface-tint-slate: #232a3a;
+  --color-surface-tint-steel: #232a3a;
+  --color-surface-tint-cloud: #1f2532;
+
+  /* Dark surfaces — same intent in both themes (modals/overlays/heros that
+     stay dark regardless of theme), so keep the literal dark values. */
+  --color-surface-deep: #0f172a;
+  --color-surface-deepest: #0B1220;
+  --color-surface-deep-navy: #0d1b2a;
   --color-email-bg: #14171f;
   --color-email-list-bg: #1a1d26;
   --color-email-control-bg: #232734;
@@ -216,6 +577,94 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
   --u-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+
+  /* ============================================================
+     🌙 EXTENDED BRAND PALETTE — DARK MODE OVERRIDES
+     ------------------------------------------------------------
+     Mirror the light-mode brand palette where the value needs to
+     flip for legibility (text on dark, cool surfaces, soft tints).
+     Brand identity colors (gradient stops, provider brand, hero
+     accents) intentionally stay constant in both modes — they're
+     identity, not theme.
+     ============================================================ */
+
+  /* Brand purple cluster (soft backgrounds need to invert) */
+  --color-brand-purple-soft: rgba(81, 64, 215, 0.18);
+  --color-brand-purple-soft-mid: rgba(81, 64, 215, 0.22);
+  --color-brand-purple-soft-strong: rgba(81, 64, 215, 0.32);
+  --color-brand-purple-pale: rgba(105, 72, 239, 0.15);
+  --color-brand-purple-pale-strong: rgba(105, 72, 239, 0.25);
+  --color-brand-purple-text-pale: rgba(120, 100, 230, 0.18);
+  --color-brand-purple-text-mid: #b8a8ff;
+
+  /* Cool gray surfaces — darken */
+  --color-surface-cool-pale: #1c2030;
+  --color-surface-cool-light: #1a1e2c;
+  --color-surface-cool-faint: #1c2030;
+  --color-surface-cool-mist: #1f2738;
+  --color-surface-cool-haze: #1e2331;
+  --color-surface-cool-blue: #2a3344;
+  --color-surface-cool-blue-light: #1f2a3d;
+  --color-surface-cool-blue-mist: #1c2a36;
+  --color-surface-cool-blue-pale: #1a2530;
+  --color-surface-cool-blue-mid: #1e2533;
+
+  /* Cool dividers */
+  --color-divider-cool: #2c313d;
+  --color-divider-cool-light: #2c313d;
+  --color-divider-cool-soft: #2c313d;
+  --color-divider-cool-strong: #2c313d;
+  --color-divider-marketing: #2c313d;
+
+  /* Cool text steps */
+  --color-text-cool-strong: #cbd5e1;
+  --color-text-cool-medium: #b6c0d0;
+  --color-text-cool-mid: #cbd5e1;
+  --color-text-cool-dark: #e2e8f0;
+  --color-text-cool-darker: #f1f5f9;
+  --color-text-cool-foggy: #cbd5e1;
+  --color-text-cool-foggy-mid: #9aa5b8;
+  --color-text-marketing-strong: #e2e8f0;
+  --color-text-marketing-light: #94a3b8;
+
+  /* Generic legacy neutrals */
+  --color-text-generic-dark: #e2e8f0;
+  --color-text-generic-mid: #9aa5b8;
+  --color-text-generic-light: #7b8597;
+  --color-text-generic-mute: #7b8597;
+  --color-border-generic: #2c313d;
+  --color-border-generic-light: #2c313d;
+  --color-surface-generic-pale: #1a1d26;
+  --color-surface-generic-faint: #1a1d26;
+  --color-surface-generic-mid: #232734;
+
+  /* Status chips — keep readable in dark mode */
+  --color-status-open-bg: rgba(45, 111, 28, 0.25);
+  --color-status-open-text: #93f2b4;
+  --color-status-pending-bg: rgba(128, 96, 0, 0.25);
+  --color-status-pending-text: #ffc857;
+
+  /* SSO panel status variants */
+  --color-success-soft-tint-cool: rgba(29, 100, 53, 0.18);
+  --color-success-soft-border-cool: rgba(29, 100, 53, 0.4);
+  --color-success-text-deep: #93f2b4;
+  --color-success-text-medium: #75dd9f;
+  --color-success-text-strong: #93f2b4;
+  --color-info-soft-border: rgba(99, 122, 209, 0.4);
+  --color-info-text-deep: #93b6ff;
+  --color-info-text-medium: #8fa1d6;
+  --color-danger-soft-border: rgba(241, 197, 199, 0.3);
+
+  /* Admin badge cluster */
+  --color-admin-badge-bg: rgba(76, 29, 149, 0.32);
+  --color-admin-badge-text: #c4b5fd;
+  --color-admin-badge-border: rgba(124, 58, 237, 0.4);
+
+  /* Misc */
+  --color-billing-empty: #4a5568;
+  --color-billing-empty-strong: #5a6478;
+  --color-surface-cool-divider: #2c313d;
+  --color-surface-cool-pale-bordered: #2c313d;
 }
 
 .u-page-shell {

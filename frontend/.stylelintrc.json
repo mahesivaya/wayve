@@ -1,0 +1,50 @@
+{
+  "extends": "stylelint-config-standard",
+  "rules": {
+    "color-no-hex": [true, {
+      "message": "Use a CSS variable from src/index.css (e.g. var(--color-surface)) instead of a hex literal so the value flips with dark mode."
+    }],
+    "no-descending-specificity": null,
+    "selector-class-pattern": null,
+    "no-duplicate-selectors": null,
+    "comment-empty-line-before": null,
+    "rule-empty-line-before": null,
+    "declaration-block-no-shorthand-property-overrides": null,
+    "media-feature-range-notation": null,
+    "alpha-value-notation": null,
+    "color-function-notation": null,
+    "hue-degree-notation": null,
+    "declaration-block-no-redundant-longhand-properties": null,
+    "shorthand-property-no-redundant-values": null,
+    "no-empty-source": null,
+    "no-invalid-position-at-import-rule": null,
+    "import-notation": null,
+    "media-query-no-invalid": null,
+    "value-no-vendor-prefix": null,
+    "property-no-vendor-prefix": null,
+    "selector-no-vendor-prefix": null,
+    "at-rule-empty-line-before": null,
+    "length-zero-no-unit": null,
+    "font-family-name-quotes": null,
+    "keyframes-name-pattern": null,
+    "declaration-block-single-line-max-declarations": null,
+    "color-function-alias-notation": null,
+    "color-function-notation": null,
+    "selector-not-notation": null,
+    "media-feature-name-no-unknown": null,
+    "function-no-unknown": null,
+    "value-keyword-case": null,
+    "property-no-unknown": null,
+    "no-duplicate-at-import-rules": null,
+    "no-irregular-whitespace": null,
+    "block-no-empty": null,
+    "comment-no-empty": null,
+    "font-family-no-missing-generic-family-keyword": null,
+    "declaration-property-value-keyword-no-deprecated": null
+  },
+  "ignoreFiles": [
+    "src/index.css",
+    "dist/**/*",
+    "node_modules/**/*"
+  ]
+}

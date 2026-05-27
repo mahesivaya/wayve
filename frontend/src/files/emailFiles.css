@@ -20,7 +20,7 @@
 }
 
 .email-files-header button {
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--color-input-border);
   background: var(--color-surface);
   color: var(--color-text-primary);
   border-radius: var(--radius-sm);
@@ -40,17 +40,17 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid rgba(17, 24, 39, 0.12);
+  border: 1px solid rgb(17, 24, 39, 0.12);
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.62);
+  background: rgb(255, 255, 255, 0.62);
   color: var(--color-text-primary);
   cursor: pointer;
   text-align: left;
 }
 
-.email-files-row:hover {
-  background: #eff6ff;
-  border-color: #93c5fd;
+.email-files-row:hover{
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
 }
 
 .email-files-main {

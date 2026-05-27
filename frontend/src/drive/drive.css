@@ -21,7 +21,7 @@
   flex-wrap: wrap;
   margin-bottom: 16px;
   padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  border: 1px solid rgb(255, 255, 255, 0.7);
   border-radius: var(--radius-md);
   background: var(--color-email-list-bg);
 }
@@ -46,7 +46,7 @@
   padding: 0;
 }
 
-.drive-crumb-link:disabled {
+.drive-crumb-link:disabled{
   color: var(--color-text-primary);
   cursor: default;
   font-size: var(--text-xl);
@@ -64,7 +64,7 @@
   min-height: 34px;
   width: 180px;
   padding: 0 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--color-input-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-primary);
@@ -73,9 +73,9 @@
   box-sizing: border-box;
 }
 
-.drive-folder-input:focus {
-  outline: 2px solid #bfdbfe;
-  border-color: #2563eb;
+.drive-folder-input:focus{
+  outline: 2px solid var(--color-primary-panel-border);
+  border-color: var(--color-primary-action);
 }
 
 .drive-folder-new-btn,
@@ -85,7 +85,7 @@
 .file-download-btn {
   min-height: 34px;
   padding: 0 12px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--color-input-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-primary);
@@ -97,30 +97,30 @@
 .drive-folder-new-btn,
 .drive-folder-create-btn,
 .upload-btn {
-  border-color: #2563eb;
-  background: #2563eb;
+  border-color: var(--color-primary-action);
+  background: var(--color-primary-action);
   color: var(--color-surface);
 }
 
 .drive-folder-new-btn:hover,
 .drive-folder-create-btn:hover,
-.upload-btn:hover {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
+.upload-btn:hover{
+  background: var(--color-primary-action-hover);
+  border-color: var(--color-primary-action-hover);
 }
 
 .drive-folder-cancel-btn:hover,
-.file-download-btn:hover {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1d4ed8;
+.file-download-btn:hover{
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-panel-border);
+  color: var(--color-primary-action-hover);
 }
 
 .upload-section,
 .files-section {
   margin-bottom: 16px;
   padding: 16px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-email-list-bg);
   box-sizing: border-box;
@@ -154,7 +154,7 @@
   justify-content: center;
   gap: 8px;
   padding: 24px;
-  border: 2px dashed #cbd5e1;
+  border: 2px dashed var(--color-input-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-muted);
@@ -162,9 +162,9 @@
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.drop-zone:hover {
-  border-color: #2563eb;
-  background: #eff6ff;
+.drop-zone:hover{
+  border-color: var(--color-primary-action);
+  background: var(--color-primary-soft);
 }
 
 .drop-zone p {
@@ -185,22 +185,22 @@
   justify-content: center;
   min-height: 34px;
   padding: 0 14px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--color-primary-panel-border);
   border-radius: var(--radius-md);
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-action);
   cursor: pointer;
   font-size: var(--text-md);
   font-weight: 800;
 }
 
-.browse-btn:hover {
-  background: #dbeafe;
+.browse-btn:hover{
+  background: var(--color-primary-panel);
 }
 
 .drive-error-msg {
   margin: 12px 0 0;
-  color: #dc2626;
+  color: var(--color-danger-hover);
   font-size: var(--text-sm);
   font-weight: 700;
 }
@@ -208,7 +208,7 @@
 .selected-files {
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
 }
@@ -237,10 +237,10 @@
 }
 
 .selected-files button {
-  border: 1px solid #fecaca;
+  border: 1px solid var(--color-danger-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  color: #dc2626;
+  color: var(--color-danger-hover);
   cursor: pointer;
 }
 
@@ -256,16 +256,16 @@
   gap: 16px;
   min-height: 62px;
   padding: 12px 14px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 1px 2px rgb(15, 23, 42, 0.05);
 }
 
-.file-row:hover {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  box-shadow: inset 4px 0 0 #1a73e8, 0 3px 10px rgba(15, 23, 42, 0.08);
+.file-row:hover{
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-panel-border);
+  box-shadow: inset 4px 0 0 var(--color-primary), 0 3px 10px rgb(15, 23, 42, 0.08);
 }
 
 .file-left {
@@ -286,8 +286,8 @@
   padding: 0;
 }
 
-.drive-folder-open:hover .file-name {
-  color: #2563eb;
+.drive-folder-open:hover .file-name{
+  color: var(--color-primary-action);
 }
 
 .file-icon {
@@ -298,7 +298,7 @@
   width: 34px;
   height: 34px;
   border-radius: var(--radius-md);
-  background: #eff6ff;
+  background: var(--color-primary-soft);
   font-size: var(--text-xl);
 }
 
@@ -335,14 +335,14 @@
 .files-section > p {
   margin: 0;
   padding: 18px;
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed var(--color-input-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 700px){
   .drive-container {
     padding: 16px;
   }

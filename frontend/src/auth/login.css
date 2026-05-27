@@ -9,7 +9,7 @@
     align-items: center;
     padding: 24px 0;
     box-sizing: border-box;
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, var(--color-brand-indigo-from), var(--color-brand-indigo-to));
   }
 
   /* CARD */
@@ -19,7 +19,7 @@
     width: 380px;
     max-width: calc(100vw - 32px);
     border-radius: var(--radius-lg);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 8px 25px rgb(0, 0, 0, 0.15);
     display: flex;
     flex-direction: column;
   }
@@ -31,7 +31,7 @@
   
   .subtitle {
     font-size: var(--text-lg);
-    color: #666;
+    color: var(--color-text-generic-mid);
     margin-bottom: 20px;
   }
   
@@ -39,7 +39,7 @@
   .login-card input {
     margin-bottom: 15px;
     padding: 10px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--color-border-generic);
     border-radius: var(--radius-sm);
     font-size: var(--text-lg);
   }
@@ -48,15 +48,15 @@
   .login-card button {
     padding: 10px;
     border: none;
-    background: #667eea;
+    background: var(--color-brand-indigo-from);
     color: var(--color-surface);
     border-radius: var(--radius-sm);
     cursor: pointer;
     font-weight: bold;
   }
   
-  .login-card button:hover {
-    background: #5a67d8;
+  .login-card button:hover{
+    background: var(--color-brand-indigo-hover);
   }
   
   /* REGISTER LINK */
@@ -67,7 +67,7 @@
   }
   
   .switch-auth span {
-    color: #667eea;
+    color: var(--color-brand-indigo-from);
     cursor: pointer;
     font-weight: bold;
   }
@@ -83,16 +83,16 @@
     display: flex;
     align-items: center;
     margin: 14px 0;
-    color: #999;
+    color: var(--color-text-generic-light);
     font-size: var(--text-sm);
   }
 
   .auth-divider::before,
-  .auth-divider::after {
+  .auth-divider::after{
     content: "";
     flex: 1;
     height: 1px;
-    background: #e5e5e5;
+    background: var(--color-surface-generic-mid);
   }
 
   .auth-divider span {
@@ -101,39 +101,39 @@
 
   .login-card .google-btn {
     background: var(--color-surface);
-    color: #333;
-    border: 1px solid #ddd;
+    color: var(--color-text-generic-dark);
+    border: 1px solid var(--color-border-generic);
     font-weight: 500;
   }
 
-  .login-card .google-btn:hover {
-    background: #f7f7f7;
+  .login-card .google-btn:hover{
+    background: var(--color-surface-generic-pale);
   }
 
   .login-card .outlook-btn {
-    background: #0f6cbd;
+    background: var(--color-brand-blue-strong);
     color: var(--color-surface);
-    border: 1px solid #0f6cbd;
+    border: 1px solid var(--color-brand-blue-strong);
     font-weight: 500;
   }
 
-  .login-card .outlook-btn:hover {
-    background: #0c578f;
+  .login-card .outlook-btn:hover{
+    background: var(--color-brand-blue-strong-hover);
   }
 
   .login-card .sso-btn {
-    background: #1f1b4d;
+    background: var(--color-brand-indigo-deep);
     color: var(--color-surface);
-    border: 1px solid #1f1b4d;
+    border: 1px solid var(--color-brand-indigo-deep);
     font-weight: 600;
   }
 
-  .login-card .sso-btn:hover {
-    background: #2a256b;
+  .login-card .sso-btn:hover{
+    background: var(--color-brand-indigo-deep-hover);
   }
 
   .login-card .recovery-mode-fieldset {
-    border: 1px solid var(--color-border, #d6d6e6);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-md, 8px);
     padding: 10px 12px 8px;
     margin: 2px 0 12px;
@@ -146,14 +146,14 @@
     padding: 0 6px;
     font-size: 0.85rem;
     font-weight: 600;
-    color: var(--color-text-primary, #1a1a2e);
+    color: var(--color-text-primary);
   }
 
   .login-card .recovery-mode-help {
     margin: 0 0 2px;
     font-size: 0.74rem;
     line-height: 1.35;
-    color: var(--color-text-secondary, #555);
+    color: var(--color-text-secondary);
   }
 
   .login-card .recovery-mode-option {
@@ -183,13 +183,13 @@
   .login-card .recovery-mode-option small {
     font-size: 0.7rem;
     line-height: 1.35;
-    color: var(--color-text-secondary, #666);
+    color: var(--color-text-secondary, var(--color-text-generic-mid));
   }
 
   .login-card .link-button {
     background: none;
     border: none;
-    color: var(--color-primary, #6f5cd6);
+    color: var(--color-primary, var(--color-accent-indigo));
     cursor: pointer;
     padding: 0;
     font: inherit;

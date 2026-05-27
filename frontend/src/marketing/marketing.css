@@ -9,7 +9,7 @@
   gap: 3rem;
   align-items: center;
   padding: 4rem 2rem;
-  background: linear-gradient(135deg, #f0f6ff 0%, #ffffff 60%);
+  background: linear-gradient(135deg, var(--color-surface-tint-blue) 0%, var(--color-surface) 60%);
   border-radius: 16px;
   margin: 2rem auto;
   max-width: 1200px;
@@ -20,7 +20,7 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #3a6df0;
+  color: var(--color-accent-blue-vivid);
   margin: 0 0 0.75rem 0;
 }
 
@@ -28,12 +28,12 @@
   font-size: clamp(2rem, 4vw, 3rem);
   line-height: 1.15;
   margin: 0 0 1rem 0;
-  color: #0d1b2a;
+  color: var(--color-surface-deep-navy);
 }
 
 .marketing-hero-copy p.lead {
   font-size: 1.15rem;
-  color: #4a5568;
+  color: var(--color-text-slate-deep);
   margin: 0 0 1.5rem 0;
   line-height: 1.55;
 }
@@ -54,26 +54,26 @@
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.marketing-hero-actions button:first-child {
-  background: #3a6df0;
+.marketing-hero-actions button:first-child{
+  background: var(--color-accent-blue-vivid);
   color: white;
 }
 
-.marketing-hero-actions button:first-child:hover {
-  background: #2f5acb;
+.marketing-hero-actions button:first-child:hover{
+  background: var(--color-brand-blue-marketing);
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(58, 109, 240, 0.25);
+  box-shadow: 0 6px 18px rgb(58, 109, 240, 0.25);
 }
 
 .marketing-hero-actions button + button {
   background: white;
-  color: #3a6df0;
-  border: 1px solid #d0d8e8;
+  color: var(--color-accent-blue-vivid);
+  border: 1px solid var(--color-surface-tint-steel);
 }
 
-.marketing-hero-actions button + button:hover {
-  background: #f0f6ff;
-  border-color: #3a6df0;
+.marketing-hero-actions button + button:hover{
+  background: var(--color-surface-tint-blue);
+  border-color: var(--color-accent-blue-vivid);
 }
 
 .marketing-hero-visual {
@@ -85,8 +85,8 @@
   background: white;
   border-radius: 14px;
   padding: 1.5rem;
-  box-shadow: 0 12px 40px rgba(13, 27, 42, 0.08);
-  border: 1px solid #e6ecf5;
+  box-shadow: 0 12px 40px rgb(13, 27, 42, 0.08);
+  border: 1px solid var(--color-accent-indigo-mist-strong);
   width: 100%;
   max-width: 340px;
 }
@@ -96,10 +96,10 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.65rem 0;
-  border-bottom: 1px solid #f0f3f8;
+  border-bottom: 1px solid var(--color-divider-marketing);
 }
 
-.marketing-hero-card-row:last-child { border-bottom: none; }
+.marketing-hero-card-row:last-child{ border-bottom: none; }
 
 .marketing-hero-card-icon {
   width: 32px;
@@ -109,18 +109,18 @@
   align-items: center;
   justify-content: center;
   font-size: 0.9rem;
-  background: #f0f6ff;
-  color: #3a6df0;
+  background: var(--color-surface-tint-blue);
+  color: var(--color-accent-blue-vivid);
 }
 
 .marketing-hero-card-text {
   font-size: 0.9rem;
-  color: #2d3748;
+  color: var(--color-text-marketing-strong);
 }
 
 .marketing-hero-card-meta {
   font-size: 0.75rem;
-  color: #718096;
+  color: var(--color-text-slate-soft-mid);
   margin-left: auto;
 }
 
@@ -136,7 +136,7 @@
 
 .marketing-stat {
   background: white;
-  border: 1px solid #e6ecf5;
+  border: 1px solid var(--color-accent-indigo-mist-strong);
   border-radius: 12px;
   padding: 1.25rem;
   text-align: center;
@@ -145,13 +145,13 @@
 .marketing-stat-value {
   font-size: 1.8rem;
   font-weight: 700;
-  color: #0d1b2a;
+  color: var(--color-surface-deep-navy);
   margin: 0 0 0.25rem 0;
 }
 
 .marketing-stat-label {
   font-size: 0.85rem;
-  color: #718096;
+  color: var(--color-text-slate-soft-mid);
   margin: 0;
 }
 
@@ -168,7 +168,7 @@
 }
 
 .marketing-section-header .marketing-eyebrow {
-  color: #3a6df0;
+  color: var(--color-accent-blue-vivid);
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -178,11 +178,11 @@
 .marketing-section-header h2 {
   font-size: clamp(1.6rem, 3vw, 2.2rem);
   margin: 0.5rem 0;
-  color: #0d1b2a;
+  color: var(--color-surface-deep-navy);
 }
 
 .marketing-section-header p {
-  color: #4a5568;
+  color: var(--color-text-slate-deep);
   max-width: 640px;
   margin: 0 auto;
 }
@@ -196,23 +196,23 @@
 
 .marketing-feature {
   background: white;
-  border: 1px solid #e6ecf5;
+  border: 1px solid var(--color-accent-indigo-mist-strong);
   border-radius: 12px;
   padding: 1.5rem;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.marketing-feature:hover {
+.marketing-feature:hover{
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(13, 27, 42, 0.08);
+  box-shadow: 0 8px 24px rgb(13, 27, 42, 0.08);
 }
 
 .marketing-feature-icon {
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  background: #f0f6ff;
-  color: #3a6df0;
+  background: var(--color-surface-tint-blue);
+  color: var(--color-accent-blue-vivid);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -223,13 +223,13 @@
 .marketing-feature h3 {
   margin: 0 0 0.5rem 0;
   font-size: 1.05rem;
-  color: #0d1b2a;
+  color: var(--color-surface-deep-navy);
 }
 
 .marketing-feature p {
   margin: 0;
   font-size: 0.92rem;
-  color: #4a5568;
+  color: var(--color-text-slate-deep);
   line-height: 1.55;
 }
 
@@ -240,7 +240,7 @@
   gap: 1.5rem;
   align-items: center;
   background: white;
-  border: 1px solid #e6ecf5;
+  border: 1px solid var(--color-accent-indigo-mist-strong);
   border-radius: 14px;
   padding: 1.5rem;
   margin-bottom: 1rem;
@@ -251,8 +251,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #3a6df0;
-  background: #f0f6ff;
+  color: var(--color-accent-blue-vivid);
+  background: var(--color-surface-tint-blue);
   padding: 0.4rem 0.75rem;
   border-radius: 6px;
   display: inline-block;
@@ -261,12 +261,12 @@
 
 .marketing-usecase h3 {
   margin: 0 0 0.4rem 0;
-  color: #0d1b2a;
+  color: var(--color-surface-deep-navy);
 }
 
 .marketing-usecase p {
   margin: 0;
-  color: #4a5568;
+  color: var(--color-text-slate-deep);
   line-height: 1.55;
 }
 
@@ -275,7 +275,7 @@
   max-width: 1200px;
   margin: 3rem auto;
   padding: 2.5rem 2rem;
-  background: linear-gradient(135deg, #3a6df0 0%, #2f5acb 100%);
+  background: linear-gradient(135deg, var(--color-accent-blue-vivid) 0%, var(--color-brand-blue-marketing) 100%);
   color: white;
   border-radius: 16px;
   text-align: center;
@@ -308,15 +308,15 @@
   cursor: pointer;
 }
 
-.marketing-cta-actions button:first-child {
+.marketing-cta-actions button:first-child{
   background: white;
-  color: #2f5acb;
+  color: var(--color-brand-blue-marketing);
 }
 
 .marketing-cta-actions button + button {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgb(255, 255, 255, 0.15);
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgb(255, 255, 255, 0.3);
 }
 
 /* ---- FAQ ---- */
@@ -327,7 +327,7 @@
 
 .marketing-faq details {
   background: white;
-  border: 1px solid #e6ecf5;
+  border: 1px solid var(--color-accent-indigo-mist-strong);
   border-radius: 10px;
   padding: 0;
   overflow: hidden;
@@ -337,25 +337,25 @@
   cursor: pointer;
   padding: 1rem 1.25rem;
   font-weight: 600;
-  color: #0d1b2a;
+  color: var(--color-surface-deep-navy);
   list-style: none;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.marketing-faq summary::after {
+.marketing-faq summary::after{
   content: "+";
   font-size: 1.3rem;
-  color: #3a6df0;
+  color: var(--color-accent-blue-vivid);
 }
 
-.marketing-faq details[open] summary::after { content: "−"; }
+.marketing-faq details[open] summary::after{ content: "−"; }
 
 .marketing-faq details > p {
   margin: 0;
   padding: 0 1.25rem 1.1rem 1.25rem;
-  color: #4a5568;
+  color: var(--color-text-slate-deep);
   line-height: 1.6;
 }
 
@@ -368,7 +368,7 @@
 
 .marketing-channel {
   background: white;
-  border: 1px solid #e6ecf5;
+  border: 1px solid var(--color-accent-indigo-mist-strong);
   border-radius: 12px;
   padding: 1.5rem;
   display: flex;
@@ -380,8 +380,8 @@
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  background: #f0f6ff;
-  color: #3a6df0;
+  background: var(--color-surface-tint-blue);
+  color: var(--color-accent-blue-vivid);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -390,12 +390,12 @@
 
 .marketing-channel h3 {
   margin: 0;
-  color: #0d1b2a;
+  color: var(--color-surface-deep-navy);
 }
 
 .marketing-channel p {
   margin: 0;
-  color: #4a5568;
+  color: var(--color-text-slate-deep);
   font-size: 0.93rem;
   line-height: 1.5;
 }
@@ -404,7 +404,7 @@
   margin-top: auto;
   background: transparent;
   border: none;
-  color: #3a6df0;
+  color: var(--color-accent-blue-vivid);
   font-weight: 600;
   cursor: pointer;
   padding: 0;
@@ -412,13 +412,13 @@
   font-size: 0.9rem;
 }
 
-.marketing-channel-link:hover { text-decoration: underline; }
+.marketing-channel-link:hover{ text-decoration: underline; }
 
 /* ---- Footer ---- */
 .marketing-footer {
   margin-top: 4rem;
-  background: #0d1b2a;
-  color: #cbd5e0;
+  background: var(--color-surface-deep-navy);
+  color: var(--color-text-marketing-light);
   padding: 2.5rem 2rem 1.5rem 2rem;
 }
 
@@ -438,7 +438,7 @@
 .marketing-footer-inner p {
   margin: 0.5rem 0 0 0;
   font-size: 0.9rem;
-  color: #94a3b8;
+  color: var(--color-text-slate-soft);
   max-width: 320px;
 }
 
@@ -451,7 +451,7 @@
 .marketing-footer-inner button {
   background: transparent;
   border: none;
-  color: #cbd5e0;
+  color: var(--color-text-marketing-light);
   display: block;
   padding: 0.3rem 0;
   cursor: pointer;
@@ -459,19 +459,19 @@
   text-align: left;
 }
 
-.marketing-footer-inner button:hover { color: white; }
+.marketing-footer-inner button:hover{ color: white; }
 
 .marketing-footer-legal {
   max-width: 1200px;
   margin: 1.5rem auto 0 auto;
   padding-top: 1.5rem;
-  border-top: 1px solid #1e2c3d;
+  border-top: 1px solid var(--color-surface-dark-divider);
   font-size: 0.8rem;
-  color: #718096;
+  color: var(--color-text-slate-soft-mid);
   text-align: center;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px){
   .marketing-hero {
     grid-template-columns: 1fr;
     padding: 2rem 1.25rem;
@@ -492,7 +492,7 @@
    data-theme="light" unless they've clicked the toggle.
    ============================================================ */
 :root[data-theme="dark"] .marketing-hero {
-  background: linear-gradient(135deg, #1a2236 0%, #14171f 60%);
+  background: linear-gradient(135deg, var(--color-surface-dark-tinted) 0%, var(--color-surface-darken) 60%);
 }
 
 :root[data-theme="dark"] .marketing-hero-copy h1,
@@ -500,7 +500,7 @@
 :root[data-theme="dark"] .marketing-usecase h3,
 :root[data-theme="dark"] .marketing-feature h3,
 :root[data-theme="dark"] .marketing-channel h3 {
-  color: #f1f5f9;
+  color: var(--color-surface-tint-cool);
 }
 :root[data-theme="dark"] .marketing-hero-copy p.lead,
 :root[data-theme="dark"] .marketing-section-header p,
@@ -508,7 +508,7 @@
 :root[data-theme="dark"] .marketing-usecase p,
 :root[data-theme="dark"] .marketing-faq details > p,
 :root[data-theme="dark"] .marketing-channel p {
-  color: #cbd5e1;
+  color: var(--color-input-border);
 }
 
 :root[data-theme="dark"] .marketing-hero-card,
@@ -517,46 +517,46 @@
 :root[data-theme="dark"] .marketing-usecase,
 :root[data-theme="dark"] .marketing-faq details,
 :root[data-theme="dark"] .marketing-channel {
-  background: #1a1d26;
-  border-color: #2c313d;
+  background: var(--color-surface-dark-card);
+  border-color: var(--color-border-dark);
 }
 :root[data-theme="dark"] .marketing-hero-card-row {
-  border-bottom-color: #2c313d;
+  border-bottom-color: var(--color-border-dark);
 }
 :root[data-theme="dark"] .marketing-hero-card-text {
-  color: #e2e8f0;
+  color: var(--color-surface-tint-slate);
 }
 :root[data-theme="dark"] .marketing-hero-card-meta,
 :root[data-theme="dark"] .marketing-stat-label {
-  color: #9aa5b8;
+  color: var(--color-text-slate-foggy);
 }
 
 :root[data-theme="dark"] .marketing-hero-card-icon,
 :root[data-theme="dark"] .marketing-feature-icon,
 :root[data-theme="dark"] .marketing-channel-icon {
-  background: rgba(96, 165, 250, 0.12);
-  color: #93c5fd;
+  background: rgb(96, 165, 250, 0.12);
+  color: var(--color-primary-border);
 }
 :root[data-theme="dark"] .marketing-usecase-label {
-  background: rgba(96, 165, 250, 0.14);
-  color: #93c5fd;
+  background: rgb(96, 165, 250, 0.14);
+  color: var(--color-primary-border);
 }
 :root[data-theme="dark"] .marketing-stat-value,
 :root[data-theme="dark"] .marketing-eyebrow {
-  color: #93c5fd;
+  color: var(--color-primary-border);
 }
 
 :root[data-theme="dark"] .marketing-faq summary {
-  color: #f1f5f9;
+  color: var(--color-surface-tint-cool);
 }
-:root[data-theme="dark"] .marketing-faq summary::after {
-  color: #93c5fd;
+:root[data-theme="dark"] .marketing-faq summary::after{
+  color: var(--color-primary-border);
 }
 
 :root[data-theme="dark"] .marketing-cta {
-  border: 1px solid #4a5fb8;
+  border: 1px solid var(--color-surface-dark-border);
 }
 
 :root[data-theme="dark"] .marketing-footer-inner button {
-  color: #cbd5e1;
+  color: var(--color-input-border);
 }

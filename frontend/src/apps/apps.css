@@ -4,7 +4,7 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: #0B1220;
+  background: var(--color-surface-deepest);
 }
 
 .split-view-pane {
@@ -18,15 +18,15 @@
 .split-view-divider {
   flex: 0 0 6px;
   cursor: col-resize;
-  background: #0B1220;
-  border-left: 1px solid #0B1220;
-  border-right: 1px solid #0B1220;
+  background: var(--color-surface-deepest);
+  border-left: 1px solid var(--color-surface-deepest);
+  border-right: 1px solid var(--color-surface-deepest);
   transition: background 0.15s;
 }
 
 .split-view-divider:hover,
-.split-view-divider:active {
-  background: #0B1220;
+.split-view-divider:active{
+  background: var(--color-surface-deepest);
 }
 
 /* ====== Pane chrome ====== */
@@ -36,7 +36,7 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: #0B1220;
+  background: var(--color-surface-deepest);
 }
 
 .app-pane-header {
@@ -44,8 +44,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 6px 10px;
-  border-bottom: 1px solid #0B1220;
-  background: #0B1220;
+  border-bottom: 1px solid var(--color-surface-deepest);
+  background: var(--color-surface-deepest);
   flex: 0 0 auto;
 }
 
@@ -63,7 +63,7 @@
 }
 
 .app-pane-empty {
-  color: #9ca3af;
+  color: var(--color-input-border-strong);
   font-weight: 500;
 }
 
@@ -76,11 +76,11 @@
   height: 24px;
   border-radius: 4px;
   cursor: pointer;
-  color: #0B1220;
+  color: var(--color-surface-deepest);
 }
 
-.app-pane-close:hover {
-  background: #0B1220;
+.app-pane-close:hover{
+  background: var(--color-surface-deepest);
   color: var(--color-text-primary);
 }
 
@@ -92,7 +92,7 @@
 
 .app-pane-loading {
   padding: 24px;
-  color: #0B1220;
+  color: var(--color-surface-deepest);
 }
 
 /* ====== App picker (used in empty pane) ====== */
@@ -103,7 +103,7 @@
 .app-picker-title {
   margin: 0 0 16px;
   font-size: var(--text-lg);
-  color: #0B1220;
+  color: var(--color-surface-deepest);
   font-weight: 500;
 }
 
@@ -120,8 +120,8 @@
   justify-content: center;
   gap: 8px;
   padding: 24px 12px;
-  background: #0B1220;
-  border: 1px solid #0B1220;
+  background: var(--color-surface-deepest);
+  border: 1px solid var(--color-surface-deepest);
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.15s;
@@ -129,9 +129,9 @@
   color: var(--color-text-primary);
 }
 
-.app-picker-card:hover {
-  border-color: #6366f1;
-  background: #eef2ff;
+.app-picker-card:hover{
+  border-color: var(--color-accent-indigo-bright);
+  background: var(--color-accent-indigo-mist);
   transform: translateY(-2px);
 }
 
