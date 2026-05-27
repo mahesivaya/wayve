@@ -149,6 +149,30 @@ pub async fn sync_all(pool: &PgPool) -> Result<()> {
 
             if let Err(e) = sync_result {
                 error!(target: "worker", account_id = account.id, provider = account.provider.as_db(), error = ?e, "email sync failed");
+            } else {
+                // After each forward-sync tick, also pull a backfill batch of
+                // older mail. The forward sync only fetches mail newer than
+                // `last_sync`; without this, history before the account was
+                // connected only arrives via the user's "Load more" clicks.
+                // Each tick walks one BACKFILL_BATCH window further back;
+                // terminates naturally once the provider returns no older mail.
+                if let Err(err) = backfill_older(
+                    &pool,
+                    account.id,
+                    &account.provider,
+                    &token.access_token,
+                )
+                .await
+                {
+                    warn!(target: "worker", account_id = account.id, error = ?err, "backfill batch failed");
+                }
+
+                // Fresh mail just landed in `emails` — drop the /api/profile
+                // and /api/me caches for this user so the Storage & Usage
+                // panel reflects the new totals on the next page load
+                // instead of waiting out the 30s/60s TTLs.
+                crate::routes::user::invalidate_profile_cache(account.user_id).await;
+                crate::email::profile::invalidate_me_cache(account.user_id).await;
             }
         }));
     }
@@ -158,6 +182,44 @@ pub async fn sync_all(pool: &PgPool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Per-tick backfill window size — how many older messages to pull each
+/// time the worker runs. Capped to keep Gmail rate-limit headroom; with a
+/// 30s tick this fully backfills ~6000 messages/hour per account, which is
+/// enough for almost every personal mailbox to catch up overnight.
+const BACKFILL_BATCH: usize = 100;
+
+/// Pulls the next batch of *older* mail for an account. Anchors the window
+/// at the oldest email currently in the local DB and asks the provider for
+/// the next BACKFILL_BATCH messages older than that. Stops naturally when
+/// `sync_before` returns no rows (mailbox exhausted) or when the account has
+/// no emails yet (in which case the forward sync handles it).
+async fn backfill_older(
+    pool: &PgPool,
+    account_id: i32,
+    provider: &crate::email::provider::MailProvider,
+    access_token: &str,
+) -> Result<()> {
+    let oldest: Option<NaiveDateTime> = sqlx::query_scalar(
+        "SELECT MIN(created_at) FROM emails WHERE account_id = $1",
+    )
+    .bind(account_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+
+    let Some(oldest_naive) = oldest else {
+        // No mail yet — the forward sync (which paginates without a
+        // last_sync floor on the first run) is responsible for the
+        // initial pull.
+        return Ok(());
+    };
+
+    let before_timestamp = oldest_naive.and_utc().timestamp();
+    provider
+        .sync_before(pool, account_id, access_token, before_timestamp, BACKFILL_BATCH)
+        .await
 }
 
 pub async fn fetch_ids(token: &str, last_sync: Option<i64>) -> Result<Vec<String>> {

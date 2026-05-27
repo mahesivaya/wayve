@@ -80,7 +80,9 @@ export default function Settings() {
               </strong>
             </div>
             <div className="settings-usage-row">
-              <span>Emails</span>
+              <span title="Number of emails synced to your local rwayve mailbox. Your Gmail/Outlook account may hold many more — sync pulls the most recent batch and grows over time.">
+                Synced Emails
+              </span>
               <strong>
                 {profile?.total_emails !== undefined ? `${profile.total_emails.toLocaleString()} emails` : "Loading…"}
               </strong>
