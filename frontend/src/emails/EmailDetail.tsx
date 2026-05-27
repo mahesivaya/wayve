@@ -33,6 +33,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const [replyBody, setReplyBody] = useState("");
   const [replySending, setReplySending] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const [forwardTo, setForwardTo] = useState("");
+  const [forwardBody, setForwardBody] = useState("");
+  const [forwardSending, setForwardSending] = useState(false);
+  const [forwardError, setForwardError] = useState<string | null>(null);
 
   // Local mirror of the shared-inbox workflow state so the UI updates
   // optimistically without waiting for a refetch of the whole list.
@@ -59,6 +64,19 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [selectedEmail?.id, selectedEmail?.is_shared, selectedEmail?.inbox_status, selectedEmail?.inbox_assignee_id]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setReplyOpen(false);
+      setReplyBody("");
+      setReplyError(null);
+      setForwardOpen(false);
+      setForwardTo("");
+      setForwardBody("");
+      setForwardError(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [selectedEmail?.id]);
 
   async function patchInboxState(
     patch: Parameters<typeof updateEmailState>[1]
@@ -144,6 +162,39 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   };
 
   const replyTo = emailAddress(selectedEmail.sender);
+  const originalSubject = selectedEmail.subject?.trim() || "(No Subject)";
+  const forwardSubject = originalSubject.toLowerCase().startsWith("fwd:")
+    ? originalSubject
+    : `Fwd: ${originalSubject}`;
+
+  const openForward = () => {
+    const originalBody = bodyToPlainText(selectedEmail.body || "");
+    setReplyOpen(false);
+    setReplyError(null);
+    setForwardOpen((open) => {
+      const nextOpen = !open;
+      if (nextOpen && !forwardBody.trim()) {
+        setForwardBody(
+          [
+            "",
+            "",
+            "---------- Forwarded message ---------",
+            `From: ${selectedEmail.sender || "Unknown sender"}`,
+            selectedEmail.receiver ? `To: ${selectedEmail.receiver}` : null,
+            `Date: ${formatEmailDate(selectedEmail.created_at) || "Unknown date"}`,
+            `Subject: ${originalSubject}`,
+            "",
+            originalBody,
+          ]
+            .filter((line): line is string => line !== null)
+            .join("\n"),
+        );
+      }
+      return nextOpen;
+    });
+    setForwardError(null);
+  };
+
   const handleReply = async () => {
     const body = replyBody.trim();
 
@@ -181,6 +232,44 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   };
 
+  const handleForward = async () => {
+    const to = forwardTo.trim();
+    const body = forwardBody.trim();
+
+    if (!selectedEmail.account_id) {
+      setForwardError("Missing sender account for this email.");
+      return;
+    }
+
+    if (!to) {
+      setForwardError("Enter a recipient for the forwarded email.");
+      return;
+    }
+
+    if (!body) {
+      setForwardError("Forward message is empty.");
+      return;
+    }
+
+    setForwardSending(true);
+    setForwardError(null);
+    try {
+      await sendEmail({
+        account_id: selectedEmail.account_id,
+        to,
+        subject: forwardSubject,
+        body,
+      });
+      setForwardTo("");
+      setForwardBody("");
+      setForwardOpen(false);
+    } catch (err) {
+      setForwardError(err instanceof Error ? err.message : "Failed to forward email");
+    } finally {
+      setForwardSending(false);
+    }
+  };
+
   return (
     <div className="email-detail">
       <div className="email-detail-actions">
@@ -189,6 +278,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           onClick={() => {
             setReplyOpen((open) => !open);
             setReplyError(null);
+            setForwardOpen(false);
+            setForwardError(null);
           }}
           title="Reply"
           aria-label="Reply"
@@ -196,6 +287,17 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           <svg className="email-detail-reply-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M10 8 5 13l5 5" />
             <path d="M5 13h9a5 5 0 0 1 5 5v1" />
+          </svg>
+        </button>
+        <button
+          className="email-detail-forward"
+          onClick={openForward}
+          title="Forward"
+          aria-label="Forward"
+        >
+          <svg className="email-detail-forward-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M14 8l5 5-5 5" />
+            <path d="M5 19v-1a5 5 0 0 1 5-5h9" />
           </svg>
         </button>
         <button
@@ -348,6 +450,46 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         </div>
       )}
 
+      {forwardOpen && (
+        <div className="email-reply-box email-forward-box">
+          <input
+            className="email-forward-to"
+            value={forwardTo}
+            onChange={(e) => setForwardTo(e.target.value)}
+            placeholder="Forward to"
+            aria-label="Forward recipient"
+          />
+          <div className="email-forward-subject">{forwardSubject}</div>
+          <textarea
+            value={forwardBody}
+            onChange={(e) => setForwardBody(e.target.value)}
+            placeholder="Forward message"
+            aria-label="Forward body"
+          />
+          {forwardError && <p className="email-body-error">{forwardError}</p>}
+          <div className="email-reply-actions">
+            <button
+              type="button"
+              className="email-reply-send"
+              onClick={() => void handleForward()}
+              disabled={forwardSending}
+            >
+              {forwardSending ? "Forwarding..." : "Send forward"}
+            </button>
+            <button
+              type="button"
+              className="email-reply-cancel"
+              onClick={() => {
+                setForwardOpen(false);
+                setForwardError(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="email-body">
         {selectedEmail._bodyLoading ? (
           <div className="email-body-loading">
@@ -389,6 +531,19 @@ function emailAddress(value?: string | null) {
   const text = value?.trim() || "";
   const match = text.match(/<([^>]+)>/);
   return (match?.[1] || text).trim();
+}
+
+function bodyToPlainText(value: string): string {
+  const text = value.trim();
+  if (!text) return "";
+  if (!/<[a-z][\s\S]*>/i.test(text)) return text;
+
+  try {
+    const doc = new DOMParser().parseFromString(text, "text/html");
+    return (doc.body.textContent || text).trim();
+  } catch {
+    return text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  }
 }
 
 // Parse "Display Name <addr@example.com>" into separate parts. If only an

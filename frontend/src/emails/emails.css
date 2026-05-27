@@ -1082,7 +1082,8 @@
 
 .email-detail-back,
 .email-detail-delete,
-.email-detail-reply {
+.email-detail-reply,
+.email-detail-forward {
   height: 26px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
@@ -1109,14 +1110,16 @@
   font-size: var(--text-xl);
 }
 
-.email-detail-reply {
+.email-detail-reply,
+.email-detail-forward {
   width: 26px;
   padding: 0;
   color: var(--color-primary-action);
 }
 
 .email-detail-delete-icon,
-.email-detail-reply-icon {
+.email-detail-reply-icon,
+.email-detail-forward-icon {
   width: 15px;
   height: 15px;
   fill: none;
@@ -1137,7 +1140,8 @@
   border-color: var(--color-danger-border);
 }
 
-.email-detail-reply:hover{
+.email-detail-reply:hover,
+.email-detail-forward:hover{
   background: var(--color-primary-panel);
   border-color: var(--color-primary-panel-border);
   color: var(--color-primary-action-hover);
@@ -1166,6 +1170,33 @@
   background: var(--color-surface);
   color: var(--color-text-primary);
   font: inherit;
+}
+
+.email-forward-box {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.email-forward-to {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  box-sizing: border-box;
+  font: inherit;
+}
+
+.email-forward-subject {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .email-reply-actions {
