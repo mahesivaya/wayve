@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { changePassword } from "../api/Auth";
 import { getProfile, updateProfile, type ProfileData } from "../api/profile";
+import { useAuth } from "../auth/useAuth";
 import { logger } from "../utils/logger";
 import "./profile.css";
 
 export default function Profile() {
+  const { user } = useAuth();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -21,13 +23,13 @@ export default function Profile() {
   useEffect(() => {
     const load = async () => {
       try {
-      const data = await getProfile();
-      setProfile(data);
-      setFirstName(data.first_name ?? "");
-      setLastName(data.last_name ?? "");
-    } catch(err) {
-      logger.error(err);
-    }
+        const data = await getProfile();
+        setProfile(data);
+        setFirstName(data.first_name ?? "");
+        setLastName(data.last_name ?? "");
+      } catch (err) {
+        logger.error(err);
+      }
     };
     void load();
   }, []);
@@ -91,107 +93,134 @@ export default function Profile() {
 
   if (!profile) {
     return (
-      <div className="profile-page">
+      <div className="settings-page">
         <div className="profile-loading">Loading…</div>
       </div>
     );
   }
 
+  const accountType = profile.account_type ?? user?.account_type ?? "personal";
+  const roleLabel = profile.role_label ?? user?.role_label ?? "Personal workspace owner";
+  const roleKey = profile.effective_role ?? user?.effective_role ?? "owner";
+
   return (
-    <div className="profile-page">
-      <div className="profile-card">
-        <h2 className="profile-title">My Profile</h2>
+    <div className="settings-page">
+      <div className="settings-stack">
 
-        <div className="profile-row">
-          <label>Username</label>
-          <div className="profile-readonly">{profile.email}</div>
-        </div>
+        <h1 className="settings-page-title">My Profile</h1>
 
-        <div className="profile-row">
-          <label htmlFor="profile-first">First name</label>
-          <input
-            id="profile-first"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            placeholder="First name"
-          />
-        </div>
+        <section className="settings-card">
+          <h2 className="settings-card-title">Account</h2>
+          <div className="settings-rows">
+            <div className="settings-usage-row">
+              <span>Email</span>
+              <strong>{profile.email}</strong>
+            </div>
+            <div className="settings-usage-row">
+              <span>Account Type</span>
+              <strong style={{ textTransform: "capitalize" }}>{accountType}</strong>
+            </div>
+            <div className="settings-usage-row">
+              <span>Access Role</span>
+              <strong>{roleLabel}</strong>
+            </div>
+            <div className="settings-usage-row">
+              <span>Role Key</span>
+              <strong>{roleKey}</strong>
+            </div>
+          </div>
+        </section>
 
-        <div className="profile-row">
-          <label htmlFor="profile-last">Last name</label>
-          <input
-            id="profile-last"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            placeholder="Last name"
-          />
-        </div>
+        <section className="settings-card">
+          <h2 className="settings-card-title">Name</h2>
 
-        <div className="profile-actions">
-          <button
-            className="profile-save"
-            onClick={save}
-            disabled={saving}
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-          {status && <span className="profile-status">{status}</span>}
-        </div>
+          <div className="profile-row">
+            <label htmlFor="profile-first">First name</label>
+            <input
+              id="profile-first"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="First name"
+            />
+          </div>
 
-        <div className="profile-password-section">
-          <h3 className="profile-section-title">Password</h3>
+          <div className="profile-row">
+            <label htmlFor="profile-last">Last name</label>
+            <input
+              id="profile-last"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Last name"
+            />
+          </div>
 
-          {!showPwForm ? (
+          <div className="profile-actions">
             <button
               type="button"
               className="profile-save"
-              onClick={() => setShowPwForm(true)}
+              onClick={() => void save()}
+              disabled={saving}
             >
-              {profile.auth_provider === "google"
-                ? "Create Password"
-                : "Change Password"}
+              {saving ? "Saving…" : "Save"}
             </button>
+            {status && <span className="profile-status">{status}</span>}
+          </div>
+        </section>
+
+        <section className="settings-card">
+          <h2 className="settings-card-title">Password</h2>
+
+          {!showPwForm ? (
+            <div className="profile-actions">
+              <button
+                type="button"
+                className="profile-save"
+                onClick={() => setShowPwForm(true)}
+              >
+                {profile.auth_provider === "google"
+                  ? "Create Password"
+                  : "Change Password"}
+              </button>
+              {pwStatus && <span className="profile-status">{pwStatus}</span>}
+            </div>
           ) : (
             <>
               {profile.auth_provider !== "google" && (
                 <div className="profile-row">
-                  <label htmlFor="profile-current-pw">
-                    Current password
-                  </label>
+                  <label htmlFor="profile-current-pw">Current password</label>
                   <input
                     id="profile-current-pw"
                     type="password"
                     value={currentPw}
                     onChange={(e) => setCurrentPw(e.target.value)}
+                    autoComplete="current-password"
                   />
                 </div>
               )}
 
               <div className="profile-row">
                 <label htmlFor="profile-new-pw">
-                  {profile.auth_provider === "google"
-                    ? "Password"
-                    : "New password"}
+                  {profile.auth_provider === "google" ? "Password" : "New password"}
                 </label>
                 <input
                   id="profile-new-pw"
                   type="password"
                   value={newPw}
                   onChange={(e) => setNewPw(e.target.value)}
+                  autoComplete="new-password"
                 />
               </div>
 
               <div className="profile-row">
                 <label htmlFor="profile-confirm-pw">
-                  {profile.auth_provider === "google"
-                    ? "Confirm password"
-                    : "Confirm new password"}
+                  {profile.auth_provider === "google" ? "Confirm password" : "Confirm new password"}
                 </label>
                 <input
                   id="profile-confirm-pw"
                   type="password"
                   value={confirmPw}
                   onChange={(e) => setConfirmPw(e.target.value)}
+                  autoComplete="new-password"
                 />
               </div>
 
@@ -199,7 +228,7 @@ export default function Profile() {
                 <button
                   type="button"
                   className="profile-save"
-                  onClick={submitPasswordChange}
+                  onClick={() => void submitPasswordChange()}
                   disabled={pwSaving}
                 >
                   {pwSaving
@@ -221,12 +250,12 @@ export default function Profile() {
                 >
                   Cancel
                 </button>
+                {pwStatus && <span className="profile-status">{pwStatus}</span>}
               </div>
             </>
           )}
+        </section>
 
-          {pwStatus && <p className="profile-status">{pwStatus}</p>}
-        </div>
       </div>
     </div>
   );

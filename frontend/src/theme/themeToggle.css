@@ -1,39 +1,84 @@
-.theme-toggle {
+/* Header appearance trigger, rendered as a circular color wheel. Conic
+   gradient runs through all hues; a radial overlay fades the centre to
+   white (light mode) or black (dark mode) so the same button visually
+   previews the active palette. Click opens the ThemeCustomizer in a
+   dropdown anchored under the wheel. */
+
+.theme-toggle-container {
+  position: relative;
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
+}
+
+.theme-toggle-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 200;
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  box-shadow: 0 12px 32px rgb(0, 0, 0, 0.4);
   border-radius: var(--radius-md);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  cursor: pointer;
+}
+
+.theme-toggle {
+  width: 30px;
+  height: 30px;
   padding: 0;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
-.theme-toggle:hover{
-  background: var(--color-surface-hover);
-  color: var(--color-text-primary);
-  border-color: var(--color-border-soft);
+.theme-toggle--light {
+  background:
+    radial-gradient(circle at 50% 50%, rgb(255, 255, 255, 0.95) 0%, rgb(255, 255, 255, 0) 55%),
+    conic-gradient(
+      from 0deg,
+      oklch(65% 0.22 0),
+      oklch(78% 0.18 60),
+      oklch(85% 0.18 120),
+      oklch(72% 0.16 180),
+      oklch(55% 0.22 240),
+      oklch(55% 0.22 300),
+      oklch(65% 0.22 360)
+    );
 }
 
-.theme-toggle:focus-visible{
+.theme-toggle--dark {
+  background:
+    radial-gradient(circle at 50% 50%, rgb(10, 10, 12, 0.95) 0%, rgb(10, 10, 12, 0) 55%),
+    conic-gradient(
+      from 0deg,
+      oklch(65% 0.22 0),
+      oklch(78% 0.18 60),
+      oklch(85% 0.18 120),
+      oklch(72% 0.16 180),
+      oklch(55% 0.22 240),
+      oklch(55% 0.22 300),
+      oklch(65% 0.22 360)
+    );
+}
+
+.theme-toggle:hover {
+  transform: scale(1.08);
+  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.5);
+}
+
+.theme-toggle:focus-visible {
   outline: 2px solid var(--color-primary-action);
   outline-offset: 2px;
 }
 
-/* The Layout header has a darker (lightslategray) background, so the
-   toggle there needs lighter defaults to stay readable. The
-   `.header .theme-toggle` selector is intentionally narrow so this
-   doesn't bleed into the marketing pages. */
+/* The Layout header sits on a darker (lightslategray) background; lighten
+   the border so the wheel still reads as a tappable affordance. */
 .header .theme-toggle {
-  border-color: rgb(255, 255, 255, 0.25);
-  color: rgb(255, 255, 255, 0.85);
+  border-color: rgb(255, 255, 255, 0.3);
 }
-.header .theme-toggle:hover{
-  background: rgb(255, 255, 255, 0.12);
-  color: var(--color-on-primary);
-  border-color: rgb(255, 255, 255, 0.4);
+
+.header .theme-toggle:hover {
+  border-color: rgb(255, 255, 255, 0.55);
 }

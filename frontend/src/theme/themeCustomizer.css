@@ -1,124 +1,189 @@
-/* Theme customizer — eats its own dog food, all colors come from index.css
-   tokens so the customizer itself reflects whichever theme is currently
-   active. */
+/* Theme customizer — macro-style dark panel with 2D color grid, segmented
+   sliders, and a preset gallery. The customizer always renders on a dark
+   surface (regardless of the active theme) so the colored dots in the grid
+   have good contrast — matching the screenshot from macro.app. */
 
 .theme-customizer {
+  --tc-bg: var(--color-customizer-bg);
+  --tc-bg-soft: var(--color-customizer-bg-soft);
+  --tc-border: var(--color-customizer-border);
+  --tc-text: var(--color-customizer-text);
+  --tc-text-muted: var(--color-customizer-text-muted);
+  --tc-handle: var(--color-customizer-handle);
+
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
+  gap: 14px;
+  padding: 14px;
+  background: var(--tc-bg);
+  border: 1px solid var(--tc-border);
   border-radius: var(--radius-md);
+  color: var(--tc-text);
+}
+
+/* Header row: tabs (left) + mode toggle (center-right) + reset (right) */
+.theme-customizer-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .theme-customizer-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 8px;
+  display: inline-flex;
+  background: var(--tc-bg-soft);
+  border: 1px solid var(--tc-border);
+  border-radius: var(--radius-pill);
+  padding: 3px;
+  gap: 2px;
 }
 
 .theme-customizer-tab {
-  padding: 6px 14px;
+  padding: 5px 16px;
   border: none;
   background: transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--text-lg);
+  color: var(--tc-text-muted);
+  font-size: var(--text-md);
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .theme-customizer-tab:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-primary);
+  color: var(--tc-text);
 }
 
 .theme-customizer-tab.active {
-  background: var(--color-primary-action);
-  color: var(--color-on-primary);
+  background: var(--tc-text);
+  color: var(--tc-bg);
+}
+
+/* Color wheel button — conic-gradient through all hues, fading to white at
+   the center via a radial overlay. Click toggles light/dark mode. In dark
+   mode the centre fades to black instead of white, mirroring the active
+   theme so the same button reads as either palette. */
+.theme-mode-wheel {
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid var(--tc-border);
+  border-radius: 50%;
+  cursor: pointer;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 55%),
+    conic-gradient(
+      from 0deg,
+      oklch(65% 0.22 0),
+      oklch(78% 0.18 60),
+      oklch(85% 0.18 120),
+      oklch(72% 0.16 180),
+      oklch(55% 0.22 240),
+      oklch(55% 0.22 300),
+      oklch(65% 0.22 360)
+    );
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.theme-mode-wheel:hover {
+  transform: scale(1.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* When pressed/active (dark mode selected) the inner fade flips to black
+   so the button itself previews the active mode. */
+.theme-mode-wheel--dark {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(10, 10, 12, 0.95) 0%, rgba(10, 10, 12, 0) 55%),
+    conic-gradient(
+      from 0deg,
+      oklch(65% 0.22 0),
+      oklch(78% 0.18 60),
+      oklch(85% 0.18 120),
+      oklch(72% 0.16 180),
+      oklch(55% 0.22 240),
+      oklch(55% 0.22 300),
+      oklch(65% 0.22 360)
+    );
 }
 
 .theme-customizer-reset {
-  margin-left: auto;
-  padding: 6px 12px;
+  padding: 5px 12px;
   background: transparent;
-  border: 1px solid var(--color-input-border);
-  color: var(--color-text-secondary);
-  font-size: var(--text-md);
+  border: 1px solid var(--tc-border);
+  color: var(--tc-text-muted);
+  font-size: var(--text-sm);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: 0.15s;
 }
 
 .theme-customizer-reset:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-primary);
+  color: var(--tc-text);
+  border-color: var(--tc-text-muted);
 }
 
-/* Preset gallery */
+/* =================== Preset gallery =================== */
 
 .theme-preset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .theme-preset-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  padding: 10px;
+  background: var(--tc-bg-soft);
+  border: 1px solid var(--tc-border);
   border-radius: var(--radius-md);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+  color: var(--tc-text);
+  transition: border-color 0.15s, transform 0.1s;
 }
 
 .theme-preset-card:hover {
-  border-color: var(--color-primary-action);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--tc-text-muted);
   transform: translateY(-1px);
 }
 
 .theme-preset-card.active {
-  border-color: var(--color-primary-action);
-  box-shadow: 0 0 0 2px var(--color-primary-action);
+  border-color: var(--tc-handle);
+  box-shadow: 0 0 0 1px var(--tc-handle);
 }
 
 .theme-preset-swatch {
   position: relative;
   width: 100%;
-  height: 80px;
+  height: 70px;
   border: 1px solid;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 3px;
 }
 
 .theme-preset-swatch-dot {
   position: absolute;
-  top: 10px;
-  width: 14px;
-  height: 14px;
+  top: 8px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
 }
 
-.theme-preset-swatch-dot:nth-child(1) { left: 12px; }
-.theme-preset-swatch-dot:nth-child(2) { left: 32px; }
-.theme-preset-swatch-dot:nth-child(3) { left: 52px; }
+.theme-preset-swatch-dot:nth-child(1) { left: 10px; }
+.theme-preset-swatch-dot:nth-child(2) { left: 28px; }
+.theme-preset-swatch-dot:nth-child(3) { left: 46px; }
 
 .theme-preset-swatch-bar {
-  height: 6px;
+  height: 5px;
   border-radius: 3px;
   width: 70%;
 }
@@ -131,115 +196,180 @@
 .theme-preset-name {
   font-size: var(--text-lg);
   font-weight: 600;
-  color: var(--color-text-primary);
 }
 
 .theme-preset-desc {
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
+  color: var(--tc-text-muted);
   line-height: 1.3;
 }
 
 .theme-preset-mode {
   font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  color: var(--tc-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   font-weight: 600;
 }
 
-/* Custom panel */
+/* =================== Custom panel =================== */
 
 .theme-custom-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.theme-custom-mode {
-  display: flex;
   gap: 16px;
-  font-size: var(--text-md);
-  color: var(--color-text-secondary);
 }
 
-.theme-custom-mode label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
+/* ---- 2D color grid ---- */
+
+.color-grid {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  background: var(--tc-bg);
+  border: 1px solid var(--tc-border);
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.color-grid:focus {
+  outline: 1px solid var(--tc-text-muted);
+  outline-offset: 1px;
+}
+
+.color-grid-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.color-grid-marker {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  margin-top: -9px;
+  border: 2px solid var(--tc-handle);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  transition: background 0.05s linear;
+}
+
+/* ---- sliders ---- */
+
+.theme-custom-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .theme-custom-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  align-items: center;
+  gap: 14px;
 }
 
 .theme-custom-row label {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: var(--text-md);
+  color: var(--tc-text-muted);
+  font-weight: 500;
 }
 
-.theme-custom-row input[type="range"] {
+.tick-slider {
+  position: relative;
+  height: 22px;
+  cursor: pointer;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+}
+
+.tick-slider:focus {
+  outline: 1px solid var(--tc-text-muted);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.tick-slider-track {
   width: 100%;
+  height: 14px;
+  border: 1px solid var(--tc-border);
+  border-radius: 2px;
+  pointer-events: none;
 }
 
-/* The hue slider gets a rainbow track so the user can see which hue they're
-   selecting at a glance. */
-.theme-custom-hue-slider {
-  appearance: none;
-  height: 8px;
-  border-radius: 4px;
-  background: linear-gradient(
-    to right,
-    oklch(65% 0.2 0),
-    oklch(65% 0.2 60),
-    oklch(65% 0.2 120),
-    oklch(65% 0.2 180),
-    oklch(65% 0.2 240),
-    oklch(65% 0.2 300),
-    oklch(65% 0.2 360)
-  );
+/* Segmented track — vertical hairlines like a ruler. */
+.tick-slider--ticks .tick-slider-track {
+  background:
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(2.5% - 1px),
+      var(--tc-border) calc(2.5% - 1px),
+      var(--tc-border) 2.5%
+    ),
+    var(--tc-bg);
 }
+
+/* Gradient track — inline-styled trackBackground overrides this; the fallback
+   is just the bg so the slider is still visible if no gradient is passed. */
+.tick-slider--gradient .tick-slider-track {
+  background: var(--tc-bg-soft);
+}
+
+.tick-slider-handle {
+  position: absolute;
+  width: 14px;
+  height: 18px;
+  margin-left: -7px;
+  background: var(--tc-handle);
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+/* ---- actions ---- */
 
 .theme-custom-actions {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .theme-customizer-apply {
   padding: 9px 18px;
-  background: var(--color-primary-action);
-  color: var(--color-on-primary);
+  background: var(--tc-handle);
+  color: var(--tc-bg);
   border: none;
   border-radius: var(--radius-sm);
-  font-size: var(--text-lg);
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   transition: 0.15s;
 }
 
 .theme-customizer-apply:hover {
-  background: var(--color-primary-action-hover);
+  background: var(--tc-text);
 }
 
 .theme-customizer-revert {
   padding: 9px 16px;
   background: transparent;
-  border: 1px solid var(--color-input-border);
-  color: var(--color-text-secondary);
+  border: 1px solid var(--tc-border);
+  color: var(--tc-text-muted);
   border-radius: var(--radius-sm);
-  font-size: var(--text-lg);
+  font-size: var(--text-md);
   cursor: pointer;
   transition: 0.15s;
 }
 
 .theme-customizer-revert:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-primary);
+  color: var(--tc-text);
+  border-color: var(--tc-text-muted);
 }

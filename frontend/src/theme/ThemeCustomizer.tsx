@@ -1,14 +1,16 @@
 // Theme customizer UI. Two tabs:
 //   Presets — gallery of curated themes. Click to apply + persist.
-//   Custom  — macro-style sliders (hue, chroma, saturation, contrast, depth)
-//             that live-preview as you drag, with Apply / Reset controls.
+//   Custom  — macro-style 2D color grid + segmented sliders (chroma,
+//             saturation, contrast, depth). Live-preview as you drag.
 //
 // The preview is driven by previewInput/clearPreview from the context, which
-// writes to :root without persisting — so dragging a slider is cheap and the
-// page can be reverted instantly by switching tabs or hitting Reset.
+// writes to :root without persisting — so dragging is cheap and the page
+// can be reverted instantly by switching tabs or hitting Reset.
 
 import { useEffect, useMemo, useState } from "react";
 
+import ColorGrid from "./ColorGrid";
+import TickSlider from "./TickSlider";
 import { PRESETS, type ThemePreset } from "./themePresets";
 import { type ThemeMode } from "./customThemeShared";
 import { useCustomTheme } from "./useCustomTheme";
@@ -17,8 +19,8 @@ import "./themeCustomizer.css";
 
 type Tab = "presets" | "custom";
 
-// Swatch shown on each preset card — uses generated palette so the preview
-// reflects what the user will actually get.
+// Swatch shown on each preset card — uses the same generator the rest of the
+// app uses so the preview matches what the user will see after picking it.
 function PresetSwatch({ preset }: { preset: ThemePreset }) {
   const tokens = useMemo(
     () => generatePalette(preset.input, preset.mode),
@@ -79,27 +81,43 @@ export default function ThemeCustomizer() {
 
   const activePresetId = choice.kind === "preset" ? choice.presetId : null;
 
+  // Chroma slider track: gray → fully-saturated accent at the current hue.
+  // Recomputed when the hue changes so the user can see what intensity the
+  // current hue can reach.
+  const chromaTrack = `linear-gradient(to right, oklch(0.70 0 ${input.hue}), oklch(0.65 0.28 ${input.hue}))`;
+
   return (
     <div className="theme-customizer">
-      <div className="theme-customizer-tabs" role="tablist">
+      <div className="theme-customizer-header">
+        <div className="theme-customizer-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "presets"}
+            className={`theme-customizer-tab ${tab === "presets" ? "active" : ""}`}
+            onClick={() => setTab("presets")}
+          >
+            Presets
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "custom"}
+            className={`theme-customizer-tab ${tab === "custom" ? "active" : ""}`}
+            onClick={() => setTab("custom")}
+          >
+            Custom
+          </button>
+        </div>
         <button
           type="button"
-          role="tab"
-          aria-selected={tab === "presets"}
-          className={`theme-customizer-tab ${tab === "presets" ? "active" : ""}`}
-          onClick={() => setTab("presets")}
-        >
-          Presets
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "custom"}
-          className={`theme-customizer-tab ${tab === "custom" ? "active" : ""}`}
-          onClick={() => setTab("custom")}
-        >
-          Custom
-        </button>
+          className={`theme-mode-wheel theme-mode-wheel--${mode}`}
+          onClick={() => setMode(mode === "light" ? "dark" : "light")}
+          title={`Switch to ${mode === "light" ? "dark" : "light"} mode (currently ${mode})`}
+          aria-label={`Switch to ${mode === "light" ? "dark" : "light"} mode`}
+          aria-pressed={mode === "dark"}
+        />
+
         <button
           type="button"
           className="theme-customizer-reset"
@@ -130,101 +148,64 @@ export default function ThemeCustomizer() {
 
       {tab === "custom" && (
         <div className="theme-custom-panel">
-          <div className="theme-custom-mode">
-            <label>
-              <input
-                type="radio"
-                name="theme-mode"
-                checked={mode === "light"}
-                onChange={() => setMode("light")}
+          <ColorGrid
+            hue={input.hue}
+            onChange={(hue) => setInput({ ...input, hue })}
+          />
+
+          <div className="theme-custom-sliders">
+            <div className="theme-custom-row">
+              <label>Chroma</label>
+              <TickSlider
+                value={input.chroma}
+                min={0}
+                max={0.3}
+                step={0.01}
+                onChange={(chroma) => setInput({ ...input, chroma })}
+                variant="gradient"
+                trackBackground={chromaTrack}
+                ariaLabel="Chroma"
               />
-              Light
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="theme-mode"
-                checked={mode === "dark"}
-                onChange={() => setMode("dark")}
+            </div>
+
+            <div className="theme-custom-row">
+              <label>Saturation</label>
+              <TickSlider
+                value={input.saturation}
+                min={0}
+                max={1.5}
+                step={0.05}
+                onChange={(saturation) => setInput({ ...input, saturation })}
+                variant="ticks"
+                ariaLabel="Saturation"
               />
-              Dark
-            </label>
-          </div>
+            </div>
 
-          <div className="theme-custom-row">
-            <label htmlFor="theme-hue">Hue ({input.hue.toFixed(0)}°)</label>
-            <input
-              id="theme-hue"
-              type="range"
-              min={0}
-              max={360}
-              step={1}
-              value={input.hue}
-              onChange={(e) => setInput({ ...input, hue: Number(e.target.value) })}
-              className="theme-custom-hue-slider"
-            />
-          </div>
+            <div className="theme-custom-row">
+              <label>Contrast</label>
+              <TickSlider
+                value={input.contrast}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(contrast) => setInput({ ...input, contrast })}
+                variant="ticks"
+                ariaLabel="Contrast"
+              />
+            </div>
 
-          <div className="theme-custom-row">
-            <label htmlFor="theme-chroma">Chroma ({input.chroma.toFixed(2)})</label>
-            <input
-              id="theme-chroma"
-              type="range"
-              min={0}
-              max={0.30}
-              step={0.01}
-              value={input.chroma}
-              onChange={(e) => setInput({ ...input, chroma: Number(e.target.value) })}
-            />
-          </div>
-
-          <div className="theme-custom-row">
-            <label htmlFor="theme-saturation">
-              Saturation ({input.saturation.toFixed(2)})
-            </label>
-            <input
-              id="theme-saturation"
-              type="range"
-              min={0}
-              max={1.5}
-              step={0.05}
-              value={input.saturation}
-              onChange={(e) =>
-                setInput({ ...input, saturation: Number(e.target.value) })
-              }
-            />
-          </div>
-
-          <div className="theme-custom-row">
-            <label htmlFor="theme-contrast">
-              Contrast ({input.contrast.toFixed(2)})
-            </label>
-            <input
-              id="theme-contrast"
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={input.contrast}
-              onChange={(e) =>
-                setInput({ ...input, contrast: Number(e.target.value) })
-              }
-            />
-          </div>
-
-          <div className="theme-custom-row">
-            <label htmlFor="theme-depth">
-              Depth ({input.depth.toFixed(3)})
-            </label>
-            <input
-              id="theme-depth"
-              type="range"
-              min={-0.05}
-              max={0.05}
-              step={0.005}
-              value={input.depth}
-              onChange={(e) => setInput({ ...input, depth: Number(e.target.value) })}
-            />
+            <div className="theme-custom-row">
+              <label>Depth</label>
+              <TickSlider
+                value={input.depth}
+                min={-0.05}
+                max={0.05}
+                step={0.005}
+                onChange={(depth) => setInput({ ...input, depth })}
+                variant="ticks"
+                ariaLabel="Depth"
+              />
+            </div>
           </div>
 
           <div className="theme-custom-actions">

@@ -384,6 +384,17 @@
   /* Apps page accent */
   --color-accent-indigo-bright: #6366f1;
 
+  /* Theme customizer chrome — intentionally always-dark (regardless of
+     active theme) so the OKLCH color grid has good contrast. Defined here
+     because feature CSS isn't allowed to use hex literals, and these
+     belong to a single component with a deliberate fixed palette. */
+  --color-customizer-bg: #0a0a0c;
+  --color-customizer-bg-soft: #14151a;
+  --color-customizer-border: #1f2128;
+  --color-customizer-text: #e8eaee;
+  --color-customizer-text-muted: #8a8d96;
+  --color-customizer-handle: #ffffff;
+
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
   color-scheme: light dark;

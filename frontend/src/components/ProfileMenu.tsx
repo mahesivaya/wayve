@@ -1,12 +1,31 @@
-import { useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import ThemeCustomizer from "../theme/ThemeCustomizer";
+import { useCustomTheme } from "../theme/useCustomTheme";
+
+// Three "identity" CSS variables — used as inline backgrounds on the
+// Appearance menu item's mini swatch. Browsers resolve var() in inline
+// `style={{ background: 'var(--…)' }}`, so the swatch always reflects the
+// active palette (including custom themes) without us having to mirror the
+// values into React state.
+const SWATCH_VARS = [
+  "var(--color-primary-action)",
+  "var(--color-accent-purple)",
+  "var(--color-success)",
+] as const;
 
 export default function ProfileMenu() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const appearanceRef = useRef<HTMLDivElement>(null);
+  // Re-key the swatch when the choice changes so the inline var() values
+  // re-resolve. The colors themselves come straight from CSS variables.
+  const { choice } = useCustomTheme();
+  const swatchKey = useMemo(() => JSON.stringify(choice), [choice]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -18,6 +37,31 @@ export default function ProfileMenu() {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [menuOpen]);
+
+  // Separate handler for the Appearance panel — it's rendered outside the
+  // profile-menu wrapper so the menu's outside-click doesn't fire when the
+  // user drags a slider inside the customizer.
+  useEffect(() => {
+    if (!appearanceOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (
+        appearanceRef.current &&
+        e.target instanceof Node &&
+        !appearanceRef.current.contains(e.target)
+      ) {
+        setAppearanceOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAppearanceOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [appearanceOpen]);
 
   if (!user) return null;
 
@@ -63,6 +107,25 @@ export default function ProfileMenu() {
             Settings & Privacy
           </button>
 
+          <button
+            className="profile-dropdown-item"
+            onClick={() => {
+              setMenuOpen(false);
+              setAppearanceOpen(true);
+            }}
+          >
+            <span className="profile-dropdown-icon">🎨</span>
+            Appearance
+            <span className="profile-dropdown-item-right">
+              <span className="profile-dropdown-swatch" key={swatchKey}>
+                {SWATCH_VARS.map((v, i) => (
+                  <span key={i} style={{ background: v }} />
+                ))}
+              </span>
+              <span className="profile-dropdown-chevron">›</span>
+            </span>
+          </button>
+
           <div className="profile-dropdown-divider" />
 
           <button
@@ -76,6 +139,17 @@ export default function ProfileMenu() {
             <span className="profile-dropdown-icon">⏻</span>
             Log out
           </button>
+        </div>
+      )}
+
+      {appearanceOpen && (
+        <div
+          className="appearance-panel"
+          role="dialog"
+          aria-label="Appearance"
+          ref={appearanceRef}
+        >
+          <ThemeCustomizer />
         </div>
       )}
     </div>

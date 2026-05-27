@@ -1,7 +1,10 @@
-// Compact header-friendly dark-mode toggle. Renders a sun icon when the
-// page is in dark mode (click to go light) and a moon when in light mode.
-// Use anywhere in the app — it carries its own state via `useTheme`.
+// Header color-wheel button. Click opens the ThemeCustomizer as a dropdown
+// panel anchored under the button — preset gallery + custom OKLCH controls
+// + light/dark toggle, all in one place. Close on outside click or Escape.
 
+import { useEffect, useRef, useState } from "react";
+
+import ThemeCustomizer from "./ThemeCustomizer";
 import { useTheme } from "./useTheme";
 import "./themeToggle.css";
 
@@ -10,40 +13,51 @@ interface Props {
 }
 
 export default function ThemeToggle({ className }: Props) {
-  const { resolved, toggle } = useTheme();
-  const next = resolved === "dark" ? "light" : "dark";
+  const { resolved } = useTheme();
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <button
-      type="button"
-      className={`theme-toggle ${className ?? ""}`.trim()}
-      onClick={toggle}
-      title={`Switch to ${next} mode`}
-      aria-label={`Switch to ${next} mode`}
-    >
-      {resolved === "dark" ? (
-        // Sun — clicking goes back to light.
-        <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
-          <circle cx="12" cy="12" r="4" fill="currentColor" />
-          <g stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M12 2v3" />
-            <path d="M12 19v3" />
-            <path d="M2 12h3" />
-            <path d="M19 12h3" />
-            <path d="M4.5 4.5l2 2" />
-            <path d="M17.5 17.5l2 2" />
-            <path d="M19.5 4.5l-2 2" />
-            <path d="M6.5 17.5l-2 2" />
-          </g>
-        </svg>
-      ) : (
-        // Crescent moon — clicking goes to dark.
-        <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
-          <path
-            d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"
-            fill="currentColor"
-          />
-        </svg>
+    <div className="theme-toggle-container" ref={containerRef}>
+      <button
+        type="button"
+        className={`theme-toggle theme-toggle--${resolved} ${className ?? ""}`.trim()}
+        onClick={() => setOpen((o) => !o)}
+        title="Customize appearance"
+        aria-label="Customize appearance"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+      />
+      {open && (
+        <div
+          className="theme-toggle-dropdown"
+          role="dialog"
+          aria-label="Appearance"
+        >
+          <ThemeCustomizer />
+        </div>
       )}
-    </button>
+    </div>
   );
 }

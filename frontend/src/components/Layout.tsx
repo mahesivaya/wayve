@@ -6,7 +6,6 @@ import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
 import SupportModal from "../support/SupportModal";
-import ThemeToggle from "../theme/ThemeToggle";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import "./Layout.css";
 
@@ -327,8 +326,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             <span aria-hidden="true">💬</span>
             <span>Support</span>
           </button>
-
-          <ThemeToggle />
 
           <ProfileMenu />
         </div>

@@ -25,6 +25,12 @@
   box-shadow: var(--u-card-shadow, 0 1px 2px rgb(0, 0, 0, 0.03));
 }
 
+/* Inside the settings grid the cards should fill the grid cell, not cap
+   themselves at the old 560px single-card width. */
+.settings-stack .settings-card {
+  max-width: none;
+}
+
 .profile-title,
 .settings-title {
   margin: 0 0 20px;
@@ -49,6 +55,8 @@
 }
 
 .profile-row input {
+  width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
   border: 1px solid var(--color-input-border);
   background: var(--color-surface);
@@ -151,10 +159,53 @@
   height: 100%;
   overflow-y: auto;
   background: var(--color-surface-soft);
-  padding: 32px 24px;
+  padding: 32px;
   box-sizing: border-box;
+}
+
+/* Centered vertical column of cards — full-pane background with the
+   stack capped at a comfortable reading width and horizontally centered,
+   so the page feels like a dedicated settings surface (not a single
+   floating card from the old layout, but not edge-to-edge either). */
+.settings-stack {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-page-title {
+  margin: 0 0 4px;
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  text-align: center;
+}
+
+.settings-card-title {
+  margin: 0 0 16px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* Replaces the old .settings-usage-section wrapper now that each section is
+   its own card — the rows just need vertical separators inside the card. */
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inline accounts list rendered directly under the "Connected Accounts"
+   row inside the Storage & Usage card. Slightly indented and grouped so
+   it visually reads as a sub-list of the row above. */
+.settings-accounts-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0 4px 16px;
 }
 
 .settings-section-title {
@@ -227,10 +278,6 @@
 .settings-billing-link:hover{
   background: var(--color-primary-action-hover);
   border-color: var(--color-primary-action-hover);
-}
-
-.settings-appearance-section {
-  margin-bottom: 24px;
 }
 
 .settings-empty {
