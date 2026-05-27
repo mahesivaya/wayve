@@ -39,11 +39,9 @@ export const EMAIL_PROVIDERS: readonly ProviderConfig[] = [
   {
     id: "yahoo",
     name: "Yahoo Mail",
-    description: "Yahoo.com personal mailboxes",
+    description: "Yahoo.com mailbox via app password",
     badge: "Y",
-    // Surfaced as disabled in the picker so enterprise buyers see it on the
-    // roadmap without us having to re-tighten the UI when it ships.
-    status: "coming_soon",
+    status: "available",
   },
 ];
 

@@ -17,6 +17,8 @@ pub mod shared_inbox;
 pub mod sync;
 pub mod sync_older;
 pub mod utils;
+pub mod yahoo;
+mod yahoo_routes;
 
 use actix_web::web;
 
@@ -32,6 +34,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(handler::send)
         .service(handler::gmail_connect_url)
         .service(outlook_oauth::outlook_connect_url)
+        .service(yahoo_routes::yahoo_connect)
         .service(provider_lookup::provider_lookup)
         .service(handler::get_me)
         .service(handler::put_theme)

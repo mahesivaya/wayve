@@ -108,6 +108,23 @@ export const getOutlookConnectUrl = async () => {
   return data.url;
 };
 
+// Yahoo doesn't use OAuth — the caller posts the email + app password
+// directly and the backend verifies via IMAP LOGIN before persisting the
+// credentials (encrypted at rest). Returns the new email_accounts row id
+// on success; throws with the backend's user-facing message on failure.
+export const connectYahoo = async (
+  email: string,
+  appPassword: string,
+): Promise<{ id: number; email: string; provider: string }> => {
+  return apiFetchJson<{ id: number; email: string; provider: string }>(
+    "/api/yahoo/connect",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, app_password: appPassword }),
+    },
+  );
+};
+
 // Persist that the user has opened this email. The frontend flips `is_read`
 // optimistically; this call is what makes the change survive a page refresh.
 // Fire-and-forget — the caller logs failures but doesn't roll the UI back.

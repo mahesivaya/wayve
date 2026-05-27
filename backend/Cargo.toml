@@ -52,6 +52,17 @@ mimalloc = { version = "0.1", default-features = false }
 hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "system-config"] }
 async-trait = "0.1"
 
+# Yahoo Mail integration — Yahoo killed third-party OAuth, so we speak
+# IMAP for read + SMTP (via lettre, above) for send. tokio-rustls layers
+# TLS over a tokio TcpStream which we then hand to async-imap. mail-parser
+# is the de-facto RFC 5322 / MIME parser in Rust; we use it to extract
+# headers and body parts from FETCH responses.
+async-imap = { version = "0.10", default-features = false, features = ["runtime-tokio"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "tls12"] }
+webpki-roots = "0.26"
+mail-parser = "0.9"
+
 # Release profile inherited by all workspace members. Same settings as
 # the pre-workspace single crate — small binary on memory-constrained
 # Docker builders, no LTO, plenty of codegen units.

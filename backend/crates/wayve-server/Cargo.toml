@@ -54,6 +54,13 @@ mimalloc.workspace = true
 hickory-resolver.workspace = true
 async-trait.workspace = true
 
+# Yahoo Mail (IMAP + MIME). lettre (above) handles SMTP send.
+async-imap.workspace = true
+tokio-rustls.workspace = true
+rustls.workspace = true
+webpki-roots.workspace = true
+mail-parser.workspace = true
+
 [dev-dependencies]
 serial_test = "3"
 wiremock = "0.6"
