@@ -176,6 +176,24 @@ export default function Billing() {
   }, [reload]);
 
   const ownerType = sub?.owner_type ?? "personal";
+
+  // Post-checkout redirect: after a successful Stripe checkout that
+  // belongs to an organization, send the owner to /organization-home so
+  // they land on their workspace dashboard instead of staying on the
+  // billing screen. Personal-plan checkouts stay on /billing where the
+  // user just landed from Stripe (existing behavior). The brief delay
+  // lets the success banner flash before navigation so the user has
+  // visual confirmation of the charge.
+  useEffect(() => {
+    if (loading) return;
+    if (checkoutStatus !== "success") return;
+    if (ownerType !== "organization") return;
+    const handle = window.setTimeout(() => {
+      navigate("/organization-home", { replace: true });
+    }, 1500);
+    return () => window.clearTimeout(handle);
+  }, [loading, checkoutStatus, ownerType, navigate]);
+
   const currentPlanCode = sub?.subscription?.plan_code ?? null;
   // A personal account with no subscription row is implicitly on the free
   // Basic tier — surface that explicitly so the card renders as "Active"
@@ -381,21 +399,22 @@ export default function Billing() {
     <div className="billing-page">
       <header className="billing-header">
         <div>
-          <h1>Billing &amp; Plans</h1>
+          <h1>{hasPaidPlan ? "Billing & Plans" : "Choose a plan"}</h1>
           <p>
-            {ownerType === "organization"
-              ? "Organization billing"
-              : "Personal billing"}{" "}
-            · {user?.email}
+            {hasPaidPlan
+              ? `${ownerType === "organization" ? "Organization billing" : "Personal billing"} · ${user?.email}`
+              : `Pick the plan that fits — you can manage it from this page once subscribed. · ${user?.email}`}
           </p>
         </div>
-        <button
-          className="billing-portal-btn"
-          onClick={() => void openPaymentMethodForm()}
-          disabled={busy === "payment-method" || busy === "save-payment-method"}
-        >
-          {busy === "payment-method" ? "Preparing…" : "Manage payment methods"}
-        </button>
+        {hasPaidPlan && (
+          <button
+            className="billing-portal-btn"
+            onClick={() => void openPaymentMethodForm()}
+            disabled={busy === "payment-method" || busy === "save-payment-method"}
+          >
+            {busy === "payment-method" ? "Preparing…" : "Manage payment methods"}
+          </button>
+        )}
       </header>
 
       {checkoutStatus === "success" && (
@@ -439,6 +458,12 @@ export default function Billing() {
       )}
 
       {/* ---- Subscription status ---- */}
+      {/* Management-only sections (Subscription, Usage, Invoices) render
+          only for paid users — a brand-new free account has nothing to
+          manage, so /billing collapses to a plan picker. The page reveals
+          the full management surface automatically after the first
+          successful checkout. */}
+      {hasPaidPlan && (
       <section className="billing-card">
         <h2>Subscription</h2>
         {activeSub ? (
@@ -486,6 +511,43 @@ export default function Billing() {
           </p>
         )}
       </section>
+      )}
+
+      {/* ---- Usage ---- */}
+      {hasPaidPlan && (
+      <section className="billing-card">
+        <h2>Usage</h2>
+        {entitlements && (
+          <p className="billing-note">
+            Plan limit: {formatBytes(entitlements.storage_limit_bytes)} storage ·{" "}
+            {entitlements.seat_limit} seats ·{" "}
+            {entitlements.active ? "active" : "free tier"}
+          </p>
+        )}
+        {usage && usage.metrics.length > 0 ? (
+          <table className="billing-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Total</th>
+                <th>Events</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usage.metrics.map((metric) => (
+                <tr key={metric.metric}>
+                  <td>{metric.metric}</td>
+                  <td>{metric.total}</td>
+                  <td>{metric.events}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="billing-empty">No usage recorded yet.</p>
+        )}
+      </section>
+      )}
 
       {/* ---- Plans / Checkout ---- */}
       <section className="billing-card">
@@ -543,6 +605,18 @@ export default function Billing() {
                   >
                     {busyHere ? "Redirecting…" : hasPaidPlan ? "Switch plan" : "Subscribe"}
                   </button>
+                ) : !isForOwner && ownerType === "personal" && plan.audience === "organization" ? (
+                  // Personal users self-promote to an organization owner via
+                  // the dedicated setup page (/organizations/new), which
+                  // captures org name + place and lets them seed members
+                  // before returning here to subscribe. We pass the plan
+                  // code so the page can show "you started with X".
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/organizations/new?plan=${plan.code}`)}
+                  >
+                    Create organization
+                  </button>
                 ) : (
                   <button type="button" disabled>
                     {isForOwner ? "Free tier" : `Requires ${plan.audience} account`}
@@ -587,41 +661,8 @@ export default function Billing() {
         </section>
       )}
 
-      {/* ---- Usage ---- */}
-      <section className="billing-card">
-        <h2>Usage</h2>
-        {entitlements && (
-          <p className="billing-note">
-            Plan limit: {formatBytes(entitlements.storage_limit_bytes)} storage ·{" "}
-            {entitlements.seat_limit} seats ·{" "}
-            {entitlements.active ? "active" : "free tier"}
-          </p>
-        )}
-        {usage && usage.metrics.length > 0 ? (
-          <table className="billing-table">
-            <thead>
-              <tr>
-                <th>Metric</th>
-                <th>Total</th>
-                <th>Events</th>
-              </tr>
-            </thead>
-            <tbody>
-              {usage.metrics.map((metric) => (
-                <tr key={metric.metric}>
-                  <td>{metric.metric}</td>
-                  <td>{metric.total}</td>
-                  <td>{metric.events}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="billing-empty">No usage recorded yet.</p>
-        )}
-      </section>
-
       {/* ---- Invoices ---- */}
+      {hasPaidPlan && (
       <section className="billing-card">
         <h2>Invoices</h2>
         {invoices.length > 0 ? (
@@ -661,6 +702,7 @@ export default function Billing() {
           <p className="billing-empty">No invoices yet.</p>
         )}
       </section>
+      )}
 
       {/* ---- Organization billing ---- */}
       {org && (

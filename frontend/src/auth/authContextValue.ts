@@ -59,6 +59,10 @@ export type AuthType = {
   // keys are missing, the user recovers via /recover-with-mnemonic.
   login: (token: string, accountType?: string, isFreshRegistration?: boolean) => void;
   logout: () => void;
+  // Re-fetch /api/me and update user state. Called after server-side
+  // mutations that change the caller's scope/permissions (e.g. a personal
+  // user creating an organization and being promoted to organization_admin).
+  refresh: () => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthType | null>(null);

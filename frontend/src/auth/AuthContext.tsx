@@ -495,8 +495,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = "/login";
   };
 
+  // Re-fetch /api/me and overwrite the cached user. Used after server-side
+  // mutations that change the caller's scope/permissions (e.g. a personal
+  // user self-promoting to organization_admin via POST /api/organizations).
+  const refresh = async () => {
+    const token = getAuthToken();
+    if (!token) return;
+    const res = await getMe(token);
+    if (!res.ok) {
+      log.warn("refresh /api/me failed", { status: res.status });
+      return;
+    }
+    const data = await res.json();
+    setUser({
+      email: data.email,
+      id: data.id,
+      username: data.username ?? null,
+      account_type: normalizeAccountType(data.account_type),
+      effective_role: data.effective_role ?? null,
+      role_label: data.role_label ?? null,
+      scope: data.scope ?? null,
+      permissions: data.permissions ?? [],
+      organization_id: data.organization_id ?? null,
+      organization_slug: data.organization_slug ?? null,
+      organization_name: data.organization_name ?? null,
+      current_plan: data.current_plan ?? null,
+      recovery_mode: normalizeRecoveryMode(data.recovery_mode),
+      theme_json: data.theme_json ?? null,
+    });
+  };
+
   return (
-    <AuthContext.Provider value={{ user, initializing, login, logout }}>
+    <AuthContext.Provider value={{ user, initializing, login, logout, refresh }}>
       {children}
       {pendingMnemonic && (
         <RecoverySeedModal

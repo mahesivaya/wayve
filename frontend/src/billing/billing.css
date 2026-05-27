@@ -445,6 +445,85 @@
   letter-spacing: 0;
 }
 
+.billing-create-org-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.billing-create-org-header h2 {
+  margin: 0 0 4px;
+}
+
+.billing-create-org-header p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  max-width: 60ch;
+  line-height: 1.5;
+}
+
+.billing-create-org-header button {
+  white-space: nowrap;
+}
+
+.billing-create-org-form {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.billing-create-org-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.billing-create-org-form label > span {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.billing-create-org-form input {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.billing-create-org-warning {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: var(--text-sm);
+  background: var(--color-warning-soft, #fff7ed);
+  color: var(--color-warning-strong, #92400e);
+  border: 1px solid var(--color-warning-border, #fed7aa);
+  border-radius: var(--radius-sm);
+}
+
+.billing-create-org-error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger-strong);
+}
+
+.billing-create-org-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.billing-create-org-actions button.secondary {
+  background: transparent;
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+
 @media (max-width: 720px){
   .billing-header {
     flex-direction: column;
@@ -453,5 +532,10 @@
 
   .billing-payment-row {
     grid-template-columns: 1fr;
+  }
+
+  .billing-create-org-header {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

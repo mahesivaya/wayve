@@ -6,14 +6,127 @@ import "../home/home.css";
 import "./admin-ui.css";
 import "./organizationAdmin.css";
 
+// Single tile spec — used for both the role-specific consoles row and the
+// app tiles row. `visible` is computed per-user from the RBAC permission
+// catalog so admins, billing, security, developer, support members each
+// see only the consoles their role can act on. App tiles are visible to
+// everyone (gated only by login).
+type Tile = {
+  icon: string;
+  label: string;
+  description: string;
+  path: string;
+  visible: boolean;
+};
+
 export default function OrganizationAdminHome() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const canSeeMembers =
     hasPermission(user, "members:read") || hasPermission(user, "members:manage");
+  const canSeeBilling =
+    hasPermission(user, "billing:read") || hasPermission(user, "billing:manage");
+  const canSeeDeveloper = hasPermission(user, "api_keys:manage");
+  const canSeeSecurity =
+    hasPermission(user, "audit:read") || hasPermission(user, "security:manage");
+  const canSeeScim = hasPermission(user, "webhooks:manage");
+  const canSeeWebhooks = hasPermission(user, "webhooks:manage");
+  const canSeeSharedInboxes = hasPermission(user, "inbox:manage");
+  const canSeeSso = hasPermission(user, "sso:manage");
 
-  // Enter / Space keyboard activation so the article behaves like a
-  // button for screen-reader + keyboard users.
+  const consoles: Tile[] = [
+    {
+      icon: "👥",
+      label: "Members & roles",
+      description: "Provision accounts inside your organization and adjust role assignments.",
+      path: "/organization/members",
+      visible: canSeeMembers,
+    },
+    {
+      icon: "💳",
+      label: "Billing",
+      description: "Subscription, plan upgrades, invoices and payment methods.",
+      path: "/billing",
+      visible: canSeeBilling,
+    },
+    {
+      icon: "🔑",
+      label: "Developer",
+      description: "API keys, scopes and usage audit for programmatic access.",
+      path: "/api-keys",
+      visible: canSeeDeveloper,
+    },
+    {
+      icon: "🛡️",
+      label: "Security",
+      description: "Audit logs, outcome filters and SIEM webhook forwarding.",
+      path: "/security/audit",
+      visible: canSeeSecurity,
+    },
+    {
+      icon: "🎧",
+      label: "Support",
+      description: "Shared inboxes and customer-support queues.",
+      path: "/settings/inboxes",
+      visible: canSeeSharedInboxes,
+    },
+    {
+      icon: "🔐",
+      label: "SSO",
+      description: "SAML / OIDC sign-in configuration for your team.",
+      path: "/settings/sso",
+      visible: canSeeSso,
+    },
+    {
+      icon: "📡",
+      label: "Webhooks",
+      description: "Outgoing event delivery and signing-secret rotation.",
+      path: "/settings/webhooks",
+      visible: canSeeWebhooks,
+    },
+    {
+      icon: "🪪",
+      label: "SCIM provisioning",
+      description: "Mint bearer tokens so Okta / Entra can provision users.",
+      path: "/settings/scim",
+      visible: canSeeScim,
+    },
+  ];
+
+  const apps: Tile[] = [
+    {
+      icon: "📬",
+      label: "Mail",
+      description: "Manage organization communication from the shared workspace.",
+      path: "/emails",
+      visible: true,
+    },
+    {
+      icon: "💬",
+      label: "Team Chat",
+      description: "Create channels, manage members, and coordinate team work.",
+      path: "/chat",
+      visible: true,
+    },
+    {
+      icon: "✅",
+      label: "Tasks",
+      description: "Create and track action items for organization workflows.",
+      path: "/tasks",
+      visible: true,
+    },
+    {
+      icon: "📅",
+      label: "Scheduler",
+      description: "Review meetings and plan team schedules.",
+      path: "/scheduler",
+      visible: true,
+    },
+  ];
+
+  const visibleConsoles = consoles.filter((c) => c.visible);
+  const hasAnyConsole = visibleConsoles.length > 0;
+
   const handleCardKeyDown = (
     event: KeyboardEvent<HTMLElement>,
     path: string,
@@ -24,6 +137,22 @@ export default function OrganizationAdminHome() {
     }
   };
 
+  const renderTile = (t: Tile) => (
+    <article
+      key={t.path}
+      className="org-home-tile"
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${t.label}`}
+      onClick={() => navigate(t.path)}
+      onKeyDown={(event) => handleCardKeyDown(event, t.path)}
+    >
+      <div className="org-home-tile-icon" aria-hidden="true">{t.icon}</div>
+      <h3 className="org-home-tile-title">{t.label}</h3>
+      <p className="org-home-tile-desc">{t.description}</p>
+    </article>
+  );
+
   return (
     <div className="organization-admin-home u-page-shell">
       <div className="organization-admin-header u-panel u-flex-between">
@@ -33,50 +162,31 @@ export default function OrganizationAdminHome() {
         </div>
       </div>
 
-      {canSeeMembers && (
+      <section className="organization-admin-panel u-panel">
+        <div className="organization-admin-section-header">
+          <div>
+            <h2>Workspace</h2>
+            <p>Day-to-day apps for the whole organization.</p>
+          </div>
+        </div>
+        <div className="org-home-tiles">
+          {apps.map(renderTile)}
+        </div>
+      </section>
+
+      {hasAnyConsole && (
         <section className="organization-admin-panel u-panel">
           <div className="organization-admin-section-header">
             <div>
               <h2>Organization consoles</h2>
-              <p>Admin surfaces for managing your organization.</p>
+              <p>Role-specific dashboards across your organization.</p>
             </div>
           </div>
-          <div className="organization-name-list platform-console-list">
-            <article
-              className="u-card-interactive"
-              role="button"
-              tabIndex={0}
-              aria-label="Open Members & roles"
-              onClick={() => navigate("/organization/members")}
-              onKeyDown={(event) =>
-                handleCardKeyDown(event, "/organization/members")
-              }
-            >
-              <strong>Members & roles</strong>
-              <span>Create accounts inside your organization and adjust their roles.</span>
-            </article>
+          <div className="org-home-tiles">
+            {visibleConsoles.map(renderTile)}
           </div>
         </section>
       )}
-
-      <div className="organization-admin-grid">
-        <article className="u-card" onClick={() => navigate("/emails")}>
-          <h3>Mail</h3>
-          <p>Manage organization communication from the shared workspace.</p>
-        </article>
-        <article className="u-card" onClick={() => navigate("/chat")}>
-          <h3>Team Chat</h3>
-          <p>Create channels, manage members, and coordinate team work.</p>
-        </article>
-        <article className="u-card" onClick={() => navigate("/tasks")}>
-          <h3>Tasks</h3>
-          <p>Create and track action items for organization workflows.</p>
-        </article>
-        <article className="u-card" onClick={() => navigate("/scheduler")}>
-          <h3>Scheduler</h3>
-          <p>Review meetings and plan team schedules.</p>
-        </article>
-      </div>
     </div>
   );
 }

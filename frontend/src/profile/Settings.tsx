@@ -6,6 +6,8 @@ import "./profile.css";
 import { deleteAccount, getAccounts } from "../api/email";
 import { getSubscription, type SubscriptionResponse } from "../api/billing";
 import { getProfile, type ProfileData } from "../api/profile";
+import { deleteMyOrganization } from "../api/admin";
+import { useAuth } from "../auth/useAuth";
 
 type Account = {
   id: number;
@@ -29,6 +31,7 @@ function formatBytes(bytes: number): string {
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { user, refresh } = useAuth();
   const [profile, setProfile] = useState<(ProfileData & {
     total_emails?: number;
     email_storage_bytes?: number;
@@ -40,6 +43,36 @@ export default function Settings() {
   const [subscription, setSubscription] = useState<SubscriptionResponse | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loaded, setLoaded] = useState(false);
+
+  // Only the org owner can tear the org back down. Mirrors the backend
+  // gate so the danger-zone card simply doesn't render for admins,
+  // members, personal accounts, or platform users.
+  const isOrgOwner =
+    user?.scope === "organization" && user?.effective_role === "owner";
+  const [deletingOrg, setDeletingOrg] = useState(false);
+  const [deleteOrgError, setDeleteOrgError] = useState("");
+
+  const onDeleteOrg = async () => {
+    const orgName = user?.organization_name ?? "this organization";
+    if (!window.confirm(
+      `Delete ${orgName}? Every member account you added will be removed and your own account will revert to a personal plan.`
+    )) {
+      return;
+    }
+    setDeleteOrgError("");
+    setDeletingOrg(true);
+    try {
+      await deleteMyOrganization();
+      await refresh();
+      navigate("/home", { replace: true });
+    } catch (err) {
+      setDeleteOrgError(
+        err instanceof Error ? err.message : "Failed to delete organization"
+      );
+    } finally {
+      setDeletingOrg(false);
+    }
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -168,6 +201,29 @@ export default function Settings() {
             </div>
           </div>
         </section>
+
+        {isOrgOwner && (
+          <section className="settings-card settings-danger">
+            <h2 className="settings-card-title settings-danger-title">Danger zone</h2>
+            <p className="settings-danger-text">
+              Delete the organization and revert your own account to a
+              personal account. Every member account you provisioned will
+              be removed. Your own emails, chats, and files stay on your
+              account.
+            </p>
+            {deleteOrgError && (
+              <p className="settings-danger-error">{deleteOrgError}</p>
+            )}
+            <button
+              type="button"
+              className="settings-danger-btn"
+              onClick={() => void onDeleteOrg()}
+              disabled={deletingOrg}
+            >
+              {deletingOrg ? "Deleting…" : "Delete organization & revert to personal"}
+            </button>
+          </section>
+        )}
 
       </div>
     </div>

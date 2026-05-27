@@ -127,6 +127,70 @@ export async function revokeOrganizationApiKey(
   );
 }
 
+// Self-serve: a personal user creates an organization for themselves and
+// is promoted to its owner. Returns the new org plus the new account_type
+// so the caller can refresh AuthContext. The starter entitlement grants
+// `seat_limit` (currently 100) free seats so the owner can invite members
+// before subscribing.
+export type CreatedMyOrganization = {
+  id: number;
+  name: string;
+  slug: string | null;
+  place: string | null;
+  account_type: string;
+  organization_id: number;
+  role: string;
+  seat_limit: number;
+};
+
+export async function createMyOrganization(input: {
+  name: string;
+  place?: string;
+}): Promise<CreatedMyOrganization> {
+  const res = await apiFetch("/api/organizations", {
+    method: "POST",
+    preserve401: true,
+    body: JSON.stringify({
+      name: input.name,
+      place: input.place && input.place.trim() ? input.place.trim() : null,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to create organization");
+  }
+
+  return data;
+}
+
+export type DeletedMyOrganization = {
+  deleted_organization_id: number;
+  deleted_member_count: number;
+  account_type: string;
+};
+
+// Tear down the caller's organization and revert them to a personal
+// account. The backend deletes every invitee account in the org, drops
+// the org row (cascades members, entitlements, billing rows), and flips
+// the owner back to account_type='personal'. Refuses with 409 if an
+// active Stripe subscription exists — cancel from /billing first.
+export async function deleteMyOrganization(): Promise<DeletedMyOrganization> {
+  const res = await apiFetch("/api/organizations/me", {
+    method: "DELETE",
+    preserve401: true,
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to delete organization");
+  }
+
+  return data;
+}
+
 // Creates a user as the calling admin. `email` is the full login address; the
 // caller builds it from a handle and the organization domain (or wayve.com for
 // personal accounts).

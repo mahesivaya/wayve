@@ -354,6 +354,16 @@ pub struct CreateOrganizationInput {
     pub admin_password: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct CreateMyOrganizationInput {
+    pub name: String,
+    /// Free-form locale (city, country, address) shown in the org setup page
+    /// and on the organization home. Optional — empty/missing is stored as
+    /// NULL.
+    #[serde(default)]
+    pub place: Option<String>,
+}
+
 /// Require the caller to be platform-scope staff holding `members:manage` — the
 /// gate for platform-only actions such as provisioning organizations. Platform
 /// `owner`, `super_admin`, and `admin` qualify. Returns the caller's user id.
@@ -591,6 +601,325 @@ pub async fn admin_create_organization(
         "slug": organization_slug,
         "user_count": user_count,
         "admin": admin_json
+    })))
+}
+
+/// Self-serve org creation: a personal user creates an organization and is
+/// promoted to its owner. The user's account_type flips from 'personal' to
+/// 'organization_admin', they become a member of the new org with role
+/// 'owner', and subsequent /api/me reflects the new scope + permissions.
+/// The JWT is left untouched because RBAC is computed per request from the
+/// DB — the next request after this call sees the new role.
+#[post("/organizations")]
+#[instrument(target = "auth", skip(req, pool, data), fields(name = %data.name))]
+pub async fn create_my_organization(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<CreateMyOrganizationInput>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Authentication required" })));
+        }
+    };
+
+    let name = data.name.trim();
+    if name.is_empty() {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Organization name is required" })));
+    }
+    if name.len() > 120 {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Organization name is too long" })));
+    }
+
+    let place = data
+        .place
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    if place.as_deref().is_some_and(|p| p.len() > 200) {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Place is too long" })));
+    }
+
+    // Only personal users may self-serve. Platform staff and existing org
+    // members already belong to a scope and would either escalate their own
+    // privileges or orphan themselves from their current org.
+    let current_account_type: Option<String> =
+        sqlx::query_scalar("SELECT account_type FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
+
+    let current_account_type = match current_account_type {
+        Some(t) => t,
+        None => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Account not found" })));
+        }
+    };
+
+    if current_account_type != "personal" {
+        return Ok(HttpResponse::Conflict().json(serde_json::json!({
+            "message": "Your account already belongs to an organization or platform scope"
+        })));
+    }
+
+    let mut tx = pool.begin().await?;
+
+    let org_row = match sqlx::query(
+        r#"
+        INSERT INTO organizations (name, slug, place)
+        VALUES (
+            $1,
+            lower(regexp_replace($1, '[^a-zA-Z0-9]+', '', 'g')),
+            $2
+        )
+        RETURNING id, name, slug, place
+        "#,
+    )
+    .bind(name)
+    .bind(place.as_deref())
+    .fetch_one(&mut *tx)
+    .await
+    {
+        Ok(row) => row,
+        Err(e) => {
+            if e.to_string().contains("duplicate key") {
+                return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                    "message": "An organization with that name already exists"
+                })));
+            }
+            return Err(AppError::Db(e));
+        }
+    };
+
+    let organization_id: i32 = org_row.get("id");
+    let organization_name: String = org_row.get("name");
+    let organization_slug: Option<String> = org_row.get("slug");
+    let organization_place: Option<String> = org_row.get("place");
+
+    sqlx::query(
+        r#"
+        UPDATE users
+           SET account_type = 'organization_admin',
+               organization_id = $1
+         WHERE id = $2
+        "#,
+    )
+    .bind(organization_id)
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO organization_members (organization_id, user_id, role)
+        VALUES ($1, $2, 'owner')
+        ON CONFLICT (organization_id, user_id) DO UPDATE
+        SET role = EXCLUDED.role, updated_at = NOW()
+        "#,
+    )
+    .bind(organization_id)
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // Seed a starter entitlement so the brand-new org can add up to 100
+    // members before subscribing. The basic_user free baseline grants only
+    // one seat, which would block the org owner from inviting anybody. When
+    // the owner later subscribes, refresh_entitlements() overwrites this
+    // row from the chosen plan's seat_limit, so this is purely a free-tier
+    // headroom, not a permanent override.
+    const STARTER_SEAT_LIMIT: i32 = 100;
+    const STARTER_STORAGE_BYTES: i64 = 1_073_741_824; // 1 GiB
+    sqlx::query(
+        r#"
+        INSERT INTO entitlements
+            (organization_id, plan_code, storage_limit_bytes,
+             seat_limit, features, active)
+        VALUES ($1, 'basic_user', $2, $3, '{}'::jsonb, false)
+        ON CONFLICT DO NOTHING
+        "#,
+    )
+    .bind(organization_id)
+    .bind(STARTER_STORAGE_BYTES)
+    .bind(STARTER_SEAT_LIMIT)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    invalidate_profile_cache(user_id).await;
+    invalidate_me_cache(user_id).await;
+
+    info!(target: "auth", user_id, organization_id, "personal user created organization");
+    Ok(HttpResponse::Created().json(serde_json::json!({
+        "id": organization_id,
+        "name": organization_name,
+        "slug": organization_slug,
+        "place": organization_place,
+        "account_type": "organization_admin",
+        "organization_id": organization_id,
+        "role": "owner",
+        "seat_limit": STARTER_SEAT_LIMIT
+    })))
+}
+
+/// Self-serve org teardown. The org owner deletes the organization, all of
+/// the invitee accounts they provisioned, and reverts themselves to a
+/// personal account. Used by the /organizations/new "revert to personal"
+/// affordance — every artifact created in the setup flow goes away in one
+/// transaction.
+///
+/// Refuses when an active subscription exists so we never leave a zombie
+/// Stripe customer charging the user after the local org disappears. The
+/// owner must cancel from /billing first in that case.
+#[delete("/organizations/me")]
+#[instrument(target = "auth", skip(req, pool))]
+pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Authentication required" })));
+        }
+    };
+
+    // Resolve scope + role from the DB. Only an organization owner may
+    // tear down their own organization.
+    let ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
+        Ok(ctx) => ctx,
+        Err(sqlx::Error::RowNotFound) => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Account not found" })));
+        }
+        Err(e) => return Err(AppError::Db(e)),
+    };
+    if ctx.scope != Scope::Organization {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Only an organization owner can delete an organization"
+        })));
+    }
+    if ctx.role != Role::Owner {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Only the organization owner can delete it"
+        })));
+    }
+    let organization_id = match ctx.organization_id {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "message": "Your account is not bound to an organization"
+            })));
+        }
+    };
+
+    // Reject if there's an active/trialing Stripe subscription. Cancelling
+    // it requires hitting the Stripe API, which is the user's job via the
+    // /billing "Cancel subscription" affordance — surfacing that explicitly
+    // is safer than deleting and orphaning charges.
+    let active_sub: Option<i32> = sqlx::query_scalar(
+        r#"
+        SELECT id FROM subscriptions
+         WHERE organization_id = $1
+           AND status IN ('active', 'trialing')
+         LIMIT 1
+        "#,
+    )
+    .bind(organization_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    if active_sub.is_some() {
+        return Ok(HttpResponse::Conflict().json(serde_json::json!({
+            "message": "Cancel the organization's subscription on the Billing page before deleting the organization."
+        })));
+    }
+
+    // Snapshot invitee user ids (everyone in the org except the owner).
+    // Once we drop the organization the FK ON DELETE SET NULL on
+    // users.organization_id would null them out, so we'd lose the ability
+    // to identify the cohort to delete.
+    let invitee_ids: Vec<i32> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE organization_id = $1 AND id <> $2",
+    )
+    .bind(organization_id)
+    .bind(user_id)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    let mut tx = pool.begin().await?;
+
+    // Notes has user_id with no FK constraint (see init.sql:469), so it
+    // doesn't ride the cascade on `users`. Wipe it explicitly for every
+    // invitee being deleted before the cascade runs.
+    if !invitee_ids.is_empty() {
+        sqlx::query("DELETE FROM notes WHERE user_id = ANY($1)")
+            .bind(&invitee_ids)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query("DELETE FROM users WHERE id = ANY($1)")
+            .bind(&invitee_ids)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    // Revert the owner to a personal account. The organizations DELETE
+    // below would null out organization_id via FK ON DELETE SET NULL, but
+    // we also need to flip account_type back to 'personal' so they leave
+    // the org-admin RBAC scope.
+    sqlx::query(
+        r#"
+        UPDATE users
+           SET account_type = 'personal',
+               organization_id = NULL
+         WHERE id = $1
+        "#,
+    )
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // Cascades clean up organization_members, entitlements,
+    // billing_customers, subscriptions, drive_shares, siem_webhook_configs,
+    // shared inboxes, etc. — every table that referenced organizations.id
+    // is declared ON DELETE CASCADE in init.sql.
+    let deleted = sqlx::query("DELETE FROM organizations WHERE id = $1")
+        .bind(organization_id)
+        .execute(&mut *tx)
+        .await?;
+    if deleted.rows_affected() == 0 {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Organization not found" })));
+    }
+
+    tx.commit().await?;
+
+    invalidate_profile_cache(user_id).await;
+    invalidate_me_cache(user_id).await;
+    for invitee_id in &invitee_ids {
+        invalidate_profile_cache(*invitee_id).await;
+        invalidate_me_cache(*invitee_id).await;
+    }
+
+    info!(
+        target: "auth",
+        user_id,
+        organization_id,
+        invitee_count = invitee_ids.len(),
+        "organization owner reverted to personal — org deleted"
+    );
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "deleted_organization_id": organization_id,
+        "deleted_member_count": invitee_ids.len(),
+        "account_type": "personal"
     })))
 }
 

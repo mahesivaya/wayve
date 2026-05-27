@@ -86,6 +86,12 @@ UPDATE organizations
 CREATE UNIQUE INDEX IF NOT EXISTS organizations_slug_unique_idx
     ON organizations (slug) WHERE slug IS NOT NULL;
 
+-- Free-form location string captured at self-serve org creation. Used in the
+-- organization setup page (and surfaced in the org home header) so the owner
+-- can pin a real-world locale to the workspace. Idempotent ALTER keeps
+-- re-running init.sql safe.
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS place TEXT;
+
 CREATE TABLE IF NOT EXISTS organization_members (
     organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

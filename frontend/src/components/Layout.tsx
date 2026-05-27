@@ -189,11 +189,17 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     authedUser.account_type === "personal" && currentPlanCode === "basic_user";
 
   function goToUpgrade() {
+    // The Upgrade nudge is rendered only for `isBasicPersonalUser`, so we
+    // always land on /billing — the page that actually lists the plan grid
+    // (with Subscribe/Switch CTAs) plus the "Create organization" surface
+    // for personal users who want team-tier plans. /pricing redirects
+    // personal users to /settings via RedirectIfPersonal, so it would be a
+    // dead end here.
     const params = new URLSearchParams({
       account: authedUser.account_type,
       plan: currentPlanCode,
     });
-    void navigate(`/pricing?${params.toString()}`, {
+    void navigate(`/billing?${params.toString()}`, {
       state: {
         accountType: authedUser.account_type,
         currentPlan: authedUser.current_plan,

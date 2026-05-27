@@ -280,6 +280,45 @@
   border-color: var(--color-primary-action-hover);
 }
 
+.settings-danger {
+  border-color: var(--color-danger-border, #fecaca);
+  background: var(--color-danger-soft, #fef2f2);
+}
+
+.settings-danger-title {
+  color: var(--color-danger-strong, #991b1b);
+}
+
+.settings-danger-text {
+  margin: 8px 0 12px;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+.settings-danger-error {
+  margin: 0 0 12px;
+  font-size: var(--text-sm);
+  color: var(--color-danger-strong);
+}
+
+.settings-danger-btn {
+  padding: 8px 16px;
+  background: var(--color-danger-strong, #b91c1c);
+  color: #fff;
+  border: 1px solid var(--color-danger-strong, #b91c1c);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-danger-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .settings-empty {
   font-size: var(--text-lg);
   color: var(--color-text-muted);
