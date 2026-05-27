@@ -1,6 +1,10 @@
 /* ============================================================
    Marketing pages (Enterprise, Support) — shared styling
    Layered on top of home.css's `public-home-*` classes.
+
+   Editorial typography (Fraunces + Inter font pair) lives in
+   home.css since it imports BOTH from the public Home variant
+   and MarketingShell.
    ============================================================ */
 
 .marketing-hero {

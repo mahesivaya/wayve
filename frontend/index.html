@@ -5,6 +5,22 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>frontend</title>
+
+    <!--
+      Editorial font pair for the marketing surfaces (`.public-home`).
+      Fraunces is a free Google Fonts approximation of the Tiempos
+      Headline / GT Sectra serif used on Stripe / Linear / ChatGPT
+      marketing pages. Inter is the body sans those same sites pair
+      with it. Scoped to `.public-home` in marketing.css so the
+      authenticated app UI keeps its current sans-serif look.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
     <!--
       Pre-paint theme bootstrap. Runs synchronously before React mounts so
       the page never flashes. Light is the default for every visitor —

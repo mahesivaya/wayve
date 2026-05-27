@@ -10,6 +10,73 @@
     linear-gradient(90deg, rgb(111, 92, 214, 0.25), rgb(235, 239, 246, 0.7) 34%, var(--color-hero-gradient-stop) 100%),
     var(--color-surface-cool-pale);
   color: var(--color-accent-indigo-darkest);
+
+  /* Editorial typography for the public marketing surface — applies
+     to BOTH the public Home variant (this file imported directly)
+     and the MarketingShell wrapper (which also imports home.css).
+     Fraunces is a free Google Fonts approximation of the Tiempos
+     Headline / GT Sectra serif used on Stripe / Linear / ChatGPT
+     marketing pages; Inter is the body sans those same sites use.
+     Loaded in index.html. Authenticated app UI is scoped under
+     `.dashboard` / feature-specific classes and is unaffected. */
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-feature-settings: "kern" 1, "liga" 1;
+}
+
+/* Headings get the Fraunces serif. `ss01` turns on Fraunces's
+   stylistic-set 1 (alternate `g`, tightened joins). Negative
+   tracking matches what editorial serifs need at display sizes. */
+.public-home h1,
+.public-home h2,
+.public-home h3 {
+  font-family: "Fraunces", "Tiempos Headline", "GT Sectra", "Newsreader",
+    Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-feature-settings: "kern" 1, "liga" 1, "ss01" 1;
+}
+
+/* Hero H1s carry the most visual weight so they hold up against
+   the long body paragraphs below them. */
+.public-home .hero-copy h1,
+.public-home .marketing-hero-copy h1 {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+/* Body copy: Inter, generous line-height for readability. */
+.public-home p,
+.public-home li,
+.public-home small {
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+/* SpaceX-style eyebrow / kicker — keep its existing wide tracking
+   and uppercase styling from the original rules below, just force
+   the family back to Inter so it doesn't inherit Fraunces. */
+.public-home .hero-kicker,
+.public-home .marketing-eyebrow {
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+
+/* Buttons in the marketing chrome stay sans — matches the
+   editorial sites this design references (Stripe / Linear). */
+.public-home button {
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+/* The wordmark "Wayve" in the top-left becomes the visual anchor
+   for the editorial system — rendered in Fraunces so the brand
+   reads as part of the same typographic voice as the headings. */
+.public-home .public-home-brand {
+  font-family: "Fraunces", "Tiempos Headline", Georgia, serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .public-home::-webkit-scrollbar{

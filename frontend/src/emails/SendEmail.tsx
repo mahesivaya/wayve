@@ -14,8 +14,11 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  // Default to "standard" so the compose flow doesn't gate on the
+  // recipient having Wayve encryption set up. The Fully-encrypted
+  // alert below makes the trade-off explicit when the user opts in.
   const [encryptionMode, setEncryptionMode] =
-    useState<EmailEncryptionMode>("fully_encrypted");
+    useState<EmailEncryptionMode>("standard");
 
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
@@ -58,7 +61,7 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
       setTo("");
       setSubject("");
       setBody("");
-      setEncryptionMode("fully_encrypted");
+      setEncryptionMode("standard");
       onSent?.();
       setTimeout(() => onClose?.(), 800);
     } catch (err) {
@@ -147,10 +150,11 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
                 display: "block",
                 color: "#4b5563",
                 fontSize: 12,
-                lineHeight: 1.35
+                lineHeight: 1.35,
+                marginTop: 2
               }}
             >
-              Only Wayve users can decrypt and read this email inside Wayve.
+              End-to-end RSA encryption — recipient needs a Wayve account.
             </span>
           </span>
         </label>
@@ -179,15 +183,44 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
                 display: "block",
                 color: "#4b5563",
                 fontSize: 12,
-                lineHeight: 1.35
+                lineHeight: 1.35,
+                marginTop: 2
               }}
             >
-              Sends normal email content that can also be viewed in Gmail.
+              Sends email content that can also be viewed in Gmail.
             </span>
           </span>
         </label>
       </div>
-  
+
+      {/* Persistent alert banner while the user has opted into full
+          encryption. Render is purely a derivation of `encryptionMode`,
+          so switching back to Standard hides it instantly and a
+          successful send resets the mode (which hides this too). */}
+      {encryptionMode === "fully_encrypted" && (
+        <div
+          role="alert"
+          aria-live="polite"
+          style={{
+            padding: "10px 12px",
+            borderRadius: 6,
+            border: "1px solid #fcd34d",
+            background: "#fffbeb",
+            color: "#92400e",
+            fontSize: 13,
+            lineHeight: 1.4,
+            display: "flex",
+            gap: 8,
+            alignItems: "flex-start"
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1 }}>🔒</span>
+          <span>
+            <strong>Only Wayve users can decrypt and read this email inside Wayve.</strong>
+          </span>
+        </div>
+      )}
+
       <button
         onClick={sendEmail}
         disabled={loading}
