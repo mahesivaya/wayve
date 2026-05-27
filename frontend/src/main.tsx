@@ -5,6 +5,7 @@ import "./index.css";
 
 import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
+import { CustomThemeProvider } from "./theme/CustomThemeContext";
 import { installDevLog } from "./utils/devlog";
 import { loadRuntimeConfig } from "./config/runtimeConfig";
 
@@ -16,9 +17,11 @@ installDevLog();
 void loadRuntimeConfig().finally(() => {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <CustomThemeProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </CustomThemeProvider>
     </BrowserRouter>
   );
 });

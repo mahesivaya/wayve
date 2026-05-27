@@ -1,0 +1,245 @@
+/* Theme customizer — eats its own dog food, all colors come from index.css
+   tokens so the customizer itself reflects whichever theme is currently
+   active. */
+
+.theme-customizer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.theme-customizer-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 8px;
+}
+
+.theme-customizer-tab {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.theme-customizer-tab:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.theme-customizer-tab.active {
+  background: var(--color-primary-action);
+  color: var(--color-on-primary);
+}
+
+.theme-customizer-reset {
+  margin-left: auto;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--color-input-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.theme-customizer-reset:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+/* Preset gallery */
+
+.theme-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.theme-preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.theme-preset-card:hover {
+  border-color: var(--color-primary-action);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.theme-preset-card.active {
+  border-color: var(--color-primary-action);
+  box-shadow: 0 0 0 2px var(--color-primary-action);
+}
+
+.theme-preset-swatch {
+  position: relative;
+  width: 100%;
+  height: 80px;
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.theme-preset-swatch-dot {
+  position: absolute;
+  top: 10px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.theme-preset-swatch-dot:nth-child(1) { left: 12px; }
+.theme-preset-swatch-dot:nth-child(2) { left: 32px; }
+.theme-preset-swatch-dot:nth-child(3) { left: 52px; }
+
+.theme-preset-swatch-bar {
+  height: 6px;
+  border-radius: 3px;
+  width: 70%;
+}
+
+.theme-preset-swatch-bar-short {
+  width: 45%;
+  opacity: 0.6;
+}
+
+.theme-preset-name {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.theme-preset-desc {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.3;
+}
+
+.theme-preset-mode {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+/* Custom panel */
+
+.theme-custom-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.theme-custom-mode {
+  display: flex;
+  gap: 16px;
+  font-size: var(--text-md);
+  color: var(--color-text-secondary);
+}
+
+.theme-custom-mode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.theme-custom-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.theme-custom-row label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.theme-custom-row input[type="range"] {
+  width: 100%;
+}
+
+/* The hue slider gets a rainbow track so the user can see which hue they're
+   selecting at a glance. */
+.theme-custom-hue-slider {
+  appearance: none;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    oklch(65% 0.2 0),
+    oklch(65% 0.2 60),
+    oklch(65% 0.2 120),
+    oklch(65% 0.2 180),
+    oklch(65% 0.2 240),
+    oklch(65% 0.2 300),
+    oklch(65% 0.2 360)
+  );
+}
+
+.theme-custom-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.theme-customizer-apply {
+  padding: 9px 18px;
+  background: var(--color-primary-action);
+  color: var(--color-on-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.theme-customizer-apply:hover {
+  background: var(--color-primary-action-hover);
+}
+
+.theme-customizer-revert {
+  padding: 9px 16px;
+  background: transparent;
+  border: 1px solid var(--color-input-border);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-lg);
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.theme-customizer-revert:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}

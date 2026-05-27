@@ -8,6 +8,7 @@ import { deleteAccount, getAccounts } from "../api/email";
 import { getSubscription, type SubscriptionResponse } from "../api/billing";
 import { getProfile, type ProfileData } from "../api/profile";
 import { useAuth } from "../auth/useAuth";
+import ThemeCustomizer from "../theme/ThemeCustomizer";
 
 type Account = {
   id: number;
@@ -217,6 +218,14 @@ export default function Settings() {
               <span className="profile-status">{passwordStatus}</span>
             )}
           </div>
+        </div>
+
+        <div className="settings-section-title">
+          Appearance
+        </div>
+
+        <div className="settings-appearance-section">
+          <ThemeCustomizer />
         </div>
 
         <div className="settings-section-title">
