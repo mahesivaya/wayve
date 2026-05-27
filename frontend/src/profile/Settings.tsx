@@ -12,9 +12,20 @@ type Account = {
   email: string;
 };
 
+const BYTES_IN_KB = 1024;
 const BYTES_IN_MB = 1024 ** 2;
 const BYTES_IN_GB = 1024 ** 3;
 const DEFAULT_MEMORY_LIMIT = 10 * BYTES_IN_GB;
+
+// Picks a human-friendly unit for a byte count. Plain `(b/GB).toFixed(1)`
+// hides everything under ~50 MB as "0.0 GB", which made the Memory Used
+// row look stuck at zero while email storage was already in the MB range.
+function formatBytes(bytes: number): string {
+  if (bytes < BYTES_IN_KB) return `${bytes} B`;
+  if (bytes < BYTES_IN_MB) return `${(bytes / BYTES_IN_KB).toFixed(1)} KB`;
+  if (bytes < BYTES_IN_GB) return `${(bytes / BYTES_IN_MB).toFixed(1)} MB`;
+  return `${(bytes / BYTES_IN_GB).toFixed(2)} GB`;
+}
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -74,8 +85,9 @@ export default function Settings() {
               <span>Memory Used</span>
               <strong className={!loaded ? "settings-loading-text" : ""}>
                 {profile?.memory_used_bytes !== undefined
-                  ? `${(profile.memory_used_bytes / BYTES_IN_GB).toFixed(1)} GB /
-                     ${((profile.memory_limit_bytes ?? DEFAULT_MEMORY_LIMIT) / BYTES_IN_GB).toFixed(0)} GB`
+                  ? `${formatBytes(profile.memory_used_bytes)} / ${(
+                      (profile.memory_limit_bytes ?? DEFAULT_MEMORY_LIMIT) / BYTES_IN_GB
+                    ).toFixed(0)} GB`
                   : "Loading…"}
               </strong>
             </div>
@@ -89,15 +101,15 @@ export default function Settings() {
             </div>
             <div className="settings-usage-row">
               <span>Email Storage</span>
-              <strong>{profile?.email_storage_bytes !== undefined ? `${(profile.email_storage_bytes / BYTES_IN_MB).toFixed(1)} MB` : "Loading…"}</strong>
+              <strong>{profile?.email_storage_bytes !== undefined ? formatBytes(profile.email_storage_bytes) : "Loading…"}</strong>
             </div>
             <div className="settings-usage-row">
               <span>Drive Storage</span>
-              <strong>{profile?.drive_storage_bytes !== undefined ? `${(profile.drive_storage_bytes / BYTES_IN_MB).toFixed(1)} MB` : "Loading…"}</strong>
+              <strong>{profile?.drive_storage_bytes !== undefined ? formatBytes(profile.drive_storage_bytes) : "Loading…"}</strong>
             </div>
             <div className="settings-usage-row">
               <span>Other Apps (Chat, Notes)</span>
-              <strong>{profile?.other_storage_bytes !== undefined ? `${(profile.other_storage_bytes / BYTES_IN_MB).toFixed(1)} MB` : "Loading…"}</strong>
+              <strong>{profile?.other_storage_bytes !== undefined ? formatBytes(profile.other_storage_bytes) : "Loading…"}</strong>
             </div>
             <div className="settings-usage-row">
               <span>Connected Accounts</span>
