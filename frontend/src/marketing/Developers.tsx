@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import DocsShell from "../docs/DocsShell";
 import "./developers.css";
 
 // Self-hosted Redoc — frontend/public/redoc.standalone.js. Loaded lazily on
@@ -193,94 +193,20 @@ const SPEC_URL = "/api/openapi.json";
 
 export default function Developers() {
   const { user } = useAuth();
-  const redocRef = useRef<HTMLDivElement>(null);
-  const [redocReady, setRedocReady] = useState(false);
-  const [redocError, setRedocError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const init = () => {
-      if (cancelled || !redocRef.current) return;
-      const redoc = window.Redoc;
-      if (!redoc) return;
-      try {
-        redoc.init(
-          SPEC_URL,
-          {
-            scrollYOffset: 16,
-            hideDownloadButton: false,
-            disableSearch: false,
-            theme: {
-              colors: { primary: { main: "#2563eb" } },
-              typography: {
-                fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-                code: { fontSize: "13px" },
-              },
-            },
-          },
-          redocRef.current,
-        );
-        setRedocReady(true);
-      } catch (err) {
-        setRedocError(err instanceof Error ? err.message : "Failed to render reference");
-      }
-    };
-
-    if (window.Redoc) {
-      init();
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    let script = document.querySelector<HTMLScriptElement>(
-      `script[src="${REDOC_SCRIPT}"]`,
-    );
-    if (!script) {
-      script = document.createElement("script");
-      script.src = REDOC_SCRIPT;
-      script.async = true;
-      document.body.appendChild(script);
-    }
-    const onLoad = () => init();
-    const onError = () => {
-      if (cancelled) return;
-      setRedocError("Could not load the API reference bundle.");
-    };
-    script.addEventListener("load", onLoad, { once: true });
-    script.addEventListener("error", onError, { once: true });
-
-    return () => {
-      cancelled = true;
-      script?.removeEventListener("load", onLoad);
-      script?.removeEventListener("error", onError);
-    };
-  }, []);
+  // The embedded Redoc panel that used to render the OpenAPI spec
+  // inline has been removed — the interactive reference now lives at
+  // /docs/api (Swagger UI). One canonical place for the spec means
+  // less duplication, no ~890KB Redoc bundle on this page, and no
+  // two-column-clipping when the surrounding shell is narrow.
 
   const dashboardLink = user ? "/platform/secrets" : "/register";
 
   return (
+    <DocsShell title="Developer overview">
     <div className="dev-portal">
-      <header className="dev-header">
-        <Link to="/" className="dev-header-brand">
-          <span className="dev-header-logo">✉</span>
-          <span>Wayve</span>
-        </Link>
-        <nav className="dev-header-nav" aria-label="Developers navigation">
-          <Link to="/">Home</Link>
-          <Link to="/pricing">Pricing</Link>
-          <Link to="/enterprise">Enterprise</Link>
-          <Link to="/support">Support</Link>
-          <Link to="/developers" aria-current="page">Developers</Link>
-        </nav>
-        <div className="dev-header-actions">
-          <Link to="/login">Sign in</Link>
-          <Link to={dashboardLink} className="dev-header-primary">
-            {user ? "API keys" : "Get started"}
-          </Link>
-        </div>
-      </header>
+      {/* dev-header / dev-footer removed — DocsShell now provides the
+          brand + nav + footer via MarketingShell. dev-portal stays as
+          the in-page layout container for the hero + sections. */}
 
       <header className="dev-hero">
         <div className="dev-hero-inner">
@@ -390,72 +316,26 @@ export default function Developers() {
             <code>{SPEC_URL}</code>
           </a>{" "}
           — import it into Postman, Insomnia, an SDK generator, or any other
-          OpenAPI 3.1-aware tool.
+          OpenAPI 3.1-aware tool. For an interactive view with{" "}
+          <strong>Try it out</strong> and <strong>Authorize</strong>
+          (paste your X-API-KEY once, fire live requests against any
+          endpoint), open the Swagger UI:
         </p>
-        {redocError && <div className="dev-banner">{redocError}</div>}
-        {!redocReady && !redocError && (
-          <div className="dev-loader">Loading API reference…</div>
-        )}
-        <div
-          ref={redocRef}
-          className="dev-redoc"
-          style={{ display: redocReady ? "block" : "none" }}
-        />
+        <div className="dev-reference-cta">
+          <Link to="/docs/api" className="dev-btn primary">
+            Open interactive API reference →
+          </Link>
+          <a href={SPEC_URL} className="dev-btn" download="wayve-openapi.json">
+            Download OpenAPI 3.1 spec
+          </a>
+        </div>
       </section>
 
-      <footer className="dev-footer">
-        <div className="dev-footer-grid">
-          <div className="dev-footer-brand">
-            <Link to="/">
-              <span className="dev-header-logo">✉</span>
-              <span>Wayve</span>
-            </Link>
-            <p>Secure workspace APIs for mail, chat, scheduling, files, notes, tasks, and AI.</p>
-          </div>
-
-          <nav className="dev-footer-column" aria-label="Developer resources">
-            <h2>Developers</h2>
-            <Link to="/developers#tutorials">Tutorials</Link>
-            <a href={SPEC_URL}>OpenAPI spec</a>
-            <Link to={dashboardLink}>API keys</Link>
-            <Link to="/support">Support</Link>
-          </nav>
-
-          <nav className="dev-footer-column" aria-label="Platform">
-            <h2>Platform</h2>
-            <Link to="/enterprise">Enterprise</Link>
-            <Link to="/pricing">Pricing</Link>
-            <Link to="/services/email">Email</Link>
-            <Link to="/services/scheduler">Scheduler</Link>
-          </nav>
-
-          <nav className="dev-footer-column" aria-label="Company">
-            <h2>Company</h2>
-            <Link to="/about">About</Link>
-            <Link to="/support">Contact</Link>
-            <Link to="/security/audit">Transparency Report</Link>
-            <Link to="/enterprise">Technical white paper</Link>
-          </nav>
-
-          <div className="dev-footer-social" aria-label="Follow us">
-            <h2>Follow us</h2>
-            <div className="dev-social-links">
-              <a href="https://www.linkedin.com" aria-label="LinkedIn">in</a>
-              <a href="https://x.com" aria-label="X">x</a>
-              <a href="https://www.youtube.com" aria-label="YouTube">▶</a>
-              <a href="https://github.com" aria-label="GitHub">gh</a>
-            </div>
-          </div>
-        </div>
-
-        <div className="dev-footer-bottom">
-          <p>© Wayve B.V. {new Date().getFullYear()}</p>
-          <p>
-            Need higher rate limits, dedicated tenancy, or a custom SLA?{" "}
-            <Link to="/enterprise">Talk to sales →</Link>
-          </p>
-        </div>
-      </footer>
+      {/* dev-footer block removed — the MarketingShell footer that
+          wraps DocsShell already lists developer / platform / company
+          links. Avoiding a duplicate footer keeps the page consistent
+          with every other /docs/* page. */}
     </div>
+    </DocsShell>
   );
 }

@@ -1,8 +1,12 @@
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { SERVICE_BY_SLUG, type ServiceSlug } from "./serviceData";
+import DocsShell from "../docs/DocsShell";
 import "./servicePage.css";
 
 export default function ServicePage() {
+  // navigate is still used by the in-content CTA buttons below; the
+  // top header used to use it too, but the brand/nav now comes from
+  // DocsShell → MarketingShell.
   const navigate = useNavigate();
   const { slug } = useParams();
   const service = slug ? SERVICE_BY_SLUG[slug as ServiceSlug] : null;
@@ -12,22 +16,7 @@ export default function ServicePage() {
   }
 
   return (
-    <div className="service-page">
-      <header className="service-page-nav">
-        <button className="service-page-brand" onClick={() => navigate("/")}>
-          Wayve
-        </button>
-        <nav aria-label="Service navigation">
-          <button onClick={() => navigate("/")}>Services</button>
-          <button onClick={() => navigate("/organization")}>Organization</button>
-          <button onClick={() => navigate("/#pricing")}>Pricing</button>
-          <button onClick={() => navigate("/login")}>Login</button>
-          <button className="service-page-register" onClick={() => navigate("/register")}>
-            Register
-          </button>
-        </nav>
-      </header>
-
+    <DocsShell title={service.name}>
       <main className="service-page-main">
         <section className="service-page-hero">
           <div className={`service-page-icon ${service.accent}`}>{service.icon}</div>
@@ -68,6 +57,6 @@ export default function ServicePage() {
           </div>
         </section>
       </main>
-    </div>
+    </DocsShell>
   );
 }

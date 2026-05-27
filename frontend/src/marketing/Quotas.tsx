@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { ApiTier, QuotaStatus, getQuota, listTiers } from "../api/tiers";
+import DocsShell from "../docs/DocsShell";
 import "./quotas.css";
 
 // Marketing copy + human-friendly labels per plan code. Lives alongside the
@@ -88,6 +89,7 @@ export default function Quotas() {
   }, [reload]);
 
   return (
+    <DocsShell title="Plans, quotas & rate limits">
     <div className="quotas-page">
       <header className="quotas-hero">
         <div className="quotas-hero-inner">
@@ -221,6 +223,7 @@ export default function Quotas() {
         </ul>
       </section>
     </div>
+    </DocsShell>
   );
 }
 

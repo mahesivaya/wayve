@@ -56,6 +56,7 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
 
           <button onClick={() => navigate("/pricing")}>Pricing</button>
           <button onClick={() => navigate("/enterprise")}>Enterprise</button>
+          <button onClick={() => navigate("/docs")}>Docs</button>
           <button onClick={() => navigate("/support")}>Support</button>
         </nav>
 
@@ -127,6 +128,13 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
             <button onClick={() => navigate("/pricing")}>Pricing</button>
             <button onClick={() => navigate("/enterprise")}>Enterprise</button>
             <button onClick={() => navigate("/support")}>Support</button>
+          </div>
+          <div>
+            <h4>Developers</h4>
+            <button onClick={() => navigate("/docs")}>All docs</button>
+            <button onClick={() => navigate("/docs/api")}>API reference</button>
+            <button onClick={() => navigate("/docs/quotas")}>Quotas & tiers</button>
+            <button onClick={() => navigate("/docs/developers")}>SDK & guides</button>
           </div>
           <div>
             <h4>Account</h4>

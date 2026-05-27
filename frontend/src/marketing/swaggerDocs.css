@@ -1,0 +1,71 @@
+/* Layout shell for the Swagger UI page inside MarketingShell. Keeps
+   the editorial chrome (header / footer) in the same column width as
+   other /docs/* pages while letting the Swagger UI itself span the
+   full panel width below the intro. */
+
+.swagger-docs-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.swagger-docs-header {
+  margin-bottom: 1.5rem;
+}
+
+.swagger-docs-header h1 {
+  margin: 0.25rem 0 0.75rem;
+}
+
+.swagger-docs-header code {
+  background: var(--color-surface-deep-navy, #1f2937);
+  color: #e5e7eb;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.swagger-docs-loading,
+.swagger-docs-error {
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  margin-top: 1rem;
+}
+
+.swagger-docs-error {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+
+/* Swagger UI ships its own opinionated theme. We give it a white
+   container background so it doesn't clash with the marketing
+   gradient backdrop, and round the top/bottom corners to look
+   like a panel. */
+.swagger-docs-ui {
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  overflow: hidden;
+  margin-top: 1.5rem;
+}
+
+/* Trim Swagger UI's default outer padding so the spec body lines up
+   with the page header instead of starting 24px to the right. The
+   selector is intentionally narrow (under .swagger-docs-ui) so it
+   doesn't bleed into anywhere else in the app. */
+.swagger-docs-ui .swagger-ui .information-container {
+  padding: 16px 24px 8px;
+}
+
+.swagger-docs-ui .swagger-ui .scheme-container {
+  background: transparent;
+  box-shadow: none;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  padding-top: 8px;
+}

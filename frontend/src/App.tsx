@@ -1,6 +1,14 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import { useLocation } from "react-router-dom";
 import { lazy, Suspense } from "react";
+
+// /services/:slug → /docs/services/:slug. Native <Navigate to="..."/>
+// can't include a dynamic `:slug` from the URL, so this tiny wrapper
+// reads the param via useParams and forwards.
+function LegacyServiceRedirect() {
+  const { slug } = useParams();
+  return <Navigate to={`/docs/services/${slug ?? ""}`} replace />;
+}
 
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -47,6 +55,8 @@ const Support = lazy(() => import("./marketing/Support"));
 const Developers = lazy(() => import("./marketing/Developers"));
 const Quotas = lazy(() => import("./marketing/Quotas"));
 const Docs = lazy(() => import("./marketing/Docs"));
+const SwaggerDocs = lazy(() => import("./marketing/SwaggerDocs"));
+const DocsIndex = lazy(() => import("./docs/DocsIndex"));
 const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
 const SsoSettings = lazy(() => import("./settings/SsoSettings"));
 const SharedInboxes = lazy(() => import("./settings/SharedInboxes"));
@@ -100,7 +110,13 @@ export default function App() {
           element={<RecoverWithMnemonicPage />}
         />
         <Route path="/organization" element={<Organization />} />
-        <Route path="/services/:slug" element={<ServicePage />} />
+        {/* /services/:slug is now /docs/services/:slug — redirect old
+            links so any externally-shared URL still lands. */}
+        <Route
+          path="/services/:slug"
+          element={<LegacyServiceRedirect />}
+        />
+        <Route path="/docs/services/:slug" element={<ServicePage />} />
         {/* Pricing is a public-facing page: anyone (logged out OR in) should
             be able to view plans. It lives here rather than under the
             ProtectedRoute branch so unauth visitors aren't bounced to
@@ -120,38 +136,25 @@ export default function App() {
         />
         <Route path="/enterprise" element={<Enterprise />} />
         <Route path="/support" element={<Support />} />
-        <Route
-          path="/developers"
-          element={
-            <RedirectIfPersonal>
-              <Developers />
-            </RedirectIfPersonal>
-          }
-        />
-        <Route
-          path="/developers/quotas"
-          element={
-            <RedirectIfPersonal>
-              <Quotas />
-            </RedirectIfPersonal>
-          }
-        />
-        <Route
-          path="/docs"
-          element={
-            <RedirectIfPersonal>
-              <Docs />
-            </RedirectIfPersonal>
-          }
-        />
-        <Route
-          path="/docs/:slug"
-          element={
-            <RedirectIfPersonal>
-              <Docs />
-            </RedirectIfPersonal>
-          }
-        />
+        {/* ── Documentation surface ──────────────────────────────────
+            Every dev-readable page now lives under /docs/* with a
+            shared DocsShell (search + sidebar + breadcrumbs). The
+            whole tree is public — anyone, logged-in or not, can
+            browse the API contract. Legacy paths (/developers,
+            /developers/quotas, /services/:slug) 301-style redirect
+            to their /docs/* canonical URL.
+            -------------------------------------------------------- */}
+        <Route path="/docs" element={<DocsIndex />} />
+        <Route path="/docs/api" element={<SwaggerDocs />} />
+        <Route path="/docs/developers" element={<Developers />} />
+        <Route path="/docs/quotas" element={<Quotas />} />
+        {/* Backend markdown catalog — matches anything else under
+            /docs/*. Order matters: this must come AFTER the static
+            routes above so /docs/api etc. aren't treated as slugs. */}
+        <Route path="/docs/:slug" element={<Docs />} />
+        {/* Legacy paths — keep external links working forever. */}
+        <Route path="/developers" element={<Navigate to="/docs/developers" replace />} />
+        <Route path="/developers/quotas" element={<Navigate to="/docs/quotas" replace />} />
 
         {/* PROTECTED */}
         <Route element={<ProtectedRoute />}>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { DocFull, DocSummary, getDoc, listDocs } from "../api/docs";
+import DocsShell from "../docs/DocsShell";
 import "./docs.css";
 
 // marked v12 — self-hosted in frontend/public/marked.min.js to avoid a CDN
@@ -159,9 +160,15 @@ export default function Docs() {
     [catalog, loadingList, slug],
   );
 
+  // The sidebar list of catalog items is now redundant — DocsShell's
+  // sidebar surfaces the same entries (and more) with a search box.
+  // We intentionally don't render `sidebar` here. Keep it computed
+  // above (the `useMemo`) so removing it is a one-liner rather than
+  // a broad rewrite of the page's effects.
+  void sidebar;
+
   return (
-    <div className="docs-page">
-      {sidebar}
+    <DocsShell title={active?.title}>
       <main className="docs-content" ref={renderHostRef}>
         {error && <div className="docs-banner">{error}</div>}
         {active && (
@@ -181,9 +188,12 @@ export default function Docs() {
           </article>
         )}
         {!active && !loadingBody && !error && (
-          <p className="docs-muted">Pick a document from the left.</p>
+          <p className="docs-muted">
+            Pick a document from the sidebar, or browse{" "}
+            <Link to="/docs">all docs</Link>.
+          </p>
         )}
       </main>
-    </div>
+    </DocsShell>
   );
 }
