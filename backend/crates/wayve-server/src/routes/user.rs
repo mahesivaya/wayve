@@ -1214,8 +1214,9 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
             (SELECT COALESCE(SUM(octet_length(body_encrypted)), 0)::BIGINT FROM emails e JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id) as email_storage_bytes,
             (SELECT COALESCE(SUM(size), 0)::BIGINT FROM drive_files f WHERE f.user_id = u.id) as drive_storage_bytes,
             (SELECT COALESCE(SUM(octet_length(content_encrypted)), 0)::BIGINT FROM messages m WHERE m.sender_id = u.id) as chat_storage_bytes,
-            (SELECT COALESCE(SUM(octet_length(coalesce(content_encrypted, content, ''))), 0)::BIGINT FROM notes n WHERE n.user_id = u.id) as notes_storage_bytes
-        FROM users u 
+            (SELECT COALESCE(SUM(octet_length(coalesce(content_encrypted, content, ''))), 0)::BIGINT FROM notes n WHERE n.user_id = u.id) as notes_storage_bytes,
+            (SELECT COALESCE(SUM(octet_length(name) + octet_length(coalesce(description, ''))), 0)::BIGINT FROM tasks t WHERE t.user_id = u.id) as tasks_storage_bytes
+        FROM users u
         LEFT JOIN organizations o ON o.id = u.organization_id
         WHERE u.id = $1
         "#,
@@ -1241,6 +1242,7 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
             let drive_storage_bytes: i64 = row.get("drive_storage_bytes");
             let chat_storage_bytes: i64 = row.get("chat_storage_bytes");
             let notes_storage_bytes: i64 = row.get("notes_storage_bytes");
+            let tasks_storage_bytes: i64 = row.get("tasks_storage_bytes");
             let username: Option<String> = row.try_get("username").ok();
             let recovery_mode: String = row
                 .try_get("recovery_mode")
@@ -1248,7 +1250,8 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
             let total_used = email_storage_bytes
                 + drive_storage_bytes
                 + chat_storage_bytes
-                + notes_storage_bytes;
+                + notes_storage_bytes
+                + tasks_storage_bytes;
 
             let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
             let organization_name = display_organization_name(
@@ -1294,7 +1297,7 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 "total_emails": total_emails,
                 "email_storage_bytes": email_storage_bytes,
                 "drive_storage_bytes": drive_storage_bytes,
-                "other_storage_bytes": chat_storage_bytes + notes_storage_bytes,
+                "other_storage_bytes": chat_storage_bytes + notes_storage_bytes + tasks_storage_bytes,
                 "memory_used_bytes": total_used,
                 "memory_limit_bytes": 10_737_418_240_i64, // 10 GB limit
                 "recovery_mode": recovery_mode,

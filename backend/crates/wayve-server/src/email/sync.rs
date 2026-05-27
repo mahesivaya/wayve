@@ -167,6 +167,46 @@ pub async fn sync_all(pool: &PgPool) -> Result<()> {
                     warn!(target: "worker", account_id = account.id, error = ?err, "backfill batch failed");
                 }
 
+                // Per-label backfill for every standard Gmail folder a user
+                // expects to see in an IMAP-style sidebar.
+                //
+                // System labels:
+                //   DRAFT  — excluded from messages.list unless labelIds=DRAFT
+                //   SPAM   — needs includeSpamTrash=true (which the helper sets)
+                //   TRASH  — same as SPAM
+                //
+                // Category labels (Gmail's INBOX sub-tabs):
+                //   CATEGORY_PERSONAL / SOCIAL / PROMOTIONS / UPDATES / FORUMS
+                //   These ride on INBOX messages so the general backfill picks
+                //   them up too, but anchoring each tick's window at the oldest
+                //   message *in that category* parallelizes catch-up so the
+                //   Promotions tab doesn't have to wait for the INBOX walk to
+                //   reach mail that happens to be promotions.
+                //
+                // INBOX / SENT / STARRED / IMPORTANT flow through the general
+                // backfill — no per-label pass needed.
+                for label in [
+                    "DRAFT",
+                    "SPAM",
+                    "TRASH",
+                    "CATEGORY_PERSONAL",
+                    "CATEGORY_SOCIAL",
+                    "CATEGORY_PROMOTIONS",
+                    "CATEGORY_UPDATES",
+                    "CATEGORY_FORUMS",
+                ] {
+                    if let Err(err) = backfill_label_older(
+                        &pool,
+                        account.id,
+                        &token.access_token,
+                        label,
+                    )
+                    .await
+                    {
+                        warn!(target: "worker", account_id = account.id, label, error = ?err, "label backfill failed");
+                    }
+                }
+
                 // Fresh mail just landed in `emails` — drop the /api/profile
                 // and /api/me caches for this user so the Storage & Usage
                 // panel reflects the new totals on the next page load
@@ -342,8 +382,11 @@ pub async fn fetch_ids_before(
     before_timestamp: i64,
     max_results: usize,
 ) -> Result<Vec<String>> {
+    // includeSpamTrash=true makes Gmail return SPAM (and TRASH) messages too —
+    // without it the general backfill silently skips spam, leaving the
+    // Spam folder stuck at whatever the recent label-pull caught.
     let url = format!(
-        "{}/gmail/v1/users/me/messages?maxResults={}&q=before:{}",
+        "{}/gmail/v1/users/me/messages?maxResults={}&q=before:{}&includeSpamTrash=true",
         crate::external::gmail_api_base(),
         max_results,
         before_timestamp
@@ -368,6 +411,95 @@ pub async fn fetch_ids_before(
         .unwrap_or_default();
 
     Ok(ids)
+}
+
+/// `messages.list` variant that filters by label AND a `before:` timestamp.
+/// Used by the per-label backfill (DRAFT in particular) since drafts are
+/// excluded from `messages.list` unless `labelIds=DRAFT` is set explicitly.
+pub async fn fetch_label_ids_before(
+    token: &str,
+    label: &str,
+    before_timestamp: i64,
+    max_results: usize,
+) -> Result<Vec<String>> {
+    let url = format!(
+        "{}/gmail/v1/users/me/messages?maxResults={}&labelIds={}&q=before:{}&includeSpamTrash=true",
+        crate::external::gmail_api_base(),
+        max_results,
+        label,
+        before_timestamp
+    );
+
+    let res: Value = HTTP_CLIENT
+        .get(&url)
+        .bearer_auth(token)
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let ids = res["messages"]
+        .as_array()
+        .map(|messages| {
+            messages
+                .iter()
+                .filter_map(|m| m["id"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(ids)
+}
+
+/// Backfill older messages within a single Gmail label (e.g. DRAFT, SPAM).
+/// Walks one BACKFILL_BATCH window older than the oldest local message
+/// currently carrying `label`. No-op when the label has zero local rows —
+/// the recent-only sync handles bootstrapping in that case.
+async fn backfill_label_older(
+    pool: &PgPool,
+    account_id: i32,
+    token: &str,
+    label: &str,
+) -> Result<()> {
+    let oldest: Option<NaiveDateTime> = sqlx::query_scalar(
+        "SELECT MIN(created_at) FROM emails WHERE account_id = $1 AND $2 = ANY(labels)",
+    )
+    .bind(account_id)
+    .bind(label)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+
+    let Some(oldest_naive) = oldest else {
+        return Ok(());
+    };
+
+    let before_timestamp = oldest_naive.and_utc().timestamp();
+    let ids = fetch_label_ids_before(token, label, before_timestamp, BACKFILL_BATCH).await?;
+    if ids.is_empty() {
+        return Ok(());
+    }
+    debug!(
+        target: "worker",
+        account_id,
+        label,
+        count = ids.len(),
+        before_timestamp,
+        "fetched older label ids"
+    );
+
+    let mut tasks = FuturesUnordered::new();
+    for id in ids {
+        let token = token.to_string();
+        tasks.push(async move { fetch_headers_only(&token, &id).await });
+        if tasks.len() >= MAX_EMAIL_CONCURRENCY {
+            process_batch(pool, account_id, &mut tasks).await?;
+        }
+    }
+    while !tasks.is_empty() {
+        process_batch(pool, account_id, &mut tasks).await?;
+    }
+    Ok(())
 }
 
 pub fn extract_headers(res: &Value) -> (String, String, String) {
@@ -451,11 +583,13 @@ async fn sync_account_label_recent(
 }
 
 // Cap the side-pulls. Spam fills the table fast and serves zero engagement
-// purpose past the "is it there" check; drafts are usually a handful. Both
-// are pulled on every sync tick so the user sees fresh state without
-// pagination support for these folders.
+// purpose past the "is it there" check; drafts are usually a handful; trash
+// is bounded by Gmail's 30-day retention. All are pulled on every sync tick
+// so the user sees fresh state for these folders even before backfill walks
+// them to completion.
 const GMAIL_SPAM_RECENT_CAP: usize = 50;
 const GMAIL_DRAFT_RECENT_CAP: usize = 25;
+const GMAIL_TRASH_RECENT_CAP: usize = 50;
 
 #[instrument(target = "worker", skip(pool, token), fields(account_id))]
 pub async fn sync_account(
@@ -504,6 +638,9 @@ pub async fn sync_account(
     }
     if let Err(err) = sync_account_label_recent(pool, account_id, token, "DRAFT", GMAIL_DRAFT_RECENT_CAP).await {
         warn!(target: "worker", account_id, error = ?err, "draft sync failed");
+    }
+    if let Err(err) = sync_account_label_recent(pool, account_id, token, "TRASH", GMAIL_TRASH_RECENT_CAP).await {
+        warn!(target: "worker", account_id, error = ?err, "trash sync failed");
     }
 
     Ok(())
@@ -562,6 +699,9 @@ pub async fn sync_account_recent(
     }
     if let Err(err) = sync_account_label_recent(pool, account_id, token, "DRAFT", GMAIL_DRAFT_RECENT_CAP).await {
         warn!(target: "worker", account_id, error = ?err, "draft first-sync failed");
+    }
+    if let Err(err) = sync_account_label_recent(pool, account_id, token, "TRASH", GMAIL_TRASH_RECENT_CAP).await {
+        warn!(target: "worker", account_id, error = ?err, "trash first-sync failed");
     }
 
     Ok(())
