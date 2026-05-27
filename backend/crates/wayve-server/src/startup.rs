@@ -62,6 +62,12 @@ pub async fn ensure_email_schema(pool: &PgPool) {
            END IF; \
          END $$",
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT TRUE",
+        // Subject at-rest encryption — same envelope shape as body_*.
+        // New writes go through email::repo which populates these and
+        // leaves `subject` NULL; legacy plaintext rows are migrated by
+        // email::repo::backfill_subjects at startup.
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS subject_encrypted TEXT",
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS subject_iv TEXT",
         // Provider labels (Gmail labelIds + Outlook categories + synthetic
         // IMPORTANT for Outlook importance=high). Used by the sidebar
         // category folders. Backfills as `{}` for legacy rows; new syncs

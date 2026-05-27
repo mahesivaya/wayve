@@ -323,41 +323,26 @@ async fn upsert_messages(
     for m in messages {
         // Encrypt the body at rest, exactly like the Gmail body-worker path.
         let (iv, encrypted) = encrypt(&m.body)?;
-        let row = sqlx::query(
-            r#"
-            INSERT INTO emails
-              (gmail_id, sender, receiver, subject, created_at,
-               body_encrypted, body_iv, account_id, attachments_checked, is_read, labels)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10)
-            ON CONFLICT (account_id, gmail_id) DO UPDATE SET
-              sender = EXCLUDED.sender,
-              receiver = EXCLUDED.receiver,
-              subject = EXCLUDED.subject,
-              created_at = EXCLUDED.created_at,
-              body_encrypted = EXCLUDED.body_encrypted,
-              body_iv = EXCLUDED.body_iv,
-              is_read = EXCLUDED.is_read,
-              labels = EXCLUDED.labels
-            RETURNING id
-            "#,
+        let email_id = crate::email::repo::upsert_one(
+            pool,
+            account_id,
+            &crate::email::repo::InsertEmail {
+                gmail_id: &m.id,
+                sender: &m.sender,
+                receiver: &m.receiver,
+                subject: &m.subject,
+                created_at: m.received,
+                is_read: m.is_read,
+                labels: m.labels.as_slice(),
+                body: Some((&iv, &encrypted)),
+                attachments_checked: true,
+            },
         )
-        .bind(&m.id)
-        .bind(&m.sender)
-        .bind(&m.receiver)
-        .bind(&m.subject)
-        .bind(m.received)
-        .bind(&encrypted)
-        .bind(&iv)
-        .bind(account_id)
-        .bind(m.is_read)
-        .bind(&m.labels)
-        .fetch_one(pool)
         .await?;
 
         // Graph keeps attachments on a sub-resource; pull their metadata in
         // parallel so the UI can list them and download the bytes on demand.
         if m.has_attachments {
-            let email_id: i32 = row.get("id");
             let msg_id = m.id.clone();
             attachment_tasks.push(async move {
                 let res = fetch_outlook_attachments(access_token, &msg_id).await;

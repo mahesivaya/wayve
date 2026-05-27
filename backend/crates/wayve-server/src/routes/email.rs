@@ -2,6 +2,7 @@ use crate::cache::Cache;
 use crate::email::oauth::HTTP_CLIENT;
 use crate::email::outlook::{OutlookAttachmentRef, download_outlook_attachment};
 use crate::email::provider::{MailProvider, refresh_and_persist_email_token};
+use crate::email::repo::{self, EmailListFilters};
 use crate::email::sync_older::sync_older_page;
 use crate::prelude::*;
 use wayve_security::jwt::get_user_id_from_request;
@@ -11,7 +12,7 @@ use actix_web::{HttpRequest, HttpResponse, delete, get, web};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::Value;
-use sqlx::{PgPool, QueryBuilder, Row};
+use sqlx::{PgPool, Row};
 use tracing::{error, info, instrument, warn};
 
 #[derive(Deserialize)]
@@ -73,166 +74,46 @@ pub async fn get_emails(
         warn!(target: "gmail", user_id, error = ?e, "older email page sync failed");
     }
 
-    // Build query dynamically. The LEFT JOINs against shared_inbox_members
-    // and shared_inbox_email_state are what extend the existing personal-
-    // mailbox query to also surface shared-inbox messages and their
-    // help-desk workflow state (status + assignee).
-    let mut qb = QueryBuilder::new(
-        r#"
-        SELECT e.id, e.gmail_id, e.subject, e.sender, e.receiver,
-               (e.body_encrypted <> '') AS has_body,
-               EXISTS (
-                   SELECT 1 FROM email_attachments ea WHERE ea.email_id = e.id
-               ) AS has_attachments,
-               e.account_id, e.is_read, e.created_at,
-               a.is_shared, a.shared_label,
-               s.status AS inbox_status, s.assignee_id AS inbox_assignee_id
-        FROM emails e
-        JOIN email_accounts a ON e.account_id = a.id
-        LEFT JOIN shared_inbox_members sm
-               ON sm.account_id = a.id AND sm.user_id =
-        "#,
-    );
-    qb.push_bind(user_id);
-    qb.push(
-        r#"
-        LEFT JOIN shared_inbox_email_state s ON s.email_id = e.id
-        WHERE (a.user_id =
-        "#,
-    );
-    qb.push_bind(user_id);
-    qb.push(" OR sm.user_id IS NOT NULL)");
+    let before = query.before.zip(query.before_id);
 
-    // ✅ Optional account filter
-    if let Some(account_id) = query.account_id {
-        qb.push(" AND a.id = ");
-        qb.push_bind(account_id);
-    }
-
-    // Shared-inbox status filter. Only meaningful when the calling user is
-    // looking at a shared inbox; on a personal mailbox there's no state
-    // row, so `open/pending/closed` simply returns nothing — which is
-    // exactly what we want.
-    if let Some(raw) = query.inbox_status.as_deref().map(str::trim) {
-        match raw {
-            "open" | "pending" | "closed" => {
-                qb.push(" AND s.status = ");
-                qb.push_bind(raw.to_string());
-            }
-            "unassigned" => {
-                qb.push(" AND s.email_id IS NOT NULL AND s.assignee_id IS NULL");
-            }
-            "mine" => {
-                qb.push(" AND s.assignee_id = ");
-                qb.push_bind(user_id);
-            }
-            _ => {}
-        }
-    }
-
-    // ✅ Folder filter (FIX)
-    //
-    // Sidebar category folders translate to provider label lookups against
-    // `emails.labels` (Gmail labelIds + Outlook categories + synthetic
-    // IMPORTANT / SPAM / DRAFT injected at parse time so both providers
-    // share one filter shape). Inbox excludes SPAM + DRAFT so a spam
-    // message never bleeds into the main list, even if Gmail tags it both
-    // INBOX and SPAM during a race.
-    if let Some(folder) = &query.folder {
-        match folder.as_str() {
-            "inbox" => {
-                qb.push(
-                    " AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%' \
-                       AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)) ",
-                );
-            }
-            "sent" => {
-                qb.push(" AND lower(coalesce(e.sender, '')) LIKE '%' || lower(a.email) || '%' ");
-            }
-            "important" => {
-                qb.push(" AND 'IMPORTANT' = ANY(e.labels) ");
-            }
-            "updates" => {
-                qb.push(" AND 'CATEGORY_UPDATES' = ANY(e.labels) ");
-            }
-            "social" => {
-                qb.push(" AND 'CATEGORY_SOCIAL' = ANY(e.labels) ");
-            }
-            "spam" => {
-                qb.push(" AND 'SPAM' = ANY(e.labels) ");
-            }
-            "drafts" => {
-                qb.push(" AND 'DRAFT' = ANY(e.labels) ");
-            }
-            _ => {}
-        }
-    }
-
-    if let Some(search) = query.q.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        let pattern = format!("%{}%", search.to_lowercase());
-        qb.push(
-            r#"
-            AND (
-                lower(coalesce(e.subject, '')) LIKE
-            "#,
-        );
-        qb.push_bind(pattern.clone());
-        qb.push(" OR lower(coalesce(e.sender, '')) LIKE ");
-        qb.push_bind(pattern.clone());
-        qb.push(" OR lower(coalesce(e.receiver, '')) LIKE ");
-        qb.push_bind(pattern.clone());
-        qb.push(" OR lower(coalesce(e.gmail_id, '')) LIKE ");
-        qb.push_bind(pattern);
-        qb.push(") ");
-    }
-
-    // ✅ Pagination filter. `before` is Unix milliseconds (wire format) so
-    // the cursor keeps sub-second precision; otherwise emails sharing the
-    // cursor's second would be dropped from the next page.
-    if let (Some(before_ms), Some(before_id)) = (query.before, query.before_id) {
-        qb.push(" AND (e.created_at, e.id) < (to_timestamp(");
-        qb.push_bind(before_ms);
-        qb.push("::double precision / 1000.0), ");
-        qb.push_bind(before_id);
-        qb.push(")");
-    }
-
-    // ✅ Order + limit
-    qb.push(" ORDER BY e.created_at DESC, e.id DESC LIMIT ");
-    qb.push_bind(query_limit as i64);
-
-    let rows = qb.build().fetch_all(pool.get_ref()).await?;
+    let rows = repo::list(
+        pool.get_ref(),
+        EmailListFilters {
+            user_id,
+            account_id: query.account_id,
+            folder: query.folder.clone(),
+            inbox_status: query.inbox_status.clone(),
+            search: query.q.clone(),
+            before,
+            page_size,
+        },
+    )
+    .await?;
 
     let has_more = rows.len() > page_size;
     let emails: Vec<Value> = rows
         .into_iter()
         .take(page_size)
         .map(|row| {
-            let created_at: Option<NaiveDateTime> = row.get("created_at");
-            let created_at = created_at.map(|dt| {
+            let created_at = row.created_at.map(|dt| {
                 chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
                     .to_rfc3339()
             });
-
             serde_json::json!({
-                "id": row.get::<i32,_>("id"),
-                "gmail_id": row.get::<String,_>("gmail_id"),
-                "subject": row.get::<Option<String>,_>("subject"),
-                "sender": row.get::<Option<String>,_>("sender"),
-                "receiver": row.get::<Option<String>,_>("receiver"),
-                "has_body": row.get::<bool,_>("has_body"),
-                "has_attachments": row.get::<bool,_>("has_attachments"),
-                "account_id": row.get::<Option<i32>,_>("account_id"),
-                "is_read": row.get::<Option<bool>,_>("is_read").unwrap_or(true),
+                "id": row.id,
+                "gmail_id": row.gmail_id,
+                "subject": row.subject,
+                "sender": row.sender,
+                "receiver": row.receiver,
+                "has_body": row.has_body,
+                "has_attachments": row.has_attachments,
+                "account_id": row.account_id,
+                "is_read": row.is_read,
                 "created_at": created_at,
-                // Shared-inbox surface — `is_shared` lets the UI render
-                // the chip/avatar grouping; `shared_label` is the
-                // friendly inbox name (e.g. "Support"); the state pair
-                // drives the help-desk badges.
-                "is_shared": row.try_get::<bool,_>("is_shared").unwrap_or(false),
-                "shared_label": row.try_get::<Option<String>,_>("shared_label").unwrap_or(None),
-                "inbox_status": row.try_get::<Option<String>,_>("inbox_status").unwrap_or(None),
-                "inbox_assignee_id": row.try_get::<Option<i32>,_>("inbox_assignee_id").unwrap_or(None),
+                "is_shared": row.is_shared,
+                "shared_label": row.shared_label,
+                "inbox_status": row.inbox_status,
+                "inbox_assignee_id": row.inbox_assignee_id,
             })
         })
         .collect();
@@ -359,40 +240,25 @@ pub async fn delete_email(
 pub async fn get_all_email_attachments(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let rows = sqlx::query(
-        r#"
-        SELECT ea.id, ea.email_id, ea.filename, ea.mime_type, ea.size,
-               ea.created_at, e.subject, e.sender, e.receiver
-        FROM email_attachments ea
-        JOIN emails e ON ea.email_id = e.id
-        JOIN email_accounts a ON ea.account_id = a.id
-        WHERE a.user_id = $1
-        ORDER BY ea.created_at DESC, ea.id DESC
-        "#,
-    )
-    .bind(user_id)
-    .fetch_all(pool.get_ref())
-    .await?;
+    let rows = repo::list_attachments_for_user(pool.get_ref(), user_id).await?;
 
     let files: Vec<Value> = rows
         .into_iter()
         .map(|row| {
-            let created_at: Option<NaiveDateTime> = row.get("created_at");
-            let created_at = created_at.map(|dt| {
+            let created_at = row.created_at.map(|dt| {
                 chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
                     .to_rfc3339()
             });
-
             serde_json::json!({
-                "id": row.get::<i32, _>("id"),
-                "email_id": row.get::<i32, _>("email_id"),
-                "filename": row.get::<String, _>("filename"),
-                "mime_type": row.get::<Option<String>, _>("mime_type"),
-                "size": row.get::<Option<i64>, _>("size"),
+                "id": row.id,
+                "email_id": row.email_id,
+                "filename": row.filename,
+                "mime_type": row.mime_type,
+                "size": row.size,
                 "created_at": created_at,
-                "subject": row.get::<Option<String>, _>("subject"),
-                "sender": row.get::<Option<String>, _>("sender"),
-                "receiver": row.get::<Option<String>, _>("receiver"),
+                "subject": row.subject,
+                "sender": row.sender,
+                "receiver": row.receiver,
             })
         })
         .collect();

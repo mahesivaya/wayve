@@ -296,6 +296,13 @@ CREATE TABLE IF NOT EXISTS emails (
 
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
 
+-- Subject at rest (AES-256-GCM, same envelope as body_*). The legacy
+-- plaintext `subject` column stays for compat during the migration window;
+-- the email repo writes only to the encrypted pair on new INSERTs, and
+-- `email::repo::backfill_subjects` walks the legacy rows on startup.
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS subject_encrypted TEXT;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS subject_iv TEXT;
+
 -- Provider labels attached to the message (Gmail labelIds, Outlook
 -- categories, plus a synthetic IMPORTANT for Outlook importance=high).
 -- Filtered by the inbox sidebar's category folders (Important / Updates /

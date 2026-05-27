@@ -238,11 +238,14 @@ pub async fn support_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppRe
     .fetch_all(pool.get_ref())
     .await?;
 
+    // Subject is fetched via the email repo so encryption stays one-place.
+    // We still need this query for the workflow columns (status, assignee,
+    // updated_at, inbox_email) — subject is filled in below.
     let inbox_queue = sqlx::query(
         r#"
         SELECT s.email_id, s.status, s.updated_at,
                COALESCE(u.email, '—') AS assignee_email,
-               e.subject, ea.email AS inbox_email
+               ea.email AS inbox_email
           FROM shared_inbox_email_state s
           LEFT JOIN users u ON u.id = s.assignee_id
           LEFT JOIN emails e ON e.id = s.email_id
@@ -255,6 +258,14 @@ pub async fn support_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppRe
     .fetch_all(pool.get_ref())
     .await
     .unwrap_or_default();
+
+    let inbox_subject_ids: Vec<i32> = inbox_queue
+        .iter()
+        .filter_map(|r| r.try_get::<i32, _>("email_id").ok())
+        .collect();
+    let inbox_subjects = crate::email::repo::subjects_for_ids(pool.get_ref(), &inbox_subject_ids)
+        .await
+        .unwrap_or_default();
 
     let top_orgs_json: Vec<_> = top_orgs
         .into_iter()
@@ -290,10 +301,12 @@ pub async fn support_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppRe
         .into_iter()
         .map(|row| {
             let updated_at: Option<DateTime<Utc>> = row.try_get("updated_at").ok();
+            let email_id = row.try_get::<i32, _>("email_id").unwrap_or(0);
+            let subject = inbox_subjects.get(&email_id).cloned().flatten();
             serde_json::json!({
-                "email_id": row.try_get::<i32, _>("email_id").unwrap_or(0),
+                "email_id": email_id,
                 "status": row.try_get::<String, _>("status").unwrap_or_default(),
-                "subject": row.try_get::<Option<String>, _>("subject").ok().flatten(),
+                "subject": subject,
                 "inbox_email": row.try_get::<Option<String>, _>("inbox_email").ok().flatten(),
                 "assignee_email": row.try_get::<Option<String>, _>("assignee_email").ok().flatten(),
                 "updated_at": updated_at,

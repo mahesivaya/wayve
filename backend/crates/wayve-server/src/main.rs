@@ -120,6 +120,14 @@ async fn main() -> std::io::Result<()> {
 
     crate::startup::ensure_email_schema(&pool).await;
 
+    // One-time encryption migration for legacy plaintext email subjects.
+    // Idempotent — re-runs only touch rows still missing the envelope.
+    match crate::email::repo::backfill_subjects(&pool).await {
+        Ok(0) => {}
+        Ok(n) => info!(target: "startup", encrypted = n, "backfilled legacy email subjects"),
+        Err(e) => warn!(target: "startup", error = ?e, "subject backfill failed"),
+    }
+
     // Dev/test only: backfill plans.stripe_price_id by creating Stripe test
     // prices for any paid plan that isn't linked yet. Idempotent via Stripe
     // lookup_key. Skips silently if STRIPE_SECRET_KEY is missing or live.

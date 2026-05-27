@@ -766,61 +766,27 @@ where
         return Ok(());
     }
 
-    // Insert headers with empty body sentinel — body_worker will fill these in.
-    let mut query = String::from(
-        "INSERT INTO emails(gmail_id, sender, receiver, subject, created_at, body_encrypted, body_iv, account_id, is_read, labels) VALUES ",
-    );
-
-    for (i, _) in batch.iter().enumerate() {
-        let idx = i * 10;
-        query.push_str(&format!(
-            "(${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}),",
-            idx + 1,
-            idx + 2,
-            idx + 3,
-            idx + 4,
-            idx + 5,
-            idx + 6,
-            idx + 7,
-            idx + 8,
-            idx + 9,
-            idx + 10
-        ));
-    }
-
-    query.pop();
-    query.push_str(
-        " ON CONFLICT (account_id, gmail_id) DO UPDATE SET \
-         sender = EXCLUDED.sender, \
-         receiver = EXCLUDED.receiver, \
-         subject = EXCLUDED.subject, \
-         created_at = EXCLUDED.created_at, \
-         is_read = EXCLUDED.is_read, \
-         labels = EXCLUDED.labels",
-    );
-
-    // RETURNING with `xmax = 0` lets us distinguish a true INSERT (xmax stays
-    // 0 on fresh tuples) from an UPDATE triggered by ON CONFLICT (xmax gets
-    // stamped with the inserting xid). Without this filter we'd fire
-    // `email.received` on every sync tick for every existing row.
-    query.push_str(
-        " RETURNING id, sender, subject, created_at, gmail_id, (xmax = 0) AS is_new",
-    );
-    let mut q = sqlx::query(&query);
-    for (gmail_id, sender, receiver, subject, gmail_timestamp, is_read, labels) in batch.iter() {
-        q = q
-            .bind(gmail_id)
-            .bind(sender)
-            .bind(receiver)
-            .bind(subject)
-            .bind(gmail_timestamp)
-            .bind("") // body_encrypted — empty until body_worker fills it
-            .bind("") // body_iv
-            .bind(account_id)
-            .bind(is_read)
-            .bind(labels);
-    }
-    let returned = q.fetch_all(pool).await?;
+    // Headers go through the email repo so the column list, encryption,
+    // and is_new detection stay in one place. Body is left empty here —
+    // body_worker fills it asynchronously.
+    use crate::email::repo::{InsertEmail, upsert_batch};
+    let insert_batch: Vec<InsertEmail<'_>> = batch
+        .iter()
+        .map(|(gmail_id, sender, receiver, subject, gmail_timestamp, is_read, labels)| {
+            InsertEmail {
+                gmail_id,
+                sender,
+                receiver,
+                subject,
+                created_at: *gmail_timestamp,
+                is_read: *is_read,
+                labels: labels.as_slice(),
+                body: None,
+                attachments_checked: false,
+            }
+        })
+        .collect();
+    let returned = upsert_batch(pool, account_id, &insert_batch).await?;
 
     // Webhook fan-out. Resolve the owner once per batch (the account's
     // user_id never changes during a sync tick).
@@ -841,14 +807,9 @@ where
             None => EventOwner::user(user_id),
         };
         for r in &returned {
-            let is_new: bool = r.try_get("is_new").unwrap_or(false);
-            if !is_new {
+            if !r.is_new {
                 continue;
             }
-            let email_id: i32 = r.try_get("id").unwrap_or(0);
-            let sender: Option<String> = r.try_get("sender").ok();
-            let subject: Option<String> = r.try_get("subject").ok();
-            let received_at: Option<chrono::NaiveDateTime> = r.try_get("created_at").ok();
             // Subject + sender only — never the body. Body fetches happen
             // asynchronously via body_worker and may carry sensitive content
             // that customers should pull explicitly via /api/emails/{id} if
@@ -858,11 +819,11 @@ where
                 owner,
                 Event::EmailReceived,
                 serde_json::json!({
-                    "id": email_id,
+                    "id": r.id,
                     "account_id": account_id,
-                    "sender": sender,
-                    "subject": subject,
-                    "received_at": received_at,
+                    "sender": r.sender,
+                    "subject": r.subject,
+                    "received_at": r.created_at,
                 }),
             )
             .await;

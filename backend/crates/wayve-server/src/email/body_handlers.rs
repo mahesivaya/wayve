@@ -30,41 +30,15 @@ pub async fn get_email_by_id(
 
     let email_id = path.into_inner();
 
-    // Either the account's owner OR a shared_inbox_members entry grants
-    // read access. Same access rule as get_emails so the list and detail
-    // views agree.
-    let row = sqlx::query(
-        r#"
-        SELECT e.id, e.account_id, e.subject, e.sender, e.receiver, e.body_encrypted, e.body_iv,
-               e.attachments_checked
-        FROM emails e
-        JOIN email_accounts a ON e.account_id = a.id
-        LEFT JOIN shared_inbox_members m
-               ON m.account_id = a.id AND m.user_id = $2
-        WHERE e.id = $1
-          AND (a.user_id = $2 OR m.user_id IS NOT NULL)
-        "#,
-    )
-    .bind(email_id)
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
-
-    let row = match row {
+    let detail = match crate::email::repo::get_detail(pool.get_ref(), email_id, user_id).await? {
         Some(row) => row,
         None => return Ok(HttpResponse::NotFound().body("Email not found")),
     };
 
-    let body_iv: String = row.get("body_iv");
-    let body_encrypted: String = row.get("body_encrypted");
-    let attachments_checked = row
-        .get::<Option<bool>, _>("attachments_checked")
-        .unwrap_or(false);
-
-    let body = if body_encrypted.is_empty() || body_iv.is_empty() {
+    let body = if detail.body_encrypted.is_empty() || detail.body_iv.is_empty() {
         String::new()
     } else {
-        match wayve_security::encryption::decrypt(&body_iv, &body_encrypted) {
+        match wayve_security::encryption::decrypt(&detail.body_iv, &detail.body_encrypted) {
             Ok(text) => text,
             Err(e) => {
                 warn!(
@@ -77,20 +51,20 @@ pub async fn get_email_by_id(
             }
         }
     };
-    if attachments_checked && !body.is_empty() {
+    if detail.attachments_checked && !body.is_empty() {
         EMAIL_BODY_CACHE
-            .insert((user_id, row.get::<i32, _>("id")), body.clone())
+            .insert((user_id, detail.id), body.clone())
             .await;
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
-        "id": row.get::<i32, _>("id"),
-        "account_id": row.get::<Option<i32>, _>("account_id"),
-        "subject": row.get::<Option<String>, _>("subject").unwrap_or_default(),
-        "sender": row.get::<Option<String>, _>("sender").unwrap_or_default(),
-        "receiver": row.get::<Option<String>, _>("receiver").unwrap_or_default(),
+        "id": detail.id,
+        "account_id": detail.account_id,
+        "subject": detail.subject.unwrap_or_default(),
+        "sender": detail.sender.unwrap_or_default(),
+        "receiver": detail.receiver.unwrap_or_default(),
         "body": body,
-        "attachments_checked": attachments_checked
+        "attachments_checked": detail.attachments_checked,
     })))
 }
 

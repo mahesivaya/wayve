@@ -9,6 +9,7 @@ pub mod outlook;
 mod outlook_oauth;
 pub mod profile;
 pub mod provider;
+pub mod repo;
 mod provider_lookup;
 mod send;
 pub mod sender;
