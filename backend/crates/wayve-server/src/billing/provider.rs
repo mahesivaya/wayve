@@ -60,6 +60,76 @@ async fn post_form(path: &str, params: &[(&str, String)]) -> Result<Value> {
     Ok(body)
 }
 
+async fn get_json(path: &str, query: &[(&str, String)]) -> Result<Value> {
+    let key = secret_key().ok_or_else(|| anyhow!("STRIPE_SECRET_KEY not configured"))?;
+    let url = format!("{}/v1{}", api_base(), path);
+    let resp = HTTP.get(&url).bearer_auth(key).query(query).send().await?;
+    let status = resp.status();
+    let body: Value = resp.json().await?;
+    if !status.is_success() {
+        return Err(anyhow!("stripe {path} returned {status}: {body}"));
+    }
+    Ok(body)
+}
+
+/// Look up a recurring price by its `lookup_key`. Returns Some(price_id) if
+/// found, None if the search returns no results. Used by `ensure_test_prices`
+/// to keep startup idempotent — re-running with the same plan code returns
+/// the existing price instead of creating duplicates.
+pub async fn find_price_by_lookup_key(lookup_key: &str) -> Result<Option<String>> {
+    let body = get_json(
+        "/prices/search",
+        &[(
+            "query",
+            format!("active:'true' AND lookup_key:'{}'", lookup_key),
+        )],
+    )
+    .await?;
+    Ok(body
+        .get("data")
+        .and_then(Value::as_array)
+        .and_then(|arr| arr.first())
+        .and_then(|p| p.get("id"))
+        .and_then(Value::as_str)
+        .map(str::to_string))
+}
+
+/// Create a Stripe Product. Returns the new `prod_...` id.
+pub async fn create_product(name: &str, description: Option<&str>) -> Result<String> {
+    let mut params = vec![("name", name.to_string())];
+    if let Some(desc) = description {
+        params.push(("description", desc.to_string()));
+    }
+    let body = post_form("/products", &params).await?;
+    body.get("id")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| anyhow!("stripe product response missing id"))
+}
+
+/// Create a recurring Price (monthly by default). Tagged with a stable
+/// `lookup_key` so re-runs can find it without storing the id outside the
+/// plans table. Returns the new `price_...` id.
+pub async fn create_monthly_price(
+    product_id: &str,
+    amount_cents: i64,
+    currency: &str,
+    lookup_key: &str,
+) -> Result<String> {
+    let params = vec![
+        ("product", product_id.to_string()),
+        ("unit_amount", amount_cents.to_string()),
+        ("currency", currency.to_string()),
+        ("recurring[interval]", "month".to_string()),
+        ("lookup_key", lookup_key.to_string()),
+    ];
+    let body = post_form("/prices", &params).await?;
+    body.get("id")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| anyhow!("stripe price response missing id"))
+}
+
 /// Create a Stripe customer; returns the new `cus_...` id.
 pub async fn create_customer(email: &str, owner_label: &str) -> Result<String> {
     let params = vec![

@@ -120,6 +120,11 @@ async fn main() -> std::io::Result<()> {
 
     crate::startup::ensure_email_schema(&pool).await;
 
+    // Dev/test only: backfill plans.stripe_price_id by creating Stripe test
+    // prices for any paid plan that isn't linked yet. Idempotent via Stripe
+    // lookup_key. Skips silently if STRIPE_SECRET_KEY is missing or live.
+    crate::billing::ensure_test_prices(&pool).await;
+
     match role {
         RuntimeRole::EmailSyncWorker => run_sync_worker(pool).await,
         RuntimeRole::EmailBodyWorker => run_body_worker(pool).await,

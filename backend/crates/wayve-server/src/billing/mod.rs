@@ -161,3 +161,83 @@ pub async fn spawn_billing_worker(pool: PgPool) {
         }
     }
 }
+
+/// Bootstrap dev/test environments: for every paid plan in the DB that has
+/// no `stripe_price_id` yet, look up (or create) a matching Stripe Price
+/// using a stable lookup_key, then persist its id on the plan row.
+///
+/// Idempotent — re-runs find the existing Price by lookup_key instead of
+/// creating duplicates. Best-effort: a Stripe API failure logs a warning
+/// and leaves the plan unlinked rather than crashing startup (the
+/// subscribe endpoint still surfaces "This plan is not linked to a Stripe
+/// price yet" so the operator sees what's missing).
+///
+/// Gated on `is_test_mode()` so production never auto-creates Stripe prices
+/// — production plans should be hand-managed via the Stripe dashboard and
+/// linked into the DB via `UPDATE plans SET stripe_price_id = ...`.
+pub async fn ensure_test_prices(pool: &PgPool) {
+    if !provider::is_configured() || !provider::is_test_mode() {
+        return;
+    }
+
+    let plans: Vec<(String, String, i64)> = match sqlx::query_as(
+        "SELECT code, name, amount_cents FROM plans \
+         WHERE is_active = true \
+           AND amount_cents > 0 \
+           AND (stripe_price_id IS NULL OR stripe_price_id = '')",
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            error!(target: "billing", error = ?e, "ensure_test_prices: plans lookup failed");
+            return;
+        }
+    };
+
+    for (code, name, amount_cents) in plans {
+        let lookup_key = format!("rwayve_{code}_v1");
+
+        let price_id = match provider::find_price_by_lookup_key(&lookup_key).await {
+            Ok(Some(id)) => {
+                info!(target: "billing", plan = %code, %id, "stripe price found by lookup_key");
+                id
+            }
+            Ok(None) => {
+                let product_id = match provider::create_product(&name, None).await {
+                    Ok(id) => id,
+                    Err(e) => {
+                        error!(target: "billing", plan = %code, error = ?e, "create_product failed");
+                        continue;
+                    }
+                };
+                match provider::create_monthly_price(&product_id, amount_cents, "usd", &lookup_key)
+                    .await
+                {
+                    Ok(id) => {
+                        info!(target: "billing", plan = %code, %id, %product_id, "stripe price created");
+                        id
+                    }
+                    Err(e) => {
+                        error!(target: "billing", plan = %code, error = ?e, "create_monthly_price failed");
+                        continue;
+                    }
+                }
+            }
+            Err(e) => {
+                error!(target: "billing", plan = %code, error = ?e, "find_price_by_lookup_key failed");
+                continue;
+            }
+        };
+
+        if let Err(e) = sqlx::query("UPDATE plans SET stripe_price_id = $1 WHERE code = $2")
+            .bind(&price_id)
+            .bind(&code)
+            .execute(pool)
+            .await
+        {
+            error!(target: "billing", plan = %code, error = ?e, "ensure_test_prices: plan update failed");
+        }
+    }
+}
