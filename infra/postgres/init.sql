@@ -213,6 +213,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_sso_identity_unique_idx
     ON users (sso_org_id, sso_sub)
     WHERE sso_sub IS NOT NULL;
 
+-- Customizable theme. Stores the serialized ThemeChoice from the frontend's
+-- theme customizer (`{ kind: "preset"|"custom"|"default", ... }`). NULL means
+-- the user has never customized — the app falls back to the stylesheet default.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_json TEXT;
+
 
 
 CREATE TABLE IF NOT EXISTS email_accounts (

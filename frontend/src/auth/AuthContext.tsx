@@ -355,6 +355,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           organization_name: data.organization_name ?? null,
           current_plan: data.current_plan ?? null,
           recovery_mode: normalizeRecoveryMode(data.recovery_mode),
+          theme_json: data.theme_json ?? null,
         };
         // Only patch state if the server sees a different user — avoids a
         // pointless re-render when the optimistic claims already matched.
@@ -373,6 +374,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           prev.organization_name === nextUser.organization_name &&
           (prev.username ?? null) === (nextUser.username ?? null) &&
           prev.recovery_mode === nextUser.recovery_mode &&
+          (prev.theme_json ?? null) === (nextUser.theme_json ?? null) &&
           // Plan changes (upgrade / downgrade / new subscription) need to
           // trigger a re-render so the tier badge + Upgrade affordance
           // refresh. Comparing the `code` is enough — other plan fields
@@ -456,6 +458,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             organization_name: data.organization_name ?? null,
             current_plan: data.current_plan ?? null,
             recovery_mode: recoveryMode,
+            theme_json: data.theme_json ?? null,
           });
           setupEncryption(decoded.sub, recoveryMode, data.email, isFreshRegistration).catch((err) =>
             log.error("background encryption setup failed", err)

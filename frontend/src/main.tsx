@@ -6,6 +6,7 @@ import "./index.css";
 import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { CustomThemeProvider } from "./theme/CustomThemeContext";
+import ThemeSyncBridge from "./theme/ThemeSyncBridge";
 import { installDevLog } from "./utils/devlog";
 import { loadRuntimeConfig } from "./config/runtimeConfig";
 
@@ -19,7 +20,9 @@ void loadRuntimeConfig().finally(() => {
     <BrowserRouter>
       <CustomThemeProvider>
         <AuthProvider>
-          <App />
+          <ThemeSyncBridge>
+            <App />
+          </ThemeSyncBridge>
         </AuthProvider>
       </CustomThemeProvider>
     </BrowserRouter>

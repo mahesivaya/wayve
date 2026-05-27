@@ -33,6 +33,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(outlook_oauth::outlook_connect_url)
         .service(provider_lookup::provider_lookup)
         .service(handler::get_me)
+        .service(handler::put_theme)
         .service(handler::save_public_key);
 }
 

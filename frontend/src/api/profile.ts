@@ -24,3 +24,12 @@ export const updateProfile = async (data: {
     method: "PUT",
     body: JSON.stringify(data),
   });
+
+// Persist the user's serialized ThemeChoice. `theme` is the JSON string the
+// frontend customizer produces (see src/theme/CustomThemeContext.tsx) or null
+// to clear the saved preference and revert to the stylesheet default.
+export const putTheme = async (theme: string | null) =>
+  apiFetchJson<{ theme: string | null }>("/api/me/theme", {
+    method: "PUT",
+    body: JSON.stringify({ theme }),
+  });

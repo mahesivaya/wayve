@@ -44,6 +44,10 @@ export type UserType = {
   current_plan?: CurrentPlan | null;
   // Defaults to "full" when /api/me predates the column (legacy rows).
   recovery_mode?: RecoveryMode;
+  // Serialized ThemeChoice from the theme customizer. Opaque JSON string;
+  // the theme module owns the schema. NULL/undefined means no server-side
+  // override, so the client uses its localStorage cache or the default.
+  theme_json?: string | null;
 };
 
 export type AuthType = {

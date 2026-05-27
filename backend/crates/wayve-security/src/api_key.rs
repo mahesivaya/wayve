@@ -471,6 +471,7 @@ mod tests {
         );
         assert_eq!(required_scope("GET", "/api/emails"), Some("email:read"));
         assert_eq!(required_scope("GET", "/api/me"), Some("profile:read"));
+        assert_eq!(required_scope("PUT", "/api/me/theme"), Some("profile:read"));
         assert_eq!(
             required_scope("POST", "/api/profile/password"),
             Some("admin")

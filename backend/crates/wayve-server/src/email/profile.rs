@@ -5,7 +5,7 @@ use crate::routes::user::{
     current_plan_for_user, display_organization_name, effective_access_for_user,
 };
 use wayve_security::jwt::get_user_id_from_request;
-use actix_web::{HttpResponse, get};
+use actix_web::{HttpResponse, get, put};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
 
@@ -36,7 +36,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
 
     let row = sqlx::query(
         r#"
-        SELECT u.id, u.email, u.account_type, u.organization_id, u.recovery_mode,
+        SELECT u.id, u.email, u.account_type, u.organization_id, u.recovery_mode, u.theme_json,
                o.slug AS organization_slug, o.name AS organization_name
         FROM users u
         LEFT JOIN organizations o ON o.id = u.organization_id
@@ -67,6 +67,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let recovery_mode: String = row
         .try_get::<String, _>("recovery_mode")
         .unwrap_or_else(|_| "full".to_string());
+    let theme_json: Option<String> = row.try_get("theme_json").ok().flatten();
 
     let organization_name = display_organization_name(
         &account_type,
@@ -106,6 +107,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "organization_name": organization_name,
         "current_plan": current_plan,
         "recovery_mode": recovery_mode,
+        "theme_json": theme_json,
     });
 
     ME_CACHE.insert(user_id, response.clone()).await;
@@ -134,4 +136,44 @@ pub async fn save_public_key(
 
     info!(target: "auth", user_id, "public key saved");
     Ok(HttpResponse::Ok().body("Saved"))
+}
+
+// PUT /api/me/theme — persist the user's theme choice. Body: { theme: <json>|null }
+// where <json> is the serialized ThemeChoice from the frontend customizer
+// ({ kind: "preset"|"custom"|"default", ... }). NULL clears the saved
+// preference and reverts the user to the stylesheet default on next load.
+//
+// The column is treated as opaque to the backend: we don't validate the
+// schema. The frontend owns the format and is permissive on parse errors.
+#[put("/me/theme")]
+#[instrument(target = "http", skip(req, pool, body))]
+pub async fn put_theme(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<serde_json::Value>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "error": "Missing or invalid token" })));
+        }
+    };
+
+    let theme: Option<String> = match body.get("theme") {
+        Some(serde_json::Value::Null) | None => None,
+        Some(serde_json::Value::String(s)) => Some(s.clone()),
+        // Allow callers to send the object directly instead of a string —
+        // we serialize it back. Keeps the API forgiving.
+        Some(value) => Some(value.to_string()),
+    };
+
+    sqlx::query("UPDATE users SET theme_json = $1 WHERE id = $2")
+        .bind(theme.as_deref())
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
+
+    invalidate_me_cache(user_id).await;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "theme": theme })))
 }
