@@ -238,6 +238,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           {renderNavItem("/notes", "notes", "Notes")}
           {renderNavItem("/tasks", "tasks", "Tasks")}
           {renderNavItem("/aichat", "aichat", "AI Chat")}
+          {user.account_type !== "personal" && renderNavItem("/github", "github", "GitHub")}
           {/* Pricing: hidden for platform members (they administer the
               platform, not customers of it) and for personal accounts
               (they reach the upgrade flow via Settings → "Manage billing
@@ -353,6 +354,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <Link to="/notes">📝</Link>
           <Link to="/tasks">☑</Link>
           <Link to="/aichat">✨</Link>
+          {user.account_type !== "personal" && <Link to="/github" title="GitHub">GH</Link>}
           {canAccessSecurity && <Link to="/security/audit">🔒</Link>}
           {canAccessPlatformBilling && <Link to="/platform/billing" title="Platform billing">💳</Link>}
           {canAccessPlatformDeveloper && <Link to="/platform/developer" title="Developer console">⚙</Link>}

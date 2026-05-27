@@ -31,6 +31,7 @@ const Drive = lazy(() => import("./drive/DriveBox"));
 const Notes = lazy(() => import("./notes/Notes"));
 const Tasks = lazy(() => import("./tasks/Tasks"));
 const AIChat = lazy(() => import("./aichat/AIChat"));
+const GitHubRepo = lazy(() => import("./github/GitHubRepo"));
 const About = lazy(() => import("./about/About"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
@@ -204,6 +205,7 @@ export default function App() {
             <Route path="/notes" element={<Notes />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/aichat" element={<AIChat />} />
+            <Route path="/github" element={<GitHubRepo />} />
             <Route path="/about" element={<About />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />

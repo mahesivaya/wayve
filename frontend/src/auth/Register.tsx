@@ -7,6 +7,8 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { getApiBase } from "../config";
 import "./login.css"; // ✅ reuse styles
 
+type AccountKind = "personal" | "organization";
+
 export default function Register() {
   const [params] = useSearchParams();
   const [email, setEmail] = useState("");
@@ -16,6 +18,15 @@ export default function Register() {
   // phrase at signup. They're shown the words once, then never again
   // (RecoverPromptModal asks them to re-enter on a new device).
   const [recoveryMode, setRecoveryMode] = useState<RecoveryMode>("full");
+  // The "Create organization →" CTA on the marketing home sends visitors
+  // here with `?next=/organizations/new`. When that's present, default
+  // the radio to "organization" so the selection matches the user's
+  // intent without an extra click. Otherwise default to personal.
+  const [accountKind, setAccountKind] = useState<AccountKind>(() =>
+    (params.get("next") ?? "").startsWith("/organizations/new")
+      ? "organization"
+      : "personal"
+  );
   const [error, setError] = useState(() =>
     params.get("error") === "email_exists"
       ? "This email is already registered. Please log in instead."
@@ -48,8 +59,26 @@ export default function Register() {
 
       login(data.token, data.account_type ?? "personal", true);
 
-      const target = homePathForAccount(data.account_type);
-      void navigate(target.startsWith("/") ? target : `/${target}`);
+      // Post-register redirect rules (in priority order):
+      //   1. Account-kind radio = "organization" → /organizations/new so the
+      //      brand-new personal user is taken straight into the self-serve
+      //      org creation flow. Beats `?next=` because the radio is the
+      //      user's explicit, last-mile choice.
+      //   2. `?next=/path` from a referring CTA — same-origin only
+      //      (rejects "" / "//other.host" / non-leading-slash to prevent
+      //      open-redirect into another origin).
+      //   3. Fall back to the account-type home (e.g. /home for personal).
+      const rawNext = params.get("next") ?? "";
+      const safeNext =
+        rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
+      const fallback = homePathForAccount(data.account_type);
+      const target =
+        accountKind === "organization"
+          ? "/organizations/new"
+          : safeNext
+            ? safeNext
+            : fallback.startsWith("/") ? fallback : `/${fallback}`;
+      void navigate(target);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     }
@@ -60,6 +89,41 @@ export default function Register() {
       <form className="login-card" onSubmit={handleRegister}>
         <h2>Create account </h2>
         <p className="subtitle">Join Wayve to get started</p>
+
+        <fieldset className="account-kind-fieldset">
+          <legend>Account type</legend>
+          <label className="account-kind-option">
+            <input
+              type="radio"
+              name="account-kind"
+              value="personal"
+              checked={accountKind === "personal"}
+              onChange={() => setAccountKind("personal")}
+            />
+            <span>
+              <strong>Personal account</strong>
+              <small>
+                Just for me — email, chat, files, AI on a private workspace.
+              </small>
+            </span>
+          </label>
+          <label className="account-kind-option">
+            <input
+              type="radio"
+              name="account-kind"
+              value="organization"
+              checked={accountKind === "organization"}
+              onChange={() => setAccountKind("organization")}
+            />
+            <span>
+              <strong>Organization account</strong>
+              <small>
+                For my team — shared inboxes, multi-seat billing, and RBAC.
+                You'll set up the organization right after signing up.
+              </small>
+            </span>
+          </label>
+        </fieldset>
 
         <input
           type="email"

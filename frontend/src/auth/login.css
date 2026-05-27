@@ -186,6 +186,56 @@
     color: var(--color-text-secondary, var(--color-text-generic-mid));
   }
 
+  /* Account-type radio group on the Register form. Visual rules mirror
+     the recovery-mode-* fieldset above so both choice blocks read as
+     the same control system. */
+  .login-card .account-kind-fieldset {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 8px);
+    padding: 10px 12px 8px;
+    margin: 2px 0 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .login-card .account-kind-fieldset legend {
+    padding: 0 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .login-card .account-kind-option {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1.3;
+  }
+
+  .login-card .account-kind-option input[type="radio"] {
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .login-card .account-kind-option > span {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .login-card .account-kind-option strong {
+    font-size: 0.82rem;
+  }
+
+  .login-card .account-kind-option small {
+    font-size: 0.7rem;
+    line-height: 1.35;
+    color: var(--color-text-secondary, var(--color-text-generic-mid));
+  }
+
   .login-card .link-button {
     background: none;
     border: none;

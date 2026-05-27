@@ -13,6 +13,7 @@ mod email;
 mod embed;
 mod error;
 mod external;
+mod integrations;
 mod middleware;
 mod models;
 mod notes;
@@ -76,6 +77,7 @@ fn app_routes(cfg: &mut web::ServiceConfig) {
                 .configure(billing::routes)
                 .configure(platform_billing::routes)
                 .configure(platform_team::routes)
+                .configure(integrations::routes)
                 .configure(openapi::routes)
                 .configure(webhooks::routes)
                 .configure(docs::routes)

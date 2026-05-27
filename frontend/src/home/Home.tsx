@@ -178,6 +178,19 @@ export default function Home() {
               <div className="hero-actions">
                 <button onClick={() => navigate("/register")}>Get started</button>
                 <button onClick={() => navigate("/login")}>Sign in</button>
+                {/* Direct path to org creation for visitors evaluating Wayve
+                    as a team workspace. Register first (no auth means we
+                    can't promote an account that doesn't exist), then
+                    Register.tsx honours `?next=` and forwards to
+                    /organizations/new instead of the default account home. */}
+                <button
+                  className="hero-actions-secondary"
+                  onClick={() =>
+                    navigate("/register?next=/organizations/new")
+                  }
+                >
+                  Create organization →
+                </button>
               </div>
             </div>
           </section>

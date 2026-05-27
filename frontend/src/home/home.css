@@ -426,6 +426,23 @@
   color: var(--color-accent-indigo-darker);
 }
 
+/* Tertiary CTA on the hero — visually distinct from the primary
+   "Get started" (filled) and secondary "Sign in" (translucent) so
+   the three actions read as a hierarchy rather than three equal
+   alternatives. Borderless / link-like with an arrow affordance. */
+.hero-actions .hero-actions-secondary {
+  background: transparent;
+  border-color: transparent;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+}
+
+.hero-actions .hero-actions-secondary:hover {
+  background: rgb(255, 255, 255, 0.08);
+  text-decoration-thickness: 2px;
+}
+
 .home-info-band,
 .home-info-grid article {
   padding: 32px 56px;
