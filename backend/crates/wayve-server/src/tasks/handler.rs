@@ -26,7 +26,9 @@ fn normalize_priority(value: Option<i16>) -> i16 {
 fn normalize_status(value: Option<&str>) -> &'static str {
     match value.map(|s| s.trim()) {
         Some("done") => "done",
-        _ => "in_progress",
+        Some("in_review") => "in_review",
+        Some("in_progress") => "in_progress",
+        _ => "to_do",
     }
 }
 

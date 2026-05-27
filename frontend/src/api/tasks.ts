@@ -2,7 +2,7 @@ import { apiFetch, apiFetchJson } from "./client";
 
 export type TaskPriority = 1 | 2 | 3 | 4 | 5;
 
-export type TaskStatus = "in_progress" | "done";
+export type TaskStatus = "to_do" | "in_progress" | "in_review" | "done";
 
 export type Task = {
   id: number;

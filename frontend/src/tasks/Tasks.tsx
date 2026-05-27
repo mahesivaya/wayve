@@ -10,6 +10,7 @@ import {
 } from "../api/tasks";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
+import Modal from "../components/Modal";
 import "./tasks.css";
 
 const PRIORITY_OPTIONS: TaskPriority[] = [5, 4, 3, 2, 1];
@@ -28,8 +29,12 @@ const normalizePriority = (value: unknown): TaskPriority => {
   return 3;
 };
 
-const normalizeStatus = (value: unknown): TaskStatus =>
-  value === "done" ? "done" : "in_progress";
+const normalizeStatus = (value: unknown): TaskStatus => {
+  if (value === "done" || value === "in_review" || value === "in_progress") {
+    return value;
+  }
+  return "to_do";
+};
 
 const sortTasks = (list: Task[]) =>
   [...list].sort(
@@ -40,7 +45,9 @@ const sortTasks = (list: Task[]) =>
   );
 
 const STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
-  { value: "in_progress", label: "In progress" },
+  { value: "to_do", label: "To Do" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "in_review", label: "In Review" },
   { value: "done", label: "Done" },
 ];
 
@@ -70,6 +77,8 @@ export default function Tasks() {
   const [taskName, setTaskName] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TaskPriority>(3);
+  const [status, setStatus] = useState<TaskStatus>("to_do");
+  const [createAnother, setCreateAnother] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -110,8 +119,15 @@ export default function Tasks() {
     setTaskName("");
     setDescription("");
     setPriority(3);
+    setStatus("to_do");
     setEditingId(null);
     setError("");
+  };
+
+  const closeForm = () => {
+    resetForm();
+    setCreateAnother(false);
+    setCreating(false);
   };
 
   const openCreate = () => {
@@ -124,7 +140,9 @@ export default function Tasks() {
     setTaskName(task.name);
     setDescription(task.description);
     setPriority(normalizePriority(task.priority));
+    setStatus(normalizeStatus(task.status));
     setError("");
+    setCreateAnother(false);
     setCreating(true);
   };
 
@@ -219,12 +237,11 @@ export default function Tasks() {
     setError("");
     try {
       if (editingId !== null) {
-        const existing = tasks.find((t) => t.id === editingId);
         const updated = await updateTaskApi(editingId, {
           name,
           description: details,
           priority,
-          status: existing?.status ?? "in_progress",
+          status,
         });
         setTasks((prev) =>
           sortTasks(
@@ -244,7 +261,7 @@ export default function Tasks() {
           name,
           description: details,
           priority,
-          status: "in_progress",
+          status,
         });
         setTasks((prev) =>
           sortTasks([
@@ -257,8 +274,13 @@ export default function Tasks() {
           ]),
         );
       }
-      resetForm();
-      setCreating(false);
+      if (createAnother && editingId === null) {
+        setTaskName("");
+        setDescription("");
+        setError("");
+      } else {
+        closeForm();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save task");
     } finally {
@@ -322,21 +344,58 @@ export default function Tasks() {
           </div>
         </div>
 
-        {creating && (
-          <form className="task-create-form" onSubmit={saveTask}>
+        <Modal
+          isOpen={creating}
+          onClose={closeForm}
+          title={isEditing ? "Edit Task" : "Create Task"}
+        >
+          <form className="task-create-form task-create-form--modal" onSubmit={saveTask}>
+            {!isEditing && (
+              <p className="task-form-required-hint">
+                Required fields are marked with an asterisk{" "}
+                <span className="task-form-required-mark">*</span>
+              </p>
+            )}
+
             <div className="task-form-grid">
-              <label>
-                <span>Task name</span>
+              <label className="task-form-field">
+                <span className="task-form-label">Status</span>
+                <select
+                  className="task-form-select"
+                  value={status}
+                  onChange={(event) =>
+                    setStatus(event.target.value as TaskStatus)
+                  }
+                >
+                  {STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                {!isEditing && (
+                  <span className="task-form-hint">
+                    This is the initial status upon creation
+                  </span>
+                )}
+              </label>
+
+              <label className="task-form-field">
+                <span className="task-form-label">
+                  Summary{" "}
+                  <span className="task-form-required-mark">*</span>
+                </span>
                 <input
                   value={taskName}
                   onChange={(event) => setTaskName(event.target.value)}
-                  placeholder="Enter task name"
+                  placeholder="Enter task summary"
                   autoFocus
+                  required
                 />
               </label>
 
-              <label>
-                <span>Description</span>
+              <label className="task-form-field">
+                <span className="task-form-label">Description</span>
                 <textarea
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
@@ -344,56 +403,64 @@ export default function Tasks() {
                 />
               </label>
 
-              <fieldset className="task-priority">
-                <legend>Priority</legend>
-                <div className="task-priority-options">
+              <label className="task-form-field">
+                <span className="task-form-label">Priority</span>
+                <select
+                  className="task-form-select"
+                  value={priority}
+                  onChange={(event) =>
+                    setPriority(normalizePriority(event.target.value))
+                  }
+                >
                   {PRIORITY_OPTIONS.map((value) => (
-                    <label key={value} className="task-priority-option">
-                      <input
-                        type="radio"
-                        name="task-priority"
-                        value={value}
-                        checked={priority === value}
-                        onChange={() => setPriority(value)}
-                      />
-                      <span className="task-priority-num">{value}</span>
-                      <span className="task-priority-text">
-                        {priorityLabel(value)}
-                      </span>
-                    </label>
+                    <option key={value} value={value}>
+                      {priorityLabel(value)}
+                    </option>
                   ))}
-                </div>
-              </fieldset>
-
+                </select>
+              </label>
             </div>
 
             {error && <div className="task-error">{error}</div>}
 
-            <div className="task-form-actions">
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={() => {
-                  resetForm();
-                  setCreating(false);
-                }}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="primary" disabled={submitting}>
-                {submitting
-                  ? isEditing
-                    ? "Saving…"
-                    : "Creating…"
-                  : isEditing
-                    ? "Save changes"
-                    : "Create task"}
-              </button>
+            <div className="task-form-footer">
+              {!isEditing ? (
+                <label className="task-form-create-another">
+                  <input
+                    type="checkbox"
+                    checked={createAnother}
+                    onChange={(event) =>
+                      setCreateAnother(event.target.checked)
+                    }
+                  />
+                  <span>Create another</span>
+                </label>
+              ) : (
+                <span />
+              )}
+              <div className="task-form-actions">
+                <button
+                  type="button"
+                  className="task-form-cancel"
+                  disabled={submitting}
+                  onClick={closeForm}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="primary" disabled={submitting}>
+                  {submitting
+                    ? isEditing
+                      ? "Saving…"
+                      : "Creating…"
+                    : isEditing
+                      ? "Save changes"
+                      : "Create"}
+                </button>
+              </div>
             </div>
           </form>
-        )}
+        </Modal>
 
-        {!creating && (
         <div className={`task-list task-list--${view}`}>
           {loading ? (
             <div className="tasks-empty">
@@ -490,9 +557,8 @@ export default function Tasks() {
             ))
           )}
         </div>
-        )}
 
-        {!creating && !loading && !loadError && completedTasks.length > 0 && (
+        {!loading && !loadError && completedTasks.length > 0 && (
           <section className="task-completed-section">
             <h3 className="task-completed-title">
               Completed tasks
