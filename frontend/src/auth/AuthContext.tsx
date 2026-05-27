@@ -12,6 +12,7 @@ import {
 } from "../crypto/recovery";
 import {
   uploadWrappedKey,
+  fetchWrappedKey,
   fetchBasicKey,
   uploadBasicKey,
 } from "../api/recovery";
@@ -220,29 +221,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Local keys missing for a full/password_only account. The seed
-      // modal only ever fires during registration. On a regular login we
-      // leave the server's wrapped envelope alone — regenerating here
-      // would overwrite it with a fresh mnemonic, orphaning the 24
-      // words the user already saved.
+      // Local keys missing for a full/password_only account. Two
+      // sub-cases to distinguish:
       //
-      // For "full" mode we then surface RecoverPromptModal so the user
-      // can paste the original 24 words and unwrap the envelope into
-      // local IndexedDB. "password_only" envelopes don't contain the
-      // real private key, so the prompt would do nothing useful — log
-      // and skip silently for that mode.
+      //   (a) Server HAS a wrapped envelope — user previously registered
+      //       and now logs in on a fresh device. We must NOT regenerate
+      //       (that would orphan the 24 words they saved); show
+      //       RecoverPromptModal so they paste the original mnemonic.
+      //
+      //   (b) Server has NO wrapped envelope — typically a SQL-seeded
+      //       account (see scripts/seed_users.sql) logging in for the
+      //       first time. There's nothing to recover; we fall through to
+      //       the fresh-setup branch below, which generates keys, a new
+      //       mnemonic, and the seed modal.
+      //
+      // password_only envelopes contain throwaway plaintext — even if
+      // present they can't restore the real key — so we log and skip the
+      // recovery prompt for that mode regardless.
       if (!isFreshRegistration) {
-        if (recoveryMode === "full") {
-          log.info("encryption keys missing — prompting for recovery mnemonic");
-          setNeedsRecovery(true);
-        } else {
-          log.warn(
-            "encryption keys missing on this device; password_only accounts " +
-              "can't restore via mnemonic. Encrypted content will be unavailable.",
-            { recoveryMode },
-          );
+        const serverWrapped = await fetchWrappedKey();
+        if (serverWrapped) {
+          if (recoveryMode === "full") {
+            log.info("encryption keys missing — prompting for recovery mnemonic");
+            setNeedsRecovery(true);
+          } else {
+            log.warn(
+              "encryption keys missing on this device; password_only accounts " +
+                "can't restore via mnemonic. Encrypted content will be unavailable.",
+              { recoveryMode },
+            );
+          }
+          return;
         }
-        return;
+        log.info(
+          "no wrapped key on server — treating as first-time setup",
+          { recoveryMode },
+        );
+        // fall through to the fresh key + mnemonic generation below
       }
 
       log.info("generating new RSA key pair", { recoveryMode });

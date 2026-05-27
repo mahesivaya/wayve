@@ -1,4 +1,5 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import type { KeyboardEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import "../home/home.css";
@@ -10,6 +11,18 @@ export default function OrganizationAdminHome() {
   const navigate = useNavigate();
   const canSeeMembers =
     hasPermission(user, "members:read") || hasPermission(user, "members:manage");
+
+  // Enter / Space keyboard activation so the article behaves like a
+  // button for screen-reader + keyboard users.
+  const handleCardKeyDown = (
+    event: KeyboardEvent<HTMLElement>,
+    path: string,
+  ) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      navigate(path);
+    }
+  };
 
   return (
     <div className="organization-admin-home u-page-shell">
@@ -29,10 +42,18 @@ export default function OrganizationAdminHome() {
             </div>
           </div>
           <div className="organization-name-list platform-console-list">
-            <article>
+            <article
+              className="u-card-interactive"
+              role="button"
+              tabIndex={0}
+              aria-label="Open Members & roles"
+              onClick={() => navigate("/organization/members")}
+              onKeyDown={(event) =>
+                handleCardKeyDown(event, "/organization/members")
+              }
+            >
               <strong>Members & roles</strong>
               <span>Create accounts inside your organization and adjust their roles.</span>
-              <Link to="/organization/members" className="u-btn-primary">Open →</Link>
             </article>
           </div>
         </section>

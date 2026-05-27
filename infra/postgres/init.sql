@@ -213,6 +213,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_sso_identity_unique_idx
     ON users (sso_org_id, sso_sub)
     WHERE sso_sub IS NOT NULL;
 
+-- Per-user password expiry. NULL = never expires (every existing user
+-- gets this default, so the new column is a no-op for them). When set
+-- to a future timestamp, the login handler refuses to issue a JWT after
+-- now() > password_valid_until, and the JWT it does issue is clamped
+-- so its `exp` claim never outlives `password_valid_until`. Used today
+-- for short-lived guest accounts seeded with a 24h window.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_valid_until TIMESTAMPTZ;
+
 -- Customizable theme. Stores the serialized ThemeChoice from the frontend's
 -- theme customizer (`{ kind: "preset"|"custom"|"default", ... }`). NULL means
 -- the user has never customized — the app falls back to the stylesheet default.

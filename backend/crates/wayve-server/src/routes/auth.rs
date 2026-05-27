@@ -4,7 +4,9 @@ use crate::email::sender::send_mail;
 use crate::models::auth::{ForgotInput, LoginInput, LoginResponse, RegisterInput, ResetInput};
 use crate::models::message::MessageResponse;
 use crate::models::user::User;
-use wayve_security::jwt::{auth_cookie, create_jwt, create_jwt_for_account, expired_auth_cookie};
+use wayve_security::jwt::{
+    auth_cookie, create_jwt, create_jwt_for_account_with_max_exp, expired_auth_cookie,
+};
 use wayve_security::password::{hash_password, verify_password};
 use rand::RngCore;
 use tracing::{error, info, instrument, warn};
@@ -78,7 +80,8 @@ pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) 
     info!(target: "auth", "login attempt");
 
     let user = sqlx::query_as::<_, User>(
-        "SELECT id, email, password, account_type FROM users WHERE email = $1",
+        "SELECT id, email, password, account_type, password_valid_until \
+         FROM users WHERE email = $1",
     )
     .bind(&data.email)
     .fetch_optional(pool.get_ref())
@@ -118,8 +121,35 @@ pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) 
         }));
     }
 
+    // Short-lived (e.g. guest) accounts carry a hard expiry on the
+    // password itself. Refuse login once past that timestamp — bcrypt
+    // verify succeeding is not enough on its own. We answer with the
+    // generic "Invalid credentials" message to avoid leaking whether
+    // an account exists vs has expired.
+    if let Some(valid_until) = user.password_valid_until
+        && chrono::Utc::now() > valid_until
+    {
+        warn!(
+            target: "auth",
+            email = %data.email,
+            "Expired credential login attempt (password_valid_until={})",
+            valid_until,
+        );
+        return Ok(HttpResponse::Unauthorized().json(MessageResponse {
+            message: "Invalid credentials".to_string(),
+        }));
+    }
+
     info!("Login success: {}", data.email);
-    let token = create_jwt_for_account(user.id, user.email.clone(), user.account_type.clone());
+    // Clamp the JWT's `exp` so it never outlives the account's hard
+    // expiry. For non-expiring accounts (the default), `max_exp` is
+    // None and the standard 24h TTL applies.
+    let token = create_jwt_for_account_with_max_exp(
+        user.id,
+        user.email.clone(),
+        user.account_type.clone(),
+        user.password_valid_until,
+    );
     Ok(HttpResponse::Ok()
         .cookie(auth_cookie(token.clone()))
         .json(LoginResponse {

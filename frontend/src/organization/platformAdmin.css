@@ -127,13 +127,6 @@
   white-space: normal;
 }
 
-.platform-console-list .u-btn-primary {
-  align-self: flex-start;
-  min-height: 32px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
 .platform-admin-empty {
   padding: 28px;
   border: 1px dashed var(--color-input-border);

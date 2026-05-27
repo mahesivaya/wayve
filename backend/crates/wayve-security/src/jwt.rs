@@ -1,4 +1,4 @@
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -22,18 +22,43 @@ pub fn create_jwt(user_id: i32, email: String) -> String {
 }
 
 pub fn create_jwt_for_account(user_id: i32, email: String, account_type: String) -> String {
+    create_jwt_for_account_with_max_exp(user_id, email, account_type, None)
+}
+
+/// Variant of `create_jwt_for_account` that clamps the JWT's `exp`
+/// claim against an optional ceiling. The default JWT TTL is 24h; if
+/// `max_exp` is set and is sooner than 24h from now, that earlier
+/// time is used. Used today for short-lived guest accounts whose
+/// `password_valid_until` is closer than the default JWT lifetime,
+/// so a guest who logs in late in their 24h window can't extend it
+/// by another 24h via the JWT.
+pub fn create_jwt_for_account_with_max_exp(
+    user_id: i32,
+    email: String,
+    account_type: String,
+    max_exp: Option<DateTime<Utc>>,
+) -> String {
     let secret = crate::config::jwt_secret();
 
-    let expiration = Utc::now()
+    let default_expiration = Utc::now()
         .checked_add_signed(ChronoDuration::hours(24))
-        .expect("valid timestamp")
-        .timestamp() as usize;
+        .expect("valid timestamp");
+
+    // Clamp against `max_exp` if provided. If the ceiling has already
+    // passed we still emit a token here — the caller is expected to
+    // have rejected the login first; we never silently issue an
+    // already-expired token because the callers above the JWT layer
+    // own the "is this still valid" decision.
+    let expiration = match max_exp {
+        Some(cap) if cap < default_expiration => cap,
+        _ => default_expiration,
+    };
 
     let claims = Claims {
         sub: user_id,
         email,
         account_type,
-        exp: expiration,
+        exp: expiration.timestamp() as usize,
     };
 
     encode(
