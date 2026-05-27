@@ -6,9 +6,56 @@ use crate::email::provider::MailProvider;
 use crate::email::sync::sync_account_recent;
 use wayve_security::jwt::{auth_cookie, create_jwt_for_account};
 use wayve_security::oauth::{consume_state, create_oauth_state};
+use wayve_security::rbac::{self, Role, Scope};
 use actix_web::{HttpResponse, Responder, web};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
+
+/// Gate the external-mailbox connect flows: only personal accounts and
+/// organization owners may attach a Gmail / Outlook mailbox to their own
+/// user. Other org members work out of shared inboxes (the org-wide
+/// pattern at /settings/inboxes), and platform staff have no reason to
+/// hang a personal mailbox off their admin account.
+///
+/// Returns `Ok(())` when the caller is allowed; `Err(response)` is a
+/// ready-to-return 403/500 otherwise.
+pub(crate) async fn require_external_mailbox_actor(
+    pool: &PgPool,
+    user_id: i32,
+) -> Result<(), HttpResponse> {
+    let ctx = match rbac::resolve_role_context(pool, user_id).await {
+        Ok(ctx) => ctx,
+        Err(sqlx::Error::RowNotFound) => {
+            return Err(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Account not found" })));
+        }
+        Err(e) => {
+            error!(target: "auth", error = ?e, user_id, "rbac role resolution failed for mailbox connect");
+            return Err(HttpResponse::InternalServerError().finish());
+        }
+    };
+
+    let allowed = match ctx.scope {
+        Scope::Personal => true,
+        Scope::Organization => ctx.role == Role::Owner,
+        Scope::Platform => false,
+    };
+
+    if !allowed {
+        warn!(
+            target: "auth",
+            user_id,
+            scope = ?ctx.scope,
+            role = ctx.role.as_str(),
+            "external mailbox connect denied",
+        );
+        return Err(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Only personal accounts and organization owners can connect an external mailbox."
+        })));
+    }
+
+    Ok(())
+}
 
 #[derive(Deserialize)]
 pub struct CallbackQuery {
@@ -106,6 +153,10 @@ pub async fn gmail_connect_url(req: HttpRequest, pool: web::Data<PgPool>) -> imp
         }
     };
 
+    if let Err(response) = require_external_mailbox_actor(pool.get_ref(), user_id).await {
+        return response;
+    }
+
     let secrets = match load_google_client() {
         Ok(value) => value,
         Err(response) => return response,
@@ -155,6 +206,14 @@ pub async fn gmail_login(
                 return HttpResponse::Unauthorized().body("Missing token");
             }
         };
+
+        // Same RBAC gate as POST /gmail/connect-url. /gmail/login is the
+        // legacy redirect-based connect flow used by older clients; without
+        // this check an org member could bypass the JSON endpoint and still
+        // hang a personal mailbox off their account via a browser redirect.
+        if let Err(response) = require_external_mailbox_actor(pool.get_ref(), user_id).await {
+            return response;
+        }
 
         (Some(user_id), OAUTH_FLOW_CONNECT)
     };

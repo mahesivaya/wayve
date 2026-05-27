@@ -298,9 +298,19 @@ export default function Emails() {
     ...account,
     display_name: accountNameOverrides[account.id] ?? account.display_name,
   }));
-  const showAccountControls = user?.scope
+  // Personal accounts and organization owners can connect external Gmail /
+  // Outlook mailboxes to their own user — the same per-user OAuth flow.
+  // Backend (`gmail_login`, `outlook_connect_url`) has no account-type gate;
+  // this is purely a UI choice. Non-owner org members stick to org-wide
+  // shared inboxes (see /settings/inboxes), so we don't surface the
+  // single-user connect picker for them.
+  const isPersonalScope = user?.scope
     ? user.scope === "personal"
     : user?.account_type === "personal";
+  const isOrgOwner =
+    (user?.scope === "organization" || user?.account_type === "organization_admin") &&
+    user?.effective_role === "owner";
+  const showAccountControls = isPersonalScope || isOrgOwner;
 
   useEffect(() => {
     if (showAccountControls) return;

@@ -205,7 +205,7 @@ export default function Home() {
               </p>
               <ul className="home-pillar-features">
                 <li>
-                  <strong>One workspace for everything.</strong> Mail, chat,
+                  <strong>One workspace for everything.</strong> Email, chat,
                   calls, scheduler, drive, notes, tasks, and AI assistant —
                   no tab juggling, no app sprawl.
                 </li>

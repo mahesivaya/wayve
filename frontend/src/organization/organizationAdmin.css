@@ -150,6 +150,38 @@
   line-height: 1.5;
 }
 
+.organization-add-account-form {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.organization-add-account-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.organization-add-account-fields button {
+  min-height: 38px;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .organization-add-account-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .organization-add-account-fields button {
+    justify-self: start;
+  }
+}
+
 .organization-member-list {
   list-style: none;
   padding: 0;

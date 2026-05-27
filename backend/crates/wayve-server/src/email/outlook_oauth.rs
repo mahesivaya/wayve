@@ -136,6 +136,12 @@ pub async fn outlook_connect_url(req: HttpRequest, pool: web::Data<PgPool>) -> i
         }
     };
 
+    if let Err(response) =
+        crate::email::oauth_flow::require_external_mailbox_actor(pool.get_ref(), user_id).await
+    {
+        return response;
+    }
+
     let creds = match require_credentials() {
         Ok(c) => c,
         Err(response) => return response,

@@ -96,7 +96,7 @@ export default function OrganizationAdminHome() {
   const apps: Tile[] = [
     {
       icon: "📬",
-      label: "Mail",
+      label: "Email",
       description: "Manage organization communication from the shared workspace.",
       path: "/emails",
       visible: true,
