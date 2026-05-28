@@ -123,6 +123,75 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     }
   }, [sidebarCollapsed]);
 
+  // Sidebar can be resized by dragging the handle between sidebar and
+  // content. Width is bounded so labels stay readable (min) and the
+  // sidebar doesn't crowd out content (max).
+  const SIDEBAR_MIN_WIDTH = 160;
+  const SIDEBAR_MAX_WIDTH = 400;
+  const SIDEBAR_DEFAULT_WIDTH = 220;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem("rwayve.sidebar.width");
+      const parsed = raw ? Number(raw) : NaN;
+      if (
+        Number.isFinite(parsed) &&
+        parsed >= SIDEBAR_MIN_WIDTH &&
+        parsed <= SIDEBAR_MAX_WIDTH
+      ) {
+        return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return SIDEBAR_DEFAULT_WIDTH;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("rwayve.sidebar.width", String(sidebarWidth));
+    } catch {
+      // ignore
+    }
+  }, [sidebarWidth]);
+
+  const handleResizeStart = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      // Don't start a resize when the sidebar is in icon-only mode or
+      // when it's running as a mobile overlay; the handle is hidden in
+      // those cases but a stray touch can still hit it.
+      if (sidebarCollapsed) return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = sidebarWidth;
+
+      const onMove = (ev: PointerEvent) => {
+        const next = Math.max(
+          SIDEBAR_MIN_WIDTH,
+          Math.min(SIDEBAR_MAX_WIDTH, startWidth + (ev.clientX - startX)),
+        );
+        setSidebarWidth(next);
+      };
+
+      const onUp = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+        setIsResizing(false);
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+      setIsResizing(true);
+    },
+    [sidebarCollapsed, sidebarWidth],
+  );
+
   // Support modal: opens from the header button, closes via the modal's own
   // close action or Esc. Lives at layout scope so every signed-in page can
   // reach support without each one re-wiring the affordance.
@@ -374,6 +443,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         {/* PRIMARY SIDEBAR — every app nav surface lives here. */}
         <nav
           className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`.trim()}
+          style={sidebarCollapsed ? undefined : { width: sidebarWidth }}
           aria-label="Primary navigation"
         >
           <div className="sidebar-section">
@@ -461,6 +531,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             {renderSidebarItem("/about", "about", "About", "ⓘ")}
           </div>
         </nav>
+
+        {/* Drag-to-resize handle. Hidden when the sidebar is collapsed
+            (fixed 56px rail) or in mobile overlay mode (≤1100px). */}
+        <div
+          className={`sidebar-resize-handle ${isResizing ? "is-resizing" : ""}`.trim()}
+          onPointerDown={handleResizeStart}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+        />
 
         {/* Scrim catches taps outside the sidebar overlay on narrow screens. */}
         {navOpen && (

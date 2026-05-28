@@ -530,6 +530,43 @@
   gap: 4px;
 }
 
+/* =============================
+   ↔ SIDEBAR RESIZE HANDLE
+   Thin vertical strip between the sidebar and content. Hover reveals
+   a primary-tinted bar; click-and-drag adjusts the sidebar width.
+   Hidden when the sidebar is collapsed or in overlay mode.
+============================== */
+.sidebar-resize-handle {
+  width: 4px;
+  flex-shrink: 0;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+  z-index: 2;
+  transition: background 0.15s;
+}
+
+.sidebar-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -2px;
+  right: -2px;
+  /* Wider hit area than the visible 4px strip. */
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.is-resizing {
+  background: var(--color-primary-action);
+}
+
+/* Hide the handle when the sidebar is collapsed (fixed-width icon rail).
+   Adjacent-sibling selector keeps this in sync with the sidebar's state. */
+.sidebar.collapsed + .sidebar-resize-handle {
+  display: none;
+}
+
 /* Scrim behind the sidebar overlay on narrow screens — taps dismiss. */
 .sidebar-scrim {
   display: none;
@@ -771,6 +808,12 @@
   .sidebar.collapsed .sidebar-link {
     justify-content: flex-start;
     padding: 7px 10px;
+  }
+
+  /* Resize handle is desktop-only — sidebar is an overlay here, so
+     dragging the edge to resize doesn't make sense. */
+  .sidebar-resize-handle {
+    display: none;
   }
 
   .sidebar-scrim {
