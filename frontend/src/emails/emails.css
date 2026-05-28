@@ -39,6 +39,34 @@
   background: var(--color-danger-soft);
 }
 
+/* Page wrapper — stacks the in-page search/layout toolbar above the
+   3-pane email layout. The global header SearchBar is hidden on /emails
+   (see Layout.tsx) and rendered here instead so search + view-mode
+   controls live with the page they affect. */
+.emails-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.emails-page-toolbar {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-email-bg);
+}
+
+.emails-page-toolbar .global-search-row {
+  margin: 0;
+}
+
+.emails-root > .main {
+  flex: 1;
+  min-height: 0;
+}
+
 /* ================= MAIN (FIXED HEIGHT ISSUE) ================= */
 /* Use 100% (not 100vh) — Layout's .content already constrains us to
    viewport-minus-header. 100vh here makes the panel taller than its

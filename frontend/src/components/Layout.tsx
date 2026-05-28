@@ -404,7 +404,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           </button>
         </div>
 
-        <SearchBar />
+        {!location.pathname.startsWith("/emails") && <SearchBar />}
 
         <div className="actions">
           {/* Welcome / role label removed — the signed-in identity is

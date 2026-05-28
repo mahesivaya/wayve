@@ -11,6 +11,7 @@ import { useEmailInbox } from "./useEmailInbox";
 import { connectYahoo, getGmailConnectUrl, getOutlookConnectUrl, updateAccountDisplayName } from "../api/email";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
+import SearchBar from "../search/SearchBar";
 import { logger } from "../utils/logger";
 
 const ACCOUNT_NAME_STORAGE_KEY = "rwayve.emailAccountNames";
@@ -363,6 +364,10 @@ export default function Emails() {
 
   // ================= UI =================
   return (
+    <div className="emails-root">
+      <div className="emails-page-toolbar">
+        <SearchBar />
+      </div>
     <div
       ref={mainRef}
       className={[
@@ -546,6 +551,7 @@ export default function Emails() {
           normalizedSearchQuery={normalizedSearchQuery}
         />
       )}
+    </div>
     </div>
   );
 }
