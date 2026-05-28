@@ -64,7 +64,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
   };
 
   return (
-    <div className="sidebar" style={{ width }}>
+    <div className="email-sidebar" style={{ width }}>
       <button
         className="compose-btn"
         onClick={onCompose}

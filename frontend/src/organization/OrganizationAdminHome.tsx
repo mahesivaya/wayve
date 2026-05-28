@@ -125,13 +125,6 @@ export default function OrganizationAdminHome() {
 
   return (
     <div className="organization-admin-home u-page-shell">
-      <div className="organization-admin-header u-panel u-flex-between">
-        <div>
-          <h1>Welcome {user?.role_label ?? "Organization member"}</h1>
-          <p>{user?.email}</p>
-        </div>
-      </div>
-
       <ActivityDashboard />
 
       {hasAnyConsole && (

@@ -50,8 +50,12 @@
   overflow: hidden;
 }
 
-/* ================= SIDEBAR ================= */
-.sidebar {
+/* ================= EMAIL SIDEBAR =================
+   Renamed from `.sidebar` to `.email-sidebar` so it stops colliding
+   with the global `.sidebar` class in [Layout.css](../components/Layout.css).
+   Before the rename, the rules below leaked onto the app's left rail
+   whenever the Emails route mounted, breaking its width/padding. */
+.email-sidebar {
   background: var(--color-email-bg);
   padding: var(--space-7);
   display: flex;
@@ -1448,7 +1452,7 @@
     background: var(--color-surface-cool-blue-mid);
   }
 
-  .main .sidebar,
+  .main .email-sidebar,
   .main .email-sidebar-resizer,
   .main .email-list-resizer {
     display: none;
