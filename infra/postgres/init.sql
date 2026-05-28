@@ -579,6 +579,23 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('to_do', '
 
 CREATE INDEX IF NOT EXISTS idx_tasks_user_priority ON tasks(user_id, priority DESC, created_at DESC);
 
+-- Files attached to a task. Stored under ./uploads encrypted at rest just
+-- like drive_files; the on-disk blob is unreferenced (and garbage-collected
+-- on next sweep) when the row is deleted by the task cascade.
+CREATE TABLE IF NOT EXISTS task_attachments (
+    id BIGSERIAL PRIMARY KEY,
+    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    file_type TEXT,
+    file_path TEXT NOT NULL,
+    file_iv TEXT,
+    size BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);
+
 -- ── Activity dashboard (GET /api/home/summary) supporting indexes ──
 -- Partial index on unread emails — both the COUNT and the "5 most recent
 -- unread" preview use this, so the query is an index-only scan even on a

@@ -1,10 +1,15 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createTaskApi,
   deleteTaskApi,
+  deleteTaskAttachment,
+  downloadTaskAttachment,
   getTasks,
+  listTaskAttachments,
   updateTaskApi,
+  uploadTaskAttachments,
   type Task,
+  type TaskAttachment,
   type TaskPriority,
   type TaskStatus,
 } from "../api/tasks";
@@ -75,6 +80,14 @@ export default function Tasks() {
   const [createAnother, setCreateAnother] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // Files chosen in the modal but not yet uploaded. Held locally so creation
+  // can persist them once we have the new task id, and so they survive
+  // re-renders before submit. Reset by closeForm/resetForm.
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  // Server-side attachments for the task currently being edited.
+  const [existingAttachments, setExistingAttachments] = useState<TaskAttachment[]>([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isEditing = editingId !== null;
 
@@ -116,6 +129,9 @@ export default function Tasks() {
     setStatus("to_do");
     setEditingId(null);
     setError("");
+    setPendingAttachments([]);
+    setExistingAttachments([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const closeForm = () => {
@@ -137,7 +153,61 @@ export default function Tasks() {
     setStatus(normalizeStatus(task.status));
     setError("");
     setCreateAnother(false);
+    setPendingAttachments([]);
+    setExistingAttachments([]);
     setCreating(true);
+    setAttachmentsLoading(true);
+    listTaskAttachments(task.id)
+      .then((list) => setExistingAttachments(list))
+      .catch(() => {
+        // Non-fatal — just leave the list empty.
+      })
+      .finally(() => setAttachmentsLoading(false));
+  };
+
+  const onPickFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const list = event.target.files;
+    if (!list) return;
+    const next = Array.from(list);
+    if (next.length === 0) return;
+    setPendingAttachments((prev) => [...prev, ...next]);
+    // Reset input so the same filename can be picked again after removal.
+    event.target.value = "";
+  };
+
+  const removePending = (index: number) => {
+    setPendingAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExisting = async (attachment: TaskAttachment) => {
+    const ok = window.confirm(`Remove attachment "${attachment.name}"?`);
+    if (!ok) return;
+    try {
+      await deleteTaskAttachment(attachment.id);
+      setExistingAttachments((prev) =>
+        prev.filter((a) => a.id !== attachment.id),
+      );
+    } catch (err) {
+      window.alert(
+        err instanceof Error ? err.message : "Failed to remove attachment",
+      );
+    }
+  };
+
+  const downloadExisting = async (attachment: TaskAttachment) => {
+    try {
+      await downloadTaskAttachment(attachment);
+    } catch (err) {
+      window.alert(
+        err instanceof Error ? err.message : "Failed to download attachment",
+      );
+    }
+  };
+
+  const formatBytes = (size: number) => {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const changeStatus = async (task: Task, nextStatus: TaskStatus) => {
@@ -230,6 +300,7 @@ export default function Tasks() {
     setSubmitting(true);
     setError("");
     try {
+      let targetTaskId: number;
       if (editingId !== null) {
         const updated = await updateTaskApi(editingId, {
           name,
@@ -237,6 +308,7 @@ export default function Tasks() {
           priority,
           status,
         });
+        targetTaskId = updated.id;
         setTasks((prev) =>
           sortTasks(
             prev.map((t) =>
@@ -257,6 +329,7 @@ export default function Tasks() {
           priority,
           status,
         });
+        targetTaskId = created.id;
         setTasks((prev) =>
           sortTasks([
             ...prev,
@@ -268,9 +341,29 @@ export default function Tasks() {
           ]),
         );
       }
+
+      if (pendingAttachments.length > 0) {
+        try {
+          await uploadTaskAttachments(targetTaskId, pendingAttachments);
+        } catch (err) {
+          // Task is already saved — surface the attachment failure but
+          // keep the modal open so the user can retry the upload.
+          setError(
+            err instanceof Error
+              ? `Task saved, but attachment upload failed: ${err.message}`
+              : "Task saved, but attachment upload failed",
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
       if (createAnother && editingId === null) {
         setTaskName("");
         setDescription("");
+        setPendingAttachments([]);
+        setExistingAttachments([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
         setError("");
       } else {
         closeForm();
@@ -413,6 +506,83 @@ export default function Tasks() {
                   ))}
                 </select>
               </label>
+
+              <div className="task-form-field task-form-field--attachments">
+                <span className="task-form-label">Attachments</span>
+                <div className="task-attachments-controls">
+                  <button
+                    type="button"
+                    className="task-attachments-pick"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    + Add files
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="task-attachments-input"
+                    onChange={onPickFiles}
+                  />
+                  <span className="task-form-hint">
+                    Files are uploaded when you save the task.
+                  </span>
+                </div>
+
+                {isEditing && attachmentsLoading && (
+                  <div className="task-attachments-empty">Loading attachments…</div>
+                )}
+
+                {(existingAttachments.length > 0 || pendingAttachments.length > 0) && (
+                  <ul className="task-attachments-list">
+                    {existingAttachments.map((att) => (
+                      <li key={`saved-${att.id}`} className="task-attachment-item">
+                        <button
+                          type="button"
+                          className="task-attachment-name"
+                          onClick={() => void downloadExisting(att)}
+                          title="Download"
+                        >
+                          {att.name}
+                        </button>
+                        <span className="task-attachment-size">
+                          {formatBytes(att.size)}
+                        </span>
+                        <button
+                          type="button"
+                          className="task-attachment-remove"
+                          onClick={() => void removeExisting(att)}
+                          aria-label={`Remove ${att.name}`}
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                    {pendingAttachments.map((file, idx) => (
+                      <li
+                        key={`pending-${idx}-${file.name}`}
+                        className="task-attachment-item task-attachment-item--pending"
+                      >
+                        <span className="task-attachment-name task-attachment-name--pending">
+                          {file.name}
+                        </span>
+                        <span className="task-attachment-size">
+                          {formatBytes(file.size)}
+                        </span>
+                        <span className="task-attachment-badge">Pending</span>
+                        <button
+                          type="button"
+                          className="task-attachment-remove"
+                          onClick={() => removePending(idx)}
+                          aria-label={`Remove ${file.name}`}
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
 
             {error && <div className="task-error">{error}</div>}

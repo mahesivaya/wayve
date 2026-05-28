@@ -645,6 +645,132 @@
   font-size: var(--text-3xl);
 }
 
+/* ── Task attachments (inside create/edit modal) ──
+   Spans the full width of the form grid so the file list sits below the
+   priority/status row instead of squeezing into one column. */
+.task-form-field--attachments {
+  grid-column: 1 / -1;
+}
+
+.task-attachments-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.task-attachments-input {
+  display: none;
+}
+
+.task-attachments-pick {
+  appearance: none;
+  border: 1px dashed var(--color-border);
+  background: transparent;
+  color: var(--color-text-primary);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.task-attachments-pick:hover {
+  background: var(--color-email-bg);
+  border-color: var(--color-primary);
+}
+
+.task-attachments-empty {
+  margin-top: 8px;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.task-attachments-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+}
+
+.task-attachment-item--pending {
+  border-style: dashed;
+}
+
+.task-attachment-name {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  color: var(--color-primary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.task-attachment-name:hover {
+  text-decoration: underline;
+}
+
+.task-attachment-name--pending {
+  color: var(--color-text-primary);
+  cursor: default;
+}
+
+.task-attachment-name--pending:hover {
+  text-decoration: none;
+}
+
+.task-attachment-size {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+  flex: 0 0 auto;
+}
+
+.task-attachment-badge {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-email-bg);
+  color: var(--color-text-secondary);
+}
+
+.task-attachment-remove {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--color-text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.task-attachment-remove:hover {
+  color: var(--color-danger, #c0392b);
+}
+
 @media (max-width: 760px){
   .tasks-app {
     flex-direction: column;
