@@ -96,6 +96,17 @@ export default function RecoverySeedModal({
               only. Copy or download the phrase and keep it somewhere
               safe — not a screenshot, not another app on this device.
             </p>
+          ) : recoveryMode === "basic" ? (
+            <p>
+              These {MNEMONIC_WORD_COUNT} words let you reset your
+              password later or <strong>upgrade to full
+              encryption</strong> — where Wayve no longer holds a copy
+              of your key. You can keep using email + password to sign
+              in today without entering them, but if you lose your
+              password or want to upgrade, you'll need this phrase. Copy
+              or download it and keep it somewhere safe — not a
+              screenshot, not another app on this device.
+            </p>
           ) : (
             <p>
               These {MNEMONIC_WORD_COUNT} words are the <strong>only</strong>{" "}

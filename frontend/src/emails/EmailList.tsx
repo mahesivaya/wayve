@@ -351,14 +351,82 @@ export const EmailList: React.FC<EmailListProps> = ({
         >
           <div className="email-top">
             {isListView && (
-              <input
-                type="checkbox"
-                className="email-row-checkbox"
-                checked={checkedIds.has(email.id)}
-                onChange={() => toggleChecked(email.id)}
-                onClick={(event) => event.stopPropagation()}
-                aria-label={`Select email "${email.subject || "(No Subject)"}"`}
+              // Unread indicator pinned to the left of the envelope.
+              // The envelope itself is the hover-to-checkbox toggle;
+              // the unread dot is a separate visual that matches the
+              // reference screenshot — solid orange for unread, empty
+              // slot for read so the row gutter alignment never shifts.
+              <span
+                className={`email-row-unread-dot ${email.is_read === false ? "is-unread" : ""}`}
+                aria-hidden="true"
               />
+            )}
+            {isListView && (
+              // Envelope icon by default; on row hover (or when the
+              // row is checked) the icon fades out and the checkbox
+              // fades in over the same spot. stopPropagation on the
+              // wrapper so a click on the checkbox doesn't also open
+              // the email.
+              <span
+                className="email-row-toggle"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  className="email-row-checkbox"
+                  checked={checkedIds.has(email.id)}
+                  onChange={() => toggleChecked(email.id)}
+                  aria-label={`Select email "${email.subject || "(No Subject)"}"`}
+                />
+                <span
+                  className="email-row-icon"
+                  aria-hidden="true"
+                >
+                  {/* Two envelope variants so the read state reads at
+                      a glance from the icon itself:
+                        - Unread → closed envelope (V flap pointing down
+                          inside the rectangle).
+                        - Read → opened envelope (^ flap above the
+                          rectangle + a letter line peeking out).
+                      Inline SVG so the rendering is consistent across
+                      OSes (the unicode `✉` ships as a colorful emoji
+                      on macOS/Windows, a plain glyph on Linux). */}
+                  {email.is_read === false ? (
+                    <svg
+                      viewBox="0 0 16 16"
+                      width="14"
+                      height="14"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="1.75" y="3.5" width="12.5" height="9" rx="1.5" />
+                      <path d="M2 4.5l6 4.5 6-4.5" />
+                    </svg>
+                  ) : (
+                    <svg
+                      viewBox="0 0 16 16"
+                      width="14"
+                      height="14"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      {/* Outer envelope with angled top edges — the
+                          flap is pulled back so the silhouette tapers
+                          inward at the top, the same shape Lucide's
+                          `mail-open` uses. */}
+                      <path d="M14.5 7v5.75a1.5 1.5 0 0 1-1.5 1.5H3a1.5 1.5 0 0 1-1.5-1.5V7a1.5 1.5 0 0 1 .6-1.2l5.25-3.95a1.5 1.5 0 0 1 1.8 0l5.25 3.95A1.5 1.5 0 0 1 14.5 7Z" />
+                      {/* Internal V showing the letter slot. */}
+                      <path d="M14.25 7.25L8 11.5 1.75 7.25" />
+                    </svg>
+                  )}
+                </span>
+              </span>
             )}
             <span className="email-primary">
               {/* Shared-inbox workflow chip. Only renders when the row

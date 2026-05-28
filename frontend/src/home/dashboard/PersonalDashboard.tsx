@@ -7,7 +7,40 @@ import {
   type MeetingPreview,
   type TaskPreview,
 } from "../../api/home";
-import { getEmails } from "../../api/email";
+import { getEmails, markEmailRead } from "../../api/email";
+
+// Persists the ids of emails we've just opened from this card so the
+// next mount of the home page applies the read state immediately,
+// even before /api/emails has caught up with the backend write. The
+// set is bounded so it can't grow without limit; entries are dropped
+// once they get crowded out.
+const RECENT_READ_KEY = "rwayve.home.recentlyRead";
+const RECENT_READ_MAX = 200;
+
+function loadRecentlyRead(): Set<number> {
+  try {
+    const raw = sessionStorage.getItem(RECENT_READ_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((v): v is number => typeof v === "number"));
+  } catch {
+    return new Set();
+  }
+}
+
+function markRecentlyRead(id: number) {
+  try {
+    const current = loadRecentlyRead();
+    current.add(id);
+    // Bound the set — drop oldest entries when capacity is hit.
+    const arr = Array.from(current);
+    const trimmed = arr.slice(Math.max(0, arr.length - RECENT_READ_MAX));
+    sessionStorage.setItem(RECENT_READ_KEY, JSON.stringify(trimmed));
+  } catch {
+    // ignore — private mode / quota
+  }
+}
 import { updateTaskApi } from "../../api/tasks";
 import type { EmailItem } from "../../emails/types";
 import "./personalDashboard.css";
@@ -106,11 +139,20 @@ export default function PersonalDashboard() {
     getEmails<EmailItem>({ folder: "inbox" })
       .then((result) => {
         if (cancelled) return;
-        setEmails(result.emails);
-        // Use the unread subset of the loaded page as a lower-bound
-        // count; the precise number lives in /api/home/inbox but for
-        // this layout the bar above the list is enough.
-        setUnreadCount(result.emails.filter((e) => !e.is_read).length);
+        // Apply the "recently opened from this card" hint so emails the
+        // user just clicked render as read immediately — even if the
+        // backend write hasn't completed yet by the time we re-fetched.
+        const recent = loadRecentlyRead();
+        const merged = recent.size === 0
+          ? result.emails
+          : result.emails.map((email) =>
+              recent.has(email.id) && email.is_read === false
+                ? { ...email, is_read: true }
+                : email,
+            );
+        setEmails(merged);
+        // Lower-bound unread count from the loaded page.
+        setUnreadCount(merged.filter((e) => !e.is_read).length);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -147,6 +189,31 @@ export default function PersonalDashboard() {
     },
     [tasks],
   );
+
+  // Click handler for the Inbox card: mark the email read optimistically
+  // both in the visible list AND in sessionStorage (so a fast back-nav
+  // from /emails to /home still sees the row as read), then fire the
+  // markEmailRead POST in the background, then navigate. The /emails
+  // page's openEmail no-ops the markEmailRead call when it sees the
+  // row already at is_read=true, so this isn't double work.
+  const openEmailFromHome = (email: EmailItem) => {
+    if (email.is_read === false) {
+      markRecentlyRead(email.id);
+      setEmails((prev) =>
+        prev
+          ? prev.map((row) =>
+              row.id === email.id ? { ...row, is_read: true } : row,
+            )
+          : prev,
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+      void markEmailRead(email.id).catch(() => {
+        // Best-effort — useEmailInbox.openEmail will retry the POST
+        // once the /emails page picks up the deep link.
+      });
+    }
+    void navigate(`/emails?open=${email.id}`);
+  };
 
   const meetingsLoading = meetings === null;
   const tasksLoading = tasks === null;
@@ -307,9 +374,43 @@ export default function PersonalDashboard() {
               <li
                 key={email.id}
                 className={`personal-email-row ${email.is_read ? "is-read" : "is-unread"}`}
-                onClick={() => navigate("/emails")}
+                onClick={() => openEmailFromHome(email)}
               >
                 <span className="personal-email-dot" aria-hidden="true" />
+                <span className="personal-email-icon" aria-hidden="true">
+                  {/* Mirror the /emails inbox: closed envelope for
+                      unread, opened envelope for read. Inline SVG so
+                      the glyph looks the same on every OS. */}
+                  {email.is_read === false ? (
+                    <svg
+                      viewBox="0 0 16 16"
+                      width="14"
+                      height="14"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="1.75" y="3.5" width="12.5" height="9" rx="1.5" />
+                      <path d="M2 4.5l6 4.5 6-4.5" />
+                    </svg>
+                  ) : (
+                    <svg
+                      viewBox="0 0 16 16"
+                      width="14"
+                      height="14"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M14.5 7v5.75a1.5 1.5 0 0 1-1.5 1.5H3a1.5 1.5 0 0 1-1.5-1.5V7a1.5 1.5 0 0 1 .6-1.2l5.25-3.95a1.5 1.5 0 0 1 1.8 0l5.25 3.95A1.5 1.5 0 0 1 14.5 7Z" />
+                      <path d="M14.25 7.25L8 11.5 1.75 7.25" />
+                    </svg>
+                  )}
+                </span>
                 <span className="personal-email-sender">
                   {senderName(email.sender)}
                 </span>

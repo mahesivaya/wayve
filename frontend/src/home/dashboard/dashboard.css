@@ -209,14 +209,17 @@
   text-align: left;
 }
 
-/* Title takes the remaining row width and stays left-aligned. `flex: 1`
-   makes it consume the gap between the lead icon and the trail, so the
-   text starts immediately after the icon instead of floating mid-row
-   (the old 1fr grid column produced the centered-looking layout that
-   the screenshot flagged). */
+/* Title sits flush against the lead icon (intrinsic content width),
+   with the timestamp pushed to the right edge by `.dashboard-item-trail`'s
+   `margin-left: auto`. `flex-grow: 0` is the key: without it the title
+   stretches to fill the row and short subjects float in the middle of
+   a wide card, which read as visually centered even though the text
+   itself was left-aligned. `max-width` lets long titles still truncate
+   with ellipsis instead of pushing the timestamp off-row. */
 .dashboard-item-title {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -252,20 +255,29 @@
   text-align: left;
 }
 
+/* Stacked variant overrides — Inbox card's `sender` + `subject` are
+   rendered as block-level rows so each fills the column width and
+   stays anchored to the left edge regardless of content length.
+   Without `display: block` they'd be intrinsic-width inline spans
+   which, on a wide card, can sit visually shifted. */
 .dashboard-item-stack .dashboard-item-lead {
+  display: block;
+  width: 100%;
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  text-align: left;
 }
 
 .dashboard-item-stack .dashboard-item-title {
+  display: block;
+  width: 100%;
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-text-muted);
-  max-width: 100%;
+  text-align: left;
 }
 
 /* ----- Empty state -----

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import "./emails.css";
 import "./loadMore.css";
 import "../files/emailFiles.css";
@@ -8,26 +9,108 @@ import { EmailSidebar } from "./EmailSidebar";
 import { EmailList } from "./EmailList";
 import { EmailDetail } from "./EmailDetail";
 import { useEmailInbox } from "./useEmailInbox";
-import { connectYahoo, getGmailConnectUrl, getOutlookConnectUrl, updateAccountDisplayName } from "../api/email";
+import {
+  connectYahoo,
+  getEmail,
+  getGmailConnectUrl,
+  getOutlookConnectUrl,
+  updateAccountDisplayName,
+} from "../api/email";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 import SearchBar from "../search/SearchBar";
 import { logger } from "../utils/logger";
+import type { EmailItem } from "./types";
 
 const ACCOUNT_NAME_STORAGE_KEY = "rwayve.emailAccountNames";
 const EMAIL_LIST_WIDTH_STORAGE_KEY = "rwayve.emailList.width";
 
 export default function Emails() {
   const { user } = useAuth();
-  const { normalizedSearchQuery, emailViewLayout } = useGlobalSearch();
+  const { normalizedSearchQuery, emailViewLayout, setEmailViewLayout } = useGlobalSearch();
   
   const {
-    accounts, emails, selectedEmail, setSelectedEmail, activeAccount, 
+    accounts, emails, selectedEmail, setSelectedEmail, activeAccount,
     setActiveAccount, activeFolder, setActiveFolder, hasMore, loadingMore,
-    viewMode, setViewMode, files, filesLoading, filesError, 
+    viewMode, setViewMode, files, filesLoading, filesError,
     fetchAccounts, setRefreshTick, loadMore, openFiles, openEmail, deleteEmail,
     bulkMarkRead, bulkDelete
   } = useEmailInbox(user?.id, normalizedSearchQuery);
+
+  // Deep-link from other surfaces (e.g. the home dashboard's Inbox
+  // card): `/emails?open=<id>` opens that email in the detail pane on
+  // mount. The handler first checks the already-loaded list to avoid
+  // an extra round-trip; on miss it fetches by id directly. Once the
+  // email is opened, the query param is stripped so a manual refresh
+  // doesn't keep re-opening it after the user navigates away inside
+  // the inbox.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkAppliedRef = useRef<number | null>(null);
+  useEffect(() => {
+    const raw = searchParams.get("open");
+    if (!raw) return;
+    const id = Number(raw);
+    if (!Number.isFinite(id)) {
+      // Bad value — drop the param and bail.
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("open");
+        return next;
+      }, { replace: true });
+      return;
+    }
+    if (deepLinkAppliedRef.current === id) return;
+    deepLinkAppliedRef.current = id;
+
+    // Force the list-view layout on deep-link arrivals so the opened
+    // email reads as an expanded row, not as the right-hand pane of
+    // the 3-column split. Matches the home dashboard's "click a row →
+    // see that one email full-width" expectation. The user can still
+    // toggle back to split via the SearchBar's layout buttons.
+    if (emailViewLayout !== "list") {
+      setEmailViewLayout("list");
+    }
+
+    const fromList = emails.find((email) => email.id === id);
+    if (fromList) {
+      void openEmail(fromList);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("open");
+        return next;
+      }, { replace: true });
+      return;
+    }
+
+    // Not in the current page — fetch the row directly. The detail
+    // pane is fine with a partial row (body fetches on its own);
+    // useEmailInbox.openEmail does the rest of the work.
+    let cancelled = false;
+    (async () => {
+      try {
+        const full = await getEmail<EmailItem>(id);
+        if (cancelled) return;
+        await openEmail(full);
+      } catch (err) {
+        logger.warn("deep-link email open failed", { id, err });
+      } finally {
+        if (!cancelled) {
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("open");
+            return next;
+          }, { replace: true });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Re-run when the loaded list changes — if the email arrives via
+    // a later page or background sync, this effect picks it up
+    // without needing a second navigate.
+  }, [searchParams, emails, openEmail, setSearchParams, emailViewLayout, setEmailViewLayout]);
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [accountNameOverrides, setAccountNameOverrides] = useState<Record<number, string>>(() => {

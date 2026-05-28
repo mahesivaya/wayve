@@ -1093,13 +1093,76 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.email-row-checkbox {
+/* Unread indicator pinned to the leftmost edge of each row, sized so
+   the read/unread slot has the same width either way (otherwise the
+   gutter shifts when scrolling past read messages). Solid orange for
+   unread; transparent for read. Reference screenshot uses this same
+   "orange bullet on the left, envelope next to it" pattern. */
+.email-row-unread-dot {
   flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  margin-right: 4px;
+}
+
+.email-row-unread-dot.is-unread {
+  background: var(--color-warning, #f59e0b);
+}
+
+/* Gmail-style row affordance: an envelope icon sits at the left of each
+   row by default; on row hover (or when the row is already checked) the
+   icon fades out and the checkbox fades in over the same 18×18 spot. The
+   two share absolute positioning inside `.email-row-toggle` so the row
+   layout never reflows between icon ↔ checkbox states. */
+.email-row-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-right: 2px;
+}
+
+.email-row-icon {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+
+.email-row-checkbox {
+  position: absolute;
+  inset: 0;
   width: 14px;
   height: 14px;
-  accent-color: var(--color-primary);
+  margin: auto;
+  opacity: 0;
   cursor: pointer;
-  margin-right: 2px;
+  accent-color: var(--color-primary);
+  transition: opacity 0.12s;
+}
+
+/* Hover anywhere on the row reveals the checkbox + hides the icon. The
+   checked state keeps the checkbox visible even when the cursor moves
+   away, so selected rows stay obviously selected. */
+.email-item:hover .email-row-checkbox,
+.email-row-checkbox:checked {
+  opacity: 1;
+}
+
+.email-item:hover .email-row-icon,
+.email-row-toggle:has(.email-row-checkbox:checked) .email-row-icon {
+  opacity: 0;
 }
 
 .main.email-list-view .email-top {

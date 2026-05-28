@@ -99,6 +99,26 @@
     padding: 0 10px;
   }
 
+  /* Side-by-side container for the OAuth (Google + Outlook) buttons on
+     the registration form. Each button takes equal width so the row
+     reads as a single "pick your provider" pair instead of competing
+     for emphasis. Collapses to a stacked column on narrow screens. */
+  .auth-oauth-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .auth-oauth-row > button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  @media (max-width: 380px) {
+    .auth-oauth-row {
+      flex-direction: column;
+    }
+  }
+
   .login-card .google-btn {
     background: var(--color-surface);
     color: var(--color-text-generic-dark);

@@ -216,8 +216,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       //                    for /recover-with-mnemonic), upload, show
       //                    the seed modal.
 
-      if (recoveryMode === "basic") {
+      // Existing basic account logging in on a new device — server
+      // already has a PKCS8 envelope; import it and we're done. No
+      // mnemonic ceremony because the user might never have one
+      // (basic-only accounts before the dual-flow rollout) and we
+      // can't regenerate one without orphaning a saved phrase.
+      if (recoveryMode === "basic" && !isFreshRegistration) {
         await setupBasicEncryption(userId, email);
+        return;
+      }
+
+      // Fresh basic registration: generate keys locally, upload the
+      // PKCS8 so cross-device email+password sign-in works, AND fall
+      // through to the mnemonic-wrap branch below so the user is
+      // shown a 24-word recovery phrase. The phrase is a recovery /
+      // future-upgrade artifact — it doesn't gate normal login (the
+      // server still holds the PKCS8), but it lets the user later
+      // migrate to "full" zero-knowledge mode or reset their
+      // password without losing their encrypted content.
+      if (recoveryMode === "basic" && isFreshRegistration) {
+        log.info("basic + fresh: generating keypair + uploading PKCS8");
+        const keyPair = await crypto.subtle.generateKey(
+          {
+            name: "RSA-OAEP",
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([1, 0, 1]),
+            hash: "SHA-256",
+          },
+          true,
+          ["encrypt", "decrypt"],
+        );
+        await savePrivateKey(keyPair.privateKey, userId, email);
+        const publicKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
+        await savePublicKey(publicKey, userId, email);
+        await publishPublicKey(publicKey);
+
+        try {
+          const pkcs8 = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+          await uploadBasicKey(pkcs8);
+        } catch (err) {
+          log.error(
+            "basic: PKCS8 upload failed; cross-device login will not work until next setup",
+            err,
+          );
+        }
+
+        const mnemonic = await generateMnemonic();
+        const wrapJob = async () => {
+          const entropy = await mnemonicToEntropy(mnemonic);
+          const envelope = await wrapKeysForRecovery(
+            keyPair.privateKey,
+            publicKey,
+            entropy,
+          );
+          await uploadWrappedKey(envelope);
+        };
+
+        setPendingWrapJob(() => wrapJob);
+        setPendingRecoveryMode("basic");
+        setPendingMnemonic(mnemonic);
+
+        log.info(
+          "basic + fresh: keypair ready, mnemonic generated, awaiting user confirmation",
+        );
         return;
       }
 
