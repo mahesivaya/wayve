@@ -212,10 +212,12 @@ export default function ActivityDashboard() {
                   className="dashboard-item dashboard-item-stack"
                   onClick={() => navigate("/emails")}
                 >
-                  <span className="dashboard-item-lead">{senderName(e.sender)}</span>
-                  <span className="dashboard-item-title">
-                    {e.subject?.trim() || "(no subject)"}
-                  </span>
+                  <div className="dashboard-item-stack-main">
+                    <span className="dashboard-item-lead">{senderName(e.sender)}</span>
+                    <span className="dashboard-item-title">
+                      {e.subject?.trim() || "(no subject)"}
+                    </span>
+                  </div>
                   <span className="dashboard-item-trail">
                     {formatRelative(e.created_at)}
                   </span>

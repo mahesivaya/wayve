@@ -110,9 +110,10 @@
 
 .dashboard-card-head {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: baseline;
-  gap: 8px;
+  gap: 12px;
+  text-align: left;
 }
 
 .dashboard-card-head h3 {
@@ -143,13 +144,17 @@
 }
 
 /* Three-column row: lead (time/sender/check/icon) · title · trail (ago/count/status).
+   Title column is intrinsic-width with auto-margin pushing the trail to
+   the row's right edge — that keeps the title text flush left, adjacent
+   to the lead icon, instead of stretched across a 1fr column where short
+   titles end up visually floating in the middle of the row.
    `dashboard-item-stack` switches lead+title to stacked when the lead is
    a sender name (inbox), where the subject deserves more horizontal room. */
 .dashboard-item {
-  display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 7px 8px;
   margin: 0 -8px;
   font-size: var(--text-md);
@@ -157,6 +162,7 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.12s;
+  text-align: left;
 }
 
 .dashboard-item:hover {
@@ -164,71 +170,88 @@
 }
 
 .dashboard-item-lead {
+  flex: 0 0 auto;
   font-weight: 600;
   color: var(--color-primary-action-hover);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-md);
   white-space: nowrap;
+  text-align: left;
 }
 
+/* Title takes the remaining row width and stays left-aligned. `flex: 1`
+   makes it consume the gap between the lead icon and the trail, so the
+   text starts immediately after the icon instead of floating mid-row
+   (the old 1fr grid column produced the centered-looking layout that
+   the screenshot flagged). */
 .dashboard-item-title {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
+  text-align: left;
 }
 
 .dashboard-item-trail {
+  flex: 0 0 auto;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-align: left;
+  margin-left: auto;
 }
 
-/* Stacked variant: lead becomes a sender label on top of the subject. */
+/* Stacked variant: lead becomes a sender label on top of the subject.
+   Inner stack is left-aligned; the trail (timestamp) is pushed to the
+   row's right edge via the parent flex's `margin-left: auto`. */
 .dashboard-item-stack {
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  row-gap: 2px;
-  align-items: start;
+  flex-direction: row;
+  align-items: center;
+}
+
+.dashboard-item-stack-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
 }
 
 .dashboard-item-stack .dashboard-item-lead {
-  grid-column: 1;
-  grid-row: 1;
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .dashboard-item-stack .dashboard-item-title {
-  grid-column: 1;
-  grid-row: 2;
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-text-muted);
+  max-width: 100%;
 }
 
-.dashboard-item-stack .dashboard-item-trail {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
-}
-
-/* ----- Empty state ----- */
+/* ----- Empty state -----
+   Left-aligned to match the rest of each card. Centering the message
+   used to draw the eye to the middle of an empty card and made the
+   layout look inconsistent next to filled cards (which read flush left). */
 .dashboard-empty {
   margin: 0;
-  padding: 24px 0;
-  text-align: center;
+  padding: 8px 0;
+  text-align: left;
   color: var(--color-text-muted);
   font-size: var(--text-md);
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 /* ----- Footer link ----- */
