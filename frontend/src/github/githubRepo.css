@@ -20,45 +20,16 @@
   display: grid;
   place-items: center;
   color: var(--color-text-muted);
-  font-size: 14px;
+  font-size: var(--text-lg);
 }
 
-.github-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: flex-start;
-  margin-bottom: 18px;
-}
-
-.github-kicker {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-primary-action);
-  text-transform: uppercase;
-}
-
-.github-header h1 {
-  margin: 0;
-  font-size: 24px;
-  line-height: 1.2;
-}
-
-.github-description {
-  margin: 6px 0 0;
-  color: var(--color-text-muted);
-  font-size: 13px;
-}
-
-.github-open,
 .github-text-btn {
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text-primary);
   border-radius: 6px;
   padding: 7px 11px;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
@@ -72,7 +43,7 @@
   border-radius: 8px;
   padding: 10px 12px;
   margin-bottom: 14px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .github-stats {
@@ -103,13 +74,13 @@
 .github-workflow small {
   display: block;
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .github-stats strong {
   display: block;
   margin-top: 4px;
-  font-size: 13px;
+  font-size: var(--text-md);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -135,7 +106,7 @@
   background: var(--color-surface);
   border-radius: 6px;
   padding: 7px 10px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .github-grid {
@@ -166,7 +137,7 @@
 
 .github-panel-head h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-lg);
 }
 
 .github-file-list {
@@ -228,7 +199,7 @@
 .github-tree-loading {
   padding: 8px 12px 8px calc(48px + (var(--tree-depth, 0) * 18px));
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .github-file-row:hover {
@@ -260,20 +231,20 @@
 }
 
 .github-icon-file {
-  color: var(--color-text-slate-light, #94a3b8);
+  color: var(--color-text-muted);
 }
 
 .github-file-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
 }
 
 .github-file-row.is-dir .github-file-name {
-  font-weight: 650;
-  color: var(--color-text-ink);
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 
 .github-file-row.is-dir .github-file-size {
@@ -295,7 +266,7 @@
   background: var(--color-surface-tint);
   color: var(--color-text-primary);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   text-align: left;
   white-space: pre;
@@ -307,7 +278,7 @@
 .github-empty {
   padding: 22px;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--text-md);
   text-align: center;
 }
 
@@ -365,10 +336,10 @@
   border: 1px solid var(--color-border);
   border-radius: 5px;
   background: var(--color-surface-tint);
-  color: var(--color-text-slate);
+  color: var(--color-text-muted);
   padding: 3px 6px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .github-run em {
@@ -376,10 +347,10 @@
   border-radius: 999px;
   padding: 3px 8px;
   background: var(--color-surface-tint-cool);
-  color: var(--color-text-slate);
-  font-size: 11px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -429,7 +400,7 @@
   border: 1px solid var(--color-border);
   border-radius: 6px;
   color: var(--color-text-primary);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease;
@@ -518,7 +489,7 @@
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: var(--color-text-slate-light);
+  background: var(--color-text-muted);
   flex-shrink: 0;
   display: inline-block;
 }
@@ -554,12 +525,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
-  color: var(--color-text-ink);
+  font-size: var(--text-md);
+  color: var(--color-text-primary);
 }
 
 .github-actions-count {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -575,13 +546,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
   color: var(--color-text-primary);
 }
 
 .github-actions-run-main small {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -593,10 +564,10 @@
   border-radius: 999px;
   padding: 2px 8px;
   background: var(--color-surface-tint-cool);
-  color: var(--color-text-slate);
-  font-size: 11px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
   text-transform: lowercase;
 }
@@ -643,10 +614,6 @@
 @media (max-width: 520px) {
   .github-page {
     padding: 14px;
-  }
-
-  .github-header {
-    flex-direction: column;
   }
 
   .github-stats {
@@ -718,7 +685,7 @@
 }
 
 .github-flow-meta-text strong {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -726,13 +693,13 @@
 }
 
 .github-flow-meta-text small {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
 .github-flow-external {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-primary-action);
   text-decoration: none;
@@ -745,7 +712,7 @@
 .github-flow-empty {
   padding: 24px;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--text-md);
   color: var(--color-text-muted);
 }
 
@@ -820,7 +787,7 @@
 }
 
 .github-flow-job-title strong {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -828,14 +795,14 @@
 }
 
 .github-flow-job-title small {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
 .github-flow-job-link {
   text-decoration: none;
   color: var(--color-text-muted);
-  font-size: 14px;
+  font-size: var(--text-lg);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -865,7 +832,7 @@
   align-items: center;
   gap: 14px;
   padding: 8px 16px;
-  font-size: 13px;
+  font-size: var(--text-md);
   border-radius: 6px;
   margin: 0 6px;
 }
@@ -911,12 +878,12 @@
 }
 
 .github-status-icon.status-cancelled {
-  color: var(--color-text-slate, #57606a);
+  color: var(--color-text-muted);
 }
 
 .github-status-icon.status-skipped,
 .github-status-icon.status-neutral {
-  color: var(--color-text-slate-light, #8c959f);
+  color: var(--color-text-muted);
 }
 
 .github-status-icon.status-in_progress,
@@ -928,7 +895,7 @@
 .github-status-icon.status-queued,
 .github-status-icon.status-pending,
 .github-status-icon.status-unknown {
-  color: var(--color-text-slate-light, #8c959f);
+  color: var(--color-text-muted);
 }
 
 /* CSS spin for in-progress dashed circle */

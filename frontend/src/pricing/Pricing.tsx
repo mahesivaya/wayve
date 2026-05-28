@@ -44,14 +44,20 @@ const FAQ = [
 function PlanCard({
   plan,
   onChoose,
+  isCurrent,
 }: {
   plan: Plan;
   onChoose: () => void;
+  isCurrent: boolean;
 }) {
   const isFree = plan.amount_cents === 0;
   const featureEntries = Object.entries(plan.features ?? {});
   return (
-    <article className="pricing-plan">
+    <article
+      className={`pricing-plan${isCurrent ? " is-current" : ""}`}
+      aria-current={isCurrent ? "true" : undefined}
+    >
+      {isCurrent && <span className="pricing-plan-badge">Current plan</span>}
       <h3>{plan.name}</h3>
       <p className="pricing-plan-price">
         {priceLabel(plan)}
@@ -74,8 +80,12 @@ function PlanCard({
           </li>
         ))}
       </ul>
-      <button className="pricing-plan-cta" onClick={onChoose}>
-        {isFree ? "Get started" : "Choose plan"}
+      <button
+        className="pricing-plan-cta"
+        onClick={onChoose}
+        disabled={isCurrent}
+      >
+        {isCurrent ? "Current plan" : isFree ? "Get started" : "Choose plan"}
       </button>
     </article>
   );
@@ -232,13 +242,20 @@ function AuthenticatedPricing() {
   const [error, setError] = useState("");
   const upgradePlanCode = params.get("plan") ?? user?.current_plan?.code ?? "basic_user";
   const isPersonal = user?.account_type === "personal";
+  const currentPlanCode = user?.current_plan?.code ?? null;
   const accountLabel =
     user?.account_type === "personal"
       ? "Personal account"
       : user?.account_type === "platform_admin"
       ? "Platform account"
       : "Organization account";
-  const planLabel = user?.current_plan?.name ?? upgradePlanCode;
+  // For org users with no active org subscription the backend returns the
+  // synthetic "organization_free" row — render that as a clearer "no
+  // subscription yet" status rather than echoing a plan name.
+  const planLabel =
+    currentPlanCode === "organization_free"
+      ? "No subscription yet"
+      : user?.current_plan?.name ?? upgradePlanCode;
 
   useEffect(() => {
     let alive = true;
@@ -300,6 +317,7 @@ function AuthenticatedPricing() {
                 <PlanCard
                   key={plan.id}
                   plan={plan}
+                  isCurrent={plan.code === currentPlanCode}
                   onChoose={() => navigate("/billing")}
                 />
               ))}
@@ -320,6 +338,7 @@ function AuthenticatedPricing() {
                   <PlanCard
                     key={plan.id}
                     plan={plan}
+                    isCurrent={plan.code === currentPlanCode}
                     onChoose={() => navigate("/billing")}
                   />
                 ))}

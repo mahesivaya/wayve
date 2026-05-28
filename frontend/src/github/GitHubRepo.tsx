@@ -703,45 +703,7 @@ export default function GitHubRepo() {
 
   return (
     <div className="github-page">
-      <header className="github-header">
-        <div>
-          <p className="github-kicker">GitHub</p>
-          <h1>{repo?.full_name ?? `${OWNER}/${REPO}`}</h1>
-          <p className="github-description">{repo?.description ?? "Repository"}</p>
-        </div>
-        <a className="github-open" href={repo?.html_url} target="_blank" rel="noreferrer">
-          Open on GitHub
-        </a>
-      </header>
-
       {error && <div className="github-banner">{error}</div>}
-
-      <section className="github-stats" aria-label="Repository stats">
-        <div>
-          <span>Language</span>
-          <strong>{repo?.language ?? "Mixed"}</strong>
-        </div>
-        <div>
-          <span>Branch</span>
-          <strong>{repo?.default_branch ?? "main"}</strong>
-        </div>
-        <div>
-          <span>Stars</span>
-          <strong>{repo?.stargazers_count ?? 0}</strong>
-        </div>
-        <div>
-          <span>Forks</span>
-          <strong>{repo?.forks_count ?? 0}</strong>
-        </div>
-        <div>
-          <span>Issues</span>
-          <strong>{repo?.open_issues_count ?? 0}</strong>
-        </div>
-        <div>
-          <span>Updated</span>
-          <strong>{repo ? formatDate(repo.updated_at) : "Unknown"}</strong>
-        </div>
-      </section>
 
       <div className="github-toolbar">
         <label>

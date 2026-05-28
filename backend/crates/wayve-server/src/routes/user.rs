@@ -163,9 +163,10 @@ pub struct CurrentPlan {
 ///   1. Active personal subscription for this user → its plan.
 ///   2. Active organization subscription via the user's org → its plan
 ///      (org members inherit the org plan).
-///   3. Fall back to the `basic_user` plan row — the canonical free tier.
-///      Every newly-registered user lands here until they subscribe; we
-///      don't insert a redundant subscriptions row to avoid table clutter.
+///   3. Fall back: org users get a synthetic `organization_free` row so
+///      the UI doesn't mislabel them as being on the personal "Basic
+///      User" tier. Personal users fall back to the `basic_user` plan
+///      row (the canonical personal free tier).
 pub async fn current_plan_for_user(
     pool: &PgPool,
     user_id: i32,
@@ -189,8 +190,8 @@ pub async fn current_plan_for_user(
         return Ok(plan);
     }
 
-    if let Some(org_id) = organization_id
-        && let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
+    if let Some(org_id) = organization_id {
+        if let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
             r#"
             SELECT p.code, p.name, p.audience, p.amount_cents
               FROM subscriptions s
@@ -204,8 +205,19 @@ pub async fn current_plan_for_user(
         .bind(org_id)
         .fetch_optional(pool)
         .await?
-    {
-        return Ok(plan);
+        {
+            return Ok(plan);
+        }
+
+        // Org with no active subscription. Synthesize an org-audience
+        // "free" row instead of leaking the personal basic_user name into
+        // org headers (which read as a contradiction in the UI).
+        return Ok(CurrentPlan {
+            code: "organization_free".to_string(),
+            name: "Not subscribed".to_string(),
+            audience: "organization".to_string(),
+            amount_cents: 0,
+        });
     }
 
     sqlx::query_as::<_, CurrentPlan>(
