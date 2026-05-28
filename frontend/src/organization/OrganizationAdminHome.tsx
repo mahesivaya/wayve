@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import type { KeyboardEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
+import ActivityDashboard from "../home/dashboard/ActivityDashboard";
 import "../home/home.css";
 import "./admin-ui.css";
 import "./organizationAdmin.css";
@@ -93,37 +94,6 @@ export default function OrganizationAdminHome() {
     },
   ];
 
-  const apps: Tile[] = [
-    {
-      icon: "📬",
-      label: "Email",
-      description: "Manage organization communication from the shared workspace.",
-      path: "/emails",
-      visible: true,
-    },
-    {
-      icon: "💬",
-      label: "Team Chat",
-      description: "Create channels, manage members, and coordinate team work.",
-      path: "/chat",
-      visible: true,
-    },
-    {
-      icon: "✅",
-      label: "Tasks",
-      description: "Create and track action items for organization workflows.",
-      path: "/tasks",
-      visible: true,
-    },
-    {
-      icon: "📅",
-      label: "Scheduler",
-      description: "Review meetings and plan team schedules.",
-      path: "/scheduler",
-      visible: true,
-    },
-  ];
-
   const visibleConsoles = consoles.filter((c) => c.visible);
   const hasAnyConsole = visibleConsoles.length > 0;
 
@@ -162,17 +132,7 @@ export default function OrganizationAdminHome() {
         </div>
       </div>
 
-      <section className="organization-admin-panel u-panel">
-        <div className="organization-admin-section-header">
-          <div>
-            <h2>Workspace</h2>
-            <p>Day-to-day apps for the whole organization.</p>
-          </div>
-        </div>
-        <div className="org-home-tiles">
-          {apps.map(renderTile)}
-        </div>
-      </section>
+      <ActivityDashboard />
 
       {hasAnyConsole && (
         <section className="organization-admin-panel u-panel">

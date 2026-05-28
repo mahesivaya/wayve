@@ -1075,3 +1075,35 @@
 
 /* OS prefers-color-scheme blocks were removed — dark mode is now
    explicit-only via [data-theme="dark"]. See index.html pre-paint. */
+
+/* =============================
+   🏠 SIGNED-IN HOME — greeting band above the ActivityDashboard.
+   Kept here (not in dashboard.css) so the dashboard stays portable;
+   each page owns its own greeting style.
+============================== */
+.home-authed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.home-authed-greeting {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+
+.home-authed-greeting h1 {
+  margin: 0;
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.home-authed-greeting p {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+}

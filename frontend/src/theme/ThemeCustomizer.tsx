@@ -150,7 +150,8 @@ export default function ThemeCustomizer() {
         <div className="theme-custom-panel">
           <ColorGrid
             hue={input.hue}
-            onChange={(hue) => setInput({ ...input, hue })}
+            chroma={input.chroma}
+            onChange={({ hue, chroma }) => setInput({ ...input, hue, chroma })}
           />
 
           <div className="theme-custom-sliders">

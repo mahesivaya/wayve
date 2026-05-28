@@ -1,5 +1,6 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { homePathForUser } from "../auth/accountHome";
 import { canAccessApiKeyAdmin, hasPermission } from "../auth/permissions";
 import { Suspense, useState, useCallback, useEffect, type ReactNode } from "react";
 import SearchProvider from "../search/SearchProvider";
@@ -101,6 +102,27 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // On narrow viewports the header nav collapses behind a hamburger toggle.
   const [navOpen, setNavOpen] = useState(false);
 
+  // Desktop sidebar can be collapsed to an icon-only rail. Persisted so the
+  // user's preference survives reloads.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("rwayve.sidebar.collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "rwayve.sidebar.collapsed",
+        sidebarCollapsed ? "1" : "0",
+      );
+    } catch {
+      // private mode / quota — preference just won't persist this session.
+    }
+  }, [sidebarCollapsed]);
+
   // Support modal: opens from the header button, closes via the modal's own
   // close action or Esc. Lives at layout scope so every signed-in page can
   // reach support without each one re-wiring the affordance.
@@ -133,30 +155,55 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     setSplitTarget("left");
   }
 
-  // When the split is open, header link clicks target the right pane instead
+  // When the split is open, sidebar clicks target the right pane instead
   // of navigating the URL. When closed, the link behaves normally.
-  const renderNavItem = useCallback((path: string, app: AppKey, label: string) => {
-    const isLeftActive = location.pathname === path;
-    const isMiddleActive = middleView === app;
-    const isRightActive = rightView === app;
+  const renderSidebarItem = useCallback(
+    (path: string, app: AppKey, label: string, icon: string) => {
+      const isLeftActive =
+        app === "home"
+          ? location.pathname === "/" || location.pathname === "/home"
+          : location.pathname === path;
+      const isMiddleActive = middleView === app;
+      const isRightActive = rightView === app;
 
-    return (
-      <Link
-        key={app}
-        to={path}
-        className={`${isLeftActive ? "active" : ""} ${isMiddleActive || isRightActive ? "active-split" : ""}`.trim()}
-        onClick={(e) => {
-          setNavOpen(false);
-          if (splitTarget === "right") {
-            e.preventDefault();
-            setRightView(app);
-          }
-        }}
-      >
-        {label}
-      </Link>
-    );
-  }, [location.pathname, middleView, rightView, splitTarget]);
+      return (
+        <Link
+          key={app}
+          to={path}
+          title={label}
+          className={`sidebar-link ${isLeftActive ? "active" : ""} ${isMiddleActive || isRightActive ? "active-split" : ""}`.trim()}
+          onClick={(e) => {
+            setNavOpen(false);
+            if (splitTarget === "right") {
+              e.preventDefault();
+              setRightView(app);
+            }
+          }}
+        >
+          <span className="sidebar-icon" aria-hidden="true">{icon}</span>
+          <span className="sidebar-label">{label}</span>
+        </Link>
+      );
+    },
+    [location.pathname, middleView, rightView, splitTarget],
+  );
+
+  const renderSidebarLink = (
+    path: string,
+    label: string,
+    icon: string,
+    isActive: boolean,
+  ) => (
+    <Link
+      to={path}
+      title={label}
+      className={`sidebar-link ${isActive ? "active" : ""}`.trim()}
+      onClick={() => setNavOpen(false)}
+    >
+      <span className="sidebar-icon" aria-hidden="true">{icon}</span>
+      <span className="sidebar-label">{label}</span>
+    </Link>
+  );
 
   // All hooks must run before this guard — an earlier return would change the
   // hook call order between renders (React rules of hooks).
@@ -209,86 +256,67 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     });
   }
 
+  const hasPlatformSection =
+    canAccessSecurity ||
+    canAccessPlatformBilling ||
+    canAccessPlatformDeveloper ||
+    canAccessPlatformSupport;
+
+  // Home is the user's landing dashboard — the Support affordance is
+  // intentionally suppressed there to keep the surface focused on app
+  // tiles. Other pages still expose Support in the header. The user's
+  // home path depends on account type (personal → /home, organization →
+  // /organization-home, platform → /platform-admin-home), so compute it
+  // off the user object rather than hard-coding /home.
+  const userHomePath = homePathForUser(authedUser);
+  const isHomePage =
+    location.pathname === "/" || location.pathname === userHomePath;
+
   return (
     <div className="app">
-      {/* 🔝 HEADER */}
+    <SearchProvider>
+      {/* 🔝 HEADER — brand + inline search + global actions. App
+          navigation lives in the left sidebar. */}
       <div className="header">
         <div className="header-brand">
-          <div className="logo" onClick={() => navigate("/")}>Wayve </div>
+          <div className="logo" onClick={() => navigate("/")}>Wayve</div>
           <button
-            className="nav-toggle"
-            onClick={() => setNavOpen((open) => !open)}
-            title="Menu"
-            aria-label="Toggle navigation menu"
-            aria-expanded={navOpen}
+            type="button"
+            className="sidebar-toggle-btn"
+            onClick={() => {
+              // On narrow viewports the sidebar is an overlay — toggle its
+              // open/close state. On wide viewports it's a permanent rail —
+              // toggle between expanded (labels) and collapsed (icon-only).
+              const isNarrow =
+                typeof window !== "undefined" &&
+                window.matchMedia("(max-width: 1100px)").matches;
+              if (isNarrow) {
+                setNavOpen((open) => !open);
+              } else {
+                setSidebarCollapsed((c) => !c);
+              }
+            }}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!sidebarCollapsed}
           >
-            ☰
+            <svg
+              className="sidebar-toggle-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <rect x="3" y="5" width="18" height="14" rx="2.2" />
+              <line x1="9" y1="5" x2="9" y2="19" />
+              {sidebarCollapsed ? (
+                <polyline points="12 9 14 12 12 15" />
+              ) : (
+                <polyline points="14 9 12 12 14 15" />
+              )}
+            </svg>
           </button>
         </div>
 
-        <div className={`nav ${navOpen ? "open" : ""}`}>
-          {renderNavItem("/", "home", "Home")}
-          {renderNavItem("/emails", "emails", "Emails")}
-          {renderNavItem("/chat", "chat", "Chat")}
-          {/* /call is no longer in the top nav — audio/video controls live
-              inside [Chat](../chat/Chat.tsx)'s conversation header. The route
-              is still reachable for legacy bookmarks. */}
-          {renderNavItem("/scheduler", "scheduler", "Scheduler")}
-          {renderNavItem("/drive", "drive", "Drive")}
-          {renderNavItem("/notes", "notes", "Notes")}
-          {renderNavItem("/tasks", "tasks", "Tasks")}
-          {renderNavItem("/aichat", "aichat", "AI Chat")}
-          {user.account_type !== "personal" && renderNavItem("/github", "github", "GitHub")}
-          {/* Pricing: hidden for platform members (they administer the
-              platform, not customers of it) and for personal accounts
-              (they reach the upgrade flow via Settings → "Manage billing
-              & upgrade", which is the canonical path for them). */}
-          {user.account_type !== "platform_admin" &&
-            user.account_type !== "personal" && (
-              <Link
-                to="/pricing"
-                className={location.pathname === "/pricing" ? "active" : ""}
-                onClick={() => setNavOpen(false)}
-              >
-                Pricing
-              </Link>
-            )}
-          {/* Developers + Docs are dev-tooling surfaces — hidden for
-              personal accounts where they're noise (no API keys, no
-              webhooks, no integrations to read about). */}
-          {user.account_type !== "personal" && (
-            <>
-              <Link
-                to="/developers"
-                className={location.pathname === "/developers" ? "active" : ""}
-                onClick={() => setNavOpen(false)}
-              >
-                Developers
-              </Link>
-              <Link
-                to="/docs"
-                className={location.pathname.startsWith("/docs") ? "active" : ""}
-                onClick={() => setNavOpen(false)}
-              >
-                Docs
-              </Link>
-            </>
-          )}
-          {/* API Keys admin surface: visible only to org/platform
-              owner, super_admin, and admin. See [canAccessApiKeyAdmin](../auth/permissions.ts)
-              for the rationale (intentionally stricter than the raw
-              `api_keys:manage` permission, which Developer also holds). */}
-          {canAccessApiKeyAdmin(user) && (
-            <Link
-              to="/api-keys"
-              className={location.pathname === "/api-keys" ? "active" : ""}
-              onClick={() => setNavOpen(false)}
-            >
-              API Keys
-            </Link>
-          )}
-          {renderNavItem("/about", "about", "About")}
-        </div>
+        <SearchBar />
 
         <div className="actions">
           {/* Welcome / role label removed — the signed-in identity is
@@ -317,22 +345,23 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               viewBox="0 0 24 24"
               aria-hidden="true"
             >
-              <rect x="3" y="4" width="18" height="16" rx="1.8" />
-              <path d="M3 8.5h18" />
-              <path d="M12 8.5V20" />
+              <rect x="4" y="5" width="16" height="14" rx="2" />
+              <line x1="12" y1="5" x2="12" y2="19" />
             </svg>
           </button>
 
-          <button
-            type="button"
-            className="header-support-btn"
-            onClick={() => setSupportOpen(true)}
-            title="Contact support"
-            aria-label="Open support"
-          >
-            <span aria-hidden="true">💬</span>
-            <span>Support</span>
-          </button>
+          {!isHomePage && (
+            <button
+              type="button"
+              className="header-support-btn"
+              onClick={() => setSupportOpen(true)}
+              title="Contact support"
+              aria-label="Open support"
+            >
+              <span aria-hidden="true">💬</span>
+              <span>Support</span>
+            </button>
+          )}
 
           <ProfileMenu />
         </div>
@@ -340,29 +369,107 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
       {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
 
-      <SearchProvider>
-        <SearchBar />
-
       {/* 🔥 BODY */}
       <div className="body">
-        {/* LEFT ICON BAR */}
-        <div className="icon-sidebar">
-          <Link to="/emails">📧</Link>
-          <Link to="/chat">💬</Link>
-          <Link to="/scheduler">📅</Link>
-          <Link to="/drive">📁</Link>
-          <Link to="/notes">📝</Link>
-          <Link to="/tasks">☑</Link>
-          <Link to="/aichat">✨</Link>
-          {user.account_type !== "personal" && <Link to="/github" title="GitHub">GH</Link>}
-          {canAccessSecurity && <Link to="/security/audit">🔒</Link>}
-          {canAccessPlatformBilling && <Link to="/platform/billing" title="Platform billing">💳</Link>}
-          {canAccessPlatformDeveloper && <Link to="/platform/developer" title="Developer console">⚙</Link>}
-          {canAccessPlatformSupport && <Link to="/platform/support" title="Support console">🛟</Link>}
-          <Link to="/about">ⓘ</Link>
+        {/* PRIMARY SIDEBAR — every app nav surface lives here. */}
+        <nav
+          className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`.trim()}
+          aria-label="Primary navigation"
+        >
+          <div className="sidebar-section">
+            {renderSidebarItem("/", "home", "Home", "🏠")}
+            {renderSidebarItem("/emails", "emails", "Emails", "📧")}
+            {renderSidebarItem("/chat", "chat", "Chat", "💬")}
+            {/* /call is intentionally absent — audio/video lives inside Chat. */}
+            {renderSidebarItem("/scheduler", "scheduler", "Scheduler", "📅")}
+            {renderSidebarItem("/drive", "drive", "Drive", "📁")}
+            {renderSidebarItem("/notes", "notes", "Notes", "📝")}
+            {renderSidebarItem("/tasks", "tasks", "Tasks", "☑")}
+            {renderSidebarItem("/aichat", "aichat", "AI Chat", "✨")}
+            {user.account_type !== "personal" &&
+              renderSidebarItem("/github", "github", "GitHub", "🐙")}
+          </div>
 
-          <div className="icon-sidebar-spacer" />
-        </div>
+          {hasPlatformSection && (
+            <div className="sidebar-section">
+              <div className="sidebar-section-label">Platform</div>
+              {canAccessSecurity &&
+                renderSidebarLink(
+                  "/security/audit",
+                  "Security",
+                  "🔒",
+                  location.pathname.startsWith("/security"),
+                )}
+              {canAccessPlatformBilling &&
+                renderSidebarLink(
+                  "/platform/billing",
+                  "Billing",
+                  "💳",
+                  location.pathname === "/platform/billing",
+                )}
+              {canAccessPlatformDeveloper &&
+                renderSidebarLink(
+                  "/platform/developer",
+                  "Developer",
+                  "⚙",
+                  location.pathname === "/platform/developer",
+                )}
+              {canAccessPlatformSupport &&
+                renderSidebarLink(
+                  "/platform/support",
+                  "Support",
+                  "🛟",
+                  location.pathname === "/platform/support",
+                )}
+            </div>
+          )}
+
+          <div className="sidebar-spacer" />
+
+          <div className="sidebar-section sidebar-section-secondary">
+            {user.account_type !== "platform_admin" &&
+              user.account_type !== "personal" &&
+              renderSidebarLink(
+                "/pricing",
+                "Pricing",
+                "💲",
+                location.pathname === "/pricing",
+              )}
+            {user.account_type !== "personal" && (
+              <>
+                {renderSidebarLink(
+                  "/developers",
+                  "Developers",
+                  "🛠",
+                  location.pathname === "/developers",
+                )}
+                {renderSidebarLink(
+                  "/docs",
+                  "Docs",
+                  "📚",
+                  location.pathname.startsWith("/docs"),
+                )}
+              </>
+            )}
+            {canAccessApiKeyAdmin(user) &&
+              renderSidebarLink(
+                "/api-keys",
+                "API Keys",
+                "🔑",
+                location.pathname === "/api-keys",
+              )}
+            {renderSidebarItem("/about", "about", "About", "ⓘ")}
+          </div>
+        </nav>
+
+        {/* Scrim catches taps outside the sidebar overlay on narrow screens. */}
+        {navOpen && (
+          <div
+            className="sidebar-scrim"
+            onClick={() => setNavOpen(false)}
+            aria-hidden="true"
+          />
+        )}
 
         {/* MAIN CONTENT */}
         <div className={`content`}>

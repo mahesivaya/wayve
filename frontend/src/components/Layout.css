@@ -16,11 +16,13 @@
 .header {
   background: lightslategray;
   color: black;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 0 20px;
   flex-shrink: 0;
+  height: 48px;
   position: relative;
   border-bottom: 1px solid var(--color-border);
 }
@@ -28,11 +30,40 @@
 .header-brand {
   display: flex;
   align-items: center;
+  gap: 14px;
 }
 
-/* Hamburger toggle — hidden on wide screens, shown when the nav collapses. */
-.nav-toggle {
-  display: none;
+/* Sidebar toggle — always visible in the header next to the logo.
+   On wide screens toggles the icon-only rail; on narrow screens
+   opens/closes the sidebar overlay. Box-style outlined icon. */
+.sidebar-toggle-btn {
+  width: 32px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-ink);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-toggle-btn:hover{
+  background: var(--color-surface-hover);
+}
+
+.sidebar-toggle-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* =============================
@@ -45,97 +76,8 @@
   color: black;
 }
 
-/* =============================
-   🧭 NAV
-============================== */
-.nav {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  align-items: center;
-}
-
-.nav a {
-  color: black;
-  text-decoration: none;
-  font-size: var(--text-lg);
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  transition: 0.2s;
-}
-
-.nav a:hover{
-  background: var(--color-surface-hover);
-}
-
-.nav .active {
-  background: var(--color-primary-action);
-  color: var(--color-surface);
-}
-
-/* Header link that's currently loaded in the right (split) pane.
-   Different style from .active so the user can tell which side the click hit. */
-.nav .active-split {
-  background: var(--color-admin-badge-bg);
-  color: var(--color-admin-badge-text);
-  box-shadow: inset 0 -2px 0 var(--color-admin-badge-shadow);
-}
-
-/* =============================
-   📱 RESPONSIVE HEADER NAV
-   Below 1100px the 11-item nav no longer fits, so it collapses into a
-   dropdown opened by the hamburger toggle.
-============================== */
-@media (max-width: 1100px){
-  .nav-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 30px;
-    margin-left: 12px;
-    border: 1px solid var(--color-input-border);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-tint-cool);
-    color: var(--color-text-ink);
-    font-size: var(--text-2xl);
-    line-height: 1;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .nav-toggle:hover{
-    background: var(--color-surface-tint-slate);
-  }
-
-  /* Collapsed: hidden until the toggle opens it. */
-  .nav{
-    display: none;
-  }
-
-  /* Open: a dropdown panel anchored under the header. */
-  .nav.open{
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    gap: 4px;
-    position: absolute;
-    top: 100%;
-    left: 16px;
-    min-width: 210px;
-    padding: 8px;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 0 0 10px 10px;
-    box-shadow: 0 12px 28px rgb(0, 0, 0, 0.18);
-    z-index: 200;
-  }
-
-  .nav.open a {
-    padding: 9px 12px;
-  }
-}
+/* Header nav rules removed — app navigation now lives in the left sidebar.
+   See `.sidebar` below. */
 
 /* =============================
    👤 ACTIONS
@@ -452,26 +394,145 @@
 }
 
 /* =============================
-   📌 ICON SIDEBAR (LEFT)
+   🔍 SEARCH BAR — INLINE IN HEADER
+   The SearchBar component still uses .global-search-row + .global-search-box.
+   When rendered as a direct child of .header it needs to drop its row
+   chrome (background, border, fixed height) and behave like a flex item.
 ============================== */
-.icon-sidebar {
-  width: 60px;
-  background: var(--color-surface-cool-faint);
-  border-right: 1px solid var(--color-border);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 15px;
-  padding-top: 12px;
-  padding-bottom: 12px;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease;
-  overflow: hidden;
-  white-space: nowrap;
+.header > .global-search-row {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
+  justify-content: center;
 }
 
-.icon-sidebar-spacer {
+.header > .global-search-row .global-search-box {
+  width: min(560px, 100%);
+}
+
+/* =============================
+   📌 PRIMARY SIDEBAR (LEFT)
+   Holds every app navigation entry: primary apps, optional Platform
+   section for platform admins, and a secondary section (Pricing, Docs,
+   Developers, API Keys, About). Width is fixed on desktop; below 1100px
+   it collapses into an overlay panel toggled by the header hamburger.
+============================== */
+.sidebar {
+  width: 220px;
+  background: var(--color-surface-cool-faint);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 8px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  transition: transform 0.2s ease, width 0.25s ease;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-section-label {
+  padding: 4px 10px 2px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.sidebar-spacer {
   flex: 1;
+  min-height: 8px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: 1.2;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-link:hover{
+  background: var(--color-surface-hover);
+}
+
+.sidebar-link.active {
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+}
+
+.sidebar-link.active-split {
+  background: var(--color-admin-badge-bg);
+  color: var(--color-admin-badge-text);
+  box-shadow: inset 0 -2px 0 var(--color-admin-badge-shadow);
+}
+
+.sidebar-icon {
+  width: 20px;
+  flex-shrink: 0;
+  display: inline-flex;
+  justify-content: center;
+  font-size: var(--text-2xl);
+  line-height: 1;
+}
+
+.sidebar-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* =============================
+   ↔ COLLAPSED SIDEBAR
+   Icon-only rail; labels and section headings are visually hidden but
+   remain in the DOM for screen readers + native tooltips on hover.
+============================== */
+.sidebar.collapsed {
+  width: 56px;
+}
+
+.sidebar.collapsed .sidebar-label,
+.sidebar.collapsed .sidebar-section-label {
+  /* Visually hide but keep accessible for screen readers. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sidebar.collapsed .sidebar-link {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.sidebar.collapsed .sidebar-section {
+  gap: 4px;
+}
+
+/* Scrim behind the sidebar overlay on narrow screens — taps dismiss. */
+.sidebar-scrim {
+  display: none;
 }
 
 /* =============================
@@ -669,15 +730,67 @@
    At ≤480px we tighten paddings and shrink the duplicate-pane
    button which is a desktop-first affordance.
 ============================== */
+/* Below 1100px the 220px sidebar competes too aggressively with the
+   primary content. Collapse it into an overlay revealed by the header
+   sidebar-toggle button. */
+@media (max-width: 1100px){
+  .sidebar {
+    position: absolute;
+    top: 49px; /* header height + 1px border */
+    bottom: 0;
+    left: 0;
+    z-index: 200;
+    transform: translateX(-100%);
+    box-shadow: 6px 0 18px rgb(0, 0, 0, 0.12);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* In overlay mode the collapsed-rail preference doesn't make sense —
+     the panel is already hidden offscreen, so when revealed it should
+     always show full labels. */
+  .sidebar.collapsed {
+    width: 220px;
+  }
+  .sidebar.collapsed .sidebar-label,
+  .sidebar.collapsed .sidebar-section-label {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: nowrap;
+  }
+  .sidebar.collapsed .sidebar-section-label {
+    padding: 4px 10px 2px;
+  }
+  .sidebar.collapsed .sidebar-link {
+    justify-content: flex-start;
+    padding: 7px 10px;
+  }
+
+  .sidebar-scrim {
+    display: block;
+    position: absolute;
+    top: 49px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgb(0, 0, 0, 0.32);
+    z-index: 150;
+  }
+}
+
 @media (max-width: 768px){
   .header {
     padding: 0 12px;
     column-gap: 6px;
   }
 
-  /* The welcome message + role chip eat ~200px of header width and
-     duplicate info available in /profile. Hide on phones; the
-     ProfileMenu avatar still identifies the signed-in user. */
   .header-welcome {
     display: none;
   }
@@ -690,8 +803,6 @@
     display: none;
   }
 
-  /* Tighten the duplicate-pane button (still useful in landscape /
-     tablet, just narrower). */
   .duplicate-pane-btn {
     width: 32px;
     height: 32px;
@@ -707,17 +818,12 @@
     font-size: var(--text-2xl);
   }
 
-  /* Duplicate-pane is desktop-first; hide it on phones. */
   .duplicate-pane-btn {
     display: none;
   }
 
-  /* The nav-toggle dropdown anchors to `left: 16px` by default.
-     On a 360px screen this clips the right edge; pin it tighter. */
-  .nav.open {
-    left: 8px;
-    right: 8px;
-    min-width: 0;
+  .sidebar {
+    width: min(260px, 80vw);
   }
 }
 
@@ -741,14 +847,6 @@
 :root[data-theme="dark"] .header .logo {
   color: var(--color-surface-tint-cool);
 }
-:root[data-theme="dark"] .nav a {
-  color: var(--color-input-border);
-}
-:root[data-theme="dark"] .nav a:hover,
-:root[data-theme="dark"] .nav a.active{
-  background: rgb(96, 165, 250, 0.15);
-  color: var(--color-on-primary);
-}
 :root[data-theme="dark"] .header-welcome {
   color: var(--color-surface-tint-slate);
 }
@@ -756,16 +854,23 @@
   background: rgb(96, 165, 250, 0.2);
   color: var(--color-primary-border);
 }
-:root[data-theme="dark"] .icon-sidebar {
+:root[data-theme="dark"] .sidebar {
   background: var(--color-surface-darken);
   border-right: 1px solid var(--color-border-dark);
 }
-:root[data-theme="dark"] .icon-sidebar a {
+:root[data-theme="dark"] .sidebar-link {
   color: var(--color-input-border);
 }
-:root[data-theme="dark"] .icon-sidebar a:hover{
+:root[data-theme="dark"] .sidebar-link:hover{
   background: var(--color-surface-hover);
   color: var(--color-on-primary);
+}
+:root[data-theme="dark"] .sidebar-link.active {
+  background: rgb(96, 165, 250, 0.15);
+  color: var(--color-on-primary);
+}
+:root[data-theme="dark"] .sidebar-section-label {
+  color: var(--color-text-slate);
 }
 
 /* OS prefers-color-scheme blocks were removed — dark mode is now

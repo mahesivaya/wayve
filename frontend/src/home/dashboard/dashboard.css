@@ -1,0 +1,286 @@
+/* =============================
+   📊 ACTIVITY DASHBOARD
+   Replaces the per-app card grid on the signed-in home pages. Four
+   focused panes — Today, Inbox, Tasks, Recent — plus a quick-capture
+   input on top. Lives at /home (personal) and /organization-home (org).
+============================== */
+
+.dashboard {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-sizing: border-box;
+}
+
+/* ----- Quick capture row ----- */
+.dashboard-capture {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px rgb(0, 0, 0, 0.04);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dashboard-capture:focus-within {
+  border-color: var(--color-primary-action);
+  box-shadow: 0 0 0 3px rgb(96, 165, 250, 0.15);
+}
+
+.dashboard-capture-icon {
+  font-size: var(--text-xl);
+  line-height: 1;
+}
+
+.dashboard-capture-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--text-lg);
+}
+
+.dashboard-capture-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.dashboard-capture-btn {
+  width: 34px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.dashboard-capture-btn:hover:not(:disabled) {
+  background: var(--color-primary-action-hover);
+}
+
+.dashboard-capture-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ----- 2x2 grid ----- */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ----- Card ----- */
+.dashboard-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-height: 220px;
+  box-shadow: 0 1px 2px rgb(0, 0, 0, 0.04);
+}
+
+.dashboard-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dashboard-card-head h3 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.dashboard-card-count {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----- List + items ----- */
+.dashboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+/* Three-column row: lead (time/sender/check/icon) · title · trail (ago/count/status).
+   `dashboard-item-stack` switches lead+title to stacked when the lead is
+   a sender name (inbox), where the subject deserves more horizontal room. */
+.dashboard-item {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 8px;
+  margin: 0 -8px;
+  font-size: var(--text-md);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.dashboard-item:hover {
+  background: var(--color-surface-hover);
+}
+
+.dashboard-item-lead {
+  font-weight: 600;
+  color: var(--color-primary-action-hover);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-md);
+  white-space: nowrap;
+}
+
+.dashboard-item-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.dashboard-item-trail {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Stacked variant: lead becomes a sender label on top of the subject. */
+.dashboard-item-stack {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  row-gap: 2px;
+  align-items: start;
+}
+
+.dashboard-item-stack .dashboard-item-lead {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-item-stack .dashboard-item-title {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.dashboard-item-stack .dashboard-item-trail {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+/* ----- Empty state ----- */
+.dashboard-empty {
+  margin: 0;
+  padding: 24px 0;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ----- Footer link ----- */
+.dashboard-card-link {
+  margin-top: auto;
+  align-self: flex-start;
+  padding: 6px 8px;
+  margin-left: -8px;
+  border: none;
+  background: transparent;
+  color: var(--color-primary-action);
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+
+.dashboard-card-link:hover {
+  background: var(--color-surface-hover);
+}
+
+/* ----- Skeleton (loading) ----- */
+.dashboard-skeleton {
+  gap: 8px;
+}
+
+.dashboard-skeleton-row {
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-hover) 0%,
+    var(--color-surface-soft) 50%,
+    var(--color-surface-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: dashboard-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes dashboard-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ----- Dark mode tweaks ----- */
+:root[data-theme="dark"] .dashboard-card,
+:root[data-theme="dark"] .dashboard-capture {
+  background: var(--color-surface-darken);
+  border-color: var(--color-border-dark);
+}
+
+:root[data-theme="dark"] .dashboard-card-head h3,
+:root[data-theme="dark"] .dashboard-card-count,
+:root[data-theme="dark"] .dashboard-item-trail,
+:root[data-theme="dark"] .dashboard-empty {
+  color: var(--color-text-slate);
+}
