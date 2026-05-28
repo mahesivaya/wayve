@@ -47,7 +47,7 @@ pub fn db_max_connections(role: RuntimeRole) -> u32 {
     // and parse handling live in wayve-db so wayve-server's only DB
     // logic is the per-role default.
     let default = match role {
-        RuntimeRole::Api | RuntimeRole::All => 10,
+        RuntimeRole::Api | RuntimeRole::All => 50,
         RuntimeRole::EmailSyncWorker | RuntimeRole::EmailBodyWorker => 5,
     };
     wayve_db::config::database_max_connections(default)
@@ -362,7 +362,7 @@ mod config_tests {
     #[serial_test::serial]
     fn db_max_connections_uses_role_defaults() {
         unsafe { env::remove_var("DATABASE_MAX_CONNECTIONS") };
-        assert_eq!(db_max_connections(RuntimeRole::Api), 10);
+        assert_eq!(db_max_connections(RuntimeRole::Api), 50);
         assert_eq!(db_max_connections(RuntimeRole::EmailSyncWorker), 5);
     }
 

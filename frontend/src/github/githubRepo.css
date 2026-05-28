@@ -395,6 +395,24 @@
   font-weight: 700;
 }
 
+/* Title + caption stack inside the Actions header. Keeps the H2 on top
+   and the "Showing runs from all workflows" subtitle right below it
+   without collapsing the inline-block alignment from the existing
+   .github-panel-head flex row. */
+.github-actions-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.github-actions-scope-note {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
 .github-file-list {
   /* Show many more files at once — the panel was previously capped at
      520px / 62vh which only fit ~15 rows on a tall display. Bumped to

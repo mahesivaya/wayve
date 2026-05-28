@@ -77,10 +77,11 @@ type RunsResponse = {
   total_count: number;
 };
 
-// How many runs we pull per `/actions/runs` page. 30 is a comfortable
-// initial load (covers a few days for an active repo without flooding
-// the UI). 100 is the GitHub API max if we ever want to bump this.
-const RUNS_PER_PAGE = 30;
+// How many runs we pull per `/actions/runs` page. 50 matches GitHub's
+// own "453 workflow runs" view density without blowing past the
+// API's 100/page max. The "Load more" affordance pages further if the
+// repo has more than this.
+const RUNS_PER_PAGE = 50;
 
 // Individual step inside a job — what GitHub renders as the bullet list
 // under each job header on the run page. The `number` field is the
@@ -539,14 +540,17 @@ export default function GitHubRepo() {
   }, []);
 
   /**
-   * Fetch a page of workflow runs filtered to `nextBranch`. `append`
-   * means we're paging through history (preserves runs already loaded);
-   * otherwise the result REPLACES the list (used on branch change or
-   * the initial load). Updates the pagination counters so the "Load
-   * more" affordance knows whether there's anything left to fetch.
+   * Fetch a page of workflow runs. We deliberately do NOT pass
+   * `branch=` — a push to ANY branch should surface under Actions so
+   * the user can see CI activity without having to switch the branch
+   * picker first. The Actions panel header makes this explicit with a
+   * "Showing runs from all workflows" subtitle.
+   *
+   * `append` means we're paging through history (preserves runs
+   * already loaded); otherwise the result REPLACES the list.
    */
   const loadRuns = useCallback(
-    async (nextBranch: string, page: number, append: boolean) => {
+    async (page: number, append: boolean) => {
       if (append) setRunsLoadingMore(true);
       // Clear any stale banner from a previous attempt so a successful
       // retry doesn't leave the error visible. The other loaders
@@ -556,8 +560,7 @@ export default function GitHubRepo() {
       try {
         const url =
           `${API_BASE}/actions/runs` +
-          `?branch=${encodeURIComponent(nextBranch)}` +
-          `&per_page=${RUNS_PER_PAGE}` +
+          `?per_page=${RUNS_PER_PAGE}` +
           `&page=${page}`;
         const data = await githubJson<RunsResponse>(url);
         setRunsTotal(data.total_count ?? 0);
@@ -565,6 +568,17 @@ export default function GitHubRepo() {
         setRuns((current) =>
           append ? [...current, ...data.workflow_runs] : data.workflow_runs,
         );
+        if (!append) {
+          // Default every workflow group to expanded so the Actions
+          // panel reads as a flat run list out-of-the-box — matches
+          // GitHub's own /actions view. The user can still collapse a
+          // workflow they want to hide; that state survives "Load more"
+          // because we only seed the set on replace, not on append.
+          const names = new Set(
+            data.workflow_runs.map((run) => run.name?.trim() || "Workflow"),
+          );
+          setExpandedWorkflows(names);
+        }
       } catch (err) {
         // Surface the error but don't blow up the rest of the page —
         // the user still has files / commits / workflows on screen.
@@ -694,15 +708,15 @@ export default function GitHubRepo() {
     if (!repo) return;
     void loadWorkflows(branch);
     void loadCommits(branch);
-    // Branch change resets the runs history so we don't show mixed-
-    // branch results. The Run-detail caches stay valid (keyed by run
-    // id, which is global), but the per-job expansion state and the
-    // expanded-runs set lose their visual context, so clear them.
+    // Actions list is now branch-agnostic (a push to any branch should
+    // surface), so we only refresh it on the initial repo load and
+    // reset per-run UI state at the same time. Run-detail caches stay
+    // valid (keyed by run id, which is global).
     setRunsPage(1);
     setRunsTotal(0);
     setExpandedRunIds(new Set());
     setExpandedJobIds(new Set());
-    void loadRuns(branch, 1, false);
+    void loadRuns(1, false);
   }, [branch, loadCommits, loadRuns, loadWorkflows, repo]);
 
   async function openFile(item: ContentItem) {
@@ -998,17 +1012,22 @@ export default function GitHubRepo() {
           {activeSection === "actions" && (
             <div className="github-panel">
               <div className="github-panel-head">
-                <h2>Actions</h2>
-            <span>
-              {/* Show "loaded / total" so the user can see how much
-                  history is still available behind "Load more". When
-                  the API hasn't returned a total yet, just show the
-                  loaded count. */}
-              {runsTotal > 0 && runsTotal > runs.length
-                ? `${runs.length} of ${runsTotal}`
-                : runs.length}
-            </span>
-          </div>
+                <div className="github-actions-head-main">
+                  <h2>Actions</h2>
+                  <small className="github-actions-scope-note">
+                    Showing runs from all workflows
+                  </small>
+                </div>
+                <span>
+                  {/* Show "loaded / total" so the user can see how much
+                      history is still available behind "Load more". When
+                      the API hasn't returned a total yet, just show the
+                      loaded count. */}
+                  {runsTotal > 0 && runsTotal > runs.length
+                    ? `${runs.length} of ${runsTotal}`
+                    : runs.length}
+                </span>
+              </div>
 
           {/* Tree view of workflow runs:
                 Workflow ──▸ (chevron toggles)
@@ -1214,7 +1233,7 @@ export default function GitHubRepo() {
               <div className="github-actions-load-more">
                 <button
                   type="button"
-                  onClick={() => void loadRuns(branch, runsPage + 1, true)}
+                  onClick={() => void loadRuns(runsPage + 1, true)}
                   disabled={runsLoadingMore}
                 >
                   {runsLoadingMore
