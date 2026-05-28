@@ -96,11 +96,32 @@
  *  card system instead of two visually distinct grids.
  * ------------------------------------------------------------------ */
 
+/* Drop the ActivityDashboard's own max-width + padding when it lives inside
+   the org-admin home, so the 2x2 status grid above lines up with the
+   Organization consoles panel below. With matching outer width and the
+   same 16px gap, each status card spans exactly two console tiles + gap. */
+.organization-admin-home .dashboard {
+  max-width: none;
+  padding: 0;
+}
+
 .org-home-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-top: 12px;
+}
+
+@media (max-width: 900px){
+  .org-home-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px){
+  .org-home-tiles {
+    grid-template-columns: 1fr;
+  }
 }
 
 .org-home-tile {
