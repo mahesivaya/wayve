@@ -79,14 +79,17 @@
   cursor: not-allowed;
 }
 
-/* ----- 2x2 grid ----- */
+/* ----- 2x2 grid -----
+   Keep the four cards in a 2x2 layout as long as the screen has any
+   reasonable horizontal room. Only collapse to a single column on phone
+   widths where two cards side-by-side become unreadable. */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 520px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
