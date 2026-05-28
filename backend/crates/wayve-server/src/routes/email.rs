@@ -58,37 +58,66 @@ pub async fn get_emails(
     let page_size = 75;
     let query_limit = page_size + 1;
 
-    if let Some(before_ms) = query.before
-        && let Err(e) = sync_older_page(
-            pool.get_ref(),
-            user_id,
-            query.account_id,
-            // sync_older_page (and the upstream Gmail/Outlook providers)
-            // expect Unix seconds; the wire format is milliseconds for
-            // sub-second precision on the DB keyset cursor.
-            before_ms / 1000,
-            query_limit,
-        )
-        .await
-    {
-        warn!(target: "gmail", user_id, error = ?e, "older email page sync failed");
-    }
-
     let before = query.before.zip(query.before_id);
 
-    let rows = repo::list(
-        pool.get_ref(),
-        EmailListFilters {
-            user_id,
-            account_id: query.account_id,
-            folder: query.folder.clone(),
-            inbox_status: query.inbox_status.clone(),
-            search: query.q.clone(),
-            before,
-            page_size,
-        },
-    )
-    .await?;
+    let filters = EmailListFilters {
+        user_id,
+        account_id: query.account_id,
+        folder: query.folder.clone(),
+        inbox_status: query.inbox_status.clone(),
+        search: query.q.clone(),
+        before,
+        page_size,
+    };
+
+    // DB-first: query what we already have cached before doing any upstream
+    // work. The previous behavior always did a synchronous Gmail/Outlook
+    // sync on every "load more" click, which added 3-10s of latency even
+    // when the DB had plenty of older rows cached. Now we only block on
+    // the provider when the cache is genuinely exhausted; otherwise the
+    // sync runs in the background so the next click is fresh.
+    let mut rows = repo::list(pool.get_ref(), filters.clone()).await?;
+
+    if let Some(before_ms) = query.before {
+        let account_id = query.account_id;
+        // sync_older_page expects Unix seconds; the wire format is
+        // milliseconds for sub-second precision on the DB keyset cursor.
+        let before_secs = before_ms / 1000;
+
+        if rows.len() > page_size {
+            // Full page available locally — return immediately and refill
+            // the cache in the background so the next click stays fast.
+            let pool_clone = pool.get_ref().clone();
+            tokio::spawn(async move {
+                if let Err(e) = sync_older_page(
+                    &pool_clone,
+                    user_id,
+                    account_id,
+                    before_secs,
+                    query_limit,
+                )
+                .await
+                {
+                    warn!(target: "gmail", user_id, error = ?e, "background older email sync failed");
+                }
+            });
+        } else {
+            // Local cache exhausted — pay the provider round-trip inline
+            // so we can return the next page instead of an empty response.
+            if let Err(e) = sync_older_page(
+                pool.get_ref(),
+                user_id,
+                account_id,
+                before_secs,
+                query_limit,
+            )
+            .await
+            {
+                warn!(target: "gmail", user_id, error = ?e, "older email page sync failed");
+            }
+            rows = repo::list(pool.get_ref(), filters).await?;
+        }
+    }
 
     let has_more = rows.len() > page_size;
     let emails: Vec<Value> = rows

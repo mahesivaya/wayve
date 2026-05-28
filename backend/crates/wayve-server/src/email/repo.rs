@@ -85,6 +85,7 @@ pub struct EmailListRow {
     pub inbox_assignee_id: Option<i32>,
 }
 
+#[derive(Clone)]
 pub struct EmailListFilters {
     pub user_id: i32,
     pub account_id: Option<i32>,
