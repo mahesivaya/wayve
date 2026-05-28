@@ -135,6 +135,36 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
     }
   };
 
+  // Auto-refresh the attachment list while the user is on the Files view
+  // AND the inbox is still being scanned (either no emails synced yet or
+  // some emails haven't had their bodies/attachments processed by the
+  // body worker). New attachments stream in without the user having to
+  // re-click "Files". The poll stops automatically once every email has
+  // `attachments_checked === true` — no waste once sync is complete.
+  const inboxStillScanning =
+    viewMode === "files" &&
+    accounts.length > 0 &&
+    (emails.length === 0 ||
+      emails.some((email) => email.attachments_checked === false));
+
+  useEffect(() => {
+    if (!inboxStillScanning) return;
+    let cancelled = false;
+    const timer = window.setInterval(async () => {
+      try {
+        const data = await getAllEmailAttachments();
+        if (!cancelled) setFiles(data);
+      } catch {
+        // Best-effort — keep the old list rather than blanking it on a
+        // transient failure. The next tick will retry.
+      }
+    }, 20_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [inboxStillScanning]);
+
   const openEmail = async (email: EmailItem) => {
     setViewMode("email");
     const openedEmail = { ...email, is_read: true };

@@ -549,6 +549,11 @@ export default function Emails() {
           filesLoading={filesLoading}
           filesError={filesError}
           normalizedSearchQuery={normalizedSearchQuery}
+          inboxAccountCount={accounts.length}
+          inboxEmailCount={emails.length}
+          inboxUncheckedCount={
+            emails.filter((email) => email.attachments_checked === false).length
+          }
         />
       )}
     </div>

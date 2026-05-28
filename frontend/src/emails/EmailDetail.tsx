@@ -14,6 +14,14 @@ interface EmailDetailProps {
   filesLoading: boolean;
   filesError: string | null;
   normalizedSearchQuery: string;
+  // Sync context for the Files view. The flat "No attached files found"
+  // empty state was misleading — a freshly connected account starts with
+  // 0 synced emails, so users couldn't tell "no attachments exist" apart
+  // from "sync hasn't finished yet". These counts let the Files panel
+  // craft an honest message and decide whether to keep polling.
+  inboxAccountCount: number;
+  inboxEmailCount: number;
+  inboxUncheckedCount: number;
 }
 
 export const EmailDetail: React.FC<EmailDetailProps> = ({
@@ -25,6 +33,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   filesLoading,
   filesError,
   normalizedSearchQuery,
+  inboxAccountCount,
+  inboxEmailCount,
+  inboxUncheckedCount,
 }) => {
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
@@ -105,6 +116,39 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   }, [files, normalizedSearchQuery]);
 
   if (viewMode === "files") {
+    // Distinguish the empty/loading states so users understand whether
+    // the inbox is still importing vs. genuinely contains no attachments.
+    // Counts come from useEmailInbox; `inboxUncheckedCount` is the number
+    // of emails whose bodies (and therefore attachments) have not yet
+    // been processed by the body worker.
+    const hasNoAccounts = inboxAccountCount === 0;
+    const inboxStillImporting =
+      !hasNoAccounts && (inboxEmailCount === 0 || inboxUncheckedCount > 0);
+    const scannedSoFar = Math.max(inboxEmailCount - inboxUncheckedCount, 0);
+
+    let emptyMessage: React.ReactNode = "No attached files found";
+    if (normalizedSearchQuery) {
+      emptyMessage = "No files match your search";
+    } else if (hasNoAccounts) {
+      emptyMessage =
+        "Connect an email account to see attachments here.";
+    } else if (inboxEmailCount === 0) {
+      emptyMessage = (
+        <>
+          We're still importing your inbox. Attachments will appear here
+          as we find them.
+        </>
+      );
+    } else if (inboxUncheckedCount > 0) {
+      emptyMessage = (
+        <>
+          Scanned {scannedSoFar} of {inboxEmailCount} email
+          {inboxEmailCount === 1 ? "" : "s"} so far. More attachments may
+          show up shortly.
+        </>
+      );
+    }
+
     return (
       <div className="email-detail">
         <div className="email-detail-actions">
@@ -113,29 +157,35 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         <div className="email-files-inline">
           <div className="email-files-header">
             <h2>Files</h2>
-            <button onClick={onBack}>Back to email</button>
+            <button onClick={onBack}>Back to inbox</button>
           </div>
           {filesLoading ? (
             <div className="email-files-empty">Loading files…</div>
           ) : filesError ? (
             <div className="email-files-error">{filesError}</div>
           ) : visibleFiles.length === 0 ? (
-            <div className="email-files-empty">
-              {normalizedSearchQuery ? "No files match your search" : "No attached files found"}
-            </div>
+            <div className="email-files-empty">{emptyMessage}</div>
           ) : (
-            <div className="email-files-list">
-              {visibleFiles.map((file) => (
-                <button key={file.id} className="email-files-row" onClick={() => downloadEmailAttachment(file, user?.id ?? null)}>
-                  <span className="email-files-icon">📎</span>
-                  <span className="email-files-main">
-                    <span className="email-files-name">{file.filename}</span>
-                    <span className="email-files-meta">{file.subject || "No subject"} · {file.sender || "Unknown sender"}</span>
-                  </span>
-                  <span className="email-files-size">{formatFileSize(file.size)}</span>
-                </button>
-              ))}
-            </div>
+            <>
+              {inboxStillImporting && !normalizedSearchQuery && (
+                <div className="email-files-progress" role="status">
+                  Still scanning {inboxUncheckedCount > 0 ? inboxUncheckedCount : ""}{" "}
+                  email{inboxUncheckedCount === 1 ? "" : "s"} for attachments — this list will update automatically.
+                </div>
+              )}
+              <div className="email-files-list">
+                {visibleFiles.map((file) => (
+                  <button key={file.id} className="email-files-row" onClick={() => downloadEmailAttachment(file, user?.id ?? null)}>
+                    <span className="email-files-icon">📎</span>
+                    <span className="email-files-main">
+                      <span className="email-files-name">{file.filename}</span>
+                      <span className="email-files-meta">{file.subject || "No subject"} · {file.sender || "Unknown sender"}</span>
+                    </span>
+                    <span className="email-files-size">{formatFileSize(file.size)}</span>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>

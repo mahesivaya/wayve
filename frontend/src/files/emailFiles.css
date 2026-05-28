@@ -81,3 +81,18 @@
 .email-files-error {
   color: var(--color-danger);
 }
+
+/* Progress strip shown above the list while the inbox is still being
+   scanned. Tells the user "you're not seeing the full picture yet" so
+   they don't conclude their attachments aren't there. The list keeps
+   rendering whatever's already arrived so the page stays useful. */
+.email-files-progress {
+  margin: 0 16px 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-primary-action);
+  background: var(--color-surface-tint-cool, var(--color-surface));
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
