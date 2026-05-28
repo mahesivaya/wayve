@@ -429,6 +429,29 @@ export default function GitHubRepo() {
   const [fileLoading, setFileLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Section nav for the left rail. Persist the user's last view so
+  // re-opening /github lands them on the same panel.
+  type Section = "files" | "workflows" | "commits" | "actions";
+  const [activeSection, setActiveSection] = useState<Section>(() => {
+    try {
+      const raw = localStorage.getItem("rwayve.github.section");
+      if (raw === "workflows" || raw === "commits" || raw === "actions") {
+        return raw;
+      }
+    } catch {
+      // ignore
+    }
+    return "files";
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("rwayve.github.section", activeSection);
+    } catch {
+      // ignore
+    }
+  }, [activeSection]);
+
   const loadRepo = useCallback(async () => {
     setError("");
     setLoading(true);
@@ -705,59 +728,110 @@ export default function GitHubRepo() {
     <div className="github-page">
       {error && <div className="github-banner">{error}</div>}
 
-      <div className="github-toolbar">
-        <label>
-          Branch
-          <select
-            value={branch}
-            onChange={(event) => {
-              setBranch(event.target.value);
-            }}
+      <div className="github-layout">
+        {/* Left rail — split into two visually distinct card panels:
+            (1) Branch picker, (2) Section nav. Mirrors the Emails-page
+            sidebar pattern (account list + folder list) so the page
+            feels at home with the rest of the app's chrome. */}
+        <aside className="github-sidebar" aria-label="GitHub sections">
+          <div className="github-sidebar-card">
+            <label className="github-sidebar-branch">
+              <span className="github-sidebar-branch-label">Branch</span>
+              <select
+                value={branch}
+                onChange={(event) => {
+                  setBranch(event.target.value);
+                }}
+              >
+                {branches.map((item) => (
+                  <option key={item.name} value={item.name}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="github-sidebar-card">
+            <button
+              type="button"
+              className={`github-sidebar-link ${activeSection === "files" ? "active" : ""}`}
+              onClick={() => setActiveSection("files")}
+            >
+              <span className="github-sidebar-icon" aria-hidden="true">📁</span>
+              <span className="github-sidebar-label">Files</span>
+            </button>
+          <button
+            type="button"
+            className={`github-sidebar-link ${activeSection === "workflows" ? "active" : ""}`}
+            onClick={() => setActiveSection("workflows")}
           >
-            {branches.map((item) => (
-              <option key={item.name} value={item.name}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+            <span className="github-sidebar-icon" aria-hidden="true">⚙️</span>
+            <span className="github-sidebar-label">Workflows</span>
+            <span className="github-sidebar-count">{workflows.length}</span>
+          </button>
+          <button
+            type="button"
+            className={`github-sidebar-link ${activeSection === "commits" ? "active" : ""}`}
+            onClick={() => setActiveSection("commits")}
+          >
+            <span className="github-sidebar-icon" aria-hidden="true">📝</span>
+            <span className="github-sidebar-label">Commits</span>
+            <span className="github-sidebar-count">{commits.length}</span>
+          </button>
+          <button
+            type="button"
+            className={`github-sidebar-link ${activeSection === "actions" ? "active" : ""}`}
+            onClick={() => setActiveSection("actions")}
+          >
+            <span className="github-sidebar-icon" aria-hidden="true">▶</span>
+            <span className="github-sidebar-label">Actions</span>
+            <span className="github-sidebar-count">{runs.length}</span>
+          </button>
+          </div>
+        </aside>
 
-      <main className="github-grid">
-        <section className="github-browser" aria-label="Repository files">
-          <div className="github-panel-head">
-            <h2>Files</h2>
-            <span>Tree</span>
-          </div>
-          <div className="github-file-list">
-            {renderTree()}
-            {!loadingPaths.has("") && (treeItems[""] ?? []).length === 0 && (
-              <div className="github-empty">No files found.</div>
-            )}
-          </div>
-        </section>
+        {/* Right pane — only the active section is rendered. The Files
+            view keeps its existing 2-pane (tree + preview) layout
+            because file browsing benefits from both being visible. */}
+        <div className="github-content">
+          {activeSection === "files" && (
+            <main className="github-grid">
+              <section className="github-browser" aria-label="Repository files">
+                <div className="github-panel-head">
+                  <h2>Files</h2>
+                  <span>Tree</span>
+                </div>
+                <div className="github-file-list">
+                  {renderTree()}
+                  {!loadingPaths.has("") && (treeItems[""] ?? []).length === 0 && (
+                    <div className="github-empty">No files found.</div>
+                  )}
+                </div>
+              </section>
 
-        <section className="github-preview" aria-label="File preview">
-          <div className="github-panel-head">
-            <h2>{selectedFile?.name ?? "Preview"}</h2>
-            {selectedFile && <span>{formatSize(selectedFile.size)}</span>}
-          </div>
-          {fileLoading ? (
-            <div className="github-empty">Loading file...</div>
-          ) : selectedFile ? (
-            <pre>{fileText || "No preview available."}</pre>
-          ) : (
-            <div className="github-empty">Select a file.</div>
+              <section className="github-preview" aria-label="File preview">
+                <div className="github-panel-head">
+                  <h2>{selectedFile?.name ?? "Preview"}</h2>
+                  {selectedFile && <span>{formatSize(selectedFile.size)}</span>}
+                </div>
+                {fileLoading ? (
+                  <div className="github-empty">Loading file...</div>
+                ) : selectedFile ? (
+                  <pre>{fileText || "No preview available."}</pre>
+                ) : (
+                  <div className="github-empty">Select a file.</div>
+                )}
+              </section>
+            </main>
           )}
-        </section>
-      </main>
 
-      <section className="github-lower-grid">
-        <div className="github-panel">
-          <div className="github-panel-head">
-            <h2>Workflows</h2>
-            <span>{workflows.length}</span>
-          </div>
+          {activeSection === "workflows" && (
+            <div className="github-panel">
+              <div className="github-panel-head">
+                <h2>Workflows</h2>
+                <span>{workflows.length}</span>
+              </div>
           {workflows.map((workflow) => (
             <button
               key={workflow.path}
@@ -769,38 +843,42 @@ export default function GitHubRepo() {
               <small>{formatSize(workflow.size)}</small>
             </button>
           ))}
-          {workflows.length === 0 && <div className="github-empty">No workflows found.</div>}
-        </div>
+              {workflows.length === 0 && <div className="github-empty">No workflows found.</div>}
+            </div>
+          )}
 
-        <div className="github-panel">
-          <div className="github-panel-head">
-            <h2>Commits</h2>
-            <span>{commits.length}</span>
-          </div>
-          {commits.map((commit) => (
-            <a
-              key={commit.sha}
-              className="github-commit"
-              href={commit.html_url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <span className="github-commit-main">
-                <strong>{firstLine(commit.commit.message)}</strong>
-                <small>
-                  {(commit.author?.login ?? commit.commit.author?.name ?? "Unknown")} ·{" "}
-                  {commit.commit.author ? formatDate(commit.commit.author.date) : "Unknown"}
-                </small>
-              </span>
-              <code>{commit.sha.slice(0, 7)}</code>
-            </a>
-          ))}
-          {commits.length === 0 && <div className="github-empty">No commits found.</div>}
-        </div>
+          {activeSection === "commits" && (
+            <div className="github-panel">
+              <div className="github-panel-head">
+                <h2>Commits</h2>
+                <span>{commits.length}</span>
+              </div>
+              {commits.map((commit) => (
+                <a
+                  key={commit.sha}
+                  className="github-commit"
+                  href={commit.html_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span className="github-commit-main">
+                    <strong>{firstLine(commit.commit.message)}</strong>
+                    <small>
+                      {(commit.author?.login ?? commit.commit.author?.name ?? "Unknown")} ·{" "}
+                      {commit.commit.author ? formatDate(commit.commit.author.date) : "Unknown"}
+                    </small>
+                  </span>
+                  <code>{commit.sha.slice(0, 7)}</code>
+                </a>
+              ))}
+              {commits.length === 0 && <div className="github-empty">No commits found.</div>}
+            </div>
+          )}
 
-        <div className="github-panel">
-          <div className="github-panel-head">
-            <h2>Actions</h2>
+          {activeSection === "actions" && (
+            <div className="github-panel">
+              <div className="github-panel-head">
+                <h2>Actions</h2>
             <span>
               {/* Show "loaded / total" so the user can see how much
                   history is still available behind "Load more". When
@@ -1025,10 +1103,11 @@ export default function GitHubRepo() {
                 </button>
               </div>
             )}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
-      </section>
-
+      </div>
     </div>
   );
 }
