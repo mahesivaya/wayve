@@ -483,6 +483,11 @@ export default function GitHubRepo() {
   const loadRuns = useCallback(
     async (nextBranch: string, page: number, append: boolean) => {
       if (append) setRunsLoadingMore(true);
+      // Clear any stale banner from a previous attempt so a successful
+      // retry doesn't leave the error visible. The other loaders
+      // (loadRepo, loadDirectory) already do this; loadRuns was the
+      // outlier and caused the 404 banner to stick across page state.
+      setError("");
       try {
         const url =
           `${API_BASE}/actions/runs` +
@@ -726,7 +731,19 @@ export default function GitHubRepo() {
 
   return (
     <div className="github-page">
-      {error && <div className="github-banner">{error}</div>}
+      {error && (
+        <div className="github-banner" role="alert">
+          <span>{error}</span>
+          <button
+            type="button"
+            className="github-banner-dismiss"
+            onClick={() => setError("")}
+            aria-label="Dismiss error"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="github-layout">
         {/* Left rail — split into two visually distinct card panels:
