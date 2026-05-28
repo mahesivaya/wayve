@@ -796,7 +796,11 @@ export default function GitHubRepo() {
             because file browsing benefits from both being visible. */}
         <div className="github-content">
           {activeSection === "files" && (
-            <main className="github-grid">
+            // Progressive disclosure: until a file is opened, render the
+            // file tree as a single full-width list. Once the user picks
+            // a file, the layout splits to show files + preview side by
+            // side. Closing the preview returns to the single-pane list.
+            <main className={`github-grid ${selectedFile ? "is-split" : "is-single"}`}>
               <section className="github-browser" aria-label="Repository files">
                 <div className="github-panel-head">
                   <h2>Files</h2>
@@ -810,19 +814,33 @@ export default function GitHubRepo() {
                 </div>
               </section>
 
-              <section className="github-preview" aria-label="File preview">
-                <div className="github-panel-head">
-                  <h2>{selectedFile?.name ?? "Preview"}</h2>
-                  {selectedFile && <span>{formatSize(selectedFile.size)}</span>}
-                </div>
-                {fileLoading ? (
-                  <div className="github-empty">Loading file...</div>
-                ) : selectedFile ? (
-                  <pre>{fileText || "No preview available."}</pre>
-                ) : (
-                  <div className="github-empty">Select a file.</div>
-                )}
-              </section>
+              {selectedFile && (
+                <section className="github-preview" aria-label="File preview">
+                  <div className="github-panel-head">
+                    <h2>{selectedFile.name}</h2>
+                    <span className="github-panel-head-trail">
+                      <span>{formatSize(selectedFile.size)}</span>
+                      <button
+                        type="button"
+                        className="github-preview-close"
+                        onClick={() => {
+                          setSelectedFile(null);
+                          setFileText("");
+                        }}
+                        aria-label="Close file preview"
+                        title="Close preview"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  </div>
+                  {fileLoading ? (
+                    <div className="github-empty">Loading file...</div>
+                  ) : (
+                    <pre>{fileText || "No preview available."}</pre>
+                  )}
+                </section>
+              )}
             </main>
           )}
 

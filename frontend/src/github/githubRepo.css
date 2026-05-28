@@ -224,12 +224,51 @@
   gap: 14px;
 }
 
-/* Files view keeps its existing 2-pane (tree | preview) shape inside
-   the new content column. */
+/* Files view has two layouts driven by selection state:
+     .is-single — no file open. Browser fills the whole content width.
+     .is-split  — a file is open. Browser shrinks to a left rail and
+                  the preview takes the larger right column. */
 .github-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.4fr);
   gap: 14px;
+}
+
+.github-grid.is-single {
+  grid-template-columns: 1fr;
+}
+
+.github-grid.is-split {
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.4fr);
+}
+
+/* Close button in the preview header — sits in the title row alongside
+   the file size so the user can return to the single-pane list. */
+.github-panel-head-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.github-preview-close {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.github-preview-close:hover{
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger-hover);
 }
 
 /* Narrow viewports: drop the sidebar above the content. The two
