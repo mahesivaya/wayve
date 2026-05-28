@@ -809,17 +809,19 @@ export default function Billing() {
 
       {/* ---- Plans / Checkout ---- */}
       <section className="billing-card">
-        <h2>Plans</h2>
-        <label className="billing-autopay">
-          <span>
-            AutoPay monthly renewals
-            <small>Default selected: YES</small>
-          </span>
-          <select value={autopay ? "yes" : "no"} onChange={(event) => setAutopay(event.target.value === "yes")}>
-            <option value="yes">YES</option>
-            <option value="no">NO</option>
-          </select>
-        </label>
+        <div className="billing-section-head">
+          <h2>Plans</h2>
+          <label className="billing-autopay">
+            <span>AutoPay monthly renewals</span>
+            <select
+              value={autopay ? "yes" : "no"}
+              onChange={(event) => setAutopay(event.target.value === "yes")}
+            >
+              <option value="yes">YES</option>
+              <option value="no">NO</option>
+            </select>
+          </label>
+        </div>
         <div className="billing-plan-grid">
           {visiblePlans.map((plan) => {
             const isCurrent = plan.code === effectiveCurrentCode;
