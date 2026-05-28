@@ -29,17 +29,29 @@ pub async fn get_email_by_id(
     };
 
     let email_id = path.into_inner();
+    let cache_key = (user_id, email_id);
 
     let detail = match crate::email::repo::get_detail(pool.get_ref(), email_id, user_id).await? {
         Some(row) => row,
         None => return Ok(HttpResponse::NotFound().body("Email not found")),
     };
 
-    let body = if detail.body_encrypted.is_empty() || detail.body_iv.is_empty() {
+    // Skip AES-GCM + HKDF on repeat opens. Plaintext lives only in this
+    // process-local moka LRU (capacity-bounded, 5min TTL); it never touches
+    // disk. On miss we decrypt once and write back, matching what
+    // `get_email_body` already does for the body-only endpoint.
+    let body = if let Some(cached) = EMAIL_BODY_CACHE.get(&cache_key).await {
+        cached
+    } else if detail.body_encrypted.is_empty() || detail.body_iv.is_empty() {
         String::new()
     } else {
         match wayve_security::encryption::decrypt(&detail.body_iv, &detail.body_encrypted) {
-            Ok(text) => text,
+            Ok(text) => {
+                if detail.attachments_checked && !text.is_empty() {
+                    EMAIL_BODY_CACHE.insert(cache_key, text.clone()).await;
+                }
+                text
+            }
             Err(e) => {
                 warn!(
                     target: "gmail",
@@ -51,11 +63,6 @@ pub async fn get_email_by_id(
             }
         }
     };
-    if detail.attachments_checked && !body.is_empty() {
-        EMAIL_BODY_CACHE
-            .insert((user_id, detail.id), body.clone())
-            .await;
-    }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "id": detail.id,
