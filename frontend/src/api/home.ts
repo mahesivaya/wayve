@@ -1,9 +1,11 @@
 import { apiFetchJson } from "./client";
 
-// Mirrors backend/crates/wayve-server/src/home/handler.rs::HomeSummary.
-// One round-trip replaces 4-6 separate fetches the dashboard used to do
-// (full inbox, all meetings, all tasks, all notes); the server bounds each
-// query to LIMIT 5 and runs them in parallel.
+// Per-card dashboard fetchers. Each card on /home calls its own endpoint
+// so the fastest queries (Today / Tasks) paint immediately and the
+// slowest (Inbox / Recent — joins + AES decryption) stream in when ready.
+// The legacy aggregate `/api/home/summary` is still exposed by the
+// backend for compatibility, but new code should prefer the per-card
+// endpoints below.
 
 export type MeetingPreview = {
   id: number;
@@ -30,12 +32,29 @@ export type RecentItem =
   | { kind: "note"; id: number; title: string | null; ts: string | null }
   | { kind: "email"; id: number; title: string | null; ts: string | null };
 
+export type TodaySummary = { events: MeetingPreview[] };
+export type InboxSummary = { unread_count: number; preview: EmailPreview[] };
+export type TasksSummary = { top: TaskPreview[] };
+
 export type HomeSummary = {
-  today: { events: MeetingPreview[] };
-  inbox: { unread_count: number; preview: EmailPreview[] };
-  tasks: { top: TaskPreview[] };
+  today: TodaySummary;
+  inbox: InboxSummary;
+  tasks: TasksSummary;
   recent: RecentItem[];
 };
 
+export const getHomeToday = () =>
+  apiFetchJson<TodaySummary>("/api/home/today");
+
+export const getHomeInbox = () =>
+  apiFetchJson<InboxSummary>("/api/home/inbox");
+
+export const getHomeTasks = () =>
+  apiFetchJson<TasksSummary>("/api/home/tasks");
+
+export const getHomeRecent = () =>
+  apiFetchJson<RecentItem[]>("/api/home/recent");
+
+/** @deprecated Prefer the per-card endpoints (`getHomeToday`, …). */
 export const getHomeSummary = () =>
   apiFetchJson<HomeSummary>("/api/home/summary");

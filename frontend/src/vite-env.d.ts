@@ -46,6 +46,14 @@ type StripeSetupIntentResult = {
   };
 };
 
+type StripePaymentIntentResult = {
+  error?: { message?: string };
+  paymentIntent?: {
+    status?: string;
+    payment_method?: string | { id?: string };
+  };
+};
+
 type StripeInstance = {
   elements: (options?: Record<string, unknown>) => StripeElements;
   confirmCardSetup: (
@@ -66,6 +74,16 @@ type StripeInstance = {
     confirmParams?: { return_url?: string };
     redirect?: "always" | "if_required";
   }) => Promise<StripeSetupIntentResult>;
+  // Confirms a PaymentIntent that's already linked to a Payment Element
+  // tree. Used by the inline-subscription flow — Stripe charges the
+  // first invoice and resolves the Promise without ever leaving our
+  // page (except for the rare bank-issued 3DS redirect, which bounces
+  // back to confirmParams.return_url on our own domain).
+  confirmPayment: (params: {
+    elements: StripeElements;
+    confirmParams?: { return_url?: string };
+    redirect?: "always" | "if_required";
+  }) => Promise<StripePaymentIntentResult>;
   retrieveSetupIntent: (clientSecret: string) => Promise<StripeSetupIntentResult>;
 };
 

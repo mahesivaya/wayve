@@ -161,6 +161,88 @@ pub struct SetupIntent {
     pub client_secret: String,
 }
 
+pub struct PendingSubscription {
+    pub subscription_id: String,
+    /// PaymentIntent client_secret from the latest invoice. The frontend
+    /// confirms this with Stripe.js to actually charge the card and
+    /// flip the subscription from `incomplete` to `active`.
+    pub client_secret: String,
+}
+
+/// Create a subscription in the `incomplete` state with a PaymentIntent
+/// already attached to its latest invoice. The frontend mounts a Payment
+/// Element with the returned `client_secret` and calls `confirmPayment`
+/// — Stripe charges the card, the subscription transitions to `active`,
+/// and the webhook handler updates our local subscriptions row.
+///
+/// `client_reference` mirrors the value we send to hosted Checkout so
+/// the webhook fan-out logic can still match the subscription back to
+/// the owner + plan. Stored on the subscription's metadata.
+pub async fn create_subscription(
+    customer_id: &str,
+    price_id: &str,
+    client_reference: &str,
+) -> Result<PendingSubscription> {
+    // Expand BOTH the legacy `payment_intent` (older API versions) and
+    // the newer `confirmation_secret` field (Stripe 2024-09-30+). The
+    // shape Stripe returns depends on the API version pinned to your
+    // account; supporting both keeps the integration version-agnostic.
+    let params = vec![
+        ("customer", customer_id.to_string()),
+        ("items[0][price]", price_id.to_string()),
+        // `default_incomplete` is the canonical recipe for in-page
+        // subscription creation: Stripe creates the subscription in
+        // `incomplete`, attaches a PaymentIntent on the first invoice,
+        // and waits for the client to confirm. Without this, Stripe
+        // tries to charge immediately and we have no client_secret to
+        // hand back.
+        ("payment_behavior", "default_incomplete".to_string()),
+        (
+            "payment_settings[save_default_payment_method]",
+            "on_subscription".to_string(),
+        ),
+        ("expand[]", "latest_invoice.payment_intent".to_string()),
+        (
+            "expand[]",
+            "latest_invoice.confirmation_secret".to_string(),
+        ),
+        ("metadata[client_reference]", client_reference.to_string()),
+    ];
+    let body = post_form("/subscriptions", &params).await?;
+
+    let subscription_id = body
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("subscription response missing id"))?
+        .to_string();
+
+    // Try the new path first (`confirmation_secret`), then fall back to
+    // the legacy `payment_intent.client_secret`. Either is acceptable —
+    // `stripe.confirmPayment({ elements })` on the frontend works with
+    // both, because Elements only needs the PaymentIntent's client_secret
+    // and that's exactly what each field carries.
+    let client_secret = body
+        .pointer("/latest_invoice/confirmation_secret/client_secret")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            body.pointer("/latest_invoice/payment_intent/client_secret")
+                .and_then(Value::as_str)
+        })
+        .ok_or_else(|| {
+            anyhow!(
+                "subscription response missing both \
+                 latest_invoice.confirmation_secret.client_secret and \
+                 latest_invoice.payment_intent.client_secret"
+            )
+        })?
+        .to_string();
+
+    Ok(PendingSubscription {
+        subscription_id,
+        client_secret,
+    })
+}
+
 /// Create a hosted Checkout Session for a subscription.
 pub async fn create_checkout_session(p: &CheckoutParams) -> Result<CheckoutSession> {
     let params = vec![

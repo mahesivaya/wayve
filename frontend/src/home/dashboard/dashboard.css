@@ -95,7 +95,13 @@
   }
 }
 
-/* ----- Card ----- */
+/* ----- Card -----
+   Cards are fixed-height (340px) so the 2x2 grid stays balanced even
+   when one card has many more items than another. Overflow is owned by
+   the inner `.dashboard-list` (scrollable) and the footer link sticks
+   to the card's bottom via the existing `margin-top: auto`. Without the
+   cap, a busy inbox would stretch the Today card to match (which
+   produced the lopsided layout in the screenshot). */
 .dashboard-card {
   display: flex;
   flex-direction: column;
@@ -104,8 +110,10 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  min-height: 220px;
+  height: 340px;
+  min-height: 0;
   box-shadow: 0 1px 2px rgb(0, 0, 0, 0.04);
+  overflow: hidden;
 }
 
 .dashboard-card-head {
@@ -114,6 +122,7 @@
   align-items: baseline;
   gap: 12px;
   text-align: left;
+  flex: 0 0 auto;
 }
 
 .dashboard-card-head h3 {
@@ -132,7 +141,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ----- List + items ----- */
+/* ----- List + items -----
+   `flex: 1` takes the remaining height between header and footer link;
+   `overflow-y: auto` adds a scrollbar inside the card when the list
+   has more rows than fit. `min-height: 0` is required for flex children
+   to actually shrink + scroll instead of expanding the parent. */
 .dashboard-list {
   list-style: none;
   margin: 0;
@@ -140,7 +153,24 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  /* Thin scrollbar so it doesn't dominate the card visually. */
+  scrollbar-width: thin;
+}
+
+.dashboard-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dashboard-list::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+.dashboard-list::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
 }
 
 /* Three-column row: lead (time/sender/check/icon) · title · trail (ago/count/status).
@@ -268,6 +298,7 @@
   cursor: pointer;
   border-radius: var(--radius-sm);
   transition: background 0.12s;
+  flex: 0 0 auto;
 }
 
 .dashboard-card-link:hover {

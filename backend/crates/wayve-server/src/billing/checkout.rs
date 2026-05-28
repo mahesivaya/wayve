@@ -174,6 +174,88 @@ pub async fn create_checkout(
     }
 }
 
+/// In-page subscription creation. Returns a PaymentIntent client_secret
+/// the frontend uses to mount a Payment Element and confirm the charge
+/// without ever redirecting to checkout.stripe.com. The subscription is
+/// created in `incomplete` state; the webhook handler flips it to
+/// `active` after the confirm round-trip succeeds.
+#[post("/billing/subscriptions")]
+#[instrument(target = "http", skip(req, pool, data))]
+pub async fn create_inline_subscription(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<CheckoutInput>,
+) -> AppResult {
+    let user_id = match super::current_user(&req) {
+        Ok(id) => id,
+        Err(resp) => return Ok(resp),
+    };
+    if !provider::is_configured() {
+        return Ok(HttpResponse::ServiceUnavailable()
+            .json(serde_json::json!({ "message": "Billing is not configured" })));
+    }
+
+    let owner = match resolve_owner(pool.get_ref(), user_id).await {
+        Ok(owner) => owner,
+        Err(resp) => return Ok(resp),
+    };
+    if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
+        return Ok(resp);
+    }
+
+    // Same plan/price/audience validation as the hosted-checkout path.
+    let plan = sqlx::query_as::<_, (i32, Option<String>, String)>(
+        "SELECT id, stripe_price_id, audience FROM plans WHERE code = $1 AND is_active = true",
+    )
+    .bind(data.plan_code.trim())
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let (plan_id, price_id, audience) = match plan {
+        Some(row) => row,
+        None => {
+            return Ok(
+                HttpResponse::NotFound().json(serde_json::json!({ "message": "Unknown plan" }))
+            );
+        }
+    };
+
+    if audience != owner.kind() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "message": format!("This plan is for {audience} accounts")
+        })));
+    }
+    let Some(price_id) = price_id.filter(|p| !p.is_empty()) else {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "This plan is not linked to a Stripe price yet"
+        })));
+    };
+
+    let email = match actor_email(pool.get_ref(), user_id).await {
+        Ok(email) => email,
+        Err(resp) => return Ok(resp),
+    };
+    let customer_id = match ensure_customer(pool.get_ref(), owner, &email).await {
+        Ok(id) => id,
+        Err(resp) => return Ok(resp),
+    };
+
+    let client_reference = format!("{}:{}:{}", owner.kind(), owner_id(owner), plan_id);
+
+    match provider::create_subscription(&customer_id, &price_id, &client_reference).await {
+        Ok(pending) => Ok(HttpResponse::Ok().json(serde_json::json!({
+            "subscription_id": pending.subscription_id,
+            "client_secret": pending.client_secret,
+            "publishable_key": provider::publishable_key(),
+        }))),
+        Err(e) => {
+            error!(target: "billing", error = ?e, "inline subscription create failed");
+            Ok(HttpResponse::BadGateway()
+                .json(serde_json::json!({ "message": "Could not start subscription" })))
+        }
+    }
+}
+
 #[get("/billing/stripe-status")]
 #[instrument(target = "http", skip(req))]
 pub async fn stripe_status(req: HttpRequest) -> AppResult {

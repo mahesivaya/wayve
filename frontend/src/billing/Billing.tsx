@@ -12,7 +12,7 @@ import {
   listInvoices,
   listPlans,
   setDefaultPaymentMethod,
-  startCheckout,
+  startInlineSubscription,
   type Entitlements,
   type Invoice,
   type OrganizationBilling,
@@ -125,6 +125,16 @@ export default function Billing() {
   const [paymentMessage, setPaymentMessage] = useState("");
   const [paymentSuccess, setPaymentSuccess] = useState("");
 
+  // Inline-subscription Payment Element. Parallel to the payment-method
+  // form above — they use distinct Stripe Element trees because one
+  // confirms a SetupIntent (saving a card) and the other confirms a
+  // PaymentIntent (charging the first invoice), and Elements doesn't
+  // let you swap intent types on an existing mount.
+  const [subscribeFormOpen, setSubscribeFormOpen] = useState(false);
+  const [subscribeFormReady, setSubscribeFormReady] = useState(false);
+  const [subscribeMessage, setSubscribeMessage] = useState("");
+  const [subscribePlan, setSubscribePlan] = useState<Plan | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -132,6 +142,18 @@ export default function Billing() {
   const paymentElementRef = useRef<StripePaymentElement | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const stripeRef = useRef<StripeInstance | null>(null);
+  const subscribeClientSecret = useRef("");
+  const subscribePaymentElementRef = useRef<StripePaymentElement | null>(null);
+  const subscribeElementsRef = useRef<StripeElements | null>(null);
+  const subscribeStripeRef = useRef<StripeInstance | null>(null);
+  // Cached Stripe.js instance — initialized once when the page mounts so
+  // clicking Subscribe doesn't pay the script-download + init cost on
+  // every click. ~200-500ms saved on the first subscribe attempt.
+  const preloadedStripeRef = useRef<StripeInstance | null>(null);
+  // The DOM node we scroll into view when the subscribe panel opens, so
+  // the user can see the form appear inline rather than feeling like
+  // the page jumped to a new screen.
+  const subscribePanelRef = useRef<HTMLElement | null>(null);
 
   const checkoutStatus = params.get("checkout");
 
@@ -175,6 +197,31 @@ export default function Billing() {
     return () => window.clearTimeout(timer);
   }, [reload]);
 
+  // Warm-up: download Stripe.js + init `Stripe(publishableKey)` as soon
+  // as we know the key. By the time the user clicks Subscribe, the only
+  // remaining latency is the backend → Stripe round-trip plus Stripe's
+  // own iframe handshake; the ~200-500ms script download is already gone.
+  useEffect(() => {
+    const publishableKey = stripeStatus?.publishable_key;
+    if (!publishableKey || !publishableKey.startsWith("pk_")) return;
+    if (preloadedStripeRef.current) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        await loadStripeScript();
+        if (cancelled) return;
+        preloadedStripeRef.current = window.Stripe?.(publishableKey) ?? null;
+      } catch {
+        // Best-effort: subscribe() will retry the load on click if this
+        // failed (e.g. user is offline at page-load time).
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [stripeStatus]);
+
   const ownerType = sub?.owner_type ?? "personal";
 
   // Post-checkout redirect: after a successful Stripe checkout that
@@ -202,17 +249,155 @@ export default function Billing() {
     currentPlanCode ?? (ownerType === "personal" ? "basic_user" : null);
   const hasPaidPlan = (sub?.subscription?.amount_cents ?? 0) > 0;
 
-  const subscribe = async (code: string) => {
-    setBusy(`plan:${code}`);
+  const clearSubscribeElements = useCallback(() => {
+    subscribePaymentElementRef.current?.destroy();
+    subscribePaymentElementRef.current = null;
+    subscribeElementsRef.current = null;
+    subscribeStripeRef.current = null;
+    subscribeClientSecret.current = "";
+    setSubscribeFormReady(false);
+  }, []);
+
+  // Open the in-page subscribe form for `plan`. Creates the subscription
+  // server-side in `incomplete` state and mounts a Payment Element bound
+  // to the latest invoice's PaymentIntent. Confirmation happens locally
+  // via stripe.confirmPayment — no redirect to checkout.stripe.com.
+  const subscribe = async (plan: Plan) => {
+    setBusy(`plan:${plan.code}`);
     setError("");
+    setSubscribeMessage("");
+    setPaymentSuccess("");
+    // Mutually exclusive with the payment-method form so two Element
+    // trees don't compete for focus / a stale clientSecret.
+    if (paymentFormOpen) {
+      setPaymentFormOpen(false);
+      clearPaymentElements();
+    }
+    setSubscribePlan(plan);
+    setSubscribeFormOpen(true);
+    // Scroll the new panel into view on the next frame (after React
+    // commits the show-panel render), so the user sees the form expand
+    // inline instead of perceiving a navigation away from the Plans
+    // section they just clicked from.
+    window.requestAnimationFrame(() => {
+      subscribePanelRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+
     try {
-      const res = await startCheckout(code, autopay);
-      window.location.assign(res.url);
+      const publishableKey =
+        stripeStatus?.publishable_key ??
+        (() => {
+          throw new Error("Stripe publishable key is not configured");
+        })();
+      if (!publishableKey.startsWith("pk_")) {
+        throw new Error("Stripe publishable key is not configured");
+      }
+
+      // Use the preloaded Stripe instance when available — it's already
+      // downloaded + initialized from the mount-time warm-up effect.
+      // Fall back to a fresh load if the preload hasn't finished yet or
+      // failed (offline at mount, slow script CDN, etc.).
+      let stripe = preloadedStripeRef.current;
+      const [intent] = await Promise.all([
+        startInlineSubscription(plan.code, autopay),
+        stripe ? Promise.resolve() : loadStripeScript(),
+      ]);
+      if (!stripe) {
+        stripe = window.Stripe?.(publishableKey) ?? null;
+        if (stripe) preloadedStripeRef.current = stripe;
+      }
+      if (!stripe) throw new Error("Stripe could not initialize");
+
+      const isDark =
+        document.documentElement.getAttribute("data-theme") === "dark";
+      const elements = stripe.elements({
+        clientSecret: intent.client_secret,
+        appearance: { theme: isDark ? "night" : "stripe" },
+      });
+      const paymentElement = elements.create("payment", {
+        layout: "tabs",
+        fields: { billingDetails: "auto" },
+      });
+      paymentElement.on("change", (event) => {
+        setSubscribeMessage(event.error?.message ?? "");
+      });
+      paymentElement.on("ready", () => setSubscribeFormReady(true));
+      paymentElement.mount("#billing-subscribe-element");
+
+      subscribeClientSecret.current = intent.client_secret;
+      subscribeStripeRef.current = stripe;
+      subscribeElementsRef.current = elements;
+      subscribePaymentElementRef.current = paymentElement;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start checkout");
+      clearSubscribeElements();
+      setSubscribeFormOpen(false);
+      setSubscribePlan(null);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not start subscription",
+      );
+    } finally {
       setBusy("");
     }
   };
+
+  const confirmSubscribe = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy("save-subscribe");
+    setSubscribeMessage("");
+
+    try {
+      const stripe = subscribeStripeRef.current;
+      const elements = subscribeElementsRef.current;
+      if (!stripe || !elements) {
+        throw new Error("Payment form is not ready yet");
+      }
+
+      // `redirect: "if_required"` keeps the user on this page when no
+      // 3DS challenge is needed. When the bank DOES require 3DS, Stripe
+      // bounces to the bank's auth page and then back to `return_url`
+      // — that URL is on our own domain, NOT checkout.stripe.com.
+      const result = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/billing?checkout=success`,
+        },
+        redirect: "if_required",
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message ?? "Could not complete payment");
+      }
+
+      // PaymentIntent succeeded inline (no redirect). Stripe will fire
+      // `invoice.payment_succeeded` + `customer.subscription.updated`
+      // webhooks that flip our local subscriptions row to `active`. The
+      // delay gives those a fighting chance to land before we re-fetch;
+      // worst case the user sees `incomplete` briefly and the next
+      // refresh corrects it.
+      setSubscribeFormOpen(false);
+      setSubscribePlan(null);
+      clearSubscribeElements();
+      setPaymentSuccess("Subscription started — confirming with Stripe…");
+      window.setTimeout(() => {
+        void reload();
+      }, 1500);
+    } catch (err) {
+      setSubscribeMessage(
+        err instanceof Error ? err.message : "Could not complete payment",
+      );
+    } finally {
+      setBusy("");
+    }
+  };
+
+  // Unmount the Payment Element on Billing's unmount so it doesn't
+  // outlive the React tree.
+  useEffect(() => () => clearSubscribeElements(), [clearSubscribeElements]);
 
   const clearPaymentElements = useCallback(() => {
     paymentElementRef.current?.destroy();
@@ -457,6 +642,79 @@ export default function Billing() {
         </section>
       )}
 
+      {subscribeFormOpen && (
+        <section className="billing-card" ref={subscribePanelRef}>
+          <h2>
+            {subscribePlan
+              ? `Upgrade — ${subscribePlan.name}`
+              : "Upgrade"}
+          </h2>
+          {subscribePlan && (
+            <p className="billing-note">
+              {formatMoney(
+                subscribePlan.amount_cents,
+                subscribePlan.currency,
+              )}
+              {subscribePlan.billing_interval
+                ? ` / ${subscribePlan.billing_interval}`
+                : ""}{" "}
+              · charged when you confirm.
+            </p>
+          )}
+          <form
+            className="billing-payment-form"
+            onSubmit={(event) => void confirmSubscribe(event)}
+          >
+            {/* Stripe's iframe mounts here. While it's still loading
+                (backend round-trip + iframe handshake, ~1-2s) show a
+                skeleton so the panel doesn't look broken. The skeleton
+                is purely cosmetic — it sits behind the Element and is
+                covered the moment the Element paints. */}
+            <div className="billing-stripe-field billing-stripe-mount">
+              {!subscribeFormReady && (
+                <div
+                  className="billing-stripe-skeleton"
+                  aria-hidden="true"
+                >
+                  <div className="billing-stripe-skeleton-row" />
+                  <div className="billing-stripe-skeleton-row" />
+                  <div className="billing-stripe-skeleton-row short" />
+                </div>
+              )}
+              <div id="billing-subscribe-element" />
+            </div>
+            {subscribeMessage && (
+              <p className="billing-payment-error">{subscribeMessage}</p>
+            )}
+            <div className="billing-payment-actions">
+              <button
+                type="submit"
+                disabled={!subscribeFormReady || busy === "save-subscribe"}
+              >
+                {busy === "save-subscribe"
+                  ? "Confirming…"
+                  : !subscribeFormReady
+                    ? "Loading…"
+                    : subscribePlan
+                      ? `Pay ${formatMoney(subscribePlan.amount_cents, subscribePlan.currency)}`
+                      : "Confirm"}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setSubscribeFormOpen(false);
+                  setSubscribePlan(null);
+                  clearSubscribeElements();
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
       {/* ---- Subscription status ---- */}
       {/* Management-only sections (Subscription, Usage, Invoices) render
           only for paid users — a brand-new free account has nothing to
@@ -600,10 +858,10 @@ export default function Billing() {
                 ) : canBuy ? (
                   <button
                     type="button"
-                    onClick={() => void subscribe(plan.code)}
+                    onClick={() => void subscribe(plan)}
                     disabled={busyHere}
                   >
-                    {busyHere ? "Redirecting…" : hasPaidPlan ? "Switch plan" : "Subscribe"}
+                    {busyHere ? "Preparing…" : hasPaidPlan ? "Switch plan" : "Upgrade"}
                   </button>
                 ) : !isForOwner && ownerType === "personal" && plan.audience === "organization" ? (
                   // Personal users self-promote to an organization owner via
@@ -615,7 +873,7 @@ export default function Billing() {
                     type="button"
                     onClick={() => navigate(`/organizations/new?plan=${plan.code}`)}
                   >
-                    Create organization
+                    Upgrade
                   </button>
                 ) : (
                   <button type="button" disabled>
@@ -647,7 +905,8 @@ export default function Billing() {
             <code>{stripeStatus?.publishable_key ?? "pk_test_sample_configure_in_env"}</code>
           </div>
           <p className="billing-note">
-            Use Stripe Checkout for real card entry. These are Stripe test card numbers for test mode only.
+            Enter these test-card numbers in the in-page Payment Element above
+            to exercise success / 3DS / decline paths. Test mode only.
           </p>
           <div className="billing-card-list">
             {STRIPE_TEST_CARDS.map((card) => (

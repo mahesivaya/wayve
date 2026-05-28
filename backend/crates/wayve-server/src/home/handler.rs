@@ -1,12 +1,10 @@
-// GET /api/home/summary — single-shot aggregate that powers the signed-in
-// home page's Activity Dashboard. Replaces 4-6 separate fetches the
-// frontend used to make (full inbox + all meetings + all tasks + all
-// notes) with one round-trip that returns only what the dashboard renders.
+// Per-card dashboard endpoints. The frontend fires all four in parallel
+// and renders each card as its response arrives, so the slowest query
+// (typically the email-side ones with their joins + AES decryption)
+// no longer gates the fast cards (Today/Tasks).
 //
-// All six SQL queries run concurrently via `tokio::try_join!` against the
-// same connection pool. Each is bounded by `LIMIT 5`, and the unread
-// count is a partial-index scan, so total wall time ≈ slowest single
-// query rather than the sum.
+// The legacy aggregate endpoint `/api/home/summary` is kept for backward
+// compatibility — it just composes the four sub-handlers.
 
 use crate::prelude::*;
 use chrono::{Local, NaiveDateTime, NaiveTime};
@@ -78,82 +76,25 @@ pub enum RecentItem {
     },
 }
 
-#[get("/home/summary")]
-#[instrument(target = "http", skip(req, pool))]
-// `tokio::try_join!` macro-expands to internals that trip the project's
-// `clippy::disallowed-methods` ban on `unwrap`/`expect`. The expansion is
-// upstream code we don't author, so suppress the lint at the function
-// scope rather than on every macro invocation.
-#[allow(clippy::disallowed_methods)]
-pub async fn home_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
-    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+// ─────────────────────────── Today ────────────────────────────
+
+async fn load_today(pool: &PgPool, user_id: i32) -> Result<TodaySummary, sqlx::Error> {
     let today = Local::now().date_naive();
-    let pool_ref = pool.get_ref();
+    let rows = sqlx::query(
+        "SELECT m.id, m.title, m.title_iv, m.title_encrypted,
+                m.start_time, m.end_time,
+                (SELECT COUNT(*) FROM meeting_participants mp WHERE mp.meeting_id = m.id) AS participants_count
+         FROM meetings m
+         WHERE m.user_id = $1 AND m.date = $2
+         ORDER BY m.start_time ASC
+         LIMIT 5",
+    )
+    .bind(user_id)
+    .bind(today)
+    .fetch_all(pool)
+    .await?;
 
-    // All queries run concurrently. Each is bounded; the partial-index
-    // unread COUNT is index-only so it's fast even on large inboxes.
-    let (meeting_rows, unread_count, unread_rows, task_rows, note_rows, recent_email_rows) = tokio::try_join!(
-        sqlx::query(
-            "SELECT m.id, m.title, m.title_iv, m.title_encrypted,
-                    m.start_time, m.end_time,
-                    (SELECT COUNT(*) FROM meeting_participants mp WHERE mp.meeting_id = m.id) AS participants_count
-             FROM meetings m
-             WHERE m.user_id = $1 AND m.date = $2
-             ORDER BY m.start_time ASC
-             LIMIT 5",
-        )
-        .bind(user_id)
-        .bind(today)
-        .fetch_all(pool_ref),
-        sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*)
-             FROM emails e
-             JOIN email_accounts a ON a.id = e.account_id
-             WHERE a.user_id = $1 AND e.is_read = false",
-        )
-        .bind(user_id)
-        .fetch_one(pool_ref),
-        sqlx::query(
-            "SELECT e.id, e.sender, e.subject, e.subject_iv, e.subject_encrypted, e.created_at
-             FROM emails e
-             JOIN email_accounts a ON a.id = e.account_id
-             WHERE a.user_id = $1 AND e.is_read = false
-             ORDER BY e.created_at DESC
-             LIMIT 5",
-        )
-        .bind(user_id)
-        .fetch_all(pool_ref),
-        sqlx::query(
-            "SELECT id, name, status
-             FROM tasks
-             WHERE user_id = $1 AND status != 'done'
-             ORDER BY priority DESC, created_at DESC
-             LIMIT 5",
-        )
-        .bind(user_id)
-        .fetch_all(pool_ref),
-        sqlx::query(
-            "SELECT id, title, updated_at
-             FROM notes
-             WHERE user_id = $1
-             ORDER BY updated_at DESC
-             LIMIT 5",
-        )
-        .bind(user_id)
-        .fetch_all(pool_ref),
-        sqlx::query(
-            "SELECT e.id, e.subject, e.subject_iv, e.subject_encrypted, e.created_at
-             FROM emails e
-             JOIN email_accounts a ON a.id = e.account_id
-             WHERE a.user_id = $1
-             ORDER BY e.created_at DESC
-             LIMIT 3",
-        )
-        .bind(user_id)
-        .fetch_all(pool_ref),
-    )?;
-
-    let events: Vec<MeetingPreview> = meeting_rows
+    let events = rows
         .into_iter()
         .map(|row| {
             let id: i32 = row.get("id");
@@ -184,7 +125,46 @@ pub async fn home_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
         })
         .collect();
 
-    let preview: Vec<EmailPreview> = unread_rows
+    Ok(TodaySummary { events })
+}
+
+#[get("/home/today")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn home_today(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let data = load_today(pool.get_ref(), user_id).await?;
+    Ok(HttpResponse::Ok().json(data))
+}
+
+// ─────────────────────────── Inbox ────────────────────────────
+
+#[allow(clippy::disallowed_methods)]
+async fn load_inbox(pool: &PgPool, user_id: i32) -> Result<InboxSummary, sqlx::Error> {
+    // Unread COUNT + 5-row preview both hit the same partial index
+    // (`emails (account_id, created_at DESC) WHERE is_read=false`).
+    // Running them in parallel halves wall time vs. sequential.
+    let (unread_count, unread_rows) = tokio::try_join!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*)
+             FROM emails e
+             JOIN email_accounts a ON a.id = e.account_id
+             WHERE a.user_id = $1 AND e.is_read = false",
+        )
+        .bind(user_id)
+        .fetch_one(pool),
+        sqlx::query(
+            "SELECT e.id, e.sender, e.subject, e.subject_iv, e.subject_encrypted, e.created_at
+             FROM emails e
+             JOIN email_accounts a ON a.id = e.account_id
+             WHERE a.user_id = $1 AND e.is_read = false
+             ORDER BY e.created_at DESC
+             LIMIT 5",
+        )
+        .bind(user_id)
+        .fetch_all(pool),
+    )?;
+
+    let preview = unread_rows
         .into_iter()
         .map(|row| EmailPreview {
             id: row.get("id"),
@@ -203,7 +183,35 @@ pub async fn home_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
         })
         .collect();
 
-    let top: Vec<TaskPreview> = task_rows
+    Ok(InboxSummary {
+        unread_count,
+        preview,
+    })
+}
+
+#[get("/home/inbox")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn home_inbox(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let data = load_inbox(pool.get_ref(), user_id).await?;
+    Ok(HttpResponse::Ok().json(data))
+}
+
+// ─────────────────────────── Tasks ────────────────────────────
+
+async fn load_tasks(pool: &PgPool, user_id: i32) -> Result<TasksSummary, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, name, status
+         FROM tasks
+         WHERE user_id = $1 AND status != 'done'
+         ORDER BY priority DESC, created_at DESC
+         LIMIT 5",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+
+    let top = rows
         .into_iter()
         .map(|row| TaskPreview {
             id: row.get("id"),
@@ -212,10 +220,43 @@ pub async fn home_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
         })
         .collect();
 
-    // Recent = notes (newest by updated_at) + 3 most recent emails (any
-    // read state). Merged + re-sorted in Rust because the column types
-    // don't match; the underlying queries each return ≤5 rows so this is
-    // cheap.
+    Ok(TasksSummary { top })
+}
+
+#[get("/home/tasks")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn home_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let data = load_tasks(pool.get_ref(), user_id).await?;
+    Ok(HttpResponse::Ok().json(data))
+}
+
+// ─────────────────────────── Recent ────────────────────────────
+
+#[allow(clippy::disallowed_methods)]
+async fn load_recent(pool: &PgPool, user_id: i32) -> Result<Vec<RecentItem>, sqlx::Error> {
+    let (note_rows, recent_email_rows) = tokio::try_join!(
+        sqlx::query(
+            "SELECT id, title, updated_at
+             FROM notes
+             WHERE user_id = $1
+             ORDER BY updated_at DESC
+             LIMIT 5",
+        )
+        .bind(user_id)
+        .fetch_all(pool),
+        sqlx::query(
+            "SELECT e.id, e.subject, e.subject_iv, e.subject_encrypted, e.created_at
+             FROM emails e
+             JOIN email_accounts a ON a.id = e.account_id
+             WHERE a.user_id = $1
+             ORDER BY e.created_at DESC
+             LIMIT 3",
+        )
+        .bind(user_id)
+        .fetch_all(pool),
+    )?;
+
     let mut recent: Vec<(NaiveDateTime, RecentItem)> = Vec::new();
 
     for row in note_rows {
@@ -264,15 +305,44 @@ pub async fn home_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
 
     recent.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     recent.truncate(5);
-    let recent: Vec<RecentItem> = recent.into_iter().map(|(_, item)| item).collect();
+    Ok(recent.into_iter().map(|(_, item)| item).collect())
+}
+
+#[get("/home/recent")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn home_recent(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let data = load_recent(pool.get_ref(), user_id).await?;
+    Ok(HttpResponse::Ok().json(data))
+}
+
+// ─────────────────────────── Aggregate (legacy) ────────────────────────────
+
+#[get("/home/summary")]
+#[instrument(target = "http", skip(req, pool))]
+// `tokio::try_join!` macro-expands to internals that trip the project's
+// `clippy::disallowed-methods` ban on `unwrap`/`expect`. The expansion is
+// upstream code we don't author, so suppress the lint at the function
+// scope rather than on every macro invocation.
+#[allow(clippy::disallowed_methods)]
+pub async fn home_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let pool_ref = pool.get_ref();
+
+    // Backward-compat aggregate — still runs the four sub-loaders in
+    // parallel so total wall time matches the old single-endpoint
+    // behavior. New frontends call the per-card endpoints instead.
+    let (today, inbox, tasks, recent) = tokio::try_join!(
+        load_today(pool_ref, user_id),
+        load_inbox(pool_ref, user_id),
+        load_tasks(pool_ref, user_id),
+        load_recent(pool_ref, user_id),
+    )?;
 
     Ok(HttpResponse::Ok().json(HomeSummary {
-        today: TodaySummary { events },
-        inbox: InboxSummary {
-            unread_count,
-            preview,
-        },
-        tasks: TasksSummary { top },
+        today,
+        inbox,
+        tasks,
         recent,
     }))
 }

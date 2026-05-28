@@ -367,11 +367,61 @@
 
 /* PaymentElement renders its own iframe with internal padding, so the
    outer container only needs to reserve vertical space and stay border-less. */
-#billing-payment-element {
+#billing-payment-element,
+#billing-subscribe-element {
   min-height: 280px;
   padding: 0;
   border: none;
   background: transparent;
+}
+
+/* Stack: skeleton at the bottom of the layer cake, Stripe's mount node
+   sits on top of it. When the iframe paints, it visually covers the
+   skeleton. No JS toggle needed — the iframe's opaque background is
+   enough. */
+.billing-stripe-mount {
+  position: relative;
+  min-height: 280px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.billing-stripe-mount > #billing-subscribe-element {
+  position: relative;
+  z-index: 1;
+}
+
+.billing-stripe-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  z-index: 0;
+}
+
+.billing-stripe-skeleton-row {
+  height: 42px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-hover) 0%,
+    var(--color-surface-soft) 50%,
+    var(--color-surface-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: billing-stripe-shimmer 1.4s ease-in-out infinite;
+}
+
+.billing-stripe-skeleton-row.short {
+  width: 50%;
+}
+
+@keyframes billing-stripe-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .billing-payment-form input {

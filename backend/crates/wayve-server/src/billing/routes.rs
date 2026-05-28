@@ -12,6 +12,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(plans::list_plans)
         .service(plans::admin_create_plan)
         .service(checkout::create_checkout)
+        .service(checkout::create_inline_subscription)
         .service(checkout::create_portal)
         .service(checkout::create_payment_method_setup_intent)
         .service(checkout::set_default_payment_method)

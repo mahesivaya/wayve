@@ -114,6 +114,20 @@ export const startCheckout = (planCode: string, autopay = true) =>
     body: JSON.stringify({ plan_code: planCode, autopay }),
   });
 
+// In-page subscription: returns a PaymentIntent client_secret the caller
+// mounts a Stripe Payment Element with. No redirect to checkout.stripe.com.
+// The subscription is created in `incomplete` state and flips to `active`
+// once the frontend's confirmPayment succeeds + Stripe webhooks land.
+export const startInlineSubscription = (planCode: string, autopay = true) =>
+  json<{
+    subscription_id: string;
+    client_secret: string;
+    publishable_key: string | null;
+  }>("/api/billing/subscriptions", {
+    method: "POST",
+    body: JSON.stringify({ plan_code: planCode, autopay }),
+  });
+
 export const openBillingPortal = () =>
   json<{ url: string }>("/api/billing/portal", { method: "POST" });
 
