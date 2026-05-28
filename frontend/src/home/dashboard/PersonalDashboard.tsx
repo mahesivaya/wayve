@@ -153,8 +153,13 @@ export default function PersonalDashboard() {
   const emailsLoading = emails === null;
 
   const totalsLabel = [
+    meetings
+      ? `${meetings.length} meeting${meetings.length === 1 ? "" : "s"}`
+      : null,
     tasks ? `${tasks.length} open task${tasks.length === 1 ? "" : "s"}` : null,
-    emails ? `${unreadCount.toLocaleString()} unread` : null,
+    emails
+      ? `${unreadCount.toLocaleString()} unread email${unreadCount === 1 ? "" : "s"}`
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");

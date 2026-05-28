@@ -22,18 +22,21 @@
 }
 
 .personal-dashboard {
+  /* Full content-area width — no max-width cap. The page reads from
+     the left edge of the content pane to the right edge of the
+     viewport, matching the Emails / Tasks pages that already use the
+     full width. */
   width: 100%;
-  max-width: 920px;
-  /* Anchored to the left edge of the content area instead of centered.
-     Personal home reads top-to-bottom; aligning the card column with
-     the rest of the app's left-side chrome (sidebar nav, header brand)
-     keeps the eye on a single vertical guide. */
   margin: 0;
-  padding: 24px;
+  /* Tighter outer padding + inter-block gap so the four sections read
+     as a single column instead of widely separated cards — the
+     previous 18px gap + 24px padding made the page feel airier than
+     it needed to be. */
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 18px;
+  gap: 8px;
   box-sizing: border-box;
   /* Take the full height of the page wrapper so the Emails card can
      stretch to the bottom edge. min-height:0 is required for flex
@@ -45,7 +48,6 @@
 
 .personal-dashboard > * {
   width: 100%;
-  max-width: 920px;
   flex: 0 0 auto;
 }
 
