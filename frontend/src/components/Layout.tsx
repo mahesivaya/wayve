@@ -2,7 +2,7 @@ import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { homePathForUser } from "../auth/accountHome";
 import { canAccessApiKeyAdmin, hasPermission } from "../auth/permissions";
-import { Suspense, useState, useCallback, useEffect, type ReactNode } from "react";
+import { Suspense, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
@@ -190,6 +190,110 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       setIsResizing(true);
     },
     [sidebarCollapsed, sidebarWidth],
+  );
+
+  // Split-pane weights — proportional sizes (flex-grow values) for the
+  // left/center/right panes. Stored as numbers because flex-grow is just a
+  // ratio; each pane gets `flex-grow: weight` and they share the content
+  // area in proportion. Default 1 each so an opening split lands at 50/50
+  // (two panes) or ~33% each (three panes). The user drags the handle
+  // between two panes to adjust their relative weights — the others stay
+  // unchanged so the unaffected pane doesn't jump while you're resizing.
+  type PaneKey = "left" | "center" | "right";
+  type PaneWeights = Record<PaneKey, number>;
+  const PANE_WEIGHTS_STORAGE_KEY = "rwayve.layout.paneWeights";
+  const PANE_MIN_WEIGHT = 0.15; // each pane keeps at least ~15% of its pair's share
+  const [paneWeights, setPaneWeights] = useState<PaneWeights>(() => {
+    try {
+      const raw = localStorage.getItem(PANE_WEIGHTS_STORAGE_KEY);
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          const obj = parsed as Record<string, unknown>;
+          const num = (v: unknown, fallback: number) =>
+            typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fallback;
+          return {
+            left: num(obj.left, 1),
+            center: num(obj.center, 1),
+            right: num(obj.right, 1),
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return { left: 1, center: 1, right: 1 };
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        PANE_WEIGHTS_STORAGE_KEY,
+        JSON.stringify(paneWeights),
+      );
+    } catch {
+      // ignore
+    }
+  }, [paneWeights]);
+
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Returns a pointerdown handler that resizes the boundary between two
+  // adjacent panes. Other panes' weights are held fixed so dragging one
+  // boundary never shifts an untouched pane. Drag captures pointer events
+  // on `document` so the gesture survives leaving the handle's hitbox.
+  const handlePaneResize = useCallback(
+    (leftKey: PaneKey, rightKey: PaneKey) =>
+      (e: React.PointerEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        const container = contentRef.current;
+        if (!container) return;
+        const leftEl = container.querySelector<HTMLElement>(
+          `.split-pane.${leftKey}`,
+        );
+        const rightEl = container.querySelector<HTMLElement>(
+          `.split-pane.${rightKey}`,
+        );
+        if (!leftEl || !rightEl) return;
+
+        const leftRect = leftEl.getBoundingClientRect();
+        const rightRect = rightEl.getBoundingClientRect();
+        const pairLeftEdge = leftRect.left;
+        const pairWidth = rightRect.right - leftRect.left;
+        const startLeftWeight = paneWeights[leftKey];
+        const startRightWeight = paneWeights[rightKey];
+        const pairWeight = startLeftWeight + startRightWeight;
+
+        const onMove = (ev: PointerEvent) => {
+          const rawFraction = (ev.clientX - pairLeftEdge) / pairWidth;
+          const minFraction = PANE_MIN_WEIGHT;
+          const maxFraction = 1 - PANE_MIN_WEIGHT;
+          const fraction = Math.max(
+            minFraction,
+            Math.min(maxFraction, rawFraction),
+          );
+          setPaneWeights((w) => ({
+            ...w,
+            [leftKey]: pairWeight * fraction,
+            [rightKey]: pairWeight * (1 - fraction),
+          }));
+        };
+
+        const onUp = () => {
+          document.removeEventListener("pointermove", onMove);
+          document.removeEventListener("pointerup", onUp);
+          document.removeEventListener("pointercancel", onUp);
+          document.body.style.userSelect = "";
+          document.body.style.cursor = "";
+        };
+
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+        document.addEventListener("pointercancel", onUp);
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "col-resize";
+      },
+    [paneWeights],
   );
 
   // Support modal: opens from the header button, closes via the modal's own
@@ -552,10 +656,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         )}
 
         {/* MAIN CONTENT */}
-        <div className={`content`}>
+        <div className={`content`} ref={contentRef}>
           <div
             className={`split-pane left ${splitTarget === "left" ? "active-target" : ""}`}
             onMouseDown={() => setSplitTarget("left")}
+            style={splitOpen ? { flexGrow: paneWeights.left } : undefined}
           >
             {splitOpen ? (
               <>
@@ -579,8 +684,27 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             )}
           </div>
 
+          {/* Resize handle between left and (middle or right) — only when
+              split open. Dragging adjusts the boundary between the two
+              panes the handle sits between. */}
+          {splitOpen && (
+            <div
+              className="split-resize-handle"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize pane"
+              onPointerDown={handlePaneResize(
+                "left",
+                middleView ? "center" : "right",
+              )}
+            />
+          )}
+
           {middleView && (
-            <div className="split-pane center">
+            <div
+              className="split-pane center"
+              style={{ flexGrow: paneWeights.center }}
+            >
               <div className="split-pane-toolbar">
                 <span className="split-pane-title">{middleLabel}</span>
                 <button
@@ -602,10 +726,23 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             </div>
           )}
 
+          {/* Second handle only when all three panes are visible — sits
+              between center and right. */}
+          {middleView && rightView && (
+            <div
+              className="split-resize-handle"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize pane"
+              onPointerDown={handlePaneResize("center", "right")}
+            />
+          )}
+
           {rightView && (
             <div
               className={`split-pane right ${splitTarget === "right" ? "active-target" : ""}`}
               onMouseDown={() => setSplitTarget("right")}
+              style={{ flexGrow: paneWeights.right }}
             >
               <div className="split-pane-toolbar">
                 <span className="split-pane-title">{rightLabel}</span>

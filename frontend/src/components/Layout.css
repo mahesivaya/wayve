@@ -613,9 +613,42 @@
   z-index: 5;
 }
 
-/* Automatically add vertical borders between any adjacent active panes */
+/* Automatically add vertical borders between any adjacent active panes.
+   When a .split-resize-handle sits between two panes, the handle owns the
+   1px visual border instead — so the rule above doesn't double-up. */
 .split-pane + .split-pane {
   border-left: 1px solid var(--color-border);
+}
+
+.split-pane + .split-resize-handle + .split-pane {
+  border-left: 0;
+}
+
+/* Drag handle between adjacent split panes. The handle is visually 1px
+   (just the border line) but has a wider invisible hitbox so the user can
+   grab it comfortably. Hover/active states tint the line to signal it
+   is draggable. */
+.split-resize-handle {
+  flex: 0 0 5px;
+  margin: 0 -2px;
+  cursor: col-resize;
+  position: relative;
+  z-index: 4;
+  background: transparent;
+  touch-action: none;
+}
+
+.split-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  background: var(--color-border);
+  transition: background 0.12s ease;
+}
+
+.split-resize-handle:hover::after,
+.split-resize-handle:active::after {
+  background: var(--color-primary-action);
 }
 
 /* Body holds the rendered app — it must fill so the embedded page (Emails,
@@ -852,7 +885,8 @@
      panes by hiding them — the underlying state survives, so when
      the user rotates / resizes wider they reappear. */
   .split-pane.center,
-  .split-pane.right {
+  .split-pane.right,
+  .split-resize-handle {
     display: none;
   }
 
