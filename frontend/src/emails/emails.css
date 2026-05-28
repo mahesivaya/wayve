@@ -772,6 +772,31 @@
      to viewport-minus-header). With dense 30px rows the panel fits
      ~20-25 emails on a 1080p laptop without needing a fixed height. */
   height: 100%;
+  /* Wider, higher-contrast scrollbar so users can clearly see how
+     much further the inbox extends and grab the thumb without
+     hunting. Firefox uses `scrollbar-*`; WebKit/Chromium uses the
+     `::-webkit-scrollbar` selectors below. */
+  scrollbar-width: auto;
+  scrollbar-color: var(--color-text-muted) transparent;
+}
+
+.email-list::-webkit-scrollbar {
+  width: 14px;
+}
+
+.email-list::-webkit-scrollbar-track {
+  background: var(--color-surface-tint-cool, transparent);
+}
+
+.email-list::-webkit-scrollbar-thumb {
+  background: var(--color-text-muted);
+  border: 3px solid var(--color-email-bg);
+  border-radius: 8px;
+  min-height: 40px;
+}
+
+.email-list::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-action);
 }
 
 .mobile-mail-topbar,
@@ -892,11 +917,13 @@
 }
 
 .main.email-list-view .email-item {
-  /* 30px row + 1px border ≈ same density as the narrow split view, so
-     ~25 emails fit on a 768px viewport instead of ~18. */
-  min-height: 30px;
+  /* Compact-but-readable rows: tall enough to hold the bold sender +
+     subject pair without squeezing, but tight enough to show ~20 emails
+     per typical viewport. Halfway between the original 30px density
+     and the personal-home preview row. */
+  min-height: 34px;
   align-items: stretch;
-  padding: 2px 7px;
+  padding: 4px 10px;
 }
 
 /* ================= LIST-VIEW BULK SELECT =================
@@ -1077,15 +1104,40 @@
 
 .main.email-list-view .email-top {
   align-items: center;
+  gap: 10px;
 }
 
 .main.email-list-view .email-primary {
   text-align: left;
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
+  gap: 10px;
 }
 
 .main.email-list-view .email-list-subject {
   flex: 1;
+  font-size: var(--text-sm);
+}
+
+/* Sender column on the inbox list view. Bold + fixed-width, mirroring
+   the personal-home email card so the two surfaces feel consistent.
+   Only renders when `isListView` is true (the JSX in
+   [EmailList.tsx](./EmailList.tsx) gates it). Read rows fade the
+   sender to muted grey alongside the subject. */
+.email-list-sender {
+  flex: 0 0 auto;
+  min-width: 120px;
+  max-width: 170px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-primary);
+}
+
+.email-item.read .email-list-sender {
+  font-weight: 500;
+  color: var(--color-text-muted);
 }
 
 .email-attachment-pin {

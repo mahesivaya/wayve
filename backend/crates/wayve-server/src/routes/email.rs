@@ -55,7 +55,10 @@ pub async fn get_emails(
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let page_size = 75;
+    // Default inbox page size — tuned for the /emails list view density.
+    // Smaller pages paint faster and keep the initial roundtrip light;
+    // "Load more" pages in the next batch via keyset pagination.
+    let page_size = 25;
     let query_limit = page_size + 1;
 
     let before = query.before.zip(query.before_id);

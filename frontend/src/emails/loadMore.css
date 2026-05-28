@@ -34,3 +34,22 @@
   background: var(--color-input-border-strong);
   cursor: default;
 }
+
+/* Status row for infinite-scroll: a faint "Loading more…" while a
+   fetch is in flight, and a quiet "No more emails." when the inbox
+   has been exhausted. Replaces the explicit "Show more emails"
+   button — the row scrolls into view on its own as the user nears
+   the bottom of the list. */
+.load-more-status {
+  display: block;
+  text-align: center;
+  padding: 10px 12px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.load-more-status.is-end {
+  font-style: normal;
+  opacity: 0.7;
+}

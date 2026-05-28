@@ -1,0 +1,372 @@
+/* =============================
+   🏠 PERSONAL USER DASHBOARD
+   Three vertical sections: welcome strip → Today (meetings+tasks
+   merged, inline actions) → Emails (tall scrollable list). Used only
+   for personal-scope users; org/platform admins still get the 2x2
+   ActivityDashboard.
+============================== */
+
+/* Page wrapper for the personal home. The Emails card at the bottom
+   stretches to fill leftover vertical space when there's room; if
+   Meetings + Tasks grow so much that Emails would shrink below its
+   `min-height`, the page scrolls instead of clipping. That keeps the
+   email list usable (always shows ~5-6 rows) regardless of how busy
+   the user's day is. */
+.home-authed-personal {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-email-bg);
+  overflow-y: auto;
+}
+
+.personal-dashboard {
+  width: 100%;
+  max-width: 920px;
+  /* Anchored to the left edge of the content area instead of centered.
+     Personal home reads top-to-bottom; aligning the card column with
+     the rest of the app's left-side chrome (sidebar nav, header brand)
+     keeps the eye on a single vertical guide. */
+  margin: 0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+  box-sizing: border-box;
+  /* Take the full height of the page wrapper so the Emails card can
+     stretch to the bottom edge. min-height:0 is required for flex
+     children to actually shrink + scroll instead of pushing the parent
+     taller than the viewport. */
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.personal-dashboard > * {
+  width: 100%;
+  max-width: 920px;
+  flex: 0 0 auto;
+}
+
+/* ── 1. Welcome ─────────────────────────────────────────────── */
+.personal-dashboard-greeting {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.personal-dashboard-greeting h1 {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.personal-dashboard-greeting h1 span {
+  color: var(--color-primary-action);
+}
+
+.personal-dashboard-greeting p {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--color-text-muted);
+}
+
+/* ── Shared card chrome ─────────────────────────────────────── */
+.personal-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px rgb(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.personal-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.personal-card-head h2 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.personal-card-action {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 4px 8px;
+  margin-right: -8px;
+  color: var(--color-primary-action);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.personal-card-action:hover {
+  background: var(--color-surface-hover);
+}
+
+.personal-card-empty {
+  margin: 0;
+  padding: 18px 16px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  text-align: left;
+}
+
+.personal-card-error {
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--color-danger, #b91c1c);
+  font-size: var(--text-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Lightweight loading skeleton: stacked shimmer bars. */
+.personal-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+.personal-card-skeleton span {
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-hover) 0%,
+    var(--color-surface-soft) 50%,
+    var(--color-surface-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: personal-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes personal-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── 2. Today list ──────────────────────────────────────────── */
+.personal-today-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.personal-today-row {
+  display: grid;
+  grid-template-columns: 22px 80px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: var(--text-md);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.personal-today-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.personal-today-marker {
+  color: var(--color-primary-action);
+  font-size: 14px;
+  line-height: 1;
+  text-align: center;
+}
+
+.personal-today-check {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.12s, color 0.12s;
+}
+
+.personal-today-check:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-primary-action);
+}
+
+.personal-today-time {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.personal-today-row.is-task .personal-today-time {
+  color: var(--color-text-secondary, var(--color-text-muted));
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+}
+
+.personal-today-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.personal-today-meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+/* ── 3. Emails ──────────────────────────────────────────────── */
+/* Emails fills leftover vertical space below the greeting + Meetings +
+   Task cards. As Meetings or Tasks grow, Emails shrinks — but only
+   down to one third of the viewport (33vh). That keeps the email list
+   meaningfully visible regardless of how busy the day is; once Meetings
+   + Tasks would push Emails smaller than that, the page scrolls
+   instead. The inner `.personal-emails-list` keeps its own scroll for
+   browsing past the visible window. */
+.personal-emails-card {
+  flex: 1 1 0;
+  min-height: 33vh;
+}
+
+.personal-dashboard > .personal-emails-card {
+  flex: 1 1 0;
+  min-height: 33vh;
+}
+
+.personal-emails-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  scrollbar-width: thin;
+}
+
+.personal-emails-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.personal-emails-list::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+.personal-emails-list::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+.personal-email-row {
+  display: grid;
+  grid-template-columns: 10px minmax(120px, 180px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: var(--text-md);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background 0.12s;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.personal-email-row:last-child {
+  border-bottom: 0;
+}
+
+.personal-email-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.personal-email-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.personal-email-row.is-unread .personal-email-dot {
+  background: var(--color-primary-action);
+}
+
+.personal-email-sender {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.personal-email-row.is-read .personal-email-sender {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.personal-email-subject {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-secondary, var(--color-text-primary));
+  min-width: 0;
+}
+
+.personal-email-row.is-read .personal-email-subject {
+  color: var(--color-text-muted);
+}
+
+.personal-email-time {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Narrow viewport ────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .personal-dashboard {
+    padding: 16px;
+  }
+
+  .personal-today-row {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+  }
+
+  .personal-today-row .personal-today-time {
+    display: none;
+  }
+
+  .personal-email-row {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+  }
+
+  .personal-email-row .personal-email-sender {
+    display: none;
+  }
+}

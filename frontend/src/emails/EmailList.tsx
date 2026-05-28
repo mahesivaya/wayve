@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { useGlobalSearch } from "../search/SearchContext";
 
@@ -36,6 +36,18 @@ function formatMobileTime(value: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+// Strip the "<addr>" tail from a sender header so the list shows a
+// clean display name. Matches the formatting used in the personal-home
+// dashboard so the inbox and the home preview read the same.
+function displaySender(value: string | null | undefined): string {
+  const raw = value?.trim();
+  if (!raw) return "Unknown sender";
+  const match = raw.match(/^"?([^"<]+?)"?\s*<.*>$/);
+  if (match) return match[1].trim();
+  if (raw.includes("@")) return raw.split("@")[0];
+  return raw;
 }
 
 export const EmailList: React.FC<EmailListProps> = ({
@@ -140,8 +152,86 @@ export const EmailList: React.FC<EmailListProps> = ({
     }
   };
 
+  // Infinite scroll: when the user nears the bottom of the list, pull
+  // the next page automatically. Replaces the explicit "Show more
+  // emails" button so browsing feels continuous.
+  //
+  // Implementation notes:
+  // - The scroll listener is bound ONCE (no deps) so we don't churn
+  //   add/remove on every render of the parent — which was happening
+  //   before because `loadMore` is re-created each render and was in
+  //   the effect's dep array. The handler reads the latest hasMore /
+  //   loadingMore / loadMore via refs instead.
+  // - An `inFlightRef` ref guards against duplicate calls before
+  //   `loadingMore` state updates (scroll fires faster than React
+  //   commits, so the state-only guard wasn't reliable).
+  // - A second effect auto-triggers loadMore right after emails
+  //   change when the container isn't yet scrollable — otherwise a
+  //   short initial page would never let the user reach a scroll
+  //   bottom, and loadMore would never fire.
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const inFlightRef = useRef(false);
+  const hasMoreRef = useRef(hasMore);
+  const loadingMoreRef = useRef(loadingMore);
+  const loadMoreRef = useRef(loadMore);
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+  useEffect(() => {
+    loadingMoreRef.current = loadingMore;
+    if (!loadingMore) inFlightRef.current = false;
+  }, [loadingMore]);
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
+
+  const triggerLoadMore = () => {
+    if (inFlightRef.current) return;
+    if (!hasMoreRef.current || loadingMoreRef.current) return;
+    inFlightRef.current = true;
+    loadMoreRef.current();
+  };
+
+  useEffect(() => {
+    const el = listScrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      // Trigger when the bottom edge is within ~400px — far enough
+      // ahead that the next page often arrives before the user runs
+      // out of rows.
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 400) {
+        triggerLoadMore();
+      }
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+    // `triggerLoadMore` reads through refs so it's safe to bind once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // After emails change (or the list first renders), check whether the
+  // container has enough content to actually scroll. If not, kick
+  // loadMore so the user can keep paging without needing to fight a
+  // non-scrollable list. This fixes the "didn't get any next emails"
+  // case where the initial 25 rows don't fill the visible area on a
+  // tall viewport.
+  useEffect(() => {
+    const el = listScrollRef.current;
+    if (!el) return;
+    if (!hasMore || loadingMore) return;
+    if (emails.length === 0) return;
+    if (el.scrollHeight <= el.clientHeight + 1) {
+      triggerLoadMore();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emails.length, hasMore, loadingMore]);
+
   return (
-    <div className="email-list" style={width ? { width } : undefined}>
+    <div
+      ref={listScrollRef}
+      className="email-list"
+      style={width ? { width } : undefined}
+    >
       <div className="mobile-mail-topbar">
         <button type="button" className="mobile-mail-menu" aria-label="Menu">
           ☰
@@ -281,6 +371,11 @@ export const EmailList: React.FC<EmailListProps> = ({
                   {email.inbox_status}
                 </span>
               )}
+              {isListView && (
+                <span className="email-list-sender">
+                  {displaySender(email.sender || email.receiver)}
+                </span>
+              )}
               <span className="email-list-subject">{email.subject || "(No Subject)"}</span>
             </span>
             <span className="email-row-meta">
@@ -323,9 +418,18 @@ export const EmailList: React.FC<EmailListProps> = ({
         </>
       )}
 
-      {!isStubFolder && hasMore && (
+      {/* Infinite-scroll status row. Renders a faint "Loading more…"
+          while the next page is in flight, and an "End of inbox" hint
+          when there's nothing left to fetch. Replaces the explicit
+          "Show more emails" button. */}
+      {!isStubFolder && hasMore && loadingMore && (
         <div className="load-more-wrap">
-          <button className="load-more-btn" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading..." : "Show more emails"}</button>
+          <span className="load-more-status">Loading more…</span>
+        </div>
+      )}
+      {!isStubFolder && !hasMore && emails.length > 0 && (
+        <div className="load-more-wrap">
+          <span className="load-more-status is-end">No more emails.</span>
         </div>
       )}
 

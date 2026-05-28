@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { SERVICES } from "../services/serviceData";
 import ThemeToggle from "../theme/ThemeToggle";
 import ActivityDashboard from "./dashboard/ActivityDashboard";
+import PersonalDashboard from "./dashboard/PersonalDashboard";
 import "./home.css";
 
 export default function Home() {
@@ -438,14 +439,31 @@ export default function Home() {
 
   // Signed-in personal home — Activity Dashboard replaces the legacy
   // grid of app tiles (which duplicated the left sidebar's navigation).
-  // The greeting lives in this page so the dashboard component can be
-  // reused on org/platform homes that show a different greeting.
+  // Personal users get a three-section vertical dashboard (welcome +
+  // Today + Emails) that's shaped around how an individual moves
+  // through their day; org and platform-admin users continue to see
+  // the 2×2 ActivityDashboard. The welcome header for ActivityDashboard
+  // stays here because PersonalDashboard renders its own greeting.
   const firstName = user.email?.split("@")[0] ?? "there";
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     month: "short",
     day: "numeric",
   });
+
+  const isPersonalUser =
+    user.scope === "personal" || user.account_type === "personal";
+
+  if (isPersonalUser) {
+    // Personal home owns its own scroll inside the Emails card, so it
+    // skips the page-level `u-page-shell` (which sets `overflow-y: auto`
+    // on the whole page) and uses a fixed-height flex wrapper instead.
+    return (
+      <div className="home-authed-personal">
+        <PersonalDashboard />
+      </div>
+    );
+  }
 
   return (
     <div className="home-authed u-page-shell">
