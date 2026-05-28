@@ -470,7 +470,7 @@ pub async fn upsert_batch(
             .bind(row.attachments_checked);
     }
     let returned = q.fetch_all(pool).await?;
-    Ok(returned
+    let results: Vec<InsertResult> = returned
         .into_iter()
         .map(|r| InsertResult {
             id: r.try_get("id").unwrap_or(0),
@@ -479,7 +479,48 @@ pub async fn upsert_batch(
             created_at: r.try_get("created_at").ok(),
             is_new: r.try_get::<bool, _>("is_new").unwrap_or(false),
         })
-        .collect())
+        .collect();
+
+    // Stamp the account's `last_message_at` with the newest genuinely-new
+    // row's timestamp. ON CONFLICT updates DON'T count — only `is_new`
+    // rows advance the freshness signal. GREATEST + COALESCE means a
+    // late-arriving older message (e.g. backfill page) won't roll the
+    // clock backwards. Skipped entirely when the batch is all re-syncs.
+    stamp_last_message_at(pool, account_id, &results).await;
+
+    Ok(results)
+}
+
+async fn stamp_last_message_at(pool: &PgPool, account_id: i32, results: &[InsertResult]) {
+    let Some(max_new) = results
+        .iter()
+        .filter(|r| r.is_new)
+        .filter_map(|r| r.created_at)
+        .max()
+    else {
+        return;
+    };
+    if let Err(err) = sqlx::query(
+        "UPDATE email_accounts \
+         SET last_message_at = GREATEST(COALESCE(last_message_at, $1), $1) \
+         WHERE id = $2",
+    )
+    .bind(max_new)
+    .bind(account_id)
+    .execute(pool)
+    .await
+    {
+        // Best-effort: a failed stamp just means the next sync cycle
+        // treats this account as quieter than it actually is. Log so an
+        // operator can spot persistent failures, but don't bubble the
+        // error up — the email row itself already landed.
+        tracing::warn!(
+            target: "worker",
+            account_id,
+            error = ?err,
+            "failed to stamp last_message_at after upsert"
+        );
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -496,6 +537,9 @@ pub async fn upsert_one(
 ) -> sqlx::Result<i32> {
     let (body_iv, body_encrypted) = row.body.unwrap_or(("", ""));
     let (subject_iv, subject_encrypted) = encrypt_subject_for_storage(row.subject);
+    // Same `(xmax = 0) AS is_new` trick as upsert_batch so we can tell a
+    // genuinely new row from an ON CONFLICT re-sync and only stamp
+    // last_message_at on the former.
     let returned = sqlx::query(
         r#"
         INSERT INTO emails
@@ -513,7 +557,7 @@ pub async fn upsert_one(
           body_iv = EXCLUDED.body_iv,
           is_read = EXCLUDED.is_read,
           labels = EXCLUDED.labels
-        RETURNING id
+        RETURNING id, (xmax = 0) AS is_new, created_at
         "#,
     )
     .bind(row.gmail_id)
@@ -530,7 +574,18 @@ pub async fn upsert_one(
     .bind(row.labels)
     .fetch_one(pool)
     .await?;
-    Ok(returned.get::<i32, _>("id"))
+
+    let id: i32 = returned.get("id");
+    let result = InsertResult {
+        id,
+        sender: None,
+        subject: None,
+        created_at: returned.try_get("created_at").ok(),
+        is_new: returned.try_get::<bool, _>("is_new").unwrap_or(false),
+    };
+    stamp_last_message_at(pool, account_id, std::slice::from_ref(&result)).await;
+
+    Ok(id)
 }
 
 /// One-time encryption migration: walks legacy plaintext-only rows in

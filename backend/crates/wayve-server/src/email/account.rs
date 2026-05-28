@@ -33,6 +33,12 @@ pub struct EmailAccount {
     pub provider: MailProvider,
     pub refresh_token: Option<String>,
     pub last_sync: Option<i64>,
+    /// Wall-clock timestamp of the most-recent message we've received
+    /// for this account. NULL on a brand-new mailbox; the sync worker
+    /// treats NULL as "cold" (30min interval). Updated by
+    /// `repo::upsert_batch` / `upsert_one` whenever a row is freshly
+    /// inserted, and seeded from `MAX(emails.created_at)` at startup.
+    pub last_message_at: Option<chrono::NaiveDateTime>,
 }
 
 impl EmailAccount {
@@ -57,6 +63,13 @@ fn account_from_row(row: sqlx::postgres::PgRow) -> EmailAccount {
         provider,
         refresh_token: row.try_get("refresh_token").ok().flatten(),
         last_sync: row.try_get("last_sync").ok(),
+        // Optional because legacy callers may select rows without the
+        // column (queries that haven't been updated). try_get + flatten
+        // makes that a NULL rather than a hard failure.
+        last_message_at: row
+            .try_get::<Option<chrono::NaiveDateTime>, _>("last_message_at")
+            .ok()
+            .flatten(),
     }
 }
 
@@ -125,7 +138,7 @@ pub async fn load_email_account_for_send(
 #[instrument(target = "db", skip(pool))]
 pub async fn load_syncable_email_accounts(pool: &PgPool) -> Result<Vec<EmailAccount>> {
     let rows = sqlx::query(
-        "SELECT id, user_id, email, provider, refresh_token, last_sync
+        "SELECT id, user_id, email, provider, refresh_token, last_sync, last_message_at
          FROM email_accounts
          WHERE access_token IS NOT NULL",
     )

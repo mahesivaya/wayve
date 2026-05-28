@@ -111,117 +111,224 @@ fn extract_gmail_timestamp(res: &Value) -> NaiveDateTime {
         .unwrap_or_else(|| chrono::Utc::now().naive_utc())
 }
 
-#[instrument(target = "worker", skip(pool))]
-pub async fn sync_all(pool: &PgPool) -> Result<()> {
-    let accounts = load_syncable_email_accounts(pool).await?;
+/// Run the full per-account sync workload: token refresh, forward sync,
+/// backfill, label backfill, and post-sync cache invalidation. Errors
+/// are logged and swallowed — the worker keeps going for the rest of
+/// the accounts in a tick.
+pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::EmailAccount) {
+    let Some(refresh_token) = account.usable_refresh_token() else {
+        warn!(target: "worker", account_id = account.id, "email account skipped: missing refresh token");
+        return;
+    };
 
-    info!(target: "worker", accounts = accounts.len(), "sync_all start");
+    let token = match refresh_and_persist_email_token(
+        pool,
+        account.id,
+        account.provider,
+        refresh_token,
+    )
+    .await
+    {
+        Ok(token) => token,
+        Err(e) => {
+            warn!(target: "worker", account_id = account.id, provider = account.provider.as_db(), error = ?e, "token refresh failed; skipping account");
+            return;
+        }
+    };
+
+    let sync_result = account
+        .provider
+        .sync(pool, account.id, &token.access_token, account.last_sync)
+        .await;
+
+    if let Err(e) = sync_result {
+        error!(target: "worker", account_id = account.id, provider = account.provider.as_db(), error = ?e, "email sync failed");
+        return;
+    }
+
+    // Per-tick backfill of older mail (general window) and the Gmail
+    // system/category labels.
+    if let Err(err) = backfill_older(
+        pool,
+        account.id,
+        &account.provider,
+        &token.access_token,
+    )
+    .await
+    {
+        warn!(target: "worker", account_id = account.id, error = ?err, "backfill batch failed");
+    }
+
+    for label in [
+        "DRAFT",
+        "SPAM",
+        "TRASH",
+        "CATEGORY_PERSONAL",
+        "CATEGORY_SOCIAL",
+        "CATEGORY_PROMOTIONS",
+        "CATEGORY_UPDATES",
+        "CATEGORY_FORUMS",
+    ] {
+        if let Err(err) = backfill_label_older(
+            pool,
+            account.id,
+            &token.access_token,
+            label,
+        )
+        .await
+        {
+            warn!(target: "worker", account_id = account.id, label, error = ?err, "label backfill failed");
+        }
+    }
+
+    // Fresh mail just landed in `emails` — drop the /api/profile and
+    // /api/me caches for this user so the Storage & Usage panel
+    // reflects the new totals on the next page load instead of waiting
+    // out the 30s/60s TTLs.
+    crate::routes::user::invalidate_profile_cache(account.user_id).await;
+    crate::email::profile::invalidate_me_cache(account.user_id).await;
+}
+
+/// Adaptive-backoff scheduler. Called every 30s from the sync worker;
+/// only syncs accounts whose per-account next-due time has elapsed, then
+/// schedules the next visit based on how recently the mailbox last
+/// received mail (the `last_message_at` ladder). `schedule` lives in the
+/// worker's process memory and is rebuilt fresh on every restart — a
+/// brand-new entry implicitly means "sync now," which is the right
+/// startup behavior.
+pub async fn sync_due_accounts(
+    pool: &PgPool,
+    schedule: &mut std::collections::HashMap<i32, std::time::Instant>,
+) -> Result<()> {
+    let accounts = load_syncable_email_accounts(pool).await?;
+    let now = std::time::Instant::now();
+
+    let (due, deferred): (Vec<_>, Vec<_>) = accounts
+        .into_iter()
+        .partition(|a| schedule.get(&a.id).map(|t| *t <= now).unwrap_or(true));
+
+    info!(
+        target: "worker",
+        due = due.len(),
+        deferred = deferred.len(),
+        "sync_due_accounts"
+    );
+
+    // Drop entries for accounts that no longer appear in the syncable list
+    // (account deleted / OAuth revoked). Without this, the schedule map
+    // grows unboundedly across re-syncs.
+    let live_ids: std::collections::HashSet<i32> =
+        due.iter().map(|a| a.id).chain(deferred.iter().map(|a| a.id)).collect();
+    schedule.retain(|id, _| live_ids.contains(id));
 
     let mut handles = vec![];
-
-    for account in accounts {
+    for account in due {
         let pool = pool.clone();
+        let account_id = account.id;
+        let pre_sync_last_message = account.last_message_at;
         handles.push(tokio::spawn(async move {
-            let Some(refresh_token) = account.usable_refresh_token() else {
-                warn!(target: "worker", account_id = account.id, "email account skipped: missing refresh token");
-                return;
-            };
-
-            let token = match refresh_and_persist_email_token(
-                &pool,
-                account.id,
-                account.provider,
-                refresh_token,
-            )
-            .await
-            {
-                Ok(token) => token,
-                Err(e) => {
-                    warn!(target: "worker", account_id = account.id, provider = account.provider.as_db(), error = ?e, "token refresh failed; skipping account");
-                    return;
-                }
-            };
-
-            let sync_result = account
-                .provider
-                .sync(&pool, account.id, &token.access_token, account.last_sync)
-                .await;
-
-            if let Err(e) = sync_result {
-                error!(target: "worker", account_id = account.id, provider = account.provider.as_db(), error = ?e, "email sync failed");
-            } else {
-                // After each forward-sync tick, also pull a backfill batch of
-                // older mail. The forward sync only fetches mail newer than
-                // `last_sync`; without this, history before the account was
-                // connected only arrives via the user's "Load more" clicks.
-                // Each tick walks one BACKFILL_BATCH window further back;
-                // terminates naturally once the provider returns no older mail.
-                if let Err(err) = backfill_older(
-                    &pool,
-                    account.id,
-                    &account.provider,
-                    &token.access_token,
-                )
-                .await
-                {
-                    warn!(target: "worker", account_id = account.id, error = ?err, "backfill batch failed");
-                }
-
-                // Per-label backfill for every standard Gmail folder a user
-                // expects to see in an IMAP-style sidebar.
-                //
-                // System labels:
-                //   DRAFT  — excluded from messages.list unless labelIds=DRAFT
-                //   SPAM   — needs includeSpamTrash=true (which the helper sets)
-                //   TRASH  — same as SPAM
-                //
-                // Category labels (Gmail's INBOX sub-tabs):
-                //   CATEGORY_PERSONAL / SOCIAL / PROMOTIONS / UPDATES / FORUMS
-                //   These ride on INBOX messages so the general backfill picks
-                //   them up too, but anchoring each tick's window at the oldest
-                //   message *in that category* parallelizes catch-up so the
-                //   Promotions tab doesn't have to wait for the INBOX walk to
-                //   reach mail that happens to be promotions.
-                //
-                // INBOX / SENT / STARRED / IMPORTANT flow through the general
-                // backfill — no per-label pass needed.
-                for label in [
-                    "DRAFT",
-                    "SPAM",
-                    "TRASH",
-                    "CATEGORY_PERSONAL",
-                    "CATEGORY_SOCIAL",
-                    "CATEGORY_PROMOTIONS",
-                    "CATEGORY_UPDATES",
-                    "CATEGORY_FORUMS",
-                ] {
-                    if let Err(err) = backfill_label_older(
-                        &pool,
-                        account.id,
-                        &token.access_token,
-                        label,
-                    )
-                    .await
-                    {
-                        warn!(target: "worker", account_id = account.id, label, error = ?err, "label backfill failed");
-                    }
-                }
-
-                // Fresh mail just landed in `emails` — drop the /api/profile
-                // and /api/me caches for this user so the Storage & Usage
-                // panel reflects the new totals on the next page load
-                // instead of waiting out the 30s/60s TTLs.
-                crate::routes::user::invalidate_profile_cache(account.user_id).await;
-                crate::email::profile::invalidate_me_cache(account.user_id).await;
-            }
+            sync_one_account(&pool, account).await;
+            (account_id, pre_sync_last_message)
         }));
     }
 
     for h in handles {
-        let _ = h.await;
+        let Ok((account_id, pre)) = h.await else { continue };
+        // Refresh last_message_at to capture any new mail that landed
+        // during this tick. One indexed PK lookup per account; cheap.
+        let post: Option<NaiveDateTime> = sqlx::query_scalar(
+            "SELECT last_message_at FROM email_accounts WHERE id = $1",
+        )
+        .bind(account_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(pre);
+
+        // "New mail landed" = the freshness stamp advanced this tick.
+        // Reset to the hot interval so the next pickup is fast; otherwise
+        // step up the ladder based on absolute age.
+        let new_mail_landed = match (pre, post) {
+            (Some(p), Some(q)) => q > p,
+            (None, Some(_)) => true,
+            _ => false,
+        };
+        let interval = if new_mail_landed {
+            INTERVAL_HOT
+        } else {
+            interval_for_age(post)
+        };
+        schedule.insert(account_id, std::time::Instant::now() + interval);
     }
 
     Ok(())
+}
+
+// Adaptive-backoff ladder. Quiet accounts back off; busy ones stay hot.
+// The brackets balance "user notices new mail quickly" against
+// "we don't hammer Gmail/Outlook for inboxes that haven't seen a message
+// in a week." Tune via the constants — the rest of the worker is generic.
+const INTERVAL_HOT: std::time::Duration = std::time::Duration::from_secs(30);
+const INTERVAL_WARM: std::time::Duration = std::time::Duration::from_secs(60);
+const INTERVAL_COOL: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+const INTERVAL_COLD: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+fn interval_for_age(last_message_at: Option<NaiveDateTime>) -> std::time::Duration {
+    let Some(ts) = last_message_at else {
+        return INTERVAL_COLD;
+    };
+    let now = chrono::Utc::now().naive_utc();
+    let age = now.signed_duration_since(ts);
+    if age < chrono::Duration::hours(1) {
+        INTERVAL_HOT
+    } else if age < chrono::Duration::hours(24) {
+        INTERVAL_WARM
+    } else if age < chrono::Duration::days(7) {
+        INTERVAL_COOL
+    } else {
+        INTERVAL_COLD
+    }
+}
+
+#[cfg(test)]
+mod adaptive_backoff_tests {
+    use super::{INTERVAL_COLD, INTERVAL_COOL, INTERVAL_HOT, INTERVAL_WARM, interval_for_age};
+
+    fn ago(minutes: i64) -> chrono::NaiveDateTime {
+        chrono::Utc::now().naive_utc() - chrono::Duration::minutes(minutes)
+    }
+
+    #[test]
+    fn unknown_last_message_is_cold() {
+        assert_eq!(interval_for_age(None), INTERVAL_COLD);
+    }
+
+    #[test]
+    fn fresh_mail_is_hot() {
+        // Anything < 1h old → 30s.
+        assert_eq!(interval_for_age(Some(ago(0))), INTERVAL_HOT);
+        assert_eq!(interval_for_age(Some(ago(59))), INTERVAL_HOT);
+    }
+
+    #[test]
+    fn day_old_mail_is_warm() {
+        // 1h–24h → 60s.
+        assert_eq!(interval_for_age(Some(ago(60))), INTERVAL_WARM);
+        assert_eq!(interval_for_age(Some(ago(60 * 23))), INTERVAL_WARM);
+    }
+
+    #[test]
+    fn week_old_mail_is_cool() {
+        // 24h–7d → 5min.
+        assert_eq!(interval_for_age(Some(ago(60 * 24))), INTERVAL_COOL);
+        assert_eq!(interval_for_age(Some(ago(60 * 24 * 6))), INTERVAL_COOL);
+    }
+
+    #[test]
+    fn old_mail_is_cold() {
+        // > 7d → 30min.
+        assert_eq!(interval_for_age(Some(ago(60 * 24 * 7))), INTERVAL_COLD);
+        assert_eq!(interval_for_age(Some(ago(60 * 24 * 30))), INTERVAL_COLD);
+    }
 }
 
 /// Per-tick backfill window size — how many older messages to pull each

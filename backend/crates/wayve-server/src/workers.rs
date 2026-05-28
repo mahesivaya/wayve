@@ -1,31 +1,44 @@
-use crate::email::sync::sync_all;
+use crate::email::sync::sync_due_accounts;
 use sqlx::PgPool;
+use std::collections::HashMap;
+use std::time::Instant;
 use tokio::time::{Duration, sleep};
 use tracing::{Instrument, error, info, warn};
 
+// Worker tick = the shortest interval in the adaptive ladder. Each
+// cycle, sync_due_accounts filters this down to accounts whose
+// per-account schedule says they're due. Quiet accounts stay deferred
+// across many ticks; hot ones get picked up every tick.
+const WORKER_TICK: Duration = Duration::from_secs(30);
+const MAX_ERROR_BACKOFF: Duration = Duration::from_secs(300);
+
 pub async fn run_sync_worker(pool: PgPool) -> ! {
-    let mut interval = Duration::from_secs(30);
-    info!("Sync worker started");
+    // Per-account `next_sync_at` schedule. Lives in process memory —
+    // restarts re-sync every account once (empty map == "due now"),
+    // which is the right startup behavior anyway.
+    let mut schedule: HashMap<i32, Instant> = HashMap::new();
+    let mut error_backoff = WORKER_TICK;
+    info!("Sync worker started (adaptive backoff: 30s/60s/5min/30min)");
 
     loop {
         let span = tracing::info_span!(target: "worker", "sync_worker_cycle");
-        interval = async {
-            match sync_all(&pool).await {
-                Ok(_) => {
-                    info!("Sync cycle success");
-                    Duration::from_secs(30)
-                }
-                Err(e) => {
-                    error!("Sync cycle failed: {:?}", e);
-                    let backoff = std::cmp::min(interval * 2, Duration::from_secs(300));
-                    warn!("Sync backoff: {:?}", backoff);
-                    backoff
-                }
-            }
-        }
-        .instrument(span)
-        .await;
+        let result = async { sync_due_accounts(&pool, &mut schedule).await }
+            .instrument(span)
+            .await;
 
-        sleep(interval).await;
+        let sleep_for = match result {
+            Ok(()) => {
+                error_backoff = WORKER_TICK;
+                WORKER_TICK
+            }
+            Err(e) => {
+                error!("Sync cycle failed: {:?}", e);
+                error_backoff = std::cmp::min(error_backoff * 2, MAX_ERROR_BACKOFF);
+                warn!("Sync error backoff: {:?}", error_backoff);
+                error_backoff
+            }
+        };
+
+        sleep(sleep_for).await;
     }
 }

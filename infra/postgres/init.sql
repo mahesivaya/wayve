@@ -265,6 +265,14 @@ ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS display_name TEXT;
 -- COUNT in that window so the badge isn't blank.
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS provider_unread_count INTEGER;
 
+-- Wall-clock timestamp of the most-recent message we've received for this
+-- account. Drives the sync worker's per-account adaptive backoff: a mailbox
+-- whose latest message is hours old is polled less often than one with mail
+-- arriving in the last minute. Stamped in `repo::upsert_batch` / `upsert_one`
+-- whenever a row is freshly inserted (xmax = 0). Distinct from `last_sync`,
+-- which tracks when WE last looked, not when the mailbox last got mail.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP;
+
 -- =========================================================================
 -- Shared inboxes (org + platform).
 -- =========================================================================

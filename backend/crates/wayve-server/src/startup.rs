@@ -88,6 +88,20 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // until the first sync writes it; the SELECT in `load_account_summaries_for_user`
         // falls back to a local COUNT during that window.
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS provider_unread_count INTEGER",
+        // Adaptive-backoff signal for the sync worker. Stamped on every
+        // upsert that inserts a fresh row; the worker reads it to decide
+        // whether this account should be polled every 30s (hot), 60s
+        // (warm), 5min (cool), or 30min (cold).
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP",
+        // Backfill once: existing DBs deployed before adaptive-backoff
+        // shipped have NULL last_message_at, which would force every
+        // account into the cold (30min) bucket. Seed from the actual
+        // max(created_at) per account. Idempotent — only touches NULL
+        // rows, so it's a no-op on every subsequent boot.
+        "UPDATE email_accounts a \
+         SET last_message_at = sub.last_at \
+         FROM (SELECT account_id, MAX(created_at) AS last_at FROM emails GROUP BY account_id) sub \
+         WHERE a.id = sub.account_id AND a.last_message_at IS NULL",
         // Drive folders. The new table + the FK column on drive_files
         // self-heal existing DBs on backend startup so a deployed instance
         // picks up the v1 folder feature without a manual psql step.
