@@ -4412,6 +4412,7 @@ dependencies = [
  "actix-web",
  "aes-gcm",
  "anyhow",
+ "async-trait",
  "base64 0.21.7",
  "bcrypt",
  "chrono",

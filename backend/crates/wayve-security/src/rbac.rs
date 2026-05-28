@@ -11,6 +11,8 @@
 
 use crate::jwt::get_user_id_from_request;
 use actix_web::{HttpRequest, HttpResponse};
+use async_trait::async_trait;
+use once_cell::sync::OnceCell;
 use sqlx::{PgPool, Row};
 use tracing::{error, warn};
 
@@ -368,13 +370,56 @@ impl RoleContext {
     }
 }
 
+/// Pluggable cache that sits in front of [`resolve_role_context`].
+///
+/// `wayve-security` doesn't know about Redis or moka — it just calls into
+/// whatever implementation `wayve-server` registers via [`install_cache`]
+/// at startup. When no cache is installed the resolver runs straight
+/// against Postgres on every call (existing behavior).
+#[async_trait]
+pub trait RoleContextCache: Send + Sync {
+    async fn get(&self, user_id: i32) -> Option<RoleContext>;
+    async fn put(&self, user_id: i32, ctx: &RoleContext);
+    async fn invalidate(&self, user_id: i32);
+}
+
+static CACHE: OnceCell<Box<dyn RoleContextCache>> = OnceCell::new();
+
+/// Register a `RoleContextCache` implementation. Must be called once at
+/// process startup, before any HTTP handlers run. Subsequent calls are
+/// silently dropped — the cache is process-global by design so role
+/// mutations only need to invalidate one key.
+pub fn install_cache(cache: Box<dyn RoleContextCache>) {
+    let _ = CACHE.set(cache);
+}
+
+/// Drop the cached `RoleContext` for `user_id`. Call this from every
+/// handler that mutates `organization_members`, `platform_members`, or
+/// `users.account_type`/`users.organization_id` so the next request sees
+/// the new role without waiting for the TTL.
+pub async fn invalidate_role_context(user_id: i32) {
+    if let Some(cache) = CACHE.get() {
+        cache.invalidate(user_id).await;
+    }
+}
+
 /// Resolve a user's scope and role from the database.
 ///
 /// Mirrors the precedence the app already used: a `platform_admin` account
 /// takes its role from `platform_members`; any account with an
 /// `organization_id` takes its role from `organization_members`; everyone else
 /// is a personal-workspace owner.
+///
+/// When a `RoleContextCache` is installed the lookup is served from cache
+/// on hit (typical case for back-to-back requests in the same session);
+/// on miss we fall through to the SQL below and write the result back.
 pub async fn resolve_role_context(pool: &PgPool, user_id: i32) -> Result<RoleContext, sqlx::Error> {
+    if let Some(cache) = CACHE.get()
+        && let Some(cached) = cache.get(user_id).await
+    {
+        return Ok(cached);
+    }
+
     let row = sqlx::query(
         r#"
         SELECT u.account_type, u.organization_id,
@@ -422,12 +467,18 @@ pub async fn resolve_role_context(pool: &PgPool, user_id: i32) -> Result<RoleCon
         (Scope::Personal, Role::Owner)
     };
 
-    Ok(RoleContext {
+    let ctx = RoleContext {
         user_id,
         scope,
         role,
         organization_id,
-    })
+    };
+
+    if let Some(cache) = CACHE.get() {
+        cache.put(user_id, &ctx).await;
+    }
+
+    Ok(ctx)
 }
 
 /// Authenticate the request and require `perm`. `Err` is a ready-to-return

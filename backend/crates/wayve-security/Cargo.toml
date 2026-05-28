@@ -31,6 +31,10 @@ rand.workspace = true
 # Caching for API key validation
 moka.workspace = true
 
+# rbac.rs uses an async-trait object behind an OnceCell so wayve-server can
+# install a Redis-backed RoleContext cache at startup.
+async-trait.workspace = true
+
 # OAuth + SSO helpers reach external providers
 reqwest.workspace = true
 

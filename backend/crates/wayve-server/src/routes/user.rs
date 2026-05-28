@@ -768,6 +768,7 @@ pub async fn create_my_organization(
 
     invalidate_profile_cache(user_id).await;
     invalidate_me_cache(user_id).await;
+    rbac::invalidate_role_context(user_id).await;
 
     info!(target: "auth", user_id, organization_id, "personal user created organization");
     Ok(HttpResponse::Created().json(serde_json::json!({
@@ -915,9 +916,11 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
 
     invalidate_profile_cache(user_id).await;
     invalidate_me_cache(user_id).await;
+    rbac::invalidate_role_context(user_id).await;
     for invitee_id in &invitee_ids {
         invalidate_profile_cache(*invitee_id).await;
         invalidate_me_cache(*invitee_id).await;
+        rbac::invalidate_role_context(*invitee_id).await;
     }
 
     info!(
@@ -1523,6 +1526,7 @@ pub async fn admin_delete_user(
 
     invalidate_me_cache(target_user_id).await;
     invalidate_profile_cache(target_user_id).await;
+    rbac::invalidate_role_context(target_user_id).await;
     info!(
         target: "auth",
         actor = ctx.user_id,
@@ -1997,6 +2001,7 @@ pub async fn update_organization_member_role(
     // on their next request rather than after the 60s cache TTL.
     invalidate_me_cache(target_user_id).await;
     invalidate_profile_cache(target_user_id).await;
+    rbac::invalidate_role_context(target_user_id).await;
     info!(
         target: "auth",
         actor = ctx.user_id, organization_id, target_user_id,
@@ -2113,6 +2118,7 @@ pub async fn update_platform_member_role(
 
     invalidate_me_cache(target_user_id).await;
     invalidate_profile_cache(target_user_id).await;
+    rbac::invalidate_role_context(target_user_id).await;
     info!(
         target: "auth",
         actor = ctx.user_id, target_user_id,

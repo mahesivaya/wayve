@@ -24,6 +24,7 @@ mod openapi;
 mod platform_billing;
 mod platform_team;
 mod prelude;
+mod rbac_cache;
 mod routes;
 mod scheduler;
 mod scim;
@@ -183,6 +184,11 @@ async fn main() -> std::io::Result<()> {
             None
         }
     };
+
+    // Install the Redis-backed RBAC role-context cache so resolve_role_context
+    // (called on ~every authenticated request) is served from cache after the
+    // first lookup per user. Falls back to the DB path when Redis is down.
+    crate::rbac_cache::install(redis_cache.clone());
 
     let frontend_url = crate::config::frontend_url();
 
