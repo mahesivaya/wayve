@@ -295,6 +295,28 @@ pub async fn get_all_email_attachments(req: HttpRequest, pool: web::Data<PgPool>
     Ok(HttpResponse::Ok().json(files))
 }
 
+// Total unread email count across all of the caller's accounts. Powers the
+// global sidebar/header badge so it doesn't have to load the full inbox to
+// count. Backed by `idx_emails_unread` (partial index on `is_read = false`)
+// so the query is an index-only scan regardless of inbox size.
+#[get("/emails/unread-count")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn get_unread_count(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) \
+         FROM emails e \
+         JOIN email_accounts a ON a.id = e.account_id \
+         WHERE a.user_id = $1 AND e.is_read = false",
+    )
+    .bind(user_id)
+    .fetch_one(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "count": count })))
+}
+
 // Mark an email as read for the authenticated user. The frontend already
 // flips `is_read` optimistically when the user opens an email, but without
 // this endpoint the change isn't persisted — refreshing the inbox showed

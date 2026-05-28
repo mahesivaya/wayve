@@ -54,6 +54,38 @@ fn cache_key(path: &str, query: &str) -> String {
     }
 }
 
+/// Maps a `?media=...` opt-in to the GitHub `Accept` header that returns
+/// the raw representation. Used by the commits-diff fallback in the
+/// frontend when GitHub's JSON commit detail omits `files[].patch` for a
+/// large text file. Unknown values fall through to JSON.
+fn parse_media_override(query: &str) -> Option<&'static str> {
+    for pair in query.split('&') {
+        let Some((key, value)) = pair.split_once('=') else {
+            continue;
+        };
+        if key != "media" {
+            continue;
+        }
+        return match value {
+            "diff" => Some("application/vnd.github.diff"),
+            "patch" => Some("application/vnd.github.patch"),
+            _ => None,
+        };
+    }
+    None
+}
+
+/// Strip `media=...` from the query string before forwarding to GitHub
+/// — it's our control knob, not a GitHub-recognized parameter, and we
+/// don't want to leak it into upstream URLs (or the upstream cache).
+fn strip_media_from_query(query: &str) -> String {
+    query
+        .split('&')
+        .filter(|pair| !(pair.starts_with("media=") || *pair == "media"))
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
 fn token() -> Option<String> {
     std::env::var("GITHUB_TOKEN")
         .ok()
@@ -73,9 +105,24 @@ pub async fn github_proxy(req: HttpRequest, path: web::Path<String>) -> impl Res
 
     let tail = path.into_inner();
     let query = req.query_string();
+    let media_override = parse_media_override(query);
+    // `media=` is our control parameter — never forward it to GitHub.
+    let upstream_query = if media_override.is_some() {
+        strip_media_from_query(query)
+    } else {
+        query.to_string()
+    };
+
+    // Cache the default JSON branch only. Diff/patch responses are
+    // typically much larger than JSON and rarely re-fetched (a user opens
+    // a single commit's full diff once); storing them would push hot
+    // JSON entries out of the bounded LRU.
+    let cache_enabled = media_override.is_none();
     let key = cache_key(&tail, query);
 
-    if let Some(cached) = GITHUB_CACHE.get(&key).await {
+    if cache_enabled
+        && let Some(cached) = GITHUB_CACHE.get(&key).await
+    {
         return HttpResponse::build(
             actix_web::http::StatusCode::from_u16(cached.status)
                 .unwrap_or(actix_web::http::StatusCode::OK),
@@ -85,19 +132,20 @@ pub async fn github_proxy(req: HttpRequest, path: web::Path<String>) -> impl Res
         .body(cached.body);
     }
 
-    let url = if query.is_empty() {
+    let url = if upstream_query.is_empty() {
         format!("{GITHUB_API}/{tail}")
     } else {
-        format!("{GITHUB_API}/{tail}?{query}")
+        format!("{GITHUB_API}/{tail}?{upstream_query}")
     };
 
     // GitHub requires a User-Agent on every request — they 403 calls
-    // that omit it. Other headers match what the frontend was sending
-    // directly so server semantics (Accept, API version) are preserved.
+    // that omit it. The Accept header switches to the raw diff/patch
+    // representation when the caller opted in via `?media=`.
+    let accept_header = media_override.unwrap_or("application/vnd.github+json");
     let mut builder = HTTP_CLIENT
         .get(&url)
         .timeout(Duration::from_secs(20))
-        .header("Accept", "application/vnd.github+json")
+        .header("Accept", accept_header)
         .header("X-GitHub-Api-Version", "2022-11-28")
         .header("User-Agent", "rwayve-app");
 
@@ -116,6 +164,16 @@ pub async fn github_proxy(req: HttpRequest, path: web::Path<String>) -> impl Res
     };
 
     let status = response.status().as_u16();
+    // Capture upstream Content-Type so the diff/patch branch surfaces
+    // as `text/plain` (or whatever GitHub returned) rather than being
+    // mislabeled JSON. For the JSON branch GitHub returns
+    // `application/json; charset=utf-8`, so the existing behavior is
+    // preserved — just sourced from upstream instead of hardcoded.
+    let upstream_content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
     let body = match response.bytes().await {
         Ok(b) => b.to_vec(),
         Err(e) => {
@@ -126,7 +184,7 @@ pub async fn github_proxy(req: HttpRequest, path: web::Path<String>) -> impl Res
 
     // Cache only successful responses — caching a 403/500 would force
     // the user to wait for the TTL even after the rate limit recovers.
-    if (200..300).contains(&status) {
+    if cache_enabled && (200..300).contains(&status) {
         GITHUB_CACHE
             .insert(
                 key,
@@ -138,12 +196,20 @@ pub async fn github_proxy(req: HttpRequest, path: web::Path<String>) -> impl Res
             .await;
     }
 
+    let response_content_type = upstream_content_type.unwrap_or_else(|| {
+        if media_override.is_some() {
+            "text/plain; charset=utf-8".to_string()
+        } else {
+            "application/json".to_string()
+        }
+    });
+
     HttpResponse::build(
         actix_web::http::StatusCode::from_u16(status)
             .unwrap_or(actix_web::http::StatusCode::OK),
     )
     .insert_header(("X-Wayve-Cache", "MISS"))
-    .insert_header(("Content-Type", "application/json"))
+    .insert_header(("Content-Type", response_content_type))
     .body(body)
 }
 

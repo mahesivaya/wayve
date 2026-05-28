@@ -639,6 +639,250 @@
   font-size: var(--text-xs);
 }
 
+/* ── Inline commit-diff view ──
+   Each commit row is now a button that toggles an inline diff panel
+   showing the patch for every changed file. The github.com link stays
+   as a tiny outbound icon on the right so users can still open the
+   full PR view if they want. */
+.github-commit-node {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.github-commit-node:last-child {
+  border-bottom: 0;
+}
+
+.github-commit.is-open {
+  background: var(--color-surface-hover);
+}
+
+/* Override the inherited row border so .github-commit-node owns it
+   instead — otherwise the divider doubles up between the toggle row
+   and the diff panel. */
+.github-commit-node > .github-commit {
+  border-bottom: 0;
+}
+
+.github-commit-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.github-commit-open {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.github-commit-open:hover {
+  color: var(--color-primary-action);
+  border-color: var(--color-primary-action);
+  background: var(--color-surface-hover);
+}
+
+.github-commit-stat {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.github-commit-stat.is-add {
+  color: var(--diff-add-strong, #1a7f37);
+}
+
+.github-commit-stat.is-del {
+  color: var(--diff-del-strong, #cf222e);
+}
+
+.github-commit-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 14px 14px;
+  background: var(--color-surface-soft);
+  border-top: 1px solid var(--color-border);
+}
+
+.github-commit-file {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.github-commit-file-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--color-surface-tint);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+
+.github-commit-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.github-commit-file-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.github-commit-status {
+  font-style: normal;
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-surface-tint-cool);
+  color: var(--color-text-muted);
+}
+
+.github-commit-status.status-added {
+  background: var(--diff-add-soft, #dafbe1);
+  color: var(--diff-add-strong, #1a7f37);
+}
+
+.github-commit-status.status-removed {
+  background: var(--diff-del-soft, #ffebe9);
+  color: var(--diff-del-strong, #cf222e);
+}
+
+.github-commit-status.status-modified,
+.github-commit-status.status-renamed {
+  background: var(--diff-edit-soft, #fff8c5);
+  color: var(--diff-edit-strong, #9a6700);
+}
+
+/* Patch body — monospace, line-by-line. Each line is rendered as a
+   <span> with a class for its kind so we can color the diff inline
+   without a heavy syntax-highlighter dependency. */
+.github-commit-patch {
+  margin: 0;
+  padding: 8px 0;
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.github-commit-patch-line {
+  display: block;
+  padding: 0 12px;
+  white-space: pre;
+}
+
+.github-commit-patch-line.diff-add {
+  background: var(--diff-add-soft, #e6ffec);
+  color: var(--diff-add-strong, #1a7f37);
+}
+
+.github-commit-patch-line.diff-del {
+  background: var(--diff-del-soft, #ffebe9);
+  color: var(--diff-del-strong, #82071e);
+}
+
+.github-commit-patch-line.diff-hunk {
+  background: var(--color-surface-tint);
+  color: var(--color-text-muted);
+}
+
+.github-commit-nopatch {
+  padding: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Full-diff fallback — opt-in fetch via the proxy's `?media=diff`
+   branch when one or more files have no inline patch (e.g. text file
+   over GitHub's ~300 KB JSON patch limit). The button stays adjacent
+   to the per-file articles so the user understands it as an addition
+   to what's already shown. */
+.github-commit-fulldiff {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.github-commit-fulldiff-btn {
+  align-self: flex-start;
+  padding: 7px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.github-commit-fulldiff-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary-action);
+}
+
+.github-commit-fulldiff-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* When the raw diff is rendered as one pre block (vs the per-file
+   articles), cap the height so the rest of the page stays usable. */
+.github-commit-patch.is-full {
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+/* `diff --git a/... b/...` lines that split each file's section in
+   the raw unified diff. Render as faint headers so the user can scan
+   between files. */
+.github-commit-patch-line.diff-file {
+  background: var(--color-surface-tint);
+  color: var(--color-text-primary);
+  font-weight: 700;
+  border-top: 1px solid var(--color-border);
+}
+
+.github-commit-patch-line.diff-file-marker {
+  color: var(--color-text-muted);
+}
+
 .github-run em {
   flex: 0 0 auto;
   border-radius: 999px;

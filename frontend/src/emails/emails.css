@@ -520,6 +520,20 @@
   color: var(--color-surface);
 }
 
+/* "All Accounts" filter pill — wrap the emoji + label so the unread-count
+   chip can sit flush on the right, mirroring the per-account row layout. */
+.filter-btn-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-btn.active .account-unread-count {
+  background: var(--color-text-primary);
+  color: var(--color-surface);
+}
+
 /* Shared-inbox surface in the sidebar. The chip + soft purple bar are
    the only differences from a personal mailbox — keeps the row scannable
    when a user has both kinds. */

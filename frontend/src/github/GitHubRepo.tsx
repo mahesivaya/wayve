@@ -72,6 +72,35 @@ type CommitItem = {
   } | null;
 };
 
+/**
+ * Detail view of a single commit fetched from
+ * `/repos/{owner}/{repo}/commits/{sha}`. The diff payload lives under
+ * `files[].patch` — a unified-diff string that we render line-by-line
+ * with +/- coloring. `stats` rolls up additions/deletions across files
+ * so the commit row can show "+12 −4" without summing patches client-
+ * side.
+ */
+type CommitFile = {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string | null;
+  previous_filename?: string | null;
+};
+
+type CommitDetail = {
+  sha: string;
+  files?: CommitFile[];
+  stats?: {
+    total: number;
+    additions: number;
+    deletions: number;
+  };
+  parents?: Array<{ sha: string; html_url: string }>;
+};
+
 type RunsResponse = {
   workflow_runs: WorkflowRun[];
   total_count: number;
@@ -399,6 +428,22 @@ export default function GitHubRepo() {
   const [fileText, setFileText] = useState("");
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [commits, setCommits] = useState<CommitItem[]>([]);
+  // Per-commit detail (file diffs) loaded on demand when a commit row
+  // is expanded. Cached by SHA so toggling open → closed → open doesn't
+  // re-hit GitHub. Aux maps track which commits are expanded, currently
+  // loading, or have an error to surface inline.
+  const [expandedCommitShas, setExpandedCommitShas] = useState<Set<string>>(new Set());
+  const [commitDetailBySha, setCommitDetailBySha] = useState<Record<string, CommitDetail>>({});
+  const [loadingCommitShas, setLoadingCommitShas] = useState<Set<string>>(new Set());
+  const [errorByCommitSha, setErrorByCommitSha] = useState<Record<string, string>>({});
+  // Raw unified-diff text fetched on demand via the proxy's
+  // `?media=diff` opt-in. This is the fallback for commits where the
+  // JSON `files[].patch` is missing (GitHub truncates patches over
+  // ~300 KB or for binary-adjacent files). Keyed by SHA so re-opening
+  // the same commit's full diff is instant.
+  const [fullDiffBySha, setFullDiffBySha] = useState<Record<string, string>>({});
+  const [loadingFullDiffShas, setLoadingFullDiffShas] = useState<Set<string>>(new Set());
+  const [errorFullDiffBySha, setErrorFullDiffBySha] = useState<Record<string, string>>({});
   const [workflows, setWorkflows] = useState<ContentItem[]>([]);
   // Which workflow rows in the Actions tree are expanded. Defaults to
   // empty so every workflow starts collapsed — users can expand the ones
@@ -644,6 +689,97 @@ export default function GitHubRepo() {
       setCommits([]);
     }
   }, []);
+
+  // Expand a commit row inline to show its file-level diff. First open
+  // fetches the per-commit detail (which includes the patch for every
+  // changed file) via the same /api/github proxy that the rest of this
+  // page uses; subsequent toggles read from the in-component cache so
+  // re-opening is instant.
+  const toggleCommitDetail = useCallback(
+    async (sha: string) => {
+      let opened = false;
+      setExpandedCommitShas((current) => {
+        const next = new Set(current);
+        if (next.has(sha)) {
+          next.delete(sha);
+        } else {
+          next.add(sha);
+          opened = true;
+        }
+        return next;
+      });
+      if (!opened) return;
+      if (commitDetailBySha[sha]) return;
+
+      setLoadingCommitShas((current) => new Set(current).add(sha));
+      setErrorByCommitSha((current) => {
+        const next = { ...current };
+        delete next[sha];
+        return next;
+      });
+      try {
+        const data = await githubJson<CommitDetail>(
+          `${API_BASE}/commits/${encodeURIComponent(sha)}`,
+        );
+        setCommitDetailBySha((current) => ({ ...current, [sha]: data }));
+      } catch (err) {
+        setErrorByCommitSha((current) => ({
+          ...current,
+          [sha]:
+            err instanceof Error ? err.message : "Could not load commit diff",
+        }));
+      } finally {
+        setLoadingCommitShas((current) => {
+          const next = new Set(current);
+          next.delete(sha);
+          return next;
+        });
+      }
+    },
+    [commitDetailBySha],
+  );
+
+  // Fetch the raw unified diff for a commit through the proxy's
+  // `?media=diff` opt-in. Used when the JSON detail returned
+  // `files[]` without a `patch` (large text files, >300 KB). Cached by
+  // SHA so re-opening the full diff is instant.
+  const loadFullDiff = useCallback(async (sha: string) => {
+    if (fullDiffBySha[sha]) return;
+    setLoadingFullDiffShas((current) => new Set(current).add(sha));
+    setErrorFullDiffBySha((current) => {
+      const next = { ...current };
+      delete next[sha];
+      return next;
+    });
+    try {
+      const response = await fetch(
+        `${API_BASE}/commits/${encodeURIComponent(sha)}?media=diff`,
+        { credentials: "include" },
+      );
+      if (!response.ok) {
+        throw new Error(`GitHub diff failed (${response.status})`);
+      }
+      const text = await response.text();
+      // Cap at ~2 MB so a runaway commit can't blow the browser tab —
+      // GitHub itself caps the raw diff endpoint at a similar size.
+      const capped =
+        text.length > 2_000_000
+          ? `${text.slice(0, 2_000_000)}\n\n…diff truncated; open on GitHub for the full patch`
+          : text;
+      setFullDiffBySha((current) => ({ ...current, [sha]: capped }));
+    } catch (err) {
+      setErrorFullDiffBySha((current) => ({
+        ...current,
+        [sha]: err instanceof Error ? err.message : "Could not load full diff",
+      }));
+    } finally {
+      setLoadingFullDiffShas((current) => {
+        const next = new Set(current);
+        next.delete(sha);
+        return next;
+      });
+    }
+  }, [fullDiffBySha]);
 
   // Toggle the run-detail flow inline. First open also fetches the
   // jobs (with steps embedded) and caches them keyed by run id so
@@ -987,24 +1123,207 @@ export default function GitHubRepo() {
                 <h2>Commits</h2>
                 <span>{commits.length}</span>
               </div>
-              {commits.map((commit) => (
-                <a
-                  key={commit.sha}
-                  className="github-commit"
-                  href={commit.html_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <span className="github-commit-main">
-                    <strong>{firstLine(commit.commit.message)}</strong>
-                    <small>
-                      {(commit.author?.login ?? commit.commit.author?.name ?? "Unknown")} ·{" "}
-                      {commit.commit.author ? formatDate(commit.commit.author.date) : "Unknown"}
-                    </small>
-                  </span>
-                  <code>{commit.sha.slice(0, 7)}</code>
-                </a>
-              ))}
+              {commits.map((commit) => {
+                const isOpen = expandedCommitShas.has(commit.sha);
+                const isLoading = loadingCommitShas.has(commit.sha);
+                const detail = commitDetailBySha[commit.sha];
+                const errorText = errorByCommitSha[commit.sha];
+                return (
+                  <div key={commit.sha} className="github-commit-node">
+                    <div className={`github-commit ${isOpen ? "is-open" : ""}`}>
+                      <button
+                        type="button"
+                        className="github-commit-toggle"
+                        onClick={() => void toggleCommitDetail(commit.sha)}
+                        aria-expanded={isOpen}
+                        aria-label={`Toggle changes for ${commit.sha.slice(0, 7)}`}
+                      >
+                        <span
+                          className={`github-tree-toggle ${isOpen ? "open" : ""}`}
+                          aria-hidden="true"
+                        >
+                          <ChevronIcon />
+                        </span>
+                        <span className="github-commit-main">
+                          <strong>{firstLine(commit.commit.message)}</strong>
+                          <small>
+                            {(commit.author?.login ?? commit.commit.author?.name ?? "Unknown")}
+                            {" · "}
+                            {commit.commit.author
+                              ? formatDate(commit.commit.author.date)
+                              : "Unknown"}
+                            {detail?.stats && (
+                              <>
+                                {" · "}
+                                <span className="github-commit-stat is-add">
+                                  +{detail.stats.additions}
+                                </span>
+                                {" "}
+                                <span className="github-commit-stat is-del">
+                                  −{detail.stats.deletions}
+                                </span>
+                              </>
+                            )}
+                          </small>
+                        </span>
+                        <code>{commit.sha.slice(0, 7)}</code>
+                      </button>
+                      <a
+                        className="github-commit-open"
+                        href={commit.html_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Open on GitHub"
+                        aria-label="Open on GitHub"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        ↗
+                      </a>
+                    </div>
+
+                    {isOpen && (
+                      <div className="github-commit-diff">
+                        {isLoading && (
+                          <div className="github-empty">Loading changes…</div>
+                        )}
+                        {errorText && (
+                          <div className="github-banner">{errorText}</div>
+                        )}
+                        {!isLoading && !errorText && detail && (
+                          <>
+                            {(detail.files ?? []).map((file) => (
+                              <article
+                                key={file.filename}
+                                className={`github-commit-file status-${file.status}`}
+                              >
+                                <header className="github-commit-file-head">
+                                  <span className="github-commit-file-name">
+                                    {file.previous_filename
+                                      ? `${file.previous_filename} → ${file.filename}`
+                                      : file.filename}
+                                  </span>
+                                  <span className="github-commit-file-meta">
+                                    <em className={`github-commit-status status-${file.status}`}>
+                                      {file.status}
+                                    </em>
+                                    <span className="github-commit-stat is-add">
+                                      +{file.additions}
+                                    </span>
+                                    <span className="github-commit-stat is-del">
+                                      −{file.deletions}
+                                    </span>
+                                  </span>
+                                </header>
+                                {file.patch ? (
+                                  <pre className="github-commit-patch">
+                                    {file.patch.split("\n").map((line, idx) => {
+                                      let cls = "diff-ctx";
+                                      if (line.startsWith("@@")) cls = "diff-hunk";
+                                      else if (line.startsWith("+") && !line.startsWith("+++"))
+                                        cls = "diff-add";
+                                      else if (line.startsWith("-") && !line.startsWith("---"))
+                                        cls = "diff-del";
+                                      return (
+                                        <span
+                                          key={idx}
+                                          className={`github-commit-patch-line ${cls}`}
+                                        >
+                                          {line || " "}
+                                        </span>
+                                      );
+                                    })}
+                                  </pre>
+                                ) : (
+                                  <div className="github-commit-nopatch">
+                                    Binary file or diff not available — open on GitHub to
+                                    view.
+                                  </div>
+                                )}
+                              </article>
+                            ))}
+                            {(detail.files ?? []).length === 0 && (
+                              <div className="github-empty">
+                                This commit has no file changes recorded.
+                              </div>
+                            )}
+
+                            {/* Fallback: when ANY file in the JSON detail
+                                has no patch (GitHub omits patches over
+                                ~300 KB), surface a button that fetches
+                                the raw unified diff through the proxy's
+                                `?media=diff` branch. Hidden once we've
+                                already loaded the raw diff for this SHA. */}
+                            {(() => {
+                              const hasMissingPatch = (detail.files ?? []).some(
+                                (file) =>
+                                  !file.patch &&
+                                  file.status !== "added" &&
+                                  file.status !== "removed",
+                              );
+                              const rawDiff = fullDiffBySha[commit.sha];
+                              const fullLoading = loadingFullDiffShas.has(commit.sha);
+                              const fullError = errorFullDiffBySha[commit.sha];
+                              if (!hasMissingPatch && !rawDiff) return null;
+                              return (
+                                <div className="github-commit-fulldiff">
+                                  {!rawDiff && (
+                                    <button
+                                      type="button"
+                                      className="github-commit-fulldiff-btn"
+                                      onClick={() => void loadFullDiff(commit.sha)}
+                                      disabled={fullLoading}
+                                    >
+                                      {fullLoading
+                                        ? "Loading full diff…"
+                                        : "Load full diff"}
+                                    </button>
+                                  )}
+                                  {fullError && (
+                                    <div className="github-banner">{fullError}</div>
+                                  )}
+                                  {rawDiff && (
+                                    <pre className="github-commit-patch is-full">
+                                      {rawDiff.split("\n").map((line, idx) => {
+                                        let cls = "diff-ctx";
+                                        if (line.startsWith("diff --git"))
+                                          cls = "diff-file";
+                                        else if (line.startsWith("@@")) cls = "diff-hunk";
+                                        else if (
+                                          line.startsWith("+++") ||
+                                          line.startsWith("---")
+                                        )
+                                          cls = "diff-file-marker";
+                                        else if (
+                                          line.startsWith("+") &&
+                                          !line.startsWith("+++")
+                                        )
+                                          cls = "diff-add";
+                                        else if (
+                                          line.startsWith("-") &&
+                                          !line.startsWith("---")
+                                        )
+                                          cls = "diff-del";
+                                        return (
+                                          <span
+                                            key={idx}
+                                            className={`github-commit-patch-line ${cls}`}
+                                          >
+                                            {line || " "}
+                                          </span>
+                                        );
+                                      })}
+                                    </pre>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {commits.length === 0 && <div className="github-empty">No commits found.</div>}
             </div>
           )}

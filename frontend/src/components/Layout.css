@@ -517,6 +517,36 @@
   text-overflow: ellipsis;
 }
 
+/* Unread / activity badge on the right edge of a sidebar nav item.
+   Fed by /api/emails/unread-count for the Emails row; tile-shape pill
+   styled to match the active state's color tokens so it doesn't clash. */
+.sidebar-badge {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-link.active .sidebar-badge {
+  background: var(--color-surface);
+  color: var(--color-primary-action);
+}
+
+/* When the rail is icon-only, hiding the badge keeps the row compact —
+   the tooltip on the link still reflects the label, and the count
+   reappears when the sidebar is expanded. */
+.sidebar.collapsed .sidebar-badge {
+  display: none;
+}
+
 /* =============================
    ↔ COLLAPSED SIDEBAR
    Icon-only rail; labels and section headings are visually hidden but

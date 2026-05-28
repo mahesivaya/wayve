@@ -7,6 +7,7 @@ import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
+import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import "./Layout.css";
 
 function appKeyFromPath(pathname: string): AppKey {
@@ -71,6 +72,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  // Live unread badge for the Emails nav item. Fed by /api/emails/unread-count
+  // (idx_emails_unread partial index) — index-only scan even on huge inboxes.
+  // Gated on `user` so it doesn't fire while the session is still loading.
+  const emailsUnreadCount = useEmailsUnreadCount(Boolean(user));
 
   // Three-pane state management. Lazy init reads any persisted split
   // from a previous visit; the effect below mirrors changes back.
@@ -256,13 +261,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // When the split is open, sidebar clicks target the right pane instead
   // of navigating the URL. When closed, the link behaves normally.
   const renderSidebarItem = useCallback(
-    (path: string, app: AppKey, label: string, icon: ReactNode) => {
+    (path: string, app: AppKey, label: string, icon: ReactNode, badge?: number) => {
       const isLeftActive =
         app === "home"
           ? location.pathname === "/" || location.pathname === "/home"
           : location.pathname === path;
       const isMiddleActive = middleView === app;
       const isRightActive = rightView === app;
+      const showBadge = typeof badge === "number" && badge > 0;
 
       return (
         <Link
@@ -280,6 +286,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         >
           <span className="sidebar-icon" aria-hidden="true">{icon}</span>
           <span className="sidebar-label">{label}</span>
+          {showBadge && (
+            <span className="sidebar-badge" aria-label={`${badge} unread`}>
+              {badge > 99 ? "99+" : badge}
+            </span>
+          )}
         </Link>
       );
     },
@@ -451,7 +462,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         >
           <div className="sidebar-section">
             {renderSidebarItem("/", "home", "Home", "🏠")}
-            {renderSidebarItem("/emails", "emails", "Emails", "📧")}
+            {renderSidebarItem("/emails", "emails", "Emails", "📧", emailsUnreadCount)}
             {renderSidebarItem("/chat", "chat", "Chat", "💬")}
             {/* /call is intentionally absent — audio/video lives inside Chat. */}
             {renderSidebarItem("/scheduler", "scheduler", "Scheduler", "📅")}

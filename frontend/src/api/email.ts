@@ -78,6 +78,15 @@ const emailListPath = ({
 export const getAccounts = async <T = unknown>() =>
   apiFetchJson<T[]>("/api/accounts");
 
+// Total unread email count across all of the user's accounts. Backed by the
+// `idx_emails_unread` partial index, so this is cheap even on a huge inbox.
+// Powers the sidebar nav badge (and the "All Accounts" filter badge) without
+// loading the full inbox to count locally.
+export const getEmailsUnreadCount = async (): Promise<number> => {
+  const data = await apiFetchJson<{ count: number }>("/api/emails/unread-count");
+  return data.count ?? 0;
+};
+
 export const deleteAccount = async (id: number) => {
   await apiFetch(`/api/accounts/${id}`, {
     method: "DELETE",
@@ -130,6 +139,12 @@ export const connectYahoo = async (
 // Fire-and-forget — the caller logs failures but doesn't roll the UI back.
 export const markEmailRead = async (emailId: number): Promise<void> => {
   await apiFetchJson(`/api/emails/${emailId}/read`, { method: "POST" });
+  // Poke any mounted unread-count badges (Layout sidebar, "All Accounts"
+  // filter) so they refresh from /api/emails/unread-count instead of waiting
+  // for the 60s poll. Listener lives in useEmailsUnreadCount.
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("rwayve:emails-unread-changed"));
+  }
 };
 
 // Maps an arbitrary email address to the OAuth provider key the backend

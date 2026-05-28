@@ -96,7 +96,25 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
               className={`filter-btn ${activeAccount === null ? "active" : ""}`}
               onClick={() => setActiveAccount(null)}
             >
-              🌐 All Accounts
+              <span className="filter-btn-label">🌐 All Accounts</span>
+              {(() => {
+                // Sum of per-account `unread_count`s. The backend already
+                // returns these in /api/accounts (see email::account), so we
+                // skip an extra round-trip and the badge stays in lock-step
+                // with each row's own pill below.
+                const total = accounts.reduce(
+                  (sum, acc) => sum + (acc.unread_count ?? 0),
+                  0,
+                );
+                return total > 0 ? (
+                  <span
+                    className="account-unread-count"
+                    aria-label={`${total} unread emails across all accounts`}
+                  >
+                    {total > 99 ? "99+" : total}
+                  </span>
+                ) : null;
+              })()}
             </button>
 
             {accounts.map((acc) => {
