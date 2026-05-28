@@ -51,6 +51,7 @@ const PlatformDeveloper = lazy(() => import("./platformTeam/PlatformDeveloper"))
 const PlatformSupport = lazy(() => import("./platformTeam/PlatformSupport"));
 const PlatformWelcome = lazy(() => import("./platformTeam/PlatformWelcome"));
 const PlatformSecrets = lazy(() => import("./platformTeam/PlatformSecrets"));
+const PlatformLogs = lazy(() => import("./platformTeam/PlatformLogs"));
 const Pricing = lazy(() => import("./pricing/Pricing"));
 const Enterprise = lazy(() => import("./marketing/Enterprise"));
 const Support = lazy(() => import("./marketing/Support"));
@@ -218,6 +219,7 @@ export default function App() {
             <Route path="/platform/support" element={<PlatformSupport />} />
             <Route path="/platform/welcome" element={<PlatformWelcome />} />
             <Route path="/platform/secrets" element={<PlatformSecrets />} />
+            <Route path="/platform/logs" element={<PlatformLogs />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
             <Route path="/security/audit" element={<AuditSecurity />} />
             <Route path="/recover" element={<RecoverPage />} />

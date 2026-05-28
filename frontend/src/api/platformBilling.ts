@@ -170,3 +170,65 @@ export const updatePayrollRunStatus = (
     `/api/platform-billing/payroll-runs/${id}`,
     { method: "PATCH", body: JSON.stringify({ status }) },
   );
+
+// ── Live Stripe account snapshot ─────────────────────────────────────
+// Calls Stripe's REST API directly server-side (balance, payouts,
+// charges, balance_transactions) and projects the responses into a
+// small, stable JSON shape. Returns `configured: false` when the
+// environment has no STRIPE_SECRET_KEY (so the UI can render a stub).
+
+export type StripeBalanceAmount = {
+  amount: number;
+  currency: string;
+};
+
+export type StripePayoutRow = {
+  id: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  status: string | null;
+  arrival_date: number | null;
+  created: number | null;
+  type: string | null;
+  description: string | null;
+};
+
+export type StripeChargeRow = {
+  id: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  status: string | null;
+  paid: boolean | null;
+  refunded: boolean | null;
+  created: number | null;
+  description: string | null;
+  receipt_url: string | null;
+  customer_email: string | null;
+  customer_name: string | null;
+};
+
+export type StripeSnapshot =
+  | {
+      configured: false;
+      message: string;
+    }
+  | {
+      configured: true;
+      test_mode: boolean;
+      balance: {
+        pending: StripeBalanceAmount[];
+        available: StripeBalanceAmount[];
+      };
+      payouts: StripePayoutRow[];
+      charges: StripeChargeRow[];
+      last_30d: {
+        gross_cents: number;
+        fees_cents: number;
+        net_cents: number;
+        transaction_count: number;
+        currency: string;
+      };
+    };
+
+export const getStripeSnapshot = () =>
+  apiFetchJson<StripeSnapshot>("/api/platform-billing/stripe/snapshot");

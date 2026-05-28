@@ -4,10 +4,12 @@ pub mod audit;
 pub mod auth;
 pub mod config;
 pub mod email;
+pub mod error_logs;
 pub mod health;
 pub mod recovery;
 pub mod shared_inbox;
 pub mod sso;
+pub mod support;
 pub mod user;
 
 use actix_web::web;
@@ -71,5 +73,16 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(recovery::put_wrapped_key)
         .service(recovery::delete_wrapped_key)
         .service(recovery::get_basic_key)
-        .service(recovery::put_basic_key);
+        .service(recovery::put_basic_key)
+        .service(support::create_ticket)
+        .service(support::list_my_tickets)
+        .service(support::get_ticket)
+        .service(support::admin_list_tickets)
+        .service(support::admin_update_ticket)
+        .service(support::upload_ticket_attachments)
+        .service(support::list_ticket_attachments)
+        .service(support::download_ticket_attachment)
+        .service(support::delete_ticket_attachment)
+        .service(error_logs::ingest_client_error)
+        .service(error_logs::list_error_logs);
 }

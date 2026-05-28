@@ -8,9 +8,11 @@ import { AuthProvider } from "./auth/AuthContext";
 import { CustomThemeProvider } from "./theme/CustomThemeContext";
 import ThemeSyncBridge from "./theme/ThemeSyncBridge";
 import { installDevLog } from "./utils/devlog";
+import { installErrorReporter } from "./utils/errorReporter";
 import { loadRuntimeConfig } from "./config/runtimeConfig";
 
 installDevLog();
+installErrorReporter();
 
 // Resolve runtime config (API/WS base) before rendering so the first request
 // uses the right origin. `loadRuntimeConfig` never rejects — it falls back to

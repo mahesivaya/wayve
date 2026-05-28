@@ -373,3 +373,106 @@
   color: var(--color-success-bright);
   background: rgb(16, 185, 129, 0.12);
 }
+
+/* Support card — list of the user's own tickets + entry into the modal. */
+.settings-support-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.settings-support-head .settings-card-title {
+  margin: 0;
+}
+
+.settings-support-empty {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+}
+
+.settings-link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-primary-action);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.settings-ticket-list {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.settings-ticket-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.settings-ticket-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-ticket-subject {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-ticket-meta {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.settings-ticket-status {
+  flex: 0 0 auto;
+  text-transform: capitalize;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.settings-ticket-status.status-open {
+  background: rgb(245, 158, 11, 0.12);
+  color: #b45309;
+  border-color: rgb(245, 158, 11, 0.25);
+}
+
+.settings-ticket-status.status-in_progress {
+  background: rgb(59, 130, 246, 0.12);
+  color: #1e40af;
+  border-color: rgb(59, 130, 246, 0.25);
+}
+
+.settings-ticket-status.status-resolved {
+  background: rgb(16, 185, 129, 0.12);
+  color: #047857;
+  border-color: rgb(16, 185, 129, 0.25);
+}
+
+.settings-ticket-status.status-closed {
+  background: rgb(107, 114, 128, 0.12);
+  color: #4b5563;
+  border-color: rgb(107, 114, 128, 0.25);
+}

@@ -1,6 +1,16 @@
 import { getApiBase } from "../config/env";
 import { clearAuthToken, getAuthToken } from "../auth/token";
 import { logger } from "../utils/logger";
+import { reportClientError } from "./errorLogs";
+
+// Skip reporting failures of the error-log endpoint itself — otherwise a
+// broken logger fans out into an infinite POST loop. Also skip routine
+// 401 (treated as session expiry, surfaced via redirect, not an error).
+function shouldReportFailure(path: string, status?: number): boolean {
+  if (path.includes("/api/error-logs")) return false;
+  if (status === 401) return false;
+  return true;
+}
 
 type ApiOptions =
   RequestInit & {
@@ -57,11 +67,19 @@ export async function apiFetch(
         }
       );
   } catch (err) {
-    throw new Error(
+    const message =
       err instanceof TypeError
         ? "Backend did not return a response. Check that the backend is running and not panicking for this request."
-        : "Network request failed"
-    );
+        : "Network request failed";
+    if (shouldReportFailure(path)) {
+      reportClientError({
+        severity: "error",
+        message: `[network] ${message}`,
+        method: (rest.method as string | undefined) ?? "GET",
+        extra: { path },
+      });
+    }
+    throw new Error(message);
   }
 
   // ================= 401 =================
@@ -156,6 +174,24 @@ export async function apiFetch(
       } catch {
         // give up — leave the generic message
       }
+    }
+
+    // Report failed API responses to the central error log so platform
+    // staff can see what users hit. We narrow the report to genuinely
+    // unexpected failures: 5xx (server fault) and unauthenticated 4xx
+    // that aren't 401 — 4xx validation errors are intentionally noisy.
+    if (
+      shouldReportFailure(path, response.status) &&
+      (response.status >= 500 || response.status === 0)
+    ) {
+      reportClientError({
+        severity: "error",
+        message: `[api ${response.status}] ${message}`,
+        method: (rest.method as string | undefined) ?? "GET",
+        status_code: response.status,
+        request_id: response.headers.get("x-request-id") ?? undefined,
+        extra: { path },
+      });
     }
 
     throw new Error(

@@ -799,6 +799,39 @@
   background: var(--color-primary-action-hover);
 }
 
+/* Bug-report shortcut in the header — sits just before the Upgrade
+   button so the monetization CTA still has the right-edge emphasis.
+   Renders the multi-color amber warning glyph at a fixed size; we do
+   not let it inherit currentColor because the icon is intentionally
+   two-tone (amber + dark exclamation). */
+.header-bug-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 3px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+
+.header-bug-btn:hover {
+  background: var(--color-surface-generic-pale, rgb(0, 0, 0, 0.06));
+}
+
+.header-bug-btn:focus-visible {
+  outline: 2px solid var(--color-primary-border);
+  outline-offset: 1px;
+}
+
+.header-bug-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
 /* =============================
    📱 LAYOUT — TABLET & PHONE
    ============================

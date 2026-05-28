@@ -334,6 +334,40 @@ pub async fn cancel_at_period_end(subscription_id: &str) -> Result<()> {
     Ok(())
 }
 
+// ── Read-only "Stripe account" snapshot helpers ──────────────────────
+// Used by the platform billing console to render live balance / payouts
+// / charges, instead of (or alongside) the local DB projection. Every
+// call hits Stripe directly; callers should rate-limit / cache at the
+// handler level.
+
+/// Account balance — pending + available amounts per currency.
+pub async fn fetch_balance() -> Result<Value> {
+    get_json("/balance", &[]).await
+}
+
+/// Most recent payouts (money landing in the connected bank).
+pub async fn list_payouts(limit: u32) -> Result<Value> {
+    get_json("/payouts", &[("limit", limit.to_string())]).await
+}
+
+/// Most recent charges (individual payment events).
+pub async fn list_charges(limit: u32) -> Result<Value> {
+    get_json("/charges", &[("limit", limit.to_string())]).await
+}
+
+/// Balance transactions in a time window — used to compute the
+/// gross / net / fees totals for "last 30 days".
+pub async fn list_balance_transactions(created_gte_unix: i64, limit: u32) -> Result<Value> {
+    get_json(
+        "/balance_transactions",
+        &[
+            ("limit", limit.to_string()),
+            ("created[gte]", created_gte_unix.to_string()),
+        ],
+    )
+    .await
+}
+
 /// Verify a Stripe `Stripe-Signature` header against the raw request body.
 /// Header form: `t=<unix>,v1=<hex hmac>,v1=<hex hmac>...`.
 pub fn verify_webhook_signature(payload: &[u8], sig_header: &str, secret: &str) -> bool {

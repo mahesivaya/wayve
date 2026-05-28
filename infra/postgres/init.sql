@@ -604,6 +604,91 @@ CREATE TABLE IF NOT EXISTS task_attachments (
 
 CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);
 
+-- ============================================================
+-- 🎫 SUPPORT TICKETS
+-- ------------------------------------------------------------
+-- Lightweight in-app ticketing. Any authenticated user (personal,
+-- organization member, platform staff) can raise a ticket from the
+-- "Help & Report issue" item in the header profile menu or from the
+-- Support section on /settings. Tickets are read & resolved by
+-- platform staff holding the `tickets:manage` permission (the
+-- `support` role in rbac.rs); replies are sent off-band by email
+-- using the ticket's email-of-record. Status moves through
+-- open → in_progress → resolved → closed.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS support_tickets (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+    subject TEXT NOT NULL,
+    description TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'other'
+        CHECK (category IN ('bug', 'feature', 'billing', 'account', 'other')),
+    status TEXT NOT NULL DEFAULT 'open'
+        CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_user ON support_tickets(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_org ON support_tickets(organization_id, created_at DESC)
+    WHERE organization_id IS NOT NULL;
+
+-- Screenshots / files uploaded with the ticket. Mirrors task_attachments:
+-- per-row AES-GCM ciphertext blob on disk under ./uploads, base64 IV in DB.
+CREATE TABLE IF NOT EXISTS support_ticket_attachments (
+    id BIGSERIAL PRIMARY KEY,
+    ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    file_type TEXT,
+    file_path TEXT NOT NULL,
+    file_iv TEXT,
+    size BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_support_ticket_attachments_ticket
+    ON support_ticket_attachments(ticket_id);
+
+-- ============================================================
+-- 🪵 ERROR LOGS — centralized client + server error dashboard
+-- ------------------------------------------------------------
+-- Anything that breaks for a user — JS errors, unhandled promise
+-- rejections, 5xx API responses, backend AppError::Internal — gets
+-- POSTed to /api/error-logs and rendered on /platform/logs for staff
+-- with `logs:read`. `source` discriminates 'client' vs 'server'.
+--
+-- The ingest endpoint is intentionally auth-optional so we still
+-- capture errors that happen before login or when the token is bad
+-- (the most interesting failure modes). `user_id` is best-effort.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS error_logs (
+    id BIGSERIAL PRIMARY KEY,
+    source TEXT NOT NULL DEFAULT 'client'
+        CHECK (source IN ('client', 'server')),
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    session_id TEXT,
+    severity TEXT NOT NULL DEFAULT 'error'
+        CHECK (severity IN ('error', 'warn', 'info')),
+    message TEXT NOT NULL,
+    stack TEXT,
+    url TEXT,
+    user_agent TEXT,
+    request_id TEXT,
+    status_code INTEGER,
+    method TEXT,
+    extra JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_error_logs_created_at
+    ON error_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_error_logs_user
+    ON error_logs (user_id, created_at DESC)
+    WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_error_logs_source
+    ON error_logs (source, created_at DESC);
+
 -- ── Activity dashboard (GET /api/home/summary) supporting indexes ──
 -- Partial index on unread emails — both the COUNT and the "5 most recent
 -- unread" preview use this, so the query is an index-only scan even on a

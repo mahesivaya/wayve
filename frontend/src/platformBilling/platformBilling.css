@@ -300,3 +300,67 @@ html[data-theme="dark"] .pb-page {
   --panel-border: var(--color-text-secondary);
   --panel-subtle: var(--color-text-primary);
 }
+
+/* Stripe tab — extra status pills + the refresh button. Pill colors
+   reuse the existing semantic tokens so dark mode picks them up. */
+.pb-pill.succeeded,
+.pb-pill.in_transit,
+.pb-pill.captured {
+  background: rgb(16, 185, 129, 0.12);
+  color: #047857;
+  border-color: rgb(16, 185, 129, 0.25);
+}
+
+.pb-pill.failed,
+.pb-pill.refunded {
+  background: rgb(239, 68, 68, 0.12);
+  color: #b91c1c;
+  border-color: rgb(239, 68, 68, 0.25);
+}
+
+.pb-pill.pending {
+  background: rgb(245, 158, 11, 0.14);
+  color: #b45309;
+  border-color: rgb(245, 158, 11, 0.3);
+}
+
+.pb-stripe-refresh {
+  margin-left: auto;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.pb-stripe-refresh:hover:not(:disabled) {
+  background: var(--color-surface-generic-pale, rgb(0, 0, 0, 0.04));
+}
+
+.pb-stripe-refresh:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pb-stripe-pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border-radius: 999px;
+  background: rgb(245, 158, 11, 0.18);
+  color: #b45309;
+  border: 1px solid rgb(245, 158, 11, 0.35);
+}
+
+.pb-link {
+  color: var(--color-primary-action);
+  text-decoration: underline;
+  font-size: 0.85rem;
+}

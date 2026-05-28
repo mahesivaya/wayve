@@ -1,0 +1,178 @@
+/* PlatformLogs — error dashboard styling. Reuses pt-* tokens for the
+   header + cards; this file just adds filter row + row coloring + the
+   expandable detail panel. */
+
+.logs-filters {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.logs-search {
+  margin-left: auto;
+  min-width: 220px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.logs-autorefresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.logs-table {
+  font-size: 0.85rem;
+}
+
+.logs-table th,
+.logs-table td {
+  vertical-align: top;
+  padding: 8px 10px;
+}
+
+.logs-row {
+  cursor: pointer;
+}
+
+.logs-row:hover {
+  background: var(--color-surface-generic-pale, rgb(0, 0, 0, 0.03));
+}
+
+.logs-row.error {
+  border-left: 3px solid #dc2626;
+}
+
+.logs-row.warn {
+  border-left: 3px solid #f59e0b;
+}
+
+.logs-row.info {
+  border-left: 3px solid #3b82f6;
+}
+
+.logs-time {
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.logs-message {
+  max-width: 420px;
+  word-break: break-word;
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.logs-url {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.logs-detail-row {
+  background: var(--color-surface-generic-pale, rgb(0, 0, 0, 0.025));
+}
+
+.logs-detail {
+  display: grid;
+  gap: 10px;
+  padding: 8px 6px 14px;
+}
+
+.logs-detail-block {
+  display: grid;
+  gap: 4px;
+}
+
+.logs-detail-block pre {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--color-text-ink, #0f172a);
+  color: var(--color-warning-soft-amber, #fcd34d);
+  border-radius: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.logs-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 6px 12px;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.logs-detail-ua {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Pill variants used only on the logs dashboard. The source / severity
+   pills reuse pt-pill base; these add color tints. */
+.pt-pill.client {
+  background: rgb(59, 130, 246, 0.12);
+  color: #1e40af;
+  border-color: rgb(59, 130, 246, 0.3);
+}
+
+.pt-pill.server {
+  background: rgb(168, 85, 247, 0.12);
+  color: #6b21a8;
+  border-color: rgb(168, 85, 247, 0.3);
+}
+
+.pt-pill.error {
+  background: rgb(239, 68, 68, 0.14);
+  color: #b91c1c;
+  border-color: rgb(239, 68, 68, 0.3);
+}
+
+.pt-pill.warn {
+  background: rgb(245, 158, 11, 0.14);
+  color: #b45309;
+  border-color: rgb(245, 158, 11, 0.3);
+}
+
+.pt-pill.info {
+  background: rgb(59, 130, 246, 0.1);
+  color: #1d4ed8;
+  border-color: rgb(59, 130, 246, 0.25);
+}
+
+.pt-pill.code-5xx {
+  background: rgb(239, 68, 68, 0.14);
+  color: #b91c1c;
+  border-color: rgb(239, 68, 68, 0.3);
+}
+
+.pt-pill.code-4xx {
+  background: rgb(245, 158, 11, 0.14);
+  color: #b45309;
+  border-color: rgb(245, 158, 11, 0.3);
+}
+
+.pt-pill.code-2xx,
+.pt-pill.code-3xx {
+  background: rgb(16, 185, 129, 0.12);
+  color: #047857;
+  border-color: rgb(16, 185, 129, 0.25);
+}

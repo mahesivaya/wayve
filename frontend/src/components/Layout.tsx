@@ -6,6 +6,7 @@ import { Suspense, useState, useCallback, useEffect, useRef, type ReactNode } fr
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
+import SupportModal from "../support/SupportModal";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import "./Layout.css";
@@ -105,6 +106,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   // On narrow viewports the header nav collapses behind a hamburger toggle.
   const [navOpen, setNavOpen] = useState(false);
+
+  // "Report a bug" overlay — opened from the red header icon, also reachable
+  // from the profile menu's "Help & Report issue" item.
+  const [supportOpen, setSupportOpen] = useState(false);
 
   // Desktop sidebar can be collapsed to an icon-only rail. Persisted so the
   // user's preference survives reloads.
@@ -340,6 +345,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       hasPermission(user, "api_keys:manage"));
   const canAccessPlatformSupport =
     user.scope === "platform" && hasPermission(user, "members:read");
+  const canAccessPlatformLogs =
+    user.scope === "platform" &&
+    (hasPermission(user, "logs:read") ||
+      hasPermission(user, "logs:read_limited"));
   const currentPlanCode = authedUser.current_plan?.code ?? "basic_user";
   const isBasicPersonalUser =
     authedUser.account_type === "personal" && currentPlanCode === "basic_user";
@@ -369,7 +378,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     canAccessSecurity ||
     canAccessPlatformBilling ||
     canAccessPlatformDeveloper ||
-    canAccessPlatformSupport;
+    canAccessPlatformSupport ||
+    canAccessPlatformLogs;
 
   return (
     <div className="app">
@@ -418,6 +428,35 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         {!location.pathname.startsWith("/emails") && <SearchBar />}
 
         <div className="actions">
+          {/* Bug-report shortcut. Always visible to signed-in users so
+              issues can be filed from anywhere without first hunting through
+              Settings. Same overlay as ProfileMenu's "Help & Report issue".
+              Sits before Upgrade so the monetization CTA still has primary
+              emphasis on the right edge. */}
+          <button
+            type="button"
+            className="header-bug-btn"
+            onClick={() => setSupportOpen(true)}
+            title="Report an issue"
+            aria-label="Report an issue"
+          >
+            <svg
+              className="header-bug-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              {/* Amber warning triangle — rounded corners, slightly inset
+                  from the viewBox so the corner radius reads cleanly. */}
+              <path
+                d="M11.13 3.3a1 1 0 0 1 1.74 0l9.4 16.3a1 1 0 0 1-.87 1.5H2.6a1 1 0 0 1-.87-1.5z"
+                fill="#f5a623"
+              />
+              {/* Dark exclamation mark — body + dot, sized to read at 20px. */}
+              <rect x="10.85" y="8.5" width="2.3" height="7.2" rx="1.05" fill="#2d2d2d" />
+              <circle cx="12" cy="18.4" r="1.35" fill="#2d2d2d" />
+            </svg>
+          </button>
+
           {/* Welcome / role label removed — the signed-in identity is
               already visible via the ProfileMenu avatar on the right.
               Keep the Upgrade nudge here because it's the single most
@@ -527,6 +566,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "Support",
                   "🛟",
                   location.pathname === "/platform/support",
+                )}
+              {canAccessPlatformLogs &&
+                renderSidebarLink(
+                  "/platform/logs",
+                  "Error Logs",
+                  "🪵",
+                  location.pathname === "/platform/logs",
                 )}
             </div>
           )}
@@ -693,6 +739,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </div>
       </div>
       </SearchProvider>
+
+      {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
     </div>
   );
 }

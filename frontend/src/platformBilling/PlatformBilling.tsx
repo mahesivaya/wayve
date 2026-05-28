@@ -11,6 +11,7 @@ import {
   EmployeeStatus,
   EmploymentType,
   getPlatformBillingOverview,
+  getStripeSnapshot,
   listEmployees,
   listOrganizationSubscriptions,
   listPayrollRuns,
@@ -22,6 +23,7 @@ import {
   PayrollRunInput,
   PlatformBillingOverview,
   PlatformInvoiceRow,
+  StripeSnapshot,
   updateEmployee,
   updatePayrollRunStatus,
   UserSubscriptionRow,
@@ -29,6 +31,7 @@ import {
 import "./platformBilling.css";
 
 type Tab =
+  | "stripe"
   | "users"
   | "organizations"
   | "invoices"
@@ -87,13 +90,20 @@ export default function PlatformBilling() {
     (hasPermission(user, "billing:read") || hasPermission(user, "billing:manage"));
   const canManage = hasPermission(user, "billing:manage");
 
-  const [tab, setTab] = useState<Tab>("users");
+  const [tab, setTab] = useState<Tab>("stripe");
   const [overview, setOverview] = useState<PlatformBillingOverview | null>(null);
   const [userSubs, setUserSubs] = useState<UserSubscriptionRow[]>([]);
   const [orgSubs, setOrgSubs] = useState<OrganizationSubscriptionRow[]>([]);
   const [invoices, setInvoices] = useState<PlatformInvoiceRow[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([]);
+
+  // Stripe account live snapshot — lazy-loaded the first time the user
+  // opens the "Stripe account" tab. Each fetch hits Stripe REST APIs so
+  // we don't auto-poll; the refresh button re-pulls on demand.
+  const [stripeSnap, setStripeSnap] = useState<StripeSnapshot | null>(null);
+  const [stripeLoading, setStripeLoading] = useState(false);
+  const [stripeError, setStripeError] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -271,9 +281,31 @@ export default function PlatformBilling() {
 
   // ---- Render ---------------------------------------------------------
 
+  const loadStripeSnapshot = useCallback(async () => {
+    setStripeError("");
+    setStripeLoading(true);
+    try {
+      const snap = await getStripeSnapshot();
+      setStripeSnap(snap);
+    } catch (err) {
+      setStripeError(err instanceof Error ? err.message : "Failed to load Stripe data");
+    } finally {
+      setStripeLoading(false);
+    }
+  }, []);
+
+  // First open of the Stripe tab triggers the live fetch. Subsequent
+  // visits use the cached snapshot until the user hits Refresh.
+  useEffect(() => {
+    if (tab === "stripe" && stripeSnap === null && !stripeLoading) {
+      void loadStripeSnapshot();
+    }
+  }, [tab, stripeSnap, stripeLoading, loadStripeSnapshot]);
+
   const tabs = useMemo(
     () =>
       [
+        { key: "stripe" as const, label: "Stripe account" },
         { key: "users" as const, label: `Users (${userSubs.length})` },
         { key: "organizations" as const, label: `Organizations (${orgSubs.length})` },
         { key: "invoices" as const, label: `Invoices (${invoices.length})` },
@@ -349,6 +381,209 @@ export default function PlatformBilling() {
           </button>
         ))}
       </nav>
+
+      {tab === "stripe" && (
+        <section className="pb-section">
+          <div className="pb-section-header">
+            <h2>Stripe account</h2>
+            <span className="pb-stat-sub">
+              Live data pulled directly from Stripe
+              {stripeSnap && stripeSnap.configured && stripeSnap.test_mode && (
+                <span className="pb-stripe-pill"> · TEST MODE</span>
+              )}
+            </span>
+            <button
+              type="button"
+              className="pb-stripe-refresh"
+              onClick={() => void loadStripeSnapshot()}
+              disabled={stripeLoading}
+            >
+              {stripeLoading ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+
+          {stripeError && <div className="pb-banner">{stripeError}</div>}
+
+          {stripeLoading && !stripeSnap && (
+            <div className="pb-empty">Loading Stripe snapshot…</div>
+          )}
+
+          {stripeSnap && !stripeSnap.configured && (
+            <div className="pb-empty">
+              Stripe isn't configured for this environment. Add{" "}
+              <code>STRIPE_SECRET_KEY</code> to the backend env and restart to
+              see live balance, payouts, and charges here.
+            </div>
+          )}
+
+          {stripeSnap && stripeSnap.configured && (
+            <>
+              {/* Balance + last-30d summary cards */}
+              <section className="pb-overview" aria-label="Stripe balance">
+                <Stat
+                  label="Available"
+                  value={
+                    stripeSnap.balance.available.length === 0
+                      ? "—"
+                      : stripeSnap.balance.available
+                          .map((b) =>
+                            fmtMoney(b.amount, b.currency.toUpperCase()),
+                          )
+                          .join(" · ")
+                  }
+                  sub="Ready to pay out"
+                />
+                <Stat
+                  label="Pending"
+                  value={
+                    stripeSnap.balance.pending.length === 0
+                      ? "—"
+                      : stripeSnap.balance.pending
+                          .map((b) =>
+                            fmtMoney(b.amount, b.currency.toUpperCase()),
+                          )
+                          .join(" · ")
+                  }
+                  sub="Awaiting capture / settlement"
+                />
+                <Stat
+                  label="Gross (30d)"
+                  value={fmtMoney(
+                    stripeSnap.last_30d.gross_cents,
+                    stripeSnap.last_30d.currency.toUpperCase(),
+                  )}
+                  sub={`${stripeSnap.last_30d.transaction_count} transactions`}
+                />
+                <Stat
+                  label="Net (30d)"
+                  value={fmtMoney(
+                    stripeSnap.last_30d.net_cents,
+                    stripeSnap.last_30d.currency.toUpperCase(),
+                  )}
+                  sub={`Fees ${fmtMoney(stripeSnap.last_30d.fees_cents, stripeSnap.last_30d.currency.toUpperCase())}`}
+                />
+              </section>
+
+              {/* Recent payouts */}
+              <div className="pb-section-header" style={{ marginTop: 24 }}>
+                <h3 style={{ margin: 0 }}>Recent payouts</h3>
+                <span className="pb-stat-sub">
+                  Transfers from Stripe balance to your bank
+                </span>
+              </div>
+              {stripeSnap.payouts.length === 0 ? (
+                <div className="pb-empty">No payouts yet.</div>
+              ) : (
+                <table className="pb-table">
+                  <thead>
+                    <tr>
+                      <th>Payout</th>
+                      <th>Status</th>
+                      <th>Arrival</th>
+                      <th>Created</th>
+                      <th className="right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stripeSnap.payouts.map((p) => (
+                      <tr key={p.id ?? Math.random()}>
+                        <td>
+                          <code>{p.id ?? "—"}</code>
+                          {p.description && (
+                            <>
+                              <br />
+                              <small style={{ color: "#6b7280" }}>{p.description}</small>
+                            </>
+                          )}
+                        </td>
+                        <td>
+                          <span className={`pb-pill ${p.status ?? ""}`}>
+                            {p.status ?? "—"}
+                          </span>
+                        </td>
+                        <td>{p.arrival_date ? new Date(p.arrival_date * 1000).toLocaleDateString() : "—"}</td>
+                        <td>{p.created ? new Date(p.created * 1000).toLocaleDateString() : "—"}</td>
+                        <td className="right">
+                          {fmtMoney(p.amount_cents, (p.currency ?? "usd").toUpperCase())}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {/* Recent charges */}
+              <div className="pb-section-header" style={{ marginTop: 24 }}>
+                <h3 style={{ margin: 0 }}>Recent charges</h3>
+                <span className="pb-stat-sub">Last 10 payment events</span>
+              </div>
+              {stripeSnap.charges.length === 0 ? (
+                <div className="pb-empty">No charges yet.</div>
+              ) : (
+                <table className="pb-table">
+                  <thead>
+                    <tr>
+                      <th>Charge</th>
+                      <th>Customer</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                      <th className="right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stripeSnap.charges.map((c) => (
+                      <tr key={c.id ?? Math.random()}>
+                        <td>
+                          <code>{c.id ?? "—"}</code>
+                          {c.description && (
+                            <>
+                              <br />
+                              <small style={{ color: "#6b7280" }}>{c.description}</small>
+                            </>
+                          )}
+                        </td>
+                        <td>
+                          {c.customer_email ?? "—"}
+                          {c.customer_name && (
+                            <>
+                              <br />
+                              <small style={{ color: "#6b7280" }}>{c.customer_name}</small>
+                            </>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className={`pb-pill ${c.refunded ? "refunded" : c.status ?? ""}`}
+                          >
+                            {c.refunded ? "refunded" : c.status ?? "—"}
+                          </span>
+                          {c.receipt_url && (
+                            <>
+                              {" "}
+                              <a
+                                href={c.receipt_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="pb-link"
+                              >
+                                receipt
+                              </a>
+                            </>
+                          )}
+                        </td>
+                        <td>{c.created ? new Date(c.created * 1000).toLocaleDateString() : "—"}</td>
+                        <td className="right">
+                          {fmtMoney(c.amount_cents, (c.currency ?? "usd").toUpperCase())}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       {tab === "users" && (
         <section className="pb-section">

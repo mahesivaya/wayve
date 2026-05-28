@@ -5,6 +5,7 @@
 // must not see other tenants' revenue.
 
 use crate::prelude::*;
+use crate::billing::provider as stripe;
 use wayve_security::rbac::{Permission, RoleContext, Scope, require_permission};
 use actix_web::{delete, patch, put};
 use chrono::{DateTime, NaiveDate, Utc};
@@ -22,7 +23,8 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(delete_employee)
         .service(list_payroll_runs)
         .service(create_payroll_run)
-        .service(update_payroll_run_status);
+        .service(update_payroll_run_status)
+        .service(get_stripe_snapshot);
 }
 
 async fn gate(
@@ -785,5 +787,151 @@ pub async fn update_payroll_run_status(
         "id": row.try_get::<i32, _>("id").unwrap_or(0),
         "status": row.try_get::<String, _>("status").unwrap_or_default(),
         "paid_at": paid_at,
+    })))
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Live Stripe account snapshot
+// ──────────────────────────────────────────────────────────────────────
+//
+// One endpoint that fans out to four Stripe REST calls in parallel and
+// projects the responses into a stable, compact JSON shape for the
+// platform billing dashboard. Stripe stays the source of truth — nothing
+// is persisted here.
+//
+//  * /v1/balance              — pending + available per currency
+//  * /v1/payouts?limit=10     — most recent transfers to the bank
+//  * /v1/charges?limit=10     — most recent payment attempts
+//  * /v1/balance_transactions — last 30 days, used for gross/net/fees
+//
+// Stripe returns amounts in minor units (cents); we forward them as-is.
+// Missing Stripe configuration (no STRIPE_SECRET_KEY) returns a 503 with
+// `configured: false` so the UI can render a stub instead of an error.
+
+#[get("/platform-billing/stripe/snapshot")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn get_stripe_snapshot(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    if let Err(resp) = gate(&req, pool.get_ref(), Permission::BillingRead).await {
+        return Ok(resp);
+    }
+    if !stripe::is_configured() {
+        // 200 + configured:false so the UI renders a friendly stub instead
+        // of an error banner. The frontend branches on `configured`.
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "configured": false,
+            "message": "STRIPE_SECRET_KEY not configured for this environment",
+        })));
+    }
+
+    let thirty_days_ago = (Utc::now() - chrono::Duration::days(30)).timestamp();
+
+    let (balance_res, payouts_res, charges_res, txns_res) = futures::join!(
+        stripe::fetch_balance(),
+        stripe::list_payouts(10),
+        stripe::list_charges(10),
+        stripe::list_balance_transactions(thirty_days_ago, 100),
+    );
+
+    let balance = balance_res.map_err(|e| AppError::Internal(format!("stripe balance: {e}")))?;
+    let payouts = payouts_res.map_err(|e| AppError::Internal(format!("stripe payouts: {e}")))?;
+    let charges = charges_res.map_err(|e| AppError::Internal(format!("stripe charges: {e}")))?;
+    let txns = txns_res
+        .map_err(|e| AppError::Internal(format!("stripe balance_transactions: {e}")))?;
+
+    let pending = balance
+        .get("pending")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let available = balance
+        .get("available")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let payouts_data = payouts.get("data").and_then(Value::as_array);
+    let payouts_view: Vec<Value> = payouts_data
+        .map(|arr| {
+            arr.iter()
+                .map(|p| {
+                    serde_json::json!({
+                        "id": p.get("id").and_then(Value::as_str),
+                        "amount_cents": p.get("amount").and_then(Value::as_i64),
+                        "currency": p.get("currency").and_then(Value::as_str),
+                        "status": p.get("status").and_then(Value::as_str),
+                        "arrival_date": p.get("arrival_date").and_then(Value::as_i64),
+                        "created": p.get("created").and_then(Value::as_i64),
+                        "type": p.get("type").and_then(Value::as_str),
+                        "description": p.get("description").and_then(Value::as_str),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let charges_data = charges.get("data").and_then(Value::as_array);
+    let charges_view: Vec<Value> = charges_data
+        .map(|arr| {
+            arr.iter()
+                .map(|c| {
+                    let bd = c.get("billing_details").cloned().unwrap_or(Value::Null);
+                    serde_json::json!({
+                        "id": c.get("id").and_then(Value::as_str),
+                        "amount_cents": c.get("amount").and_then(Value::as_i64),
+                        "currency": c.get("currency").and_then(Value::as_str),
+                        "status": c.get("status").and_then(Value::as_str),
+                        "paid": c.get("paid").and_then(Value::as_bool),
+                        "refunded": c.get("refunded").and_then(Value::as_bool),
+                        "created": c.get("created").and_then(Value::as_i64),
+                        "description": c.get("description").and_then(Value::as_str),
+                        "receipt_url": c.get("receipt_url").and_then(Value::as_str),
+                        "customer_email": bd.get("email").and_then(Value::as_str),
+                        "customer_name": bd.get("name").and_then(Value::as_str),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Aggregate last-30-days totals from the balance_transactions stream.
+    // gross = sum of amounts, fees = sum of fees, net = gross - fees.
+    let mut gross_cents: i64 = 0;
+    let mut fees_cents: i64 = 0;
+    let mut net_cents: i64 = 0;
+    let mut txn_count: i64 = 0;
+    let mut currency: Option<String> = None;
+    if let Some(arr) = txns.get("data").and_then(Value::as_array) {
+        for t in arr {
+            let amount = t.get("amount").and_then(Value::as_i64).unwrap_or(0);
+            let fee = t.get("fee").and_then(Value::as_i64).unwrap_or(0);
+            let net = t.get("net").and_then(Value::as_i64).unwrap_or(amount - fee);
+            gross_cents += amount;
+            fees_cents += fee;
+            net_cents += net;
+            txn_count += 1;
+            if currency.is_none() {
+                if let Some(c) = t.get("currency").and_then(Value::as_str) {
+                    currency = Some(c.to_string());
+                }
+            }
+        }
+    }
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "configured": true,
+        "test_mode": stripe::is_test_mode(),
+        "balance": {
+            "pending": pending,
+            "available": available,
+        },
+        "payouts": payouts_view,
+        "charges": charges_view,
+        "last_30d": {
+            "gross_cents": gross_cents,
+            "fees_cents": fees_cents,
+            "net_cents": net_cents,
+            "transaction_count": txn_count,
+            "currency": currency.unwrap_or_else(|| "usd".to_string()),
+        },
     })))
 }

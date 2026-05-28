@@ -129,7 +129,8 @@
 }
 
 .support-form input,
-.support-form textarea {
+.support-form textarea,
+.support-form select {
   font: inherit;
   font-size: 0.95rem;
   padding: 9px 11px;
@@ -142,10 +143,80 @@
 }
 
 .support-form input:focus,
-.support-form textarea:focus{
+.support-form textarea:focus,
+.support-form select:focus{
   outline: 2px solid var(--color-primary-border);
   outline-offset: 1px;
   border-color: var(--color-primary-action);
+}
+
+.support-attach-label input[type="file"] {
+  padding: 6px 4px;
+  font-size: 0.85rem;
+}
+
+.support-attach-hint {
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.support-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0 0;
+  display: grid;
+  gap: 4px;
+}
+
+.support-file-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  background: var(--color-email-bg);
+  border: 1px solid var(--color-border-muted);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+.support-file-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.support-file-size {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.support-file-remove {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.support-file-remove:hover {
+  color: var(--color-danger, #dc2626);
+}
+
+.support-error {
+  margin: 0;
+  color: var(--color-danger, #dc2626);
+  font-size: 0.85rem;
+  background: var(--color-danger-bg, #fee2e2);
+  padding: 8px 10px;
+  border-radius: 6px;
 }
 
 .support-form-actions {

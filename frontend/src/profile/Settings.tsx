@@ -8,6 +8,8 @@ import { getSubscription, type SubscriptionResponse } from "../api/billing";
 import { getProfile, type ProfileData } from "../api/profile";
 import { deleteMyOrganization } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
+import { listMyTickets, type SupportTicket } from "../api/support";
+import SupportModal from "../support/SupportModal";
 
 type Account = {
   id: number;
@@ -43,6 +45,9 @@ export default function Settings() {
   const [subscription, setSubscription] = useState<SubscriptionResponse | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [ticketsLoaded, setTicketsLoaded] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   // Only the org owner can tear the org back down. Mirrors the backend
   // gate so the danger-zone card simply doesn't render for admins,
@@ -89,9 +94,21 @@ export default function Settings() {
     }
   }, []);
 
+  const loadTickets = useCallback(async () => {
+    try {
+      const rows = await listMyTickets();
+      setTickets(rows);
+    } catch {
+      // Best effort — Support card just shows "Failed to load".
+    } finally {
+      setTicketsLoaded(true);
+    }
+  }, []);
+
   useEffect(() => {
     void loadData();
-  }, [loadData]);
+    void loadTickets();
+  }, [loadData, loadTickets]);
 
   const remove = async (id: number, email: string) => {
     if (!confirm(`Disconnect ${email}? Synced messages will be removed.`)) {
@@ -202,6 +219,53 @@ export default function Settings() {
           </div>
         </section>
 
+        <section className="settings-card">
+          <div className="settings-support-head">
+            <h2 className="settings-card-title">Support</h2>
+            <button
+              type="button"
+              className="settings-billing-link"
+              onClick={() => setSupportOpen(true)}
+            >
+              Report an issue
+            </button>
+          </div>
+          {!ticketsLoaded ? (
+            <p className="settings-loading-text">Loading tickets…</p>
+          ) : tickets.length === 0 ? (
+            <p className="settings-support-empty">
+              No tickets yet. If something isn't working, use{" "}
+              <button
+                type="button"
+                className="settings-link-button"
+                onClick={() => setSupportOpen(true)}
+              >
+                Report an issue
+              </button>{" "}
+              and we'll reply by email.
+            </p>
+          ) : (
+            <ul className="settings-ticket-list">
+              {tickets.map((t) => (
+                <li key={t.id} className="settings-ticket-row">
+                  <div className="settings-ticket-main">
+                    <span className="settings-ticket-subject" title={t.subject}>
+                      #{t.id} · {t.subject}
+                    </span>
+                    <span className="settings-ticket-meta">
+                      {t.category} · {new Date(t.created_at).toLocaleDateString()}
+                      {t.attachment_count > 0 && ` · ${t.attachment_count} attachment${t.attachment_count === 1 ? "" : "s"}`}
+                    </span>
+                  </div>
+                  <span className={`settings-ticket-status status-${t.status}`}>
+                    {t.status.replace("_", " ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         {isOrgOwner && (
           <section className="settings-card settings-danger">
             <h2 className="settings-card-title settings-danger-title">Danger zone</h2>
@@ -226,6 +290,13 @@ export default function Settings() {
         )}
 
       </div>
+
+      {supportOpen && (
+        <SupportModal
+          onClose={() => setSupportOpen(false)}
+          onSubmitted={() => void loadTickets()}
+        />
+      )}
     </div>
   );
 }
