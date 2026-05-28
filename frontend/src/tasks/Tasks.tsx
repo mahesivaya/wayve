@@ -51,12 +51,6 @@ const STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
   { value: "done", label: "Done" },
 ];
 
-const formatDate = (iso: string | null | undefined) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString();
-};
-
 export default function Tasks() {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
@@ -507,51 +501,49 @@ export default function Tasks() {
                     >
                       P{task.priority}
                     </span>
-                    <h3>{task.name}</h3>
+                    <h3>
+                      <button
+                        type="button"
+                        className="task-card-title-link"
+                        onClick={() => openEdit(task)}
+                        title="Open task details"
+                      >
+                        {task.name}
+                      </button>
+                    </h3>
                   </div>
-                  <p>{task.description || "No description added."}</p>
                 </div>
-                <div className="task-card-meta">
-                  {task.created_at && (
-                    <time dateTime={task.created_at}>
-                      {formatDate(task.created_at)}
-                    </time>
-                  )}
-                  <div className="task-card-actions">
-                    <button
-                      type="button"
-                      className="task-edit-btn"
-                      onClick={() => openEdit(task)}
-                      aria-label={`Edit ${task.name}`}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="task-delete-btn"
-                      onClick={() => deleteTask(task)}
-                      aria-label={`Delete ${task.name}`}
-                    >
-                      Delete
-                    </button>
-                    <select
-                      className={`task-status-select task-status-select--${task.status}`}
-                      value={task.status}
-                      onChange={(event) =>
-                        void changeStatus(
-                          task,
-                          event.target.value as TaskStatus,
-                        )
-                      }
-                      aria-label={`Status of ${task.name}`}
-                    >
-                      {STATUS_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="task-card-actions">
+                  <button
+                    type="button"
+                    className="task-edit-btn"
+                    onClick={() => openEdit(task)}
+                    aria-label={`Edit ${task.name}`}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="task-delete-btn"
+                    onClick={() => deleteTask(task)}
+                    aria-label={`Delete ${task.name}`}
+                  >
+                    Delete
+                  </button>
+                  <select
+                    className={`task-status-select task-status-select--${task.status}`}
+                    value={task.status}
+                    onChange={(event) =>
+                      void changeStatus(task, event.target.value as TaskStatus)
+                    }
+                    aria-label={`Status of ${task.name}`}
+                  >
+                    {STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </article>
             ))
@@ -580,34 +572,35 @@ export default function Tasks() {
                       >
                         P{task.priority}
                       </span>
-                      <h3>{task.name}</h3>
+                      <h3>
+                        <button
+                          type="button"
+                          className="task-card-title-link"
+                          onClick={() => openEdit(task)}
+                          title="Open task details"
+                        >
+                          {task.name}
+                        </button>
+                      </h3>
                     </div>
-                    <p>{task.description || "No description added."}</p>
                   </div>
-                  <div className="task-card-meta">
-                    {task.created_at && (
-                      <time dateTime={task.created_at}>
-                        {formatDate(task.created_at)}
-                      </time>
-                    )}
-                    <div className="task-card-actions">
-                      <button
-                        type="button"
-                        className="task-edit-btn"
-                        onClick={() => openEdit(task)}
-                        aria-label={`Edit ${task.name}`}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="task-delete-btn"
-                        onClick={() => deleteTask(task)}
-                        aria-label={`Delete ${task.name}`}
-                      >
-                        Delete
-                      </button>
-                    </div>
+                  <div className="task-card-actions">
+                    <button
+                      type="button"
+                      className="task-edit-btn"
+                      onClick={() => openEdit(task)}
+                      aria-label={`Edit ${task.name}`}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="task-delete-btn"
+                      onClick={() => deleteTask(task)}
+                      aria-label={`Delete ${task.name}`}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </article>
               ))}

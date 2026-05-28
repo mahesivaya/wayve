@@ -579,6 +579,29 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('to_do', '
 
 CREATE INDEX IF NOT EXISTS idx_tasks_user_priority ON tasks(user_id, priority DESC, created_at DESC);
 
+-- ── Activity dashboard (GET /api/home/summary) supporting indexes ──
+-- Partial index on unread emails — both the COUNT and the "5 most recent
+-- unread" preview use this, so the query is an index-only scan even on a
+-- huge inbox. Skips read mail entirely.
+CREATE INDEX IF NOT EXISTS idx_emails_unread
+ON emails (account_id, created_at DESC)
+WHERE is_read = false;
+
+-- Today's meetings for a user — used by the dashboard's Today card.
+CREATE INDEX IF NOT EXISTS idx_meetings_user_date
+ON meetings (user_id, date, start_time);
+
+-- Open tasks for a user, ordered by priority. The pre-existing
+-- idx_tasks_user_priority above scans all tasks; this partial variant
+-- skips done rows entirely so the dashboard's top-5 lookup is tighter.
+CREATE INDEX IF NOT EXISTS idx_tasks_user_open_priority
+ON tasks (user_id, priority DESC, created_at DESC)
+WHERE status != 'done';
+
+-- Most-recently-touched notes for a user.
+CREATE INDEX IF NOT EXISTS idx_notes_user_updated
+ON notes (user_id, updated_at DESC);
+
 
 -- 🔥 INDEXES
 

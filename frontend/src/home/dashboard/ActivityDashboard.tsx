@@ -1,32 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { getMeetings } from "../../api/scheduler";
-import { getEmails } from "../../api/email";
-import { getTasks, type Task } from "../../api/tasks";
-import { getNotes, type Note } from "../../api/notes";
-import type { EmailItem } from "../../emails/types";
+import {
+  getHomeSummary,
+  type HomeSummary,
+  type RecentItem,
+} from "../../api/home";
 import "./dashboard.css";
 
-// Backend shape from GET /api/meetings — matches `ApiMeeting` in Scheduler.tsx.
-type ApiMeeting = {
-  id: number;
-  title: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  participants?: string[] | null;
-};
-
-const todayISO = () => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
-
 const formatTime = (hhmm: string) => {
-  // Accepts "09:00" or "09:00:00".
+  // Backend serialises start_time/end_time as "HH:MM" (24h).
   const parts = hhmm.split(":").map(Number);
   const h = parts[0] ?? 0;
   const m = parts[1] ?? 0;
@@ -54,124 +36,98 @@ const formatRelative = (iso: string | null | undefined) => {
 
 const senderName = (sender: string | null | undefined) => {
   if (!sender) return "Unknown";
-  // "Name <email@x>" → "Name" else "email@x" → local part else raw.
   const m = sender.match(/^"?([^"<]+?)"?\s*<.*>$/);
   if (m) return m[1].trim();
   if (sender.includes("@")) return sender.split("@")[0];
   return sender;
 };
 
-const TASK_STATUS_LABEL: Record<Task["status"], string> = {
+// Map server-side status (`to_do | in_progress | in_review | done`) to a
+// human label. Done is filtered out by the backend, but keep the entry so
+// the type stays exhaustive.
+const TASK_STATUS_LABEL: Record<string, string> = {
   to_do: "To do",
   in_progress: "In progress",
   in_review: "In review",
   done: "Done",
 };
 
+// SessionStorage cache — paints the dashboard instantly on repeat visits
+// while the freshfetch runs in the background. Keyed per-tab so a logout
+// doesn't bleed across users.
+const CACHE_KEY = "rwayve.home.summary";
+
+function loadCachedSummary(): HomeSummary | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as HomeSummary;
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedSummary(summary: HomeSummary) {
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(summary));
+  } catch {
+    // ignore — private mode / quota
+  }
+}
+
 export default function ActivityDashboard() {
   const navigate = useNavigate();
-  const [meetings, setMeetings] = useState<ApiMeeting[] | null>(null);
-  const [emails, setEmails] = useState<EmailItem[] | null>(null);
-  const [tasks, setTasks] = useState<Task[] | null>(null);
-  const [notes, setNotes] = useState<Note[] | null>(null);
+  const [summary, setSummary] = useState<HomeSummary | null>(loadCachedSummary);
   const [captureValue, setCaptureValue] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-
-    const loadMeetings = async () => {
-      try {
-        const data = (await getMeetings()) as ApiMeeting[];
-        if (!cancelled) setMeetings(Array.isArray(data) ? data : []);
-      } catch {
-        if (!cancelled) setMeetings([]);
-      }
-    };
-
-    const loadEmails = async () => {
-      try {
-        const data = await getEmails<EmailItem>({ folder: "inbox" });
-        if (!cancelled) setEmails(data.emails);
-      } catch {
-        if (!cancelled) setEmails([]);
-      }
-    };
-
-    const loadTasks = async () => {
-      try {
-        const data = await getTasks();
-        if (!cancelled) setTasks(data);
-      } catch {
-        if (!cancelled) setTasks([]);
-      }
-    };
-
-    const loadNotes = async () => {
-      try {
-        const data = await getNotes();
-        if (!cancelled) setNotes(data);
-      } catch {
-        if (!cancelled) setNotes([]);
-      }
-    };
-
-    void Promise.all([loadMeetings(), loadEmails(), loadTasks(), loadNotes()]);
-
+    getHomeSummary()
+      .then((data) => {
+        if (cancelled) return;
+        setSummary(data);
+        saveCachedSummary(data);
+      })
+      .catch(() => {
+        // Leave the cached value rendered if the refresh fails — better
+        // than a flash-of-empty-state. If there was no cache, fall back
+        // to the empty shape so the cards render their empty messages.
+        if (cancelled) return;
+        if (!summary) {
+          setSummary({
+            today: { events: [] },
+            inbox: { unread_count: 0, preview: [] },
+            tasks: { top: [] },
+            recent: [],
+          });
+        }
+      });
     return () => {
       cancelled = true;
     };
+    // Intentionally fetches once on mount. The `summary` reference in the
+    // catch above is only read to gate a fallback assignment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const today = todayISO();
-  const todaysMeetings = (meetings ?? [])
-    .filter((m) => m.date === today)
-    .sort((a, b) => a.start_time.localeCompare(b.start_time))
-    .slice(0, 5);
-
-  const unreadEmails = (emails ?? []).filter((e) => !e.is_read);
-  const unreadPreview = unreadEmails.slice(0, 5);
-
-  const openTasks = (tasks ?? [])
-    .filter((t) => t.status !== "done")
-    .sort((a, b) => b.priority - a.priority)
-    .slice(0, 5);
-
-  // Recent: notes (by updated_at) merged with 3 most recent emails.
-  // Drive/chat omitted in v1 — would need a dedicated activity endpoint to
-  // keep this fast and complete.
-  const recentNotes = (notes ?? []).map((n) => ({
-    type: "note" as const,
-    id: n.id,
-    title: n.title?.trim() || "(untitled)",
-    ts: n.updated_at ?? "",
-    path: "/notes",
-  }));
-  const recentEmails = (emails ?? []).slice(0, 3).map((e) => ({
-    type: "email" as const,
-    id: e.id,
-    title: e.subject?.trim() || "(no subject)",
-    ts: e.created_at,
-    path: "/emails",
-  }));
-  const recent = [...recentNotes, ...recentEmails]
-    .filter((r) => r.ts)
-    .sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))
-    .slice(0, 5);
 
   function submitCapture(e: FormEvent) {
     e.preventDefault();
     const value = captureValue.trim();
     if (!value) return;
-    // V1: route to AI Chat. The query lands as the user's next message
-    // once /aichat learns to accept a `?q=` entry-point.
     setCaptureValue("");
     void navigate("/aichat");
   }
 
-  const meetingsLoading = meetings === null;
-  const emailsLoading = emails === null;
-  const tasksLoading = tasks === null;
-  const recentLoading = emails === null || notes === null;
+  const loading = summary === null;
+  const events = summary?.today.events ?? [];
+  const unreadPreview = summary?.inbox.preview ?? [];
+  const unreadCount = summary?.inbox.unread_count ?? 0;
+  const openTasks = summary?.tasks.top ?? [];
+  const recent = summary?.recent ?? [];
+
+  function navigateForRecent(item: RecentItem) {
+    void navigate(item.kind === "note" ? "/notes" : "/emails");
+  }
 
   return (
     <div className="dashboard">
@@ -200,19 +156,19 @@ export default function ActivityDashboard() {
         <section className="dashboard-card">
           <header className="dashboard-card-head">
             <h3>Today</h3>
-            {!meetingsLoading && (
+            {!loading && (
               <span className="dashboard-card-count">
-                {todaysMeetings.length} event{todaysMeetings.length === 1 ? "" : "s"}
+                {events.length} event{events.length === 1 ? "" : "s"}
               </span>
             )}
           </header>
-          {meetingsLoading ? (
+          {loading ? (
             <DashboardSkeleton rows={3} />
-          ) : todaysMeetings.length === 0 ? (
+          ) : events.length === 0 ? (
             <p className="dashboard-empty">Nothing scheduled today.</p>
           ) : (
             <ul className="dashboard-list">
-              {todaysMeetings.map((m) => (
+              {events.map((m) => (
                 <li
                   key={m.id}
                   className="dashboard-item"
@@ -221,9 +177,7 @@ export default function ActivityDashboard() {
                   <span className="dashboard-item-lead">{formatTime(m.start_time)}</span>
                   <span className="dashboard-item-title">{m.title}</span>
                   <span className="dashboard-item-trail">
-                    {m.participants?.length
-                      ? `${m.participants.length} ppl`
-                      : ""}
+                    {m.participants_count > 0 ? `${m.participants_count} ppl` : ""}
                   </span>
                 </li>
               ))}
@@ -242,13 +196,11 @@ export default function ActivityDashboard() {
         <section className="dashboard-card">
           <header className="dashboard-card-head">
             <h3>Inbox</h3>
-            {!emailsLoading && (
-              <span className="dashboard-card-count">
-                {unreadEmails.length} unread
-              </span>
+            {!loading && (
+              <span className="dashboard-card-count">{unreadCount} unread</span>
             )}
           </header>
-          {emailsLoading ? (
+          {loading ? (
             <DashboardSkeleton rows={3} />
           ) : unreadPreview.length === 0 ? (
             <p className="dashboard-empty">Inbox zero.</p>
@@ -284,13 +236,11 @@ export default function ActivityDashboard() {
         <section className="dashboard-card">
           <header className="dashboard-card-head">
             <h3>Tasks</h3>
-            {!tasksLoading && (
-              <span className="dashboard-card-count">
-                {openTasks.length} open
-              </span>
+            {!loading && (
+              <span className="dashboard-card-count">{openTasks.length} open</span>
             )}
           </header>
-          {tasksLoading ? (
+          {loading ? (
             <DashboardSkeleton rows={3} />
           ) : openTasks.length === 0 ? (
             <p className="dashboard-empty">Nothing on your plate.</p>
@@ -305,7 +255,7 @@ export default function ActivityDashboard() {
                   <span className="dashboard-item-lead" aria-hidden="true">◯</span>
                   <span className="dashboard-item-title">{t.name}</span>
                   <span className="dashboard-item-trail">
-                    {TASK_STATUS_LABEL[t.status]}
+                    {TASK_STATUS_LABEL[t.status] ?? t.status}
                   </span>
                 </li>
               ))}
@@ -325,7 +275,7 @@ export default function ActivityDashboard() {
           <header className="dashboard-card-head">
             <h3>Recent</h3>
           </header>
-          {recentLoading ? (
+          {loading ? (
             <DashboardSkeleton rows={3} />
           ) : recent.length === 0 ? (
             <p className="dashboard-empty">Activity will appear here.</p>
@@ -333,14 +283,16 @@ export default function ActivityDashboard() {
             <ul className="dashboard-list">
               {recent.map((r) => (
                 <li
-                  key={`${r.type}-${r.id}`}
+                  key={`${r.kind}-${r.id}`}
                   className="dashboard-item"
-                  onClick={() => navigate(r.path)}
+                  onClick={() => navigateForRecent(r)}
                 >
                   <span className="dashboard-item-lead" aria-hidden="true">
-                    {r.type === "note" ? "📝" : "📧"}
+                    {r.kind === "note" ? "📝" : "📧"}
                   </span>
-                  <span className="dashboard-item-title">{r.title}</span>
+                  <span className="dashboard-item-title">
+                    {r.title?.trim() || (r.kind === "note" ? "(untitled)" : "(no subject)")}
+                  </span>
                   <span className="dashboard-item-trail">{formatRelative(r.ts)}</span>
                 </li>
               ))}

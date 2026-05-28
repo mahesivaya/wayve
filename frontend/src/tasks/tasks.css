@@ -138,6 +138,22 @@
   background: transparent;
 }
 
+/* The shared Modal defaults to ~520px which leaves the description
+   textarea cramped and clips longer summaries. Widen it specifically
+   for the task form via `:has()` so the Emails / Scheduler modals
+   (other Modal consumers) are unaffected. */
+.modal-content:has(.task-create-form--modal) {
+  width: 760px;
+  max-width: 92vw;
+}
+
+/* Bump the description textarea min-height when shown inside the
+   task form modal — the long performance-task descriptions need
+   real estate to be readable without scrolling. */
+.task-create-form--modal .task-form-grid textarea {
+  min-height: 200px;
+}
+
 .task-form-required-hint {
   margin: 0 0 16px;
   color: var(--color-text-slate);
@@ -416,16 +432,10 @@
   gap: 12px;
 }
 
-.task-list--grid .task-card-meta {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  width: 100%;
-}
-
 .task-list--grid .task-card-actions {
   flex-wrap: wrap;
   width: 100%;
+  justify-content: flex-end;
 }
 
 .task-list--grid .task-status-select {
@@ -437,7 +447,7 @@
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 16px;
+  padding: 10px 14px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -453,14 +463,42 @@
 .task-card h3 {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
+  line-height: 1.3;
 }
 
-.task-card p {
-  margin: 8px 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-md);
-  line-height: 1.45;
+/* Task cards no longer render the description in the list view.
+   Full description is accessible by clicking the task title, which
+   opens the edit modal (same layout as the create form). Removing
+   the preview keeps the list compact so more tasks fit per screen. */
+
+/* Title is a button so the whole task name is clickable — opens the
+   edit modal (same layout as the create form) where the user can see
+   the full description, the textarea preserves newlines. Styled to
+   look like a plain heading; underline + colour shift on hover make
+   the affordance discoverable without dressing every title in blue. */
+.task-card-title-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.12s;
+}
+
+.task-card-title-link:hover {
+  color: var(--color-primary-action);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.task-card-title-link:focus-visible {
+  outline: 2px solid var(--color-primary-action);
+  outline-offset: 3px;
 }
 
 .task-card-body {
@@ -468,21 +506,15 @@
   min-width: 0;
 }
 
-.task-card-meta {
+/* Actions cluster sits on the same row as the title, aligned to the
+   right edge of the card. The card itself is `display: flex;
+   justify-content: space-between`, so dropping `.task-card-meta` and
+   making `.task-card-actions` a direct child is enough to pin them
+   right. */
+.task-card-actions {
   flex: 0 0 auto;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.task-card time {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-.task-card-actions {
-  display: flex;
+  align-items: center;
   gap: 6px;
 }
 

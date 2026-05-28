@@ -17,6 +17,7 @@ mod github_proxy;
 mod integrations;
 mod middleware;
 mod models;
+mod home;
 mod notes;
 mod observability;
 mod openapi;
@@ -71,6 +72,7 @@ fn app_routes(cfg: &mut web::ServiceConfig) {
                 .configure(chat::routes)
                 .configure(scheduler::routes)
                 .configure(drive::routes)
+                .configure(home::routes)
                 .configure(notes::routes)
                 .configure(tasks::routes)
                 .configure(call::api_routes)
