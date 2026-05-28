@@ -6,7 +6,6 @@ import { Suspense, useState, useCallback, useEffect, useRef, type ReactNode } fr
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
-import SupportModal from "../support/SupportModal";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import "./Layout.css";
 
@@ -227,11 +226,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     [paneWeights],
   );
 
-  // Support modal: opens from the header button, closes via the modal's own
-  // close action or Esc. Lives at layout scope so every signed-in page can
-  // reach support without each one re-wiring the affordance.
-  const [supportOpen, setSupportOpen] = useState(false);
-
   const middleApp = SPLIT_APPS.find((a) => a.key === middleView) ?? null;
   const MiddleComp = middleApp?.Comp ?? null;
   const middleLabel = middleApp?.label ?? null;
@@ -366,16 +360,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     canAccessPlatformDeveloper ||
     canAccessPlatformSupport;
 
-  // Home is the user's landing dashboard — the Support affordance is
-  // intentionally suppressed there to keep the surface focused on app
-  // tiles. Other pages still expose Support in the header. The user's
-  // home path depends on account type (personal → /home, organization →
-  // /organization-home, platform → /platform-admin-home), so compute it
-  // off the user object rather than hard-coding /home.
-  const userHomePath = homePathForUser(authedUser);
-  const isHomePage =
-    location.pathname === "/" || location.pathname === userHomePath;
-
   return (
     <div className="app">
     <SearchProvider>
@@ -454,24 +438,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             </svg>
           </button>
 
-          {!isHomePage && (
-            <button
-              type="button"
-              className="header-support-btn"
-              onClick={() => setSupportOpen(true)}
-              title="Contact support"
-              aria-label="Open support"
-            >
-              <span aria-hidden="true">💬</span>
-              <span>Support</span>
-            </button>
-          )}
-
           <ProfileMenu />
         </div>
       </div>
-
-      {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
 
       {/* 🔥 BODY */}
       <div className="body">

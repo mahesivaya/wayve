@@ -452,6 +452,71 @@ export default function GitHubRepo() {
     }
   }, [activeSection]);
 
+  // Resizable split between the file tree and the preview panel. Default
+  // 280px gives the tree room for typical file names while leaving the
+  // preview as the larger pane (code reads better with room). Persisted so
+  // the user's adjustment survives reloads.
+  const FILES_PANE_MIN = 180;
+  const FILES_PANE_MAX = 720;
+  const [filesPaneWidth, setFilesPaneWidth] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem("rwayve.github.filesPaneWidth");
+      const parsed = raw ? Number(raw) : NaN;
+      if (
+        Number.isFinite(parsed) &&
+        parsed >= FILES_PANE_MIN &&
+        parsed <= FILES_PANE_MAX
+      ) {
+        return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return 280;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "rwayve.github.filesPaneWidth",
+        String(filesPaneWidth),
+      );
+    } catch {
+      // ignore
+    }
+  }, [filesPaneWidth]);
+
+  const handleFilesPaneResize = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = filesPaneWidth;
+
+      const onMove = (ev: PointerEvent) => {
+        const next = Math.max(
+          FILES_PANE_MIN,
+          Math.min(FILES_PANE_MAX, startWidth + (ev.clientX - startX)),
+        );
+        setFilesPaneWidth(next);
+      };
+
+      const onUp = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+    },
+    [filesPaneWidth],
+  );
+
   const loadRepo = useCallback(async () => {
     setError("");
     setLoading(true);
@@ -817,11 +882,21 @@ export default function GitHubRepo() {
             // file tree as a single full-width list. Once the user picks
             // a file, the layout splits to show files + preview side by
             // side. Closing the preview returns to the single-pane list.
-            <main className={`github-grid ${selectedFile ? "is-split" : "is-single"}`}>
+            // In split mode the grid columns are driven inline so the
+            // drag handle between tree and preview can resize live.
+            <main
+              className={`github-grid ${selectedFile ? "is-split" : "is-single"}`}
+              style={
+                selectedFile
+                  ? {
+                      gridTemplateColumns: `${filesPaneWidth}px 5px minmax(0, 1fr)`,
+                    }
+                  : undefined
+              }
+            >
               <section className="github-browser" aria-label="Repository files">
                 <div className="github-panel-head">
                   <h2>Files</h2>
-                  <span>Tree</span>
                 </div>
                 <div className="github-file-list">
                   {renderTree()}
@@ -830,6 +905,16 @@ export default function GitHubRepo() {
                   )}
                 </div>
               </section>
+
+              {selectedFile && (
+                <div
+                  className="github-grid-resize"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize files pane"
+                  onPointerDown={handleFilesPaneResize}
+                />
+              )}
 
               {selectedFile && (
                 <section className="github-preview" aria-label="File preview">

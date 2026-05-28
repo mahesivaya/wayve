@@ -4,10 +4,13 @@
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 24px;
+  /* Tight horizontal padding — the panels inside already have their own
+     borders/cards, so a thick outer gutter reads as wasted whitespace on
+     wide screens. Vertical padding stays roomier so the top edge of the
+     first panel isn't flush against the header divider. */
+  padding: 16px 10px;
   color: var(--color-text-primary);
   background: var(--color-surface-soft);
-  scrollbar-gutter: stable;
 }
 
 .github-page *,
@@ -127,7 +130,7 @@
 .github-layout {
   display: flex;
   align-items: stretch;
-  gap: 14px;
+  gap: 8px;
 }
 
 /* The sidebar is now a column of separate card panels (Branch on
@@ -246,31 +249,69 @@
 .github-content {
   flex: 1;
   min-width: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
 }
 
 /* Files view has two layouts driven by selection state:
      .is-single — no file open. Browser fills the whole content width.
      .is-split  — a file is open. Browser shrinks to a left rail and
-                  the preview takes the larger right column. */
+                  the preview takes the larger right column.
+   `width: 100%` is defensive — without it, a single-column grid inside a
+   flex-direction:column parent can collapse to its intrinsic content
+   width (longest file row) instead of stretching, leaving wasted space
+   to the right of the panel on wide screens. */
 .github-grid {
   display: grid;
-  gap: 14px;
+  gap: 8px;
+  width: 100%;
 }
 
 .github-grid.is-single {
-  /* Single-pane file list doesn't need to stretch the whole content
-     width — 80% keeps it more comfortable to scan. */
-  grid-template-columns: minmax(0, 80%);
+  /* Single-pane file list fills the entire content width — no wasted
+     space when no preview is open. */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .github-grid.is-split {
   /* When a file is open the tree shrinks to a narrow fixed rail and
      the preview claims the remaining width — code reads better with
-     room than the file list does. */
-  grid-template-columns: 240px minmax(0, 1fr);
+     room than the file list does. The inline `gridTemplateColumns` set
+     by the component overrides this default once the user drags the
+     resize handle; this rule is the fallback before any inline style
+     applies. `column-gap: 0` so the only space between the file tree
+     and the preview is the 5px resize handle column — anything more
+     reads as wasted whitespace. */
+  grid-template-columns: 280px 5px minmax(0, 1fr);
+  column-gap: 0;
+}
+
+/* Drag handle that sits between the file tree and the preview when the
+   layout is in split mode. Visually a 1px line (centered in a 5px-wide
+   grid column for a comfortable hitbox) that tints on hover/active so
+   the resize affordance is discoverable. */
+.github-grid-resize {
+  cursor: col-resize;
+  position: relative;
+  z-index: 3;
+  touch-action: none;
+  align-self: stretch;
+}
+
+.github-grid-resize::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  background: var(--color-border);
+  border-radius: 1px;
+  transition: background 0.12s ease;
+}
+
+.github-grid-resize:hover::after,
+.github-grid-resize:active::after {
+  background: var(--color-primary-action);
 }
 
 /* Close button in the preview header — sits in the title row alongside
@@ -355,7 +396,11 @@
 }
 
 .github-file-list {
-  max-height: min(520px, 62vh);
+  /* Show many more files at once — the panel was previously capped at
+     520px / 62vh which only fit ~15 rows on a tall display. Bumped to
+     ~80% of the viewport so a full directory listing is visible without
+     needing to scroll inside the panel on common desktop heights. */
+  max-height: min(900px, 80vh);
   overflow: auto;
   padding: 6px;
 }
@@ -847,7 +892,7 @@
 
 @media (max-width: 520px) {
   .github-page {
-    padding: 14px;
+    padding: 12px 8px;
   }
 
   .github-stats {
