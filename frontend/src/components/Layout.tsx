@@ -262,7 +262,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // When the split is open, sidebar clicks target the right pane instead
   // of navigating the URL. When closed, the link behaves normally.
   const renderSidebarItem = useCallback(
-    (path: string, app: AppKey, label: string, icon: string) => {
+    (path: string, app: AppKey, label: string, icon: ReactNode) => {
       const isLeftActive =
         app === "home"
           ? location.pathname === "/" || location.pathname === "/home"
@@ -295,7 +295,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const renderSidebarLink = (
     path: string,
     label: string,
-    icon: string,
+    icon: ReactNode,
     isActive: boolean,
   ) => (
     <Link
@@ -491,7 +491,30 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             {renderSidebarItem("/tasks", "tasks", "Tasks", "☑")}
             {renderSidebarItem("/aichat", "aichat", "AI Chat", "✨")}
             {user.account_type !== "personal" &&
-              renderSidebarItem("/github", "github", "GitHub", "🐙")}
+              renderSidebarItem(
+                "/github",
+                "github",
+                "GitHub",
+                // Folder with a branch tree inside — picks up currentColor
+                // so it follows the link's foreground (white when active).
+                <svg
+                  className="sidebar-icon-svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                  <circle cx="9" cy="11" r="1.4" />
+                  <circle cx="15" cy="11" r="1.4" />
+                  <circle cx="12" cy="17" r="1.4" />
+                  <path d="M9 12v1a3 3 0 0 0 3 3" />
+                  <path d="M15 12v1a3 3 0 0 1-3 3" />
+                </svg>,
+              )}
           </div>
 
           {hasPlatformSection && (

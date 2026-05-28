@@ -499,6 +499,15 @@
   line-height: 1;
 }
 
+/* Inline SVG sidebar icons (e.g. GitHub branch-folder). Same visual
+   footprint as the emoji icons; inherits color from the link so the
+   stroke flips to white when the row is active. */
+.sidebar-icon-svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 .sidebar-label {
   flex: 1 1 auto;
   min-width: 0;
