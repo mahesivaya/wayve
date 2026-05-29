@@ -14,12 +14,12 @@ import {
   ErrorSource,
   listErrorLogs,
 } from "../api/errorLogs";
+import { fmtDateTime } from "../utils/datetime";
 import "./platformTeam.css";
 import "./platformLogs.css";
 
 function fmtDate(value: string): string {
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  return fmtDateTime(value);
 }
 
 function shortStack(stack: string | null, lines = 4): string {

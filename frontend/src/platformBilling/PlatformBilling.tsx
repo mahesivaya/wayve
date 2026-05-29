@@ -28,6 +28,7 @@ import {
   updatePayrollRunStatus,
   UserSubscriptionRow,
 } from "../api/platformBilling";
+import { fmtShortDate } from "../utils/datetime";
 import "./platformBilling.css";
 
 type Tab =
@@ -49,9 +50,7 @@ function fmtMoney(cents: number | null | undefined, currency = "USD"): string {
 }
 
 function fmtDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+  return fmtShortDate(value);
 }
 
 function toISODate(d: Date): string {
@@ -501,8 +500,8 @@ export default function PlatformBilling() {
                             {p.status ?? "—"}
                           </span>
                         </td>
-                        <td>{p.arrival_date ? new Date(p.arrival_date * 1000).toLocaleDateString() : "—"}</td>
-                        <td>{p.created ? new Date(p.created * 1000).toLocaleDateString() : "—"}</td>
+                        <td>{p.arrival_date ? fmtShortDate(p.arrival_date * 1000) : "—"}</td>
+                        <td>{p.created ? fmtShortDate(p.created * 1000) : "—"}</td>
                         <td className="right">
                           {fmtMoney(p.amount_cents, (p.currency ?? "usd").toUpperCase())}
                         </td>
@@ -571,7 +570,7 @@ export default function PlatformBilling() {
                             </>
                           )}
                         </td>
-                        <td>{c.created ? new Date(c.created * 1000).toLocaleDateString() : "—"}</td>
+                        <td>{c.created ? fmtShortDate(c.created * 1000) : "—"}</td>
                         <td className="right">
                           {fmtMoney(c.amount_cents, (c.currency ?? "usd").toUpperCase())}
                         </td>

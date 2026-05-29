@@ -30,6 +30,7 @@ import {
   toTime,
 } from "./dateUtils";
 import { readJson, writeJson } from "./storage";
+import { APP_TIME_ZONE } from "../utils/datetime";
 import type { CalendarItem, SchedulerView } from "./types";
 
 type SchedulerEvent = {
@@ -512,6 +513,7 @@ export default function Scheduler() {
           <button onClick={() => changeMonth(-1)}>◀</button>
           <span>
             {currentDate.toLocaleDateString("en-US", {
+              timeZone: APP_TIME_ZONE,
               month: "long",
               year: "numeric",
             })}
@@ -597,6 +599,7 @@ export default function Scheduler() {
           <button onClick={() => changeMonth(1)}>›</button>
           <div className="calendar-title">
             {currentDate.toLocaleDateString("en-US", {
+              timeZone: APP_TIME_ZONE,
               month: "long",
               year: "numeric",
             })}
@@ -715,7 +718,7 @@ export default function Scheduler() {
             className={`week-day-header${isToday ? " is-today" : ""}`}
           >
             <span className="week-day-name">
-              {d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}
+              {d.toLocaleDateString("en-US", { timeZone: APP_TIME_ZONE, weekday: "short" }).toUpperCase()}
             </span>
             <span className="week-day-num">{d.getDate()}</span>
           </div>

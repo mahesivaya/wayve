@@ -12,11 +12,11 @@ import { useGlobalSearch } from "../search/SearchContext";
 import { useAuth } from "../auth/useAuth";
 import { logger } from "../utils/logger";
 import { decryptForSelf, encryptForSelf } from "../crypto/selfEncrypt";
+import { fmtShortDate } from "../utils/datetime";
 
 const formatDate = (iso: string | null | undefined) => {
   if (!iso) return "";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString();
+  return fmtShortDate(iso);
 };
 
 export default function Notes() {

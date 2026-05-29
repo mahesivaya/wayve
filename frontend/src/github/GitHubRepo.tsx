@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { fmtDateTime } from "../utils/datetime";
 import "./githubRepo.css";
 
 const OWNER = "mahesivaya";
@@ -145,7 +146,7 @@ type JobsResponse = {
 
 function formatDate(value: string) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "Unknown" : fmtDateTime(date);
 }
 
 function formatSize(bytes: number) {

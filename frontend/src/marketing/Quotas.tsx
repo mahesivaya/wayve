@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { ApiTier, QuotaStatus, getQuota, listTiers } from "../api/tiers";
 import DocsShell from "../docs/DocsShell";
+import { fmtShortDate } from "../utils/datetime";
 import "./quotas.css";
 
 // Marketing copy + human-friendly labels per plan code. Lives alongside the
@@ -50,9 +51,7 @@ function fmtQuota(quota: number): string {
 }
 
 function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+  return fmtShortDate(value);
 }
 
 export default function Quotas() {

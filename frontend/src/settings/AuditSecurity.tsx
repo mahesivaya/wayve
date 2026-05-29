@@ -12,6 +12,7 @@ import {
   type AuditLogRow,
   type SiemSettings,
 } from "../api/audit";
+import { fmtDateTime } from "../utils/datetime";
 import "./auditSecurity.css";
 
 const OUTCOMES = [
@@ -25,7 +26,7 @@ const OUTCOMES = [
 ];
 
 function toLocalTime(value: string) {
-  return new Date(value).toLocaleString();
+  return fmtDateTime(value);
 }
 
 function csvEscape(value: string | number | null) {

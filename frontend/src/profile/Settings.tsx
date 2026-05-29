@@ -10,6 +10,7 @@ import { deleteMyOrganization } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
 import { listMyTickets, type SupportTicket } from "../api/support";
 import SupportModal from "../support/SupportModal";
+import { fmtDate, fmtShortDate } from "../utils/datetime";
 
 type Account = {
   id: number;
@@ -203,7 +204,7 @@ export default function Settings() {
               <span>Renewal</span>
               <strong>
                 {subscription?.subscription?.current_period_end
-                  ? new Date(subscription.subscription.current_period_end).toLocaleDateString()
+                  ? fmtShortDate(subscription.subscription.current_period_end)
                   : "No paid renewal"}
               </strong>
             </div>
@@ -253,7 +254,7 @@ export default function Settings() {
                       #{t.id} · {t.subject}
                     </span>
                     <span className="settings-ticket-meta">
-                      {t.category} · {new Date(t.created_at).toLocaleDateString()}
+                      {t.category} · {fmtDate(t.created_at)}
                       {t.attachment_count > 0 && ` · ${t.attachment_count} attachment${t.attachment_count === 1 ? "" : "s"}`}
                     </span>
                   </div>

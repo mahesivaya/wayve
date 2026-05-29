@@ -21,6 +21,7 @@ import {
   type SubscriptionResponse,
   type UsageResponse,
 } from "../api/billing";
+import { fmtShortDate } from "../utils/datetime";
 import "./billing.css";
 
 const BYTES_IN_GB = 1024 * 1024 * 1024;
@@ -78,9 +79,7 @@ function formatBytes(bytes: number): string {
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
+  return fmtShortDate(value);
 }
 
 function loadStripeScript(): Promise<void> {

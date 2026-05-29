@@ -12,6 +12,7 @@ import {
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { slugify } from "../auth/accountHome";
+import { fmtShortDate } from "../utils/datetime";
 import "./admin-ui.css";
 import "./platformAdmin.css";
 
@@ -366,7 +367,7 @@ export default function PlatformOrganizations() {
                           {key.revoked_at
                             ? "Revoked"
                             : key.last_used_at
-                              ? `Last used ${new Date(key.last_used_at).toLocaleDateString()}`
+                              ? `Last used ${fmtShortDate(key.last_used_at)}`
                               : "Never used"}
                         </small>
                       </span>

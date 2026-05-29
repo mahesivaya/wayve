@@ -9,12 +9,11 @@ import {
   ScimToken,
   ScimTokenCreated,
 } from "../api/scim";
+import { fmtDateTime } from "../utils/datetime";
 import "./scimTokens.css";
 
 function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  return fmtDateTime(value);
 }
 
 export default function ScimTokens() {

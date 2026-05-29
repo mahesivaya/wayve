@@ -1,5 +1,6 @@
 import type { ChatChannel } from "../api/chat";
 import type { ChannelRole, Conversation } from "./types";
+import { APP_TIME_ZONE } from "../utils/datetime";
 
 export const parseEmails = (value: string) =>
   value
@@ -11,7 +12,8 @@ export const formatTime = (dateStr: string) => {
   const d = new Date(dateStr);
   return Number.isNaN(d.getTime())
     ? ""
-    : d.toLocaleTimeString([], {
+    : d.toLocaleTimeString("en-US", {
+        timeZone: APP_TIME_ZONE,
         hour: "2-digit",
         minute: "2-digit",
       });

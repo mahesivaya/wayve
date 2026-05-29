@@ -11,6 +11,7 @@ import {
   type ApiKeyAuditRow,
   type KeyType,
 } from "../api/apiKeys";
+import { fmtDateTime } from "../utils/datetime";
 import "./apiKeys.css";
 
 export default function ApiKeysPage() {
@@ -277,12 +278,12 @@ export default function ApiKeysPage() {
                   <span>{key.rate_limit_per_min}/min</span>
                   <span>
                     {key.expires_at
-                      ? `expires ${new Date(key.expires_at).toLocaleString()}`
+                      ? `expires ${fmtDateTime(key.expires_at)}`
                       : "no expiry"}
                   </span>
                   <span>
                     {key.last_used_at
-                      ? `last used ${new Date(key.last_used_at).toLocaleString()}`
+                      ? `last used ${fmtDateTime(key.last_used_at)}`
                       : "never used"}
                   </span>
                 </div>
@@ -334,7 +335,7 @@ export default function ApiKeysPage() {
               <tbody>
                 {auditRows.map((row) => (
                   <tr key={row.id}>
-                    <td>{new Date(row.created_at).toLocaleString()}</td>
+                    <td>{fmtDateTime(row.created_at)}</td>
                     <td>{row.method}</td>
                     <td>{row.path}</td>
                     <td>{row.status_code}</td>

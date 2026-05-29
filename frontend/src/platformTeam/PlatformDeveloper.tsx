@@ -6,12 +6,11 @@ import {
   DeveloperSummary,
   getDeveloperSummary,
 } from "../api/platformTeam";
+import { fmtDateTime } from "../utils/datetime";
 import "./platformTeam.css";
 
 function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  return fmtDateTime(value);
 }
 
 function statusClass(code: number, outcome: string): string {

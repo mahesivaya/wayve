@@ -3,6 +3,7 @@ import { downloadEmailAttachment, sendEmail } from "../api/email";
 import { formatFileSize, renderEmailBody } from "./renderUtils";
 import { EmailItem, EmailAttachment } from "./types";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
+import { APP_TIME_ZONE } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
 
 interface EmailDetailProps {
@@ -619,12 +620,21 @@ function formatEmailDate(iso: string | null | undefined): string {
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
   if (sameDay) {
-    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    return d.toLocaleTimeString("en-US", {
+      timeZone: APP_TIME_ZONE,
+      hour: "numeric",
+      minute: "2-digit",
+    });
   }
   if (d.getFullYear() === now.getFullYear()) {
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return d.toLocaleDateString("en-US", {
+      timeZone: APP_TIME_ZONE,
+      month: "short",
+      day: "numeric",
+    });
   }
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString("en-US", {
+    timeZone: APP_TIME_ZONE,
     year: "numeric",
     month: "short",
     day: "numeric",

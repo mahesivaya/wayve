@@ -13,12 +13,11 @@ import {
   testWebhook,
   updateWebhook,
 } from "../api/webhooks";
+import { fmtDateTime } from "../utils/datetime";
 import "./webhooks.css";
 
 function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  return fmtDateTime(value);
 }
 
 const EMPTY_DRAFT: CreateWebhookInput = {

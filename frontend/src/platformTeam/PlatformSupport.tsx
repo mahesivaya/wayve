@@ -9,6 +9,7 @@ import {
   type SupportTicket,
   type TicketStatus,
 } from "../api/support";
+import { fmtDateTime } from "../utils/datetime";
 import "./platformTeam.css";
 
 const STATUS_OPTIONS: { value: TicketStatus; label: string }[] = [
@@ -19,9 +20,7 @@ const STATUS_OPTIONS: { value: TicketStatus; label: string }[] = [
 ];
 
 function fmtDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  return fmtDateTime(value);
 }
 
 export default function PlatformSupport() {
@@ -174,7 +173,7 @@ export default function PlatformSupport() {
                     <td>
                       <span className="pt-pill info">{t.category}</span>
                     </td>
-                    <td>{new Date(t.created_at).toLocaleString()}</td>
+                    <td>{fmtDateTime(t.created_at)}</td>
                     <td>
                       <select
                         value={t.status}

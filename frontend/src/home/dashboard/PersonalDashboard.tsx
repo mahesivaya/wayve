@@ -43,6 +43,7 @@ function markRecentlyRead(id: number) {
 }
 import { updateTaskApi } from "../../api/tasks";
 import type { EmailItem } from "../../emails/types";
+import { APP_TIME_ZONE } from "../../utils/datetime";
 import "./personalDashboard.css";
 
 // Three-section personal-user home: welcome strip + Today (meetings +
@@ -92,7 +93,8 @@ const greeting = () => {
 };
 
 const todayLabel = () =>
-  new Date().toLocaleDateString(undefined, {
+  new Date().toLocaleDateString("en-US", {
+    timeZone: APP_TIME_ZONE,
     weekday: "long",
     month: "long",
     day: "numeric",
