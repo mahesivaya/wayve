@@ -160,6 +160,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                     let receiver_id = data.receiver_id;
                     let channel_id = data.channel_id;
                     let parent_message_id = data.parent_message_id;
+                    let client_id = data.client_id.clone();
                     let content = data.content.clone();
 
                     // Threads are channel-only. A DM with parent_message_id set
@@ -313,6 +314,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                         "status": "sent",
                                         "created_at": created_at.to_rfc3339(),
                                         "parent_message_id": parent_message_id,
+                                        "client_id": client_id,
                                     })
                                     .to_string();
 
@@ -433,7 +435,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     "receiver_id": receiver_id,
                                     "content": content,
                                     "status": "sent",
-                                    "created_at": created_at.to_rfc3339()
+                                    "created_at": created_at.to_rfc3339(),
+                                    "client_id": client_id,
                                 })
                                 .to_string();
 

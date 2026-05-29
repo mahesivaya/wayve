@@ -137,9 +137,45 @@ export default function Chat() {
       content: await decryptChatContent(msg.content, user.id),
     };
 
-    // Threaded reply: keep it out of the main feed entirely. If the matching
-    // thread is open, append it to the panel; either way, bump the parent's
-    // reply_count so the "N replies →" indicator updates live.
+    // Self-echo reconciliation: the broadcast carries the same client_id we
+    // generated on send, so we patch the optimistic local copy with the real
+    // server-assigned message_id (and refreshed created_at) instead of
+    // appending a duplicate. The reply_count bump on the parent was already
+    // done optimistically in sendThreadReply, so we deliberately do not bump
+    // again here.
+    if (decrypted.sender_id === user.id && decrypted.client_id) {
+      if (decrypted.parent_message_id != null) {
+        setThreadReplies((prev) =>
+          prev.map((r) =>
+            r.client_id === decrypted.client_id
+              ? {
+                  ...r,
+                  message_id: decrypted.message_id,
+                  created_at: decrypted.created_at,
+                }
+              : r,
+          ),
+        );
+      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.client_id === decrypted.client_id
+              ? {
+                  ...m,
+                  message_id: decrypted.message_id,
+                  created_at: decrypted.created_at,
+                }
+              : m,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Threaded reply from someone else: keep it out of the main feed
+    // entirely. If the matching thread is open, append it to the panel;
+    // either way, bump the parent's reply_count so the "N replies →"
+    // indicator updates live.
     if (decrypted.parent_message_id != null) {
       setThreadReplies((prev) =>
         activeThread?.message_id === decrypted.parent_message_id ? [...prev, decrypted] : prev,
@@ -241,6 +277,7 @@ export default function Chat() {
       created_at: new Date().toISOString(),
       channel_id: selectedConversation.channel.id,
       parent_message_id: parentId,
+      client_id: crypto.randomUUID(),
     };
 
     wsRef.current.send(JSON.stringify(message));
@@ -365,6 +402,7 @@ export default function Chat() {
       content: encryptedContent,
       status: "sent",
       created_at: new Date().toISOString(),
+      client_id: crypto.randomUUID(),
       ...(selectedConversation.type === "channel"
         ? { channel_id: selectedConversation.channel.id }
         : { receiver_id: selectedConversation.user.id }),

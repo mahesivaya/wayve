@@ -1,8 +1,8 @@
 {
-  "name": "rwayve-e2e",
+  "name": "rwayve-e2etest",
   "private": true,
-  "version": "0.0.0",
-  "description": "Playwright end-to-end tests for rwayve. Runs against the full docker-compose stack (frontend on :80, backend on :8080).",
+  "version": "0.1.0",
+  "description": "End-to-end Playwright suite for the rwayve app (runs against the local docker stack).",
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
-    "@types/node": "^22.10.0"
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
   }
 }

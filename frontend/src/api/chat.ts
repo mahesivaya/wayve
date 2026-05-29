@@ -23,6 +23,10 @@ export type ChatMessage = {
   // on top-level rows returned by the main channel history fetch; replies
   // themselves carry 0.
   reply_count?: number;
+  // Sender-generated correlation token. Sent with the WS frame; echoed back
+  // in the broadcast so the sender's UI can match the server-assigned
+  // `message_id` to its optimistic local copy without re-fetching.
+  client_id?: string | null;
 };
 
 export type ChatChannel = {

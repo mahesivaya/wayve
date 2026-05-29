@@ -61,3 +61,5 @@ client_secret.json
 stress/k6-summary.json
 stress/k6-samples.json
 stress/k6-stdout.txt
+
+trash/*

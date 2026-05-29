@@ -36,7 +36,13 @@ export function useChatSocket(
 
     ws.onmessage = (event) => {
       const msg: ChatMessage & { type?: string } = JSON.parse(event.data);
-      if (msg.type === "status_update" || msg.sender_id === user.id) return;
+      if (msg.type === "status_update") return;
+      // Self-broadcasts without a client_id are legacy/multi-tab and we drop
+      // them — the optimistic local copy already covers the same-tab case.
+      // Self-broadcasts WITH a client_id are the reconciliation echo: pass
+      // them through so appendRealtimeMessage can patch the optimistic copy
+      // with the server-assigned message_id.
+      if (msg.sender_id === user.id && !msg.client_id) return;
 
       if (messageBelongsToSelectedConversation(msg, selectedRef.current)) {
         void onMessage(msg);

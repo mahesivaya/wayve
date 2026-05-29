@@ -40,4 +40,10 @@ pub struct ChatMessage {
     // are channel-only).
     #[serde(default)]
     pub parent_message_id: Option<i32>,
+    // Sender-generated correlation token. Echoed in the broadcast JSON so
+    // the sender's client can match the server-assigned `message_id` back to
+    // its optimistic local copy without a full re-fetch. None for legacy
+    // clients and for rows fetched from history.
+    #[serde(default)]
+    pub client_id: Option<String>,
 }

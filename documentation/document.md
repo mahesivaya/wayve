@@ -1053,3 +1053,31 @@ Tests: backend/src/security/rbac.rs (inline), frontend/src/test/permissions.test
 
 
 
+
+
+
+Frontend/browser E2E
+
+Most popular today:
+
+Playwright
+
+Very modern and powerful.
+
+Supports:
+
+Chromium
+Firefox
+Safari
+
+Great for SaaS apps.
+
+Cypress
+
+Frontend-focused E2E.
+
+Very popular historically.
+
+Selenium
+
+Older but still widely used.
