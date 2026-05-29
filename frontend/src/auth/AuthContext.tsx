@@ -546,14 +546,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     authVersion.current += 1;
-    logoutRequest().catch((err) => log.error("logout request failed", err));
     clearAuthToken();
     setUser(null);
     setNeedsRecovery(false);
-    // Hard-nav to /login so the user lands on the sign-in screen
-    // immediately. The reload also clears all in-memory state so
-    // nothing leaks across sessions.
-    window.location.href = "/login";
+    // Wait for the /api/logout response (which carries the cookie-clear
+    // Set-Cookie) before navigating. The previous fire-and-forget shape
+    // could hard-nav while the POST was still in flight; the browser
+    // then aborted the request and never honored the Set-Cookie, so the
+    // auth cookie kept living and re-authenticated the user on the next
+    // page load. A 2-second cap means a slow/dead backend can't hang
+    // the UI — the local state is already cleared, so we land on
+    // /login either way.
+    const logoutDone = logoutRequest().catch((err) =>
+      log.error("logout request failed", err),
+    );
+    const timeout = new Promise<void>((resolve) =>
+      window.setTimeout(resolve, 2000),
+    );
+    void Promise.race([logoutDone, timeout]).finally(() => {
+      // Hard-nav to /login so the user lands on the sign-in screen
+      // and all in-memory state is reset. This runs only after the
+      // logout POST has either completed or hit the 2s safety cap.
+      window.location.href = "/login";
+    });
   };
 
   // Re-fetch /api/me and overwrite the cached user. Used after server-side
