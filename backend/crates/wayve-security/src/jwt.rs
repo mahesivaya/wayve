@@ -105,8 +105,15 @@ pub fn auth_cookie(token: String) -> Cookie<'static> {
 }
 
 pub fn expired_auth_cookie() -> Cookie<'static> {
+    // Must mirror the Secure flag used by `auth_cookie` (HTTPS in prod).
+    // Browsers reject a non-Secure cookie attempting to overwrite a
+    // Secure one of the same name, so without this the logout response
+    // silently fails to clear the cookie and the user is still
+    // authenticated on the next page load.
+    let secure = crate::config::auth_cookie_secure();
     Cookie::build(AUTH_COOKIE_NAME, "")
         .http_only(true)
+        .secure(secure)
         .same_site(SameSite::Lax)
         .path("/")
         .max_age(actix_web::cookie::time::Duration::seconds(0))
