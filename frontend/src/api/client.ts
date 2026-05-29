@@ -5,9 +5,14 @@ import { reportClientError } from "./errorLogs";
 
 // Skip reporting failures of the error-log endpoint itself — otherwise a
 // broken logger fans out into an infinite POST loop. Also skip routine
-// 401 (treated as session expiry, surfaced via redirect, not an error).
+// 401 (treated as session expiry, surfaced via redirect, not an error)
+// and `/api/logout` — the AuthContext fires logout async then immediately
+// clears the token and navigates, so the in-flight POST is routinely
+// torn down mid-flight on rapid clicks. The user is logged out either
+// way; the spurious "network" report just adds noise to the dashboard.
 function shouldReportFailure(path: string, status?: number): boolean {
   if (path.includes("/api/error-logs")) return false;
+  if (path.includes("/api/logout")) return false;
   if (status === 401) return false;
   return true;
 }
