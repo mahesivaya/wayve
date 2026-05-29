@@ -375,7 +375,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       hasPermission(user, "logs:read_limited"));
   const currentPlanCode = authedUser.current_plan?.code ?? "basic_user";
   const isBasicPersonalUser =
-    authedUser.account_type === "personal" && currentPlanCode === "basic_user";
+    authedUser.account_type === "personal" &&
+    currentPlanCode === "basic_user" &&
+    user.scope !== "platform" &&
+    user.scope !== "organization";
 
   function goToUpgrade() {
     // The Upgrade nudge is rendered only for `isBasicPersonalUser`, so we

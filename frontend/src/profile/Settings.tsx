@@ -55,6 +55,9 @@ export default function Settings() {
   // members, personal accounts, or platform users.
   const isOrgOwner =
     user?.scope === "organization" && user?.effective_role === "owner";
+  const isPlatformUser = user?.scope === "platform";
+  const isOrgUser = user?.scope === "organization";
+  const hideBilling = isPlatformUser || isOrgUser;
   const [deletingOrg, setDeletingOrg] = useState(false);
   const [deleteOrgError, setDeleteOrgError] = useState("");
 
@@ -189,36 +192,38 @@ export default function Settings() {
           </div>
         </section>
 
-        <section className="settings-card">
-          <h2 className="settings-card-title">Billing &amp; Plans</h2>
-          <div className="settings-rows">
-            <div className="settings-usage-row">
-              <span>Current Plan</span>
-              <strong>{subscription?.subscription?.plan_name ?? "Basic User Free"}</strong>
+        {!hideBilling && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Billing &amp; Plans</h2>
+            <div className="settings-rows">
+              <div className="settings-usage-row">
+                <span>Current Plan</span>
+                <strong>{subscription?.subscription?.plan_name ?? "Basic User Free"}</strong>
+              </div>
+              <div className="settings-usage-row">
+                <span>Status</span>
+                <strong>{subscription?.subscription?.status ?? "free"}</strong>
+              </div>
+              <div className="settings-usage-row">
+                <span>Renewal</span>
+                <strong>
+                  {subscription?.subscription?.current_period_end
+                    ? fmtShortDate(subscription.subscription.current_period_end)
+                    : "No paid renewal"}
+                </strong>
+              </div>
+              <div className="settings-usage-row">
+                <span>Upgrade plans</span>
+                <button
+                  className="settings-billing-link"
+                  onClick={() => navigate("/billing")}
+                >
+                  Manage billing &amp; upgrade
+                </button>
+              </div>
             </div>
-            <div className="settings-usage-row">
-              <span>Status</span>
-              <strong>{subscription?.subscription?.status ?? "free"}</strong>
-            </div>
-            <div className="settings-usage-row">
-              <span>Renewal</span>
-              <strong>
-                {subscription?.subscription?.current_period_end
-                  ? fmtShortDate(subscription.subscription.current_period_end)
-                  : "No paid renewal"}
-              </strong>
-            </div>
-            <div className="settings-usage-row">
-              <span>Upgrade plans</span>
-              <button
-                className="settings-billing-link"
-                onClick={() => navigate("/billing")}
-              >
-                Manage billing &amp; upgrade
-              </button>
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         <section className="settings-card">
           <div className="settings-support-head">

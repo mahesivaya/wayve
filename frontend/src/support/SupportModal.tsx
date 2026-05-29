@@ -112,11 +112,6 @@ export default function SupportModal({ onClose, onSubmitted }: Props) {
             </button>
           </header>
           <section className="support-form-section">
-            <p>
-              Thanks — your ticket <strong>#{createdId}</strong> is in our queue.
-              Our support team will reply by email. You can track its status
-              under <strong>Settings → Support</strong>.
-            </p>
             <div className="support-form-actions">
               <button type="button" className="support-primary-btn" onClick={onClose}>
                 Done
