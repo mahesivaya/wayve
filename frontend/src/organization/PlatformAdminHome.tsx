@@ -28,6 +28,7 @@ export default function PlatformAdminHome() {
     hasPermission(user, "logs:read_limited") ||
     hasPermission(user, "api_keys:manage");
   const canSeeSupport = hasPermission(user, "members:read");
+  const canSeeAnalytics = hasPermission(user, "members:read");
   const canSeeSecurity =
     hasPermission(user, "audit:read") || hasPermission(user, "security:manage");
   const canSeeOrganizations = canManageMembers || canManageApiKeys;
@@ -58,9 +59,15 @@ export default function PlatformAdminHome() {
     },
     {
       label: "Support",
-      description: "Customer activity, signups and shared-inbox queue.",
+      description: "In-app tickets and shared-inbox queue.",
       path: "/platform/support",
       visible: canSeeSupport,
+    },
+    {
+      label: "Analytics",
+      description: "Users, tenants, signups and connected mailboxes at a glance.",
+      path: "/platform/analytics",
+      visible: canSeeAnalytics,
     },
     {
       label: "Developer",

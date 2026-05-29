@@ -983,7 +983,671 @@
    explicit-only via [data-theme="dark"]. See index.html pre-paint. */
 
 /* =============================
-   🏠 SIGNED-IN HOME — greeting band above the ActivityDashboard.
+   � ENTERPRISE FEATURES SECTION
+============================== */
+.enterprise-features {
+  padding: 80px 56px;
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-cool-pale) 100%);
+}
+
+.enterprise-features-header {
+  text-align: center;
+  max-width: 800px;
+  margin: 0 auto 60px;
+}
+
+.enterprise-features-header h2 {
+  margin: 0 0 16px;
+  font-size: 42px;
+  color: var(--color-accent-indigo-darker);
+}
+
+.enterprise-features-header p {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-text-slate-deep);
+  line-height: 1.6;
+}
+
+.enterprise-features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.enterprise-feature-card {
+  background: var(--color-surface);
+  padding: 40px 32px;
+  border-radius: 16px;
+  border: 1px solid var(--color-surface-tint-cloud);
+  box-shadow: 0 4px 24px rgb(0, 0, 0, 0.06);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.enterprise-feature-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 40px rgb(0, 0, 0, 0.12);
+}
+
+.enterprise-feature-icon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, var(--color-accent-indigo), var(--color-brand-purple));
+  border-radius: 16px;
+}
+
+.enterprise-feature-card h3 {
+  margin: 0 0 16px;
+  font-size: 22px;
+  color: var(--color-accent-indigo-darker);
+  font-weight: 700;
+}
+
+.enterprise-feature-card p {
+  margin: 0;
+  font-size: 16px;
+  color: var(--color-text-slate-deep);
+  line-height: 1.6;
+}
+
+/* =============================
+   🏅 TRUST BADGES SECTION
+============================== */
+.trust-badges {
+  padding: 60px 56px;
+  background: var(--color-surface);
+  text-align: center;
+}
+
+.trust-badges-header {
+  max-width: 700px;
+  margin: 0 auto 40px;
+}
+
+.trust-badges-header h2 {
+  margin: 0 0 12px;
+  font-size: 32px;
+  color: var(--color-accent-indigo-darker);
+}
+
+.trust-badges-header p {
+  margin: 0;
+  font-size: 16px;
+  color: var(--color-text-slate-deep);
+}
+
+.trust-badges-grid {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.trust-badge {
+  padding: 16px 32px;
+  background: linear-gradient(135deg, var(--color-brand-purple-soft), var(--color-accent-indigo-soft));
+  border: 2px solid var(--color-brand-purple);
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-brand-purple-deep);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.trust-badge:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 24px rgb(99, 102, 241, 0.2);
+}
+
+/* =============================
+   🔗 INTEGRATIONS SECTION
+============================== */
+.integrations-section {
+  padding: 80px 56px;
+  background: linear-gradient(180deg, var(--color-surface-cool-pale) 0%, var(--color-surface) 100%);
+}
+
+.integrations-header {
+  text-align: center;
+  max-width: 700px;
+  margin: 0 auto 48px;
+}
+
+.integrations-header h2 {
+  margin: 0 0 12px;
+  font-size: 36px;
+  color: var(--color-accent-indigo-darker);
+}
+
+.integrations-header p {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-text-slate-deep);
+}
+
+.integrations-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.integration-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-surface-tint-cloud);
+  border-radius: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.integration-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.08);
+  border-color: var(--color-brand-purple);
+}
+
+.integration-icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  background: var(--color-brand-purple-soft);
+  border-radius: 12px;
+}
+
+.integration-item span {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-slate-deep);
+}
+
+/* =============================
+   💬 TESTIMONIALS SECTION
+============================== */
+.testimonials-section {
+  padding: 80px 56px;
+  background: var(--color-surface);
+}
+
+.testimonials-header {
+  text-align: center;
+  max-width: 700px;
+  margin: 0 auto 56px;
+}
+
+.testimonials-header h2 {
+  margin: 0 0 12px;
+  font-size: 36px;
+  color: var(--color-accent-indigo-darker);
+}
+
+.testimonials-header p {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-text-slate-deep);
+}
+
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.testimonial-card {
+  background: linear-gradient(135deg, var(--color-surface-cool-pale), var(--color-surface));
+  padding: 40px 32px;
+  border-radius: 16px;
+  border: 1px solid var(--color-surface-tint-cloud);
+  box-shadow: 0 4px 24px rgb(0, 0, 0, 0.06);
+}
+
+.testimonial-content {
+  margin-bottom: 32px;
+}
+
+.testimonial-content p {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-text-slate-deep);
+  line-height: 1.7;
+  font-style: italic;
+}
+
+.testimonial-author {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.author-avatar {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--color-brand-purple), var(--color-accent-indigo));
+  color: var(--color-surface);
+  font-size: 20px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
+.author-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.author-info strong {
+  font-size: 18px;
+  color: var(--color-accent-indigo-darker);
+}
+
+.author-info span {
+  font-size: 14px;
+  color: var(--color-text-slate-soft-deep);
+}
+
+/* =============================
+   💰 ENTERPRISE PRICING SECTION
+============================== */
+.enterprise-pricing {
+  padding: 80px 56px;
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-cool-pale) 100%);
+}
+
+.enterprise-pricing-header {
+  text-align: center;
+  max-width: 700px;
+  margin: 0 auto 56px;
+}
+
+.enterprise-pricing-header h2 {
+  margin: 0 0 12px;
+  font-size: 42px;
+  color: var(--color-accent-indigo-darker);
+}
+
+.enterprise-pricing-header p {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-text-slate-deep);
+}
+
+.pricing-table {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.pricing-card {
+  background: var(--color-surface);
+  padding: 48px 40px;
+  border-radius: 20px;
+  border: 2px solid var(--color-surface-tint-cloud);
+  box-shadow: 0 4px 24px rgb(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.pricing-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 40px rgb(0, 0, 0, 0.12);
+}
+
+.pricing-card-popular {
+  border-color: var(--color-brand-purple);
+  box-shadow: 0 8px 32px rgb(99, 102, 241, 0.15);
+}
+
+.popular-badge {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 24px;
+  background: linear-gradient(135deg, var(--color-brand-purple), var(--color-accent-indigo));
+  color: var(--color-surface);
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pricing-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.pricing-header h3 {
+  margin: 0 0 16px;
+  font-size: 28px;
+  color: var(--color-accent-indigo-darker);
+  font-weight: 700;
+}
+
+.pricing-price {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.price-amount {
+  font-size: 56px;
+  font-weight: 800;
+  color: var(--color-brand-purple);
+  line-height: 1;
+}
+
+.price-period {
+  font-size: 18px;
+  color: var(--color-text-slate-deep);
+}
+
+.pricing-description {
+  margin: 0;
+  font-size: 16px;
+  color: var(--color-text-slate-soft-deep);
+}
+
+.pricing-features {
+  list-style: none;
+  margin: 0 0 40px;
+  padding: 0;
+  flex: 1;
+}
+
+.pricing-features li {
+  padding: 12px 0;
+  font-size: 16px;
+  color: var(--color-text-slate-deep);
+  line-height: 1.5;
+  border-bottom: 1px solid var(--color-surface-tint-cloud);
+}
+
+.pricing-features li:last-child {
+  border-bottom: none;
+}
+
+.pricing-cta {
+  width: 100%;
+  padding: 16px 32px;
+  border: 2px solid var(--color-brand-purple);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-brand-purple);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pricing-cta:hover {
+  background: var(--color-brand-purple-soft);
+}
+
+.pricing-cta-primary {
+  background: linear-gradient(135deg, var(--color-brand-purple), var(--color-accent-indigo));
+  color: var(--color-surface);
+  border-color: transparent;
+}
+
+.pricing-cta-primary:hover {
+  background: linear-gradient(135deg, var(--color-brand-purple-strong), var(--color-accent-indigo-strong));
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgb(99, 102, 241, 0.3);
+}
+
+/* =============================
+   ❓ FAQ SECTION
+============================== */
+.faq-section {
+  padding: 80px 56px;
+  background: var(--color-surface);
+}
+
+.faq-header {
+  text-align: center;
+  max-width: 700px;
+  margin: 0 auto 56px;
+}
+
+.faq-header h2 {
+  margin: 0 0 12px;
+  font-size: 36px;
+  color: var(--color-accent-indigo-darker);
+}
+
+.faq-header p {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-text-slate-deep);
+}
+
+.faq-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.faq-item {
+  background: linear-gradient(135deg, var(--color-surface-cool-pale), var(--color-surface));
+  padding: 32px;
+  border-radius: 12px;
+  border: 1px solid var(--color-surface-tint-cloud);
+}
+
+.faq-item h3 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  color: var(--color-accent-indigo-darker);
+  font-weight: 700;
+}
+
+.faq-item p {
+  margin: 0;
+  font-size: 16px;
+  color: var(--color-text-slate-deep);
+  line-height: 1.6;
+}
+
+/* =============================
+   🌙 DARK MODE — NEW SECTIONS
+============================== */
+:root[data-theme="dark"] .enterprise-features {
+  background: linear-gradient(180deg, var(--color-surface-dark-card) 0%, var(--color-surface-darken) 100%);
+}
+
+:root[data-theme="dark"] .enterprise-features-header h2,
+:root[data-theme="dark"] .trust-badges-header h2,
+:root[data-theme="dark"] .integrations-header h2,
+:root[data-theme="dark"] .testimonials-header h2,
+:root[data-theme="dark"] .enterprise-pricing-header h2,
+:root[data-theme="dark"] .faq-header h2 {
+  color: var(--color-surface-tint-cool);
+}
+
+:root[data-theme="dark"] .enterprise-features-header p,
+:root[data-theme="dark"] .trust-badges-header p,
+:root[data-theme="dark"] .integrations-header p,
+:root[data-theme="dark"] .testimonials-header p,
+:root[data-theme="dark"] .enterprise-pricing-header p,
+:root[data-theme="dark"] .faq-header p {
+  color: var(--color-input-border);
+}
+
+:root[data-theme="dark"] .enterprise-feature-card,
+:root[data-theme="dark"] .integration-item,
+:root[data-theme="dark"] .testimonial-card,
+:root[data-theme="dark"] .pricing-card,
+:root[data-theme="dark"] .faq-item {
+  background: var(--color-surface-dark-card);
+  border-color: var(--color-border-dark);
+  box-shadow: 0 4px 24px rgb(0, 0, 0, 0.3);
+}
+
+:root[data-theme="dark"] .enterprise-feature-card h3,
+:root[data-theme="dark"] .integration-item span,
+:root[data-theme="dark"] .author-info strong,
+:root[data-theme="dark"] .pricing-header h3,
+:root[data-theme="dark"] .faq-item h3 {
+  color: var(--color-surface-tint-cool);
+}
+
+:root[data-theme="dark"] .enterprise-feature-card p,
+:root[data-theme="dark"] .testimonial-content p,
+:root[data-theme="dark"] .author-info span,
+:root[data-theme="dark"] .pricing-description,
+:root[data-theme="dark"] .pricing-features li,
+:root[data-theme="dark"] .faq-item p {
+  color: var(--color-input-border);
+}
+
+:root[data-theme="dark"] .trust-badges {
+  background: var(--color-surface-dark-card);
+}
+
+:root[data-theme="dark"] .trust-badge {
+  background: linear-gradient(135deg, var(--color-surface-dark-card-strong), var(--color-accent-purple-soft));
+  border-color: var(--color-accent-purple);
+  color: var(--color-accent-purple);
+}
+
+:root[data-theme="dark"] .integration-icon {
+  background: var(--color-surface-dark-card-strong);
+}
+
+:root[data-theme="dark"] .integrations-section,
+:root[data-theme="dark"] .enterprise-pricing {
+  background: linear-gradient(180deg, var(--color-surface-darken) 0%, var(--color-surface-dark-card) 100%);
+}
+
+:root[data-theme="dark"] .testimonial-card {
+  background: linear-gradient(135deg, var(--color-surface-dark-card-strong), var(--color-surface-dark-card));
+}
+
+:root[data-theme="dark"] .author-avatar {
+  background: linear-gradient(135deg, var(--color-accent-purple), var(--color-brand-purple));
+}
+
+:root[data-theme="dark"] .pricing-card-popular {
+  border-color: var(--color-accent-purple);
+  box-shadow: 0 8px 32px rgb(139, 92, 246, 0.2);
+}
+
+:root[data-theme="dark"] .popular-badge {
+  background: linear-gradient(135deg, var(--color-accent-purple), var(--color-brand-purple));
+}
+
+:root[data-theme="dark"] .price-amount {
+  color: var(--color-accent-purple);
+}
+
+:root[data-theme="dark"] .pricing-cta {
+  border-color: var(--color-accent-purple);
+  color: var(--color-accent-purple);
+}
+
+:root[data-theme="dark"] .pricing-cta:hover {
+  background: var(--color-surface-dark-card-strong);
+}
+
+:root[data-theme="dark"] .pricing-cta-primary {
+  background: linear-gradient(135deg, var(--color-accent-purple), var(--color-brand-purple));
+}
+
+:root[data-theme="dark"] .faq-item {
+  background: linear-gradient(135deg, var(--color-surface-dark-card-strong), var(--color-surface-dark-card));
+}
+
+/* =============================
+   📱 RESPONSIVE — NEW SECTIONS
+============================== */
+@media (max-width: 1120px) {
+  .enterprise-features-grid,
+  .testimonials-grid,
+  .pricing-table {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .integrations-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .faq-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .enterprise-features,
+  .trust-badges,
+  .integrations-section,
+  .testimonials-section,
+  .enterprise-pricing,
+  .faq-section {
+    padding: 48px 22px;
+  }
+
+  .enterprise-features-grid,
+  .testimonials-grid,
+  .pricing-table,
+  .integrations-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .enterprise-features-header h2,
+  .enterprise-pricing-header h2 {
+    font-size: 32px;
+  }
+
+  .trust-badges-grid {
+    gap: 16px;
+  }
+
+  .trust-badge {
+    padding: 12px 20px;
+    font-size: 14px;
+  }
+
+  .pricing-card {
+    padding: 32px 24px;
+  }
+
+  .price-amount {
+    font-size: 42px;
+  }
+}
+
+/* =============================
+   �🏠 SIGNED-IN HOME — greeting band above the ActivityDashboard.
    Kept here (not in dashboard.css) so the dashboard stays portable;
    each page owns its own greeting style.
 ============================== */

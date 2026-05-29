@@ -127,6 +127,46 @@
   white-space: normal;
 }
 
+.platform-admin-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.platform-admin-log-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.platform-admin-log-row strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60vw;
+}
+
+.platform-admin-log-row span {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.platform-admin-log-row code {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
 .platform-admin-empty {
   padding: 28px;
   border: 1px dashed var(--color-input-border);

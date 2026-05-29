@@ -5,6 +5,7 @@ import { SERVICES } from "../services/serviceData";
 import ThemeToggle from "../theme/ThemeToggle";
 import ActivityDashboard from "./dashboard/ActivityDashboard";
 import PersonalDashboard from "./dashboard/PersonalDashboard";
+import { APP_TIME_ZONE } from "../utils/datetime";
 import "./home.css";
 
 export default function Home() {
@@ -381,6 +382,253 @@ export default function Home() {
             </article>
           </section>
 
+          {/* Enterprise Features Section */}
+          <section className="enterprise-features">
+            <div className="enterprise-features-header">
+              <h2>Enterprise-Grade Security & Compliance</h2>
+              <p>Built to meet the most demanding security requirements with industry-standard certifications</p>
+            </div>
+            <div className="enterprise-features-grid">
+              <div className="enterprise-feature-card">
+                <div className="enterprise-feature-icon">🔐</div>
+                <h3>End-to-End Encryption</h3>
+                <p>All data encrypted at rest and in transit using AES-256. Zero-knowledge architecture ensures your data remains private.</p>
+              </div>
+              <div className="enterprise-feature-card">
+                <div className="enterprise-feature-icon">🛡️</div>
+                <h3>SOC 2 Type II Certified</h3>
+                <p>Audited security controls meeting AICPA trust services criteria for security, availability, and confidentiality.</p>
+              </div>
+              <div className="enterprise-feature-card">
+                <div className="enterprise-feature-icon">🌍</div>
+                <h3>GDPR Compliant</h3>
+                <p>Full compliance with EU data protection regulations. Data residency options in EU, US, and Asia-Pacific regions.</p>
+              </div>
+              <div className="enterprise-feature-card">
+                <div className="enterprise-feature-icon">🔑</div>
+                <h3>SSO & SAML</h3>
+                <p>Enterprise single sign-on with Okta, Azure AD, Google Workspace, and custom SAML 2.0 identity providers.</p>
+              </div>
+              <div className="enterprise-feature-card">
+                <div className="enterprise-feature-icon">📊</div>
+                <h3>Audit Logs</h3>
+                <p>Comprehensive logging of all user actions, API calls, and administrative changes with 7-year retention.</p>
+              </div>
+              <div className="enterprise-feature-card">
+                <div className="enterprise-feature-icon">👥</div>
+                <h3>SCIM Provisioning</h3>
+                <p>Automated user provisioning and deprovisioning through System for Cross-domain Identity Management.</p>
+              </div>
+            </div>
+          </section>
+
+          {/* Trust Badges Section */}
+          <section className="trust-badges">
+            <div className="trust-badges-header">
+              <h2>Trusted by Industry Leaders</h2>
+              <p>Join thousands of organizations that trust Wayve for their critical communications</p>
+            </div>
+            <div className="trust-badges-grid">
+              <div className="trust-badge">SOC 2</div>
+              <div className="trust-badge">GDPR</div>
+              <div className="trust-badge">ISO 27001</div>
+              <div className="trust-badge">HIPAA</div>
+              <div className="trust-badge">CCPA</div>
+              <div className="trust-badge">PCI DSS</div>
+            </div>
+          </section>
+
+          {/* Integrations Section */}
+          <section className="integrations-section">
+            <div className="integrations-header">
+              <h2>Seamless Integrations</h2>
+              <p>Connect Wayve with your existing tools and workflows</p>
+            </div>
+            <div className="integrations-grid">
+              <div className="integration-item">
+                <div className="integration-icon">📧</div>
+                <span>Gmail</span>
+              </div>
+              <div className="integration-item">
+                <div className="integration-icon">📅</div>
+                <span>Google Calendar</span>
+              </div>
+              <div className="integration-item">
+                <div className="integration-icon">🔵</div>
+                <span>Microsoft 365</span>
+              </div>
+              <div className="integration-item">
+                <div className="integration-icon">📊</div>
+                <span>Slack</span>
+              </div>
+              <div className="integration-item">
+                <div className="integration-icon">💼</div>
+                <span>Salesforce</span>
+              </div>
+              <div className="integration-item">
+                <div className="integration-icon">🗂️</div>
+                <span>Dropbox</span>
+              </div>
+              <div className="integration-item">
+                <div className="integration-icon">🔗</div>
+                <span>Zapier</span>
+              </div>
+              <div className="integration-item">
+                <div className="integration-icon">⚡</div>
+                <span>Webhooks</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Testimonials Section */}
+          <section className="testimonials-section">
+            <div className="testimonials-header">
+              <h2>What Our Customers Say</h2>
+              <p>See how organizations transform their productivity with Wayve</p>
+            </div>
+            <div className="testimonials-grid">
+              <div className="testimonial-card">
+                <div className="testimonial-content">
+                  <p>"Wayve replaced 5 different tools for our team. The security features give our IT department peace of mind, while employees love the unified interface."</p>
+                </div>
+                <div className="testimonial-author">
+                  <div className="author-avatar">SK</div>
+                  <div className="author-info">
+                    <strong>Sarah Kim</strong>
+                    <span>CTO, TechCorp Inc.</span>
+                  </div>
+                </div>
+              </div>
+              <div className="testimonial-card">
+                <div className="testimonial-content">
+                  <p>"The enterprise features are exactly what we needed. SSO integration was seamless, and the audit logs satisfy our compliance requirements."</p>
+                </div>
+                <div className="testimonial-author">
+                  <div className="author-avatar">MJ</div>
+                  <div className="author-info">
+                    <strong>Michael Johnson</strong>
+                    <span>VP of Security, FinanceHub</span>
+                  </div>
+                </div>
+              </div>
+              <div className="testimonial-card">
+                <div className="testimonial-content">
+                  <p>"Implementation was smooth and the ROI was immediate. We've reduced our SaaS spend by 40% while improving team collaboration."</p>
+                </div>
+                <div className="testimonial-author">
+                  <div className="author-avatar">EP</div>
+                  <div className="author-info">
+                    <strong>Emily Patel</strong>
+                    <span>CEO, StartupXYZ</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Enterprise Pricing Section */}
+          <section className="enterprise-pricing">
+            <div className="enterprise-pricing-header">
+              <h2>Enterprise Pricing</h2>
+              <p>Flexible plans designed for organizations of all sizes</p>
+            </div>
+            <div className="pricing-table">
+              <div className="pricing-card pricing-card-standard">
+                <div className="pricing-header">
+                  <h3>Team</h3>
+                  <div className="pricing-price">
+                    <span className="price-amount">$12</span>
+                    <span className="price-period">/user/month</span>
+                  </div>
+                  <p className="pricing-description">Perfect for small teams getting started</p>
+                </div>
+                <ul className="pricing-features">
+                  <li>✓ All core features included</li>
+                  <li>✓ 50GB storage per user</li>
+                  <li>✓ Basic admin controls</li>
+                  <li>✓ Email support</li>
+                  <li>✓ 30-day retention</li>
+                </ul>
+                <button className="pricing-cta" onClick={() => navigate("/register")}>Get Started</button>
+              </div>
+              <div className="pricing-card pricing-card-popular">
+                <div className="popular-badge">Most Popular</div>
+                <div className="pricing-header">
+                  <h3>Business</h3>
+                  <div className="pricing-price">
+                    <span className="price-amount">$25</span>
+                    <span className="price-period">/user/month</span>
+                  </div>
+                  <p className="pricing-description">For growing organizations</p>
+                </div>
+                <ul className="pricing-features">
+                  <li>✓ Everything in Team</li>
+                  <li>✓ Unlimited storage</li>
+                  <li>✓ Advanced admin dashboard</li>
+                  <li>✓ Priority support</li>
+                  <li>✓ 1-year retention</li>
+                  <li>✓ SSO integration</li>
+                  <li>✓ API access</li>
+                </ul>
+                <button className="pricing-cta pricing-cta-primary" onClick={() => navigate("/enterprise")}>Contact Sales</button>
+              </div>
+              <div className="pricing-card pricing-card-enterprise">
+                <div className="pricing-header">
+                  <h3>Enterprise</h3>
+                  <div className="pricing-price">
+                    <span className="price-amount">Custom</span>
+                  </div>
+                  <p className="pricing-description">For large-scale deployments</p>
+                </div>
+                <ul className="pricing-features">
+                  <li>✓ Everything in Business</li>
+                  <li>✓ Custom SLA</li>
+                  <li>✓ Dedicated account manager</li>
+                  <li>✓ 24/7 phone support</li>
+                  <li>✓ 7-year retention</li>
+                  <li>✓ Advanced security features</li>
+                  <li>✓ Custom integrations</li>
+                  <li>✓ On-premise deployment option</li>
+                </ul>
+                <button className="pricing-cta" onClick={() => navigate("/enterprise")}>Contact Sales</button>
+              </div>
+            </div>
+          </section>
+
+          {/* FAQ Section */}
+          <section className="faq-section">
+            <div className="faq-header">
+              <h2>Frequently Asked Questions</h2>
+              <p>Everything you need to know about Wayve Enterprise</p>
+            </div>
+            <div className="faq-grid">
+              <div className="faq-item">
+                <h3>What security certifications does Wayve have?</h3>
+                <p>Wayve is SOC 2 Type II certified, GDPR compliant, and ISO 27001 certified. We undergo annual third-party security audits to maintain these certifications.</p>
+              </div>
+              <div className="faq-item">
+                <h3>Can I integrate Wayve with my existing identity provider?</h3>
+                <p>Yes, Wayve supports SSO through SAML 2.0 and integrates with Okta, Azure AD, Google Workspace, and other major identity providers.</p>
+              </div>
+              <div className="faq-item">
+                <h3>What is your data retention policy?</h3>
+                <p>Retention periods vary by plan: Team (30 days), Business (1 year), and Enterprise (7 years). Custom retention options are available for Enterprise customers.</p>
+              </div>
+              <div className="faq-item">
+                <h3>Do you offer on-premise deployment?</h3>
+                <p>Yes, Enterprise customers can choose cloud or on-premise deployment. Our team will work with you to determine the best option for your requirements.</p>
+              </div>
+              <div className="faq-item">
+                <h3>What kind of support do you offer?</h3>
+                <p>Team plans include email support, Business plans include priority support, and Enterprise plans include 24/7 phone support with a dedicated account manager.</p>
+              </div>
+              <div className="faq-item">
+                <h3>Can I migrate data from other platforms?</h3>
+                <p>Yes, we offer migration assistance from Gmail, Outlook, Slack, and other popular platforms. Our team handles the entire migration process.</p>
+              </div>
+            </div>
+          </section>
+
           <footer className="public-home-footer">
             <div className="public-home-footer-grid">
               <div className="public-home-footer-brand">
@@ -445,7 +693,8 @@ export default function Home() {
   // the 2×2 ActivityDashboard. The welcome header for ActivityDashboard
   // stays here because PersonalDashboard renders its own greeting.
   const firstName = user.email?.split("@")[0] ?? "there";
-  const today = new Date().toLocaleDateString(undefined, {
+  const today = new Date().toLocaleDateString("en-US", {
+    timeZone: APP_TIME_ZONE,
     weekday: "long",
     month: "short",
     day: "numeric",

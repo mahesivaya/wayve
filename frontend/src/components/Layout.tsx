@@ -11,6 +11,28 @@ import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import "./Layout.css";
 
+// Shared bug-report glyph — amber warning triangle with a dark `!`.
+// Used in both the header shortcut button (.header-bug-btn) and the
+// Platform → Support sidebar entry so the two surfaces stay visually
+// consistent. The colors are hard-coded (not currentColor) because the
+// icon is intentionally two-tone.
+function BugReportIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        d="M11.13 3.3a1 1 0 0 1 1.74 0l9.4 16.3a1 1 0 0 1-.87 1.5H2.6a1 1 0 0 1-.87-1.5z"
+        fill="#f5a623"
+      />
+      <rect x="10.85" y="8.5" width="2.3" height="7.2" rx="1.05" fill="#2d2d2d" />
+      <circle cx="12" cy="18.4" r="1.35" fill="#2d2d2d" />
+    </svg>
+  );
+}
+
 function appKeyFromPath(pathname: string): AppKey {
   const match = SPLIT_APPS.find((app) => {
     if (app.key === "home") {
@@ -345,6 +367,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       hasPermission(user, "api_keys:manage"));
   const canAccessPlatformSupport =
     user.scope === "platform" && hasPermission(user, "members:read");
+  const canAccessPlatformAnalytics =
+    user.scope === "platform" && hasPermission(user, "members:read");
   const canAccessPlatformLogs =
     user.scope === "platform" &&
     (hasPermission(user, "logs:read") ||
@@ -379,6 +403,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     canAccessPlatformBilling ||
     canAccessPlatformDeveloper ||
     canAccessPlatformSupport ||
+    canAccessPlatformAnalytics ||
     canAccessPlatformLogs;
 
   return (
@@ -425,7 +450,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           </button>
         </div>
 
-        {!location.pathname.startsWith("/emails") && <SearchBar />}
+        {!location.pathname.startsWith("/emails") &&
+          !location.pathname.startsWith("/notes") && <SearchBar />}
 
         <div className="actions">
           {/* Bug-report shortcut. Always visible to signed-in users so
@@ -440,21 +466,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             title="Report an issue"
             aria-label="Report an issue"
           >
-            <svg
-              className="header-bug-icon"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              {/* Amber warning triangle — rounded corners, slightly inset
-                  from the viewBox so the corner radius reads cleanly. */}
-              <path
-                d="M11.13 3.3a1 1 0 0 1 1.74 0l9.4 16.3a1 1 0 0 1-.87 1.5H2.6a1 1 0 0 1-.87-1.5z"
-                fill="#f5a623"
-              />
-              {/* Dark exclamation mark — body + dot, sized to read at 20px. */}
-              <rect x="10.85" y="8.5" width="2.3" height="7.2" rx="1.05" fill="#2d2d2d" />
-              <circle cx="12" cy="18.4" r="1.35" fill="#2d2d2d" />
-            </svg>
+            <BugReportIcon className="header-bug-icon" />
           </button>
 
           {/* Welcome / role label removed — the signed-in identity is
@@ -564,8 +576,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 renderSidebarLink(
                   "/platform/support",
                   "Support",
-                  "🛟",
+                  <BugReportIcon className="sidebar-bug-icon" />,
                   location.pathname === "/platform/support",
+                )}
+              {canAccessPlatformAnalytics &&
+                renderSidebarLink(
+                  "/platform/analytics",
+                  "Analytics",
+                  "📊",
+                  location.pathname === "/platform/analytics",
                 )}
               {canAccessPlatformLogs &&
                 renderSidebarLink(

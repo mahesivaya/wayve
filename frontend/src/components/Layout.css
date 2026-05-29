@@ -508,6 +508,15 @@
   display: block;
 }
 
+/* Bug-report (amber warning triangle) — sized to match the emoji
+   icons in the same column. Multi-color SVG, so we don't let it
+   inherit currentColor like the stroke-based sidebar-icon-svg. */
+.sidebar-bug-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
 .sidebar-label {
   flex: 1 1 auto;
   min-width: 0;

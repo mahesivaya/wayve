@@ -49,6 +49,7 @@ const CreateOrganization = lazy(() => import("./organization/CreateOrganization"
 const PlatformBilling = lazy(() => import("./platformBilling/PlatformBilling"));
 const PlatformDeveloper = lazy(() => import("./platformTeam/PlatformDeveloper"));
 const PlatformSupport = lazy(() => import("./platformTeam/PlatformSupport"));
+const PlatformAnalytics = lazy(() => import("./platformTeam/PlatformAnalytics"));
 const PlatformWelcome = lazy(() => import("./platformTeam/PlatformWelcome"));
 const PlatformSecrets = lazy(() => import("./platformTeam/PlatformSecrets"));
 const PlatformLogs = lazy(() => import("./platformTeam/PlatformLogs"));
@@ -217,6 +218,7 @@ export default function App() {
             <Route path="/platform/billing" element={<PlatformBilling />} />
             <Route path="/platform/developer" element={<PlatformDeveloper />} />
             <Route path="/platform/support" element={<PlatformSupport />} />
+            <Route path="/platform/analytics" element={<PlatformAnalytics />} />
             <Route path="/platform/welcome" element={<PlatformWelcome />} />
             <Route path="/platform/secrets" element={<PlatformSecrets />} />
             <Route path="/platform/logs" element={<PlatformLogs />} />
