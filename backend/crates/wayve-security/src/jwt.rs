@@ -110,6 +110,13 @@ pub fn expired_auth_cookie() -> Cookie<'static> {
     // Secure one of the same name, so without this the logout response
     // silently fails to clear the cookie and the user is still
     // authenticated on the next page load.
+    //
+    // We also set `expires` to the Unix epoch alongside `max_age(0)` —
+    // iOS Safari/WebKit (and Chrome iOS, which is WebKit-backed) has
+    // been observed to ignore Max-Age=0 alone on the second-and-later
+    // cookie-clear in a session, but reliably honors `Expires` in the
+    // past. Setting both is the recommended belt-and-suspenders form
+    // and matches what most production identity stacks ship.
     let secure = crate::config::auth_cookie_secure();
     Cookie::build(AUTH_COOKIE_NAME, "")
         .http_only(true)
@@ -117,6 +124,7 @@ pub fn expired_auth_cookie() -> Cookie<'static> {
         .same_site(SameSite::Lax)
         .path("/")
         .max_age(actix_web::cookie::time::Duration::seconds(0))
+        .expires(actix_web::cookie::time::OffsetDateTime::UNIX_EPOCH)
         .finish()
 }
 
