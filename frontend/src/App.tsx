@@ -66,6 +66,8 @@ const SsoSettings = lazy(() => import("./settings/SsoSettings"));
 const SharedInboxes = lazy(() => import("./settings/SharedInboxes"));
 const Webhooks = lazy(() => import("./settings/Webhooks"));
 const ScimTokens = lazy(() => import("./settings/ScimTokens"));
+const PlanAdmin = lazy(() => import("./settings/PlanAdmin"));
+const SecureMessageView = lazy(() => import("./emails/SecureMessageView"));
 const AuditSecurity = lazy(() => import("./settings/AuditSecurity"));
 const RecoverPage = lazy(() => import("./recovery/RecoverPage"));
 
@@ -113,6 +115,12 @@ export default function App() {
           path="/recover-with-mnemonic"
           element={<RecoverWithMnemonicPage />}
         />
+        {/* Plan A Phase 3 — Secure-send magic link. Intentionally
+            public: the recipient is not (necessarily) a Wayve user,
+            and the passphrase is what actually unlocks the message.
+            The page fetches the ciphertext from a no-auth API route
+            and decrypts entirely client-side. */}
+        <Route path="/m/:token" element={<SecureMessageView />} />
         <Route path="/organization" element={<Organization />} />
         {/* /services/:slug is now /docs/services/:slug — redirect old
             links so any externally-shared URL still lands. */}
@@ -229,6 +237,7 @@ export default function App() {
             <Route path="/settings/inboxes" element={<SharedInboxes />} />
             <Route path="/settings/webhooks" element={<Webhooks />} />
             <Route path="/settings/scim" element={<ScimTokens />} />
+            <Route path="/settings/plans" element={<PlanAdmin />} />
 
           </Route>
         </Route>

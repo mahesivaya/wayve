@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `backend/` — Rust + Actix Web 4 server (single crate, name `rwayve`). Postgres via sqlx, Redis for cache, Gmail OAuth + sync, WebSocket chat/call, AES-256-GCM at-rest encryption.
 - `frontend/` — React 18 + TypeScript + Vite. React Compiler is enabled (via `@vitejs/plugin-react`). React Router v7.
-- `infra/` — `docker-compose.yml` (postgres, redis, backend, frontend, nginx; `mailhog` under the `mail` profile), `justfile` of common commands, `postgres/init.sql` (the canonical schema), `nginx/nginx.conf`.
+- `infra/` — `docker-compose.yml` (postgres, redis, backend, frontend, nginx), `docker-compose.dev.yml` (full dev stack including `mailpit`), `justfile` of common commands, `postgres/init.sql` (the canonical schema), `nginx/nginx.conf`.
 - `scripts/smoke.sh` — end-to-end docker smoke that brings up the stack and hits a handful of endpoints. Used by CI.
 - `.github/workflows/smoke.yml` — runs backend `cargo test`, frontend `tsc --noEmit` + `vitest`, then the docker smoke.
 
@@ -36,7 +36,7 @@ Docker / full stack (from `infra/` via `just`, or from repo root with `docker co
 - `just db-shell` — `psql` into the running `postgres_db` container as `wayve_user`.
 - `just db-reset` — wipes the volume and restarts postgres (re-runs `init.sql`).
 - Smoke: `./scripts/smoke.sh` (set `KEEP_RUNNING=1` to leave the stack up).
-- MailHog (catches outbound SMTP, UI at `http://localhost:8025`): `docker compose -f infra/docker-compose.yml --profile mail up -d mailhog`.
+- Mailpit (catches outbound SMTP, UI at `http://localhost:8025`): part of the dev stack — `docker compose -f infra/docker-compose.dev.yml up -d mailpit` (or just bring up the full dev stack).
 
 ## Backend architecture
 
@@ -94,7 +94,7 @@ Test helpers in `backend/src/test_support.rs` (`test_pool`, `insert_local_user`,
 
 Backend integration tests live in `backend/src/tests/*.rs` and are wired in via `backend/src/tests/mod.rs`, which is itself declared `#[cfg(test)] mod tests;` from `backend/src/main.rs`. Adding a new test file means appending a `mod foo_test;` line to `tests/mod.rs` — the file itself uses the pattern `#[cfg(test)] mod tests { ... }` with explicit `use crate::...` paths into the items it exercises. `cargo test` compiles and runs them.
 
-Tests that mutate env vars use `#[serial_test::serial]`; CI runs `--test-threads=1` for the same reason. OAuth flows are mocked with `wiremock` and `external::gmail_api_base()` indirection (set the env var to point at the mock server). MailHog-dependent tests skip themselves when `MAILHOG_API` is unset.
+Tests that mutate env vars use `#[serial_test::serial]`; CI runs `--test-threads=1` for the same reason. OAuth flows are mocked with `wiremock` and `external::gmail_api_base()` indirection (set the env var to point at the mock server). Mailpit-dependent tests skip themselves when `MAILPIT_API` is unset.
 
 ## Frontend architecture
 
@@ -114,4 +114,4 @@ Vitest + jsdom + Testing Library. Setup in `src/test/setup.ts` polyfills `localS
 
 ## CI
 
-`.github/workflows/smoke.yml` has three jobs: `backend-tests` (spins up Postgres + MailHog services, applies `init.sql`, runs `cargo test --test-threads=1`), `frontend-tests` (`tsc --noEmit` + `npm test`), then `docker-smoke` (depends on both; generates throwaway `.env`s + `client_secret.json`, then runs `scripts/smoke.sh`). Match this locally before pushing breaking changes.
+`.github/workflows/smoke.yml` has three jobs: `backend-tests` (spins up Postgres + Mailpit services, applies `init.sql`, runs `cargo test --test-threads=1`), `frontend-tests` (`tsc --noEmit` + `npm test`), then `docker-smoke` (depends on both; generates throwaway `.env`s + `client_secret.json`, then runs `scripts/smoke.sh`). Match this locally before pushing breaking changes.

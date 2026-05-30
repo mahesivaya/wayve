@@ -24,19 +24,22 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      mailhog:
-        image: mailhog/mailhog:v1.0.1
+      mailpit:
+        image: axllent/mailpit:latest
         ports:
           - 1025:1025
           - 8025:8025
+        env:
+          MP_SMTP_AUTH_ACCEPT_ANY: "true"
+          MP_SMTP_AUTH_ALLOW_INSECURE: "true"
 
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/rwayve_test
       JWT_SECRET: ci-secret
       AES_KEY: 0123456789abcdef0123456789abcdef
-      MAILHOG_API: http://localhost:8025
-      MAILHOG_SMTP_HOST: localhost
-      MAILHOG_SMTP_PORT: "1025"
+      MAILPIT_API: http://localhost:8025
+      MAILPIT_SMTP_HOST: localhost
+      MAILPIT_SMTP_PORT: "1025"
       RUST_BACKTRACE: 1
 
     steps:

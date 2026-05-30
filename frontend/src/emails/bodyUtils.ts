@@ -38,7 +38,22 @@ export function normalizeEmailBody(body: string) {
     .trim();
 }
 
-function parseWayveEncryptedBody(body: string): WayveEncryptedBody | null {
+// Two envelope shapes share the `WAYVE_SECURE_V1` prefix:
+//   * `wayve_encrypted`        — single-recipient. Phase 1 (inbound
+//     encrypt-on-arrival from external Gmail/Outlook senders) emits
+//     this; `key` is one RSA-OAEP-wrapped AES key for the inbox owner.
+//   * `wayve_encrypted_multi`  — multi-recipient. Phase 2 (Wayve-to-
+//     Wayve native channel) emits this; `keys` is a map keyed by
+//     recipient user_id so the same envelope row decrypts cleanly for
+//     every recipient including the sender's Sent copy.
+//
+// The normaliser returns a discriminated union so the decryptor can
+// pick the right wrapped key without re-parsing the JSON.
+type ParsedWayveEnvelope =
+  | { kind: "single"; data: number[]; key: number[]; iv: number[] }
+  | { kind: "multi"; data: number[]; iv: number[]; keys: Record<string, number[]> };
+
+function parseWayveEncryptedBody(body: string): ParsedWayveEnvelope | null {
   const trimmed = normalizeEmailBody(body).trim();
 
   if (!trimmed.startsWith(WAYVE_SECURE_PREFIX)) {
@@ -58,15 +73,34 @@ function parseWayveEncryptedBody(body: string): WayveEncryptedBody | null {
   const parsed = JSON.parse(trimmed.slice(jsonStart, jsonEnd + 1));
 
   if (
-    parsed?.type !== "wayve_encrypted" ||
-    !Array.isArray(parsed.data) ||
-    !Array.isArray(parsed.key) ||
-    !Array.isArray(parsed.iv)
+    parsed?.type === "wayve_encrypted" &&
+    Array.isArray(parsed.data) &&
+    Array.isArray(parsed.key) &&
+    Array.isArray(parsed.iv)
   ) {
-    throw new Error("Encrypted Wayve email payload is invalid");
+    return {
+      kind: "single",
+      data: parsed.data,
+      key: parsed.key,
+      iv: parsed.iv,
+    };
   }
 
-  return parsed;
+  if (
+    parsed?.type === "wayve_encrypted_multi" &&
+    Array.isArray(parsed.data) &&
+    Array.isArray(parsed.iv) &&
+    parsed.keys && typeof parsed.keys === "object"
+  ) {
+    return {
+      kind: "multi",
+      data: parsed.data,
+      iv: parsed.iv,
+      keys: parsed.keys as Record<string, number[]>,
+    };
+  }
+
+  throw new Error("Encrypted Wayve email payload is invalid");
 }
 
 export function emailBodyErrorMessage(err: unknown) {
@@ -115,13 +149,38 @@ export async function decryptWayveBodyIfNeeded(
     throw new Error("This device does not have your Wayve private key");
   }
 
+  // Pick the correct wrapped key per envelope shape:
+  //   * single-recipient envelopes carry one `key` field for the inbox
+  //     owner — used by Phase 1's inbound encrypt-on-arrival path.
+  //   * multi-recipient envelopes carry a `keys` map indexed by
+  //     recipient user_id — used by Phase 2's Wayve-to-Wayve channel.
+  //     We MUST have a userId here to know which slot is ours; without
+  //     it (legacy callers pre-Phase-2) we surface a clear error.
+  let wrappedKeyBytes: number[];
+  if (encrypted.kind === "single") {
+    wrappedKeyBytes = encrypted.key;
+  } else {
+    if (!userId) {
+      throw new Error(
+        "Multi-recipient Wayve email decryption requires a userId — no slot to read from `keys`."
+      );
+    }
+    const slot = encrypted.keys[String(userId)];
+    if (!slot) {
+      throw new Error(
+        "No wrapped key for this user in the email envelope — the sender did not include you."
+      );
+    }
+    wrappedKeyBytes = slot;
+  }
+
   let lastError: unknown = null;
 
   for (const privateKey of privateKeys) {
     try {
       return await decryptMessage(
         new Uint8Array(encrypted.data),
-        new Uint8Array(encrypted.key),
+        new Uint8Array(wrappedKeyBytes),
         new Uint8Array(encrypted.iv),
         privateKey
       ).then(normalizeEmailBody);

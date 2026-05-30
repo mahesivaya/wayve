@@ -74,6 +74,20 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // populate. GIN index keeps `<label> = ANY(labels)` index-scanned.
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS labels TEXT[] NOT NULL DEFAULT '{}'",
         "CREATE INDEX IF NOT EXISTS idx_emails_labels ON emails USING GIN (labels)",
+        // Plan A Phase 2 — Wayve-to-Wayve native channel. `source` tags
+        // the provenance of each row so the list query knows whether to
+        // join through email_accounts (imap/gmail/outlook) or scan by
+        // recipient_user_id (wayve). recipient_user_id is the owner of a
+        // 'wayve'-source row when account_id is NULL — the send-internal
+        // path inserts one row per recipient with their user_id stamped
+        // here. Same definitions live in init.sql; mirrored here for
+        // already-running deployments.
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'imap'",
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS recipient_user_id INTEGER \
+         REFERENCES users(id) ON DELETE CASCADE",
+        "CREATE INDEX IF NOT EXISTS idx_emails_recipient_user_id \
+         ON emails(recipient_user_id, created_at DESC) \
+         WHERE recipient_user_id IS NOT NULL",
         // Widen the body-worker partial index to match the worker's full
         // predicate: missing body OR pending attachment verification. The
         // CREATE INDEX IF NOT EXISTS clause is a no-op when the index
@@ -299,12 +313,19 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // prod DBs need the self-heal here or /api/me + registration
         // 500 on the new column reference.
         // ────────────────────────────────────────────────────────────────
+        // Plan A: collapsed to 'full' only. Any 'basic' / 'password_only'
+        // legacy rows are pinned to 'full' here so the tighter CHECK
+        // installs cleanly; the AuthContext picks them up on next login,
+        // generates a fresh mnemonic, wraps the on-device RSA key and
+        // nulls out private_key_encrypted/_iv so the mnemonic is the
+        // only path back in. See init.sql for the same migration.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_mode TEXT NOT NULL DEFAULT 'full'",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS private_key_encrypted TEXT",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS private_key_iv TEXT",
+        "UPDATE users SET recovery_mode = 'full' WHERE recovery_mode <> 'full'",
         "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_recovery_mode_check",
         "ALTER TABLE users ADD CONSTRAINT users_recovery_mode_check \
-         CHECK (recovery_mode IN ('basic', 'full', 'password_only'))",
+         CHECK (recovery_mode = 'full')",
         // ────────────────────────────────────────────────────────────────
         // OIDC SSO (multi-tenant). One IdP config row per org;
         // allowed_domain routes alice@acme.com → Acme's IdP. The
@@ -514,6 +535,40 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS external_id TEXT",
         "CREATE UNIQUE INDEX IF NOT EXISTS users_external_id_org_idx \
          ON users(organization_id, external_id) WHERE external_id IS NOT NULL",
+        // Plan A: per-user 1 GiB ciphertext quota across emails, chat,
+        // drive, tasks, calendar, notes. Same definition lives in
+        // init.sql; mirrored here for already-running deployments.
+        "CREATE TABLE IF NOT EXISTS user_storage_usage (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            bytes_used BIGINT NOT NULL DEFAULT 0,
+            bytes_quota BIGINT NOT NULL DEFAULT 1073741824,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT user_storage_usage_nonneg_chk CHECK (bytes_used >= 0 AND bytes_quota >= 0)
+        )",
+        // Plan A Phase 3 — secure-send magic-link table. The server
+        // stores only opaque ciphertext + wrapped key + per-message
+        // PBKDF2 salt; it never sees the passphrase the recipient
+        // needs. Same definition lives in init.sql; mirrored here for
+        // already-running deployments.
+        "CREATE TABLE IF NOT EXISTS secure_messages (
+            id BIGSERIAL PRIMARY KEY,
+            token TEXT NOT NULL UNIQUE,
+            sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            recipient_email TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            ciphertext TEXT NOT NULL,
+            iv TEXT NOT NULL,
+            wrapped_key TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            pbkdf2_iterations INTEGER NOT NULL DEFAULT 600000,
+            expires_at TIMESTAMPTZ NOT NULL,
+            opened_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_secure_messages_expires_at \
+         ON secure_messages(expires_at)",
+        "CREATE INDEX IF NOT EXISTS idx_secure_messages_sender \
+         ON secure_messages(sender_user_id, created_at DESC)",
     ];
 
     for statement in statements {

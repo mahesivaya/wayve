@@ -36,32 +36,30 @@ export async function deleteWrappedKey(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Basic-mode private-key client
+// Legacy basic-key client — migration only
 // ---------------------------------------------------------------------------
 //
-// Only valid for users with `recovery_mode = 'basic'`. Server stores the
-// PKCS8 plaintext encrypted at rest with AES_KEY and ships it back in
-// plaintext over TLS so the browser can load it into IndexedDB on a new
-// device. password_only / full users get 404 from these endpoints —
-// they don't escrow keys with the server.
+// Plan A retired the server-held PKCS8 escrow flow. These calls exist
+// only to migrate users who were on the old 'basic' mode: GET pulls the
+// legacy envelope (returns null once the row has been migrated and the
+// columns nulled), and DELETE wipes it after the SPA has wrapped the
+// private key under a fresh BIP-39 mnemonic. PUT now returns 410 from
+// the server; the upload helper is retained for backwards-compat call
+// sites and is a no-op outside of tests.
 
-/** Upload the plaintext PKCS8 of the user's RSA private key to the server. */
-export async function uploadBasicKey(pkcs8Bytes: ArrayBuffer): Promise<void> {
-  const bytes = new Uint8Array(pkcs8Bytes);
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  const pkcs8 = btoa(binary);
-  await apiFetch("/api/me/basic-key", {
-    method: "PUT",
-    body: JSON.stringify({ pkcs8 }),
-  });
+/** Legacy: PUT is 410 Gone on the server. Kept to avoid breaking imports. */
+export async function uploadBasicKey(_pkcs8Bytes: ArrayBuffer): Promise<void> {
+  // Server returns 410 under Plan A. Don't even round-trip; treat as a
+  // silent no-op so existing call paths during the migration window
+  // don't surface a misleading error. Real call sites should be removed
+  // as part of the AuthContext rewrite.
+  return;
 }
 
 /**
- * Fetch the plaintext PKCS8 of the user's basic-mode private key.
- * Returns null when no key is on file (server returns 404 — typical on
- * the first login right after registration if the prior upload didn't
- * land).
+ * Fetch the legacy server-held PKCS8 envelope (if any) so a migrating
+ * user can recover their pre-Plan-A RSA private key and re-wrap it
+ * under a new mnemonic. Returns null once the row has been migrated.
  */
 export async function fetchBasicKey(): Promise<ArrayBuffer | null> {
   const res = await apiFetch("/api/me/basic-key", { preserve401: true });
@@ -71,4 +69,13 @@ export async function fetchBasicKey(): Promise<ArrayBuffer | null> {
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
   return out.buffer;
+}
+
+/**
+ * Wipe the legacy server-held PKCS8 envelope. Call this right after a
+ * successful uploadWrappedKey() so the mnemonic becomes the only path
+ * back into the account.
+ */
+export async function deleteBasicKey(): Promise<void> {
+  await apiFetch("/api/me/basic-key", { method: "DELETE" });
 }

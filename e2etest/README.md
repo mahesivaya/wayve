@@ -23,14 +23,14 @@ That gives you:
 | backend  | <http://localhost:8080>   | API calls + seeding fixtures        |
 | postgres | localhost:5432            | (indirect — through backend)        |
 | redis    | localhost:6379            | Rate-limit key flush in setup       |
-| MailHog  | <http://localhost:8025>   | Reset-token retrieval (when wired)  |
+| Mailpit  | <http://localhost:8025>   | Reset-token retrieval (when wired)  |
 
 Override any of these with env vars:
 
 ```bash
 E2E_BASE_URL=http://localhost \
 E2E_API_BASE=http://localhost:8080 \
-E2E_MAILHOG_API=http://localhost:8025 \
+E2E_MAILPIT_API=http://localhost:8025 \
 E2E_REDIS_HOST=127.0.0.1 \
 E2E_REDIS_PORT=6379 \
   npm test
@@ -76,7 +76,7 @@ Round-one coverage — ten critical-path specs across thirteen tests:
 | Public    | `public/home.spec.ts`             | Wordmark renders, Login CTA navigates to `/login`                |
 | Auth      | `auth/signup.spec.ts`             | UI signup lands the user inside the app (sidebar visible)        |
 | Auth      | `auth/login.spec.ts`              | Seeded user logs in; wrong password is rejected                  |
-| Auth      | `auth/reset.spec.ts`              | Forgot → token via MailHog → reset → login (skipped without smtp)|
+| Auth      | `auth/reset.spec.ts`              | Forgot → token via Mailpit → reset → login (skipped without smtp)|
 | Pricing   | `pricing/plans.spec.ts`           | Anonymous /pricing shows Basic, Advance, Enterprise tiers        |
 | Emails    | `emails/empty.spec.ts`            | Fresh user sees the Accounts header and add-account "+"           |
 | Scheduler | `scheduler/create.spec.ts`        | Authenticated user can open `/scheduler`                          |
@@ -151,7 +151,7 @@ The full directory is gitignored — re-run to regenerate.
   the limiter. Confirm the dev stack is up and the port is exposed
   (`docker ps | grep redis`).
 - **`auth/reset` skips** — backend `SMTP_HOST` isn't pointing at
-  MailHog. Set `SMTP_HOST=mailhog SMTP_PORT=1025` on the backend
+  Mailpit. Set `SMTP_HOST=mailpit SMTP_PORT=1025` on the backend
   container to enable the round-trip.
 - **`waitForURL` timeouts after a UI navigation** — the dockerised
   frontend takes longer to compile the first time after a rebuild.

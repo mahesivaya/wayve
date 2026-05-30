@@ -12,16 +12,14 @@ export type CurrentPlan = {
   amount_cents: number;
 };
 
-// Recovery mode chosen at signup. Surfaced by /api/me so the SPA can
-// branch setupEncryption.
-//   basic           → server holds an AES_KEY-encrypted copy of the
-//                     RSA private key (cross-device login, server-trust)
-//   full            → server stores a mnemonic-wrapped envelope of the
-//                     real private key (cross-device via /recover)
-//   password_only   → server holds only a credential blob (mnemonic
-//                     unlocks password reset, encrypted history is
-//                     device-bound)
-export type RecoveryMode = "basic" | "full" | "password_only";
+// Plan A: only one recovery mode exists — 'full'. Every user's RSA
+// private key is wrapped by their 24-word BIP-39 mnemonic; the server
+// stores only the opaque envelope. The string union still exists as a
+// type so the rest of the SPA compiles unchanged, but it has exactly
+// one inhabitant. The legacy 'basic' and 'password_only' rows have
+// been migrated to 'full' (see infra/postgres/init.sql and
+// backend/.../startup.rs).
+export type RecoveryMode = "full";
 
 export type UserType = {
   email: string;

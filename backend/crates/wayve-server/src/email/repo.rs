@@ -102,6 +102,12 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
     // `result.len() > page_size` without an extra COUNT round-trip.
     let query_limit = (filters.page_size + 1) as i64;
 
+    // Plan A Phase 2 — `email_accounts` is now a LEFT JOIN so rows with
+    // `source = 'wayve'` (no account_id, recipient_user_id is the owner)
+    // still come back. Tenant boundary moves into the WHERE clause:
+    // either a row belongs to the caller via their email_account, OR via
+    // shared-inbox membership, OR (new) via being a Wayve-to-Wayve
+    // delivery addressed to them.
     let mut qb = QueryBuilder::new(
         r#"
         SELECT e.id, e.gmail_id, e.subject, e.subject_iv, e.subject_encrypted,
@@ -111,10 +117,11 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                    SELECT 1 FROM email_attachments ea WHERE ea.email_id = e.id
                ) AS has_attachments,
                e.account_id, e.is_read, e.created_at,
-               a.is_shared, a.shared_label,
+               COALESCE(a.is_shared, FALSE) AS is_shared,
+               a.shared_label,
                s.status AS inbox_status, s.assignee_id AS inbox_assignee_id
         FROM emails e
-        JOIN email_accounts a ON e.account_id = a.id
+        LEFT JOIN email_accounts a ON e.account_id = a.id
         LEFT JOIN shared_inbox_members sm
                ON sm.account_id = a.id AND sm.user_id =
         "#,
@@ -127,7 +134,9 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
         "#,
     );
     qb.push_bind(filters.user_id);
-    qb.push(" OR sm.user_id IS NOT NULL)");
+    qb.push(" OR sm.user_id IS NOT NULL OR (e.source = 'wayve' AND e.recipient_user_id = ");
+    qb.push_bind(filters.user_id);
+    qb.push("))");
 
     if let Some(account_id) = filters.account_id {
         qb.push(" AND a.id = ");
@@ -153,14 +162,30 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
 
     if let Some(folder) = filters.folder.as_deref() {
         match folder {
+            // Plan A Phase 2: wayve-source rows have NULL account_id so
+            // the legacy `sender NOT LIKE a.email` heuristic can't apply
+            // (a.email is NULL). They're tagged explicitly with INBOX
+            // or SENT labels by send_internal, so route via label for
+            // those rows and fall back to the legacy heuristic for
+            // provider-synced rows.
             "inbox" => {
                 qb.push(
-                    " AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%' \
-                       AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)) ",
+                    " AND (\
+                       (e.source = 'wayve' AND 'INBOX' = ANY(e.labels)) \
+                       OR (e.source <> 'wayve' \
+                           AND a.email IS NOT NULL \
+                           AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%' \
+                           AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)))) ",
                 );
             }
             "sent" => {
-                qb.push(" AND lower(coalesce(e.sender, '')) LIKE '%' || lower(a.email) || '%' ");
+                qb.push(
+                    " AND (\
+                       (e.source = 'wayve' AND 'SENT' = ANY(e.labels)) \
+                       OR (e.source <> 'wayve' \
+                           AND a.email IS NOT NULL \
+                           AND lower(coalesce(e.sender, '')) LIKE '%' || lower(a.email) || '%')) ",
+                );
             }
             "important" => {
                 qb.push(" AND 'IMPORTANT' = ANY(e.labels) ");
@@ -260,16 +285,21 @@ pub async fn get_detail(
     email_id: i32,
     user_id: i32,
 ) -> sqlx::Result<Option<EmailDetailRow>> {
+    // Plan A Phase 2 — same LEFT JOIN + wayve-source recipient extension
+    // as the list query, so opening a Wayve-to-Wayve email by id works
+    // even though the row has NULL account_id.
     let row = sqlx::query(
         r#"
         SELECT e.id, e.account_id, e.subject, e.subject_iv, e.subject_encrypted,
                e.sender, e.receiver, e.body_encrypted, e.body_iv, e.attachments_checked
           FROM emails e
-          JOIN email_accounts a ON e.account_id = a.id
+          LEFT JOIN email_accounts a ON e.account_id = a.id
           LEFT JOIN shared_inbox_members m
                  ON m.account_id = a.id AND m.user_id = $2
          WHERE e.id = $1
-           AND (a.user_id = $2 OR m.user_id IS NOT NULL)
+           AND (a.user_id = $2
+                OR m.user_id IS NOT NULL
+                OR (e.source = 'wayve' AND e.recipient_user_id = $2))
         "#,
     )
     .bind(email_id)

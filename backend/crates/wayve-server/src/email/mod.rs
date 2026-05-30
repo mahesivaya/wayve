@@ -11,6 +11,7 @@ pub mod profile;
 pub mod provider;
 pub mod repo;
 mod provider_lookup;
+pub mod secure;
 mod send;
 pub mod sender;
 pub mod shared_inbox;
@@ -33,6 +34,10 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(handler::get_email_body)
         .service(handler::get_email_by_id)
         .service(handler::send)
+        .service(handler::send_internal)
+        .service(secure::send_secure)
+        .service(secure::get_secure_message)
+        .service(secure::revoke_secure_message)
         .service(handler::gmail_connect_url)
         .service(outlook_oauth::outlook_connect_url)
         .service(yahoo_routes::yahoo_connect)

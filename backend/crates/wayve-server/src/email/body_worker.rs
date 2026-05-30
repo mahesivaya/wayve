@@ -3,7 +3,7 @@ use crate::prelude::*;
 use crate::email::attachments::save_email_attachments;
 use crate::email::oauth::{HTTP_CLIENT, load_google_secrets, refresh_access_token};
 use crate::email::utils::{AttachmentMeta, extract_attachments, extract_body};
-use wayve_security::encryption::encrypt;
+use wayve_security::encryption::{encrypt, encrypt_to_pubkey};
 
 use serde_json::Value;
 use tokio::time::{Duration, sleep};
@@ -196,7 +196,9 @@ pub(crate) async fn process_account(
     while let Some(res) = tasks.next().await {
         match res {
             Ok(fetched) => {
-                if let Err(e) = update_body(pool, fetched.id, &fetched.body).await {
+                if let Err(e) =
+                    update_body(pool, fetched.account_id, fetched.id, &fetched.body).await
+                {
                     println!("body_worker update {} failed: {:?}", fetched.id, e);
                 } else {
                     save_email_attachments(
@@ -260,8 +262,55 @@ async fn fetch_one(token: &str, account_id: i32, id: i32, gmail_id: &str) -> Res
 }
 
 #[instrument(target = "db", skip(pool, body), fields(email_id = id))]
-async fn update_body(pool: &PgPool, id: i32, body: &str) -> Result<()> {
-    let (iv, encrypted) = encrypt(body)?;
+async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Result<()> {
+    // Plan A inbound encrypt-on-arrival: prefer wrapping the body to the
+    // owning user's RSA public key so the server never persists a copy
+    // it can decrypt. If the user has no pubkey on file (legacy account
+    // that pre-dates the keypair rollout, OR a SQL-seeded test user)
+    // we fall back to the historical server-AES path so onboarding
+    // isn't blocked by the missing key.
+    //
+    // Both shapes coexist in the same `body_encrypted` column because
+    // `frontend/src/emails/bodyUtils.ts` checks for the
+    // `WAYVE_SECURE_V1` prefix first and falls through to the API's
+    // server-decrypted shape otherwise.
+    let public_key_json: Option<String> = sqlx::query_scalar(
+        "SELECT u.public_key
+           FROM email_accounts a
+           JOIN users u ON u.id = a.user_id
+          WHERE a.id = $1",
+    )
+    .bind(account_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+
+    let (iv, encrypted) = match public_key_json
+        .as_deref()
+        .and_then(parse_spki_from_json_bytes)
+    {
+        Some(spki) => {
+            // Envelope is self-contained (it carries its own AES nonce
+            // inside the JSON). The legacy `body_iv` column stays empty
+            // so the frontend's prefix-sniffing decoder doesn't get
+            // confused by a stray IV that doesn't apply.
+            let envelope = encrypt_to_pubkey(body.as_bytes(), &spki)?;
+            (String::new(), envelope)
+        }
+        None => {
+            // Fallback: AES_KEY at-rest. The user has no public key on
+            // file yet, so we cannot E2E this row. Log a warn-target so
+            // an operator can spot persistent pubkey-missing accounts.
+            tracing::warn!(
+                target: "worker",
+                email_id = id,
+                account_id,
+                "encrypt-on-arrival: no public key on file for owner; \
+                 falling back to server-AES at rest"
+            );
+            encrypt(body)?
+        }
+    };
 
     // Note: `attachments_checked` is NOT stamped here. We used to flip it
     // alongside the body update, but a transient failure inside
@@ -277,6 +326,16 @@ async fn update_body(pool: &PgPool, id: i32, body: &str) -> Result<()> {
         .await?;
 
     Ok(())
+}
+
+// `users.public_key` is stored as a JSON array of bytes (the literal
+// output of `Array.from(new Uint8Array(spkiBytes))` in the browser, see
+// `frontend/src/api/Auth.ts::saveUserPublicKey`). Parse that back into
+// the raw SPKI bytes `encrypt_to_pubkey` expects. Returns None on any
+// parse failure so the caller can fall back cleanly — a corrupt pubkey
+// row should not crash the body-worker for the whole user.
+fn parse_spki_from_json_bytes(json: &str) -> Option<Vec<u8>> {
+    serde_json::from_str::<Vec<u8>>(json).ok()
 }
 
 #[instrument(target = "db", skip(pool), fields(email_id = id))]

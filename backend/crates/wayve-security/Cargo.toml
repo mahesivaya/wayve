@@ -27,6 +27,11 @@ hmac.workspace = true
 jsonwebtoken.workspace = true
 base64.workspace = true
 rand.workspace = true
+# RSA-OAEP for Plan A's inbound "encrypt-on-arrival" path: body_worker
+# wraps each fetched email body to the recipient's RSA public key so the
+# server never persists a copy it can decrypt. Single dep, no transitive
+# weight beyond what aes-gcm + sha2 already brought in.
+rsa = "0.9"
 
 # Caching for API key validation
 moka.workspace = true

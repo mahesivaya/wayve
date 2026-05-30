@@ -7,8 +7,15 @@ import MarketingShell from "../marketing/MarketingShell";
 import "./pricing.css";
 
 const BYTES_IN_GB = 1024 * 1024 * 1024;
+const BYTES_IN_TB = BYTES_IN_GB * 1024;
 
 function formatBytes(bytes: number): string {
+  // Non-positive byte counts mean "no quota set" (schema default) or a
+  // legacy `-1` sentinel for unlimited. Render as "Unlimited" so a
+  // pricing card never shows "-0 MB" or "0 MB storage", which read as
+  // bugs to a visitor and aren't what the plan actually advertises.
+  if (bytes <= 0) return "Unlimited";
+  if (bytes >= BYTES_IN_TB) return `${(bytes / BYTES_IN_TB).toFixed(0)} TB`;
   if (bytes >= BYTES_IN_GB) return `${(bytes / BYTES_IN_GB).toFixed(0)} GB`;
   return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }

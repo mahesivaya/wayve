@@ -6,15 +6,12 @@ import {
   loadPublicKey,
 } from "../crypto/keyStore";
 import { generateMnemonic, mnemonicToEntropy } from "../crypto/mnemonic";
-import {
-  wrapKeysForRecovery,
-  wrapCredentialForRecovery,
-} from "../crypto/recovery";
+import { wrapKeysForRecovery } from "../crypto/recovery";
 import {
   uploadWrappedKey,
   fetchWrappedKey,
   fetchBasicKey,
-  uploadBasicKey,
+  deleteBasicKey,
 } from "../api/recovery";
 import RecoverySeedModal from "../recovery/RecoverySeedModal";
 import RecoverPromptModal from "../recovery/RecoverPromptModal";
@@ -30,10 +27,10 @@ import {
   type UserType,
 } from "./authContextValue";
 
-const normalizeRecoveryMode = (value: unknown): RecoveryMode =>
-  value === "basic" ? "basic"
-    : value === "password_only" ? "password_only"
-    : "full";
+// Plan A collapsed RecoveryMode to just "full"; the helper still exists
+// so older /api/me payloads from a partially-migrated deployment can be
+// normalized in one place.
+const normalizeRecoveryMode = (_value: unknown): RecoveryMode => "full";
 
 const log = logger.scope("auth");
 
@@ -101,95 +98,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // their own — auto-nagging caused too many false positives in dev
   // (port switching) and confused real users. Lazy restore wins.
 
-  // Basic mode (server-trust tier): the server holds an at-rest-
-  // encrypted copy of the RSA private key. On a new device or freshly-
-  // wiped IndexedDB we fetch the plaintext PKCS8 over TLS and load it
-  // locally. On first login after registration the server has nothing
-  // yet, so we generate a keypair, save locally, and upload the PKCS8
-  // for future logins. No mnemonic ceremony at all in this mode.
-  const setupBasicEncryption = async (userId: number, email: string) => {
-    const serverPkcs8 = await fetchBasicKey().catch((err) => {
-      log.warn("basic-key fetch failed", err);
-      return null;
-    });
-
-    if (serverPkcs8) {
-      log.info("basic: importing server-held private key");
-      const privateKey = await crypto.subtle.importKey(
-        "pkcs8",
-        serverPkcs8,
-        { name: "RSA-OAEP", hash: "SHA-256" },
-        true,
-        ["decrypt"]
-      );
-      // Re-derive the SPKI public key from the imported private key by
-      // exporting/importing the JWK form — WebCrypto can't extract a
-      // public key directly from a private CryptoKey, but the JWK round-
-      // trip yields a usable RSA-OAEP encrypt key.
-      const jwk = await crypto.subtle.exportKey("jwk", privateKey);
-      const pubJwk: JsonWebKey = {
-        kty: jwk.kty,
-        n: jwk.n,
-        e: jwk.e,
-        alg: "RSA-OAEP-256",
-        ext: true,
-      };
-      const publicCryptoKey = await crypto.subtle.importKey(
-        "jwk",
-        pubJwk,
-        { name: "RSA-OAEP", hash: "SHA-256" },
-        true,
-        ["encrypt"]
-      );
-      const publicKey = await crypto.subtle.exportKey("spki", publicCryptoKey);
-
-      await savePrivateKey(privateKey, userId, email);
-      await savePublicKey(publicKey, userId, email);
-      await publishPublicKey(publicKey);
-      return;
-    }
-
-    log.info("basic: no server-held key — generating + uploading fresh keypair");
-    const keyPair = await crypto.subtle.generateKey(
-      {
-        name: "RSA-OAEP",
-        modulusLength: 2048,
-        publicExponent: new Uint8Array([1, 0, 1]),
-        hash: "SHA-256",
-      },
+  // Import a PKCS8 RSA-OAEP private key blob and derive the matching
+  // SPKI public key. WebCrypto can't extract a public CryptoKey from a
+  // private one directly, but exporting → re-importing the JWK form
+  // yields a usable encrypt key. Returns the SPKI bytes (what
+  // savePublicKey + publishPublicKey expect downstream).
+  const importPkcs8AndDerivePublicSpki = async (
+    pkcs8: ArrayBuffer,
+  ): Promise<{ privateKey: CryptoKey; publicKeyBytes: ArrayBuffer }> => {
+    const privateKey = await crypto.subtle.importKey(
+      "pkcs8",
+      pkcs8,
+      { name: "RSA-OAEP", hash: "SHA-256" },
       true,
-      ["encrypt", "decrypt"]
+      ["decrypt"],
     );
-    await savePrivateKey(keyPair.privateKey, userId, email);
-    const publicKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
-    await savePublicKey(publicKey, userId, email);
-    await publishPublicKey(publicKey);
-
-    // Upload the PKCS8 plaintext to the server. Best-effort: failure
-    // here means cross-device login won't work yet, but local
-    // encryption is fine. Surface the error in the log and continue.
-    try {
-      const pkcs8 = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
-      await uploadBasicKey(pkcs8);
-      log.info("basic: PKCS8 uploaded to /api/me/basic-key");
-    } catch (err) {
-      log.error("basic: PKCS8 upload failed; cross-device login will not work until next setup", err);
-    }
+    const jwk = await crypto.subtle.exportKey("jwk", privateKey);
+    const pubJwk: JsonWebKey = {
+      kty: jwk.kty,
+      n: jwk.n,
+      e: jwk.e,
+      alg: "RSA-OAEP-256",
+      ext: true,
+    };
+    const publicCryptoKey = await crypto.subtle.importKey(
+      "jwk",
+      pubJwk,
+      { name: "RSA-OAEP", hash: "SHA-256" },
+      true,
+      ["encrypt"],
+    );
+    const publicKeyBytes = await crypto.subtle.exportKey("spki", publicCryptoKey);
+    return { privateKey, publicKeyBytes };
   };
 
+  // Plan A encryption bootstrap. Exactly one mode ('full') exists, so
+  // there's no branching on `recovery_mode` — only on what state the
+  // current device/server is in:
+  //
+  //   1. Local IndexedDB already has the keypair  → publish the public
+  //      key and return; nothing else to do.
+  //
+  //   2. No local key, but the server has a wrapped envelope on file
+  //      → another device set this user up. Show RecoverPromptModal so
+  //      the user pastes their 24 words; that flow imports the keys.
+  //
+  //   3. No local key, no wrapped envelope on file, BUT the server has
+  //      a legacy `basic-key` PKCS8 envelope  → this is a pre-Plan-A
+  //      'basic' user logging in after the migration. Pull the PKCS8,
+  //      import it, generate a brand-new mnemonic, prep a wrap+delete
+  //      closure, and show the seed modal. Once the user confirms,
+  //      the wrap uploads and the legacy basic-key blob is DELETEd —
+  //      the mnemonic becomes the only path back in.
+  //
+  //   4. None of the above  → fresh signup (or a SQL-seeded account
+  //      that never finished setup). Generate a new keypair, generate
+  //      a mnemonic, prep a wrap closure, and show the seed modal.
   const setupEncryption = async (
     userId: number,
-    recoveryMode: RecoveryMode,
+    _recoveryMode: RecoveryMode,
     email: string,
     isFreshRegistration: boolean,
   ) => {
     try {
-      // A fresh registration always wants brand-new keys, even if
-      // IndexedDB still has stale entries from a previous test run
-      // (common in dev after `just db-reset` re-issues the same email
-      // with a new user_id). Short-circuiting here would skip the seed
-      // modal AND leave the user with keys that don't match the server's
-      // new wrapped envelope.
+      // (1) Local key already on this device. A fresh registration
+      // still wants brand-new keys, even if IndexedDB has stale
+      // entries from a prior dev session — short-circuiting here
+      // would skip the seed modal and leave the user with keys that
+      // don't match the server's new wrapped envelope.
       if (!isFreshRegistration) {
         const existingKey = await loadPrivateKey(userId, email);
         const existingPublicKey = await loadPublicKey(userId, email);
@@ -201,127 +177,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // No local key. The recovery_mode chosen at signup decides what
-      // happens next.
-      //
-      // basic            → server holds an at-rest-encrypted copy of the
-      //                    private key. Try to fetch it; if absent (first
-      //                    login after register), generate fresh + upload.
-      //                    No mnemonic, no seed modal.
-      // full             → generate fresh keys, wrap the real private key
-      //                    with a mnemonic, upload the envelope, show
-      //                    the seed modal.
-      // password_only    → generate fresh keys, wrap a random throwaway
-      //                    payload with a mnemonic (just a credential
-      //                    for /recover-with-mnemonic), upload, show
-      //                    the seed modal.
-
-      // Existing basic account logging in on a new device — server
-      // already has a PKCS8 envelope; import it and we're done. No
-      // mnemonic ceremony because the user might never have one
-      // (basic-only accounts before the dual-flow rollout) and we
-      // can't regenerate one without orphaning a saved phrase.
-      if (recoveryMode === "basic" && !isFreshRegistration) {
-        await setupBasicEncryption(userId, email);
-        return;
-      }
-
-      // Fresh basic registration: generate keys locally, upload the
-      // PKCS8 so cross-device email+password sign-in works, AND fall
-      // through to the mnemonic-wrap branch below so the user is
-      // shown a 24-word recovery phrase. The phrase is a recovery /
-      // future-upgrade artifact — it doesn't gate normal login (the
-      // server still holds the PKCS8), but it lets the user later
-      // migrate to "full" zero-knowledge mode or reset their
-      // password without losing their encrypted content.
-      if (recoveryMode === "basic" && isFreshRegistration) {
-        log.info("basic + fresh: generating keypair + uploading PKCS8");
-        const keyPair = await crypto.subtle.generateKey(
-          {
-            name: "RSA-OAEP",
-            modulusLength: 2048,
-            publicExponent: new Uint8Array([1, 0, 1]),
-            hash: "SHA-256",
-          },
-          true,
-          ["encrypt", "decrypt"],
-        );
-        await savePrivateKey(keyPair.privateKey, userId, email);
-        const publicKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
-        await savePublicKey(publicKey, userId, email);
-        await publishPublicKey(publicKey);
-
-        try {
-          const pkcs8 = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
-          await uploadBasicKey(pkcs8);
-        } catch (err) {
-          log.error(
-            "basic: PKCS8 upload failed; cross-device login will not work until next setup",
-            err,
-          );
-        }
-
-        const mnemonic = await generateMnemonic();
-        const wrapJob = async () => {
-          const entropy = await mnemonicToEntropy(mnemonic);
-          const envelope = await wrapKeysForRecovery(
-            keyPair.privateKey,
-            publicKey,
-            entropy,
-          );
-          await uploadWrappedKey(envelope);
-        };
-
-        setPendingWrapJob(() => wrapJob);
-        setPendingRecoveryMode("basic");
-        setPendingMnemonic(mnemonic);
-
-        log.info(
-          "basic + fresh: keypair ready, mnemonic generated, awaiting user confirmation",
-        );
-        return;
-      }
-
-      // Local keys missing for a full/password_only account. Two
-      // sub-cases to distinguish:
-      //
-      //   (a) Server HAS a wrapped envelope — user previously registered
-      //       and now logs in on a fresh device. We must NOT regenerate
-      //       (that would orphan the 24 words they saved); show
-      //       RecoverPromptModal so they paste the original mnemonic.
-      //
-      //   (b) Server has NO wrapped envelope — typically a SQL-seeded
-      //       account (see scripts/seed_users.sql) logging in for the
-      //       first time. There's nothing to recover; we fall through to
-      //       the fresh-setup branch below, which generates keys, a new
-      //       mnemonic, and the seed modal.
-      //
-      // password_only envelopes contain throwaway plaintext — even if
-      // present they can't restore the real key — so we log and skip the
-      // recovery prompt for that mode regardless.
+      // (2) Server-side wrapped envelope already exists. We must NOT
+      // regenerate or the original mnemonic would be orphaned. Defer
+      // to RecoverPromptModal so the user enters their 24 words.
       if (!isFreshRegistration) {
         const serverWrapped = await fetchWrappedKey();
         if (serverWrapped) {
-          if (recoveryMode === "full") {
-            log.info("encryption keys missing — prompting for recovery mnemonic");
-            setNeedsRecovery(true);
-          } else {
-            log.warn(
-              "encryption keys missing on this device; password_only accounts " +
-                "can't restore via mnemonic. Encrypted content will be unavailable.",
-              { recoveryMode },
-            );
-          }
+          log.info("encryption keys missing — prompting for recovery mnemonic");
+          setNeedsRecovery(true);
           return;
         }
-        log.info(
-          "no wrapped key on server — treating as first-time setup",
-          { recoveryMode },
-        );
-        // fall through to the fresh key + mnemonic generation below
       }
 
-      log.info("generating new RSA key pair", { recoveryMode });
+      // (3) Migration: legacy 'basic' user whose RSA private key still
+      // lives on the server as `users.private_key_encrypted`. Pull it
+      // once, wrap it under a fresh mnemonic, upload the envelope, and
+      // schedule the basic-key DELETE so the mnemonic becomes the only
+      // recovery path. The user MUST save the 24 words — there is no
+      // second chance.
+      if (!isFreshRegistration) {
+        const legacyPkcs8 = await fetchBasicKey().catch((err) => {
+          log.warn("legacy basic-key fetch failed", err);
+          return null;
+        });
+        if (legacyPkcs8) {
+          log.info("migration: legacy basic-key found, upgrading to mnemonic-wrap");
+          const { privateKey, publicKeyBytes } = await importPkcs8AndDerivePublicSpki(legacyPkcs8);
+          await savePrivateKey(privateKey, userId, email);
+          await savePublicKey(publicKeyBytes, userId, email);
+          await publishPublicKey(publicKeyBytes);
+
+          const mnemonic = await generateMnemonic();
+          const wrapJob = async () => {
+            const entropy = await mnemonicToEntropy(mnemonic);
+            const envelope = await wrapKeysForRecovery(
+              privateKey,
+              publicKeyBytes,
+              entropy,
+            );
+            await uploadWrappedKey(envelope);
+            // Once the wrap is on file, drop the legacy server-held
+            // PKCS8 envelope so the mnemonic is the only path back in.
+            // Failure to delete is non-fatal — the wrap is already
+            // uploaded; we just log and move on, and a future login
+            // can retry the DELETE.
+            try {
+              await deleteBasicKey();
+              log.info("migration: legacy basic-key DELETEd from server");
+            } catch (err) {
+              log.warn("migration: legacy basic-key DELETE failed (non-fatal)", err);
+            }
+          };
+
+          setPendingWrapJob(() => wrapJob);
+          setPendingRecoveryMode("full");
+          setPendingMnemonic(mnemonic);
+          log.info(
+            "migration: imported legacy key, mnemonic generated, awaiting user confirmation",
+          );
+          return;
+        }
+      }
+
+      // (4) Truly fresh setup — either a brand-new signup or a SQL-
+      // seeded account on its first login with no envelope anywhere.
+      log.info("generating new RSA key pair");
 
       const keyPair = await crypto.subtle.generateKey(
         {
@@ -334,33 +254,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ["encrypt", "decrypt"]
       );
 
-      await savePrivateKey(keyPair.privateKey, userId);
+      await savePrivateKey(keyPair.privateKey, userId, email);
 
       const publicKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
-      await savePublicKey(publicKey, userId);
+      await savePublicKey(publicKey, userId, email);
 
       await publishPublicKey(publicKey);
 
-      // Generate a recovery mnemonic, prepare the wrap closure, and let
-      // the modal drive the rest. Critical: we generate the mnemonic
-      // here (in the browser) and only the user ever sees it.
+      // The mnemonic is generated in the browser; only the user
+      // ever sees it. The wrap closure runs AFTER the user confirms
+      // they've saved the 24 words — a user who closes the modal
+      // never uploads a recovery envelope.
       const mnemonic = await generateMnemonic();
       const wrapJob = async () => {
         const entropy = await mnemonicToEntropy(mnemonic);
-        const envelope =
-          recoveryMode === "password_only"
-            ? await wrapCredentialForRecovery(publicKey, entropy)
-            : await wrapKeysForRecovery(keyPair.privateKey, publicKey, entropy);
+        const envelope = await wrapKeysForRecovery(
+          keyPair.privateKey,
+          publicKey,
+          entropy,
+        );
         await uploadWrappedKey(envelope);
       };
 
       setPendingWrapJob(() => wrapJob);
-      setPendingRecoveryMode(recoveryMode);
+      setPendingRecoveryMode("full");
       setPendingMnemonic(mnemonic);
 
-      log.info("encryption setup complete; awaiting recovery-seed confirmation", {
-        recoveryMode,
-      });
+      log.info("encryption setup complete; awaiting recovery-seed confirmation");
     } catch (err) {
       log.error("encryption setup failed", err);
     }

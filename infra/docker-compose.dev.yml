@@ -6,7 +6,7 @@ x-backend-env: &backend-env
   RWAYVE_ENV: development
   POSTGRES_HOST: postgres_db
   REDIS_URL: redis://redis:6379
-  SMTP_HOST: mailhog
+  SMTP_HOST: mailpit
 
 services:
   postgres_db:
@@ -47,14 +47,19 @@ services:
     volumes:
       - redis_dev_data:/data
 
-  mailhog:
-    image: mailhog/mailhog:v1.0.1
-    container_name: rwayve_mailhog_dev
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: rwayve_mailpit_dev
+    restart: unless-stopped
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # web UI + API
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8025/api/v2/messages"]
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8025/api/v1/info"]
       interval: 5s
       timeout: 3s
       retries: 5

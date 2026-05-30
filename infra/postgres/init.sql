@@ -17,32 +17,27 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT '
 ALTER TABLE users ADD COLUMN IF NOT EXISTS account_type TEXT NOT NULL DEFAULT 'personal';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
 
--- Recovery-phrase mode chosen at signup.
---   'basic'          — easy mode. Server holds an AES-GCM(AES_KEY)
---                      encrypted copy of the user's RSA private key
---                      (users.private_key_encrypted/_iv) and ships it
---                      back to the browser on login over TLS, so the
---                      user can sign in from any device with just
---                      email + password. No mnemonic, no recovery
---                      page. Server-trust tier: the server CAN read
---                      the user's content.
---   'full'           — server stores an AES-GCM envelope of the user's RSA
---                      private key, wrapped by a 24-word mnemonic. New-
---                      device restore via /recover unlocks chat/notes/
---                      files history. Server cannot read the user's
---                      content.
---   'password_only'  — server only stores a credential blob (random
---                      bytes wrapped by the mnemonic) used to verify
---                      mnemonic possession for /recover-with-mnemonic
---                      password reset. The user's private key never
---                      leaves the device; encrypted history does NOT
---                      follow them to new devices.
+-- Plan A: end-to-end encryption is the ONLY mode. Every user's RSA
+-- private key is wrapped by a 24-word BIP-39 mnemonic; the server
+-- holds the opaque envelope and nothing more. Forget your password →
+-- you must produce the mnemonic to reset. Lose both → encrypted
+-- content is unrecoverable. By design: no other option.
+--
+-- The 'basic' and 'password_only' modes have been removed. Any legacy
+-- row gets force-migrated to 'full' below; the corresponding
+-- private_key_encrypted / private_key_iv server-held copies stay in
+-- the schema (still set NULL on new rows) only so older deployments
+-- can be re-run against this file without losing data.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_mode TEXT NOT NULL DEFAULT 'full';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS private_key_encrypted TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS private_key_iv TEXT;
--- Drop any older CHECK before re-adding, so re-running init.sql after
--- adding 'basic' to the allowed set doesn't fail with "constraint
--- already exists" or "value violates check constraint".
+-- Migrate every legacy row to 'full' BEFORE re-adding the tighter CHECK,
+-- otherwise the constraint would refuse to install. AuthContext detects
+-- the migration on the next login: the user is shown a fresh 24-word
+-- mnemonic, the existing (still-on-device) RSA private key is wrapped
+-- under it, and the server-held PKCS8 fallback (private_key_encrypted)
+-- is nulled out so the only path back in is the mnemonic.
+UPDATE users SET recovery_mode = 'full' WHERE recovery_mode <> 'full';
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'users_recovery_mode_check'
@@ -52,7 +47,7 @@ DO $$ BEGIN
 END $$;
 ALTER TABLE users
   ADD CONSTRAINT users_recovery_mode_check
-  CHECK (recovery_mode IN ('basic', 'full', 'password_only'));
+  CHECK (recovery_mode = 'full');
 
 -- Account-type renames: the role strings were renamed
 --   project_admin  -> platform_admin
@@ -317,6 +312,27 @@ CREATE TABLE IF NOT EXISTS emails (
 );
 
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+
+-- Plan A Phase 2 — Wayve-to-Wayve native email channel.
+--
+-- `source` discriminates how the row got here so the list query knows
+-- whether to join through email_accounts (for 'imap'/'gmail'/'outlook')
+-- or fall back to `recipient_user_id` (for 'wayve'). Default value
+-- keeps every legacy row pinned to 'imap' which is the historical
+-- behaviour. CHECK constraint kept lenient — adding a new provider
+-- later just requires another value.
+--
+-- `recipient_user_id` is the owner of a 'wayve'-source row when
+-- account_id is NULL. The Wayve-to-Wayve send path inserts one row per
+-- recipient with their user_id stamped here; the inbox list query
+-- picks up rows belonging to the caller via this column when
+-- account_id is unset.
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'imap';
+ALTER TABLE emails
+    ADD COLUMN IF NOT EXISTS recipient_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_emails_recipient_user_id
+    ON emails(recipient_user_id, created_at DESC)
+    WHERE recipient_user_id IS NOT NULL;
 
 -- Subject at rest (AES-256-GCM, same envelope as body_*). The legacy
 -- plaintext `subject` column stays for compat during the migration window;
@@ -1005,3 +1021,54 @@ CREATE UNIQUE INDEX IF NOT EXISTS siem_webhook_org_uniq
 CREATE UNIQUE INDEX IF NOT EXISTS siem_webhook_user_uniq
     ON siem_webhook_configs(user_id)
     WHERE scope = 'personal';
+
+-- Plan A end-to-end encryption ships with a hard 1 GiB cap per user
+-- spanning every app surface: emails, chat, drive, tasks, calendar,
+-- notes. The counter is maintained at the write path of each surface
+-- (an INSERT/UPDATE of ciphertext bumps bytes_used; DELETE decrements
+-- it). bytes_quota is per-row so paid tiers can raise it without
+-- touching the default. Out-of-band reconciliation can rebuild
+-- bytes_used from the source tables — it's a cache, the source data
+-- is the ciphertext columns themselves.
+CREATE TABLE IF NOT EXISTS user_storage_usage (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    bytes_used BIGINT NOT NULL DEFAULT 0,
+    bytes_quota BIGINT NOT NULL DEFAULT 1073741824,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT user_storage_usage_nonneg_chk CHECK (bytes_used >= 0 AND bytes_quota >= 0)
+);
+
+-- Plan A Phase 3 — Secure-send magic link.
+--
+-- When a Wayve user sends an email to a non-Wayve recipient with
+-- "Secure send" enabled, the body is encrypted in the sender's browser
+-- to a passphrase the sender shares with the recipient out-of-band
+-- (Signal, SMS, in-person). The server stores only the opaque
+-- ciphertext + wrapped key + per-message PBKDF2 salt — it has no path
+-- to the passphrase so it cannot decrypt at any point. Recipients
+-- redeem the magic link, enter the passphrase, and decrypt entirely
+-- client-side.
+--
+-- Fields the FRONTEND generates and uploads (server stores verbatim):
+--   ciphertext, iv, wrapped_key, salt
+-- Fields the BACKEND generates:
+--   token (URL-safe random), expires_at, opened_at
+CREATE TABLE IF NOT EXISTS secure_messages (
+    id BIGSERIAL PRIMARY KEY,
+    token TEXT NOT NULL UNIQUE,
+    sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_email TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    ciphertext TEXT NOT NULL,
+    iv TEXT NOT NULL,
+    wrapped_key TEXT NOT NULL,
+    salt TEXT NOT NULL,
+    pbkdf2_iterations INTEGER NOT NULL DEFAULT 600000,
+    expires_at TIMESTAMPTZ NOT NULL,
+    opened_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_secure_messages_expires_at
+    ON secure_messages(expires_at);
+CREATE INDEX IF NOT EXISTS idx_secure_messages_sender
+    ON secure_messages(sender_user_id, created_at DESC);

@@ -289,7 +289,7 @@ Files: [backend/src/chat/](backend/src/chat/) + frontend [chat/](frontend/src/ch
   Google Calendar event linkage.
 - Title + Zoom URL + participant emails encrypted at rest.
 - Notifications: SMTP-out invites/updates/cancels on create/update/delete
-  (MailHog in dev, real SMTP in prod).
+  (Mailpit in dev, real SMTP in prod).
 - Webhook fan-out: `meeting.created` / `.updated` / `.deleted` events.
 
 Files: [backend/src/scheduler/](backend/src/scheduler/) + frontend
@@ -553,7 +553,7 @@ URLs:
 - `http://localhost/` — frontend via nginx
 - `http://localhost:5173` and `http://localhost:3000` — Vite dev server
 - `http://localhost:8080` — backend direct
-- `http://localhost:8025` — MailHog (under the `mail` profile)
+- `http://localhost:8025` — Mailpit (part of the dev stack)
 - `http://localhost:16686` — Jaeger UI
 
 ### 12.2 Without Docker
@@ -581,7 +581,7 @@ npm test
 ### 12.4 CI
 
 [.github/workflows/smoke.yml](.github/workflows/smoke.yml) has three jobs:
-- **backend-tests** (Postgres + MailHog services, `init.sql` applied,
+- **backend-tests** (Postgres + Mailpit services, `init.sql` applied,
   single-threaded `cargo test`).
 - **frontend-tests** (`tsc --noEmit` + `npm test`).
 - **docker-smoke** (depends on the above; runs `scripts/smoke.sh` against a

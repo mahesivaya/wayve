@@ -34,6 +34,7 @@ export default function PlatformAdminHome() {
   const canSeeOrganizations = canManageMembers || canManageApiKeys;
   const canSeeMembers = canReadMembers;
   const canSeeScim = hasPermission(user, "webhooks:manage");
+  const canManagePlans = hasPermission(user, "billing:manage");
   const isPlatformOwner = user?.effective_role === "owner";
 
   const consoles: ConsoleCard[] = [
@@ -86,6 +87,13 @@ export default function PlatformAdminHome() {
       description: "Mint bearer tokens so Okta / Entra can provision users.",
       path: "/settings/scim",
       visible: canSeeScim,
+    },
+    {
+      label: "Plans & pricing",
+      description:
+        "Create, edit and deactivate the plans shown on /pricing. Set price, storage, notes and Stripe price IDs.",
+      path: "/settings/plans",
+      visible: canManagePlans,
     },
   ];
 

@@ -105,4 +105,13 @@ pub struct CreatePlanInput {
     pub billing_interval: Option<String>,
     pub storage_limit_bytes: Option<i64>,
     pub seat_limit: Option<i32>,
+    /// Free-form bullet list of feature notes the admin wants to surface
+    /// on /pricing. Stored as JSONB `{bullet1: true, bullet2: true}` so
+    /// the existing Pricing.tsx renderer (which does `Object.entries`)
+    /// keeps working with no further changes.
+    pub features: Option<Value>,
+    /// Optional — when not provided, plan is (re)activated on upsert as
+    /// the historical default. Pass `false` to keep an existing plan
+    /// hidden from /pricing without losing the row.
+    pub is_active: Option<bool>,
 }

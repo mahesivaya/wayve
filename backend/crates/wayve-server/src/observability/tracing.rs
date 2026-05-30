@@ -174,13 +174,16 @@ pub fn init_tracing() {
         .into()
     });
 
-    // ✅ Console logs
-    let stdout_layer = fmt::layer()
-        .with_target(false)
-        .with_ansi(false) // 🔥 removes weird terminal escape codes
-        .compact();
-
-    // ✅ File logs — disabled gracefully if no writer could be opened.
+    // File-only logging is the default — the stdout layer was dropped so
+    // `docker logs` / `cargo run` terminals stay quiet. The full event
+    // stream still lands in logs/tracing.log (size-rotated, bind-mounted
+    // from the host). Tail it during dev with:
+    //
+    //   tail -f backend/logs/tracing.log
+    //
+    // The stderr fallback below only fires if the log file genuinely can't
+    // be opened (disk full, permission denied) — at that point we WANT
+    // loud terminal output so the failure isn't silent.
     match file_writer {
         Ok(writer) => {
             let file_layer = fmt::layer()
@@ -197,15 +200,19 @@ pub fn init_tracing() {
                 .with_span_events(FmtSpan::CLOSE);
             tracing_subscriber::registry()
                 .with(env_filter)
-                .with(stdout_layer)
                 .with(file_layer)
                 .init();
         }
         Err(e) => {
-            eprintln!("tracing: file logging disabled ({e})");
+            eprintln!("tracing: file logging disabled ({e}) — falling back to stderr");
+            let stderr_layer = fmt::layer()
+                .with_target(false)
+                .with_ansi(false)
+                .with_writer(std::io::stderr)
+                .compact();
             tracing_subscriber::registry()
                 .with(env_filter)
-                .with(stdout_layer)
+                .with(stderr_layer)
                 .init();
         }
     }

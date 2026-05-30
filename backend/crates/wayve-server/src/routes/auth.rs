@@ -25,18 +25,22 @@ pub async fn register(pool: web::Data<PgPool>, data: web::Json<RegisterInput>) -
             .json(serde_json::json!({ "message": "Passwords do not match" })));
     }
 
-    // Recovery mode is opt-in; clients that don't send the field land on
-    // the legacy "full" path so we don't break existing flows.
-    let recovery_mode = match data.recovery_mode.as_deref() {
-        None | Some("full") => "full",
-        Some("password_only") => "password_only",
-        Some("basic") => "basic",
-        Some(other) => {
-            warn!(target: "auth", recovery_mode = other, "register rejected: invalid recovery_mode");
-            return Ok(HttpResponse::BadRequest()
-                .json(serde_json::json!({ "message": "Invalid recovery_mode" })));
+    // Plan A: every new signup lands on 'full'. The legacy 'basic' and
+    // 'password_only' values are no longer accepted — any client still
+    // sending them is silently coerced to 'full' rather than rejected
+    // outright, because the user's intent ("create an account") is
+    // unchanged and the constraint will reject anything else at the
+    // DB layer anyway.
+    if let Some(requested) = data.recovery_mode.as_deref() {
+        if requested != "full" {
+            warn!(
+                target: "auth",
+                recovery_mode = requested,
+                "register: ignoring legacy recovery_mode; coercing to 'full'"
+            );
         }
-    };
+    }
+    let recovery_mode = "full";
 
     let hashed = hash_password(&data.password).await?;
 
@@ -466,27 +470,19 @@ pub async fn recover_with_mnemonic(
 
     info!(target: "auth", user_id, recovery_mode = %recovery_mode, "recover-with-mnemonic: password reset via recovery phrase");
 
-    // For `full` users, return the envelope so the frontend can unlock
-    // E2E keys client-side immediately (avoids "enter the mnemonic
-    // twice" UX). For `password_only` users the envelope holds random
-    // throwaway bytes — withholding it is the whole point of the mode,
-    // so we only acknowledge the reset.
-    if recovery_mode == "password_only" {
-        Ok(HttpResponse::Ok().json(serde_json::json!({
-            "user_id": user_id,
-            "wrapped_envelope": null,
-            "recovery_mode": recovery_mode,
-        })))
-    } else {
-        Ok(HttpResponse::Ok().json(serde_json::json!({
-            "user_id": user_id,
-            "wrapped_envelope": {
-                "v": v,
-                "iv": iv_b64,
-                "pub": pub_b64,
-                "ct": ct_b64,
-            },
-            "recovery_mode": recovery_mode,
-        })))
-    }
+    // Plan A: every user is 'full', so always return the envelope so
+    // the SPA can unlock E2E keys client-side without making the user
+    // type the mnemonic a second time. The 'password_only' branch is
+    // gone; legacy callers will still see a sensible payload because
+    // any pre-migration row was pinned to 'full' by the schema migration.
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "user_id": user_id,
+        "wrapped_envelope": {
+            "v": v,
+            "iv": iv_b64,
+            "pub": pub_b64,
+            "ct": ct_b64,
+        },
+        "recovery_mode": recovery_mode,
+    })))
 }

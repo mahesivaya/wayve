@@ -72,8 +72,8 @@ Two ground rules:
                 │      │      │      │
                 ▼      ▼      ▼      ▼
             ┌──────┐ ┌─────┐ ┌──────┐ ┌──────┐
-            │Postgres│Redis│Jaeger │MailHog│   (dev only)
-            │  15   │  7   │  1.60  │ v1.0  │
+            │Postgres│Redis│Jaeger │Mailpit│   (dev only)
+            │  15   │  7   │  1.60  │ v1.30 │
             └──────┘ └─────┘ └──────┘ └──────┘
 
         external dependencies (called by backend):
@@ -84,7 +84,7 @@ Two ground rules:
         ─ Zoom API (meeting creation, optional)
         ─ Google Calendar API (meeting export, optional)
         ─ Cloudflare Realtime (TURN credential proxy)
-        ─ SMTP (transactional mail; MailHog in dev)
+        ─ SMTP (transactional mail; Mailpit in dev)
 ```
 
 ### What is *not* in the topology
@@ -140,7 +140,7 @@ infra/docker-compose.dev.yml exposes:
    email_body     (no port)
    postgres_db    :5432
    redis          :6379
-   mailhog        :8025 (UI), :1025 (SMTP)
+   mailpit        :8025 (UI), :1025 (SMTP)
    jaeger         :16686 (UI), :4317 (OTLP)
 
 Volumes:
@@ -1473,7 +1473,7 @@ jobs:
     │backend-tests │  │frontend-tests│    │
     │              │  │              │    │
     │ Postgres svc │  │ Node 20      │    │
-    │ MailHog svc  │  │              │    │
+    │ Mailpit svc  │  │              │    │
     │ init.sql     │  │ tsc --noEmit │    │
     │ cargo test   │  │ npm test     │    │
     │ -t 1 thread  │  │              │    │

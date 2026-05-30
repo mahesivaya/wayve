@@ -60,13 +60,22 @@ pub async fn send_mail(to: &str, subject: &str, body: &str) -> Result<(), MailEr
         .body(body.to_string())
         .map_err(MailError::MessageBuild)?;
 
-    let creds = Credentials::new(user, pass);
-    let mailer: AsyncSmtpTransport<Tokio1Executor> =
+    // Local SMTP traps (Mailpit) don't always speak STARTTLS. Detect the
+    // common dev hostnames and use a plaintext transport for them. Production
+    // (Gmail, SES, etc.) stays on STARTTLS with auth.
+    let is_local_relay = matches!(host.as_str(), "mailpit" | "localhost" | "127.0.0.1");
+    let mailer: AsyncSmtpTransport<Tokio1Executor> = if is_local_relay {
+        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&host)
+            .port(port)
+            .build()
+    } else {
+        let creds = Credentials::new(user, pass);
         AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&host)
             .map_err(MailError::TransportBuild)?
             .port(port)
             .credentials(creds)
-            .build();
+            .build()
+    };
 
     match mailer.send(email).await {
         Ok(_) => {

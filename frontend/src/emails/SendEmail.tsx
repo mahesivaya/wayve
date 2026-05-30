@@ -1,8 +1,20 @@
 import { logger } from "../utils/logger";
-import { sendEmail as sendEmailApi } from "../api/email";
+import {
+  getUserByEmail,
+  sendEmail as sendEmailApi,
+  sendInternalEmail,
+  sendSecureEmail,
+  type WayveRecipient,
+} from "../api/email";
+import { useAuth } from "../auth/useAuth";
+import { loadPublicKey } from "../crypto/keyStore";
+import {
+  buildInternalEnvelope,
+  type InternalRecipientKey,
+} from "./internalEnvelope";
+import { sealSecureMessage } from "./secureSend";
 
 import { useState, useEffect } from "react";
-import {buildEncryptedBody, type EmailEncryptionMode} from "./encryptEmail";
 
 type SendEmailProps = {
   accountId: number;
@@ -10,15 +22,29 @@ type SendEmailProps = {
   onSent?: () => void;
 };
 
+// Parse a free-form `To` value into individual email addresses. Accepts
+// commas, semicolons, or whitespace as separators (the three things most
+// users actually type — Gmail itself accepts the first two). Empty
+// strings are filtered out so trailing separators don't produce ghost
+// addresses.
+function parseRecipients(raw: string): string[] {
+  return raw
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps) {
+  const { user } = useAuth();
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  // Default to "standard" so the compose flow doesn't gate on the
-  // recipient having Wayve encryption set up. The Fully-encrypted
-  // alert below makes the trade-off explicit when the user opts in.
-  const [encryptionMode, setEncryptionMode] =
-    useState<EmailEncryptionMode>("standard");
+  // Plan A Phase 3 — Secure-send toggle. When on, EVERY recipient
+  // (Wayve or external) gets the magic-link path with the same
+  // user-supplied passphrase. Off (default) keeps the cascade in
+  // place: Wayve users via internal channel, externals via plain SMTP.
+  const [secureSend, setSecureSend] = useState(false);
+  const [passphrase, setPassphrase] = useState("");
 
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,8 +56,13 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
   }, [status]);
 
   const sendEmail = async () => {
-    if (!to || !subject || !body) {
+    const recipients = parseRecipients(to);
+    if (recipients.length === 0 || !subject || !body) {
       setStatus("Please fill all fields ⚠️");
+      return;
+    }
+    if (secureSend && passphrase.length < 6) {
+      setStatus("Passphrase must be at least 6 characters ⚠️");
       return;
     }
 
@@ -39,36 +70,200 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
     setStatus("");
 
     try {
-      logger.warn("📨 BEFORE ENCRYPT:",body);
-    
-      const finalBody =
-        await buildEncryptedBody(
-          to,
-          body,
-          encryptionMode
+      // ── Secure-send branch: every recipient gets the magic-link
+      //    path with the same passphrase. The body is encrypted ONCE
+      //    in the browser (the bundle is the same for everyone); we
+      //    upload it once per recipient so each gets their own token
+      //    (which lets the sender revoke or expire each one
+      //    individually later if we add that UI). The recipient list
+      //    can mix Wayve and non-Wayve addresses — Secure-send treats
+      //    them identically and does not auto-promote Wayve users to
+      //    the native channel.
+      if (secureSend) {
+        let secureDelivered = 0;
+        const secureErrors: string[] = [];
+        for (const recipient of recipients) {
+          try {
+            const bundle = await sealSecureMessage(body, passphrase);
+            await sendSecureEmail({
+              recipient_email: recipient,
+              subject,
+              ...bundle,
+            });
+            secureDelivered += 1;
+          } catch (err) {
+            logger.error("secure-send failed", err, recipient);
+            secureErrors.push(
+              err instanceof Error
+                ? `${recipient}: ${err.message}`
+                : `${recipient}: secure-send failed`,
+            );
+          }
+        }
+        if (secureDelivered > 0) {
+          setStatus(
+            `Secure link sent to ${secureDelivered} recipient${secureDelivered === 1 ? "" : "s"} — share the passphrase out-of-band ✅`,
+          );
+        }
+        if (secureErrors.length > 0) {
+          setStatus(`${status} ⚠️ ${secureErrors.join("; ")}`);
+        }
+        if (secureErrors.length === 0) {
+          setTo("");
+          setSubject("");
+          setBody("");
+          setPassphrase("");
+          setSecureSend(false);
+          onSent?.();
+          setTimeout(() => onClose?.(), 800);
+        }
+        return;
+      }
+
+      const senderId = user?.id;
+
+      // Resolve each recipient in parallel. A lookup failure is treated
+      // as "not on Wayve" so a transient API hiccup falls back to
+      // standard SMTP rather than blocking the send entirely.
+      const lookups: Array<{ email: string; user: WayveRecipient | null }> =
+        await Promise.all(
+          recipients.map(async (email) => {
+            try {
+              return { email, user: await getUserByEmail(email) };
+            } catch (err) {
+              logger.warn("Wayve recipient lookup failed; treating as external", err, email);
+              return { email, user: null };
+            }
+          }),
         );
-    
-      logger.warn("🔐 AFTER ENCRYPT:",finalBody);
 
-      await sendEmailApi({
-        account_id: accountId,
-        to,
-        subject,
-        body: finalBody,
-      });
+      // Partition the resolved lookups in one pass — anything that
+      // resolves to a Wayve user WITH a non-empty public key goes
+      // through the native channel; everything else (unknown address,
+      // Wayve user without a pubkey on file) falls back to SMTP.
+      const wayveLookups: Array<{ email: string; user: WayveRecipient }> = [];
+      const externalEmails: string[] = [];
+      for (const l of lookups) {
+        if (
+          l.user !== null &&
+          Array.isArray(l.user.public_key) &&
+          l.user.public_key.length > 0
+        ) {
+          wayveLookups.push({ email: l.email, user: l.user });
+        } else {
+          externalEmails.push(l.email);
+        }
+      }
 
-      setStatus("Email sent successfully ✅");
-      setTo("");
-      setSubject("");
-      setBody("");
-      setEncryptionMode("standard");
-      onSent?.();
-      setTimeout(() => onClose?.(), 800);
+      let internalDelivered = 0;
+      let externalDelivered = 0;
+      const errors: string[] = [];
+
+      // ── Wayve-to-Wayve native channel — ONE envelope covers all
+      //    Wayve recipients at once (multi-recipient wrap), plus the
+      //    sender's own slot so their Sent copy decrypts later.
+      if (wayveLookups.length > 0 && senderId !== undefined) {
+        const recipientsForEnvelope: InternalRecipientKey[] = wayveLookups.map(
+          ({ user: u }) => ({
+            userId: u.id,
+            publicKeyBytes: u.public_key as number[],
+          }),
+        );
+
+        const senderPubKeyRaw = await loadPublicKey(senderId, user?.email).catch(
+          () => null,
+        );
+        if (senderPubKeyRaw) {
+          recipientsForEnvelope.push({
+            userId: senderId,
+            publicKeyBytes: Array.from(new Uint8Array(senderPubKeyRaw)),
+          });
+        } else {
+          logger.warn(
+            "no sender public key on this device; Sent copy will be unreadable",
+          );
+        }
+
+        try {
+          const envelope = await buildInternalEnvelope(body, recipientsForEnvelope);
+          const res = await sendInternalEmail({
+            recipient_user_ids: wayveLookups.map((l) => l.user.id),
+            envelope,
+            subject,
+          });
+          internalDelivered = res.delivered;
+        } catch (err) {
+          logger.error("Wayve internal send failed", err);
+          errors.push(
+            err instanceof Error
+              ? `Wayve recipients: ${err.message}`
+              : "Wayve send failed",
+          );
+        }
+      } else if (wayveLookups.length > 0 && senderId === undefined) {
+        // Edge case: lookups found Wayve users but the SPA hasn't
+        // resolved the signed-in user yet. Fall the addresses back to
+        // SMTP so the send doesn't get stuck.
+        externalEmails.push(...wayveLookups.map((l) => l.email));
+      }
+
+      // ── Standard SMTP for non-Wayve recipients. The backend endpoint
+      //    takes one `to` at a time; we loop sequentially so a per-
+      //    recipient failure doesn't take down the rest.
+      for (const externalTo of externalEmails) {
+        try {
+          await sendEmailApi({
+            account_id: accountId,
+            to: externalTo,
+            subject,
+            body,
+          });
+          externalDelivered += 1;
+        } catch (err) {
+          logger.error("External SMTP send failed", err, externalTo);
+          errors.push(
+            err instanceof Error
+              ? `${externalTo}: ${err.message}`
+              : `${externalTo}: send failed`,
+          );
+        }
+      }
+
+      // ── Status summary — tell the user exactly what happened per
+      //    channel so they're never guessing whether a send was E2E.
+      if (internalDelivered > 0 && externalDelivered > 0) {
+        setStatus(
+          `Sent E2E to ${internalDelivered} Wayve user${internalDelivered === 1 ? "" : "s"} + standard mail to ${externalDelivered} external recipient${externalDelivered === 1 ? "" : "s"} ✅`,
+        );
+      } else if (internalDelivered > 0) {
+        setStatus(
+          `Sent end-to-end to ${internalDelivered} Wayve user${internalDelivered === 1 ? "" : "s"} via Wayve ✅`,
+        );
+      } else if (externalDelivered > 0) {
+        setStatus(
+          `Email sent successfully to ${externalDelivered} recipient${externalDelivered === 1 ? "" : "s"} ✅`,
+        );
+      }
+
+      if (errors.length > 0) {
+        // Any per-recipient failure surfaces but doesn't block the
+        // overall flow if at least one delivery succeeded. Form is
+        // cleared only on a fully clean send so the user can retry.
+        setStatus(`${status} ⚠️ ${errors.join("; ")}`);
+      }
+
+      if (errors.length === 0) {
+        setTo("");
+        setSubject("");
+        setBody("");
+        onSent?.();
+        setTimeout(() => onClose?.(), 800);
+      }
     } catch (err) {
       logger.error(err);
       setStatus(err instanceof Error ? err.message : "Failed to send email ❌");
-    }finally{
-    setLoading(false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -78,9 +273,9 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
       flexDirection: "column",
       gap: "10px"
     }}>
-  
+
       <input
-        placeholder="To"
+        placeholder="To — separate multiple addresses with commas"
         value={to}
         onChange={(e) => setTo(e.target.value)}
         style={{
@@ -89,7 +284,7 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
           border: "1px solid #ccc"
         }}
       />
-  
+
       <input
         placeholder="Subject"
         value={subject}
@@ -100,7 +295,7 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
           border: "1px solid #ccc"
         }}
       />
-  
+
       <textarea
         placeholder="Message"
         value={body}
@@ -115,111 +310,57 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
       />
 
       <div
-        role="radiogroup"
-        aria-label="Email encryption type"
         style={{
-          display: "grid",
-          gap: 8,
-          padding: "10px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          padding: 10,
           border: "1px solid #d1d5db",
           borderRadius: 6,
-          background: "#f9fafb"
+          background: "#f9fafb",
+          fontSize: 13,
         }}
       >
         <label
           style={{
-            display: "grid",
-            gridTemplateColumns: "18px 1fr",
-            gap: 8,
-            alignItems: "start",
-            cursor: "pointer"
-          }}
-        >
-          <input
-            type="radio"
-            name="email-encryption"
-            value="fully_encrypted"
-            checked={encryptionMode === "fully_encrypted"}
-            onChange={() => setEncryptionMode("fully_encrypted")}
-            style={{ marginTop: 2 }}
-          />
-          <span>
-            <strong>Fully encrypted</strong>
-            <span
-              style={{
-                display: "block",
-                color: "#4b5563",
-                fontSize: 12,
-                lineHeight: 1.35,
-                marginTop: 2
-              }}
-            >
-              End-to-end RSA encryption — recipient needs a Wayve account.
-            </span>
-          </span>
-        </label>
-
-        <label
-          style={{
-            display: "grid",
-            gridTemplateColumns: "18px 1fr",
-            gap: 8,
-            alignItems: "start",
-            cursor: "pointer"
-          }}
-        >
-          <input
-            type="radio"
-            name="email-encryption"
-            value="standard"
-            checked={encryptionMode === "standard"}
-            onChange={() => setEncryptionMode("standard")}
-            style={{ marginTop: 2 }}
-          />
-          <span>
-            <strong>Standard encryption</strong>
-            <span
-              style={{
-                display: "block",
-                color: "#4b5563",
-                fontSize: 12,
-                lineHeight: 1.35,
-                marginTop: 2
-              }}
-            >
-              Sends email content that can also be viewed in Gmail.
-            </span>
-          </span>
-        </label>
-      </div>
-
-      {/* Persistent alert banner while the user has opted into full
-          encryption. Render is purely a derivation of `encryptionMode`,
-          so switching back to Standard hides it instantly and a
-          successful send resets the mode (which hides this too). */}
-      {encryptionMode === "fully_encrypted" && (
-        <div
-          role="alert"
-          aria-live="polite"
-          style={{
-            padding: "10px 12px",
-            borderRadius: 6,
-            border: "1px solid #fcd34d",
-            background: "#fffbeb",
-            color: "#92400e",
-            fontSize: 13,
-            lineHeight: 1.4,
             display: "flex",
+            alignItems: "center",
             gap: 8,
-            alignItems: "flex-start"
+            cursor: "pointer",
+            fontWeight: 600,
           }}
         >
-          <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1 }}>🔒</span>
-          <span>
-            <strong>Only Wayve users can decrypt and read this email inside Wayve.</strong>
-          </span>
-        </div>
-      )}
+          <input
+            type="checkbox"
+            checked={secureSend}
+            onChange={(e) => setSecureSend(e.target.checked)}
+          />
+          <span>🔒 Secure send (end-to-end via Wayve magic link)</span>
+        </label>
+        {secureSend && (
+          <>
+            <input
+              type="password"
+              placeholder="Passphrase (share with recipient via Signal, SMS, or in person)"
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              autoComplete="off"
+              style={{
+                padding: "8px",
+                borderRadius: 5,
+                border: "1px solid #ccc",
+              }}
+            />
+            <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
+              The recipient gets a plain email with a link only. They
+              click it and enter this passphrase to decrypt your message
+              in their browser. <strong>Wayve never sees the passphrase</strong> —
+              if you share it in the same email, you defeat the
+              encryption. Use Signal, SMS, or in-person.
+            </small>
+          </>
+        )}
+      </div>
 
       <button
         onClick={sendEmail}
@@ -235,16 +376,16 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
       >
         {loading ? "Sending..." : "Send"}
       </button>
-  
+
       {status && (
         <div style={{
           fontSize: 12,
-          color: status.includes("success") ? "green" : "red"
+          color: status.includes("success") || status.includes("✅") ? "green" : "red"
         }}>
           {status}
         </div>
       )}
-  
+
     </div>
   );
 }

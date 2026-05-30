@@ -47,6 +47,38 @@ pub async fn send(
         }
     };
 
+    // Dev-only shortcut: when the connected account holds a sentinel
+    // `fake-*` refresh token (only ever inserted by seed scripts / manual
+    // rows for UI testing), bypass the real provider and deliver via the
+    // local SMTP trap (Mailpit) so the compose loop is closed end-to-end
+    // without real OAuth. No production refresh token starts with `fake-`.
+    if refresh_token.starts_with("fake-") {
+        info!(
+            target: "gmail",
+            user_id,
+            account_id = account.id,
+            "send dev shortcut: routing through local SMTP (fake token detected)"
+        );
+        let to = data.to.trim();
+        let subject = data.subject.trim();
+        return Ok(
+            match crate::email::sender::send_mail(to, subject, &data.body).await {
+                Ok(()) => HttpResponse::Ok().body("Email sent ✅ (dev → Mailpit)"),
+                Err(e) => {
+                    error!(
+                        target: "gmail",
+                        user_id,
+                        account_id = account.id,
+                        error = ?e,
+                        "dev SMTP shortcut send failed"
+                    );
+                    HttpResponse::InternalServerError()
+                        .body("Failed to deliver dev mail via local SMTP")
+                }
+            },
+        );
+    }
+
     let token = match refresh_and_persist_email_token(
         pool.get_ref(),
         account.id,
@@ -100,6 +132,175 @@ pub async fn send(
     }
 
     Ok(response)
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Plan A Phase 2 — Wayve-to-Wayve native channel
+// ──────────────────────────────────────────────────────────────────────
+//
+// The browser builds a multi-recipient `WAYVE_SECURE_V1` envelope (one
+// RSA-OAEP-wrapped AES key per recipient pubkey, plus one for the sender
+// so they can decrypt their own Sent copy) and POSTs it here. This
+// endpoint never invokes SMTP — it inserts one `emails` row per
+// recipient (source='wayve', body_encrypted=envelope, no account_id) so
+// the message lands in every recipient's inbox at the next list-emails
+// fetch. Crucially the server stores ONLY the opaque envelope; it
+// cannot decrypt the body at any point.
+//
+// Wire shape (subject is plaintext for inbox-preview UX, same trade-off
+// Plan A Phase 1 made for inbound):
+//
+//   {
+//     "recipient_user_ids": [int],
+//     "envelope":            "WAYVE_SECURE_V1\n{ ... }",
+//     "subject":             "Hello"
+//   }
+
+#[derive(serde::Deserialize)]
+pub struct SendInternalInput {
+    pub recipient_user_ids: Vec<i32>,
+    pub envelope: String,
+    pub subject: String,
+}
+
+const SEND_INTERNAL_MAX_RECIPIENTS: usize = 50;
+const SEND_INTERNAL_MAX_ENVELOPE_BYTES: usize = 1_048_576; // 1 MiB
+const SEND_INTERNAL_MAX_SUBJECT_BYTES: usize = 1024;
+const WAYVE_ENVELOPE_PREFIX: &str = "WAYVE_SECURE_V1\n";
+
+#[post("/email/send-internal")]
+#[instrument(target = "gmail", skip(req, data, pool), fields(recipients = data.recipient_user_ids.len()))]
+pub async fn send_internal(
+    req: HttpRequest,
+    data: web::Json<SendInternalInput>,
+    pool: web::Data<PgPool>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => return Ok(HttpResponse::Unauthorized().body("Invalid token")),
+    };
+
+    // ─── Validate the payload ──────────────────────────────────────
+    if data.recipient_user_ids.is_empty() {
+        return Ok(HttpResponse::BadRequest().body("recipient_user_ids must not be empty"));
+    }
+    if data.recipient_user_ids.len() > SEND_INTERNAL_MAX_RECIPIENTS {
+        return Ok(HttpResponse::BadRequest().body(format!(
+            "Too many recipients (max {})",
+            SEND_INTERNAL_MAX_RECIPIENTS
+        )));
+    }
+    if !data.envelope.starts_with(WAYVE_ENVELOPE_PREFIX) {
+        return Ok(HttpResponse::BadRequest().body("envelope must be a WAYVE_SECURE_V1 payload"));
+    }
+    if data.envelope.len() > SEND_INTERNAL_MAX_ENVELOPE_BYTES {
+        return Ok(HttpResponse::BadRequest().body("envelope too large"));
+    }
+    if data.subject.len() > SEND_INTERNAL_MAX_SUBJECT_BYTES {
+        return Ok(HttpResponse::BadRequest().body("subject too long"));
+    }
+
+    // ─── Look up sender + recipient emails for the row metadata ────
+    let sender_email: Option<String> =
+        sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?
+            .flatten();
+    let sender_email = match sender_email {
+        Some(addr) => addr,
+        None => return Ok(HttpResponse::Unauthorized().body("Sender account not found")),
+    };
+
+    // Verify every requested recipient exists. A missing recipient is a
+    // 400 (probably a stale browser cache) rather than a silent skip.
+    let recipient_rows: Vec<(i32, String)> = sqlx::query_as::<_, (i32, String)>(
+        "SELECT id, email FROM users WHERE id = ANY($1)",
+    )
+    .bind(&data.recipient_user_ids)
+    .fetch_all(pool.get_ref())
+    .await?;
+    if recipient_rows.len() != data.recipient_user_ids.len() {
+        return Ok(HttpResponse::BadRequest()
+            .body("One or more recipient_user_ids do not resolve to a known user"));
+    }
+
+    // ─── Insert N+1 rows: one per recipient + sender's Sent copy ───
+    //
+    // Synthetic gmail_id namespaces wayve-internal rows so they never
+    // collide with a real Gmail message id (which is a hex string). The
+    // pattern is `wayve:<sender>:<unix-ms>:<recipient or 'sent'>` so a
+    // single send produces a unique id per row even under high
+    // concurrency from the same sender.
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let envelope = data.envelope.as_str();
+    let subject = data.subject.as_str();
+
+    // Use a single transaction so a partial failure rolls back the whole
+    // delivery — either every recipient gets the message or nobody does.
+    let mut tx = pool.begin().await?;
+
+    for (recipient_user_id, recipient_email) in &recipient_rows {
+        let gmail_id = format!("wayve:{user_id}:{now_ms}:rcpt:{recipient_user_id}");
+        sqlx::query(
+            r#"
+            INSERT INTO emails
+                (gmail_id, account_id, subject, sender, receiver, body_encrypted,
+                 body_iv, is_read, labels, source, recipient_user_id)
+            VALUES ($1, NULL, $2, $3, $4, $5, '', FALSE,
+                    ARRAY['INBOX']::text[], 'wayve', $6)
+            "#,
+        )
+        .bind(&gmail_id)
+        .bind(subject)
+        .bind(&sender_email)
+        .bind(recipient_email)
+        .bind(envelope)
+        .bind(recipient_user_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    // Sender's Sent copy. Same envelope (the sender's wrapped key is
+    // inside, the browser wraps the AES key for the sender too) so they
+    // can decrypt and re-read their own message later.
+    let sent_gmail_id = format!("wayve:{user_id}:{now_ms}:sent");
+    let recipient_list_for_to: String = recipient_rows
+        .iter()
+        .map(|(_, email)| email.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    sqlx::query(
+        r#"
+        INSERT INTO emails
+            (gmail_id, account_id, subject, sender, receiver, body_encrypted,
+             body_iv, is_read, labels, source, recipient_user_id)
+        VALUES ($1, NULL, $2, $3, $4, $5, '', TRUE,
+                ARRAY['SENT']::text[], 'wayve', $6)
+        "#,
+    )
+    .bind(&sent_gmail_id)
+    .bind(subject)
+    .bind(&sender_email)
+    .bind(&recipient_list_for_to)
+    .bind(envelope)
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    info!(
+        target: "gmail",
+        user_id,
+        recipients = recipient_rows.len(),
+        "Wayve-to-Wayve internal email delivered"
+    );
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "delivered": recipient_rows.len(),
+        "sent_id": sent_gmail_id,
+    })))
 }
 
 pub(super) async fn send_via_gmail(

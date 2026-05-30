@@ -43,7 +43,7 @@ For the fastest local loop on macOS, run Postgres/Redis in Docker and run the fr
 
 ```sh
 cd infra
-docker compose -f docker-compose.dev.yml --env-file .env.development up -d postgres_db redis mailhog
+docker compose -f docker-compose.dev.yml --env-file .env.development up -d postgres_db redis mailpit
 ```
 
 Run the backend:

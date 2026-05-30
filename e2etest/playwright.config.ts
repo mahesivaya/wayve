@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 // Endpoints discovered on the local docker stack:
 //   Frontend (nginx): http://localhost   (port 80, the URL real users hit)
 //   Backend  (actix): http://localhost:8080/api
-//   MailHog  (smtp catch + web UI): http://localhost:8025
+//   Mailpit  (smtp catch + web UI): http://localhost:8025
 //
 // All three are reachable when you've run `just docker-up-detached` or
 // `docker compose -f infra/docker-compose.yml up -d` from the repo root.
@@ -12,7 +12,7 @@ import { defineConfig, devices } from "@playwright/test";
 // the harness CI workflow already brings it up via scripts/smoke.sh.
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost";
 const API_BASE = process.env.E2E_API_BASE ?? "http://localhost:8080";
-const MAILHOG_API = process.env.E2E_MAILHOG_API ?? "http://localhost:8025";
+const MAILPIT_API = process.env.E2E_MAILPIT_API ?? "http://localhost:8025";
 
 export default defineConfig({
   testDir: "./tests",
@@ -34,7 +34,7 @@ export default defineConfig({
   outputDir: "test-results/artifacts",
   use: {
     baseURL: BASE_URL,
-    // Inject the API + MailHog URLs via context so fixtures can read them
+    // Inject the API + Mailpit URLs via context so fixtures can read them
     // without re-importing process.env in every spec.
     extraHTTPHeaders: {},
     trace: "retain-on-failure",
@@ -56,5 +56,5 @@ export default defineConfig({
 export const ENV = {
   BASE_URL,
   API_BASE,
-  MAILHOG_API,
+  MAILPIT_API,
 };

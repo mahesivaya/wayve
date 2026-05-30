@@ -243,14 +243,101 @@ export const sendEmail = async (payload: SendEmailPayload) => {
   return res.text();
 };
 
-export const getWayveRecipientByEmail = async <T = unknown>(
+// ---------------------------------------------------------------------------
+// Plan A Phase 2 — Wayve-to-Wayve native channel
+// ---------------------------------------------------------------------------
+//
+// `getUserByEmail` resolves a recipient address to a Wayve user record so
+// the compose flow can detect "this person is on Wayve" and (when they
+// are) encrypt to their RSA public key. Returns null when the address
+// is not a Wayve user — fall back to the standard SMTP send path.
+//
+// `sendInternalEmail` POSTs a pre-built multi-recipient envelope to the
+// backend's send-internal endpoint. The server never sees plaintext —
+// only the opaque envelope string the browser produced via
+// `buildInternalEnvelope` (see `frontend/src/emails/internalEnvelope.ts`).
+
+export type WayveRecipient = {
+  id: number;
+  email: string;
+  /** SPKI public key bytes, as the server stores them (number array). */
+  public_key: number[] | null;
+};
+
+/**
+ * Resolve an email address to a Wayve user. Returns `null` for unknown
+ * addresses (which means: not a Wayve user — caller should use plain
+ * SMTP). Throws on transport errors so retries are explicit.
+ */
+export const getUserByEmail = async (
   email: string,
-  token?: string
-) =>
-  apiFetchJson<T[] | T>(`/api/users?email=${encodeURIComponent(email)}`, {
-    headers: token
-      ? {
-          Authorization: `Bearer ${token}`,
-        }
-      : undefined,
+): Promise<WayveRecipient | null> => {
+  const trimmed = email.trim();
+  if (!trimmed) return null;
+  const res = await apiFetch(`/api/users?email=${encodeURIComponent(trimmed)}`);
+  const body = await res.json();
+  if (!body || typeof body !== "object") return null;
+  return body as WayveRecipient;
+};
+
+export type SendInternalPayload = {
+  recipient_user_ids: number[];
+  envelope: string;
+  subject: string;
+};
+
+/**
+ * Deliver a pre-encrypted multi-recipient envelope through the
+ * Wayve-to-Wayve native channel. No SMTP involved; the backend stores
+ * one row per recipient + one Sent copy for the sender, all carrying
+ * the same opaque envelope.
+ */
+export const sendInternalEmail = async (payload: SendInternalPayload) => {
+  const res = await apiFetch("/api/email/send-internal", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
+  return res.json() as Promise<{ delivered: number; sent_id: string }>;
+};
+
+// ---------------------------------------------------------------------------
+// Plan A Phase 3 — Secure-send magic link
+// ---------------------------------------------------------------------------
+
+export type SecureSendPayload = {
+  recipient_email: string;
+  subject: string;
+  ciphertext: string;
+  iv: string;
+  wrapped_key: string;
+  salt: string;
+  pbkdf2_iterations: number;
+};
+
+/**
+ * Upload a pre-encrypted secure message bundle. Server picks the token
+ * + expiry and fires the notification email; we get back the token +
+ * link the sender can copy (e.g., to share the link manually if SES
+ * fails to deliver).
+ */
+export const sendSecureEmail = async (payload: SecureSendPayload) => {
+  const res = await apiFetch("/api/email/send-secure", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return res.json() as Promise<{ token: string; link: string; expires_at: string }>;
+};
+
+/**
+ * Public-route fetch — no auth header required. Used by the magic-link
+ * read page to pull the ciphertext bundle for client-side decryption.
+ * Returns null on 404 (invalid token), throws on other errors.
+ */
+export const fetchSecureMessage = async (token: string) => {
+  const res = await apiFetch(`/api/secure-messages/${encodeURIComponent(token)}`, {
+    preserve401: true,
+  });
+  if (res.status === 404 || res.status === 410) return null;
+  return res.json() as Promise<import("../emails/secureSend").ServerSecureMessage>;
+};
+

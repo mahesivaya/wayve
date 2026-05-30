@@ -7,13 +7,13 @@
 //      Words never cross the wire.
 //   3. Backend verifies the phrase by AES-GCM-decrypting the user's
 //      stored envelope. If the auth tag passes, it sets the new
-//      password. For "full" accounts it returns the envelope so the
-//      frontend can locally unwrap the RSA keypair too. For
-//      "password_only" accounts no envelope comes back — the wrap
-//      contains a credential blob, not the real private key.
-//   4. With the envelope in hand (full mode only) this page also locally
-//      unwraps the user's RSA keypair and saves it to IndexedDB so the
-//      user lands in /home with chat/notes/drive working.
+//      password and returns the envelope so the frontend can locally
+//      unwrap the RSA keypair too. Plan A has a single recovery_mode
+//      ('full'), so the envelope always comes back — the
+//      "password_only" branch from the previous schema is retired.
+//   4. With the envelope in hand this page also locally unwraps the
+//      user's RSA keypair and saves it to IndexedDB so the user lands
+//      in /home with chat/notes/drive working.
 //
 // "Lost password AND lost mnemonic" = account is genuinely unrecoverable.
 // That's the explicit promise this page reinforces in its copy.
@@ -69,11 +69,10 @@ export default function RecoverWithMnemonicPage() {
         newPassword,
       );
 
-      // For "full" accounts, unlock E2E keys locally now so the user
-      // doesn't have to re-enter the mnemonic at /recover after login.
-      // For "password_only" accounts, the server intentionally returns
-      // wrapped_envelope = null — no client-side restore is possible
-      // (the server never had the user's real private key).
+      // Plan A: the server always returns the envelope on a successful
+      // mnemonic reset, so we always unlock E2E keys locally and the
+      // user doesn't have to re-enter the mnemonic at /recover after
+      // login. The legacy `wrapped_envelope === null` branch is gone.
       if (wrapped_envelope) {
         try {
           await unwrapKeysFromRecovery(wrapped_envelope, entropy, user_id);
@@ -180,8 +179,6 @@ export default function RecoverWithMnemonicPage() {
 
         <p className="switch-auth">
           <Link to="/login">Back to login</Link>
-          {" · "}
-          <Link to="/forgot-password">Use email link instead</Link>
         </p>
       </form>
     </div>

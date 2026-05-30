@@ -40,13 +40,12 @@ export default function Register() {
     }
 
     try {
-      // All new signups start in "basic" recovery mode — sign in with
-      // email + password from anywhere, no seed phrase required. The
-      // 24-word phrase + zero-knowledge "full" mode is offered later
-      // as part of the upgrade flow (see /billing → security upgrade),
-      // so the registration form stays a single-click "create
-      // account" with no decision fatigue.
-      const data = await register(email, password, confirm, "basic");
+      // Plan A: every signup is end-to-end encrypted. The server is
+      // sent `recovery_mode = 'full'` so the user gets a 24-word
+      // BIP-39 mnemonic right after the form submit, generated and
+      // shown by RecoverySeedModal. Forget the password AND lose the
+      // mnemonic → the account is unrecoverable; that's by design.
+      const data = await register(email, password, confirm, "full");
 
       if (!data || !data.token) {
         throw new Error("No token returned from server");

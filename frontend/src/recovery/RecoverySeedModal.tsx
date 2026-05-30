@@ -20,10 +20,10 @@ import "./recoverySeedModal.css";
 
 interface Props {
   mnemonic: string;
-  // Drives the explainer paragraph. "full" mentions cross-device
-  // restore; "password_only" makes clear the phrase only resets a
-  // forgotten password.
-  recoveryMode: RecoveryMode;
+  // Retained for source-compat with the multi-mode era — Plan A has a
+  // single mode so this prop no longer drives the explainer paragraph.
+  // The seed modal always shows the "only way to recover" copy.
+  recoveryMode?: RecoveryMode;
   onConfirmed: () => Promise<void> | void;
   busy?: boolean;
   error?: string | null;
@@ -31,7 +31,6 @@ interface Props {
 
 export default function RecoverySeedModal({
   mnemonic,
-  recoveryMode,
   onConfirmed,
   busy,
   error,
@@ -86,36 +85,16 @@ export default function RecoverySeedModal({
       <div className="recovery-modal">
         <header>
           <h2>Save your recovery phrase</h2>
-          {recoveryMode === "password_only" ? (
-            <p>
-              These {MNEMONIC_WORD_COUNT} words are the <strong>only</strong>{" "}
-              way to reset your password if you forget it. Wayve cannot
-              reset them for you. Encrypted chat, notes, and files will
-              not follow you to other devices in this mode — that's the
-              tradeoff for keeping your encryption key on this device
-              only. Copy or download the phrase and keep it somewhere
-              safe — not a screenshot, not another app on this device.
-            </p>
-          ) : recoveryMode === "basic" ? (
-            <p>
-              These {MNEMONIC_WORD_COUNT} words let you reset your
-              password later or <strong>upgrade to full
-              encryption</strong> — where Wayve no longer holds a copy
-              of your key. You can keep using email + password to sign
-              in today without entering them, but if you lose your
-              password or want to upgrade, you'll need this phrase. Copy
-              or download it and keep it somewhere safe — not a
-              screenshot, not another app on this device.
-            </p>
-          ) : (
-            <p>
-              These {MNEMONIC_WORD_COUNT} words are the <strong>only</strong>{" "}
-              way to recover your account if you forget your password or
-              switch to a new device. Wayve cannot reset them for you.
-              Copy or download them and keep them somewhere safe — not in
-              a screenshot, not in another app on this device.
-            </p>
-          )}
+          <p>
+            These {MNEMONIC_WORD_COUNT} words are the <strong>only</strong>{" "}
+            way to recover your account if you forget your password or
+            switch to a new device. Wayve cannot reset them for you —
+            losing both the password and this phrase means your
+            encrypted content (emails, chat, drive, tasks, calendar,
+            notes) is unrecoverable. Copy or download them and keep
+            them somewhere safe — not in a screenshot, not in another
+            app on this device.
+          </p>
         </header>
 
         <div className="recovery-grid">

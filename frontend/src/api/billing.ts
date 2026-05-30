@@ -95,6 +95,48 @@ const json = <T>(path: string, options?: RequestInit) =>
 
 export const listPlans = () => json<Plan[]>("/api/billing/plans");
 
+// ---- Platform admin: plan management --------------------------------------
+
+export type UpsertPlanInput = {
+  code: string;
+  name: string;
+  description?: string | null;
+  audience: "personal" | "organization";
+  stripe_price_id?: string | null;
+  amount_cents: number;
+  currency: string;
+  billing_interval: string;
+  storage_limit_bytes: number;
+  seat_limit: number;
+  features?: Record<string, unknown>;
+  is_active?: boolean;
+};
+
+/** Returns ALL plans including deactivated ones — only platform admins may call. */
+export const adminListPlans = () =>
+  json<Plan[]>("/api/billing/admin/plans");
+
+/**
+ * Create or update a plan by `code`. Same payload shape for both — the
+ * server upserts on the unique `code` column. Returns the persisted row.
+ */
+export const adminUpsertPlan = (input: UpsertPlanInput) =>
+  json<Plan>("/api/billing/admin/plans", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/**
+ * Soft-delete (sets is_active=false). The row stays so historical
+ * subscriptions that still reference it stay resolvable; it just stops
+ * appearing on /pricing.
+ */
+export const adminDeactivatePlan = async (code: string) => {
+  await json<void>(`/api/billing/admin/plans/${encodeURIComponent(code)}`, {
+    method: "DELETE",
+  });
+};
+
 export const getSubscription = () =>
   json<SubscriptionResponse>("/api/billing/subscription");
 
