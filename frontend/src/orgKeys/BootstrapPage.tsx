@@ -55,7 +55,16 @@ export default function BootstrapPage() {
   }
 
   if (phase.kind === "loading") {
-    return <div style={{ padding: 40 }}>Generating your organization recovery key…</div>;
+    return (
+      <div style={{ padding: 40 }}>
+        <h2>Setting up your organization recovery key</h2>
+        <p style={{ color: "#6b7280" }}>
+          Generating your encryption keypair and the 24-word recovery phrase.
+          This can take up to 20 seconds on a fresh browser — please don't
+          close this tab.
+        </p>
+      </div>
+    );
   }
 
   if (phase.kind === "error") {
@@ -63,7 +72,10 @@ export default function BootstrapPage() {
       <div style={{ padding: 40 }}>
         <h2 style={{ color: "#b91c1c" }}>Bootstrap failed</h2>
         <p>{phase.message}</p>
-        <button onClick={() => navigate("/organization/home")}>Back</button>
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button onClick={() => window.location.reload()}>Retry</button>
+          <button onClick={() => navigate("/organization/home")}>Back</button>
+        </div>
       </div>
     );
   }

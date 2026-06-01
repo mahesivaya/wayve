@@ -30,17 +30,20 @@ function bytesToB64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Wait up to ~5s for the personal pubkey to land in IndexedDB. AuthContext's
+// Wait up to ~20s for the personal pubkey to land in IndexedDB. AuthContext's
 // `setupEncryption` runs in the background after login, so the very first
 // org-bootstrap redirect after a brand-new owner logs in can fire BEFORE
-// the personal keypair has been saved. Polling here keeps the bootstrap
-// page from failing with a confusing "sign in fully first" message just
-// because the two async tasks raced.
-async function waitForPublicKey(
+// the personal keypair has been saved. setupEncryption may also have to
+// (a) call /api/me/wrapped-key, (b) call /api/me/basic-key, then (c)
+// generate the RSA-2048 keypair, then (d) write to IndexedDB — comfortably
+// 1–10s end to end on cold WebCrypto + a slow network. Polling here keeps
+// the bootstrap page from failing with a confusing "sign in fully first"
+// message just because the two async tasks raced.
+export async function waitForPublicKey(
   userId: number,
   email: string,
-  timeoutMs = 5000,
-  intervalMs = 200,
+  timeoutMs = 20_000,
+  intervalMs = 250,
 ): Promise<ArrayBuffer | null> {
   const start = performance.now();
   // First attempt is immediate so steady-state (key already present)
