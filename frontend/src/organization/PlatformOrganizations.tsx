@@ -89,7 +89,8 @@ export default function PlatformOrganizations() {
       setShowCreateForm(false);
       setSuccess(
         `Created organization ${created.name}` +
-          (created.admin ? ` with admin ${created.admin.email}` : "")
+          (created.admin ? ` with admin ${created.admin.email}.` : ".") +
+          " Share the credentials with the owner — on their first login they'll be prompted to set up the 24-word recovery key for the organization."
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create organization");

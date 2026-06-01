@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { KeyboardEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
+import { getOrgKeys } from "../orgKeys/api";
 import ActivityDashboard from "../home/dashboard/ActivityDashboard";
 import "../home/home.css";
 import "./admin-ui.css";
@@ -23,6 +25,35 @@ type Tile = {
 export default function OrganizationAdminHome() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // If this user is the org owner (only the owner holds `org_keys:bootstrap`)
+  // and the org has no master key yet — which is the state right after a
+  // platform-admin-created org, or a self-serve org whose first owner closed
+  // the tab during bootstrap — send them to the mnemonic flow. Without this,
+  // a freshly-provisioned owner lands on the dashboard, never sees the 24
+  // words, and silently can't ever decrypt member data. The bootstrap page
+  // is the single place the mnemonic is shown, by design (one-time).
+  const canBootstrap = hasPermission(user, "org_keys:bootstrap");
+  const orgId = user?.organization_id ?? null;
+  useEffect(() => {
+    if (!canBootstrap || !orgId) return;
+    let cancelled = false;
+    getOrgKeys(orgId)
+      .catch((err) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes("404") || /not[_ ]found/i.test(message)) {
+          navigate(
+            `/organization/recovery-key/bootstrap?org=${orgId}`,
+            { replace: true },
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canBootstrap, orgId, navigate]);
+
   const canSeeMembers =
     hasPermission(user, "members:read") || hasPermission(user, "members:manage");
   const canSeeBilling =
