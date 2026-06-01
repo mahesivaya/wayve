@@ -70,7 +70,6 @@ pub struct FileRecord {
 //
 // 🔥 UPDATED UPLOAD FILE (FIXED USER_ID)
 //
-#[post("/files/upload")]
 #[instrument(target = "http", skip(req, payload, pool))]
 pub async fn upload_file(
     req: HttpRequest,
@@ -578,11 +577,11 @@ mod auth_regression_tests {
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(lazy_pool()))
-                .service(upload_file),
+                .route("/files", web::post().to(upload_file)),
         )
         .await;
 
-        let req = test::TestRequest::post().uri("/files/upload").to_request();
+        let req = test::TestRequest::post().uri("/files").to_request();
         let resp = test::call_service(&app, req).await;
 
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);

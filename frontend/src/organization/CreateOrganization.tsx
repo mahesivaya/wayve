@@ -36,17 +36,25 @@ export default function CreateOrganization() {
     setCreateError("");
     setCreating(true);
     try {
-      await createMyOrganization({
+      const created = await createMyOrganization({
         name: name.trim(),
         place: place.trim() || undefined,
       });
       // /api/me now reflects the promoted account_type + org info. Refresh
       // so the Header re-renders for the new scope before we navigate.
       await refresh();
-      const target = intendedPlan
-        ? `/organization-home?plan=${encodeURIComponent(intendedPlan)}`
-        : "/organization-home";
-      navigate(target, { replace: true });
+      // Mandatory step before the new org can add any members: bootstrap
+      // the org master key. The /organization/recovery-key/bootstrap page
+      // mints the keypair + mnemonic and shows the words to the owner.
+      // After that the user lands on /organization-home as before; the
+      // ?plan=... hint propagates through the bootstrap return path.
+      const planSuffix = intendedPlan
+        ? `&plan=${encodeURIComponent(intendedPlan)}`
+        : "";
+      navigate(
+        `/organization/recovery-key/bootstrap?org=${created.organization_id}${planSuffix}`,
+        { replace: true },
+      );
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create organization");
     } finally {

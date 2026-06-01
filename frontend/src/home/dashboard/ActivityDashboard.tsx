@@ -139,7 +139,7 @@ export default function ActivityDashboard() {
     const value = captureValue.trim();
     if (!value) return;
     setCaptureValue("");
-    void navigate("/aichat");
+    void navigate("/ai-chat");
   }
 
   function navigateForRecent(item: RecentItem) {

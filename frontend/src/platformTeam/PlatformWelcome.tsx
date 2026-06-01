@@ -19,7 +19,7 @@ const APP_TILES: Array<{
   { path: "/drive", icon: "📁", label: "Drive", desc: "Files & folders" },
   { path: "/notes", icon: "📝", label: "Notes", desc: "Personal notes" },
   { path: "/tasks", icon: "☑", label: "Tasks", desc: "Your to-do list" },
-  { path: "/aichat", icon: "✨", label: "AI Chat", desc: "Assistant" },
+  { path: "/ai-chat", icon: "✨", label: "AI Chat", desc: "Assistant" },
   { path: "/profile", icon: "👤", label: "Profile", desc: "Account settings" },
 ];
 

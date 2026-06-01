@@ -185,9 +185,9 @@ export const setDefaultPaymentMethod = (paymentMethodId: string) =>
   });
 
 export const cancelSubscription = () =>
-  json<{ cancel_at_period_end: boolean }>("/api/billing/subscription/cancel", {
-    method: "POST",
+  json<{ cancel_at_period_end: boolean }>("/api/billing/subscription", {
+    method: "DELETE",
   });
 
 export const getStripeStatus = () =>
-  json<StripeStatus>("/api/billing/stripe-status");
+  json<StripeStatus>("/api/billing/provider-status");

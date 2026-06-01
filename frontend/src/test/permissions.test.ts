@@ -18,10 +18,38 @@ describe("permission matrix", () => {
     }
   });
 
-  it("super_admin is owner minus the billing permissions", () => {
+  it("super_admin is owner minus billing AND org_keys:bootstrap", () => {
+    // Matches backend rbac.rs: super_admin gets everything except the
+    // two billing perms AND org_keys:bootstrap (which is owner-only,
+    // because bootstrapping the mnemonic recovery root is the trust
+    // anchor for the org's master key — not delegated to super_admin).
     for (const perm of PERMISSIONS) {
-      const expected = perm !== "billing:manage" && perm !== "billing:read";
+      const expected =
+        perm !== "billing:manage" &&
+        perm !== "billing:read" &&
+        perm !== "org_keys:bootstrap";
       expect(ROLE_PERMISSIONS.super_admin.includes(perm)).toBe(expected);
+    }
+  });
+
+  it("org_keys:bootstrap is owner-only", () => {
+    expect(ROLE_PERMISSIONS.owner).toContain("org_keys:bootstrap");
+    for (const role of [
+      "super_admin", "admin", "security", "billing",
+      "developer", "support", "member", "guest",
+    ] as const) {
+      expect(ROLE_PERMISSIONS[role]).not.toContain("org_keys:bootstrap");
+    }
+  });
+
+  it("org_keys:use_master is owner / super_admin / admin", () => {
+    for (const role of ["owner", "super_admin", "admin"] as const) {
+      expect(ROLE_PERMISSIONS[role]).toContain("org_keys:use_master");
+    }
+    for (const role of [
+      "security", "billing", "developer", "support", "member", "guest",
+    ] as const) {
+      expect(ROLE_PERMISSIONS[role]).not.toContain("org_keys:use_master");
     }
   });
 

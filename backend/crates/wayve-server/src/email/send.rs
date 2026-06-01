@@ -11,7 +11,6 @@ use base64::Engine;
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
 
-#[post("/send")]
 #[instrument(target = "gmail", skip(req, data, pool), fields(to = %data.to))]
 pub async fn send(
     req: HttpRequest,
@@ -168,7 +167,6 @@ const SEND_INTERNAL_MAX_ENVELOPE_BYTES: usize = 1_048_576; // 1 MiB
 const SEND_INTERNAL_MAX_SUBJECT_BYTES: usize = 1024;
 const WAYVE_ENVELOPE_PREFIX: &str = "WAYVE_SECURE_V1\n";
 
-#[post("/email/send-internal")]
 #[instrument(target = "gmail", skip(req, data, pool), fields(recipients = data.recipient_user_ids.len()))]
 pub async fn send_internal(
     req: HttpRequest,

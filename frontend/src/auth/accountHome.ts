@@ -27,9 +27,9 @@ export const getEmailDomain = (slug?: string | null) =>
 
 export function homePathForAccount(accountType?: string | null) {
   const normalized = normalizeAccountType(accountType);
-  if (normalized === "platform_admin") return "/platform-admin-home";
+  if (normalized === "platform_admin") return "/platform/home";
   if (normalized === "organization_admin" || normalized === "organization") {
-    return "/organization-home";
+    return "/organization/home";
   }
   return "/home";
 }
@@ -61,12 +61,12 @@ export function homePathForUser(user?: AccountLike | null): string {
   const normalized = normalizeAccountType(user?.account_type);
   if (normalized === "platform_admin") {
     const role = user?.effective_role ?? "";
-    return PLATFORM_ROLE_HOMES[role] ?? "/platform-admin-home";
+    return PLATFORM_ROLE_HOMES[role] ?? "/platform/home";
   }
   if (normalized === "organization_admin" || normalized === "organization") {
-    return "/organization-home";
+    return "/organization/home";
   }
-  if (user?.organization_id != null) return "/organization-home";
+  if (user?.organization_id != null) return "/organization/home";
 
   return "/home";
 }

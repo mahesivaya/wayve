@@ -1,7 +1,10 @@
 use crate::prelude::*;
 
 use crate::email::sender::send_mail;
-use crate::models::auth::{ForgotInput, LoginInput, LoginResponse, RegisterInput, ResetInput};
+use crate::models::auth::{
+    ForgotInput, LoginInput, LoginResponse, MemberLoginWrap, RegisterInput, ResetInput,
+};
+use crate::organization;
 use crate::models::message::MessageResponse;
 use crate::models::user::User;
 use wayve_security::jwt::{
@@ -154,11 +157,32 @@ pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) 
         user.account_type.clone(),
         user.password_valid_until,
     );
+
+    // Org members get their password-wrapped private key in the login
+    // response so the browser can unwrap on a fresh device (where
+    // IndexedDB has no cached key). Personal users don't have a row in
+    // member_login_wrapped_keys — they get None and stay on the
+    // existing mnemonic recovery path.
+    let login_wrap = match organization::keys::fetch_login_wrap(pool.get_ref(), user.id).await {
+        Ok(Some(wrap)) => Some(MemberLoginWrap {
+            iv: wrap.iv,
+            ct: wrap.ct,
+            salt: wrap.salt,
+            iterations: wrap.iterations,
+        }),
+        Ok(None) => None,
+        Err(e) => {
+            warn!(target: "auth", error = ?e, user_id = user.id, "login wrap fetch failed");
+            None
+        }
+    };
+
     Ok(HttpResponse::Ok()
         .cookie(auth_cookie(token.clone()))
         .json(LoginResponse {
             token,
             account_type: user.account_type,
+            login_wrap,
         }))
 }
 

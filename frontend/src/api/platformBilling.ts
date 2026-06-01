@@ -231,4 +231,4 @@ export type StripeSnapshot =
     };
 
 export const getStripeSnapshot = () =>
-  apiFetchJson<StripeSnapshot>("/api/platform-billing/stripe/snapshot");
+  apiFetchJson<StripeSnapshot>("/api/platform-billing/provider-snapshot");

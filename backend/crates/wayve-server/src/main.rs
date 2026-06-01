@@ -20,6 +20,7 @@ mod models;
 mod home;
 mod notes;
 mod observability;
+mod organization;
 mod openapi;
 mod platform_billing;
 mod platform_team;
@@ -75,6 +76,7 @@ fn app_routes(cfg: &mut web::ServiceConfig) {
                 .configure(drive::routes)
                 .configure(home::routes)
                 .configure(notes::routes)
+                .configure(organization::routes)
                 .configure(tasks::routes)
                 .configure(call::api_routes)
                 .configure(ai::routes)

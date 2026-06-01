@@ -256,7 +256,6 @@ pub async fn create_inline_subscription(
     }
 }
 
-#[get("/billing/stripe-status")]
 #[instrument(target = "http", skip(req))]
 pub async fn stripe_status(req: HttpRequest) -> AppResult {
     if let Err(resp) = super::current_user(&req) {

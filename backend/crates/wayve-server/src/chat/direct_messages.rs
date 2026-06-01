@@ -9,7 +9,6 @@ use super::dto::QueryParams;
 use sqlx::Row;
 use tracing::{error, instrument, warn};
 
-#[get("/messages")]
 #[instrument(target = "http", skip(req, pool, _cache, query), fields(user1 = query.user1, user2 = query.user2))]
 pub async fn get_messages(
     req: HttpRequest,

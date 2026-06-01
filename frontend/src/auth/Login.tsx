@@ -7,6 +7,8 @@ import { useAuth } from "../auth/useAuth";
 import { homePathForUser } from "../auth/accountHome";
 import { getApiBase } from "../config";
 import { ssoStartUrl } from "../api/sso";
+import { parseJwt } from "./bootToken";
+import { unwrapAndCacheMemberKeys } from "../orgKeys/memberLogin";
 import "./login.css";
 
 // Hash-fragment error codes set by the backend SSO callback when something
@@ -67,6 +69,33 @@ export default function Login() {
 
       if (!data || !data.token) {
         throw new Error("No token returned");
+      }
+
+      // Org members: server returned a password-wrapped private key in
+      // `login_wrap`. Unwrap with PBKDF2(password) and write to the
+      // existing IndexedDB slot BEFORE authLogin runs setupEncryption —
+      // that way setupEncryption's "key already on device" branch
+      // short-circuits and the user lands fully set up. Personal users
+      // get no login_wrap and follow the existing mnemonic path
+      // unchanged.
+      if (data.login_wrap) {
+        try {
+          const claims = parseJwt(data.token);
+          if (claims) {
+            await unwrapAndCacheMemberKeys(
+              claims.sub,
+              data.email ?? email,
+              password,
+              data.login_wrap,
+            );
+          }
+        } catch (err) {
+          logger.error("org member key unwrap failed", err);
+          setError(
+            "Couldn't unlock your account keys — please contact your administrator.",
+          );
+          return;
+        }
       }
 
       authLogin(data.token, data.account_type ?? "personal");
@@ -193,16 +222,20 @@ export default function Login() {
 
           <div className="auth-divider"><span>or</span></div>
 
-          <button
-            type="button"
-            className="sso-btn"
-            onClick={() => {
-              setSsoMode(true);
-              setError("");
-            }}
-          >
-            Sign in with SSO
-          </button>
+          {false && (
+            <button
+              type="button"
+              className="sso-btn"
+              disabled
+              title="SSO sign-in is temporarily disabled"
+              onClick={() => {
+                setSsoMode(true);
+                setError("");
+              }}
+            >
+              Sign in with SSO
+            </button>
+          )}
 
           <button
             type="button"

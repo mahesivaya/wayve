@@ -65,7 +65,6 @@ pub async fn get_subscription(req: HttpRequest, pool: web::Data<PgPool>) -> AppR
     }
 }
 
-#[post("/billing/subscription/cancel")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn cancel_subscription(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = match super::current_user(&req) {

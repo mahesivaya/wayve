@@ -569,6 +569,62 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          ON secure_messages(expires_at)",
         "CREATE INDEX IF NOT EXISTS idx_secure_messages_sender \
          ON secure_messages(sender_user_id, created_at DESC)",
+        // ────────────────────────────────────────────────────────────────
+        // Organization Master Key. Schema lives in init.sql; mirrored
+        // here so existing dev/prod DBs pick it up without `just db-reset`.
+        // See organization/keys.rs for the handler set.
+        // ────────────────────────────────────────────────────────────────
+        "CREATE TABLE IF NOT EXISTS organization_keys (
+            organization_id INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+            public_key TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE TABLE IF NOT EXISTS organization_wrapped_keys (
+            id BIGSERIAL PRIMARY KEY,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            wrap_method TEXT NOT NULL CHECK (wrap_method IN ('mnemonic', 'user_pubkey')),
+            holder_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            iv TEXT NOT NULL,
+            ct TEXT NOT NULL,
+            pbkdf2_iterations INTEGER,
+            pbkdf2_salt TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_organization_wrapped_keys_holder \
+         ON organization_wrapped_keys(organization_id, holder_user_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_organization_wrapped_keys_mnemonic \
+         ON organization_wrapped_keys(organization_id) \
+         WHERE wrap_method = 'mnemonic'",
+        "CREATE TABLE IF NOT EXISTS member_login_wrapped_keys (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            iv TEXT NOT NULL,
+            ct TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            iterations INTEGER NOT NULL DEFAULT 600000,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE TABLE IF NOT EXISTS member_wrapped_keys (
+            organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            iv TEXT NOT NULL,
+            ct TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (organization_id, user_id)
+        )",
+        "CREATE TABLE IF NOT EXISTS org_key_audit_log (
+            id BIGSERIAL PRIMARY KEY,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            actor_role TEXT,
+            action TEXT NOT NULL,
+            target_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            ip TEXT,
+            user_agent TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_org_key_audit_log_org_time \
+         ON org_key_audit_log(organization_id, created_at DESC)",
     ];
 
     for statement in statements {

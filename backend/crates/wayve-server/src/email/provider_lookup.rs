@@ -18,7 +18,7 @@
 
 use crate::prelude::*;
 use wayve_security::jwt::get_user_id_from_request;
-use actix_web::{HttpRequest, HttpResponse, post, web};
+use actix_web::{HttpRequest, HttpResponse, web};
 use hickory_resolver::Resolver;
 use hickory_resolver::TokioResolver;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
@@ -73,7 +73,6 @@ static RESOLVER: Lazy<TokioResolver> = Lazy::new(|| {
         .unwrap_or_else(|e| panic!("hickory resolver init failed: {e}"))
 });
 
-#[post("/email/provider-lookup")]
 #[instrument(target = "email", skip(req, body), fields(email = %body.email))]
 pub async fn provider_lookup(
     req: HttpRequest,

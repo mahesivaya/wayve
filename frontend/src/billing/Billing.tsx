@@ -235,7 +235,7 @@ export default function Billing() {
     if (checkoutStatus !== "success") return;
     if (ownerType !== "organization") return;
     const handle = window.setTimeout(() => {
-      navigate("/organization-home", { replace: true });
+      navigate("/organization/home", { replace: true });
     }, 1500);
     return () => window.clearTimeout(handle);
   }, [loading, checkoutStatus, ownerType, navigate]);

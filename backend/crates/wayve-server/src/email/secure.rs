@@ -25,7 +25,6 @@
 
 use crate::email::sender::send_mail;
 use crate::prelude::*;
-use actix_web::delete;
 use base64::Engine as _;
 use chrono::{DateTime, Duration, Utc};
 use rand::{RngCore, thread_rng};
@@ -66,7 +65,6 @@ pub struct SecureMessageView {
     pub created_at: DateTime<Utc>,
 }
 
-#[post("/email/send-secure")]
 #[instrument(target = "gmail", skip(req, data, pool))]
 pub async fn send_secure(
     req: HttpRequest,
@@ -205,7 +203,6 @@ pub async fn send_secure(
     })))
 }
 
-#[get("/secure-messages/{token}")]
 #[instrument(target = "http", skip(pool, path))]
 pub async fn get_secure_message(
     pool: web::Data<PgPool>,
@@ -279,7 +276,6 @@ pub async fn get_secure_message(
     Ok(HttpResponse::Ok().json(view))
 }
 
-#[delete("/email/send-secure/{token}")]
 #[instrument(target = "gmail", skip(req, pool, path))]
 pub async fn revoke_secure_message(
     req: HttpRequest,

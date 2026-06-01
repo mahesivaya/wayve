@@ -56,6 +56,7 @@
   border-radius: var(--radius-sm);
   font-size: var(--text-md);
   background: var(--color-surface);
+  color: var(--color-text-primary);
 }
 
 .rbac-members-actions {

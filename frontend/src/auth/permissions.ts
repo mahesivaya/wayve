@@ -28,6 +28,11 @@ export const PERMISSIONS = [
   "tickets:manage",
   "sso:manage",
   "inbox:manage",
+  // Org master key permissions (mirror backend wayve-security/rbac.rs).
+  // org_keys:bootstrap is owner-only; org_keys:use_master is granted to
+  // owner / super_admin / admin (NOT security — separation of duties).
+  "org_keys:bootstrap",
+  "org_keys:use_master",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -49,9 +54,14 @@ export type Role = (typeof ROLES)[number];
 // `member` and `guest` share the baseline capability bundle.
 const BASELINE: Permission[] = ["apps:use", "profile:manage_self"];
 
-// owner = the whole catalog; super_admin = the whole catalog minus billing.
+// owner = the whole catalog; super_admin = the whole catalog minus billing
+// AND minus org_keys:bootstrap (only the original owner can bootstrap /
+// promote a new key holder — matches backend wayve-security/rbac.rs).
 const SUPER_ADMIN: Permission[] = PERMISSIONS.filter(
-  (perm) => perm !== "billing:manage" && perm !== "billing:read"
+  (perm) =>
+    perm !== "billing:manage" &&
+    perm !== "billing:read" &&
+    perm !== "org_keys:bootstrap"
 );
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
@@ -68,6 +78,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "usage:read",
     "sso:manage",
     "inbox:manage",
+    "org_keys:use_master",
   ],
   security: [
     "apps:use",

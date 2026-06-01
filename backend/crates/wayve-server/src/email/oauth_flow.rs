@@ -142,7 +142,6 @@ fn google_client_id(secrets: &Value) -> std::result::Result<&str, HttpResponse> 
     Ok(client_id)
 }
 
-#[post("/gmail/connect-url")]
 #[instrument(target = "gmail", skip(req, pool))]
 pub async fn gmail_connect_url(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
     let user_id = match wayve_security::jwt::get_user_id_from_request(&req) {

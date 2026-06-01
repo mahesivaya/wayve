@@ -1,5 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { rewrapMemberForPasswordReset } from "../orgKeys/ownerImpersonate";
+import { resetMemberPassword } from "../orgKeys/api";
 import {
   adminCreateUser,
   adminDeleteUser,
@@ -40,6 +43,16 @@ export default function MembersRolesPanel(props: Props) {
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  // Password-reset modal state. Modal opens with a target member; the
+  // form captures the new temp password, computes a fresh login wrap in
+  // the browser using the org master key, and POSTs both. Success closes
+  // the modal and surfaces the new password so the admin can share it.
+  const [resetTarget, setResetTarget] = useState<Member | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [resetDone, setResetDone] = useState<{ email: string; tempPassword: string } | null>(null);
 
   // Create-user inline form state.
   const [createOpen, setCreateOpen] = useState(false);
@@ -125,6 +138,41 @@ export default function MembersRolesPanel(props: Props) {
   // Hard-delete with a native confirm prompt. Server-side gates handle the
   // last-owner / role-management / cross-scope edge cases; this just keeps
   // the user from accidentally clicking through.
+  const submitResetPassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!resetTarget || props.scope !== "organization" || !user) return;
+    if (resetPassword.length < 8) {
+      setResetError("Temp password must be at least 8 characters.");
+      return;
+    }
+    setResetBusy(true);
+    setResetError("");
+    try {
+      const newWrap = await rewrapMemberForPasswordReset(
+        props.organizationId,
+        user.id,
+        resetTarget.user_id,
+        resetPassword,
+      );
+      await resetMemberPassword(props.organizationId, resetTarget.user_id, {
+        new_password: resetPassword,
+        new_login_wrap: {
+          iv: newWrap.iv,
+          ct: newWrap.ct,
+          salt: newWrap.salt,
+          iterations: newWrap.iterations,
+        },
+      });
+      setResetDone({ email: resetTarget.email, tempPassword: resetPassword });
+      setResetTarget(null);
+      setResetPassword("");
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : "Reset failed");
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
   const deleteMember = async (member: Member) => {
     const label = member.username || member.email;
     if (
@@ -193,6 +241,148 @@ export default function MembersRolesPanel(props: Props) {
 
   return (
     <section className="rbac-members-panel">
+      {/* Reset-password "done" banner — surfaces the new temp password
+          once so the admin can share it out-of-band. Dismissable. */}
+      {resetDone && (
+        <div
+          style={{
+            margin: "0 0 16px",
+            padding: 12,
+            border: "1px solid #fde68a",
+            background: "#fef3c7",
+            borderRadius: 8,
+          }}
+        >
+          <strong>Password reset for {resetDone.email}.</strong>
+          <p style={{ margin: "4px 0" }}>
+            New temp password:{" "}
+            <code
+              style={{
+                padding: "2px 6px",
+                background: "#fff",
+                border: "1px solid #fcd34d",
+                borderRadius: 4,
+              }}
+            >
+              {resetDone.tempPassword}
+            </code>
+          </p>
+          <p style={{ margin: "4px 0", fontSize: 12, color: "#92400e" }}>
+            Share this with the member out-of-band (Slack, SMS, in person).
+            They keep all their existing notes / files / messages — only
+            the password changed.
+          </p>
+          <button
+            type="button"
+            onClick={() => setResetDone(null)}
+            style={{
+              marginTop: 6,
+              padding: "4px 12px",
+              border: "1px solid #d97706",
+              background: "transparent",
+              color: "#92400e",
+              borderRadius: 4,
+              cursor: "pointer",
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Reset-password modal */}
+      {resetTarget && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => {
+            if (!resetBusy) {
+              setResetTarget(null);
+              setResetError("");
+            }
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              padding: 24,
+              borderRadius: 8,
+              maxWidth: 480,
+              width: "90%",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginTop: 0 }}>
+              Reset password for {resetTarget.email}
+            </h3>
+            <p style={{ color: "#6b7280", fontSize: 14 }}>
+              Your browser will re-wrap this member's private key under the
+              new password using the org master key. The member keeps all
+              their existing notes / files / messages — they just log in
+              with the new password. Share the new password out-of-band.
+            </p>
+            <form onSubmit={submitResetPassword}>
+              <label style={{ display: "block", margin: "12px 0" }}>
+                <span style={{ display: "block", marginBottom: 4 }}>
+                  New temporary password
+                </span>
+                <input
+                  type="text"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  autoFocus
+                  required
+                  minLength={8}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 4,
+                    color: "#111827",
+                  }}
+                />
+              </label>
+              {resetError && (
+                <p style={{ color: "#b91c1c", margin: "8px 0" }}>{resetError}</p>
+              )}
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  disabled={resetBusy}
+                  onClick={() => {
+                    setResetTarget(null);
+                    setResetError("");
+                  }}
+                  style={{ padding: "8px 16px" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetBusy}
+                  style={{
+                    padding: "8px 16px",
+                    background: "#2563eb",
+                    color: "white",
+                    border: "none",
+                    borderRadius: 4,
+                  }}
+                >
+                  {resetBusy ? "Resetting…" : "Reset password"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="rbac-members-header">
         <div className="rbac-members-title-row">
           <div>
@@ -339,6 +529,45 @@ export default function MembersRolesPanel(props: Props) {
                   ) : (
                     <span className="rbac-members-role">{member.role_label}</span>
                   )}
+                  {/* Org master-key flows: only meaningful in organization
+                      scope, and only for users holding org_keys:use_master
+                      (owner / super_admin / admin). Hidden for the caller's
+                      own row — recovering your own data is meaningless. */}
+                  {props.scope === "organization" &&
+                    hasPermission(user, "org_keys:use_master") &&
+                    member.user_id !== user?.id && (
+                      <>
+                        <Link
+                          to={`/organization/members/${member.user_id}/impersonate`}
+                          className="rbac-delete-btn"
+                          style={{ textDecoration: "none", color: "#2563eb", borderColor: "#bfdbfe" }}
+                          title="Recover this member's data using the org master key"
+                        >
+                          Recover data
+                        </Link>
+                        {/* Reset password — only for non-key-holder rows.
+                            Key-holder rows (owner / super_admin / admin)
+                            are refused server-side anyway; hiding the
+                            button avoids a wasted modal. */}
+                        {!["owner", "super_admin", "admin"].includes(
+                          normalizeRole(member.role),
+                        ) && (
+                          <button
+                            type="button"
+                            className="rbac-delete-btn"
+                            style={{ color: "#a16207", borderColor: "#fde68a" }}
+                            onClick={() => {
+                              setResetTarget(member);
+                              setResetError("");
+                              setResetPassword("");
+                            }}
+                            title="Reset this member's password — they'll keep all their data"
+                          >
+                            Reset password
+                          </button>
+                        )}
+                      </>
+                    )}
                   {canDelete && (
                     <button
                       type="button"

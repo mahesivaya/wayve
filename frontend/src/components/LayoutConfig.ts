@@ -34,7 +34,7 @@ export const SPLIT_APPS = [
   { key: "drive" as AppKey, label: "Drive", path: "/drive", icon: "📁", Comp: DriveView },
   { key: "notes" as AppKey, label: "Notes", path: "/notes", icon: "📝", Comp: NotesView },
   { key: "tasks" as AppKey, label: "Tasks", path: "/tasks", icon: "☑", Comp: TasksView },
-  { key: "aichat" as AppKey, label: "AI Chat", path: "/aichat", icon: "✨", Comp: AIChatView },
+  { key: "aichat" as AppKey, label: "AI Chat", path: "/ai-chat", icon: "✨", Comp: AIChatView },
   { key: "github" as AppKey, label: "GitHub", path: "/github", icon: "GH", Comp: GitHubRepoView },
   { key: "about" as AppKey, label: "About", path: "/about", icon: "ⓘ", Comp: AboutView },
 ];

@@ -4,7 +4,9 @@ pub mod handler;
 use actix_web::web;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(handler::upload_file)
+    // File upload: canonical POST /api/files, legacy POST /api/files/upload.
+    cfg.route("/files", web::post().to(handler::upload_file))
+        .route("/files/upload", web::post().to(handler::upload_file))
         .service(handler::get_files)
         .service(handler::download_file)
         .service(handler::shared_drive_items)

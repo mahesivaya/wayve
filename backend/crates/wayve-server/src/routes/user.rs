@@ -4,6 +4,7 @@ use crate::cache::TtlCache;
 use crate::email::profile::invalidate_me_cache;
 use crate::models::auth::ChangePasswordInput;
 use crate::models::email_request::UserResponse;
+use crate::organization;
 use crate::prelude::*;
 use wayve_security::api_key::{generate_api_key, hash_api_key};
 use wayve_security::jwt::get_user_id_from_request;
@@ -1271,6 +1272,36 @@ pub async fn admin_create_user(
         }
     }
 
+    // Pre-check: org members (account_type = 'organization', NOT founders)
+    // need a bootstrapped org master key so the server can escrow their
+    // keypair at provisioning time. Fail loud and early if the org has
+    // no key yet — better than creating a user that can't crypto.
+    // Founders (organization_admin) and personal users don't need this
+    // and follow the client-side mnemonic path.
+    let needs_provisioned_keypair = account_type == "organization" && organization_id.is_some();
+    let org_pubkey_spki: Option<Vec<u8>> = if needs_provisioned_keypair {
+        let org_id = organization_id.expect("checked is_some above");
+        match organization::keys::fetch_org_public_key(pool.get_ref(), org_id).await? {
+            Some(pub_json) => {
+                let bytes: Vec<u8> = serde_json::from_str(&pub_json).map_err(|e| {
+                    AppError::Internal(format!(
+                        "org {org_id} public_key JSON malformed: {e}"
+                    ))
+                })?;
+                Some(bytes)
+            }
+            None => {
+                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                    "message": "Organization master key not bootstrapped yet. \
+                                The owner must visit /organization/recovery-key/bootstrap \
+                                before members can be added."
+                })));
+            }
+        }
+    } else {
+        None
+    };
+
     let hashed = hash_password(&plaintext_password).await?;
 
     let result = sqlx::query(
@@ -1353,6 +1384,48 @@ pub async fn admin_create_user(
                 .bind(role)
                 .execute(pool.get_ref())
                 .await?;
+            }
+
+            // Server-side keypair generation for org members. The keypair
+            // never leaves this process unwrapped — it gets wrapped twice
+            // (once under the org pubkey for owner-recovery, once under
+            // PBKDF2(password) for the member's own login) inside the
+            // blocking task, and the plaintext is zeroed before the task
+            // returns. RSA-2048 keygen is ~50-200ms, so spawn_blocking to
+            // keep the Tokio runtime responsive.
+            if let (Some(spki), Some(org_id)) = (org_pubkey_spki, organization_id) {
+                let password_for_gen = plaintext_password.clone();
+                let provisioned = tokio::task::spawn_blocking(move || {
+                    wayve_security::encryption::provision_org_member_keypair(
+                        &password_for_gen,
+                        &spki,
+                    )
+                })
+                .await
+                .map_err(|e| {
+                    AppError::Internal(format!("keypair spawn_blocking failed: {e}"))
+                })?
+                .map_err(|e| {
+                    AppError::Internal(format!("org member keypair provisioning failed: {e}"))
+                })?;
+
+                organization::keys::persist_provisioned_keys(
+                    pool.get_ref(),
+                    id,
+                    org_id,
+                    &provisioned.public_key_json,
+                    &provisioned.member_escrow_envelope,
+                    &provisioned.login_wrap,
+                )
+                .await?;
+
+                info!(
+                    target: "auth",
+                    admin_id,
+                    user_id = id,
+                    organization_id = org_id,
+                    "org member keypair provisioned + escrowed"
+                );
             }
 
             info!(target: "auth", admin_id, user_id = id, "admin created user");
@@ -1703,15 +1776,56 @@ pub async fn change_password(
             .json(serde_json::json!({ "message": "This account has no password to change" })));
     }
 
+    // Org members have a server-stored member_login_wrapped_keys row
+    // keyed by PBKDF2(old_password). If we update the bcrypt hash but
+    // leave that row alone, the member is locked out at next login —
+    // their browser will try to unwrap their PKCS8 with the new password
+    // and AES-GCM auth-tag-fail. Require the frontend to send the
+    // pre-computed new wrap whenever such a row exists.
+    let needs_wrap_rotation: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*)::BIGINT FROM member_login_wrapped_keys WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(pool.get_ref())
+    .await
+    .unwrap_or(0)
+        > 0;
+    if needs_wrap_rotation && data.new_login_wrap.is_none() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Organization accounts must include the re-wrapped login envelope on password change."
+        })));
+    }
+
     let hashed = hash_password(&data.new_password).await?;
 
+    let mut tx = pool.get_ref().begin().await?;
     sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
         .bind(&hashed)
         .bind(user_id)
-        .execute(pool.get_ref())
+        .execute(&mut *tx)
         .await?;
+    if let Some(wrap) = &data.new_login_wrap {
+        sqlx::query(
+            "INSERT INTO member_login_wrapped_keys (user_id, iv, ct, salt, iterations)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (user_id) DO UPDATE
+             SET iv = EXCLUDED.iv,
+                 ct = EXCLUDED.ct,
+                 salt = EXCLUDED.salt,
+                 iterations = EXCLUDED.iterations,
+                 updated_at = NOW()",
+        )
+        .bind(user_id)
+        .bind(&wrap.iv)
+        .bind(&wrap.ct)
+        .bind(&wrap.salt)
+        .bind(wrap.iterations)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
 
-    info!(target: "auth", user_id, had_password = data.current_password.is_some(), "password updated");
+    info!(target: "auth", user_id, had_password = data.current_password.is_some(), wrap_rotated = data.new_login_wrap.is_some(), "password updated");
     Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "Password updated" })))
 }
 

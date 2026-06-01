@@ -29,7 +29,7 @@ export async function getIceServers(): Promise<RTCIceServer[]> {
   }
 
   try {
-    const response = await apiFetch("/api/turn/credentials");
+    const response = await apiFetch("/api/call/credentials");
     if (response.status === 503) {
       log.warn("TURN not configured on server, using STUN fallback");
       return STUN_FALLBACK;

@@ -24,7 +24,16 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(list_payroll_runs)
         .service(create_payroll_run)
         .service(update_payroll_run_status)
-        .service(get_stripe_snapshot);
+        // Provider snapshot: canonical /api/platform-billing/provider-snapshot,
+        // legacy /api/platform-billing/stripe/snapshot (vendor-leak).
+        .route(
+            "/platform-billing/provider-snapshot",
+            web::get().to(get_stripe_snapshot),
+        )
+        .route(
+            "/platform-billing/stripe/snapshot",
+            web::get().to(get_stripe_snapshot),
+        );
 }
 
 async fn gate(
@@ -808,7 +817,6 @@ pub async fn update_payroll_run_status(
 // Missing Stripe configuration (no STRIPE_SECRET_KEY) returns a 503 with
 // `configured: false` so the UI can render a stub instead of an error.
 
-#[get("/platform-billing/stripe/snapshot")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_stripe_snapshot(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     if let Err(resp) = gate(&req, pool.get_ref(), Permission::BillingRead).await {

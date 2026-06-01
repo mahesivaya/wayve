@@ -178,7 +178,7 @@ export const SERVICES: ServiceDetail[] = [
   },
   {
     slug: "ai",
-    appPath: "/aichat",
+    appPath: "/ai-chat",
     icon: "AI",
     accent: "ai",
     name: "Wayve AI",

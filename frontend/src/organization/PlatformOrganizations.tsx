@@ -168,7 +168,7 @@ export default function PlatformOrganizations() {
           <h1>Organizations</h1>
           <p>Provision new tenants and manage their programmatic API keys.</p>
         </div>
-        <Link to="/platform-admin-home" className="u-btn-primary">
+        <Link to="/platform/home" className="u-btn-primary">
           ← Back to platform home
         </Link>
       </div>

@@ -18,9 +18,27 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(checkout::create_portal)
         .service(checkout::create_payment_method_setup_intent)
         .service(checkout::set_default_payment_method)
-        .service(checkout::stripe_status)
+        // Provider status: canonical /api/billing/provider-status, legacy /api/billing/stripe-status.
+        // The "stripe" name leaks the vendor; provider-status survives a future switch.
+        .route(
+            "/billing/provider-status",
+            web::get().to(checkout::stripe_status),
+        )
+        .route(
+            "/billing/stripe-status",
+            web::get().to(checkout::stripe_status),
+        )
         .service(subscriptions::get_subscription)
-        .service(subscriptions::cancel_subscription)
+        // Cancel subscription: canonical DELETE /api/billing/subscription,
+        // legacy POST /api/billing/subscription/cancel.
+        .route(
+            "/billing/subscription",
+            web::delete().to(subscriptions::cancel_subscription),
+        )
+        .route(
+            "/billing/subscription/cancel",
+            web::post().to(subscriptions::cancel_subscription),
+        )
         .service(subscriptions::admin_list_subscriptions)
         .service(invoices::list_invoices)
         .service(entitlements::get_entitlements)

@@ -1,0 +1,182 @@
+// First-time mnemonic display + confirm-words-back for the org master
+// key. Reached at /organization/recovery-key/bootstrap?org=<id> after
+// the owner finishes /api/organizations self-serve creation.
+
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";
+import { bootstrapOrgMasterKey } from "./orgKeypair";
+
+type Phase =
+  | { kind: "loading" }
+  | { kind: "display"; mnemonic: string[] }
+  | { kind: "confirm"; mnemonic: string[]; entered: string }
+  | { kind: "done" }
+  | { kind: "error"; message: string };
+
+export default function BootstrapPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const orgIdParam = params.get("org");
+  const orgId = orgIdParam ? Number(orgIdParam) : NaN;
+
+  const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+
+  useEffect(() => {
+    if (!user) return;
+    if (!Number.isFinite(orgId)) {
+      setPhase({ kind: "error", message: "Missing or invalid ?org parameter." });
+      return;
+    }
+    let cancelled = false;
+    bootstrapOrgMasterKey(orgId, user.id, user.email)
+      .then((result) => {
+        if (cancelled) return;
+        setPhase({ kind: "display", mnemonic: result.mnemonic.split(/\s+/) });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Failed to bootstrap the organization recovery key.";
+        setPhase({ kind: "error", message });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, orgId]);
+
+  if (!user) {
+    return (
+      <div style={{ padding: 40 }}>You must be signed in to bootstrap.</div>
+    );
+  }
+
+  if (phase.kind === "loading") {
+    return <div style={{ padding: 40 }}>Generating your organization recovery key…</div>;
+  }
+
+  if (phase.kind === "error") {
+    return (
+      <div style={{ padding: 40 }}>
+        <h2 style={{ color: "#b91c1c" }}>Bootstrap failed</h2>
+        <p>{phase.message}</p>
+        <button onClick={() => navigate("/organization/home")}>Back</button>
+      </div>
+    );
+  }
+
+  if (phase.kind === "done") {
+    return (
+      <div style={{ padding: 40, maxWidth: 640 }}>
+        <h2>Recovery key saved</h2>
+        <p>
+          Your organization master key is bootstrapped. Keep the 24-word
+          phrase you wrote down somewhere safe — Wayve cannot recover it
+          for you if you lose it.
+        </p>
+        <button
+          onClick={() => navigate("/organization/home", { replace: true })}
+        >
+          Continue to organization home
+        </button>
+      </div>
+    );
+  }
+
+  if (phase.kind === "display") {
+    return (
+      <div style={{ padding: 40, maxWidth: 640 }}>
+        <h2>🔑 Your organization recovery key</h2>
+        <p style={{ color: "#b91c1c", fontWeight: 600 }}>
+          Write these 24 words on paper and store them somewhere physically
+          secure. Wayve cannot recover this for you. Without these words,
+          if you lose access to every browser you've used, you cannot
+          decrypt any departing-member data — ever.
+        </p>
+        <ol
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 8,
+            padding: 16,
+            background: "#f9fafb",
+            border: "1px solid #e5e7eb",
+            borderRadius: 8,
+          }}
+        >
+          {phase.mnemonic.map((word, i) => (
+            <li
+              key={i}
+              style={{
+                listStyle: "none",
+                fontFamily: "monospace",
+                fontSize: 14,
+              }}
+            >
+              <span style={{ color: "#6b7280" }}>{i + 1}.</span> {word}
+            </li>
+          ))}
+        </ol>
+        <button
+          style={{ marginTop: 16 }}
+          onClick={() =>
+            setPhase({ kind: "confirm", mnemonic: phase.mnemonic, entered: "" })
+          }
+        >
+          I have written it down — confirm
+        </button>
+      </div>
+    );
+  }
+
+  // phase.kind === "confirm"
+  const onConfirm = () => {
+    const words = phase.entered.trim().toLowerCase().split(/\s+/);
+    const expected = phase.mnemonic.map((w) => w.toLowerCase());
+    if (
+      words.length !== expected.length ||
+      words.some((w, i) => w !== expected[i])
+    ) {
+      setPhase({
+        kind: "error",
+        message:
+          "The words you entered don't match. Go back and try again — the original phrase is gone the moment you leave this page.",
+      });
+      return;
+    }
+    setPhase({ kind: "done" });
+  };
+
+  return (
+    <div style={{ padding: 40, maxWidth: 640 }}>
+      <h2>Confirm your recovery key</h2>
+      <p>Re-type the 24 words separated by spaces to confirm you saved them.</p>
+      <textarea
+        rows={5}
+        value={phase.entered}
+        onChange={(e) =>
+          setPhase({ kind: "confirm", mnemonic: phase.mnemonic, entered: e.target.value })
+        }
+        style={{
+          width: "100%",
+          padding: 12,
+          fontFamily: "monospace",
+          border: "1px solid #d1d5db",
+          borderRadius: 6,
+        }}
+        autoFocus
+      />
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button onClick={onConfirm}>Confirm</button>
+        <button
+          onClick={() => setPhase({ kind: "display", mnemonic: phase.mnemonic })}
+        >
+          Back to view words
+        </button>
+      </div>
+    </div>
+  );
+}

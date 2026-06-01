@@ -14,7 +14,12 @@ mod websocket;
 use actix_web::web;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(handler::get_messages)
+    // Direct messages: canonical /api/chat/direct-messages, legacy /api/messages.
+    cfg.route(
+        "/chat/direct-messages",
+        web::get().to(handler::get_messages),
+    )
+    .route("/messages", web::get().to(handler::get_messages))
         .service(handler::get_channels)
         .service(handler::create_channel)
         .service(handler::update_channel_subject)

@@ -13,7 +13,7 @@ use crate::email::account::{
 use crate::email::oauth_flow::require_external_mailbox_actor;
 use crate::email::provider::MailProvider;
 use crate::email::yahoo::{encode_app_password, verify_credentials};
-use actix_web::{HttpRequest, HttpResponse, Responder, post, web};
+use actix_web::{HttpRequest, HttpResponse, Responder, web};
 use serde::Deserialize;
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
@@ -25,7 +25,6 @@ pub struct YahooConnectInput {
     pub app_password: String,
 }
 
-#[post("/yahoo/connect")]
 #[instrument(target = "auth", skip(req, pool, data), fields(email = %data.email))]
 pub async fn yahoo_connect(
     req: HttpRequest,

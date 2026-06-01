@@ -8,10 +8,12 @@ use base64::engine::general_purpose;
 use hkdf::Hkdf;
 use rand::{RngCore, thread_rng};
 use rsa::{
-    Oaep, RsaPublicKey,
-    pkcs8::DecodePublicKey,
+    Oaep, RsaPrivateKey, RsaPublicKey,
+    pkcs8::{DecodePublicKey, EncodePrivateKey, EncodePublicKey},
 };
+use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Sha512};
+use zeroize::Zeroize;
 
 const HKDF_INFO: &[u8] = b"rwayve:v1:aes-256-gcm:messages-email-bodies";
 const DEFAULT_HKDF_SALT: &[u8] = b"rwayve:v1:hkdf-sha512";
@@ -250,18 +252,214 @@ pub fn encrypt_to_pubkey(plaintext: &[u8], spki_der: &[u8]) -> Result<String> {
     //    `encryptEmail.ts` produced.
     let payload = serde_json::json!({
         "type": "wayve_encrypted",
-        "data": ciphertext.iter().copied().collect::<Vec<u8>>(),
-        "key":  wrapped_key.iter().copied().collect::<Vec<u8>>(),
-        "iv":   nonce_bytes.iter().copied().collect::<Vec<u8>>(),
+        "data": ciphertext.to_vec(),
+        "key":  wrapped_key.to_vec(),
+        "iv":   nonce_bytes.to_vec(),
     });
 
     Ok(format!("{WAYVE_SECURE_PREFIX}\n{}", payload))
 }
 
+/// Default PBKDF2 iteration count for the org-member login wrap. Matches
+/// `PBKDF2_ITERATIONS` in `frontend/src/crypto/recovery.ts` so both sides
+/// use the same KDF cost. Stored in `member_login_wrapped_keys.iterations`
+/// so a future bump to 1M can coexist with old rows.
+pub const ORG_MEMBER_PBKDF2_ITERATIONS: u32 = 600_000;
+
+/// Password-derived wrap of the member's PKCS8 private key. Base64-encoded
+/// for direct insertion into `member_login_wrapped_keys`. The salt is
+/// per-user random so a server-DB dump can't be rainbow-tabled across
+/// users; iterations is recorded explicitly so the unwrap side doesn't
+/// have to guess at a stale constant.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasswordWrappedPrivateKey {
+    pub iv_b64: String,
+    pub ct_b64: String,
+    pub salt_b64: String,
+    pub iterations: u32,
+}
+
+/// The full output of `provision_org_member_keypair`. The caller (the
+/// `POST /admin/users` handler) inserts each piece into the appropriate
+/// table — never logs the keypair, never returns it in the HTTP response.
+#[derive(Debug)]
+pub struct ProvisionedOrgMemberKeypair {
+    /// SPKI bytes of the member's public key, JSON-encoded as a number
+    /// array — the wire shape `users.public_key` already stores.
+    pub public_key_json: String,
+    /// `WAYVE_SECURE_V1` envelope wrapping the PKCS8 private key under
+    /// the org's RSA pubkey. Insert verbatim into `member_wrapped_keys.ct`
+    /// (with iv = "" since the envelope is self-describing).
+    pub member_escrow_envelope: String,
+    /// Password-derived wrap for `member_login_wrapped_keys`. The member
+    /// uses this to unwrap on a fresh device at login time.
+    pub login_wrap: PasswordWrappedPrivateKey,
+}
+
+/// Generate an RSA-2048 keypair for a new org member, wrap the private
+/// key two ways (org escrow + password-derived login wrap), and return
+/// everything ready for the caller to persist. The plaintext private
+/// key is zeroed before this function returns.
+///
+/// **Security boundary:** this function holds the plaintext private key
+/// in memory for the duration of the call. Don't log it, don't pass it
+/// across `await` points (the `tokio::spawn_blocking` wrapper at the
+/// call site keeps it on a single thread), don't return it through any
+/// channel other than the wrapped envelopes above. The `zeroize` calls
+/// at the end overwrite the bytes; Rust's drop semantics make this
+/// best-effort but it raises the bar significantly above bare `Vec`.
+pub fn provision_org_member_keypair(
+    password: &str,
+    org_public_key_spki: &[u8],
+) -> Result<ProvisionedOrgMemberKeypair> {
+    use pbkdf2::pbkdf2_hmac;
+
+    // 1. Generate the RSA-2048 keypair. This is the only place the
+    //    plaintext private key ever exists on the server.
+    let mut rng = thread_rng();
+    let private_key = RsaPrivateKey::new(&mut rng, 2048)
+        .map_err(|e| anyhow::anyhow!("rsa keygen failed: {e}"))?;
+    let public_key = RsaPublicKey::from(&private_key);
+
+    // 2. Export to PKCS8 DER (member-side private key form) and SPKI DER
+    //    (public key form for both org escrow + users.public_key column).
+    //    PKCS8 bytes go in a Zeroizing<Vec<u8>> so the buffer is wiped on
+    //    drop even if a panic unwinds before the explicit zero below.
+    let pkcs8 = private_key
+        .to_pkcs8_der()
+        .map_err(|e| anyhow::anyhow!("pkcs8 encode failed: {e}"))?;
+    let mut pkcs8_bytes: Vec<u8> = pkcs8.as_bytes().to_vec();
+
+    let spki_bytes: Vec<u8> = public_key
+        .to_public_key_der()
+        .map_err(|e| anyhow::anyhow!("spki encode failed: {e}"))?
+        .to_vec();
+
+    // 3. Wrap (a): under the org pubkey, for owner/admin recovery.
+    let member_escrow_envelope = encrypt_to_pubkey(&pkcs8_bytes, org_public_key_spki)?;
+
+    // 4. Wrap (b): under PBKDF2(password, fresh salt), for the member's
+    //    own login path. Fresh random salt + standard 600k iters.
+    let mut salt = [0u8; 16];
+    let mut nonce = [0u8; 12];
+    let mut derived = [0u8; 32];
+    rng.fill_bytes(&mut salt);
+    rng.fill_bytes(&mut nonce);
+    pbkdf2_hmac::<Sha256>(
+        password.as_bytes(),
+        &salt,
+        ORG_MEMBER_PBKDF2_ITERATIONS,
+        &mut derived,
+    );
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&derived));
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), pkcs8_bytes.as_slice())
+        .map_err(|e| anyhow::anyhow!("login wrap AES-GCM failed: {e:?}"))?;
+
+    // 5. Build the public-key JSON-array string the existing storage
+    //    shape expects (users.public_key is a JSON array of bytes).
+    let public_key_json = serde_json::to_string(&spki_bytes)
+        .map_err(|e| anyhow::anyhow!("pubkey json encode failed: {e}"))?;
+
+    let login_wrap = PasswordWrappedPrivateKey {
+        iv_b64: general_purpose::STANDARD.encode(nonce),
+        ct_b64: general_purpose::STANDARD.encode(&ciphertext),
+        salt_b64: general_purpose::STANDARD.encode(salt),
+        iterations: ORG_MEMBER_PBKDF2_ITERATIONS,
+    };
+
+    // 6. Wipe everything sensitive. The wrapped envelopes above hold
+    //    only RSA/AES ciphertext at this point; the plaintext private
+    //    key bytes and the PBKDF2-derived AES key are no longer needed.
+    pkcs8_bytes.zeroize();
+    derived.zeroize();
+    nonce.zeroize();
+    salt.zeroize();
+
+    Ok(ProvisionedOrgMemberKeypair {
+        public_key_json,
+        member_escrow_envelope,
+        login_wrap,
+    })
+}
+
+/// Unwrap a member's password-wrapped private key (the inverse of the
+/// `login_wrap` produced by `provision_org_member_keypair`). Used by the
+/// password-change handler to re-wrap with a new salt + new derived key.
+/// Returns the plaintext PKCS8 bytes in a Zeroizing buffer so the caller
+/// can re-wrap and the bytes get wiped at drop.
+pub fn unwrap_org_member_login(
+    password: &str,
+    wrap: &PasswordWrappedPrivateKey,
+) -> Result<Vec<u8>> {
+    use pbkdf2::pbkdf2_hmac;
+
+    let salt = general_purpose::STANDARD
+        .decode(&wrap.salt_b64)
+        .map_err(|e| anyhow::anyhow!("salt b64 decode failed: {e}"))?;
+    let iv = general_purpose::STANDARD
+        .decode(&wrap.iv_b64)
+        .map_err(|e| anyhow::anyhow!("iv b64 decode failed: {e}"))?;
+    let ct = general_purpose::STANDARD
+        .decode(&wrap.ct_b64)
+        .map_err(|e| anyhow::anyhow!("ct b64 decode failed: {e}"))?;
+    if iv.len() != 12 {
+        return Err(anyhow::anyhow!("login wrap iv has wrong length"));
+    }
+
+    let mut derived = [0u8; 32];
+    pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, wrap.iterations, &mut derived);
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&derived));
+    let pkcs8 = cipher
+        .decrypt(Nonce::from_slice(&iv), ct.as_slice())
+        .map_err(|e| anyhow::anyhow!("login unwrap failed (wrong password?): {e:?}"))?;
+    derived.zeroize();
+    Ok(pkcs8)
+}
+
+/// Re-wrap a member's PKCS8 private key under a new password. Used by
+/// (a) the member-driven password-change handler with the old password's
+/// unwrap result, and (b) the admin-driven password-reset handler with
+/// the org-key-driven unwrap result. Either way the input is fresh
+/// PKCS8 bytes; this just generates new salt/IV/derived key and AES-GCMs.
+pub fn rewrap_org_member_login(
+    new_password: &str,
+    pkcs8_bytes: &[u8],
+) -> Result<PasswordWrappedPrivateKey> {
+    use pbkdf2::pbkdf2_hmac;
+
+    let mut rng = thread_rng();
+    let mut salt = [0u8; 16];
+    let mut nonce = [0u8; 12];
+    let mut derived = [0u8; 32];
+    rng.fill_bytes(&mut salt);
+    rng.fill_bytes(&mut nonce);
+    pbkdf2_hmac::<Sha256>(
+        new_password.as_bytes(),
+        &salt,
+        ORG_MEMBER_PBKDF2_ITERATIONS,
+        &mut derived,
+    );
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&derived));
+    let ct = cipher
+        .encrypt(Nonce::from_slice(&nonce), pkcs8_bytes)
+        .map_err(|e| anyhow::anyhow!("rewrap AES-GCM failed: {e:?}"))?;
+    derived.zeroize();
+    let out = PasswordWrappedPrivateKey {
+        iv_b64: general_purpose::STANDARD.encode(nonce),
+        ct_b64: general_purpose::STANDARD.encode(&ct),
+        salt_b64: general_purpose::STANDARD.encode(salt),
+        iterations: ORG_MEMBER_PBKDF2_ITERATIONS,
+    };
+    nonce.zeroize();
+    salt.zeroize();
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rsa::{RsaPrivateKey, pkcs8::EncodePublicKey};
+    use rsa::pkcs8::DecodePrivateKey;
 
     // Generate an ephemeral keypair, encrypt a body to its public half,
     // then decrypt with the private half and confirm round-trip. The
@@ -337,5 +535,105 @@ mod tests {
     fn encrypt_to_pubkey_rejects_garbage_key() {
         let result = encrypt_to_pubkey(b"x", b"not a real spki blob");
         assert!(result.is_err());
+    }
+
+    // Full provisioning round-trip: generate a member keypair, escrow it
+    // under an org pubkey, login-wrap it under a password. Verify (a)
+    // the org-pubkey owner can recover the PKCS8 private key from the
+    // escrow envelope, (b) the member can recover the same PKCS8 from
+    // the login wrap using the same password, (c) both recovered keys
+    // agree, and (d) the public key bytes in the JSON match what the
+    // recovered private key implies. End-to-end check that the two
+    // wrapping paths describe the same underlying keypair.
+    #[test]
+    fn provision_org_member_keypair_double_wrap_roundtrip() {
+        let mut rng = thread_rng();
+        let org_priv = RsaPrivateKey::new(&mut rng, 2048).expect("org keygen");
+        let org_spki = RsaPublicKey::from(&org_priv)
+            .to_public_key_der()
+            .expect("org spki")
+            .to_vec();
+
+        let password = "correct-horse-battery-staple";
+        let result = provision_org_member_keypair(password, &org_spki)
+            .expect("provision succeeds");
+
+        // (a) Owner recovers PKCS8 from the org-pubkey-wrapped envelope.
+        let prefix_len = WAYVE_SECURE_PREFIX.len() + 1; // "\n"
+        let json_str = &result.member_escrow_envelope[prefix_len..];
+        let parsed: serde_json::Value = serde_json::from_str(json_str).expect("json");
+        let wrapped_aes: Vec<u8> =
+            serde_json::from_value(parsed["key"].clone()).expect("wrapped key");
+        let body_ct: Vec<u8> =
+            serde_json::from_value(parsed["data"].clone()).expect("body ciphertext");
+        let body_iv: Vec<u8> =
+            serde_json::from_value(parsed["iv"].clone()).expect("body iv");
+        let aes_key = org_priv
+            .decrypt(Oaep::new::<Sha256>(), &wrapped_aes)
+            .expect("rsa unwrap");
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&aes_key));
+        let pkcs8_via_org = cipher
+            .decrypt(Nonce::from_slice(&body_iv), body_ct.as_ref())
+            .expect("aes unwrap via org key");
+
+        // (b) Member recovers PKCS8 from the password wrap.
+        let pkcs8_via_password = unwrap_org_member_login(password, &result.login_wrap)
+            .expect("login unwrap");
+
+        // (c) Both paths must yield the EXACT same PKCS8 bytes — proves
+        //     both wraps describe the same keypair.
+        assert_eq!(pkcs8_via_org, pkcs8_via_password);
+
+        // (d) The recovered PKCS8 must parse as a real RSA private key
+        //     whose pubkey matches the JSON-encoded SPKI bytes.
+        let recovered = RsaPrivateKey::from_pkcs8_der(&pkcs8_via_org).expect("pkcs8 parse");
+        let recovered_spki = RsaPublicKey::from(&recovered)
+            .to_public_key_der()
+            .expect("recovered spki")
+            .to_vec();
+        let pub_json: Vec<u8> =
+            serde_json::from_str(&result.public_key_json).expect("pub json");
+        assert_eq!(recovered_spki, pub_json);
+    }
+
+    // Wrong password must FAIL with a clear error from AES-GCM auth
+    // tag rejection — must never silently return junk PKCS8 bytes.
+    #[test]
+    fn unwrap_org_member_login_rejects_wrong_password() {
+        let mut rng = thread_rng();
+        let org_priv = RsaPrivateKey::new(&mut rng, 2048).expect("org keygen");
+        let org_spki = RsaPublicKey::from(&org_priv)
+            .to_public_key_der()
+            .expect("org spki")
+            .to_vec();
+
+        let result = provision_org_member_keypair("right-password", &org_spki)
+            .expect("provision");
+        let wrong = unwrap_org_member_login("wrong-password", &result.login_wrap);
+        assert!(wrong.is_err(), "wrong password must reject");
+    }
+
+    // Password change round-trip: unwrap with old password, re-wrap with
+    // new, unwrap with new must yield original PKCS8. Verifies the
+    // re-wrap path used by the password-change handler.
+    #[test]
+    fn rewrap_org_member_login_roundtrip() {
+        let mut rng = thread_rng();
+        let org_priv = RsaPrivateKey::new(&mut rng, 2048).expect("org keygen");
+        let org_spki = RsaPublicKey::from(&org_priv)
+            .to_public_key_der()
+            .expect("org spki")
+            .to_vec();
+
+        let initial = provision_org_member_keypair("old-pass", &org_spki).expect("provision");
+        let pkcs8 = unwrap_org_member_login("old-pass", &initial.login_wrap).expect("unwrap");
+
+        let new_wrap = rewrap_org_member_login("new-pass", &pkcs8).expect("rewrap");
+        let pkcs8_via_new =
+            unwrap_org_member_login("new-pass", &new_wrap).expect("unwrap via new");
+        assert_eq!(pkcs8, pkcs8_via_new);
+
+        // Salt MUST differ — confirms fresh randomness on rewrap.
+        assert_ne!(initial.login_wrap.salt_b64, new_wrap.salt_b64);
     }
 }

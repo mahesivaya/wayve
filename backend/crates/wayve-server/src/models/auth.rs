@@ -25,6 +25,20 @@ pub struct LoginInput {
 pub struct LoginResponse {
     pub token: String,
     pub account_type: String,
+    /// Server-provisioned login wrap for org members. Personal users get
+    /// `None` — they use the client-side keypair + mnemonic recovery
+    /// path. Org members use this to unwrap their PKCS8 private key with
+    /// PBKDF2(password) on first-login or any fresh device.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login_wrap: Option<MemberLoginWrap>,
+}
+
+#[derive(Serialize)]
+pub struct MemberLoginWrap {
+    pub iv: String,
+    pub ct: String,
+    pub salt: String,
+    pub iterations: i32,
 }
 
 #[derive(Deserialize)]
@@ -42,4 +56,19 @@ pub struct ResetInput {
 pub struct ChangePasswordInput {
     pub current_password: Option<String>,
     pub new_password: String,
+    /// Org members MUST send this — their private key is wrapped under
+    /// PBKDF2(password) in member_login_wrapped_keys, and changing the
+    /// password without rotating the wrap would lock them out on next
+    /// login. Frontend computes this in-browser using PBKDF2(new_password)
+    /// over the same plaintext PKCS8 it just unwrapped with old_password.
+    /// Personal users (no member_login_wrapped_keys row) leave this None.
+    pub new_login_wrap: Option<NewLoginWrapInput>,
+}
+
+#[derive(Deserialize)]
+pub struct NewLoginWrapInput {
+    pub iv: String,
+    pub ct: String,
+    pub salt: String,
+    pub iterations: i32,
 }

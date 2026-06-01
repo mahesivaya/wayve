@@ -16,7 +16,7 @@ use crate::email::outlook::{
 use crate::email::provider::MailProvider;
 use wayve_security::jwt::{auth_cookie, create_jwt_for_account, get_user_id_from_request};
 use wayve_security::oauth::{consume_state, create_oauth_state};
-use actix_web::{HttpRequest, HttpResponse, Responder, post, web};
+use actix_web::{HttpRequest, HttpResponse, Responder, web};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
 
@@ -125,7 +125,6 @@ pub async fn outlook_login(
 
 /// `POST /api/outlook/connect-url` — returns the Microsoft consent URL for
 /// connecting the signed-in user's Outlook mailbox.
-#[post("/outlook/connect-url")]
 #[instrument(target = "auth", skip(req, pool))]
 pub async fn outlook_connect_url(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
     let user_id = match get_user_id_from_request(&req) {

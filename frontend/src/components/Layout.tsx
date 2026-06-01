@@ -523,7 +523,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             {renderSidebarItem("/drive", "drive", "Drive", "📁")}
             {renderSidebarItem("/notes", "notes", "Notes", "📝")}
             {renderSidebarItem("/tasks", "tasks", "Tasks", "☑")}
-            {renderSidebarItem("/aichat", "aichat", "AI Chat", "✨")}
+            {renderSidebarItem("/ai-chat", "aichat", "AI Chat", "✨")}
             {user.account_type !== "personal" &&
               renderSidebarItem(
                 "/github",

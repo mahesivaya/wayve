@@ -33,15 +33,62 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(crate::routes::email::download_email_attachment)
         .service(handler::get_email_body)
         .service(handler::get_email_by_id)
-        .service(handler::send)
-        .service(handler::send_internal)
-        .service(secure::send_secure)
-        .service(secure::get_secure_message)
-        .service(secure::revoke_secure_message)
-        .service(handler::gmail_connect_url)
-        .service(outlook_oauth::outlook_connect_url)
-        .service(yahoo_routes::yahoo_connect)
-        .service(provider_lookup::provider_lookup)
+        // Send: canonical POST /api/emails, legacy POST /api/send.
+        .route("/emails", web::post().to(handler::send))
+        .route("/send", web::post().to(handler::send))
+        // Internal send: canonical POST /api/emails/internal, legacy POST /api/email/send-internal.
+        .route("/emails/internal", web::post().to(handler::send_internal))
+        .route("/email/send-internal", web::post().to(handler::send_internal))
+        // Secure (encrypted) send: canonical POST /api/emails/secure, legacy POST /api/email/send-secure.
+        .route("/emails/secure", web::post().to(secure::send_secure))
+        .route("/email/send-secure", web::post().to(secure::send_secure))
+        // Secure message fetch (public via JWT-less token): /api/secure-messages/{token}.
+        .route(
+            "/secure-messages/{token}",
+            web::get().to(secure::get_secure_message),
+        )
+        // Revoke secure message: canonical DELETE /api/emails/secure/{token}, legacy DELETE /api/email/send-secure/{token}.
+        .route(
+            "/emails/secure/{token}",
+            web::delete().to(secure::revoke_secure_message),
+        )
+        .route(
+            "/email/send-secure/{token}",
+            web::delete().to(secure::revoke_secure_message),
+        )
+        // Provider OAuth URL: canonical POST /api/email-providers/{provider}/connect,
+        // legacy provider-specific paths kept for compatibility.
+        .route(
+            "/email-providers/gmail/connect",
+            web::post().to(handler::gmail_connect_url),
+        )
+        .route(
+            "/gmail/connect-url",
+            web::post().to(handler::gmail_connect_url),
+        )
+        .route(
+            "/email-providers/outlook/connect",
+            web::post().to(outlook_oauth::outlook_connect_url),
+        )
+        .route(
+            "/outlook/connect-url",
+            web::post().to(outlook_oauth::outlook_connect_url),
+        )
+        .route(
+            "/email-providers/yahoo/connect",
+            web::post().to(yahoo_routes::yahoo_connect),
+        )
+        .route("/yahoo/connect", web::post().to(yahoo_routes::yahoo_connect))
+        // Provider auto-detect from email domain: canonical POST /api/email-providers/lookup,
+        // legacy POST /api/email/provider-lookup.
+        .route(
+            "/email-providers/lookup",
+            web::post().to(provider_lookup::provider_lookup),
+        )
+        .route(
+            "/email/provider-lookup",
+            web::post().to(provider_lookup::provider_lookup),
+        )
         .service(handler::get_me)
         .service(handler::put_theme)
         .service(handler::save_public_key);

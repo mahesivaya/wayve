@@ -156,10 +156,20 @@ pub enum Permission {
     TicketsManage,
     SsoManage,
     InboxManage,
+    /// Bootstrap the org master keypair AND promote a member to a key-holder
+    /// role (admin / owner). Granted to owner only — the canonical recovery
+    /// root must stay single-owner because the mnemonic is a one-time secret.
+    OrgKeysBootstrap,
+    /// Use the org master key to fetch a member's escrow envelope, decrypt
+    /// their data for offboarding/compliance, or reset their password.
+    /// Granted to owner, super_admin, admin. NOT granted to security — they
+    /// can provision members (via MembersManage) but not access their
+    /// already-existing escrows; that's a separation-of-duties choice.
+    OrgKeysUseMaster,
 }
 
 impl Permission {
-    pub const ALL: [Permission; 22] = [
+    pub const ALL: [Permission; 24] = [
         AppsUse,
         AppsManage,
         ProfileManageSelf,
@@ -182,6 +192,8 @@ impl Permission {
         TicketsManage,
         SsoManage,
         InboxManage,
+        OrgKeysBootstrap,
+        OrgKeysUseMaster,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -208,6 +220,8 @@ impl Permission {
             TicketsManage => "tickets:manage",
             SsoManage => "sso:manage",
             InboxManage => "inbox:manage",
+            OrgKeysBootstrap => "org_keys:bootstrap",
+            OrgKeysUseMaster => "org_keys:use_master",
         }
     }
 }
@@ -252,6 +266,9 @@ static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Ve
                     TicketsManage,
                     SsoManage,
                     InboxManage,
+                    // super_admin is everything-except-billing, so the master
+                    // key permission is in. Bootstrap is owner-only.
+                    OrgKeysUseMaster,
                 ],
             ),
             (
@@ -267,6 +284,11 @@ static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Ve
                     UsageRead,
                     SsoManage,
                     InboxManage,
+                    // Admin holds the org master key (re-wrapped under their
+                    // personal pubkey at promotion time) so they can reset
+                    // member passwords and recover member data without
+                    // bothering the owner. Cannot bootstrap or promote.
+                    OrgKeysUseMaster,
                 ],
             ),
             (
@@ -584,11 +606,55 @@ mod tests {
     #[test]
     fn super_admin_is_owner_minus_billing() {
         for perm in Permission::ALL {
-            let expected = !matches!(perm, BillingManage | BillingRead);
+            let expected =
+                !matches!(perm, BillingManage | BillingRead | OrgKeysBootstrap);
             assert_eq!(
                 role_has(Role::SuperAdmin, perm),
                 expected,
                 "super_admin {perm:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn org_keys_bootstrap_is_owner_only() {
+        assert!(role_has(Role::Owner, OrgKeysBootstrap));
+        for role in [
+            Role::SuperAdmin,
+            Role::Admin,
+            Role::Security,
+            Role::Billing,
+            Role::Developer,
+            Role::Support,
+            Role::Member,
+            Role::Guest,
+        ] {
+            assert!(
+                !role_has(role, OrgKeysBootstrap),
+                "{role:?} must NOT have OrgKeysBootstrap"
+            );
+        }
+    }
+
+    #[test]
+    fn org_keys_use_master_is_owner_super_admin_admin() {
+        for role in [Role::Owner, Role::SuperAdmin, Role::Admin] {
+            assert!(
+                role_has(role, OrgKeysUseMaster),
+                "{role:?} must have OrgKeysUseMaster"
+            );
+        }
+        for role in [
+            Role::Security,
+            Role::Billing,
+            Role::Developer,
+            Role::Support,
+            Role::Member,
+            Role::Guest,
+        ] {
+            assert!(
+                !role_has(role, OrgKeysUseMaster),
+                "{role:?} must NOT have OrgKeysUseMaster"
             );
         }
     }

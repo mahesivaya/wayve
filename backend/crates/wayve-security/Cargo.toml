@@ -33,6 +33,19 @@ rand.workspace = true
 # weight beyond what aes-gcm + sha2 already brought in.
 rsa = "0.9"
 
+# Zero-out plaintext private-key bytes after wrapping. Used in the org-
+# member provisioning path (encryption.rs::provision_org_member_keypair)
+# so the keypair the server briefly held in memory doesn't linger on the
+# heap past the wrap step. Best-effort — Rust's drop semantics make full
+# guarantees impossible — but raises the bar significantly above bare Vec.
+zeroize = { version = "1.7", features = ["zeroize_derive"] }
+
+# PBKDF2-HMAC-SHA256 for deriving an AES-GCM wrap key from the member's
+# password. 600k iters matches the personal-user mnemonic path in
+# frontend/src/crypto/recovery.ts. With a per-user random salt this gives
+# the same brute-force cost the personal-user mnemonic path enjoys.
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac", "sha2"] }
+
 # Caching for API key validation
 moka.workspace = true
 

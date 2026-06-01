@@ -104,16 +104,18 @@ export const updateAccountDisplayName = async (
 };
 
 export const getGmailConnectUrl = async () => {
-  const data = await apiFetchJson<{ url: string }>("/api/gmail/connect-url", {
-    method: "POST",
-  });
+  const data = await apiFetchJson<{ url: string }>(
+    "/api/email-providers/gmail/connect",
+    { method: "POST" },
+  );
   return data.url;
 };
 
 export const getOutlookConnectUrl = async () => {
-  const data = await apiFetchJson<{ url: string }>("/api/outlook/connect-url", {
-    method: "POST",
-  });
+  const data = await apiFetchJson<{ url: string }>(
+    "/api/email-providers/outlook/connect",
+    { method: "POST" },
+  );
   return data.url;
 };
 
@@ -126,7 +128,7 @@ export const connectYahoo = async (
   appPassword: string,
 ): Promise<{ id: number; email: string; provider: string }> => {
   return apiFetchJson<{ id: number; email: string; provider: string }>(
-    "/api/yahoo/connect",
+    "/api/email-providers/yahoo/connect",
     {
       method: "POST",
       body: JSON.stringify({ email, app_password: appPassword }),
@@ -153,7 +155,7 @@ export const markEmailRead = async (emailId: number): Promise<void> => {
 // See [provider_lookup.rs](../../../backend/src/email/provider_lookup.rs).
 export const lookupEmailProvider = async (email: string): Promise<string> => {
   const data = await apiFetchJson<{ provider: string }>(
-    "/api/email/provider-lookup",
+    "/api/email-providers/lookup",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -235,7 +237,7 @@ export const downloadEmailAttachment = async (
 };
 
 export const sendEmail = async (payload: SendEmailPayload) => {
-  const res = await apiFetch("/api/send", {
+  const res = await apiFetch("/api/emails", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -293,7 +295,7 @@ export type SendInternalPayload = {
  * the same opaque envelope.
  */
 export const sendInternalEmail = async (payload: SendInternalPayload) => {
-  const res = await apiFetch("/api/email/send-internal", {
+  const res = await apiFetch("/api/emails/internal", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -321,7 +323,7 @@ export type SecureSendPayload = {
  * fails to deliver).
  */
 export const sendSecureEmail = async (payload: SecureSendPayload) => {
-  const res = await apiFetch("/api/email/send-secure", {
+  const res = await apiFetch("/api/emails/secure", {
     method: "POST",
     body: JSON.stringify(payload),
   });

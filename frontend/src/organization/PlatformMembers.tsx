@@ -11,7 +11,7 @@ export default function PlatformMembers() {
           <h1>Members & roles</h1>
           <p>Manage platform team members and their role assignments.</p>
         </div>
-        <Link to="/platform-admin-home" className="u-btn-primary">
+        <Link to="/platform/home" className="u-btn-primary">
           ← Back to platform home
         </Link>
       </div>

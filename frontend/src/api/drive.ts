@@ -126,7 +126,7 @@ export const uploadDriveFiles = async (
 
   // Raw fetch (not apiFetch) so the browser sets the multipart boundary.
   const token = getAuthToken();
-  const res = await fetch(`${getApiBase()}/api/files/upload`, {
+  const res = await fetch(`${getApiBase()}/api/files`, {
     method: "POST",
     credentials: "include",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,

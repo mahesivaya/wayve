@@ -61,7 +61,9 @@ export const getChatMessages = async (userId: number, otherUserId: number) => {
     user2: String(otherUserId),
   });
 
-  return apiFetchJson<ChatMessage[]>(`/api/messages?${params.toString()}`);
+  return apiFetchJson<ChatMessage[]>(
+    `/api/chat/direct-messages?${params.toString()}`,
+  );
 };
 
 export const getChatChannels = async () =>

@@ -38,7 +38,6 @@ fn default_ttl_seconds() -> u64 {
         .unwrap_or(600)
 }
 
-#[get("/turn/credentials")]
 #[instrument(target = "http", skip(req))]
 pub async fn turn_credentials(req: HttpRequest) -> AppResult {
     // Require an authenticated user — credentials are personal-call-tied and

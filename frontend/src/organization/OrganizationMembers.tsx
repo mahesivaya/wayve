@@ -50,7 +50,7 @@ export default function OrganizationMembers() {
           <h1>Members & roles</h1>
           <p>Provision accounts inside your organization and manage role assignments.</p>
         </div>
-        <Link to="/organization-home" className="u-btn-primary">
+        <Link to="/organization/home" className="u-btn-primary">
           ← Back to organization home
         </Link>
       </div>

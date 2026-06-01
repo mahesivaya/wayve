@@ -70,6 +70,10 @@ const PlanAdmin = lazy(() => import("./settings/PlanAdmin"));
 const SecureMessageView = lazy(() => import("./emails/SecureMessageView"));
 const AuditSecurity = lazy(() => import("./settings/AuditSecurity"));
 const RecoverPage = lazy(() => import("./recovery/RecoverPage"));
+const OrgKeyBootstrap = lazy(() => import("./orgKeys/BootstrapPage"));
+const OrgRecoveryKey = lazy(() => import("./orgKeys/RecoveryKeyPage"));
+const RecoverMemberData = lazy(() => import("./orgKeys/RecoverMemberDataPage"));
+const OrgAuditLog = lazy(() => import("./orgKeys/AuditLogPage"));
 
 export default function App() {
   const { user } = useAuth();
@@ -177,7 +181,7 @@ export default function App() {
               element={redirectToAccountHome ?? <Home />}
             />
             <Route
-              path="/organization-home"
+              path="/organization/home"
               element={
                 isOrganizationUser ? (
                   <OrganizationAdminHome />
@@ -186,20 +190,30 @@ export default function App() {
                 )
               }
             />
+            {/* Legacy alias — bookmarks from before the rename. */}
             <Route
-              path="/platform-admin-home"
+              path="/organization-home"
+              element={<Navigate to="/organization/home" replace />}
+            />
+            <Route
+              path="/platform/home"
               element={
                 // A platform user whose role-derived home is NOT this page
                 // (currently: billing → /platform/billing) gets bounced out.
-                // Keeps /platform-admin-home from being the landing surface
+                // Keeps /platform/home from being the landing surface
                 // for roles that have no actionable panels on it.
                 accountType === "platform_admin" &&
-                accountHome === "/platform-admin-home" ? (
+                accountHome === "/platform/home" ? (
                   <PlatformAdminHome />
                 ) : (
                   redirectToAccountHome ?? <PlatformAdminHome />
                 )
               }
+            />
+            {/* Legacy alias — bookmarks from before the rename. */}
+            <Route
+              path="/platform-admin-home"
+              element={<Navigate to="/platform/home" replace />}
             />
             <Route path="/organization/members" element={<OrganizationMembers />} />
             <Route
@@ -207,14 +221,24 @@ export default function App() {
               element={redirectToAccountHome ?? <OrganizationHome />}
             />
             <Route path="/emails" element={<Emails />} />
-            <Route path="/email-files" element={<EmailFiles />} />
+            <Route path="/emails/attachments" element={<EmailFiles />} />
+            {/* Legacy alias. */}
+            <Route
+              path="/email-files"
+              element={<Navigate to="/emails/attachments" replace />}
+            />
             <Route path="/chat" element={<Chat />} />
             <Route path="/call" element={<Call />} />
             <Route path="/scheduler" element={<Scheduler />} />
             <Route path="/drive" element={<Drive />} />
             <Route path="/notes" element={<Notes />} />
             <Route path="/tasks" element={<Tasks />} />
-            <Route path="/aichat" element={<AIChat />} />
+            <Route path="/ai-chat" element={<AIChat />} />
+            {/* Legacy alias (no hyphen — original spelling). */}
+            <Route
+              path="/aichat"
+              element={<Navigate to="/ai-chat" replace />}
+            />
             <Route path="/github" element={<GitHubRepo />} />
             <Route path="/about" element={<About />} />
             <Route path="/profile" element={<Profile />} />
@@ -231,6 +255,44 @@ export default function App() {
             <Route path="/platform/secrets" element={<PlatformSecrets />} />
             <Route path="/platform/logs" element={<PlatformLogs />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
+            {/* Org-master-key flows. Bootstrap shows the 24-word
+                mnemonic ONCE; recovery-key accepts the mnemonic on a
+                fresh device; recover-data is the owner / admin
+                impersonation proof view. */}
+            <Route
+              path="/organization/recovery-key/bootstrap"
+              element={<OrgKeyBootstrap />}
+            />
+            <Route
+              path="/organization/recovery-key"
+              element={<OrgRecoveryKey />}
+            />
+            <Route
+              path="/organization/members/:uid/impersonate"
+              element={<RecoverMemberData />}
+            />
+            {/* Legacy alias — "recover-data" read like the member lost data;
+                "impersonate" describes what the owner is actually doing. */}
+            <Route
+              path="/organization/members/:uid/recover-data"
+              element={
+                <Navigate
+                  to={
+                    typeof window !== "undefined"
+                      ? window.location.pathname.replace(
+                          /\/recover-data$/,
+                          "/impersonate",
+                        ) + window.location.search
+                      : "/organization/members"
+                  }
+                  replace
+                />
+              }
+            />
+            <Route
+              path="/organization/audit/key-access"
+              element={<OrgAuditLog />}
+            />
             <Route path="/security/audit" element={<AuditSecurity />} />
             <Route path="/recover" element={<RecoverPage />} />
             <Route path="/settings/sso" element={<SsoSettings />} />
