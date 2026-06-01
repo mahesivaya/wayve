@@ -23,6 +23,7 @@ export default function PlatformOrganizations() {
   const [organizationName, setOrganizationName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState("");
   const [organizations, setOrganizations] = useState<AdminOrganization[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -65,6 +66,17 @@ export default function PlatformOrganizations() {
     event.preventDefault();
     setError("");
     setSuccess("");
+
+    // Password confirmation: catches typos before the org is provisioned.
+    // Without this the admin can quietly mis-type the password, the org
+    // gets created, the owner can never sign in, and the only fix is to
+    // delete + recreate (because changing users.password later breaks the
+    // PBKDF2-derived `member_login_wrapped_keys` row alongside it).
+    if (adminPassword !== adminPasswordConfirm) {
+      setError("Passwords do not match. Please re-enter the same password in both fields.");
+      return;
+    }
+
     setCreating(true);
 
     // username is required by the backend but isn't exposed in the UI —
@@ -89,6 +101,7 @@ export default function PlatformOrganizations() {
       setOrganizationName("");
       setAdminEmail("");
       setAdminPassword("");
+      setAdminPasswordConfirm("");
       setShowCreateForm(false);
       setSuccess(
         `Created organization ${created.name}` +
@@ -234,8 +247,35 @@ export default function PlatformOrganizations() {
                   required
                 />
               </label>
+              <label className="u-form-label">
+                <span className="u-form-label-text">Confirm password</span>
+                <input
+                  className="u-form-control"
+                  type="password"
+                  value={adminPasswordConfirm}
+                  onChange={(event) => setAdminPasswordConfirm(event.target.value)}
+                  placeholder="Re-type the password"
+                  minLength={6}
+                  required
+                />
+              </label>
+              {adminPassword &&
+                adminPasswordConfirm &&
+                adminPassword !== adminPasswordConfirm && (
+                  <p className="platform-admin-hint" style={{ color: "#b91c1c" }}>
+                    Passwords do not match.
+                  </p>
+                )}
               <div className="platform-admin-form-actions">
-                <button className="u-btn-primary" type="submit" disabled={creating}>
+                <button
+                  className="u-btn-primary"
+                  type="submit"
+                  disabled={
+                    creating ||
+                    !adminPassword ||
+                    adminPassword !== adminPasswordConfirm
+                  }
+                >
                   {creating ? "Creating..." : "Create Organization"}
                 </button>
                 <button
@@ -246,6 +286,7 @@ export default function PlatformOrganizations() {
                     setOrganizationName("");
                     setAdminEmail("");
                     setAdminPassword("");
+                    setAdminPasswordConfirm("");
                     setError("");
                   }}
                   disabled={creating}
