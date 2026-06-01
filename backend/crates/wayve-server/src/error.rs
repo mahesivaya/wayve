@@ -31,6 +31,22 @@ pub enum AppError {
     BadRequest(String),
 }
 
+#[allow(dead_code)]
+impl AppError {
+    /// Shorthand for `AppError::BadRequest(msg.into())` — lets handlers say
+    /// `return Err(AppError::bad_request("missing field"))` without the
+    /// explicit `.into()` everywhere.
+    pub fn bad_request(msg: impl Into<String>) -> Self {
+        AppError::BadRequest(msg.into())
+    }
+
+    /// Shorthand for `AppError::Internal(msg.into())`. The string never reaches
+    /// the client (5xx bodies are generic in `error_response`).
+    pub fn internal(msg: impl Into<String>) -> Self {
+        AppError::Internal(msg.into())
+    }
+}
+
 /// Handler return type. `Ok` is the success response; `Err` is rendered by
 /// `AppError`'s [`actix_web::ResponseError`] impl.
 pub type AppResult = Result<HttpResponse, AppError>;

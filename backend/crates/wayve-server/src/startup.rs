@@ -1,13 +1,10 @@
-use crate::ai;
-use crate::call;
-use crate::chat;
-use crate::drive;
-use crate::email;
-use crate::notes;
-use crate::routes;
-use crate::scheduler;
-use crate::tasks;
-use actix_web::web;
+use crate::cache::Cache;
+use crate::config::{self, RuntimeRole};
+use crate::email::body_worker::run_body_worker;
+use crate::workers::run_sync_worker;
+use crate::{billing, email, observability, rbac_cache, webhooks};
+use actix_cors::Cors;
+use actix_web::http::header;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
 use tracing::{info, instrument, warn};
@@ -634,21 +631,123 @@ pub async fn ensure_email_schema(pool: &PgPool) {
     }
 }
 
-#[instrument(target = "startup", skip(cfg))]
-#[allow(dead_code)]
-pub fn configure_app(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::scope("/api")
-            .configure(routes::routes)
-            .configure(email::routes)
-            .configure(chat::routes)
-            .configure(scheduler::routes)
-            .configure(drive::routes)
-            .configure(notes::routes)
-            .configure(tasks::routes)
-            .configure(ai::routes),
-    )
-    .configure(email::public_routes)
-    .configure(chat::ws_routes)
-    .configure(call::routes);
+/// Initialise tracing, load `.env` files, and validate required config.
+/// Called once at process start.
+pub fn init_telemetry() {
+    observability::tracing::init_tracing();
+    config::load_env_files();
+    config::validate();
+    info!("Server starting...");
+    tracing::info!("Server starting...");
+}
+
+/// Connect to Postgres with retries and run the idempotent startup migrations
+/// (email schema compat, subject backfill, dev-only Stripe test-price seed).
+#[instrument(target = "startup", skip())]
+pub async fn connect_db_and_migrate(role: RuntimeRole) -> PgPool {
+    // Explicit DATABASE_URL wins; otherwise derived from the POSTGRES_* parts
+    // so the credentials are single-sourced in .env.secrets.
+    let db_url = config::database_url();
+    let max_db_connections = config::db_max_connections(role);
+    info!(max_db_connections, "Database pool size selected");
+    let pool = wayve_db::pool::connect_with_retries(&db_url, max_db_connections).await;
+
+    ensure_email_schema(&pool).await;
+
+    // One-time encryption migration for legacy plaintext email subjects.
+    // Idempotent — re-runs only touch rows still missing the envelope.
+    match email::repo::backfill_subjects(&pool).await {
+        Ok(0) => {}
+        Ok(n) => info!(target: "startup", encrypted = n, "backfilled legacy email subjects"),
+        Err(e) => warn!(target: "startup", error = ?e, "subject backfill failed"),
+    }
+
+    // Dev/test only: backfill plans.stripe_price_id by creating Stripe test
+    // prices for any paid plan that isn't linked yet. Idempotent via Stripe
+    // lookup_key. Skips silently if STRIPE_SECRET_KEY is missing or live.
+    billing::ensure_test_prices(&pool).await;
+
+    pool
+}
+
+/// Spawn background tokio tasks appropriate for the runtime role.
+///
+/// * `EmailSyncWorker` / `EmailBodyWorker` block until process exit and never
+///   return; they're modeled as `.await` rather than `spawn` so the binary
+///   exits when the worker stops.
+/// * `All` co-locates every worker alongside the API in one container — used
+///   by dev compose and small deployments.
+/// * `Api` runs only the lightweight webhook dispatcher next to the API; sync
+///   and body workers are deployed separately.
+pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool) {
+    match role {
+        RuntimeRole::EmailSyncWorker => run_sync_worker(pool.clone()).await,
+        RuntimeRole::EmailBodyWorker => run_body_worker(pool.clone()).await,
+        RuntimeRole::All => {
+            let sync_pool = pool.clone();
+            tokio::spawn(async move {
+                run_sync_worker(sync_pool).await;
+            });
+            let body_pool = pool.clone();
+            tokio::spawn(async move {
+                run_body_worker(body_pool).await;
+            });
+            let billing_pool = pool.clone();
+            tokio::spawn(async move {
+                billing::spawn_billing_worker(billing_pool).await;
+            });
+            let webhook_pool = pool.clone();
+            tokio::spawn(async move {
+                webhooks::spawn_dispatcher(webhook_pool).await;
+            });
+        }
+        RuntimeRole::Api => {
+            // The webhook dispatcher is a cheap DB poller; spawning it
+            // here means the API container can deliver subscribed events
+            // without depending on a separate worker container. Safe to
+            // run concurrently with the `All` variant — claim uses
+            // FOR UPDATE SKIP LOCKED.
+            let webhook_pool = pool.clone();
+            tokio::spawn(async move {
+                webhooks::spawn_dispatcher(webhook_pool).await;
+            });
+        }
+    }
+}
+
+/// Connect to Redis (best-effort; the app keeps running with `None` if Redis
+/// is down) and install the RBAC role-context cache layer.
+pub async fn connect_redis_and_install_cache() -> Option<Cache> {
+    let redis_cache = match Cache::connect().await {
+        Ok(c) => {
+            info!("Connected to Redis");
+            Some(c)
+        }
+        Err(e) => {
+            warn!("Redis unavailable, caching disabled ({e:?})");
+            None
+        }
+    };
+
+    // resolve_role_context (called on ~every authenticated request) is served
+    // from cache after the first lookup per user. Falls back to the DB path
+    // when Redis is down.
+    rbac_cache::install(redis_cache.clone());
+
+    redis_cache
+}
+
+/// Build the CORS layer. Single-origin allowlist read from `FRONTEND_URL`;
+/// supports credentials so the auth cookie survives.
+pub fn build_cors(frontend_url: &str) -> Cors {
+    Cors::default()
+        .allowed_origin(frontend_url)
+        .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+        .allowed_headers(vec![
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::HeaderName::from_static("x-request-id"),
+        ])
+        .expose_headers(vec![header::HeaderName::from_static("x-has-more")])
+        .supports_credentials()
 }

@@ -131,7 +131,7 @@
 }
 
 .public-home-links button,
-.public-home-actions button {
+.public-home-actions button:not(.theme-toggle) {
   border: 0;
   background: transparent;
   color: var(--color-accent-indigo-bridge);

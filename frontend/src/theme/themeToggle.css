@@ -23,8 +23,8 @@
 }
 
 .theme-toggle {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 1px solid var(--color-border);
   border-radius: 50%;
@@ -35,7 +35,7 @@
 
 .theme-toggle--light {
   background:
-    radial-gradient(circle at 50% 50%, rgb(255, 255, 255, 0.95) 0%, rgb(255, 255, 255, 0) 55%),
+    radial-gradient(circle at 50% 50%, rgb(255, 255, 255, 0.55) 0%, rgb(255, 255, 255, 0) 22%),
     conic-gradient(
       from 0deg,
       oklch(65% 0.22 0),
@@ -50,7 +50,7 @@
 
 .theme-toggle--dark {
   background:
-    radial-gradient(circle at 50% 50%, rgb(10, 10, 12, 0.95) 0%, rgb(10, 10, 12, 0) 55%),
+    radial-gradient(circle at 50% 50%, rgb(10, 10, 12, 0.55) 0%, rgb(10, 10, 12, 0) 22%),
     conic-gradient(
       from 0deg,
       oklch(65% 0.22 0),
