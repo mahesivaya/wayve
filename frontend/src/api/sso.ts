@@ -50,6 +50,8 @@ export interface SsoTestResult {
 export async function getSsoConfig(orgId: number): Promise<SsoConfig | null> {
   const res = await apiFetch(`/organizations/${orgId}/sso/config`, {
     preserve401: true,
+    // 404 = no SSO config set for this org yet; return null, don't throw.
+    preserve404: true,
   });
   if (res.status === 404) return null;
   return (await res.json()) as SsoConfig;

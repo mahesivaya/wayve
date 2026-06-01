@@ -32,6 +32,7 @@ const Notes = lazy(() => import("./notes/Notes"));
 const Tasks = lazy(() => import("./tasks/Tasks"));
 const AIChat = lazy(() => import("./aichat/AIChat"));
 const GitHubRepo = lazy(() => import("./github/GitHubRepo"));
+const DomainVerification = lazy(() => import("./orgDomains/DomainVerification"));
 const About = lazy(() => import("./about/About"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
@@ -247,6 +248,17 @@ export default function App() {
               element={
                 user?.scope === "platform" ? (
                   <GitHubRepo />
+                ) : (
+                  <Navigate to={accountHome} replace />
+                )
+              }
+            />
+            {/* Platform-owner only: domain administration for organizations. */}
+            <Route
+              path="/platform/domains"
+              element={
+                user?.scope === "platform" && user?.effective_role === "owner" ? (
+                  <DomainVerification />
                 ) : (
                   <Navigate to={accountHome} replace />
                 )

@@ -43,7 +43,7 @@ pub struct ProviderLookupResponse {
 // One resolver per process. hickory has a built-in cache; reusing the
 // resolver lets repeated lookups (e.g. an enterprise re-trying after a typo)
 // hit the cache rather than the network.
-static RESOLVER: Lazy<TokioResolver> = Lazy::new(|| {
+pub(crate) static RESOLVER: Lazy<TokioResolver> = Lazy::new(|| {
     let mut opts = ResolverOpts::default();
     // Cap the per-query budget — a slow nameserver should never wedge a
     // user-facing request. Combined with the outer tokio::time::timeout

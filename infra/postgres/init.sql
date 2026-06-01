@@ -189,6 +189,27 @@ CREATE TABLE IF NOT EXISTS org_sso_configs (
 CREATE INDEX IF NOT EXISTS idx_org_sso_configs_domain
     ON org_sso_configs(allowed_domain);
 
+-- Custom-domain ownership for organizations. An org claims a domain
+-- (e.g. acme.com) and proves it controls the DNS by publishing a TXT
+-- challenge at `_wayve-challenge.<domain>` containing `wayve-verify=<token>`.
+-- Only a VERIFIED row authorizes minting `*@<domain>` member addresses
+-- (see admin_create_user). `verified` is flipped by the server after a
+-- successful DNS check and is NEVER set directly by the client. UNIQUE on
+-- `domain` means at most one org can ever own a given domain — the gate
+-- that stops a user creating x@usa.com on a domain they don't control.
+CREATE TABLE IF NOT EXISTS organization_domains (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    domain TEXT NOT NULL UNIQUE,
+    verify_token TEXT NOT NULL,
+    verified BOOLEAN NOT NULL DEFAULT FALSE,
+    verified_at TIMESTAMPTZ,
+    last_checked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_organization_domains_org
+    ON organization_domains(organization_id);
+
 -- In-flight authorization-code state for the OIDC redirect dance. PKCE
 -- verifier + nonce are bound to the state so a stolen `code` alone can't be
 -- exchanged. Single-use, 10-minute lifetime; the callback DELETEs the row

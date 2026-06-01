@@ -366,6 +366,25 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         )",
         "CREATE INDEX IF NOT EXISTS idx_org_sso_configs_domain \
          ON org_sso_configs(allowed_domain)",
+        // ────────────────────────────────────────────────────────────────
+        // Custom-domain ownership. An org claims a domain; ownership is
+        // proven by publishing a DNS TXT challenge. Only a VERIFIED row
+        // lets the org mint `*@domain` member addresses. `verified` is set
+        // by the server after a successful DNS check — never by the client.
+        // UNIQUE(domain) stops two orgs claiming the same domain.
+        // ────────────────────────────────────────────────────────────────
+        "CREATE TABLE IF NOT EXISTS organization_domains (
+            id SERIAL PRIMARY KEY,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            domain TEXT NOT NULL UNIQUE,
+            verify_token TEXT NOT NULL,
+            verified BOOLEAN NOT NULL DEFAULT FALSE,
+            verified_at TIMESTAMPTZ,
+            last_checked_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_organization_domains_org \
+         ON organization_domains(organization_id)",
         "CREATE TABLE IF NOT EXISTS sso_states (
             state TEXT PRIMARY KEY,
             sso_config_id INTEGER NOT NULL REFERENCES org_sso_configs(id) ON DELETE CASCADE,

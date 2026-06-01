@@ -355,6 +355,10 @@ export const sendSecureEmail = async (payload: SecureSendPayload) => {
 export const fetchSecureMessage = async (token: string) => {
   const res = await apiFetch(`/api/secure-messages/${encodeURIComponent(token)}`, {
     preserve401: true,
+    // 404 = invalid token, 410 = expired; both mean "no message", return
+    // null instead of throwing.
+    preserve404: true,
+    preserve410: true,
   });
   if (res.status === 404 || res.status === 410) return null;
   return res.json() as Promise<import("../emails/secureSend").ServerSecureMessage>;

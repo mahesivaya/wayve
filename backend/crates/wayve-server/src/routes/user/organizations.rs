@@ -811,6 +811,36 @@ pub async fn admin_create_user(
         }
     }
 
+    // Domain gate: an org member may only be minted on a domain the
+    // organization has VERIFIED it owns. Default-deny — gmail.com, usa.com,
+    // a typo, or any domain the org doesn't control is rejected, because it
+    // can never appear as a verified row in organization_domains. Founders
+    // (organization_admin) and personal users are exempt: they bootstrap the
+    // org / verify the domain before any members can be created on it.
+    if account_type == "organization"
+        && let Some(org_id) = organization_id
+    {
+        let domain = match email.rsplit_once('@') {
+            Some((_, d)) if !d.is_empty() => d.to_lowercase(),
+            _ => {
+                return Ok(HttpResponse::BadRequest()
+                    .json(serde_json::json!({ "message": "Invalid email address" })));
+            }
+        };
+        if organization::domains::is_public_provider_domain(&domain) {
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "message": format!("'{domain}' is a public email provider and can't be used for organization accounts")
+            })));
+        }
+        if !organization::domains::is_domain_verified_for_org(pool.get_ref(), org_id, &domain).await
+        {
+            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                "message": format!("The organization has not verified ownership of '{domain}'. Verify the domain before creating addresses on it."),
+                "domain": domain
+            })));
+        }
+    }
+
     // Pre-check: org members (account_type = 'organization', NOT founders)
     // need a bootstrapped org master key so the server can escrow their
     // keypair at provisioning time. Fail loud and early if the org has

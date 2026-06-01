@@ -10,7 +10,7 @@ mod outlook_oauth;
 pub mod profile;
 pub mod provider;
 pub mod repo;
-mod provider_lookup;
+pub(crate) mod provider_lookup;
 pub mod secure;
 mod send;
 pub mod sender;

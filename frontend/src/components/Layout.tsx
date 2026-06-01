@@ -369,6 +369,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     user.scope === "platform" && hasPermission(user, "members:read");
   const canAccessPlatformAnalytics =
     user.scope === "platform" && hasPermission(user, "members:read");
+  // Domain administration is restricted to the platform OWNER specifically
+  // (not all platform staff) — mirrors the backend require_platform_owner gate.
+  const isPlatformOwner =
+    user.scope === "platform" && user.effective_role === "owner";
   const canAccessPlatformLogs =
     user.scope === "platform" &&
     (hasPermission(user, "logs:read") ||
@@ -595,6 +599,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "Error Logs",
                   "🪵",
                   location.pathname === "/platform/logs",
+                )}
+              {isPlatformOwner &&
+                renderSidebarLink(
+                  "/platform/domains",
+                  "Domains",
+                  "🌐",
+                  location.pathname === "/platform/domains",
                 )}
             </div>
           )}

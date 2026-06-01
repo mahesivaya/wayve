@@ -25,6 +25,15 @@ type ApiOptions =
     // messages without forcing
     // logout/redirect.
     preserve401?: boolean;
+
+    // Return the Response on 404 instead of throwing. For endpoints where
+    // "not found" is an expected, meaningful answer (e.g. the wrapped-key
+    // lookup: 404 = "no recovery key on file yet"), so callers can branch
+    // on res.status === 404 rather than catching a thrown error.
+    preserve404?: boolean;
+
+    // Same, for 410 Gone — e.g. an expired secure-message token.
+    preserve410?: boolean;
   };
 
 export async function apiFetch(
@@ -35,6 +44,10 @@ export async function apiFetch(
     auth = true,
 
     preserve401 = false,
+
+    preserve404 = false,
+
+    preserve410 = false,
 
     headers,
 
@@ -148,6 +161,16 @@ export async function apiFetch(
   }
 
   // ================= OTHER ERRORS =================
+
+  // Caller opted to handle these itself (expected "not found" / "gone"):
+  // hand back the Response untouched instead of throwing, so it can branch
+  // on the status.
+  if (
+    (response.status === 404 && preserve404) ||
+    (response.status === 410 && preserve410)
+  ) {
+    return response;
+  }
 
   if (!response.ok) {
     let message =

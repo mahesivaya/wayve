@@ -26,7 +26,13 @@ export async function uploadWrappedKey(envelope: WrappedKeyEnvelope): Promise<vo
  * keeps the existing session valid through this lookup.
  */
 export async function fetchWrappedKey(): Promise<ServerWrappedKey | null> {
-  const res = await apiFetch("/api/me/wrapped-key", { preserve401: true });
+  const res = await apiFetch("/api/me/wrapped-key", {
+    preserve401: true,
+    // 404 = no recovery key on file yet (a fresh / SQL-seeded account).
+    // Without this, apiFetch throws on the 404 and setupEncryption aborts
+    // before it can generate keys + show the recovery-seed modal.
+    preserve404: true,
+  });
   if (res.status === 404) return null;
   return (await res.json()) as ServerWrappedKey;
 }
@@ -62,7 +68,12 @@ export async function uploadBasicKey(_pkcs8Bytes: ArrayBuffer): Promise<void> {
  * under a new mnemonic. Returns null once the row has been migrated.
  */
 export async function fetchBasicKey(): Promise<ArrayBuffer | null> {
-  const res = await apiFetch("/api/me/basic-key", { preserve401: true });
+  const res = await apiFetch("/api/me/basic-key", {
+    preserve401: true,
+    // 404 = no legacy key (the normal case post-migration); return null
+    // rather than throwing so the migration probe stays quiet.
+    preserve404: true,
+  });
   if (res.status === 404) return null;
   const body = (await res.json()) as { pkcs8: string };
   const binary = atob(body.pkcs8);
