@@ -11,7 +11,6 @@ import {
 } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
-import { slugify } from "../auth/accountHome";
 import { fmtShortDate } from "../utils/datetime";
 import "./admin-ui.css";
 import "./platformAdmin.css";
@@ -22,7 +21,7 @@ export default function PlatformOrganizations() {
   const canManageApiKeys = hasPermission(user, "api_keys:manage");
 
   const [organizationName, setOrganizationName] = useState("");
-  const [adminHandle, setAdminHandle] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [organizations, setOrganizations] = useState<AdminOrganization[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,13 +67,17 @@ export default function PlatformOrganizations() {
     setSuccess("");
     setCreating(true);
 
-    const adminEmail = `${slugify(adminHandle)}@${slugify(organizationName)}.com`;
+    // username is required by the backend but isn't exposed in the UI —
+    // derive it from the email's local-part. Most apps do this.
+    const trimmedEmail = adminEmail.trim().toLowerCase();
+    const localPart = trimmedEmail.split("@")[0] ?? "";
+    const adminUsername = localPart || trimmedEmail;
 
     try {
       const created = await createAdminOrganization({
         name: organizationName,
-        adminUsername: adminHandle,
-        adminEmail,
+        adminUsername,
+        adminEmail: trimmedEmail,
         adminPassword,
       });
       setOrganizations((prev) => {
@@ -84,7 +87,7 @@ export default function PlatformOrganizations() {
           : [...prev, created].sort((a, b) => a.name.localeCompare(b.name));
       });
       setOrganizationName("");
-      setAdminHandle("");
+      setAdminEmail("");
       setAdminPassword("");
       setShowCreateForm(false);
       setSuccess(
@@ -209,25 +212,18 @@ export default function PlatformOrganizations() {
                 />
               </label>
               <label className="u-form-label">
-                <span className="u-form-label-text">Organization admin handle</span>
+                <span className="u-form-label-text">Email address</span>
                 <input
                   className="u-form-control"
-                  value={adminHandle}
-                  onChange={(event) => setAdminHandle(event.target.value)}
-                  placeholder="e.g. john"
+                  type="email"
+                  value={adminEmail}
+                  onChange={(event) => setAdminEmail(event.target.value)}
+                  placeholder="owner@company.com"
                   required
                 />
               </label>
-              {adminHandle && organizationName && (
-                <p className="platform-admin-hint">
-                  Login email will be{" "}
-                  <strong>
-                    {slugify(adminHandle)}@{slugify(organizationName)}.com
-                  </strong>
-                </p>
-              )}
               <label className="u-form-label">
-                <span className="u-form-label-text">Organization admin password</span>
+                <span className="u-form-label-text">Password</span>
                 <input
                   className="u-form-control"
                   type="password"
@@ -248,7 +244,7 @@ export default function PlatformOrganizations() {
                   onClick={() => {
                     setShowCreateForm(false);
                     setOrganizationName("");
-                    setAdminHandle("");
+                    setAdminEmail("");
                     setAdminPassword("");
                     setError("");
                   }}

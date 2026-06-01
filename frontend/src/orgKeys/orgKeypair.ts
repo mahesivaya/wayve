@@ -30,6 +30,29 @@ function bytesToB64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+// Wait up to ~5s for the personal pubkey to land in IndexedDB. AuthContext's
+// `setupEncryption` runs in the background after login, so the very first
+// org-bootstrap redirect after a brand-new owner logs in can fire BEFORE
+// the personal keypair has been saved. Polling here keeps the bootstrap
+// page from failing with a confusing "sign in fully first" message just
+// because the two async tasks raced.
+async function waitForPublicKey(
+  userId: number,
+  email: string,
+  timeoutMs = 5000,
+  intervalMs = 200,
+): Promise<ArrayBuffer | null> {
+  const start = performance.now();
+  // First attempt is immediate so steady-state (key already present)
+  // doesn't pay the polling tax.
+  let key = await loadPublicKey(userId, email);
+  while (!key && performance.now() - start < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    key = await loadPublicKey(userId, email);
+  }
+  return key;
+}
+
 async function deriveMnemonicKey(
   mnemonicEntropy: Uint8Array,
   salt: Uint8Array,
@@ -99,7 +122,14 @@ export async function bootstrapOrgMasterKey(
   // 5. User-pubkey wrap: encrypt the same PKCS8 to the founder's
   //    PERSONAL pubkey so they auto-load the org key on this device
   //    without re-entering the mnemonic next session.
-  const founderPub = await loadPublicKey(founderUserId, founderEmail);
+  //
+  //    AuthContext's `setupEncryption` generates the personal keypair
+  //    asynchronously and is NOT awaited before `user` is set — so
+  //    BootstrapPage can mount and call into here before the pubkey
+  //    has landed in IndexedDB. Poll for up to ~5s so the redirect
+  //    path from OrganizationAdminHome doesn't race against personal-
+  //    keypair generation.
+  const founderPub = await waitForPublicKey(founderUserId, founderEmail);
   if (!founderPub) {
     throw new Error(
       "Founder personal public key not found on this device — sign in fully first.",
