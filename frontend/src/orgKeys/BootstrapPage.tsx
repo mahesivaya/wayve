@@ -26,6 +26,23 @@ export default function BootstrapPage() {
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [copied, setCopied] = useState(false);
 
+  const downloadMnemonic = (words: string[]) => {
+    // Numbered + space-separated forms in the same file so the user can
+    // pick whichever they want when restoring. No trailing whitespace.
+    const numbered = words.map((w, i) => `${i + 1}. ${w}`).join("\n");
+    const phrase = words.join(" ");
+    const body = `Wayve organization recovery key\nGenerated ${new Date().toISOString()}\n\n${numbered}\n\nPhrase:\n${phrase}\n`;
+    const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `wayve-org-recovery-key.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   useEffect(() => {
     if (!user) return;
     if (!Number.isFinite(orgId)) {
@@ -170,11 +187,29 @@ export default function BootstrapPage() {
                 fontSize: 14,
               }}
             >
-              <span style={{ color: "#6b7280" }}>{i + 1}.</span> {word}
+              <span
+                style={{
+                  color: "#6b7280",
+                  userSelect: "none",
+                  WebkitUserSelect: "none",
+                }}
+                aria-hidden="true"
+              >
+                {i + 1}.{" "}
+              </span>
+              {word}
             </li>
           ))}
         </ol>
-        <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginTop: 16,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
           <button
             type="button"
             onClick={() => {
@@ -187,6 +222,12 @@ export default function BootstrapPage() {
             }}
           >
             {copied ? "Copied ✓" : "Copy phrase"}
+          </button>
+          <button
+            type="button"
+            onClick={() => downloadMnemonic(phase.mnemonic)}
+          >
+            Download .txt
           </button>
           <button
             onClick={() =>
