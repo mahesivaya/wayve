@@ -24,6 +24,7 @@ export default function BootstrapPage() {
   const orgId = orgIdParam ? Number(orgIdParam) : NaN;
 
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -173,14 +174,28 @@ export default function BootstrapPage() {
             </li>
           ))}
         </ol>
-        <button
-          style={{ marginTop: 16 }}
-          onClick={() =>
-            setPhase({ kind: "confirm", mnemonic: phase.mnemonic, entered: "" })
-          }
-        >
-          I have written it down — confirm
-        </button>
+        <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard
+                ?.writeText(phase.mnemonic.join(" "))
+                .then(() => {
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 2000);
+                });
+            }}
+          >
+            {copied ? "Copied ✓" : "Copy phrase"}
+          </button>
+          <button
+            onClick={() =>
+              setPhase({ kind: "confirm", mnemonic: phase.mnemonic, entered: "" })
+            }
+          >
+            I have written it down — confirm
+          </button>
+        </div>
       </div>
     );
   }
