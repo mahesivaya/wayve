@@ -6,9 +6,11 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { bootstrapOrgMasterKey } from "./orgKeypair";
+import { getOrgKeys } from "./api";
 
 type Phase =
   | { kind: "loading" }
+  | { kind: "already_done" }
   | { kind: "display"; mnemonic: string[] }
   | { kind: "confirm"; mnemonic: string[]; entered: string }
   | { kind: "done" }
@@ -30,19 +32,39 @@ export default function BootstrapPage() {
       return;
     }
     let cancelled = false;
-    bootstrapOrgMasterKey(orgId, user.id, user.email)
-      .then((result) => {
+    // Idempotency guard: a previous visit may have already bootstrapped
+    // this org. The backend rejects re-bootstrap with 400, which would
+    // surface here as a confusing "Bootstrap failed" — even though the
+    // org is in fact set up. Probe GET /keys first; if it returns the
+    // pubkey, route the user to the dashboard with a clear message.
+    (async () => {
+      try {
+        await getOrgKeys(orgId);
+        if (!cancelled) setPhase({ kind: "already_done" });
+        return;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const notBootstrapped =
+          message.includes("404") || /not[_ ]found/i.test(message);
+        if (!notBootstrapped) {
+          if (!cancelled) setPhase({ kind: "error", message });
+          return;
+        }
+      }
+      // Fresh org — actually bootstrap.
+      try {
+        const result = await bootstrapOrgMasterKey(orgId, user.id, user.email);
         if (cancelled) return;
         setPhase({ kind: "display", mnemonic: result.mnemonic.split(/\s+/) });
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
         const message =
           err instanceof Error
             ? err.message
             : "Failed to bootstrap the organization recovery key.";
         setPhase({ kind: "error", message });
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -76,6 +98,25 @@ export default function BootstrapPage() {
           <button onClick={() => window.location.reload()}>Retry</button>
           <button onClick={() => navigate("/organization/home")}>Back</button>
         </div>
+      </div>
+    );
+  }
+
+  if (phase.kind === "already_done") {
+    return (
+      <div style={{ padding: 40, maxWidth: 640 }}>
+        <h2>Recovery key already set up</h2>
+        <p>
+          Your organization recovery key was bootstrapped on a previous visit.
+          The 24-word phrase is shown only once at creation — Wayve cannot
+          display it again. If you didn't save it, contact your platform
+          administrator to rotate the key.
+        </p>
+        <button
+          onClick={() => navigate("/organization/home", { replace: true })}
+        >
+          Go to organization home
+        </button>
       </div>
     );
   }
