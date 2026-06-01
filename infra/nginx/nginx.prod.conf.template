@@ -129,6 +129,13 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+
+            # index.html (and any other non-hashed entry) must NEVER be cached:
+            # the file references content-hashed bundles in /assets/ which are
+            # immutable forever; without this, a browser sitting on a stale
+            # index.html keeps requesting the OLD hashed bundles and never sees
+            # a deploy. The /assets/ location above keeps its own long cache.
+            add_header Cache-Control "no-cache, no-store, must-revalidate" always;
         }
     }
 }
