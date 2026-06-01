@@ -430,7 +430,9 @@
   max-width: 1200px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  /* Four blocks: brand (wider) + Product + Developers + Account. Was
+     three columns, which wrapped Account onto a second row. */
+  grid-template-columns: 2fr 1fr 1fr 1fr;
   gap: 2rem;
 }
 

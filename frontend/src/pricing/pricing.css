@@ -90,7 +90,10 @@
 
 .pricing-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  /* auto-fit (not auto-fill): collapse empty tracks so a fixed set of
+     plans always stretches to fill the row instead of leaving a phantom
+     empty column and dead space on the right at wide viewports. */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   grid-auto-rows: 1fr;
   gap: 10px;
   margin-top: 10px;
@@ -102,7 +105,11 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  height: 100%;
+  /* border-box so padding + border are included in the height the grid
+     stretches to — otherwise (content-box) the card renders ~30px taller
+     than its track and overflows the section panel. align-items:stretch
+     on the grid already gives equal-height cards, so no height:100% here. */
+  box-sizing: border-box;
   min-height: 300px;
   padding: 14px;
   border: 1px solid var(--color-border);
