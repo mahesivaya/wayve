@@ -383,6 +383,85 @@ pub fn provision_org_member_keypair(
     })
 }
 
+/// Output of `provision_org_owner_keypair`. Same shape as
+/// [`ProvisionedOrgMemberKeypair`] minus the org-escrow envelope — the
+/// owner is the org's trust root, so by definition there's no upper key
+/// to escrow them under at the moment the org is being created.
+#[derive(Debug)]
+pub struct ProvisionedOrgOwnerKeypair {
+    /// SPKI bytes of the owner's public key, JSON-encoded — wire shape
+    /// `users.public_key` expects.
+    pub public_key_json: String,
+    /// Password-derived wrap for `member_login_wrapped_keys`. The owner
+    /// unwraps this with their password on first login, exactly the same
+    /// way org members do.
+    pub login_wrap: PasswordWrappedPrivateKey,
+}
+
+/// Generate an RSA-2048 keypair for a brand-new org owner at the moment
+/// the platform admin creates the organization. Wraps the private key
+/// only under PBKDF2(password) — there is no org pubkey to escrow under
+/// (the owner is the trust root; the org master key gets bootstrapped
+/// separately from the owner's browser after first login).
+///
+/// Same security boundary as `provision_org_member_keypair`: the
+/// plaintext private key exists in memory only for the duration of this
+/// call, is wrapped before returning, and the raw bytes are zeroed.
+pub fn provision_org_owner_keypair(password: &str) -> Result<ProvisionedOrgOwnerKeypair> {
+    use pbkdf2::pbkdf2_hmac;
+
+    let mut rng = thread_rng();
+    let private_key = RsaPrivateKey::new(&mut rng, 2048)
+        .map_err(|e| anyhow::anyhow!("rsa keygen failed: {e}"))?;
+    let public_key = RsaPublicKey::from(&private_key);
+
+    let pkcs8 = private_key
+        .to_pkcs8_der()
+        .map_err(|e| anyhow::anyhow!("pkcs8 encode failed: {e}"))?;
+    let mut pkcs8_bytes: Vec<u8> = pkcs8.as_bytes().to_vec();
+
+    let spki_bytes: Vec<u8> = public_key
+        .to_public_key_der()
+        .map_err(|e| anyhow::anyhow!("spki encode failed: {e}"))?
+        .to_vec();
+
+    let mut salt = [0u8; 16];
+    let mut nonce = [0u8; 12];
+    let mut derived = [0u8; 32];
+    rng.fill_bytes(&mut salt);
+    rng.fill_bytes(&mut nonce);
+    pbkdf2_hmac::<Sha256>(
+        password.as_bytes(),
+        &salt,
+        ORG_MEMBER_PBKDF2_ITERATIONS,
+        &mut derived,
+    );
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&derived));
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), pkcs8_bytes.as_slice())
+        .map_err(|e| anyhow::anyhow!("owner login wrap AES-GCM failed: {e:?}"))?;
+
+    let public_key_json = serde_json::to_string(&spki_bytes)
+        .map_err(|e| anyhow::anyhow!("pubkey json encode failed: {e}"))?;
+
+    let login_wrap = PasswordWrappedPrivateKey {
+        iv_b64: general_purpose::STANDARD.encode(nonce),
+        ct_b64: general_purpose::STANDARD.encode(&ciphertext),
+        salt_b64: general_purpose::STANDARD.encode(salt),
+        iterations: ORG_MEMBER_PBKDF2_ITERATIONS,
+    };
+
+    pkcs8_bytes.zeroize();
+    derived.zeroize();
+    nonce.zeroize();
+    salt.zeroize();
+
+    Ok(ProvisionedOrgOwnerKeypair {
+        public_key_json,
+        login_wrap,
+    })
+}
+
 /// Unwrap a member's password-wrapped private key (the inverse of the
 /// `login_wrap` produced by `provision_org_member_keypair`). Used by the
 /// password-change handler to re-wrap with a new salt + new derived key.

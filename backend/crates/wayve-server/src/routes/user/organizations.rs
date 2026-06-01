@@ -234,10 +234,29 @@ pub async fn admin_create_organization(
     if let Some((username, email, password)) = organization_admin {
         let hashed = hash_password(&password).await?;
 
+        // Generate the owner's personal RSA-2048 keypair server-side
+        // BEFORE we touch the tx. Same security-boundary discipline as
+        // org-member provisioning: the plaintext private key only exists
+        // inside this blocking task, gets wrapped under PBKDF2(password)
+        // before the task returns, and is zeroed in encryption.rs. No
+        // org-escrow wrap because the org has no master key yet — the
+        // owner will bootstrap that from their browser on first login,
+        // and the wrap-under-owner-pubkey step there works because we
+        // store the SPKI in users.public_key below.
+        let password_for_gen = password.clone();
+        let provisioned = tokio::task::spawn_blocking(move || {
+            wayve_security::encryption::provision_org_owner_keypair(&password_for_gen)
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("owner keypair spawn_blocking failed: {e}")))?
+        .map_err(|e| {
+            AppError::Internal(format!("org owner keypair provisioning failed: {e}"))
+        })?;
+
         match sqlx::query(
             r#"
-            INSERT INTO users (username, email, password, auth_provider, account_type, organization_id)
-            VALUES ($1, $2, $3, 'local', $4, $5)
+            INSERT INTO users (username, email, password, auth_provider, account_type, organization_id, public_key)
+            VALUES ($1, $2, $3, 'local', $4, $5, $6)
             RETURNING id, username, email, account_type, organization_id
             "#,
         )
@@ -246,6 +265,7 @@ pub async fn admin_create_organization(
         .bind(&hashed)
         .bind("organization_admin")
         .bind(organization_id)
+        .bind(&provisioned.public_key_json)
         .fetch_one(&mut *tx)
         .await
         {
@@ -273,6 +293,28 @@ pub async fn admin_create_organization(
                 )
                 .bind(organization_id)
                 .bind(id)
+                .execute(&mut *tx)
+                .await?;
+
+                // Password-wrapped private key — owner unwraps on first
+                // login using the same flow org members already use
+                // (login response carries `login_wrap`, frontend derives
+                // PBKDF2(password) and decrypts into IndexedDB).
+                sqlx::query(
+                    "INSERT INTO member_login_wrapped_keys (user_id, iv, ct, salt, iterations)
+                     VALUES ($1, $2, $3, $4, $5)
+                     ON CONFLICT (user_id) DO UPDATE
+                     SET iv = EXCLUDED.iv,
+                         ct = EXCLUDED.ct,
+                         salt = EXCLUDED.salt,
+                         iterations = EXCLUDED.iterations,
+                         updated_at = NOW()",
+                )
+                .bind(id)
+                .bind(&provisioned.login_wrap.iv_b64)
+                .bind(&provisioned.login_wrap.ct_b64)
+                .bind(&provisioned.login_wrap.salt_b64)
+                .bind(provisioned.login_wrap.iterations as i32)
                 .execute(&mut *tx)
                 .await?;
             }

@@ -126,12 +126,14 @@ export async function bootstrapOrgMasterKey(
   //    PERSONAL pubkey so they auto-load the org key on this device
   //    without re-entering the mnemonic next session.
   //
-  //    AuthContext's `setupEncryption` generates the personal keypair
-  //    asynchronously and is NOT awaited before `user` is set — so
-  //    BootstrapPage can mount and call into here before the pubkey
-  //    has landed in IndexedDB. Poll for up to ~5s so the redirect
-  //    path from OrganizationAdminHome doesn't race against personal-
-  //    keypair generation.
+  //    For platform-admin-created owners the personal keypair is
+  //    server-provisioned at org creation and unwrapped on this device
+  //    by `unwrapAndCacheMemberKeys` during login. For self-serve flow
+  //    the founder is an existing personal user with the key already
+  //    on this device. Either way it's expected to be in IndexedDB by
+  //    the time bootstrap runs — but AuthContext::setupEncryption is
+  //    not awaited before `user` flips, so we still poll briefly as a
+  //    safety net for that race.
   const founderPub = await waitForPublicKey(founderUserId, founderEmail);
   if (!founderPub) {
     throw new Error(
