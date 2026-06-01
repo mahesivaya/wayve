@@ -112,6 +112,7 @@ export default function Register() {
           <button
             type="button"
             className="google-btn"
+            aria-label="Sign up with Google"
             onClick={handleGmailSignup}
           >
             Gmail
@@ -119,6 +120,7 @@ export default function Register() {
           <button
             type="button"
             className="outlook-btn"
+            aria-label="Sign up with Outlook"
             onClick={handleOutlookSignup}
           >
             Outlook
