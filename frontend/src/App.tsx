@@ -239,7 +239,19 @@ export default function App() {
               path="/aichat"
               element={<Navigate to="/ai-chat" replace />}
             />
-            <Route path="/github" element={<GitHubRepo />} />
+            {/* Platform-team only. Hiding the sidebar link isn't enough —
+                guard the route so a non-platform user typing /github is
+                bounced to their own home instead of seeing the page. */}
+            <Route
+              path="/github"
+              element={
+                user?.scope === "platform" ? (
+                  <GitHubRepo />
+                ) : (
+                  <Navigate to={accountHome} replace />
+                )
+              }
+            />
             <Route path="/about" element={<About />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />

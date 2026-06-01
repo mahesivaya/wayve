@@ -27,9 +27,11 @@ use crate::cache::TtlCache;
 use crate::email::oauth::HTTP_CLIENT;
 use actix_web::{HttpRequest, HttpResponse, Responder, get, web};
 use once_cell::sync::Lazy;
+use sqlx::PgPool;
 use std::time::Duration;
 use tracing::{instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
+use wayve_security::rbac::{Scope, resolve_role_context};
 
 const GITHUB_API: &str = "https://api.github.com";
 const CACHE_TTL_SECS: u64 = 60;
@@ -94,13 +96,31 @@ fn token() -> Option<String> {
 }
 
 #[get("/github/{tail:.*}")]
-#[instrument(target = "http", skip(req))]
-pub async fn github_proxy(req: HttpRequest, path: web::Path<String>) -> impl Responder {
-    // Same gate as every other /api/* endpoint — must be a signed-in
-    // user. We don't want any random visitor using us as a free anon-
-    // upgrade to GitHub.
-    if get_user_id_from_request(&req).is_none() {
+#[instrument(target = "http", skip(req, pool))]
+pub async fn github_proxy(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<String>,
+) -> impl Responder {
+    // Platform-team only. The GitHub dashboard is restricted to platform
+    // staff in the UI (sidebar link + route guard); enforce the same here
+    // so a non-platform user can't reach the repo data by calling the API
+    // directly. Mirrors the frontend `user.scope === "platform"` check.
+    let Some(user_id) = get_user_id_from_request(&req) else {
         return HttpResponse::Unauthorized().finish();
+    };
+    match resolve_role_context(pool.get_ref(), user_id).await {
+        Ok(ctx) if ctx.scope == Scope::Platform => {}
+        Ok(_) => {
+            warn!(target: "auth", user_id, "github proxy denied: non-platform caller");
+            return HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "GitHub access is restricted to the platform team"
+            }));
+        }
+        Err(e) => {
+            warn!(target: "auth", user_id, error = ?e, "github proxy rbac resolution failed");
+            return HttpResponse::InternalServerError().finish();
+        }
     }
 
     let tail = path.into_inner();

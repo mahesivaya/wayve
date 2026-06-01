@@ -55,7 +55,16 @@ export type AuthType = {
   // register flow generates new keys + shows the 24-word seed modal.
   // Regular login leaves the server's wrapped envelope alone — if local
   // keys are missing, the user recovers via /recover-with-mnemonic.
-  login: (token: string, accountType?: string, isFreshRegistration?: boolean) => void;
+  // `plaintextPassword`, when supplied, is forwarded once to
+  // setupEncryption so the post-login flow can also produce a PBKDF2
+  // login-wrap for the personal user (auto-unlock on new browsers,
+  // skip the mnemonic prompt). Optional — SSO/Google paths omit it.
+  login: (
+    token: string,
+    accountType?: string,
+    isFreshRegistration?: boolean,
+    plaintextPassword?: string,
+  ) => void;
   logout: () => void;
   // Re-fetch /api/me and update user state. Called after server-side
   // mutations that change the caller's scope/permissions (e.g. a personal

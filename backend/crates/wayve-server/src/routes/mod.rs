@@ -72,6 +72,8 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(recovery::get_wrapped_key)
         .service(recovery::put_wrapped_key)
         .service(recovery::delete_wrapped_key)
+        .service(recovery::put_login_wrap)
+        .service(recovery::delete_login_wrap)
         .service(recovery::get_basic_key)
         .service(recovery::put_basic_key)
         .service(recovery::delete_basic_key)

@@ -16,6 +16,7 @@ import {
 import RecoverySeedModal from "../recovery/RecoverySeedModal";
 import RecoverPromptModal from "../recovery/RecoverPromptModal";
 import { getMe, logout as logoutRequest, saveUserPublicKey } from "../api/Auth";
+import { apiFetch } from "../api/client";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./token";
 import { logger } from "../utils/logger";
 import { normalizeAccountType } from "./accountHome";
@@ -36,6 +37,70 @@ const log = logger.scope("auth");
 
 async function publishPublicKey(publicKey: ArrayBuffer) {
   await saveUserPublicKey(publicKey);
+}
+
+// PBKDF2 settings — match the org-member login-wrap (encryption.rs
+// ORG_MEMBER_PBKDF2_ITERATIONS). Browser-CSPRNG salt + nonce.
+const LOGIN_WRAP_PBKDF2_ITERATIONS = 600_000;
+
+function bytesToB64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
+// Wrap the user's freshly-generated PKCS8 private key under
+// PBKDF2(password) and PUT to /api/me/login-wrap. Lets the same user
+// auto-unlock on any new browser by re-deriving the AES key from their
+// typed password — no mnemonic prompt unless they forget the password.
+async function uploadPasswordLoginWrap(
+  privateKey: CryptoKey,
+  password: string,
+): Promise<void> {
+  const pkcs8 = new Uint8Array(
+    await crypto.subtle.exportKey("pkcs8", privateKey),
+  );
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"],
+  );
+  const aesKey = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: salt.slice().buffer,
+      iterations: LOGIN_WRAP_PBKDF2_ITERATIONS,
+      hash: "SHA-256",
+    },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"],
+  );
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv.slice().buffer },
+    aesKey,
+    pkcs8.slice().buffer,
+  );
+
+  // Zero the plaintext PKCS8 bytes we copied into JS memory. Best-effort
+  // — JS can't guarantee a fresh allocation didn't already snapshot it.
+  pkcs8.fill(0);
+
+  await apiFetch("/api/me/login-wrap", {
+    method: "PUT",
+    body: JSON.stringify({
+      iv: bytesToB64(iv),
+      ct: bytesToB64(new Uint8Array(ciphertext)),
+      salt: bytesToB64(salt),
+      iterations: LOGIN_WRAP_PBKDF2_ITERATIONS,
+    }),
+  });
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -159,6 +224,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     _recoveryMode: RecoveryMode,
     email: string,
     isFreshRegistration: boolean,
+    // Just-typed password, used once to derive the PBKDF2 login-wrap and
+    // upload it. Lives only on this stack frame; not stored.
+    plaintextPassword?: string,
   ) => {
     try {
       // (1) Local key already on this device. A fresh registration
@@ -260,6 +328,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await savePublicKey(publicKey, userId, email);
 
       await publishPublicKey(publicKey);
+
+      // Password-derived login wrap: lets the user sign in from a new
+      // browser without being prompted for the 24-word phrase. The wrap
+      // is AES-256-GCM(PBKDF2-SHA256-600k(password)) over the PKCS8
+      // bytes of the private key, PUT to /api/me/login-wrap. The
+      // mnemonic recovery path (below) stays in place as the
+      // forgot-password fallback. If `plaintextPassword` is missing
+      // (legacy callers, SSO without password), we skip silently and
+      // the user keeps the mnemonic-only flow.
+      if (plaintextPassword) {
+        try {
+          await uploadPasswordLoginWrap(keyPair.privateKey, plaintextPassword);
+          log.info("password login-wrap uploaded");
+        } catch (err) {
+          log.warn("password login-wrap upload failed (non-fatal)", err);
+        }
+      }
 
       // The mnemonic is generated in the browser; only the user
       // ever sees it. The wrap closure runs AFTER the user confirms
@@ -408,7 +493,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = (token: string, accountType?: string, isFreshRegistration = false) => {
+  const login = (
+    token: string,
+    accountType?: string,
+    isFreshRegistration = false,
+    // Just-typed plaintext password, forwarded from the login/register form.
+    // We use it once inside `setupEncryption` to compute a PBKDF2 wrap of
+    // the freshly-generated personal RSA private key, so the user's next
+    // login from a new browser can auto-unlock without prompting for the
+    // 24-word mnemonic. Never persisted, never logged.
+    plaintextPassword?: string,
+  ) => {
     authVersion.current += 1;
     setAuthToken(token);
     setInitializing(false);
@@ -456,9 +551,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             recovery_mode: recoveryMode,
             theme_json: data.theme_json ?? null,
           });
-          setupEncryption(decoded.sub, recoveryMode, data.email, isFreshRegistration).catch((err) =>
-            log.error("background encryption setup failed", err)
-          );
+          setupEncryption(
+            decoded.sub,
+            recoveryMode,
+            data.email,
+            isFreshRegistration,
+            plaintextPassword,
+          ).catch((err) => log.error("background encryption setup failed", err));
         })
         .catch((err) => log.error("post-login profile fetch failed", err));
     }

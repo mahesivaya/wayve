@@ -15,9 +15,11 @@ pub mod secure;
 mod send;
 pub mod sender;
 pub mod shared_inbox;
+mod rehydrate;
 pub mod sync;
 pub mod sync_older;
 pub mod utils;
+mod wake;
 pub mod yahoo;
 mod yahoo_routes;
 
@@ -91,7 +93,9 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         )
         .service(handler::get_me)
         .service(handler::put_theme)
-        .service(handler::save_public_key);
+        .service(handler::save_public_key)
+        .service(wake::wake_user_accounts)
+        .service(rehydrate::rehydrate_account);
 }
 
 pub fn public_routes(cfg: &mut web::ServiceConfig) {

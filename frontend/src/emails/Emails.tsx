@@ -15,6 +15,7 @@ import {
   getGmailConnectUrl,
   getOutlookConnectUrl,
   updateAccountDisplayName,
+  wakeEmailSync,
 } from "../api/email";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
@@ -347,12 +348,21 @@ export default function Emails() {
         stop();
       } else {
         // Catch up immediately on focus return, then resume polling.
+        // Wake first so the next fetchAccounts pulls anything new
+        // synced in the background since the tab was last visible.
+        void wakeEmailSync();
         tick();
         start();
       }
     };
 
-    if (!document.hidden) start();
+    if (!document.hidden) {
+      // Initial mount: ask the backend to sync the caller's mailboxes
+      // immediately, bypassing the adaptive worker schedule. New mail
+      // surfaces in ≤ ~2s instead of ≤ ~5min for quiet accounts.
+      void wakeEmailSync();
+      start();
+    }
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {

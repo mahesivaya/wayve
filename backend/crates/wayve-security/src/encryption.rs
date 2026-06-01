@@ -6,6 +6,7 @@ use anyhow::Result;
 use base64::Engine;
 use base64::engine::general_purpose;
 use hkdf::Hkdf;
+use hmac::{Hmac, Mac};
 use rand::{RngCore, thread_rng};
 use rsa::{
     Oaep, RsaPrivateKey, RsaPublicKey,
@@ -17,6 +18,13 @@ use zeroize::Zeroize;
 
 const HKDF_INFO: &[u8] = b"rwayve:v1:aes-256-gcm:messages-email-bodies";
 const DEFAULT_HKDF_SALT: &[u8] = b"rwayve:v1:hkdf-sha512";
+// Distinct HKDF context so the HMAC key used for address equality
+// search cannot be reused for AES decryption (and vice versa). If an
+// operator ever rotates only the AES key, the HMAC key stays stable
+// because both derive from the same `AES_KEY` material via different
+// info strings — but the rotation policy must wipe `*_hash` columns
+// in step. For now AES_KEY is treated as a single forever-stable key.
+const HKDF_INFO_ADDR_HASH: &[u8] = b"rwayve:v1:hmac-sha256:email-address-hash";
 
 /// Wire prefix for the single-recipient RSA-OAEP + AES-GCM envelope used
 /// for "encrypt-on-arrival" inbound mail. Matches the format the frontend
@@ -148,6 +156,58 @@ fn derive_hkdf_sha512_key(input_key_material: &[u8; 32]) -> Result<[u8; 32], Str
         .map_err(|_| "HKDF-SHA512 key derivation failed".to_string())?;
 
     Ok(output_key_material)
+}
+
+fn derive_address_hmac_key() -> Result<[u8; 32], String> {
+    // Same root key material, separate HKDF context. Domain separation
+    // means a leak of the HMAC key (e.g. via an oracle) can't decrypt
+    // AES-GCM messages and vice versa.
+    let key_material = get_key_material()?;
+    let salt = hkdf_salt();
+    let hk = Hkdf::<Sha512>::new(Some(&salt), &key_material);
+    let mut out = [0u8; 32];
+    hk.expand(HKDF_INFO_ADDR_HASH, &mut out)
+        .map_err(|_| "HKDF expand for address HMAC failed".to_string())?;
+    Ok(out)
+}
+
+/// Normalize an email address for deterministic hashing. Lowercase +
+/// trim. We deliberately don't strip dots from gmail-style locals — two
+/// users who type their address with vs. without dots should NOT be
+/// conflated in our DB. The intent is "equality on the literal address
+/// the user typed", not "RFC 5322 canonicalization".
+fn normalize_address(addr: &str) -> String {
+    addr.trim().to_lowercase()
+}
+
+/// HMAC-SHA256 of the normalized address, hex-encoded. Used as the
+/// `*_hash` column in `emails` so the Sent-folder filter and any
+/// equality lookup can run as a SQL `=` instead of decrypting every
+/// row. The hash is not reversible without brute force, AND it's keyed
+/// — an attacker who exfiltrated the `emails` table cannot construct
+/// the hash for any guessed address without also leaking `AES_KEY`.
+///
+/// Returns the hex string. Empty input returns `None` so the caller
+/// writes SQL NULL rather than the hash of an empty string.
+pub fn compute_address_hash(addr: &str) -> Result<Option<String>, String> {
+    let normalized = normalize_address(addr);
+    if normalized.is_empty() {
+        return Ok(None);
+    }
+    let key = derive_address_hmac_key()?;
+    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&key)
+        .map_err(|e| format!("hmac init failed: {e:?}"))?;
+    Mac::update(&mut mac, normalized.as_bytes());
+    let out = mac.finalize().into_bytes();
+    Ok(Some(hex_encode(&out)))
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        s.push_str(&format!("{:02x}", b));
+    }
+    s
 }
 
 fn hkdf_salt() -> Vec<u8> {

@@ -51,7 +51,9 @@ export default function Register() {
         throw new Error("No token returned from server");
       }
 
-      login(data.token, data.account_type ?? "personal", true);
+      // Pass the plaintext password so AuthContext can also produce
+      // the PBKDF2 login-wrap (auto-unlock on new browsers w/o mnemonic).
+      login(data.token, data.account_type ?? "personal", true, password);
 
       // Post-register redirect rules (in priority order):
       //   1. `?next=/path` from a referring CTA — same-origin only

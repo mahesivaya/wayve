@@ -236,6 +236,23 @@ export const downloadEmailAttachment = async (
   URL.revokeObjectURL(url);
 };
 
+// Fire-and-forget: ask the backend to sync every email account the
+// caller owns RIGHT NOW, bypassing the adaptive per-account schedule.
+// The endpoint returns 202 Accepted as soon as the syncs are queued —
+// the actual work happens in a background tokio task on the backend.
+// The next inbox poll (≤60 s away) picks up anything new.
+//
+// Errors are swallowed; this is best-effort latency reduction, not a
+// correctness path. The 30-second worker tick still catches anything
+// that didn't sync here.
+export const wakeEmailSync = async (): Promise<void> => {
+  try {
+    await apiFetch("/api/email/wake", { method: "POST" });
+  } catch {
+    // Intentional: wake is a hint, not a guarantee.
+  }
+};
+
 export const sendEmail = async (payload: SendEmailPayload) => {
   const res = await apiFetch("/api/emails", {
     method: "POST",

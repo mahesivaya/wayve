@@ -98,7 +98,12 @@ export default function Login() {
         }
       }
 
-      authLogin(data.token, data.account_type ?? "personal");
+      // Forward the typed password so AuthContext can produce the
+      // PBKDF2 login-wrap for a personal user on first signup-then-
+      // login on this device. Existing users (key already in IDB) hit
+      // the short-circuit branch in setupEncryption and the password
+      // is never used.
+      authLogin(data.token, data.account_type ?? "personal", false, password);
 
       // Org slug isn't known yet at login; routing settles to /organization/<slug>
       // once AuthContext's post-login /api/me fetch resolves.

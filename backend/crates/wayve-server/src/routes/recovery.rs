@@ -144,6 +144,76 @@ pub async fn put_wrapped_key(
     Ok(HttpResponse::NoContent().finish())
 }
 
+// Password-derived login wrap (the same `member_login_wrapped_keys` table
+// org members use). For personal users this is the "auto-unlock on a new
+// browser" path: the frontend wraps the PKCS8 private key under
+// PBKDF2-SHA256-600k(password) and PUTs it here. On the next login from
+// any device, `routes/auth.rs::login` returns the wrap, `Login.tsx`
+// re-derives PBKDF2 from the typed password, unwraps, and writes the key
+// to IndexedDB — no 24-word prompt needed. The mnemonic-wrap above is
+// kept only for the forgot-password recovery path.
+#[derive(Deserialize)]
+pub struct PutLoginWrapInput {
+    pub iv: String,
+    pub ct: String,
+    pub salt: String,
+    pub iterations: i32,
+}
+
+#[put("/me/login-wrap")]
+#[instrument(target = "auth", skip(req, pool, body))]
+pub async fn put_login_wrap(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<PutLoginWrapInput>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+
+    const MAX_FIELD_LEN: usize = 64 * 1024;
+    if body.iv.len() > MAX_FIELD_LEN
+        || body.ct.len() > MAX_FIELD_LEN
+        || body.salt.len() > MAX_FIELD_LEN
+    {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Login-wrap payload too large" })));
+    }
+    if body.iterations < 100_000 {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "PBKDF2 iterations too low" })));
+    }
+
+    sqlx::query(
+        "INSERT INTO member_login_wrapped_keys (user_id, iv, ct, salt, iterations)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (user_id) DO UPDATE
+         SET iv = EXCLUDED.iv,
+             ct = EXCLUDED.ct,
+             salt = EXCLUDED.salt,
+             iterations = EXCLUDED.iterations,
+             updated_at = NOW()",
+    )
+    .bind(user_id)
+    .bind(&body.iv)
+    .bind(&body.ct)
+    .bind(&body.salt)
+    .bind(body.iterations)
+    .execute(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::NoContent().finish())
+}
+
+#[delete("/me/login-wrap")]
+#[instrument(target = "auth", skip(req, pool))]
+pub async fn delete_login_wrap(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    sqlx::query("DELETE FROM member_login_wrapped_keys WHERE user_id = $1")
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
 #[delete("/me/wrapped-key")]
 #[instrument(target = "auth", skip(req, pool))]
 pub async fn delete_wrapped_key(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {

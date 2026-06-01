@@ -341,6 +341,23 @@ CREATE INDEX IF NOT EXISTS idx_emails_recipient_user_id
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS subject_encrypted TEXT;
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS subject_iv TEXT;
 
+-- Sender/receiver at rest. Same AES-GCM(AES_KEY) envelope as subject_*/body_*.
+-- The `*_hash` siblings store an HKDF-keyed HMAC-SHA256 of the lowercased
+-- address — used by the Sent-folder filter and any exact-address lookup so
+-- queries can compare addresses without decrypting every row. The legacy
+-- plaintext `sender` / `receiver` columns stay during the migration window;
+-- `email::repo::backfill_addresses` populates these new columns on startup.
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_iv TEXT;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_encrypted TEXT;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_hash TEXT;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS receiver_iv TEXT;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS receiver_encrypted TEXT;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS receiver_hash TEXT;
+CREATE INDEX IF NOT EXISTS idx_emails_sender_hash ON emails(sender_hash)
+    WHERE sender_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_emails_receiver_hash ON emails(receiver_hash)
+    WHERE receiver_hash IS NOT NULL;
+
 -- Provider labels attached to the message (Gmail labelIds, Outlook
 -- categories, plus a synthetic IMPORTANT for Outlook importance=high).
 -- Filtered by the inbox sidebar's category folders (Important / Updates /

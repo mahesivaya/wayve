@@ -61,6 +61,56 @@ fn read_subject(row: &PgRow) -> Option<String> {
     row.try_get::<Option<String>, _>("subject").ok().flatten()
 }
 
+/// Encrypts an email address (From: / To:) for storage as `(iv, ct, hash)`.
+/// Empty input returns three empty strings — the INSERT path binds these
+/// as NULLs in the column-level coalesce later, and reads return None.
+/// The hash is keyed HMAC of the *normalized* (trim + lowercase) address;
+/// callers that need to compare addresses for equality use that column.
+fn encrypt_address_for_storage(addr: &str) -> (String, String, String) {
+    if addr.is_empty() {
+        return (String::new(), String::new(), String::new());
+    }
+    let (iv, ciphertext) = match wayve_security::encryption::encrypt(addr) {
+        Ok(env) => env,
+        Err(_) => (String::new(), String::new()),
+    };
+    let hash = wayve_security::encryption::compute_address_hash(addr)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    (iv, ciphertext, hash)
+}
+
+/// Decode `sender_encrypted` + `sender_iv` first; fall back to the legacy
+/// plaintext `sender` column for rows that haven't been backfilled yet.
+/// PR 2 drops the legacy column and this fallback becomes dead code; for
+/// now both paths coexist so the migration is reversible.
+fn read_sender(row: &PgRow) -> Option<String> {
+    let enc: Option<String> = row.try_get("sender_encrypted").ok().flatten();
+    let iv: Option<String> = row.try_get("sender_iv").ok().flatten();
+    if let (Some(e), Some(i)) = (enc.as_deref(), iv.as_deref())
+        && !e.is_empty()
+        && !i.is_empty()
+        && let Ok(plain) = wayve_security::encryption::decrypt(i, e)
+    {
+        return Some(plain);
+    }
+    row.try_get::<Option<String>, _>("sender").ok().flatten()
+}
+
+fn read_receiver(row: &PgRow) -> Option<String> {
+    let enc: Option<String> = row.try_get("receiver_encrypted").ok().flatten();
+    let iv: Option<String> = row.try_get("receiver_iv").ok().flatten();
+    if let (Some(e), Some(i)) = (enc.as_deref(), iv.as_deref())
+        && !e.is_empty()
+        && !i.is_empty()
+        && let Ok(plain) = wayve_security::encryption::decrypt(i, e)
+    {
+        return Some(plain);
+    }
+    row.try_get::<Option<String>, _>("receiver").ok().flatten()
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Read: list
 // ─────────────────────────────────────────────────────────────────────
@@ -112,6 +162,7 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
         r#"
         SELECT e.id, e.gmail_id, e.subject, e.subject_iv, e.subject_encrypted,
                e.sender, e.receiver,
+               e.sender_iv, e.sender_encrypted, e.receiver_iv, e.receiver_encrypted,
                (e.body_encrypted <> '') AS has_body,
                EXISTS (
                    SELECT 1 FROM email_attachments ea WHERE ea.email_id = e.id
@@ -250,8 +301,8 @@ fn map_list_row(row: PgRow) -> EmailListRow {
         gmail_id: row.get::<String, _>("gmail_id"),
         account_id: row.try_get::<Option<i32>, _>("account_id").ok().flatten(),
         subject: read_subject(&row),
-        sender: row.try_get::<Option<String>, _>("sender").ok().flatten(),
-        receiver: row.try_get::<Option<String>, _>("receiver").ok().flatten(),
+        sender: read_sender(&row),
+        receiver: read_receiver(&row),
         has_body: row.try_get::<bool, _>("has_body").unwrap_or(false),
         has_attachments: row.try_get::<bool, _>("has_attachments").unwrap_or(false),
         is_read: row.try_get::<Option<bool>, _>("is_read").ok().flatten().unwrap_or(true),
@@ -291,7 +342,9 @@ pub async fn get_detail(
     let row = sqlx::query(
         r#"
         SELECT e.id, e.account_id, e.subject, e.subject_iv, e.subject_encrypted,
-               e.sender, e.receiver, e.body_encrypted, e.body_iv, e.attachments_checked
+               e.sender, e.receiver,
+               e.sender_iv, e.sender_encrypted, e.receiver_iv, e.receiver_encrypted,
+               e.body_encrypted, e.body_iv, e.attachments_checked
           FROM emails e
           LEFT JOIN email_accounts a ON e.account_id = a.id
           LEFT JOIN shared_inbox_members m
@@ -311,8 +364,8 @@ pub async fn get_detail(
         id: r.get::<i32, _>("id"),
         account_id: r.try_get::<Option<i32>, _>("account_id").ok().flatten(),
         subject: read_subject(&r),
-        sender: r.try_get::<Option<String>, _>("sender").ok().flatten(),
-        receiver: r.try_get::<Option<String>, _>("receiver").ok().flatten(),
+        sender: read_sender(&r),
+        receiver: read_receiver(&r),
         body_iv: r.try_get::<Option<String>, _>("body_iv").ok().flatten().unwrap_or_default(),
         body_encrypted: r
             .try_get::<Option<String>, _>("body_encrypted")
@@ -374,7 +427,8 @@ pub async fn list_attachments_for_user(
         r#"
         SELECT ea.id, ea.email_id, ea.filename, ea.mime_type, ea.size,
                ea.created_at, e.subject, e.subject_iv, e.subject_encrypted,
-               e.sender, e.receiver
+               e.sender, e.receiver,
+               e.sender_iv, e.sender_encrypted, e.receiver_iv, e.receiver_encrypted
           FROM email_attachments ea
           JOIN emails e ON ea.email_id = e.id
           JOIN email_accounts a ON ea.account_id = a.id
@@ -396,8 +450,8 @@ pub async fn list_attachments_for_user(
             size: r.try_get::<Option<i64>, _>("size").ok().flatten(),
             created_at: r.try_get("created_at").ok(),
             subject: read_subject(&r),
-            sender: r.try_get::<Option<String>, _>("sender").ok().flatten(),
-            receiver: r.try_get::<Option<String>, _>("receiver").ok().flatten(),
+            sender: read_sender(&r),
+            receiver: read_receiver(&r),
         })
         .collect())
 }
@@ -443,12 +497,19 @@ pub async fn upsert_batch(
 
     // Columns per row: gmail_id, sender, receiver, subject_iv,
     // subject_encrypted, created_at, body_encrypted, body_iv, account_id,
-    // is_read, labels, attachments_checked = 12.
-    let placeholders_per_row = 12;
+    // is_read, labels, attachments_checked, sender_iv, sender_encrypted,
+    // sender_hash, receiver_iv, receiver_encrypted, receiver_hash = 18.
+    //
+    // The legacy plaintext `sender`/`receiver` are still written so
+    // post-PR1 readers that fall back to the plaintext column on rows
+    // synced before backfill ran keep working. PR2 will drop the
+    // plaintext columns and zero out the binds here.
+    let placeholders_per_row = 18;
     let mut query = String::from(
         "INSERT INTO emails(gmail_id, sender, receiver, subject_iv, subject_encrypted, \
          created_at, body_encrypted, body_iv, account_id, is_read, labels, \
-         attachments_checked) VALUES ",
+         attachments_checked, sender_iv, sender_encrypted, sender_hash, \
+         receiver_iv, receiver_encrypted, receiver_hash) VALUES ",
     );
     for (i, _) in batch.iter().enumerate() {
         let base = i * placeholders_per_row;
@@ -472,18 +533,35 @@ pub async fn upsert_batch(
          subject_iv = EXCLUDED.subject_iv, \
          subject_encrypted = EXCLUDED.subject_encrypted, \
          subject = NULL, \
+         sender_iv = EXCLUDED.sender_iv, \
+         sender_encrypted = EXCLUDED.sender_encrypted, \
+         sender_hash = EXCLUDED.sender_hash, \
+         receiver_iv = EXCLUDED.receiver_iv, \
+         receiver_encrypted = EXCLUDED.receiver_encrypted, \
+         receiver_hash = EXCLUDED.receiver_hash, \
          created_at = EXCLUDED.created_at, \
          is_read = EXCLUDED.is_read, \
          labels = EXCLUDED.labels \
-         RETURNING id, sender, subject, subject_iv, subject_encrypted, created_at, (xmax = 0) AS is_new",
+         RETURNING id, sender, subject, subject_iv, subject_encrypted, \
+         sender_iv, sender_encrypted, receiver_iv, receiver_encrypted, \
+         created_at, (xmax = 0) AS is_new",
     );
 
     let mut q = sqlx::query(&query);
     let mut subject_envelopes: Vec<(String, String)> = Vec::with_capacity(batch.len());
+    let mut sender_envelopes: Vec<(String, String, String)> = Vec::with_capacity(batch.len());
+    let mut receiver_envelopes: Vec<(String, String, String)> = Vec::with_capacity(batch.len());
     for row in batch {
         subject_envelopes.push(encrypt_subject_for_storage(row.subject));
+        sender_envelopes.push(encrypt_address_for_storage(row.sender));
+        receiver_envelopes.push(encrypt_address_for_storage(row.receiver));
     }
-    for (row, (subject_iv, subject_encrypted)) in batch.iter().zip(subject_envelopes.iter()) {
+    for ((row, (subject_iv, subject_encrypted)), ((s_iv, s_ct, s_hash), (r_iv, r_ct, r_hash))) in
+        batch
+            .iter()
+            .zip(subject_envelopes.iter())
+            .zip(sender_envelopes.iter().zip(receiver_envelopes.iter()))
+    {
         let (body_iv, body_encrypted) = row.body.unwrap_or(("", ""));
         q = q
             .bind(row.gmail_id)
@@ -497,14 +575,20 @@ pub async fn upsert_batch(
             .bind(account_id)
             .bind(row.is_read)
             .bind(row.labels)
-            .bind(row.attachments_checked);
+            .bind(row.attachments_checked)
+            .bind(s_iv.as_str())
+            .bind(s_ct.as_str())
+            .bind(s_hash.as_str())
+            .bind(r_iv.as_str())
+            .bind(r_ct.as_str())
+            .bind(r_hash.as_str());
     }
     let returned = q.fetch_all(pool).await?;
     let results: Vec<InsertResult> = returned
         .into_iter()
         .map(|r| InsertResult {
             id: r.try_get("id").unwrap_or(0),
-            sender: r.try_get::<Option<String>, _>("sender").ok().flatten(),
+            sender: read_sender(&r),
             subject: read_subject(&r),
             created_at: r.try_get("created_at").ok(),
             is_new: r.try_get::<bool, _>("is_new").unwrap_or(false),
@@ -567,6 +651,10 @@ pub async fn upsert_one(
 ) -> sqlx::Result<i32> {
     let (body_iv, body_encrypted) = row.body.unwrap_or(("", ""));
     let (subject_iv, subject_encrypted) = encrypt_subject_for_storage(row.subject);
+    let (sender_iv, sender_encrypted, sender_hash) =
+        encrypt_address_for_storage(row.sender);
+    let (receiver_iv, receiver_encrypted, receiver_hash) =
+        encrypt_address_for_storage(row.receiver);
     // Same `(xmax = 0) AS is_new` trick as upsert_batch so we can tell a
     // genuinely new row from an ON CONFLICT re-sync and only stamp
     // last_message_at on the former.
@@ -574,14 +662,23 @@ pub async fn upsert_one(
         r#"
         INSERT INTO emails
           (gmail_id, sender, receiver, subject_iv, subject_encrypted, created_at,
-           body_encrypted, body_iv, account_id, attachments_checked, is_read, labels)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           body_encrypted, body_iv, account_id, attachments_checked, is_read, labels,
+           sender_iv, sender_encrypted, sender_hash,
+           receiver_iv, receiver_encrypted, receiver_hash)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                $13, $14, $15, $16, $17, $18)
         ON CONFLICT (account_id, gmail_id) DO UPDATE SET
           sender = EXCLUDED.sender,
           receiver = EXCLUDED.receiver,
           subject_iv = EXCLUDED.subject_iv,
           subject_encrypted = EXCLUDED.subject_encrypted,
           subject = NULL,
+          sender_iv = EXCLUDED.sender_iv,
+          sender_encrypted = EXCLUDED.sender_encrypted,
+          sender_hash = EXCLUDED.sender_hash,
+          receiver_iv = EXCLUDED.receiver_iv,
+          receiver_encrypted = EXCLUDED.receiver_encrypted,
+          receiver_hash = EXCLUDED.receiver_hash,
           created_at = EXCLUDED.created_at,
           body_encrypted = EXCLUDED.body_encrypted,
           body_iv = EXCLUDED.body_iv,
@@ -602,6 +699,12 @@ pub async fn upsert_one(
     .bind(row.attachments_checked)
     .bind(row.is_read)
     .bind(row.labels)
+    .bind(&sender_iv)
+    .bind(&sender_encrypted)
+    .bind(&sender_hash)
+    .bind(&receiver_iv)
+    .bind(&receiver_encrypted)
+    .bind(&receiver_hash)
     .fetch_one(pool)
     .await?;
 
@@ -658,6 +761,77 @@ pub async fn backfill_subjects(pool: &PgPool) -> sqlx::Result<u64> {
             )
             .bind(&iv)
             .bind(&encrypted)
+            .bind(id)
+            .execute(pool)
+            .await;
+        }
+        total += count;
+        if (count as i64) < BATCH {
+            return Ok(total);
+        }
+    }
+}
+
+/// One-time encryption + hashing migration for sender/receiver columns.
+/// Mirrors `backfill_subjects`: walks rows where the legacy plaintext
+/// column has data but the new encrypted column is empty, encrypts +
+/// hashes, writes the three new columns. We do NOT null the plaintext
+/// here — PR 2 will drop those columns wholesale once we've verified
+/// the encrypted-first read path works on real traffic.
+///
+/// Idempotent. Safe to call on every boot.
+pub async fn backfill_addresses(pool: &PgPool) -> sqlx::Result<u64> {
+    const BATCH: i64 = 500;
+    let mut total: u64 = 0;
+    loop {
+        let rows = sqlx::query(
+            "SELECT id, sender, receiver FROM emails \
+             WHERE ((sender IS NOT NULL AND sender <> '' \
+                    AND (sender_encrypted IS NULL OR sender_encrypted = '')) \
+                 OR (receiver IS NOT NULL AND receiver <> '' \
+                    AND (receiver_encrypted IS NULL OR receiver_encrypted = ''))) \
+             LIMIT $1",
+        )
+        .bind(BATCH)
+        .fetch_all(pool)
+        .await?;
+        if rows.is_empty() {
+            return Ok(total);
+        }
+        let count = rows.len() as u64;
+        for row in rows {
+            let id: i32 = match row.try_get("id") {
+                Ok(id) => id,
+                Err(_) => continue,
+            };
+            let sender_plain: Option<String> = row.try_get("sender").ok();
+            let receiver_plain: Option<String> = row.try_get("receiver").ok();
+
+            let (s_iv, s_ct, s_hash) =
+                encrypt_address_for_storage(sender_plain.as_deref().unwrap_or(""));
+            let (r_iv, r_ct, r_hash) =
+                encrypt_address_for_storage(receiver_plain.as_deref().unwrap_or(""));
+
+            // Only write the columns that actually have content; leave
+            // the others NULL. This keeps the WHERE clause selective
+            // across reboots — once a row has both filled it stops
+            // matching the predicate above.
+            let _ = sqlx::query(
+                "UPDATE emails SET \
+                   sender_iv = NULLIF($1, ''), \
+                   sender_encrypted = NULLIF($2, ''), \
+                   sender_hash = NULLIF($3, ''), \
+                   receiver_iv = NULLIF($4, ''), \
+                   receiver_encrypted = NULLIF($5, ''), \
+                   receiver_hash = NULLIF($6, '') \
+                 WHERE id = $7",
+            )
+            .bind(&s_iv)
+            .bind(&s_ct)
+            .bind(&s_hash)
+            .bind(&r_iv)
+            .bind(&r_ct)
+            .bind(&r_hash)
             .bind(id)
             .execute(pool)
             .await;

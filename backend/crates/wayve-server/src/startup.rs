@@ -65,6 +65,23 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // email::repo::backfill_subjects at startup.
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS subject_encrypted TEXT",
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS subject_iv TEXT",
+        // Sender/receiver at-rest encryption (same AES-GCM(AES_KEY)
+        // envelope as subject_*/body_*). The `*_hash` siblings hold an
+        // HMAC-SHA256 of the lowercased address keyed by a HKDF-derived
+        // subkey of AES_KEY — used by the Sent-folder filter and any
+        // exact-address lookup so we don't have to decrypt every row
+        // to filter. `backfill_email_addresses` migrates legacy rows
+        // at startup.
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_iv TEXT",
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_encrypted TEXT",
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_hash TEXT",
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS receiver_iv TEXT",
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS receiver_encrypted TEXT",
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS receiver_hash TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_emails_sender_hash ON emails(sender_hash) \
+         WHERE sender_hash IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_emails_receiver_hash ON emails(receiver_hash) \
+         WHERE receiver_hash IS NOT NULL",
         // Provider labels (Gmail labelIds + Outlook categories + synthetic
         // IMPORTANT for Outlook importance=high). Used by the sidebar
         // category folders. Backfills as `{}` for legacy rows; new syncs
@@ -660,6 +677,16 @@ pub async fn connect_db_and_migrate(role: RuntimeRole) -> PgPool {
         Ok(0) => {}
         Ok(n) => info!(target: "startup", encrypted = n, "backfilled legacy email subjects"),
         Err(e) => warn!(target: "startup", error = ?e, "subject backfill failed"),
+    }
+
+    // Same migration shape for sender/receiver. Encrypts the plaintext
+    // address columns into the new `*_iv` / `*_encrypted` / `*_hash`
+    // trio. The plaintext columns are NOT cleared in this PR — that
+    // happens in the follow-up PR that drops them entirely.
+    match email::repo::backfill_addresses(&pool).await {
+        Ok(0) => {}
+        Ok(n) => info!(target: "startup", encrypted = n, "backfilled legacy email addresses"),
+        Err(e) => warn!(target: "startup", error = ?e, "address backfill failed"),
     }
 
     // Dev/test only: backfill plans.stripe_price_id by creating Stripe test
