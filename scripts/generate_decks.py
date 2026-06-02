@@ -203,7 +203,7 @@ def make_title_slide(prs, title, subtitle, *, deck_name):
     add_text(slide, Inches(0.8), Inches(3.6), Inches(11), Inches(0.6),
              subtitle, size=22, color=INK_MUTED_INVERT)
     add_text(slide, Inches(0.8), Inches(6.6), Inches(11), Inches(0.4),
-             "Wayve  ·  maheshg.me  ·  API version 2026.05",
+             "Wayve  ·  dev.maheshg.me  ·  API version 2026.05",
              size=12, color=INK_MUTED_INVERT)
     return slide
 
@@ -289,7 +289,7 @@ def build_technical_deck(out_path: Path):
     # 4. Topology
     s = make_content_slide(prs, "Single-instance v1 topology", "02")
     add_text(s, Inches(0.8), Inches(2.0), Inches(11.5), Inches(0.5),
-             "EC2 i-07af9db286562f5ac  ·  EIP 32.199.117.86  ·  maheshg.me",
+             "EC2 i-07af9db286562f5ac  ·  EIP 32.199.117.86  ·  dev.maheshg.me",
              size=14, color=INK_MUTED)
     layers = [
         ("nginx 1.27", "TLS terminate · CSP · HSTS · routes /api,/scim/v2,/ws/* → backend; else SPA"),
@@ -1020,7 +1020,7 @@ def build_business_deck(out_path: Path):
     slides_built.append(make_closer_slide(
         prs,
         "Bundle. Encrypt. Honest pricing.",
-        "Wayve · maheshg.me · founder@maheshg.me",
+        "Wayve · dev.maheshg.me · founder@dev.maheshg.me",
         deck_name=deck_name,
     ))
 
