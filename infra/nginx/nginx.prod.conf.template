@@ -138,4 +138,37 @@ http {
             add_header Cache-Control "no-cache, no-store, must-revalidate" always;
         }
     }
+
+    # ---- Apex maheshg.me -> canonical ${NGINX_HOST} ----
+    # The bare domain hosts no app of its own; 301 everything to the
+    # canonical host. Port 80 also serves the ACME challenge so the apex
+    # can be added to the Let's Encrypt cert via `certbot --expand`. The
+    # 443 block reuses the ${NGINX_HOST} cert — valid once that cert
+    # includes maheshg.me as a SAN (expand step); until then it presents a
+    # name-mismatch but nginx still starts fine.
+    server {
+        listen 80;
+        server_name maheshg.me;
+
+        location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+            default_type "text/plain";
+        }
+
+        location / {
+            return 301 https://${NGINX_HOST}$request_uri;
+        }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+        server_name maheshg.me;
+
+        ssl_certificate     /etc/letsencrypt/live/${NGINX_HOST}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${NGINX_HOST}/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+
+        return 301 https://${NGINX_HOST}$request_uri;
+    }
 }
