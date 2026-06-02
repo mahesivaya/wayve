@@ -298,20 +298,38 @@ pub async fn get_all_email_attachments(req: HttpRequest, pool: web::Data<PgPool>
     Ok(HttpResponse::Ok().json(files))
 }
 
-// Total unread email count across all of the caller's accounts. Powers the
-// global sidebar/header badge so it doesn't have to load the full inbox to
-// count. Backed by `idx_emails_unread` (partial index on `is_read = false`)
-// so the query is an index-only scan regardless of inbox size.
+// Unread *inbox* count across all of the caller's accounts. Powers the global
+// nav/header badge. This deliberately mirrors the per-account `unread_count`
+// computed in `email::account` (see `load_*_email_accounts`): take Gmail/Outlook's
+// authoritative `provider_unread_count` (which counts the INBOX label only),
+// falling back to a local COUNT that excludes SPAM/DRAFT and self-sent mail for
+// the brief window before the first sync. Summed per account so the nav badge
+// equals the email page's "All Accounts" badge instead of counting every
+// folder (Sent/Spam/Trash/etc.).
 #[get("/emails/unread-count")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_unread_count(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) \
-         FROM emails e \
-         JOIN email_accounts a ON a.id = e.account_id \
-         WHERE a.user_id = $1 AND e.is_read = false",
+        r#"
+        SELECT COALESCE(SUM(unread), 0)::BIGINT
+        FROM (
+          SELECT COALESCE(
+            a.provider_unread_count::BIGINT,
+            COUNT(e.id) FILTER (
+              WHERE e.is_read = false
+                AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'
+                AND NOT ('SPAM' = ANY(e.labels))
+                AND NOT ('DRAFT' = ANY(e.labels))
+            )::BIGINT
+          ) AS unread
+          FROM email_accounts a
+          LEFT JOIN emails e ON e.account_id = a.id
+          WHERE a.user_id = $1
+          GROUP BY a.id, a.email, a.provider_unread_count
+        ) t
+        "#,
     )
     .bind(user_id)
     .fetch_one(pool.get_ref())

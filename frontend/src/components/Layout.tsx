@@ -315,7 +315,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <span className="sidebar-label">{label}</span>
           {showBadge && (
             <span className="sidebar-badge" aria-label={`${badge} unread`}>
-              {badge > 99 ? "99+" : badge}
+              {badge}
             </span>
           )}
         </Link>
