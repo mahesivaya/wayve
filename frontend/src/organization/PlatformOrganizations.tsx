@@ -123,16 +123,16 @@ export default function PlatformOrganizations() {
         <section className="platform-admin-panel u-panel">
           <div className="platform-admin-section-header">
             <div>
-              <h2>Organization names</h2>
-              <p>All organizations currently available on the platform.</p>
+              <h2>Business</h2>
+              <p>All businesses currently available on the platform.</p>
             </div>
             <span>{organizations.length} total</span>
           </div>
 
           {loading ? (
-            <div className="platform-admin-empty">Loading organizations...</div>
+            <div className="platform-admin-empty">Loading businesses...</div>
           ) : organizations.length === 0 ? (
-            <div className="platform-admin-empty">No organizations created yet.</div>
+            <div className="platform-admin-empty">No businesses created yet.</div>
           ) : (
             <div className="organization-grid">
               {organizations.map((org) => (
@@ -155,18 +155,18 @@ export default function PlatformOrganizations() {
           <div className="platform-admin-section-header">
             <div>
               <h2>API keys</h2>
-              <p>Generate keys for programmatic (external) access to an organization.</p>
+              <p>Generate keys for programmatic (external) access to a business.</p>
             </div>
           </div>
 
           <label className="platform-admin-key-org u-form-label">
-            <span className="u-form-label-text">Organization</span>
+            <span className="u-form-label-text">Business</span>
             <select
               className="u-form-control"
               value={keyOrgId ?? ""}
               onChange={(event) => void selectKeyOrg(event.target.value)}
             >
-              <option value="">Select an organization…</option>
+              <option value="">Select a business…</option>
               {organizations.map((org) => (
                 <option key={org.id} value={org.id}>
                   {org.name}
