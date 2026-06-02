@@ -7,22 +7,22 @@ const CHANNELS = [
     icon: "✉️",
     title: "Email support",
     body: "For account, billing, or product questions. Replies within one business day.",
-    actionLabel: "support@rwayve.maheshg.me",
-    href: "mailto:support@rwayve.maheshg.me",
+    actionLabel: "support@maheshg.me",
+    href: "mailto:support@maheshg.me",
   },
   {
     icon: "🛡️",
     title: "Security disclosures",
     body: "Found a vulnerability? Report it privately before any public disclosure.",
-    actionLabel: "security@rwayve.maheshg.me",
-    href: "mailto:security@rwayve.maheshg.me",
+    actionLabel: "security@maheshg.me",
+    href: "mailto:security@maheshg.me",
   },
   {
     icon: "📊",
     title: "Status & incidents",
     body: "Production incidents and scheduled maintenance are posted on the status page.",
     actionLabel: "View status →",
-    href: "https://rwayve.maheshg.me",
+    href: "https://maheshg.me",
   },
   {
     icon: "💼",
@@ -83,7 +83,7 @@ export default function Support() {
             a real person reads every message, usually within a business day.
           </p>
           <div className="marketing-hero-actions">
-            <button onClick={() => (window.location.href = "mailto:support@rwayve.maheshg.me")}>
+            <button onClick={() => (window.location.href = "mailto:support@maheshg.me")}>
               Email support
             </button>
             {user?.account_type !== "platform_admin" && !user?.username?.startsWith("platform-") && (
@@ -174,7 +174,7 @@ export default function Support() {
         <h2>Still stuck?</h2>
         <p>Tell us what's happening — we'll dig in and reply within one business day.</p>
         <div className="marketing-cta-actions">
-          <button onClick={() => (window.location.href = "mailto:support@rwayve.maheshg.me")}>
+          <button onClick={() => (window.location.href = "mailto:support@maheshg.me")}>
             Email support
           </button>
           <button onClick={() => navigate("/enterprise")}>

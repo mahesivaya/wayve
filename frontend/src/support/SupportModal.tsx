@@ -14,7 +14,7 @@ import {
 } from "../api/support";
 import "./supportModal.css";
 
-const SUPPORT_EMAIL = "support@rwayve.maheshg.me";
+const SUPPORT_EMAIL = "support@maheshg.me";
 const MAX_ATTACHMENT_MB = 10;
 
 const CATEGORY_OPTIONS: { value: TicketCategory; label: string }[] = [

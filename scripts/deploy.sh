@@ -22,7 +22,7 @@
 set -euo pipefail
 
 INSTANCE_USER="${INSTANCE_USER:-ubuntu}"
-INSTANCE_HOST="${INSTANCE_HOST:-rwayve.maheshg.me}"
+INSTANCE_HOST="${INSTANCE_HOST:-maheshg.me}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/rwayve-deploy.pem}"
 BRANCH="${BRANCH:-main}"
 REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/rwayve}"
