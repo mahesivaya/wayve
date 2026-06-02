@@ -1,5 +1,6 @@
 import { logger } from "../utils/logger";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import "./scheduler.css";
 import { computeLanes } from "./eventLayout";
 import Modal from "../components/Modal";
@@ -10,6 +11,7 @@ import {
   updateMeetingApi,
 } from "../api/scheduler";
 import { useGlobalSearch } from "../search/SearchContext";
+import { getChatUsers, type ChatUser } from "../api/chat";
 import {
   CALENDAR_COLORS,
   CALENDAR_STORAGE_KEY,
@@ -158,6 +160,27 @@ export default function Scheduler() {
 
   const [participants, setParticipants] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState("");
+  // Org/platform-scoped people directory for the participant typeahead.
+  // /api/users/all already returns only the caller's own org members (or
+  // platform team / personal peers), so suggestions never cross tenants.
+  const [directory, setDirectory] = useState<ChatUser[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    getChatUsers()
+      .then((users) => {
+        if (alive) setDirectory(users);
+      })
+      .catch(() => {
+        // Best-effort: if the directory can't load the field still accepts
+        // free-typed emails, it just won't suggest matches.
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     writeJson(CALENDAR_STORAGE_KEY, calendars);
@@ -240,22 +263,56 @@ export default function Scheduler() {
   };
 
   // ================= PARTICIPANTS =================
-  const addParticipant = () => {
-    const email = emailInput.trim().toLowerCase();
-  
+  // Suggestions: people from the scoped directory whose email matches what's
+  // typed (substring, case-insensitive) and who aren't already added. Empty
+  // query shows the first few so the list is browsable on focus.
+  const participantSuggestions = useMemo(() => {
+    const query = emailInput.trim().toLowerCase();
+    const chosen = new Set(participants.map((p) => p.toLowerCase()));
+    const pool = directory.filter((u) => !chosen.has(u.email.toLowerCase()));
+    const matched = query
+      ? pool.filter((u) => u.email.toLowerCase().includes(query))
+      : pool;
+    return matched.slice(0, 8);
+  }, [emailInput, directory, participants]);
+
+  const addParticipant = (explicit?: string) => {
+    const email = (explicit ?? emailInput).trim().toLowerCase();
+
     if (!email) return;
-  
+
     // better validation
     if (!email.includes("@") || !email.includes(".")) {
       alert("Enter a valid email");
       return;
     }
-  
+
     if (!participants.includes(email)) {
       setParticipants([...participants, email]);
     }
-  
+
     setEmailInput("");
+    setShowSuggestions(false);
+    setActiveSuggestion(0);
+  };
+
+  const onParticipantKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setShowSuggestions(true);
+      setActiveSuggestion((i) =>
+        Math.min(i + 1, participantSuggestions.length - 1)
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveSuggestion((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const pick = participantSuggestions[activeSuggestion];
+      addParticipant(pick ? pick.email : emailInput);
+    } else if (e.key === "Escape") {
+      setShowSuggestions(false);
+    }
   };
 
   const removeParticipant = (email: string) => {
@@ -928,12 +985,57 @@ export default function Scheduler() {
               ))}
             </div>
             <div className="participant-input">
-              <input
-                type="email"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-              />
-              <button onClick={addParticipant}>Add</button>
+              <div className="participant-typeahead">
+                <input
+                  type="text"
+                  placeholder="Type a name or email…"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    setShowSuggestions(true);
+                    setActiveSuggestion(0);
+                  }}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() =>
+                    window.setTimeout(() => setShowSuggestions(false), 120)
+                  }
+                  onKeyDown={onParticipantKeyDown}
+                  role="combobox"
+                  aria-expanded={
+                    showSuggestions && participantSuggestions.length > 0
+                  }
+                  aria-autocomplete="list"
+                />
+                {showSuggestions && participantSuggestions.length > 0 && (
+                  <ul className="participant-suggestions" role="listbox">
+                    {participantSuggestions.map((u, idx) => (
+                      <li
+                        key={u.id}
+                        role="option"
+                        aria-selected={idx === activeSuggestion}
+                        className={idx === activeSuggestion ? "is-active" : ""}
+                        onMouseEnter={() => setActiveSuggestion(idx)}
+                        onMouseDown={(e) => {
+                          // mousedown (not click) so it fires before the input's
+                          // blur hides the list.
+                          e.preventDefault();
+                          addParticipant(u.email);
+                        }}
+                      >
+                        <span className="participant-suggestion-avatar">
+                          {u.email.charAt(0).toUpperCase()}
+                        </span>
+                        <span className="participant-suggestion-email">
+                          {u.email}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <button type="button" onClick={() => addParticipant()}>
+                Add
+              </button>
             </div>
           </div>
 
