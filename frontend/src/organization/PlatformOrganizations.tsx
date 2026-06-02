@@ -1,7 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  createAdminOrganization,
   generateOrganizationApiKey,
   listAdminOrganizations,
   listOrganizationApiKeys,
@@ -20,16 +19,9 @@ export default function PlatformOrganizations() {
   const canManageMembers = hasPermission(user, "members:manage");
   const canManageApiKeys = hasPermission(user, "api_keys:manage");
 
-  const [organizationName, setOrganizationName] = useState("");
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState("");
   const [organizations, setOrganizations] = useState<AdminOrganization[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [showCreateForm, setShowCreateForm] = useState(false);
 
   const [keyOrgId, setKeyOrgId] = useState<number | null>(null);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
@@ -61,59 +53,6 @@ export default function PlatformOrganizations() {
       alive = false;
     };
   }, [canManageMembers, canManageApiKeys]);
-
-  const createOrganization = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
-    setSuccess("");
-
-    // Password confirmation: catches typos before the org is provisioned.
-    // Without this the admin can quietly mis-type the password, the org
-    // gets created, the owner can never sign in, and the only fix is to
-    // delete + recreate (because changing users.password later breaks the
-    // PBKDF2-derived `member_login_wrapped_keys` row alongside it).
-    if (adminPassword !== adminPasswordConfirm) {
-      setError("Passwords do not match. Please re-enter the same password in both fields.");
-      return;
-    }
-
-    setCreating(true);
-
-    // username is required by the backend but isn't exposed in the UI —
-    // derive it from the email's local-part. Most apps do this.
-    const trimmedEmail = adminEmail.trim().toLowerCase();
-    const localPart = trimmedEmail.split("@")[0] ?? "";
-    const adminUsername = localPart || trimmedEmail;
-
-    try {
-      const created = await createAdminOrganization({
-        name: organizationName,
-        adminUsername,
-        adminEmail: trimmedEmail,
-        adminPassword,
-      });
-      setOrganizations((prev) => {
-        const exists = prev.some((item) => item.id === created.id);
-        return exists
-          ? prev.map((item) => (item.id === created.id ? created : item))
-          : [...prev, created].sort((a, b) => a.name.localeCompare(b.name));
-      });
-      setOrganizationName("");
-      setAdminEmail("");
-      setAdminPassword("");
-      setAdminPasswordConfirm("");
-      setShowCreateForm(false);
-      setSuccess(
-        `Created organization ${created.name}` +
-          (created.admin ? ` with admin ${created.admin.email}.` : ".") +
-          " Share the credentials with the owner — on their first login they'll be prompted to set up the 24-word recovery key for the organization."
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create organization");
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const selectKeyOrg = async (value: string) => {
     setNewRawKey("");
@@ -180,114 +119,6 @@ export default function PlatformOrganizations() {
 
   return (
     <div className="platform-admin-home u-page-shell">
-      {canManageMembers && (
-        <section className="platform-admin-panel u-panel">
-          <div className="platform-admin-section-header">
-            {!showCreateForm && (
-              <button
-                type="button"
-                className="u-btn-primary"
-                onClick={() => {
-                  setError("");
-                  setSuccess("");
-                  setShowCreateForm(true);
-                }}
-              >
-                + Create new organization
-              </button>
-            )}
-          </div>
-
-          {showCreateForm && (
-            <form className="platform-admin-form u-form-stack" onSubmit={createOrganization}>
-              <label className="u-form-label">
-                <span className="u-form-label-text">Organization name</span>
-                <input
-                  className="u-form-control"
-                  value={organizationName}
-                  onChange={(event) => setOrganizationName(event.target.value)}
-                  placeholder="Enter organization name"
-                  required
-                />
-              </label>
-              <label className="u-form-label">
-                <span className="u-form-label-text">Email address</span>
-                <input
-                  className="u-form-control"
-                  type="email"
-                  value={adminEmail}
-                  onChange={(event) => setAdminEmail(event.target.value)}
-                  placeholder="owner@company.com"
-                  required
-                />
-              </label>
-              <label className="u-form-label">
-                <span className="u-form-label-text">Password</span>
-                <input
-                  className="u-form-control"
-                  type="password"
-                  value={adminPassword}
-                  onChange={(event) => setAdminPassword(event.target.value)}
-                  placeholder="At least 6 characters"
-                  minLength={6}
-                  required
-                />
-              </label>
-              <label className="u-form-label">
-                <span className="u-form-label-text">Confirm password</span>
-                <input
-                  className="u-form-control"
-                  type="password"
-                  value={adminPasswordConfirm}
-                  onChange={(event) => setAdminPasswordConfirm(event.target.value)}
-                  placeholder="Re-type the password"
-                  minLength={6}
-                  required
-                />
-              </label>
-              {adminPassword &&
-                adminPasswordConfirm &&
-                adminPassword !== adminPasswordConfirm && (
-                  <p className="platform-admin-hint" style={{ color: "#b91c1c" }}>
-                    Passwords do not match.
-                  </p>
-                )}
-              <div className="platform-admin-form-actions">
-                <button
-                  className="u-btn-primary"
-                  type="submit"
-                  disabled={
-                    creating ||
-                    !adminPassword ||
-                    adminPassword !== adminPasswordConfirm
-                  }
-                >
-                  {creating ? "Creating..." : "Create Organization"}
-                </button>
-                <button
-                  type="button"
-                  className="platform-admin-cancel-btn"
-                  onClick={() => {
-                    setShowCreateForm(false);
-                    setOrganizationName("");
-                    setAdminEmail("");
-                    setAdminPassword("");
-                    setAdminPasswordConfirm("");
-                    setError("");
-                  }}
-                  disabled={creating}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
-
-          {error && <div className="platform-admin-error">{error}</div>}
-          {success && <div className="platform-admin-success">{success}</div>}
-        </section>
-      )}
-
       {canManageMembers && (
         <section className="platform-admin-panel u-panel">
           <div className="platform-admin-section-header">
