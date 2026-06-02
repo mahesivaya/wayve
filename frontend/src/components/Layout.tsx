@@ -540,7 +540,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               renderSidebarItem(
                 "/github",
                 "github",
-                "GitHub",
+                "Code",
                 // Folder with a branch tree inside — picks up currentColor
                 // so it follows the link's foreground (white when active).
                 <svg
