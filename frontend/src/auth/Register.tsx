@@ -11,7 +11,6 @@ export default function Register() {
   const [params] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState(() =>
     params.get("error") === "email_exists"
       ? "This email is already registered. Please log in instead."
@@ -33,19 +32,13 @@ export default function Register() {
     e.preventDefault();
     setError("");
 
-    // ✅ basic validation
-    if (password !== confirm) {
-      setError("Passwords do not match");
-      return;
-    }
-
     try {
       // Plan A: every signup is end-to-end encrypted. The server is
       // sent `recovery_mode = 'full'` so the user gets a 24-word
       // BIP-39 mnemonic right after the form submit, generated and
       // shown by RecoverySeedModal. Forget the password AND lose the
       // mnemonic → the account is unrecoverable; that's by design.
-      const data = await register(email, password, confirm, "full");
+      const data = await register(email, password, password, "full");
 
       if (!data || !data.token) {
         throw new Error("No token returned from server");
@@ -95,14 +88,6 @@ export default function Register() {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-
-        <input
-          type="password"
-          placeholder="Confirm Password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
           required
         />
 
