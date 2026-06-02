@@ -169,6 +169,24 @@ environment.
 `SMTP_HOST`, `SMTP_PORT` (default `587`), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
 (defaults to `SMTP_USER`).
 
+The sender (`email/sender.rs`) picks the transport by host: `mailpit` /
+`localhost` / `127.0.0.1` → plaintext (no TLS, no auth); any other host →
+STARTTLS **with auth** on `SMTP_PORT`.
+
+- **Dev → Mailpit:** `SMTP_HOST=mailpit` (compose) or `localhost`, `SMTP_PORT=1025`.
+  `SMTP_USER`/`SMTP_PASS` can be anything — Mailpit accepts any auth. View sent
+  mail at <http://localhost:8025>.
+- **Prod → AWS SES (SMTP interface):**
+  - `SMTP_HOST=email-smtp.<region>.amazonaws.com`, `SMTP_PORT=587` (STARTTLS —
+    the 465/implicit-TLS port is **not** supported by the sender).
+  - `SMTP_USER`/`SMTP_PASS` are **SES SMTP credentials** (SES console → SMTP
+    settings → *Create SMTP credentials*) — **not** your AWS access key/secret.
+  - `SMTP_FROM` must be an address on an identity **verified** in SES. While the
+    account is in the **SES sandbox**, mail is delivered only to verified
+    recipients until you request production access.
+  - A `target=smtp "mail send failed"` log with an auth/relay error means wrong
+    SMTP credentials or an unverified `SMTP_FROM`.
+
 ### Optional integrations (feature disabled when unset)
 
 | Integration | Variables |
