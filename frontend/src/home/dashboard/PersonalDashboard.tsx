@@ -264,7 +264,8 @@ export default function PersonalDashboard() {
         </p>
       </section>
 
-      {/* ── 2. Meetings ────────────────────────────────────────── */}
+      {/* ── 2. Meetings + Tasks (two columns) ──────────────────── */}
+      <div className="personal-dashboard-row">
       <section className="personal-card">
         <header className="personal-card-head">
           <h2>Meetings</h2>
@@ -366,6 +367,7 @@ export default function PersonalDashboard() {
 
         {tasksErr && <div className="personal-card-error">{tasksErr}</div>}
       </section>
+      </div>
 
       {/* ── 3. Emails ──────────────────────────────────────────── */}
       <section className="personal-card personal-emails-card">

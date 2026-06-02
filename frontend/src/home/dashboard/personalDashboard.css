@@ -51,6 +51,25 @@
   flex: 0 0 auto;
 }
 
+/* Meetings + Tasks sit side by side as two equal columns; Emails stays a
+   full-width single column below. Collapses to one column on narrow widths. */
+.personal-dashboard-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.personal-dashboard-row > .personal-card {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .personal-dashboard-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── 1. Welcome ─────────────────────────────────────────────── */
 .personal-dashboard-greeting {
   display: flex;
