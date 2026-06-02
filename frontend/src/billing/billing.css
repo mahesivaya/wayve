@@ -315,6 +315,28 @@
   font-weight: 700;
 }
 
+/* Organization focused-billing view: large monthly amount, receipt link
+   group and the "sample data" note. */
+.billing-amount-lg {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--color-primary-action);
+}
+
+.billing-receipt-links {
+  display: flex;
+  gap: 14px;
+}
+
+.billing-muted {
+  color: var(--color-text-muted);
+}
+
+.billing-sample-note {
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
 .billing-payment-status {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);

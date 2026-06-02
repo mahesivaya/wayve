@@ -90,6 +90,56 @@ function formatDate(value: string | null): string {
   return fmtShortDate(value);
 }
 
+// "June 2026" — the billing history is one row per month, so we label each
+// charge by its month rather than the exact day.
+function formatMonth(value: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fmtShortDate(value);
+  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+// Reference samples shown on an organization's billing page before any real
+// Stripe invoices exist, so the layout (monthly amount, history, downloadable
+// receipts) is demonstrable. Negative ids keep them clear of real rows; the
+// receipt links are placeholders. Replaced by live data once invoices land.
+const SAMPLE_MONTHLY_AMOUNT_CENTS = 9000; // 9 seats × $10/user/month
+const SAMPLE_INVOICES: Invoice[] = [
+  {
+    id: -1,
+    stripe_invoice_id: "sample_in_0003",
+    amount_due_cents: 9000,
+    amount_paid_cents: 9000,
+    currency: "usd",
+    status: "paid",
+    hosted_invoice_url: "#",
+    invoice_pdf: "#",
+    created_at: "2026-05-01T00:00:00Z",
+  },
+  {
+    id: -2,
+    stripe_invoice_id: "sample_in_0002",
+    amount_due_cents: 8000,
+    amount_paid_cents: 8000,
+    currency: "usd",
+    status: "paid",
+    hosted_invoice_url: "#",
+    invoice_pdf: "#",
+    created_at: "2026-04-01T00:00:00Z",
+  },
+  {
+    id: -3,
+    stripe_invoice_id: "sample_in_0001",
+    amount_due_cents: 8000,
+    amount_paid_cents: 8000,
+    currency: "usd",
+    status: "paid",
+    hosted_invoice_url: "#",
+    invoice_pdf: "#",
+    created_at: "2026-03-01T00:00:00Z",
+  },
+];
+
 function loadStripeScript(): Promise<void> {
   if (window.Stripe) return Promise.resolve();
 
@@ -277,6 +327,10 @@ export default function Billing() {
   const effectiveCurrentCode =
     currentPlanCode ?? (ownerType === "personal" ? "basic_user" : null);
   const hasPaidPlan = (sub?.subscription?.amount_cents ?? 0) > 0;
+  // Organization owners get a focused billing view (monthly amount, monthly
+  // bill history, downloadable receipts) instead of the personal
+  // plan-selection + usage + members layout.
+  const isOrg = ownerType === "organization";
 
   const clearSubscribeElements = useCallback(() => {
     subscribePaymentElementRef.current?.destroy();
@@ -715,6 +769,136 @@ export default function Billing() {
       {error && <div className="billing-banner error">{error}</div>}
       {paymentSuccess && <div className="billing-banner success">{paymentSuccess}</div>}
 
+      {/* ---- Organization billing (focused view) ---- */}
+      {isOrg && (
+        <>
+          <section className="billing-card">
+            <h2>Monthly billing{org ? ` — ${org.organization.name}` : ""}</h2>
+            {activeSub ? (
+              <div className="billing-sub">
+                <div className="billing-sub-row">
+                  <span>Amount</span>
+                  <strong className="billing-amount-lg">
+                    {formatMoney(activeSub.amount_cents, activeSub.currency)}
+                    {activeSub.billing_interval
+                      ? ` / ${activeSub.billing_interval}`
+                      : " / month"}
+                  </strong>
+                </div>
+                <div className="billing-sub-row">
+                  <span>Plan</span>
+                  <strong>
+                    {activeSub.plan_name ?? activeSub.plan_code ?? "—"}
+                  </strong>
+                </div>
+                <div className="billing-sub-row">
+                  <span>Status</span>
+                  <strong className={`billing-status ${activeSub.status}`}>
+                    {activeSub.status}
+                  </strong>
+                </div>
+                <div className="billing-sub-row">
+                  <span>Next charge</span>
+                  <strong>{formatDate(activeSub.current_period_end)}</strong>
+                </div>
+                {activeSub.cancel_at_period_end ? (
+                  <p className="billing-note">
+                    Cancels at the end of the current period.
+                  </p>
+                ) : (
+                  <button
+                    className="billing-cancel-btn"
+                    onClick={() => void cancel()}
+                    disabled={busy === "cancel"}
+                  >
+                    {busy === "cancel" ? "Canceling…" : "Cancel subscription"}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="billing-sub">
+                <div className="billing-sub-row">
+                  <span>Amount</span>
+                  <strong className="billing-amount-lg">
+                    {formatMoney(SAMPLE_MONTHLY_AMOUNT_CENTS, "usd")} / month
+                  </strong>
+                </div>
+                <div className="billing-sub-row">
+                  <span>Plan</span>
+                  <strong>Business</strong>
+                </div>
+                <p className="billing-note billing-sample-note">
+                  Sample figures for reference — no active subscription yet.
+                  Choose a Business or Enterprise plan to start monthly billing.
+                </p>
+              </div>
+            )}
+          </section>
+
+          <section className="billing-card">
+            <h2>Billing history</h2>
+            {invoices.length === 0 && (
+              <p className="billing-note billing-sample-note">
+                Sample bills shown for reference. Your real monthly receipts will
+                appear here after the first charge.
+              </p>
+            )}
+            {(invoices.length > 0 ? invoices : SAMPLE_INVOICES).length > 0 ? (
+              <table className="billing-table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Receipt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(invoices.length > 0 ? invoices : SAMPLE_INVOICES).map((invoice) => (
+                    <tr key={invoice.id}>
+                      <td>{formatMonth(invoice.created_at)}</td>
+                      <td>
+                        {formatMoney(invoice.amount_paid_cents, invoice.currency)}
+                      </td>
+                      <td>{invoice.status}</td>
+                      <td className="billing-receipt-links">
+                        {invoice.invoice_pdf && (
+                          <a
+                            href={invoice.invoice_pdf}
+                            target="_blank"
+                            rel="noreferrer"
+                            download
+                          >
+                            Download
+                          </a>
+                        )}
+                        {invoice.hosted_invoice_url && (
+                          <a
+                            href={invoice.hosted_invoice_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View
+                          </a>
+                        )}
+                        {!invoice.invoice_pdf && !invoice.hosted_invoice_url && (
+                          <span className="billing-muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="billing-empty">
+                No bills yet. Monthly receipts will appear here after your first
+                charge.
+              </p>
+            )}
+          </section>
+        </>
+      )}
+
       {paymentFormOpen && (
         <section className="billing-card">
           <h2>Payment method</h2>
@@ -822,7 +1006,7 @@ export default function Billing() {
           manage, so /billing collapses to a plan picker. The page reveals
           the full management surface automatically after the first
           successful checkout. */}
-      {hasPaidPlan && (
+      {hasPaidPlan && !isOrg && (
       <section className="billing-card">
         <h2>Subscription</h2>
         {activeSub ? (
@@ -873,7 +1057,7 @@ export default function Billing() {
       )}
 
       {/* ---- Usage ---- */}
-      {hasPaidPlan && (
+      {hasPaidPlan && !isOrg && (
       <section className="billing-card">
         <h2>Usage</h2>
         {entitlements && (
@@ -908,7 +1092,8 @@ export default function Billing() {
       </section>
       )}
 
-      {/* ---- Plans / Checkout ---- */}
+      {/* ---- Plans / Checkout (personal accounts only) ---- */}
+      {!isOrg && (
       <section className="billing-card">
         <div className="billing-section-head">
           <h2>Plans</h2>
@@ -930,9 +1115,13 @@ export default function Billing() {
           )}
         </div>
       </section>
+      )}
 
       {/* ---- Business & Enterprise ---- */}
-      {businessPlans.length > 0 && (
+      {/* Personal users always see this (to create an org); an org owner only
+          sees it while they have no active subscription, so they can subscribe.
+          Once subscribed, the focused billing view above is all they get. */}
+      {businessPlans.length > 0 && (!isOrg || !hasPaidPlan) && (
         <section className="billing-card">
           <div className="billing-section-head">
             <h2>Business &amp; Enterprise</h2>
@@ -975,7 +1164,7 @@ export default function Billing() {
       )}
 
       {/* ---- Invoices ---- */}
-      {hasPaidPlan && (
+      {hasPaidPlan && !isOrg && (
       <section className="billing-card">
         <h2>Invoices</h2>
         {invoices.length > 0 ? (
@@ -1015,47 +1204,6 @@ export default function Billing() {
           <p className="billing-empty">No invoices yet.</p>
         )}
       </section>
-      )}
-
-      {/* ---- Organization billing ---- */}
-      {org && (
-        <section className="billing-card">
-          <h2>Organization billing — {org.organization.name}</h2>
-          <div className="billing-sub-row">
-            <span>Seats</span>
-            <strong>
-              {org.seats_used} / {org.seat_limit}
-            </strong>
-          </div>
-          <div className="billing-sub-row">
-            <span>Plan</span>
-            <strong>
-              {org.plan_code ?? "Free"} {org.plan_active ? "" : "(inactive)"}
-            </strong>
-          </div>
-          {!org.can_manage && (
-            <p className="billing-note">
-              Only organization admins can change the organization plan.
-            </p>
-          )}
-          <h3 className="billing-members-title">Members</h3>
-          <table className="billing-table">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Role</th>
-              </tr>
-            </thead>
-            <tbody>
-              {org.members.map((member) => (
-                <tr key={member.id}>
-                  <td>{member.email}</td>
-                  <td>{member.role ?? member.account_type}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
       )}
     </div>
   );
