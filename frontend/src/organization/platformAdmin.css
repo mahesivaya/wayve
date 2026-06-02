@@ -58,6 +58,60 @@
   }
 }
 
+/* Name-only tiles laid out as a responsive grid of equal blocks. */
+.organization-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.organization-grid-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 84px;
+  padding: 16px 14px;
+  text-align: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+
+.organization-grid-tile:hover {
+  border-color: var(--color-primary-action);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.organization-grid-tile strong {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.organization-detail-welcome {
+  padding: 24px 8px;
+  text-align: center;
+}
+
+.organization-detail-welcome h2 {
+  margin: 0 0 8px;
+  font-size: var(--text-2xl);
+  color: var(--color-text-primary);
+}
+
+.organization-detail-welcome p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+}
+
 .platform-organization-list {
   grid-template-columns: 1fr;
 }

@@ -317,20 +317,16 @@ export default function PlatformOrganizations() {
           ) : organizations.length === 0 ? (
             <div className="platform-admin-empty">No organizations created yet.</div>
           ) : (
-            <div className="organization-name-list platform-organization-list">
+            <div className="organization-grid">
               {organizations.map((org) => (
-                <article key={org.id}>
+                <Link
+                  key={org.id}
+                  to={`/platform/organizations/${org.id}`}
+                  className="organization-grid-tile"
+                  title={org.name}
+                >
                   <strong>{org.name}</strong>
-                  <span>
-                    {org.slug ? `${org.slug}.com · ` : ""}
-                    {org.user_count} users
-                    {org.admin && (
-                      <>
-                        <br /><small style={{ color: '#6b7280' }}>Admin: {org.admin.email}</small>
-                      </>
-                    )}
-                  </span>
-                </article>
+                </Link>
               ))}
             </div>
           )}
