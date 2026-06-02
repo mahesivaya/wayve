@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/renew-certs.sh — Renew the prod Let's Encrypt cert and reload nginx.
 #
-# The cert(s) (currently dev.maheshg.me; maheshg.me added for prod later) live in the
+# The prod cert (rwayve.maheshg.me + maheshg.me as a SAN) lives in the
 # `rwayve_prod_letsencrypt_certs` Docker volume; nginx (rwayve_nginx_prod)
 # reads it and serves the ACME HTTP-01 challenge from the
 # `rwayve_prod_certbot_webroot` volume at /.well-known/acme-challenge/.

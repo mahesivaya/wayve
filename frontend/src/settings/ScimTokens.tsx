@@ -108,7 +108,7 @@ export default function ScimTokens() {
             Mint a bearer token here, then paste it into your IdP (Okta / Entra /
             Google Workspace / OneLogin). They'll create, update, and deprovision
             users automatically through{" "}
-            <code>https://dev.maheshg.me/scim/v2</code>.
+            <code>https://maheshg.me/scim/v2</code>.
           </p>
         </div>
       </header>
@@ -214,7 +214,7 @@ export default function ScimTokens() {
         <ul>
           <li>
             <strong>Base URL:</strong>{" "}
-            <code>https://dev.maheshg.me/scim/v2</code>
+            <code>https://maheshg.me/scim/v2</code>
           </li>
           <li>
             <strong>Authentication:</strong>{" "}

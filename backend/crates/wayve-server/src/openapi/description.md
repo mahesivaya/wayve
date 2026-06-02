@@ -124,17 +124,17 @@ cursor back as a query parameter.
 ## SDKs
 
 The spec is the source of truth. To generate a client, point any
-OpenAPI 3.1-aware generator at `https://dev.maheshg.me/api/openapi.json`:
+OpenAPI 3.1-aware generator at `https://maheshg.me/api/openapi.json`:
 
 ```bash
 # TypeScript / fetch
-npx @hey-api/openapi-ts -i https://dev.maheshg.me/api/openapi.json -o ./wayve
+npx @hey-api/openapi-ts -i https://maheshg.me/api/openapi.json -o ./wayve
 
 # Python / httpx
-openapi-python-client generate --url https://dev.maheshg.me/api/openapi.json
+openapi-python-client generate --url https://maheshg.me/api/openapi.json
 
 # Go
-oapi-codegen -package wayve https://dev.maheshg.me/api/openapi.json > wayve.gen.go
+oapi-codegen -package wayve https://maheshg.me/api/openapi.json > wayve.gen.go
 ```
 
 A spec change updates the ETag so generators with caching can short-circuit
@@ -149,7 +149,7 @@ types; Wayve will deliver every matching event as a signed JSON payload.
 ### Subscribing
 
 ```bash
-curl https://dev.maheshg.me/api/webhooks \
+curl https://maheshg.me/api/webhooks \
   -H "X-API-KEY: $WAYVE_KEY" \
   -H "Content-Type: application/json" \
   -d '{
