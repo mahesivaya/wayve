@@ -182,6 +182,29 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         }
     }
 
+    // Google Calendar: import upcoming events on the SAME cadence as email
+    // (this tick) so the Scheduler stays current, instead of the one-shot
+    // import that only ran at connect time. Reuses the token we just
+    // refreshed above; best-effort and idempotent (import_upcoming_events
+    // upserts ON CONFLICT (user_id, google_event_id)).
+    if account.provider == crate::email::provider::MailProvider::Google {
+        match crate::scheduler::google_calendar::import_upcoming_events(
+            pool,
+            account.user_id,
+            account.id,
+            &token.access_token,
+        )
+        .await
+        {
+            Ok(n) => {
+                debug!(target: "worker", account_id = account.id, count = n, "calendar import (tick)")
+            }
+            Err(e) => {
+                warn!(target: "worker", account_id = account.id, error = %e, "calendar import (tick) failed")
+            }
+        }
+    }
+
     // Fresh mail just landed in `emails` — drop the /api/profile and
     // /api/me caches for this user so the Storage & Usage panel
     // reflects the new totals on the next page load instead of waiting
