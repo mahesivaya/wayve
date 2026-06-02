@@ -6,6 +6,34 @@
 
 use super::entitlements::refresh_entitlements;
 use super::models::BillingOwner;
+use crate::email::profile::invalidate_me_cache;
+use crate::routes::user::invalidate_profile_cache;
+
+/// A plan/limit/status just changed for `owner`; drop the per-user caches that
+/// embed plan info (`/api/me`, `/api/profile`) so the next request returns the
+/// new plan + storage limit instead of a stale (30–60s) cached copy. For an
+/// organization every member's view changes, so invalidate all of them.
+async fn invalidate_owner_caches(pool: &PgPool, owner: BillingOwner) {
+    match owner {
+        BillingOwner::User(uid) => {
+            invalidate_me_cache(uid).await;
+            invalidate_profile_cache(uid).await;
+        }
+        BillingOwner::Organization(org_id) => {
+            let members = sqlx::query_scalar::<_, i32>(
+                "SELECT id FROM users WHERE organization_id = $1",
+            )
+            .bind(org_id)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+            for uid in members {
+                invalidate_me_cache(uid).await;
+                invalidate_profile_cache(uid).await;
+            }
+        }
+    }
+}
 use super::provider;
 use crate::prelude::*;
 use tracing::{error, info, instrument, warn};
@@ -163,6 +191,7 @@ async fn handle_checkout_completed(pool: &PgPool, object: &Value) -> Result<()> 
     .await?;
 
     refresh_entitlements(pool, owner).await?;
+    invalidate_owner_caches(pool, owner).await;
     Ok(())
 }
 
@@ -211,6 +240,7 @@ async fn handle_subscription_event(pool: &PgPool, event_type: &str, object: &Val
     }
     if let Some(owner) = subscription_owner(pool, sub_id).await? {
         refresh_entitlements(pool, owner).await?;
+        invalidate_owner_caches(pool, owner).await;
     }
     Ok(())
 }

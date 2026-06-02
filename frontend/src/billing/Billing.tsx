@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { invalidateGetCache } from "../api/client";
 import {
   cancelSubscription,
   createPaymentMethodSetupIntent,
@@ -107,7 +108,7 @@ function loadStripeScript(): Promise<void> {
 }
 
 export default function Billing() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const [params] = useSearchParams();
   const navigate = useNavigate();
 
@@ -196,6 +197,18 @@ export default function Billing() {
     return () => window.clearTimeout(timer);
   }, [reload]);
 
+  // After an upgrade, the plan/limit/status live in several caches: the
+  // frontend GET cache (/api/profile, /api/accounts), the global auth user
+  // (`current_plan`, drives the whole app + Settings), and this page's billing
+  // data. Clear the GET cache and refetch all three so every surface — Settings
+  // storage limit, plan badge, the storage banner — reflects the new plan
+  // immediately. Stripe's activation webhook is async, so callers schedule a
+  // couple of attempts to catch it.
+  const refreshAfterUpgrade = useCallback(async () => {
+    invalidateGetCache();
+    await Promise.allSettled([reload(), refresh()]);
+  }, [reload, refresh]);
+
   // Warm-up: download Stripe.js + init `Stripe(publishableKey)` as soon
   // as we know the key. By the time the user clicks Subscribe, the only
   // remaining latency is the backend → Stripe round-trip plus Stripe's
@@ -239,6 +252,16 @@ export default function Billing() {
     }, 1500);
     return () => window.clearTimeout(handle);
   }, [loading, checkoutStatus, ownerType, navigate]);
+
+  // Returning from a successful checkout (hosted or inline redirect): refresh
+  // plan-derived data everywhere. Retry once after a few seconds since Stripe's
+  // activation webhook may not have landed when we first re-fetch.
+  useEffect(() => {
+    if (checkoutStatus !== "success") return;
+    void refreshAfterUpgrade();
+    const retry = window.setTimeout(() => void refreshAfterUpgrade(), 4000);
+    return () => window.clearTimeout(retry);
+  }, [checkoutStatus, refreshAfterUpgrade]);
 
   const currentPlanCode = sub?.subscription?.plan_code ?? null;
   // A personal account with no subscription row is implicitly on the free
@@ -382,9 +405,11 @@ export default function Billing() {
       setSubscribePlan(null);
       clearSubscribeElements();
       setPaymentSuccess("Subscription started — confirming with Stripe…");
-      window.setTimeout(() => {
-        void reload();
-      }, 1500);
+      // Two attempts: the first usually beats the webhook (shows the pending
+      // state), the second lands after activation so plan/limit/status settle
+      // across Settings, the plan badge, and the storage banner.
+      window.setTimeout(() => void refreshAfterUpgrade(), 1500);
+      window.setTimeout(() => void refreshAfterUpgrade(), 5000);
     } catch (err) {
       setSubscribeMessage(
         err instanceof Error ? err.message : "Could not complete payment",
