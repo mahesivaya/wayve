@@ -50,6 +50,13 @@ const PLAN_COPY: Record<string, { price: string; features: string[]; action?: st
 
 const PLAN_DISPLAY_ORDER = ["basic_user", "advance_user", "organization", "enterprise"];
 
+// Display titles for the Business & Enterprise section: the `organization` plan
+// is shown as "Business" so the two business tiers read as Business + Enterprise.
+const PLAN_TITLE: Record<string, string> = {
+  organization: "Business",
+  enterprise: "Enterprise",
+};
+
 function planDisplayRank(plan: Plan): number {
   const codeRank = PLAN_DISPLAY_ORDER.indexOf(plan.code);
   if (codeRank >= 0) return codeRank;
@@ -604,6 +611,76 @@ export default function Billing() {
   const canViewStripeDetails =
     user?.account_type === "platform_admin" && user?.effective_role === "owner";
 
+  // Personal plans stay under "Plans"; business/enterprise (audience
+  // "organization") render in their own section below.
+  const personalPlans = visiblePlans.filter((plan) => plan.audience === "personal");
+  const businessPlans = visiblePlans.filter(
+    (plan) => plan.audience === "organization",
+  );
+
+  const renderPlanCard = (plan: Plan) => {
+    const isCurrent = plan.code === effectiveCurrentCode;
+    const isFree = plan.amount_cents === 0;
+    const copy = PLAN_COPY[plan.code];
+    const isEnterprise = plan.code === "enterprise";
+    const isForOwner = plan.audience === ownerType;
+    const canBuy = isForOwner && !isCurrent && !isFree && !isEnterprise;
+    const busyHere = busy === `plan:${plan.code}`;
+    return (
+      <article
+        key={plan.id}
+        className={`billing-plan ${isCurrent ? "current" : ""}`}
+      >
+        <h3>{PLAN_TITLE[plan.code] ?? plan.name}</h3>
+        <p className="billing-plan-price">
+          {copy?.price ?? (isFree
+            ? "Free"
+            : `${formatMoney(plan.amount_cents, plan.currency)} / ${plan.billing_interval}`)}
+        </p>
+        {plan.description && (
+          <p className="billing-plan-desc">{plan.description}</p>
+        )}
+        <ul className="billing-plan-features">
+          {(copy?.features ?? [
+            `${formatBytes(plan.storage_limit_bytes)} storage`,
+            `${plan.seat_limit} seat${plan.seat_limit === 1 ? "" : "s"}`,
+          ]).map((feature) => <li key={feature}>{feature}</li>)}
+        </ul>
+        {isCurrent ? (
+          <button type="button" disabled>Active</button>
+        ) : isEnterprise ? (
+          <button type="button" onClick={() => navigate("/support")}>
+            Contact sales
+          </button>
+        ) : canBuy ? (
+          <button
+            type="button"
+            onClick={() => void subscribe(plan)}
+            disabled={busyHere}
+          >
+            {busyHere ? "Preparing…" : hasPaidPlan ? "Switch plan" : "Upgrade"}
+          </button>
+        ) : !isForOwner && ownerType === "personal" && plan.audience === "organization" ? (
+          // Personal users self-promote to an organization owner via
+          // the dedicated setup page (/organizations/new), which
+          // captures org name + place and lets them seed members
+          // before returning here to subscribe. We pass the plan
+          // code so the page can show "you started with X".
+          <button
+            type="button"
+            onClick={() => navigate(`/organizations/new?plan=${plan.code}`)}
+          >
+            Upgrade
+          </button>
+        ) : (
+          <button type="button" disabled>
+            {isForOwner ? "Free tier" : `Requires ${plan.audience} account`}
+          </button>
+        )}
+      </article>
+    );
+  };
+
   return (
     <div className="billing-page">
       <header className="billing-header">
@@ -847,73 +924,24 @@ export default function Billing() {
           </label>
         </div>
         <div className="billing-plan-grid">
-          {visiblePlans.map((plan) => {
-            const isCurrent = plan.code === effectiveCurrentCode;
-            const isFree = plan.amount_cents === 0;
-            const copy = PLAN_COPY[plan.code];
-            const isEnterprise = plan.code === "enterprise";
-            const isForOwner = plan.audience === ownerType;
-            const canBuy = isForOwner && !isCurrent && !isFree && !isEnterprise;
-            const busyHere = busy === `plan:${plan.code}`;
-            return (
-              <article
-                key={plan.id}
-                className={`billing-plan ${isCurrent ? "current" : ""}`}
-              >
-                <h3>{plan.name}</h3>
-                <p className="billing-plan-price">
-                  {copy?.price ?? (isFree
-                    ? "Free"
-                    : `${formatMoney(plan.amount_cents, plan.currency)} / ${plan.billing_interval}`)}
-                </p>
-                {plan.description && (
-                  <p className="billing-plan-desc">{plan.description}</p>
-                )}
-                <ul className="billing-plan-features">
-                  {(copy?.features ?? [
-                    `${formatBytes(plan.storage_limit_bytes)} storage`,
-                    `${plan.seat_limit} seat${plan.seat_limit === 1 ? "" : "s"}`,
-                  ]).map((feature) => <li key={feature}>{feature}</li>)}
-                </ul>
-                {isCurrent ? (
-                  <button type="button" disabled>Active</button>
-                ) : isEnterprise ? (
-                  <button type="button" onClick={() => navigate("/support")}>
-                    Contact sales
-                  </button>
-                ) : canBuy ? (
-                  <button
-                    type="button"
-                    onClick={() => void subscribe(plan)}
-                    disabled={busyHere}
-                  >
-                    {busyHere ? "Preparing…" : hasPaidPlan ? "Switch plan" : "Upgrade"}
-                  </button>
-                ) : !isForOwner && ownerType === "personal" && plan.audience === "organization" ? (
-                  // Personal users self-promote to an organization owner via
-                  // the dedicated setup page (/organizations/new), which
-                  // captures org name + place and lets them seed members
-                  // before returning here to subscribe. We pass the plan
-                  // code so the page can show "you started with X".
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/organizations/new?plan=${plan.code}`)}
-                  >
-                    Upgrade
-                  </button>
-                ) : (
-                  <button type="button" disabled>
-                    {isForOwner ? "Free tier" : `Requires ${plan.audience} account`}
-                  </button>
-                )}
-              </article>
-            );
-          })}
-          {visiblePlans.length === 0 && (
+          {personalPlans.map(renderPlanCard)}
+          {personalPlans.length === 0 && (
             <p className="billing-empty">No plans available.</p>
           )}
         </div>
       </section>
+
+      {/* ---- Business & Enterprise ---- */}
+      {businessPlans.length > 0 && (
+        <section className="billing-card">
+          <div className="billing-section-head">
+            <h2>Business &amp; Enterprise</h2>
+          </div>
+          <div className="billing-plan-grid">
+            {businessPlans.map(renderPlanCard)}
+          </div>
+        </section>
+      )}
 
       {canViewStripeDetails && (
         <section className="billing-card">
