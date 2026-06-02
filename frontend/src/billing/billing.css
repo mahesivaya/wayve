@@ -180,16 +180,22 @@
 .billing-section-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
   margin: 0 0 12px;
+  position: relative;
 }
 
 .billing-section-head h2 {
   margin: 0;
+  text-align: center;
 }
 
 .billing-autopay {
+  /* Keep the section title centered across the card; pin the AutoPay
+     control to the right so it doesn't offset the heading. */
+  position: absolute;
+  right: 0;
   display: inline-flex;
   align-items: center;
   gap: 8px;

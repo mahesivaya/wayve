@@ -670,7 +670,7 @@ export default function Billing() {
             type="button"
             onClick={() => navigate(`/organizations/new?plan=${plan.code}`)}
           >
-            Upgrade
+            Upgrade or Create account
           </button>
         ) : (
           <button type="button" disabled>
