@@ -75,8 +75,11 @@ const emailListPath = ({
   return `/api/emails?${params.toString()}`;
 };
 
+// Cached for 15s: the emails page (and its sidebar badge) fetch accounts on
+// every mount/navigation. deleteAccount / updateAccountDisplayName / OAuth
+// connect are non-GET, so they clear the GET cache and a fresh list loads.
 export const getAccounts = async <T = unknown>() =>
-  apiFetchJson<T[]>("/api/accounts");
+  apiFetchJson<T[]>("/api/accounts", { cacheTtlMs: 15_000 });
 
 // Total unread email count across all of the user's accounts. Backed by the
 // `idx_emails_unread` partial index, so this is cheap even on a huge inbox.

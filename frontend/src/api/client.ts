@@ -34,7 +34,35 @@ type ApiOptions =
 
     // Same, for 410 Gone — e.g. an expired secure-message token.
     preserve410?: boolean;
+
+    // Opt-in short-TTL response cache for GET requests, in milliseconds.
+    // When set and > 0, a successful GET is cached by URL and re-served
+    // (cloned) for repeat calls within the window — so remount-on-navigation
+    // doesn't refetch. Off by default. Any non-GET request clears the whole
+    // GET cache, so callers never see data stale past a mutation.
+    cacheTtlMs?: number;
   };
+
+// In-flight GET coalescing: identical concurrent GETs share one network
+// request. Staleness-free — only genuinely simultaneous calls share a result.
+const inflightGets = new Map<string, Promise<Response>>();
+
+// Opt-in short-TTL GET cache (see cacheTtlMs). Keyed the same as coalescing.
+const getCache = new Map<string, { res: Response; expires: number }>();
+
+/**
+ * Drop cached GET responses. With no argument, clears everything (what every
+ * mutation does automatically). Pass a substring to clear only matching URLs.
+ */
+export function invalidateGetCache(prefix?: string): void {
+  if (!prefix) {
+    getCache.clear();
+    return;
+  }
+  for (const key of getCache.keys()) {
+    if (key.includes(prefix)) getCache.delete(key);
+  }
+}
 
 export async function apiFetch(
   path: string,
@@ -42,15 +70,11 @@ export async function apiFetch(
 ) {
   const {
     auth = true,
-
     preserve401 = false,
-
     preserve404 = false,
-
     preserve410 = false,
-
+    cacheTtlMs,
     headers,
-
     ...rest
   } = options;
 
@@ -59,9 +83,22 @@ export async function apiFetch(
     ? path
     : `${getApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
 
-  let response: Response;
+  const method = (rest.method ?? "GET").toString().toUpperCase();
+  const isGet = method === "GET";
+  // Coalescing/cache key. Preserve flags fold in so two GETs to the same URL
+  // with different 404/410 handling never share a result.
+  const cacheKey = `${method} ${url}|${preserve401 ? 1 : 0}${preserve404 ? 1 : 0}${preserve410 ? 1 : 0}`;
 
-  try {
+  // Mutations invalidate the whole GET cache — a read after any write can
+  // never be stale past the mutation.
+  if (!isGet) invalidateGetCache();
+
+  // The actual network + status handling. Returns the success (or preserved
+  // 404/410) Response, or throws on error. Wrapped so GETs can coalesce/cache.
+  const run = async (): Promise<Response> => {
+    let response: Response;
+
+    try {
     response =
       await fetch(
         url,
@@ -228,6 +265,40 @@ export async function apiFetch(
   }
 
   return response;
+  };
+
+  // Non-GET: run directly — never coalesced or cached.
+  if (!isGet) {
+    return run();
+  }
+
+  // GET: serve a fresh cached response without touching the network.
+  if (cacheTtlMs && cacheTtlMs > 0) {
+    const hit = getCache.get(cacheKey);
+    if (hit && hit.expires > Date.now()) {
+      return hit.res.clone();
+    }
+  }
+
+  // Coalesce identical concurrent GETs onto one in-flight request.
+  let shared = inflightGets.get(cacheKey);
+  if (!shared) {
+    shared = run().finally(() => {
+      inflightGets.delete(cacheKey);
+    });
+    inflightGets.set(cacheKey, shared);
+  }
+  const response = await shared;
+
+  if (cacheTtlMs && cacheTtlMs > 0 && response.ok) {
+    getCache.set(cacheKey, {
+      res: response.clone(),
+      expires: Date.now() + cacheTtlMs,
+    });
+  }
+  // Every awaiter (including the first) gets its own clone, so the shared
+  // body is never consumed and stays re-readable by all callers.
+  return response.clone();
 }
 
 /**

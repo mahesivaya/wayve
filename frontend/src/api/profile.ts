@@ -13,8 +13,11 @@ export type ProfileData = {
   organization_name?: string | null;
 };
 
+// Cached for 30s: /profile and /settings both call this and remount on
+// navigation. updateProfile/changePassword are non-GET, so they clear the
+// GET cache — the form never shows stale name/storage data after a save.
 export const getProfile = async () =>
-  apiFetchJson<ProfileData>("/api/profile");
+  apiFetchJson<ProfileData>("/api/profile", { cacheTtlMs: 30_000 });
 
 export const updateProfile = async (data: {
   first_name: string;

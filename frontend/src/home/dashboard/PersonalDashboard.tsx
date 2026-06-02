@@ -8,6 +8,7 @@ import {
   type TaskPreview,
 } from "../../api/home";
 import { getEmails, markEmailRead } from "../../api/email";
+import { loadCached, saveCached } from "./useCardData";
 
 // Persists the ids of emails we've just opened from this card so the
 // next mount of the home page applies the read state immediately,
@@ -105,10 +106,22 @@ export default function PersonalDashboard() {
   const { user } = useAuth();
   const firstName = user?.email?.split("@")[0] ?? "there";
 
-  const [meetings, setMeetings] = useState<MeetingPreview[] | null>(null);
-  const [tasks, setTasks] = useState<TaskPreview[] | null>(null);
-  const [emails, setEmails] = useState<EmailItem[] | null>(null);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
+  // Seed from sessionStorage so a return visit to /home paints instantly;
+  // the mount fetch below still runs and refreshes in the background (same
+  // behaviour as ActivityDashboard). Keys are namespaced "personal.*" so they
+  // don't collide with ActivityDashboard's differently-shaped card snapshots.
+  const [meetings, setMeetings] = useState<MeetingPreview[] | null>(() =>
+    loadCached<MeetingPreview[]>("personal.meetings"),
+  );
+  const [tasks, setTasks] = useState<TaskPreview[] | null>(() =>
+    loadCached<TaskPreview[]>("personal.tasks"),
+  );
+  const [emails, setEmails] = useState<EmailItem[] | null>(() =>
+    loadCached<EmailItem[]>("personal.emails"),
+  );
+  const [unreadCount, setUnreadCount] = useState<number>(
+    () => loadCached<EmailItem[]>("personal.emails")?.filter((e) => !e.is_read).length ?? 0,
+  );
   const [meetingsErr, setMeetingsErr] = useState<string | null>(null);
   const [tasksErr, setTasksErr] = useState<string | null>(null);
   const [emailsErr, setEmailsErr] = useState<string | null>(null);
@@ -118,7 +131,9 @@ export default function PersonalDashboard() {
 
     getHomeToday()
       .then((data) => {
-        if (!cancelled) setMeetings(data.events);
+        if (cancelled) return;
+        setMeetings(data.events);
+        saveCached("personal.meetings", data.events);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -129,7 +144,9 @@ export default function PersonalDashboard() {
 
     getHomeTasks()
       .then((data) => {
-        if (!cancelled) setTasks(data.top);
+        if (cancelled) return;
+        setTasks(data.top);
+        saveCached("personal.tasks", data.top);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -153,6 +170,7 @@ export default function PersonalDashboard() {
                 : email,
             );
         setEmails(merged);
+        saveCached("personal.emails", merged);
         // Lower-bound unread count from the loaded page.
         setUnreadCount(merged.filter((e) => !e.is_read).length);
       })

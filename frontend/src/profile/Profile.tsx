@@ -7,7 +7,26 @@ import "./profile.css";
 
 export default function Profile() {
   const { user } = useAuth();
-  const [profile, setProfile] = useState<ProfileData | null>(null);
+  // Seed from AuthContext (already in memory from /api/me) so the header
+  // paints instantly on first visit. getProfile() then fills the fields
+  // /api/me doesn't carry (first/last name, auth_provider) — and it's cached,
+  // so renavigating to /profile within the TTL makes no network call.
+  const [profile, setProfile] = useState<ProfileData | null>(() =>
+    user
+      ? {
+          id: user.id,
+          email: user.email,
+          first_name: null,
+          last_name: null,
+          auth_provider: "", // placeholder; overwritten by getProfile()
+          account_type: user.account_type ?? undefined,
+          effective_role: user.effective_role ?? null,
+          role_label: user.role_label ?? null,
+          organization_id: user.organization_id ?? null,
+          organization_name: user.organization_name ?? null,
+        }
+      : null,
+  );
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [saving, setSaving] = useState(false);
