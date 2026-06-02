@@ -42,6 +42,8 @@ const OrganizationMembers = lazy(() => import("./organization/OrganizationMember
 const PlatformAdminHome = lazy(() => import("./organization/PlatformAdminHome"));
 const PlatformOrganizations = lazy(() => import("./organization/PlatformOrganizations"));
 const PlatformOrganizationDetail = lazy(() => import("./organization/PlatformOrganizationDetail"));
+const PlatformUsers = lazy(() => import("./organization/PlatformUsers"));
+const PlatformEnterprises = lazy(() => import("./organization/PlatformEnterprises"));
 const PlatformMembers = lazy(() => import("./organization/PlatformMembers"));
 const OrganizationHome = lazy(() => import("./organization/OrganizationHome"));
 const EmailFiles = lazy(() => import("./files/EmailFiles"));
@@ -272,6 +274,8 @@ export default function App() {
             <Route path="/organizations/new" element={<CreateOrganization />} />
             <Route path="/platform/organizations" element={<PlatformOrganizations />} />
             <Route path="/platform/organizations/:id" element={<PlatformOrganizationDetail />} />
+            <Route path="/platform/users" element={<PlatformUsers />} />
+            <Route path="/platform/enterprise" element={<PlatformEnterprises />} />
             <Route path="/platform/members" element={<PlatformMembers />} />
             <Route path="/platform/billing" element={<PlatformBilling />} />
             <Route path="/platform/developer" element={<PlatformDeveloper />} />

@@ -9,6 +9,7 @@ import "./platformAdmin.css";
 // permission catalog; cards the user can't see are filtered out before
 // render, so the grid only ever holds entries the user can actually open.
 type ConsoleCard = {
+  key: string;
   label: string;
   description: string;
   path: string;
@@ -39,13 +40,44 @@ export default function PlatformAdminHome() {
 
   const consoles: ConsoleCard[] = [
     {
-      label: "Organizations",
+      key: "users",
+      label: "Users",
+      description: "Browse the total number of users registered on the platform.",
+      path: "/platform/users",
+      visible: canSeeAnalytics,
+    },
+    {
+      key: "business",
+      label: "Business",
       description:
-        "Create tenants, browse existing organizations and manage their API keys.",
+        "Create tenants, browse existing business organizations and manage their API keys.",
       path: "/platform/organizations",
       visible: canSeeOrganizations,
     },
     {
+      key: "enterprise",
+      label: "Enterprise",
+      description: "Browse all enterprises provisioned on the platform.",
+      path: "/platform/enterprise",
+      visible: canSeeOrganizations,
+    },
+    {
+      key: "billing",
+      label: "Billing",
+      description: "Revenue, customer subscriptions, invoices and payroll.",
+      path: "/platform/billing",
+      visible: canSeePlatformBilling,
+    },
+    {
+      key: "plans",
+      label: "Plans & pricing",
+      description:
+        "Create, edit and deactivate the plans shown on /pricing. Set price, storage, notes and Stripe price IDs.",
+      path: "/settings/plans",
+      visible: canManagePlans,
+    },
+    {
+      key: "members",
       label: "Members & roles",
       description:
         "Provision platform team accounts and adjust their role assignments.",
@@ -53,52 +85,69 @@ export default function PlatformAdminHome() {
       visible: canSeeMembers,
     },
     {
-      label: "Billing",
-      description: "Revenue, customer subscriptions, invoices and payroll.",
-      path: "/platform/billing",
-      visible: canSeePlatformBilling,
-    },
-    {
+      key: "support",
       label: "Support",
       description: "In-app tickets and shared-inbox queue.",
       path: "/platform/support",
       visible: canSeeSupport,
     },
     {
-      label: "Analytics",
-      description: "Users, tenants, signups and connected mailboxes at a glance.",
-      path: "/platform/analytics",
-      visible: canSeeAnalytics,
-    },
-    {
+      key: "developer",
       label: "Developer",
       description: "API keys, audit traffic, webhooks and integrations.",
       path: "/platform/developer",
       visible: canSeeDeveloper,
     },
     {
+      key: "analytics",
+      label: "Analytics",
+      description: "Users, tenants, signups and connected mailboxes at a glance.",
+      path: "/platform/analytics",
+      visible: canSeeAnalytics,
+    },
+    {
+      key: "security",
       label: "Security",
       description: "Audit logs, outcome filters and SIEM webhook forwarding.",
       path: "/security/audit",
       visible: canSeeSecurity,
     },
     {
+      key: "scim",
       label: "SCIM provisioning",
       description: "Mint bearer tokens so Okta / Entra can provision users.",
       path: "/settings/scim",
       visible: canSeeScim,
     },
-    {
-      label: "Plans & pricing",
-      description:
-        "Create, edit and deactivate the plans shown on /pricing. Set price, storage, notes and Stripe price IDs.",
-      path: "/settings/plans",
-      visible: canManagePlans,
-    },
   ];
 
-  const visibleConsoles = consoles.filter((c) => c.visible);
-  const hasAnyConsole = visibleConsoles.length > 0;
+  // Explicit dashboard layout, one inner array per row:
+  //   1. Users · Business · Enterprise
+  //   2. Billing · Plans & pricing
+  //   3. Members · Support · Developer
+  // Anything not named here (Analytics, Security, SCIM, …) flows into
+  // trailing rows of up to three. Hidden (no-permission) cards drop out
+  // and empty rows are skipped, so non-owner roles still get a tidy grid.
+  const byKey = new Map(
+    consoles.filter((c) => c.visible).map((c) => [c.key, c]),
+  );
+  const ROW_KEYS: string[][] = [
+    ["users", "business", "enterprise"],
+    ["billing", "plans"],
+    ["members", "support", "developer"],
+  ];
+  const namedKeys = new Set(ROW_KEYS.flat());
+
+  const rows: ConsoleCard[][] = ROW_KEYS.map((keys) =>
+    keys.map((k) => byKey.get(k)).filter((c): c is ConsoleCard => Boolean(c)),
+  ).filter((row) => row.length > 0);
+
+  const remaining = consoles.filter((c) => c.visible && !namedKeys.has(c.key));
+  for (let i = 0; i < remaining.length; i += 3) {
+    rows.push(remaining.slice(i, i + 3));
+  }
+
+  const hasAnyConsole = rows.length > 0;
 
   // Enter / Space keyboard activation so the article behaves like a
   // button for screen-reader + keyboard users. `event.preventDefault`
@@ -135,20 +184,27 @@ export default function PlatformAdminHome() {
               <p>Role-specific dashboards across the platform team.</p>
             </div>
           </div>
-          <div className="organization-name-list platform-console-list">
-            {visibleConsoles.map((c) => (
-              <article
-                key={c.path}
-                className="u-card-interactive"
-                role="button"
-                tabIndex={0}
-                aria-label={`Open ${c.label}`}
-                onClick={() => navigate(c.path)}
-                onKeyDown={(event) => handleCardKeyDown(event, c.path)}
+          <div className="platform-console-rows">
+            {rows.map((row, rowIdx) => (
+              <div
+                key={rowIdx}
+                className={`organization-name-list platform-console-list platform-console-row platform-console-row--${row.length}`}
               >
-                <strong>{c.label}</strong>
-                <span>{c.description}</span>
-              </article>
+                {row.map((c) => (
+                  <article
+                    key={c.path}
+                    className="u-card-interactive"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open ${c.label}`}
+                    onClick={() => navigate(c.path)}
+                    onKeyDown={(event) => handleCardKeyDown(event, c.path)}
+                  >
+                    <strong>{c.label}</strong>
+                    <span>{c.description}</span>
+                  </article>
+                ))}
+              </div>
             ))}
           </div>
         </section>

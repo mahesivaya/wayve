@@ -180,23 +180,9 @@ export default function PlatformOrganizations() {
 
   return (
     <div className="platform-admin-home u-page-shell">
-      <div className="platform-admin-header u-panel u-flex-between">
-        <div>
-          <h1>Organizations</h1>
-          <p>Provision new tenants and manage their programmatic API keys.</p>
-        </div>
-        <Link to="/platform/home" className="u-btn-primary">
-          ← Back to platform home
-        </Link>
-      </div>
-
       {canManageMembers && (
         <section className="platform-admin-panel u-panel">
           <div className="platform-admin-section-header">
-            <div>
-              <h2>Create organization</h2>
-              <p>Add a new organization and provision its primary administrator account.</p>
-            </div>
             {!showCreateForm && (
               <button
                 type="button"

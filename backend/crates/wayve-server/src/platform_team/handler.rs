@@ -6,7 +6,8 @@ use tracing::instrument;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(developer_summary)
-        .service(support_summary);
+        .service(support_summary)
+        .service(users_summary);
 }
 
 async fn gate(
@@ -328,5 +329,50 @@ pub async fn support_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppRe
         "top_organizations": top_orgs_json,
         "recent_signups": signups_json,
         "open_inbox_queue": inbox_json,
+    })))
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Users
+// ──────────────────────────────────────────────────────────────────────
+
+#[get("/platform-team/users-summary")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn users_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    if let Err(resp) = gate(&req, pool.get_ref(), Permission::MembersRead).await {
+        return Ok(resp);
+    }
+
+    // Platform-wide rollups. Storage mirrors the per-user breakdown in
+    // routes/user/profile.rs (drive files + email bodies + chat + notes +
+    // tasks) summed across every user, so the number here matches the sum of
+    // what each user sees on their own profile.
+    let row = sqlx::query(
+        r#"
+        SELECT
+          (SELECT COUNT(*) FROM users)::BIGINT AS users_total,
+          (SELECT COUNT(*) FROM users
+             WHERE created_at >= NOW() - INTERVAL '1 month')::BIGINT AS users_new_1m,
+          (SELECT COUNT(*) FROM users
+             WHERE created_at >= NOW() - INTERVAL '1 year')::BIGINT AS users_new_1y,
+          (SELECT COUNT(*) FROM emails)::BIGINT AS emails_total,
+          (
+            (SELECT COALESCE(SUM(size), 0)::BIGINT FROM drive_files)
+          + (SELECT COALESCE(SUM(octet_length(body_encrypted)), 0)::BIGINT FROM emails)
+          + (SELECT COALESCE(SUM(octet_length(content_encrypted)), 0)::BIGINT FROM messages)
+          + (SELECT COALESCE(SUM(octet_length(coalesce(content_encrypted, content, ''))), 0)::BIGINT FROM notes)
+          + (SELECT COALESCE(SUM(octet_length(name) + octet_length(coalesce(description, ''))), 0)::BIGINT FROM tasks)
+          )::BIGINT AS storage_used_bytes
+        "#,
+    )
+    .fetch_one(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "users_total": row.try_get::<i64, _>("users_total").unwrap_or(0),
+        "users_new_1m": row.try_get::<i64, _>("users_new_1m").unwrap_or(0),
+        "users_new_1y": row.try_get::<i64, _>("users_new_1y").unwrap_or(0),
+        "emails_total": row.try_get::<i64, _>("emails_total").unwrap_or(0),
+        "storage_used_bytes": row.try_get::<i64, _>("storage_used_bytes").unwrap_or(0),
     })))
 }

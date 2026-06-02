@@ -99,6 +99,20 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
             o.slug,
             o.created_at,
             COUNT(u.id) AS user_count,
+            (SELECT COUNT(*)::BIGINT FROM email_accounts ea
+             JOIN users eu ON eu.id = ea.user_id
+             WHERE eu.organization_id = o.id) AS email_account_count,
+            (
+              (SELECT COALESCE(SUM(f.size), 0)::BIGINT FROM drive_files f
+               JOIN users fu ON fu.id = f.user_id WHERE fu.organization_id = o.id)
+            + (SELECT COALESCE(SUM(octet_length(e.body_encrypted)), 0)::BIGINT FROM emails e
+               JOIN email_accounts ea ON ea.id = e.account_id
+               JOIN users eu ON eu.id = ea.user_id WHERE eu.organization_id = o.id)
+            + (SELECT COALESCE(SUM(octet_length(m.content_encrypted)), 0)::BIGINT FROM messages m
+               JOIN users mu ON mu.id = m.sender_id WHERE mu.organization_id = o.id)
+            + (SELECT COALESCE(SUM(octet_length(coalesce(n.content_encrypted, n.content, ''))), 0)::BIGINT FROM notes n
+               JOIN users nu ON nu.id = n.user_id WHERE nu.organization_id = o.id)
+            )::BIGINT AS storage_used_bytes,
             (SELECT json_build_object('id', u2.id, 'email', u2.email)
              FROM users u2
              WHERE u2.organization_id = o.id AND u2.account_type = 'organization_admin'
@@ -119,6 +133,8 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
             let name: String = row.get("name");
             let slug: Option<String> = row.get("slug");
             let user_count: i64 = row.get("user_count");
+            let email_account_count: i64 = row.try_get("email_account_count").unwrap_or(0);
+            let storage_used_bytes: i64 = row.try_get("storage_used_bytes").unwrap_or(0);
             let admin: Option<serde_json::Value> = row.get("admin");
 
             serde_json::json!({
@@ -126,6 +142,8 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
                 "name": name,
                 "slug": slug,
                 "user_count": user_count,
+                "email_account_count": email_account_count,
+                "storage_used_bytes": storage_used_bytes,
                 "admin": admin
             })
         })

@@ -95,6 +95,65 @@
   overflow-wrap: anywhere;
 }
 
+/* Stat variant: name on top, per-enterprise usage figures below. */
+.organization-grid--stats {
+  margin-top: 16px;
+}
+
+.organization-grid-tile--stats {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 8px;
+  text-align: left;
+}
+
+.organization-tile-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Big-number stat blocks (Users page). Single block or a responsive grid. */
+.platform-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.platform-stat-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.platform-stat-value {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--color-primary-action);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.platform-stat-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
 .organization-detail-welcome {
   padding: 24px 8px;
   text-align: center;
@@ -179,6 +238,39 @@
   line-height: 1.45;
   overflow-wrap: anywhere;
   white-space: normal;
+}
+
+/* Explicit row layout for the console grid. Each row is its own grid so the
+   dashboard reads as fixed rows (Users·Business·Enterprise / Billing·Plans /
+   …) instead of a single auto-flowing block. Partial rows are width-capped to
+   the same column track so cards stay aligned with the rows above them. */
+.platform-console-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.platform-console-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.platform-console-row--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: calc(66.666% - 8px);
+}
+
+.platform-console-row--1 {
+  grid-template-columns: minmax(0, 1fr);
+  width: calc(33.333% - 8px);
+}
+
+@media (max-width: 720px) {
+  .platform-console-row,
+  .platform-console-row--2,
+  .platform-console-row--1 {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
 }
 
 .platform-admin-logs {

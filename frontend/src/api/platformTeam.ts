@@ -94,3 +94,14 @@ export const getDeveloperSummary = () =>
 
 export const getSupportSummary = () =>
   apiFetchJson<SupportSummary>("/api/platform-team/support-summary");
+
+export type UsersSummary = {
+  users_total: number;
+  users_new_1m: number;
+  users_new_1y: number;
+  emails_total: number;
+  storage_used_bytes: number;
+};
+
+export const getUsersSummary = () =>
+  apiFetchJson<UsersSummary>("/api/platform-team/users-summary");

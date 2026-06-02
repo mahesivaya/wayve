@@ -13,6 +13,8 @@ export type AdminOrganization = {
   name: string;
   slug?: string | null;
   user_count: number;
+  email_account_count?: number;
+  storage_used_bytes?: number;
   admin?: AdminCreatedUser | null;
 };
 
