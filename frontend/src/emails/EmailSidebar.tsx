@@ -111,7 +111,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
                     className="account-unread-count"
                     aria-label={`${total} unread emails across all accounts`}
                   >
-                    {total > 99 ? "99+" : total}
+                    {total}
                   </span>
                 ) : null;
               })()}
