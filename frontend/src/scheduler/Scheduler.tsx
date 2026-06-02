@@ -613,10 +613,6 @@ export default function Scheduler() {
             queueDefaultTimeScroll("week");
           }}>Week</button>
           <button onClick={() => setView("month")}>Month</button>
-
-          <button className="create-btn" onClick={() => openCreate()}>
-            ➕ Schedule
-          </button>
         </div>
 
 
