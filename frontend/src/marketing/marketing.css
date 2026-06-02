@@ -434,6 +434,11 @@
      three columns, which wrapped Account onto a second row. */
   grid-template-columns: 2fr 1fr 1fr 1fr;
   gap: 2rem;
+  /* The columns were inheriting a centered text-align from the marketing
+     page wrapper, so the headings + brand copy rendered centered while the
+     link buttons (text-align:left) stayed left — that mismatch is the bug.
+     Pin the footer grid left so headings, brand text, and links line up. */
+  text-align: left;
 }
 
 .marketing-footer-inner strong {

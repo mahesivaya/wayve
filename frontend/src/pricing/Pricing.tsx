@@ -191,8 +191,44 @@ const PUBLIC_TIERS: PublicTier[] = [
   },
 ];
 
+// Which public tiers belong to the "Personal" section; the rest fall under
+// "Business & Enterprise". Mirrors the grouped layout of the logged-in
+// (personal-account) pricing page.
+const PUBLIC_PERSONAL_IDS = ["basic", "advance", "more-advance"];
+
 function PublicPricing() {
   const navigate = useNavigate();
+  const personalTiers = PUBLIC_TIERS.filter((tier) =>
+    PUBLIC_PERSONAL_IDS.includes(tier.id),
+  );
+  const businessTiers = PUBLIC_TIERS.filter(
+    (tier) => !PUBLIC_PERSONAL_IDS.includes(tier.id),
+  );
+
+  const renderTier = (tier: PublicTier) => (
+    <article key={tier.id} className="pricing-plan">
+      <h3>{tier.name}</h3>
+      <p className="pricing-plan-price">
+        {tier.price}
+        {tier.interval && (
+          <span className="pricing-plan-interval"> / {tier.interval}</span>
+        )}
+      </p>
+      <p className="pricing-plan-desc">{tier.tagline}</p>
+      <ul className="pricing-plan-features">
+        {tier.features.map((feature) => (
+          <li key={feature}>{feature}</li>
+        ))}
+      </ul>
+      <button
+        className="pricing-plan-cta"
+        onClick={() => navigate("/register")}
+      >
+        {tier.cta}
+      </button>
+    </article>
+  );
+
   return (
     <MarketingShell>
       <div className="pricing-page">
@@ -205,31 +241,17 @@ function PublicPricing() {
         </header>
 
         <section className="pricing-section">
-          <div className="pricing-grid">
-            {PUBLIC_TIERS.map((tier) => (
-              <article key={tier.id} className="pricing-plan">
-                <h3>{tier.name}</h3>
-                <p className="pricing-plan-price">
-                  {tier.price}
-                  {tier.interval && (
-                    <span className="pricing-plan-interval"> / {tier.interval}</span>
-                  )}
-                </p>
-                <p className="pricing-plan-desc">{tier.tagline}</p>
-                <ul className="pricing-plan-features">
-                  {tier.features.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-                <button
-                  className="pricing-plan-cta"
-                  onClick={() => navigate("/register")}
-                >
-                  {tier.cta}
-                </button>
-              </article>
-            ))}
-          </div>
+          <h2>Personal</h2>
+          <p className="pricing-section-sub">For individual accounts.</p>
+          <div className="pricing-grid">{personalTiers.map(renderTier)}</div>
+        </section>
+
+        <section className="pricing-section">
+          <h2>Business &amp; Enterprise</h2>
+          <p className="pricing-section-sub">
+            For teams and organizations of any size.
+          </p>
+          <div className="pricing-grid">{businessTiers.map(renderTier)}</div>
         </section>
       </div>
     </MarketingShell>
