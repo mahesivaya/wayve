@@ -9,6 +9,7 @@ import ProfileMenu from "./ProfileMenu";
 import SupportModal from "../support/SupportModal";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
+import StorageLimitBanner from "./StorageLimitBanner";
 import "./Layout.css";
 
 // Shared bug-report glyph — amber warning triangle with a dark `!`.
@@ -510,6 +511,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <ProfileMenu />
         </div>
       </div>
+
+      <StorageLimitBanner onUpgrade={goToUpgrade} />
 
       {/* 🔥 BODY */}
       <div className="body">

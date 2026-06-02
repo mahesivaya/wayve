@@ -5,6 +5,7 @@ use super::shared::{
     PROFILE_CACHE, current_plan_for_user, display_organization_name, effective_access_for_user,
     fallback_access, invalidate_profile_cache,
 };
+use crate::billing::{entitlements::effective_entitlements, resolve_owner};
 use crate::email::profile::invalidate_me_cache;
 use crate::models::auth::ChangePasswordInput;
 use crate::models::email_request::UserResponse;
@@ -153,6 +154,23 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                     }
                 };
 
+            // Real plan storage limit from entitlements (1 GiB free, 10 GiB
+            // advance, -1 = unlimited for org/enterprise) instead of a hardcoded
+            // value. On a transient owner-resolution error, fall back to -1
+            // (the client treats <= 0 as unlimited) so a DB hiccup never shows a
+            // false "storage full" alert.
+            let memory_limit_bytes = match resolve_owner(pool.get_ref(), id).await {
+                Ok(owner) => {
+                    effective_entitlements(pool.get_ref(), owner)
+                        .await
+                        .storage_limit_bytes
+                }
+                Err(e) => {
+                    warn!(target: "db", user_id = id, error = ?e, "owner resolve failed for storage limit");
+                    -1
+                }
+            };
+
             let response = serde_json::json!({
                 "id": id,
                 "email": email,
@@ -173,7 +191,7 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 "drive_storage_bytes": drive_storage_bytes,
                 "other_storage_bytes": chat_storage_bytes + notes_storage_bytes + tasks_storage_bytes,
                 "memory_used_bytes": total_used,
-                "memory_limit_bytes": 10_737_418_240_i64, // 10 GB limit
+                "memory_limit_bytes": memory_limit_bytes,
                 "recovery_mode": recovery_mode,
             });
 

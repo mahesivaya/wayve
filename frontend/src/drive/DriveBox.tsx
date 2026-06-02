@@ -198,6 +198,10 @@ export default function Drive() {
       setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
     } finally {
       setUploading(false);
+      // Nudge the global storage banner to re-check usage — storage went up on
+      // a successful upload, or the limit was hit on a 402. Matches
+      // StorageLimitBanner's STORAGE_CHANGED_EVENT name.
+      window.dispatchEvent(new Event("rwayve:storage-changed"));
     }
   };
 

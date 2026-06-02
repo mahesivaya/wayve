@@ -1,0 +1,58 @@
+/* App-wide storage-limit alert. Mounted in Layout above the body so it spans
+   the full width across every authed page. Warning = amber, critical = red. */
+.storage-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--color-warning-soft, #fff7ed);
+  border-bottom: 1px solid var(--color-warning-border, #fdba74);
+  color: var(--color-warning-strong, #9a3412);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.storage-alert.is-critical {
+  background: var(--color-danger-soft, #fef2f2);
+  border-bottom-color: var(--color-danger-border, #fca5a5);
+  color: var(--color-danger-strong, #991b1b);
+}
+
+.storage-alert-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.storage-alert-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.storage-alert-upgrade {
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  padding: 7px 14px;
+  background: var(--color-primary-action, #4f46e5);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.storage-alert-upgrade:hover {
+  filter: brightness(0.95);
+}
+
+.storage-alert-dismiss {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}

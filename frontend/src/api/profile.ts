@@ -11,6 +11,15 @@ export type ProfileData = {
   role_label?: string | null;
   organization_id?: number | null;
   organization_name?: string | null;
+  // Storage usage vs the plan's limit. `memory_limit_bytes` <= 0 means
+  // unlimited (org/enterprise). Powers the Settings storage row and the
+  // global StorageLimitBanner.
+  total_emails?: number;
+  email_storage_bytes?: number;
+  drive_storage_bytes?: number;
+  other_storage_bytes?: number;
+  memory_used_bytes?: number;
+  memory_limit_bytes?: number;
 };
 
 // Cached for 30s: /profile and /settings both call this and remount on
