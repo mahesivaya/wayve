@@ -2,7 +2,6 @@ import { useAuth } from "../auth/useAuth";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { SERVICES } from "../services/serviceData";
-import ThemeToggle from "../theme/ThemeToggle";
 import ActivityDashboard from "./dashboard/ActivityDashboard";
 import PersonalDashboard from "./dashboard/PersonalDashboard";
 import { APP_TIME_ZONE } from "../utils/datetime";
@@ -59,7 +58,6 @@ export default function Home() {
           </nav>
 
           <div className="public-home-actions">
-            <ThemeToggle />
             <button className="home-login-btn" onClick={() => navigate("/login")}>
               Login
             </button>
@@ -131,10 +129,7 @@ export default function Home() {
             <div className="hero-copy">
               <p className="hero-kicker">Private workspace for modern teams</p>
               <h1>One home for email, chat, calls, files, notes, and AI.</h1>
-              <p>
-                Wayve brings daily work tools into a single secure app, with fast
-                switching between personal productivity and team collaboration.
-              </p>
+              <p>Your daily work tools in a single secure app.</p>
               <div className="hero-actions">
                 <button onClick={() => navigate("/register")}>Get started</button>
                 <button onClick={() => navigate("/login")}>Sign in</button>
@@ -157,12 +152,7 @@ export default function Home() {
 
           <section className="home-info-band">
             <h2>Built for fast, secure, scalable work</h2>
-            <p>
-              Three promises shape every decision behind Wayve: get things
-              done in seconds, keep your work private by default, and grow
-              with you from one user to a whole organization. Here&apos;s
-              what that looks like in practice.
-            </p>
+            <p>Fast to use, private by default, and ready to grow with you.</p>
           </section>
 
           <section className="home-pillars">
@@ -171,31 +161,20 @@ export default function Home() {
                 <span className="home-pillar-icon">⚡</span>
                 <h3>Fast — one place to get work done</h3>
               </header>
-              <p>
-                Stop hopping between five tools to send an email, ping a
-                teammate, share a file, and book a meeting. Wayve puts every
-                daily action one click away on the same screen.
-              </p>
+              <p>Every daily action one click away on the same screen.</p>
               <ul className="home-pillar-features">
                 <li>
-                  <strong>One workspace for everything.</strong> Email, chat,
-                  calls, scheduler, drive, notes, tasks, and AI assistant —
-                  no tab juggling, no app sprawl.
+                  <strong>One workspace for everything.</strong> Mail, chat,
+                  calls, files, notes, tasks, and AI.
                 </li>
                 <li>
-                  <strong>Side-by-side apps.</strong> Open Chat next to Email,
-                  or Drive next to Notes, without leaving the page you&apos;re
-                  on.
+                  <strong>Side-by-side apps.</strong> Open two tools at once.
                 </li>
                 <li>
-                  <strong>Lightning-fast loads.</strong> The app only
-                  downloads what you&apos;re using, so the first open takes
-                  seconds and the rest feels instant.
+                  <strong>Lightning-fast loads.</strong> Opens in seconds.
                 </li>
                 <li>
-                  <strong>Real-time everything.</strong> Messages, mail
-                  updates, and meeting changes appear live — no refresh
-                  button, no waiting.
+                  <strong>Real-time everything.</strong> Updates appear live.
                 </li>
               </ul>
             </article>
@@ -205,38 +184,22 @@ export default function Home() {
                 <span className="home-pillar-icon">🛡️</span>
                 <h3>Secure — privacy is the default, not a feature</h3>
               </header>
-              <p>
-                Most platforms store your data in the clear and call security
-                a premium add-on. Wayve flips that: your conversations and
-                files are encrypted before they leave your device, and access
-                is checked on every single action.
-              </p>
+              <p>Your conversations and files are encrypted by default.</p>
               <ul className="home-pillar-features">
                 <li>
-                  <strong>End-to-end encrypted chat.</strong> Messages are
-                  locked on your device before anyone sees them — not even
-                  Wayve can read your conversations.
+                  <strong>End-to-end encrypted chat.</strong> Only you can read it.
                 </li>
                 <li>
-                  <strong>Files encrypted at rest.</strong> Industry-standard
-                  256-bit encryption protects every uploaded file on our
-                  servers.
+                  <strong>Files encrypted at rest.</strong> 256-bit encryption.
                 </li>
                 <li>
-                  <strong>Sign in the way you want.</strong> Email and
-                  password, Google, or Microsoft — with one-hour password
-                  reset links and rate-limited login attempts.
+                  <strong>Sign in your way.</strong> Email, Google, or Microsoft.
                 </li>
                 <li>
-                  <strong>Granular roles.</strong> Nine permission levels
-                  (Owner, Admin, Security, Billing, Developer, Support,
-                  Member, Guest, and more) so the right people see the right
-                  things.
+                  <strong>Granular roles.</strong> Fine-grained access control.
                 </li>
                 <li>
-                  <strong>Audit-ready.</strong> Every service API call is
-                  logged, every role change recorded, every key has an
-                  expiry. Compliance teams love this.
+                  <strong>Audit-ready.</strong> Every action is logged.
                 </li>
               </ul>
             </article>
@@ -246,36 +209,22 @@ export default function Home() {
                 <span className="home-pillar-icon">📈</span>
                 <h3>Scalable — grow without rebuilding</h3>
               </header>
-              <p>
-                A workspace that suits one person on day one shouldn&apos;t
-                need a migration when you become twenty, or two hundred.
-                Wayve is designed so your account, your team, and your bills
-                grow on the same rails.
-              </p>
+              <p>From one user to a whole organization on the same rails.</p>
               <ul className="home-pillar-features">
                 <li>
-                  <strong>Start free, upgrade later.</strong> Basic plan
-                  forever; bump up only when you need more storage, more
-                  seats, or more AI.
+                  <strong>Start free, upgrade later.</strong> Pay when you grow.
                 </li>
                 <li>
-                  <strong>Solo → team → organization.</strong> Add teammates
-                  with one invite; promote to an organization workspace
-                  whenever you&apos;re ready — same data, same login.
+                  <strong>Solo → team → organization.</strong> Same data, same login.
                 </li>
                 <li>
-                  <strong>Bring your existing mail.</strong> Connect Gmail or
-                  Outlook in two clicks; more providers (IMAP, custom
-                  domains) on the way without breaking anything.
+                  <strong>Bring your existing mail.</strong> Connect Gmail or Outlook.
                 </li>
                 <li>
-                  <strong>Build on Wayve.</strong> Service API keys with
-                  scoped access let your other tools talk to Wayve safely.
+                  <strong>Build on Wayve.</strong> Scoped service API keys.
                 </li>
                 <li>
-                  <strong>Billing that just works.</strong> Powered by
-                  Stripe — switch plans any time, prorated automatically, no
-                  surprises on the invoice.
+                  <strong>Billing that just works.</strong> Powered by Stripe.
                 </li>
               </ul>
             </article>
@@ -306,55 +255,31 @@ export default function Home() {
 
           <section className="home-info-band">
             <h2>Who Wayve is for</h2>
-            <p>
-              From a freelancer juggling clients to an organization scaling
-              past a hundred employees — the same workspace adapts to where
-              you are.
-            </p>
+            <p>One workspace that adapts from solo to organization.</p>
           </section>
 
           <section className="home-roles-grid">
             <article>
               <h3>🚀 Founders &amp; freelancers</h3>
-              <p>
-                Run your whole business from one tab. Mail for clients,
-                scheduler for meetings, drive for deliverables, AI assistant
-                for drafts — without paying for five different SaaS bills.
-              </p>
+              <p>Run your whole business from one tab.</p>
             </article>
             <article>
               <h3>👥 Small teams (2–20)</h3>
-              <p>
-                Replace Slack, Zoom, Gmail, Drive, and Notion with one
-                login. Shared channels, side-by-side apps, encrypted DMs,
-                and team-wide file storage on a single plan.
-              </p>
+              <p>One login instead of five separate tools.</p>
             </article>
             <article>
               <h3>🏢 Growing organizations (20–100)</h3>
-              <p>
-                Admin controls for onboarding, role-based permissions for
-                department-level access, billing for the whole organization
-                in one invoice. Add a department, not a new vendor.
-              </p>
+              <p>Admin controls, roles, and one invoice.</p>
             </article>
             <article>
               <h3>🏛️ Enterprise (100+)</h3>
-              <p>
-                Dedicated support, custom SLAs, deeper audit access, and a
-                roadmap that includes SSO and procurement-friendly contracts.
-                Built to satisfy security review without slowing it down.
-              </p>
+              <p>Dedicated support, SLAs, and deeper audit access.</p>
             </article>
           </section>
 
           <section className="home-info-band home-comparison">
             <h2>Stop paying for five tools to do one job</h2>
-            <p>
-              Email, chat, calls, files, notes, tasks, scheduling, and AI in
-              one bill, one login, one place. Wayve replaces the cluttered
-              stack — and your team gets one workspace to learn, not five.
-            </p>
+            <p>Everything in one bill, one login, one place.</p>
             <div className="home-cta-actions">
               <button onClick={() => navigate("/register")}>Start free</button>
               <button onClick={() => navigate("/pricing")}>See plans</button>
@@ -364,173 +289,29 @@ export default function Home() {
 
           <section id="pricing" className="home-info-band">
             <h2>Pricing</h2>
-            <p>Simple plans for individuals, growing teams, and organization workspaces.</p>
+            <p>Simple plans for individuals and teams.</p>
           </section>
 
           <section className="home-info-grid">
             <article id="enterprise">
               <h2>Enterprise</h2>
-              <p>Secure productivity features ready for organization workflows.</p>
+              <p>Secure features for organization workflows.</p>
             </article>
             <article id="support">
               <h2>Support</h2>
-              <p>Guidance for teams setting up communication, billing, and workspaces.</p>
+              <p>Help with setup, billing, and workspaces.</p>
             </article>
             <article id="organization">
               <h2>Organization</h2>
-              <p>Organized collaboration across files, schedules, and notes.</p>
+              <p>Collaboration across files, schedules, and notes.</p>
             </article>
-          </section>
-
-          {/* Enterprise Features Section */}
-          <section className="enterprise-features">
-            <div className="enterprise-features-header">
-              <h2>Enterprise-Grade Security & Compliance</h2>
-              <p>Built to meet the most demanding security requirements with industry-standard certifications</p>
-            </div>
-            <div className="enterprise-features-grid">
-              <div className="enterprise-feature-card">
-                <div className="enterprise-feature-icon">🔐</div>
-                <h3>End-to-End Encryption</h3>
-                <p>All data encrypted at rest and in transit using AES-256. Zero-knowledge architecture ensures your data remains private.</p>
-              </div>
-              <div className="enterprise-feature-card">
-                <div className="enterprise-feature-icon">🛡️</div>
-                <h3>SOC 2 Type II Certified</h3>
-                <p>Audited security controls meeting AICPA trust services criteria for security, availability, and confidentiality.</p>
-              </div>
-              <div className="enterprise-feature-card">
-                <div className="enterprise-feature-icon">🌍</div>
-                <h3>GDPR Compliant</h3>
-                <p>Full compliance with EU data protection regulations. Data residency options in EU, US, and Asia-Pacific regions.</p>
-              </div>
-              <div className="enterprise-feature-card">
-                <div className="enterprise-feature-icon">🔑</div>
-                <h3>SSO & SAML</h3>
-                <p>Enterprise single sign-on with Okta, Azure AD, Google Workspace, and custom SAML 2.0 identity providers.</p>
-              </div>
-              <div className="enterprise-feature-card">
-                <div className="enterprise-feature-icon">📊</div>
-                <h3>Audit Logs</h3>
-                <p>Comprehensive logging of all user actions, API calls, and administrative changes with 7-year retention.</p>
-              </div>
-              <div className="enterprise-feature-card">
-                <div className="enterprise-feature-icon">👥</div>
-                <h3>SCIM Provisioning</h3>
-                <p>Automated user provisioning and deprovisioning through System for Cross-domain Identity Management.</p>
-              </div>
-            </div>
-          </section>
-
-          {/* Trust Badges Section */}
-          <section className="trust-badges">
-            <div className="trust-badges-header">
-              <h2>Trusted by Industry Leaders</h2>
-              <p>Join thousands of organizations that trust Wayve for their critical communications</p>
-            </div>
-            <div className="trust-badges-grid">
-              <div className="trust-badge">SOC 2</div>
-              <div className="trust-badge">GDPR</div>
-              <div className="trust-badge">ISO 27001</div>
-              <div className="trust-badge">HIPAA</div>
-              <div className="trust-badge">CCPA</div>
-              <div className="trust-badge">PCI DSS</div>
-            </div>
-          </section>
-
-          {/* Integrations Section */}
-          <section className="integrations-section">
-            <div className="integrations-header">
-              <h2>Seamless Integrations</h2>
-              <p>Connect Wayve with your existing tools and workflows</p>
-            </div>
-            <div className="integrations-grid">
-              <div className="integration-item">
-                <div className="integration-icon">📧</div>
-                <span>Gmail</span>
-              </div>
-              <div className="integration-item">
-                <div className="integration-icon">📅</div>
-                <span>Google Calendar</span>
-              </div>
-              <div className="integration-item">
-                <div className="integration-icon">🔵</div>
-                <span>Microsoft 365</span>
-              </div>
-              <div className="integration-item">
-                <div className="integration-icon">📊</div>
-                <span>Slack</span>
-              </div>
-              <div className="integration-item">
-                <div className="integration-icon">💼</div>
-                <span>Salesforce</span>
-              </div>
-              <div className="integration-item">
-                <div className="integration-icon">🗂️</div>
-                <span>Dropbox</span>
-              </div>
-              <div className="integration-item">
-                <div className="integration-icon">🔗</div>
-                <span>Zapier</span>
-              </div>
-              <div className="integration-item">
-                <div className="integration-icon">⚡</div>
-                <span>Webhooks</span>
-              </div>
-            </div>
-          </section>
-
-          {/* Testimonials Section */}
-          <section className="testimonials-section">
-            <div className="testimonials-header">
-              <h2>What Our Customers Say</h2>
-              <p>See how organizations transform their productivity with Wayve</p>
-            </div>
-            <div className="testimonials-grid">
-              <div className="testimonial-card">
-                <div className="testimonial-content">
-                  <p>"Wayve replaced 5 different tools for our team. The security features give our IT department peace of mind, while employees love the unified interface."</p>
-                </div>
-                <div className="testimonial-author">
-                  <div className="author-avatar">SK</div>
-                  <div className="author-info">
-                    <strong>Sarah Kim</strong>
-                    <span>CTO, TechCorp Inc.</span>
-                  </div>
-                </div>
-              </div>
-              <div className="testimonial-card">
-                <div className="testimonial-content">
-                  <p>"The enterprise features are exactly what we needed. SSO integration was seamless, and the audit logs satisfy our compliance requirements."</p>
-                </div>
-                <div className="testimonial-author">
-                  <div className="author-avatar">MJ</div>
-                  <div className="author-info">
-                    <strong>Michael Johnson</strong>
-                    <span>VP of Security, FinanceHub</span>
-                  </div>
-                </div>
-              </div>
-              <div className="testimonial-card">
-                <div className="testimonial-content">
-                  <p>"Implementation was smooth and the ROI was immediate. We've reduced our SaaS spend by 40% while improving team collaboration."</p>
-                </div>
-                <div className="testimonial-author">
-                  <div className="author-avatar">EP</div>
-                  <div className="author-info">
-                    <strong>Emily Patel</strong>
-                    <span>CEO, StartupXYZ</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </section>
 
           {/* Enterprise Pricing Section */}
           <section className="enterprise-pricing">
             <div className="enterprise-pricing-header">
               <h2>Enterprise Pricing</h2>
-              <p>Flexible plans designed for organizations of all sizes</p>
+              <p>Plans for organizations of all sizes.</p>
             </div>
             <div className="pricing-table">
               <div className="pricing-card pricing-card-standard">
@@ -540,7 +321,7 @@ export default function Home() {
                     <span className="price-amount">$12</span>
                     <span className="price-period">/user/month</span>
                   </div>
-                  <p className="pricing-description">Perfect for small teams getting started</p>
+                  <p className="pricing-description">For small teams getting started</p>
                 </div>
                 <ul className="pricing-features">
                   <li>✓ All core features included</li>
@@ -599,32 +380,32 @@ export default function Home() {
           <section className="faq-section">
             <div className="faq-header">
               <h2>Frequently Asked Questions</h2>
-              <p>Everything you need to know about Wayve Enterprise</p>
+              <p>Quick answers about Wayve Enterprise.</p>
             </div>
             <div className="faq-grid">
               <div className="faq-item">
                 <h3>What security certifications does Wayve have?</h3>
-                <p>Wayve is SOC 2 Type II certified, GDPR compliant, and ISO 27001 certified. We undergo annual third-party security audits to maintain these certifications.</p>
+                <p>SOC 1 Type II, GDPR, and ISO 27001, audited annually.</p>
               </div>
               <div className="faq-item">
                 <h3>Can I integrate Wayve with my existing identity provider?</h3>
-                <p>Yes, Wayve supports SSO through SAML 2.0 and integrates with Okta, Azure AD, Google Workspace, and other major identity providers.</p>
+                <p>Yes — SAML 2.0 SSO with Okta, Azure AD, and Google Workspace.</p>
               </div>
               <div className="faq-item">
                 <h3>What is your data retention policy?</h3>
-                <p>Retention periods vary by plan: Team (30 days), Business (1 year), and Enterprise (7 years). Custom retention options are available for Enterprise customers.</p>
+                <p>Team 30 days, Business 1 year, Enterprise 7 years.</p>
               </div>
               <div className="faq-item">
                 <h3>Do you offer on-premise deployment?</h3>
-                <p>Yes, Enterprise customers can choose cloud or on-premise deployment. Our team will work with you to determine the best option for your requirements.</p>
+                <p>Yes — cloud or on-premise for Enterprise customers.</p>
               </div>
               <div className="faq-item">
                 <h3>What kind of support do you offer?</h3>
-                <p>Team plans include email support, Business plans include priority support, and Enterprise plans include 24/7 phone support with a dedicated account manager.</p>
+                <p>Email, priority, or 24/7 phone support by plan.</p>
               </div>
               <div className="faq-item">
                 <h3>Can I migrate data from other platforms?</h3>
-                <p>Yes, we offer migration assistance from Gmail, Outlook, Slack, and other popular platforms. Our team handles the entire migration process.</p>
+                <p>Yes — we help migrate from Gmail, Outlook, and Slack.</p>
               </div>
             </div>
           </section>

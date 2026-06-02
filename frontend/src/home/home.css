@@ -6,6 +6,10 @@
   height: 100svh;
   overflow-y: scroll;
   scrollbar-gutter: stable;
+  /* Shrink the whole marketing surface a touch so the page reads more
+     compact. zoom scales every font uniformly across mixed px/var units
+     and only affects pages that import home.css, not the app UI. */
+  zoom: 0.92;
   background:
     linear-gradient(90deg, rgb(111, 92, 214, 0.25), rgb(235, 239, 246, 0.7) 34%, var(--color-hero-gradient-stop) 100%),
     var(--color-surface-cool-pale);
@@ -101,7 +105,7 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  min-height: 54px;
+  min-height: 66px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -116,7 +120,7 @@
   border: 0;
   background: transparent;
   color: var(--color-brand-purple);
-  font-size: 26px;
+  font-size: 32px;
   font-weight: 850;
   line-height: 1;
   cursor: pointer;

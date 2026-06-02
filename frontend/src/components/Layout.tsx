@@ -6,6 +6,7 @@ import { Suspense, useState, useCallback, useEffect, useRef, type ReactNode } fr
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
+import ThemeToggle from "../theme/ThemeToggle";
 import SupportModal from "../support/SupportModal";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
@@ -506,6 +507,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               <line x1="12" y1="5" x2="12" y2="19" />
             </svg>
           </button>
+
+          <ThemeToggle />
 
           <ProfileMenu />
         </div>
