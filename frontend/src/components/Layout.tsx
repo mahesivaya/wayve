@@ -374,6 +374,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // (not all platform staff) — mirrors the backend require_platform_owner gate.
   const isPlatformOwner =
     user.scope === "platform" && user.effective_role === "owner";
+  // Organization owners get a Domains shortcut to their own org's custom-domain
+  // administration. (Nav only — backend domain endpoints stay platform-owner
+  // gated for now, so the link targets their org via ?org=<id>.)
+  const isOrgOwner =
+    user.scope === "organization" && user.effective_role === "owner";
   const canAccessPlatformLogs =
     user.scope === "platform" &&
     (hasPermission(user, "logs:read") ||
@@ -610,6 +615,20 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "🌐",
                   location.pathname === "/platform/domains",
                 )}
+            </div>
+          )}
+
+          {isOrgOwner && (
+            <div className="sidebar-section">
+              <div className="sidebar-section-label">Organization</div>
+              {renderSidebarLink(
+                user.organization_id != null
+                  ? `/platform/domains?org=${user.organization_id}`
+                  : "/platform/domains",
+                "Domains",
+                "🌐",
+                location.pathname === "/platform/domains",
+              )}
             </div>
           )}
 
