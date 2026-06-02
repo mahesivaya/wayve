@@ -15,24 +15,29 @@ export default function PersonalChatList({
   return (
     <>
       <div className="conversation-section-title">People</div>
-      {users.map((u) => (
-        <button
-          key={u.id}
-          type="button"
-          className={`conversation-item ${
-            selectedConversation?.type === "user" &&
-            selectedConversation.user.id === u.id
-              ? "active"
-              : ""
-          }`}
-          onClick={() => onSelect(u)}
-        >
-          <span className="conversation-icon">@</span>
-          <span className="conversation-main">
-            <span className="conversation-name">{u.email}</span>
-          </span>
-        </button>
-      ))}
+      {users.map((u) => {
+        const name = u.email.split("@")[0];
+        return (
+          <button
+            key={u.id}
+            type="button"
+            className={`conversation-item ${
+              selectedConversation?.type === "user" &&
+              selectedConversation.user.id === u.id
+                ? "active"
+                : ""
+            }`}
+            onClick={() => onSelect(u)}
+          >
+            <span className="conversation-icon">
+              {name.charAt(0).toUpperCase()}
+            </span>
+            <span className="conversation-main">
+              <span className="conversation-name">{name}</span>
+            </span>
+          </button>
+        );
+      })}
     </>
   );
 }

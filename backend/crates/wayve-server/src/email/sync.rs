@@ -160,6 +160,7 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
     }
 
     for label in [
+        "SENT",
         "DRAFT",
         "SPAM",
         "TRASH",
@@ -697,6 +698,7 @@ async fn sync_account_label_recent(
 const GMAIL_SPAM_RECENT_CAP: usize = 50;
 const GMAIL_DRAFT_RECENT_CAP: usize = 25;
 const GMAIL_TRASH_RECENT_CAP: usize = 50;
+const GMAIL_SENT_RECENT_CAP: usize = 50;
 
 #[instrument(target = "worker", skip(pool, token), fields(account_id))]
 pub async fn sync_account(
@@ -748,6 +750,9 @@ pub async fn sync_account(
     }
     if let Err(err) = sync_account_label_recent(pool, account_id, token, "TRASH", GMAIL_TRASH_RECENT_CAP).await {
         warn!(target: "worker", account_id, error = ?err, "trash sync failed");
+    }
+    if let Err(err) = sync_account_label_recent(pool, account_id, token, "SENT", GMAIL_SENT_RECENT_CAP).await {
+        warn!(target: "worker", account_id, error = ?err, "sent sync failed");
     }
 
     Ok(())
@@ -809,6 +814,9 @@ pub async fn sync_account_recent(
     }
     if let Err(err) = sync_account_label_recent(pool, account_id, token, "TRASH", GMAIL_TRASH_RECENT_CAP).await {
         warn!(target: "worker", account_id, error = ?err, "trash first-sync failed");
+    }
+    if let Err(err) = sync_account_label_recent(pool, account_id, token, "SENT", GMAIL_SENT_RECENT_CAP).await {
+        warn!(target: "worker", account_id, error = ?err, "sent first-sync failed");
     }
 
     Ok(())

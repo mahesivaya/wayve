@@ -16,7 +16,6 @@ export default function MessageComposer({
   conversation,
   canChat,
   isConnected,
-  title,
   input,
   onInputChange,
   onSend,
@@ -46,6 +45,7 @@ export default function MessageComposer({
       )}
       <div className="chat-input-row">
         <textarea
+          rows={1}
           value={input}
           onChange={(e) => onInputChange(e.target.value)}
           disabled={disabled}
@@ -55,7 +55,6 @@ export default function MessageComposer({
               if (!disabled) onSend();
             }
           }}
-          placeholder={disabled ? "Connecting to chat..." : `Message ${title}`}
         />
         <button type="button" onClick={onSend} disabled={disabled}>
           Send

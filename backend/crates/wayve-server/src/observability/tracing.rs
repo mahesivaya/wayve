@@ -4,7 +4,17 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{
+    EnvFilter, Layer, fmt, layer::SubscriberExt, util::SubscriberInitExt,
+};
+
+// Curated default filter for the human-readable stdout layer: show everything
+// at DEBUG except the chatty framework targets (TLS handshakes, connection
+// pooling, raw SQL), which would otherwise bury the app's own logs. The full,
+// unfiltered stream still goes to logs/tracing.log. Override with
+// RWAYVE_LOG_STDOUT_FILTER (standard RUST_LOG syntax).
+const DEFAULT_STDOUT_FILTER: &str = "debug,hyper=warn,hyper_util=warn,h2=warn,\
+rustls=warn,mio=warn,tokio=warn,reqwest=warn,sqlx=warn,want=warn,tower=warn,tonic=warn";
 
 const TRACING_LOG_DIR: &str = "logs";
 const TRACING_LOG_PATH: &str = "logs/tracing.log";
@@ -174,13 +184,39 @@ pub fn init_tracing() {
         .into()
     });
 
-    // File-only logging is the default — the stdout layer was dropped so
-    // `docker logs` / `cargo run` terminals stay quiet. The full event
-    // stream still lands in logs/tracing.log (size-rotated, bind-mounted
-    // from the host). Tail it during dev with:
+    // The full JSON event stream always lands in logs/tracing.log (size-
+    // rotated, bind-mounted from the host). Tail it with:
     //
-    //   tail -f backend/logs/tracing.log
+    //   tail -f logs/tracing.log
     //
+    // In addition, when stdout logging is enabled we attach a second,
+    // human-readable (compact) layer so `docker logs <container>` /
+    // `cargo run` terminals show the live event stream. It's ON
+    // automatically in development (RWAYVE_ENV=development) and can be
+    // forced on/off anywhere with RWAYVE_LOG_STDOUT=1 / =0.
+    let stdout_enabled = std::env::var("RWAYVE_LOG_STDOUT")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or_else(|| {
+            std::env::var("RWAYVE_ENV")
+                .map(|env| env.eq_ignore_ascii_case("development"))
+                .unwrap_or(false)
+        });
+    let stdout_layer = stdout_enabled.then(|| {
+        let stdout_filter = EnvFilter::new(
+            std::env::var("RWAYVE_LOG_STDOUT_FILTER")
+                .unwrap_or_else(|_| DEFAULT_STDOUT_FILTER.to_string()),
+        );
+        fmt::layer()
+            .with_writer(std::io::stdout)
+            .with_ansi(true)
+            .with_target(true)
+            .with_line_number(true)
+            .with_span_events(FmtSpan::NONE)
+            .compact()
+            .with_filter(stdout_filter)
+    });
+
     // The stderr fallback below only fires if the log file genuinely can't
     // be opened (disk full, permission denied) — at that point we WANT
     // loud terminal output so the failure isn't silent.
@@ -201,6 +237,7 @@ pub fn init_tracing() {
             tracing_subscriber::registry()
                 .with(env_filter)
                 .with(file_layer)
+                .with(stdout_layer)
                 .init();
         }
         Err(e) => {

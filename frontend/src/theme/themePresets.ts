@@ -38,39 +38,11 @@ export const PRESETS: ThemePreset[] = [
     input: { hue: 205, chroma: 0.18, saturation: 1.1, contrast: 0.7, depth: -0.02 },
   },
   {
-    id: "forest",
-    name: "Forest",
-    description: "Calm green tones.",
-    mode: "light",
-    input: { hue: 155, chroma: 0.14, saturation: 0.9, contrast: 0.5, depth: 0 },
-  },
-  {
-    id: "sunset",
-    name: "Sunset",
-    description: "Warm orange and pink accents.",
-    mode: "light",
-    input: { hue: 25, chroma: 0.20, saturation: 1.2, contrast: 0.55, depth: 0.01 },
-  },
-  {
     id: "midnight",
     name: "Midnight",
     description: "Deep dark with violet accent.",
     mode: "dark",
     input: { hue: 270, chroma: 0.17, saturation: 1.1, contrast: 0.7, depth: 0.02 },
-  },
-  {
-    id: "sepia",
-    name: "Sepia",
-    description: "Warm cream paper feel.",
-    mode: "light",
-    input: { hue: 45, chroma: 0.08, saturation: 0.7, contrast: 0.4, depth: 0.02 },
-  },
-  {
-    id: "high-contrast",
-    name: "High Contrast",
-    description: "Maximum legibility.",
-    mode: "light",
-    input: { hue: 220, chroma: 0.20, saturation: 1.3, contrast: 1.0, depth: 0 },
   },
 ];
 

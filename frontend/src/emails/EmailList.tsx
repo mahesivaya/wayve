@@ -494,7 +494,7 @@ export const EmailList: React.FC<EmailListProps> = ({
         </div>
       )}
       {!isStubFolder && !hasMore && emails.length > 0 && (
-        <div className="load-more-wrap">
+        <div className="load-more-wrap load-more-wrap--end">
           <span className="load-more-status is-end">No more emails.</span>
         </div>
       )}
