@@ -7,6 +7,8 @@ pub struct Task {
     pub description: String,
     pub priority: i16,
     pub status: String,
+    pub assigned_by: String,
+    pub assignee: String,
     pub created_at: Option<NaiveDateTime>,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -17,4 +19,6 @@ pub struct TaskInput {
     pub description: Option<String>,
     pub priority: Option<i16>,
     pub status: Option<String>,
+    pub assigned_by: Option<String>,
+    pub assignee: Option<String>,
 }

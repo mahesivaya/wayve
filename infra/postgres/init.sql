@@ -639,6 +639,11 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'to_do';
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
 ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('to_do', 'in_progress', 'in_review', 'done'));
 
+-- Free-text "assigned by" / "assignee" attribution (who handed the task over
+-- and who it's assigned to). Plain text, optional; empty string when unspecified.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee TEXT NOT NULL DEFAULT '';
+
 CREATE INDEX IF NOT EXISTS idx_tasks_user_priority ON tasks(user_id, priority DESC, created_at DESC);
 
 -- Files attached to a task. Stored under ./uploads encrypted at rest just

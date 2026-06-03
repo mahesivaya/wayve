@@ -1,7 +1,6 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { homePathForUser } from "../auth/accountHome";
-import { canAccessApiKeyAdmin, hasPermission } from "../auth/permissions";
+import { canAccessApiKeyAdmin, canViewPricing, hasPermission } from "../auth/permissions";
 import { Suspense, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
@@ -379,6 +378,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // gated for now, so the link targets their org via ?org=<id>.)
   const isOrgOwner =
     user.scope === "organization" && user.effective_role === "owner";
+  // Developers (org or platform scope) get the Code shortcut alongside owners.
+  const isDeveloper = user.effective_role === "developer";
+  // Pricing is hidden from roles that don't manage plans/billing (org +
+  // platform scope) — only owner / super_admin / billing keep it. Shared with
+  // the /pricing route guard so the URL can't bypass the hidden nav link.
+  const canSeePricing = canViewPricing(user);
   const canAccessPlatformLogs =
     user.scope === "platform" &&
     (hasPermission(user, "logs:read") ||
@@ -536,7 +541,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             {renderSidebarItem("/notes", "notes", "Notes", "📝")}
             {renderSidebarItem("/tasks", "tasks", "Tasks", "☑")}
             {renderSidebarItem("/ai-chat", "aichat", "AI Chat", "✨")}
-            {user.scope === "platform" &&
+            {(user.scope === "platform" || isOrgOwner || isDeveloper) &&
               renderSidebarItem(
                 "/github",
                 "github",
@@ -637,6 +642,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <div className="sidebar-section sidebar-section-secondary">
             {user.account_type !== "platform_admin" &&
               user.account_type !== "personal" &&
+              canSeePricing &&
               renderSidebarLink(
                 "/pricing",
                 "Pricing",

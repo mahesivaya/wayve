@@ -12,6 +12,8 @@ export type Task = {
   description: string;
   priority: TaskPriority;
   status: TaskStatus;
+  assigned_by: string;
+  assignee: string;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -21,6 +23,8 @@ export type SaveTaskPayload = {
   description: string;
   priority: TaskPriority;
   status: TaskStatus;
+  assigned_by: string;
+  assignee: string;
 };
 
 export const getTasks = async () => apiFetchJson<Task[]>("/api/tasks");

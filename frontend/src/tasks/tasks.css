@@ -183,6 +183,24 @@
   font-size: var(--text-xs);
 }
 
+/* Inline "Assign to me" toggle sitting under the Assignee input. */
+.task-form-assign-me {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.task-form-assign-me input {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
 .task-form-select {
   width: 100%;
   box-sizing: border-box;

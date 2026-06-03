@@ -77,6 +77,8 @@ export default function Tasks() {
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TaskPriority>(3);
   const [status, setStatus] = useState<TaskStatus>("to_do");
+  const [assignedBy, setAssignedBy] = useState("");
+  const [assignee, setAssignee] = useState("");
   const [createAnother, setCreateAnother] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -127,6 +129,8 @@ export default function Tasks() {
     setDescription("");
     setPriority(3);
     setStatus("to_do");
+    setAssignedBy("");
+    setAssignee("");
     setEditingId(null);
     setError("");
     setPendingAttachments([]);
@@ -151,6 +155,8 @@ export default function Tasks() {
     setDescription(task.description);
     setPriority(normalizePriority(task.priority));
     setStatus(normalizeStatus(task.status));
+    setAssignedBy(task.assigned_by ?? "");
+    setAssignee(task.assignee ?? "");
     setError("");
     setCreateAnother(false);
     setPendingAttachments([]);
@@ -228,6 +234,8 @@ export default function Tasks() {
         description: task.description,
         priority: task.priority,
         status: nextStatus,
+        assigned_by: task.assigned_by ?? "",
+        assignee: task.assignee ?? "",
       });
       setTasks((current) =>
         sortTasks(
@@ -307,6 +315,8 @@ export default function Tasks() {
           description: details,
           priority,
           status,
+          assigned_by: assignedBy.trim(),
+          assignee: assignee.trim(),
         });
         targetTaskId = updated.id;
         setTasks((prev) =>
@@ -328,6 +338,8 @@ export default function Tasks() {
           description: details,
           priority,
           status,
+          assigned_by: assignedBy.trim(),
+          assignee: assignee.trim(),
         });
         targetTaskId = created.id;
         setTasks((prev) =>
@@ -488,6 +500,36 @@ export default function Tasks() {
                   onChange={(event) => setDescription(event.target.value)}
                   placeholder="Add task details"
                 />
+              </label>
+
+              <label className="task-form-field">
+                <span className="task-form-label">Assigned by</span>
+                <input
+                  value={assignedBy}
+                  onChange={(event) => setAssignedBy(event.target.value)}
+                  placeholder="Who assigned this task"
+                />
+              </label>
+
+              <label className="task-form-field">
+                <span className="task-form-label">Assignee</span>
+                <input
+                  value={assignee}
+                  onChange={(event) => setAssignee(event.target.value)}
+                  placeholder="Who is this task assigned to"
+                />
+                {user?.email && (
+                  <span className="task-form-assign-me">
+                    <input
+                      type="checkbox"
+                      checked={assignee.trim().toLowerCase() === user.email.toLowerCase()}
+                      onChange={(event) =>
+                        setAssignee(event.target.checked ? user.email : "")
+                      }
+                    />
+                    Assign to me
+                  </span>
+                )}
               </label>
 
               <label className="task-form-field">

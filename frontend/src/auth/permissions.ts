@@ -144,6 +144,26 @@ export function permissionsForRole(role?: string | null): Permission[] {
   return [...ROLE_PERMISSIONS[normalizeRole(role)]];
 }
 
+// Roles that should NOT see the Pricing surface (nav link AND the /pricing
+// route) in either org or platform scope — they don't manage plans/billing.
+// Only owner, super_admin and billing keep access. Used by both the sidebar
+// (Layout) and the route guard so the URL can't bypass the hidden nav link.
+export const PRICING_HIDDEN_ROLES: Role[] = [
+  "admin",
+  "security",
+  "developer",
+  "support",
+  "guest",
+  "member",
+];
+
+/** Whether this user's role is allowed to view Pricing. */
+export function canViewPricing(
+  user: { effective_role?: string | null } | null | undefined,
+): boolean {
+  return !PRICING_HIDDEN_ROLES.includes(normalizeRole(user?.effective_role));
+}
+
 type PermissionHolder = { permissions?: string[] | null } | null | undefined;
 
 /** Whether the holder (typically the auth user) has `perm`. */

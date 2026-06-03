@@ -12,7 +12,7 @@ function LegacyServiceRedirect() {
 
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
-import RedirectIfPersonal from "./components/RedirectIfPersonal";
+import RequirePricingAccess from "./components/RequirePricingAccess";
 import Register from "./auth/Register";
 import Login from "./auth/Login";
 import ForgotPassword from "./auth/ForgotPassword";
@@ -149,9 +149,9 @@ export default function App() {
         <Route
           path="/pricing"
           element={
-            <RedirectIfPersonal to="/settings">
+            <RequirePricingAccess>
               <Pricing />
-            </RedirectIfPersonal>
+            </RequirePricingAccess>
           }
         />
         <Route path="/enterprise" element={<Enterprise />} />
@@ -243,13 +243,17 @@ export default function App() {
               path="/aichat"
               element={<Navigate to="/ai-chat" replace />}
             />
-            {/* Platform-team only. Hiding the sidebar link isn't enough —
-                guard the route so a non-platform user typing /github is
-                bounced to their own home instead of seeing the page. */}
+            {/* Platform team, organization owners, and developers (either
+                scope). Hiding the sidebar link isn't enough — guard the route
+                so anyone else typing /github is bounced to their own home
+                instead of seeing the page. */}
             <Route
               path="/github"
               element={
-                user?.scope === "platform" ? (
+                user?.scope === "platform" ||
+                (user?.scope === "organization" &&
+                  user?.effective_role === "owner") ||
+                user?.effective_role === "developer" ? (
                   <GitHubRepo />
                 ) : (
                   <Navigate to={accountHome} replace />
