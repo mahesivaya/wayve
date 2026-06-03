@@ -616,6 +616,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "📊",
                   location.pathname === "/platform/analytics",
                 )}
+              {isPlatformOwner &&
+                renderSidebarLink(
+                  "/platform/tracing",
+                  "Tracing",
+                  "📈",
+                  location.pathname === "/platform/tracing",
+                )}
               {canAccessPlatformLogs &&
                 renderSidebarLink(
                   "/platform/logs",

@@ -11,6 +11,7 @@ pub mod recovery;
 pub mod shared_inbox;
 pub mod sso;
 pub mod support;
+pub mod tracing;
 pub mod user;
 
 use actix_web::web;
@@ -46,6 +47,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(api_keys::api_key_audit)
         .service(audit::list_audit_logs)
         .service(audit::list_user_actions)
+        .service(tracing::tracing_overview)
         .service(audit::export_audit_logs)
         .service(audit::get_siem_settings)
         .service(audit::upsert_siem_settings)

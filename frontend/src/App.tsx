@@ -83,6 +83,7 @@ const TestAccess = lazy(() => import("./test_access/TestAccess"));
 const AccessRequestsReview = lazy(
   () => import("./accessRequests/AccessRequestsReview"),
 );
+const TracingDashboard = lazy(() => import("./tracing/TracingDashboard"));
 
 export default function App() {
   const { user } = useAuth();
@@ -260,6 +261,17 @@ export default function App() {
                   user?.effective_role === "owner") ||
                 user?.effective_role === "developer" ? (
                   <GitHubRepo />
+                ) : (
+                  <Navigate to={accountHome} replace />
+                )
+              }
+            />
+            {/* Platform-owner only: graphical tracing-log dashboard. */}
+            <Route
+              path="/platform/tracing"
+              element={
+                user?.scope === "platform" && user?.effective_role === "owner" ? (
+                  <TracingDashboard />
                 ) : (
                   <Navigate to={accountHome} replace />
                 )
