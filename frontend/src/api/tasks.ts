@@ -23,8 +23,11 @@ export type SaveTaskPayload = {
   description: string;
   priority: TaskPriority;
   status: TaskStatus;
-  assigned_by: string;
-  assignee: string;
+  // Personal accounts leave these unset — a task is implicitly owned by its
+  // creator. Only business/platform scopes assign a task to someone else, so
+  // their UI supplies both fields.
+  assigned_by?: string;
+  assignee?: string;
 };
 
 export const getTasks = async () => apiFetchJson<Task[]>("/api/tasks");
