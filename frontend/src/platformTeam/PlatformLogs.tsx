@@ -3,7 +3,7 @@
 // failed API calls, and (when called from handlers) server-side
 // internal faults. Gated by `logs:read` + platform scope.
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
@@ -173,9 +173,8 @@ export default function PlatformLogs() {
               {rows.map((r) => {
                 const isExpanded = expandedId === r.id;
                 return (
-                  <>
+                  <Fragment key={r.id}>
                     <tr
-                      key={r.id}
                       className={`logs-row ${r.severity}`}
                       onClick={() =>
                         setExpandedId(isExpanded ? null : r.id)
@@ -242,7 +241,7 @@ export default function PlatformLogs() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>
