@@ -408,6 +408,12 @@ async function githubJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { credentials: "include" });
 
   if (!response.ok) {
+    // A 403 from the proxy means the server has no usable GitHub access for
+    // this repo (missing/insufficient token or org settings) — surface a
+    // plain, actionable message instead of the raw status.
+    if (response.status === 403) {
+      throw new Error("Organization repository settings need to be set.");
+    }
     throw new Error(`GitHub request failed (${response.status})`);
   }
 
