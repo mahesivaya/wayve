@@ -788,7 +788,7 @@ pub async fn connect_redis_and_install_cache() -> Option<Cache> {
 pub fn build_cors(frontend_url: &str) -> Cors {
     Cors::default()
         .allowed_origin(frontend_url)
-        .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+        .allowed_methods(vec!["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
         .allowed_headers(vec![
             header::CONTENT_TYPE,
             header::AUTHORIZATION,
