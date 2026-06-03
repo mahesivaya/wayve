@@ -189,6 +189,35 @@
   color: var(--color-warning);
 }
 
+/* Billing-history event pills. */
+.pb-pill.payment,
+.pb-pill.subscribed {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+.pb-pill.upgraded {
+  background: var(--color-accent-indigo-soft);
+  color: var(--color-accent-indigo-deep);
+}
+
+/* History search box. `margin-left:auto` pushes it to the right edge of the
+   flex section header, after the title + subtitle. */
+.pb-search {
+  margin-left: auto;
+  min-width: 220px;
+  padding: 7px 11px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--panel-border, var(--color-border));
+  border-radius: 8px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text-primary);
+}
+.pb-search:focus {
+  outline: none;
+  border-color: var(--color-primary-action, #2563eb);
+}
+
 .pb-btn {
   background: var(--accent-color, var(--color-primary-action));
   color: var(--color-on-primary);

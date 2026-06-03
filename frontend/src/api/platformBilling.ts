@@ -61,6 +61,22 @@ export type PlatformInvoiceRow = {
   organization_name: string | null;
 };
 
+// A single billing activity event for the History timeline. `sample` is true
+// for the illustrative fallback rows the backend returns when no real billing
+// data exists yet.
+export type BillingHistoryRow = {
+  ts: string | null;
+  event: "payment" | "subscribed" | "upgraded" | string;
+  user_email: string | null;
+  organization_name: string | null;
+  plan_name: string | null;
+  plan_code: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  status: string | null;
+  sample?: boolean;
+};
+
 export type EmploymentType = "full_time" | "part_time" | "contractor";
 export type EmployeeStatus = "active" | "on_leave" | "terminated";
 export type PayFrequency = "monthly" | "biweekly" | "weekly" | "annual";
@@ -134,6 +150,11 @@ export const listOrganizationSubscriptions = () =>
 
 export const listPlatformInvoices = () =>
   apiFetchJson<PlatformInvoiceRow[]>("/api/platform-billing/invoices");
+
+export const listBillingHistory = (limit = 200) =>
+  apiFetchJson<BillingHistoryRow[]>(
+    `/api/platform-billing/history?limit=${limit}`,
+  );
 
 export const listEmployees = () =>
   apiFetchJson<Employee[]>("/api/platform-billing/employees");

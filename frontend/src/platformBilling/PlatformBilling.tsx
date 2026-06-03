@@ -10,8 +10,10 @@ import {
   EmployeeInput,
   EmployeeStatus,
   EmploymentType,
+  BillingHistoryRow,
   getPlatformBillingOverview,
   getStripeSnapshot,
+  listBillingHistory,
   listEmployees,
   listOrganizationSubscriptions,
   listPayrollRuns,
@@ -33,6 +35,7 @@ import "./platformBilling.css";
 
 type Tab =
   | "stripe"
+  | "history"
   | "users"
   | "organizations"
   | "invoices"
@@ -96,6 +99,8 @@ export default function PlatformBilling() {
   const [invoices, setInvoices] = useState<PlatformInvoiceRow[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([]);
+  const [history, setHistory] = useState<BillingHistoryRow[]>([]);
+  const [historySearch, setHistorySearch] = useState("");
 
   // Stripe account live snapshot — lazy-loaded the first time the user
   // opens the "Stripe account" tab. Each fetch hits Stripe REST APIs so
@@ -126,13 +131,14 @@ export default function PlatformBilling() {
     if (!canView) return;
     setError("");
     try {
-      const [ov, us, os, inv, emp, runs] = await Promise.all([
+      const [ov, us, os, inv, emp, runs, hist] = await Promise.all([
         getPlatformBillingOverview(),
         listUserSubscriptions(),
         listOrganizationSubscriptions(),
         listPlatformInvoices(),
         listEmployees(),
         listPayrollRuns(),
+        listBillingHistory(),
       ]);
       setOverview(ov);
       setUserSubs(us);
@@ -140,6 +146,7 @@ export default function PlatformBilling() {
       setInvoices(inv);
       setEmployees(emp);
       setPayrollRuns(runs);
+      setHistory(hist);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load billing data");
     } finally {
@@ -305,14 +312,27 @@ export default function PlatformBilling() {
     () =>
       [
         { key: "stripe" as const, label: "Stripe account" },
+        { key: "history" as const, label: `History (${history.length})` },
         { key: "users" as const, label: `Users (${userSubs.length})` },
         { key: "organizations" as const, label: `Organizations (${orgSubs.length})` },
         { key: "invoices" as const, label: `Invoices (${invoices.length})` },
         { key: "employees" as const, label: `Employees (${employees.length})` },
         { key: "payroll" as const, label: `Payroll runs (${payrollRuns.length})` },
       ],
-    [userSubs, orgSubs, invoices, employees, payrollRuns],
+    [history, userSubs, orgSubs, invoices, employees, payrollRuns],
   );
+
+  // Client-side search over the billing history — filter by user email, org,
+  // plan, event or status so staff can quickly find one user's activity.
+  const filteredHistory = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    if (!q) return history;
+    return history.filter((h) =>
+      [h.user_email, h.organization_name, h.plan_name, h.event, h.status].some(
+        (v) => (v ?? "").toLowerCase().includes(q),
+      ),
+    );
+  }, [history, historySearch]);
 
   if (!canView) {
     return <Navigate to="/" replace />;
@@ -681,6 +701,70 @@ export default function PlatformBilling() {
                       {fmtMoney(row.monthly_cents, row.currency ?? "USD")}
                     </td>
                     <td>{fmtDate(row.current_period_end)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
+
+      {tab === "history" && (
+        <section className="pb-section">
+          <div className="pb-section-header">
+            <h2>Billing history</h2>
+            <span className="pb-stat-sub">
+              Subscriptions, upgrades and payments across the platform
+            </span>
+            <input
+              type="search"
+              className="pb-search"
+              placeholder="Search user, org, plan…"
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              aria-label="Search billing history"
+            />
+          </div>
+          {history.length > 0 && history[0]?.sample && (
+            <div className="pb-stat-sub" style={{ marginBottom: 8 }}>
+              Showing sample data — no billing events recorded yet.
+            </div>
+          )}
+          {filteredHistory.length === 0 ? (
+            <div className="pb-empty">
+              {history.length === 0
+                ? "No billing activity yet."
+                : "No matches for that search."}
+            </div>
+          ) : (
+            <table className="pb-table">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>User / Org</th>
+                  <th>Event</th>
+                  <th>Plan</th>
+                  <th className="right">Amount paid</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHistory.map((h, i) => (
+                  <tr key={`${h.ts}-${h.user_email ?? h.organization_name}-${i}`}>
+                    <td>{fmtDate(h.ts)}</td>
+                    <td>{h.user_email ?? h.organization_name ?? "—"}</td>
+                    <td>
+                      <span className={`pb-pill ${h.event}`}>{h.event}</span>
+                    </td>
+                    <td>{h.plan_name ?? h.plan_code ?? "—"}</td>
+                    <td className="right">
+                      {fmtMoney(h.amount_cents, h.currency ?? "USD")}
+                    </td>
+                    <td>
+                      <span className={`pb-pill ${h.status ?? ""}`}>
+                        {h.status ?? "—"}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

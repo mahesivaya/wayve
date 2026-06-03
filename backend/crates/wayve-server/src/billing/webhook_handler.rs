@@ -36,7 +36,40 @@ async fn invalidate_owner_caches(pool: &PgPool, owner: BillingOwner) {
 }
 use super::provider;
 use crate::prelude::*;
+use tokio::io::AsyncWriteExt;
 use tracing::{error, info, instrument, warn};
+
+// Append-only JSON-lines audit trail of billing events (subscription /
+// upgrade / payment), written under the project `logs/` directory next to
+// `access_requests.log`. Best-effort: a logging failure must never break
+// webhook processing (Stripe would otherwise retry a state change that
+// already landed in the DB).
+const BILLING_LOG_DIR: &str = "logs";
+const BILLING_LOG_PATH: &str = "logs/billing_events.log";
+
+async fn append_billing_event(event: serde_json::Value) {
+    let line = match serde_json::to_string(&event) {
+        Ok(s) => s,
+        Err(err) => {
+            warn!(target: "billing", error = ?err, "billing event log serialize failed");
+            return;
+        }
+    };
+    let _ = tokio::fs::create_dir_all(BILLING_LOG_DIR).await;
+    match tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(BILLING_LOG_PATH)
+        .await
+    {
+        Ok(mut file) => {
+            if let Err(err) = file.write_all(format!("{line}\n").as_bytes()).await {
+                warn!(target: "billing", error = ?err, "billing event log write failed");
+            }
+        }
+        Err(err) => warn!(target: "billing", error = ?err, "billing event log open failed"),
+    }
+}
 
 #[post("/billing/webhook")]
 #[instrument(target = "http", skip(req, pool, body))]
@@ -192,6 +225,18 @@ async fn handle_checkout_completed(pool: &PgPool, object: &Value) -> Result<()> 
 
     refresh_entitlements(pool, owner).await?;
     invalidate_owner_caches(pool, owner).await;
+
+    append_billing_event(serde_json::json!({
+        "ts": chrono::Utc::now().to_rfc3339(),
+        "event": "subscribed",
+        "stripe_subscription_id": sub_id,
+        "stripe_customer_id": customer,
+        "user_id": owner.user_id(),
+        "organization_id": owner.organization_id(),
+        "plan_id": plan_id,
+        "status": "active",
+    }))
+    .await;
     Ok(())
 }
 
@@ -241,6 +286,15 @@ async fn handle_subscription_event(pool: &PgPool, event_type: &str, object: &Val
     if let Some(owner) = subscription_owner(pool, sub_id).await? {
         refresh_entitlements(pool, owner).await?;
         invalidate_owner_caches(pool, owner).await;
+        append_billing_event(serde_json::json!({
+            "ts": chrono::Utc::now().to_rfc3339(),
+            "event": "upgraded",
+            "stripe_subscription_id": sub_id,
+            "user_id": owner.user_id(),
+            "organization_id": owner.organization_id(),
+            "status": status,
+        }))
+        .await;
     }
     Ok(())
 }
@@ -302,5 +356,16 @@ async fn handle_invoice_event(pool: &PgPool, object: &Value) -> Result<()> {
     .execute(pool)
     .await?;
 
+    append_billing_event(serde_json::json!({
+        "ts": chrono::Utc::now().to_rfc3339(),
+        "event": "payment",
+        "stripe_invoice_id": invoice_id,
+        "stripe_customer_id": customer,
+        "amount_paid_cents": amount_paid,
+        "amount_due_cents": amount_due,
+        "currency": currency,
+        "status": status,
+    }))
+    .await;
     Ok(())
 }

@@ -17,6 +17,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(list_user_subscriptions)
         .service(list_organization_subscriptions)
         .service(list_recent_invoices)
+        .service(list_billing_history)
         .service(list_employees)
         .service(create_employee)
         .service(update_employee)
@@ -321,6 +322,141 @@ pub async fn list_recent_invoices(req: HttpRequest, pool: web::Data<PgPool>) -> 
             })
         })
         .collect();
+    Ok(HttpResponse::Ok().json(items))
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Billing history — a chronological activity feed across the tenant base:
+// subscription/upgrade events + invoice payments, joined to users/orgs so
+// the dashboard can show (and search) per-user billing activity. Falls back
+// to a small sample set when the projection is empty (e.g. dev with no
+// Stripe) so the page is never blank.
+// ──────────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct HistoryQuery {
+    pub limit: Option<i64>,
+}
+
+// Shown only when the real projection is empty — illustrative users,
+// upgrades, amounts, dates and payments so the dashboard demonstrates the
+// shape of the data before any Stripe events have flowed.
+fn sample_history() -> Vec<Value> {
+    let row = |ts: &str,
+               event: &str,
+               user_email: Option<&str>,
+               organization_name: Option<&str>,
+               plan_name: &str,
+               plan_code: &str,
+               amount_cents: i64,
+               status: &str| {
+        serde_json::json!({
+            "ts": ts,
+            "event": event,
+            "user_email": user_email,
+            "organization_name": organization_name,
+            "plan_name": plan_name,
+            "plan_code": plan_code,
+            "amount_cents": amount_cents,
+            "currency": "usd",
+            "status": status,
+            "sample": true,
+        })
+    };
+    vec![
+        row("2026-06-01T09:14:00Z", "payment", Some("owner@acme.com"), Some("Acme"), "Organization", "organization", 1000, "paid"),
+        row("2026-05-28T16:02:00Z", "upgraded", Some("alice@personal.test"), None, "Advance", "advance_user", 700, "active"),
+        row("2026-05-20T11:31:00Z", "payment", Some("alice@personal.test"), None, "Advance", "advance_user", 700, "paid"),
+        row("2026-05-12T08:45:00Z", "upgraded", Some("owner@acme.com"), Some("Acme"), "Organization", "organization", 1000, "active"),
+        row("2026-05-03T13:20:00Z", "subscribed", Some("bob@personal.test"), None, "Basic", "basic_user", 0, "active"),
+        row("2026-05-01T00:05:00Z", "payment", Some("owner@acme.com"), Some("Acme"), "Organization", "organization", 1000, "paid"),
+    ]
+}
+
+#[get("/platform-billing/history")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn list_billing_history(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<HistoryQuery>,
+) -> AppResult {
+    if let Err(resp) = gate(&req, pool.get_ref(), Permission::BillingRead).await {
+        return Ok(resp);
+    }
+    let limit = query.limit.unwrap_or(200).clamp(1, 1000);
+
+    let rows = sqlx::query(
+        r#"
+        SELECT ts, event, user_email, organization_name,
+               plan_name, plan_code, amount_cents, currency, status
+        FROM (
+            -- Invoice payments
+            SELECT i.created_at AS ts,
+                   'payment' AS event,
+                   u.email AS user_email,
+                   o.name AS organization_name,
+                   p.name AS plan_name,
+                   p.code AS plan_code,
+                   i.amount_paid_cents AS amount_cents,
+                   i.currency AS currency,
+                   i.status AS status
+              FROM invoices i
+              LEFT JOIN billing_customers bc ON bc.stripe_customer_id = i.stripe_customer_id
+              LEFT JOIN users u ON u.id = bc.user_id
+              LEFT JOIN organizations o ON o.id = bc.organization_id
+              LEFT JOIN subscriptions s ON s.id = i.subscription_id
+              LEFT JOIN plans p ON p.id = s.plan_id
+
+            UNION ALL
+
+            -- Subscription / upgrade events
+            SELECT s.created_at AS ts,
+                   CASE WHEN COALESCE(p.amount_cents, 0) > 0 THEN 'upgraded' ELSE 'subscribed' END AS event,
+                   u.email AS user_email,
+                   o.name AS organization_name,
+                   p.name AS plan_name,
+                   p.code AS plan_code,
+                   p.amount_cents AS amount_cents,
+                   p.currency AS currency,
+                   s.status AS status
+              FROM subscriptions s
+              LEFT JOIN users u ON u.id = s.user_id
+              LEFT JOIN organizations o ON o.id = s.organization_id
+              LEFT JOIN plans p ON p.id = s.plan_id
+        ) feed
+        ORDER BY ts DESC NULLS LAST
+        LIMIT $1
+        "#,
+    )
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    let items: Vec<Value> = rows
+        .into_iter()
+        .map(|row| {
+            let ts: Option<DateTime<Utc>> = row.try_get("ts").ok();
+            serde_json::json!({
+                "ts": ts,
+                "event": row.try_get::<Option<String>, _>("event").ok().flatten(),
+                "user_email": row.try_get::<Option<String>, _>("user_email").ok().flatten(),
+                "organization_name": row.try_get::<Option<String>, _>("organization_name").ok().flatten(),
+                "plan_name": row.try_get::<Option<String>, _>("plan_name").ok().flatten(),
+                "plan_code": row.try_get::<Option<String>, _>("plan_code").ok().flatten(),
+                "amount_cents": row.try_get::<Option<i64>, _>("amount_cents").ok().flatten(),
+                "currency": row.try_get::<Option<String>, _>("currency").ok().flatten(),
+                "status": row.try_get::<Option<String>, _>("status").ok().flatten(),
+                "sample": false,
+            })
+        })
+        .collect();
+
+    let items = if items.is_empty() {
+        sample_history()
+    } else {
+        items
+    };
+
     Ok(HttpResponse::Ok().json(items))
 }
 
