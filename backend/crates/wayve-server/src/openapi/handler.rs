@@ -58,7 +58,7 @@ fn build_spec() -> serde_json::Value {
             "contact": {
                 "name": "Wayve developer support",
                 "email": "support@maheshg.me",
-                "url": "https://maheshg.me/support"
+                "url": "https://fluxze.com/support"
             },
             "license": {
                 "name": "Commercial",
@@ -66,7 +66,7 @@ fn build_spec() -> serde_json::Value {
             }
         },
         "servers": [
-            { "url": "https://maheshg.me", "description": "Production" },
+            { "url": "https://fluxze.com", "description": "Production" },
             { "url": "http://localhost:8080",     "description": "Local development" }
         ],
         "security": [{ "ApiKeyAuth": [] }],

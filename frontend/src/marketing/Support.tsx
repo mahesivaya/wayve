@@ -22,7 +22,7 @@ const CHANNELS = [
     title: "Status & incidents",
     body: "Production incidents and scheduled maintenance are posted on the status page.",
     actionLabel: "View status →",
-    href: "https://maheshg.me",
+    href: "https://fluxze.com",
   },
   {
     icon: "💼",
