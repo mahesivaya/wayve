@@ -13,7 +13,8 @@ export type AppKey =
   | "tasks"
   | "aichat"
   | "github"
-  | "about";
+  | "about"
+  | "test_access";
 
 const HomeView = lazy(() => import("../home/Home"));
 const EmailsView = lazy(() => import("../emails/Emails"));

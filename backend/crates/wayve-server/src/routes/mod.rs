@@ -1,3 +1,4 @@
+pub mod access_requests;
 pub mod account;
 pub mod api_keys;
 pub mod audit;
@@ -77,6 +78,10 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(recovery::get_basic_key)
         .service(recovery::put_basic_key)
         .service(recovery::delete_basic_key)
+        .service(access_requests::create_access_request)
+        .service(access_requests::my_access_status)
+        .service(access_requests::admin_list_access_requests)
+        .service(access_requests::admin_decide_access_request)
         .service(support::create_ticket)
         .service(support::list_my_tickets)
         .service(support::get_ticket)

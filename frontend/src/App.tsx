@@ -20,6 +20,7 @@ import ResetPassword from "./auth/ResetPassword";
 import RecoverWithMnemonicPage from "./auth/RecoverWithMnemonic";
 import { useAuth } from "./auth/useAuth";
 import { homePathForUser, normalizeAccountType } from "./auth/accountHome";
+import { hasPermission } from "./auth/permissions";
 
 // 🔥 Lazy loaded pages
 const Home = lazy(() => import("./home/Home"));
@@ -78,6 +79,10 @@ const OrgKeyBootstrap = lazy(() => import("./orgKeys/BootstrapPage"));
 const OrgRecoveryKey = lazy(() => import("./orgKeys/RecoveryKeyPage"));
 const RecoverMemberData = lazy(() => import("./orgKeys/RecoverMemberDataPage"));
 const OrgAuditLog = lazy(() => import("./orgKeys/AuditLogPage"));
+const TestAccess = lazy(() => import("./test_access/TestAccess"));
+const AccessRequestsReview = lazy(
+  () => import("./accessRequests/AccessRequestsReview"),
+);
 
 export default function App() {
   const { user } = useAuth();
@@ -272,6 +277,17 @@ export default function App() {
               }
             />
             <Route path="/about" element={<About />} />
+            <Route path="/test-access" element={<TestAccess />} />
+            <Route
+              path="/access-requests"
+              element={
+                hasPermission(user, "tickets:manage") ? (
+                  <AccessRequestsReview />
+                ) : (
+                  <Navigate to={accountHome} replace />
+                )
+              }
+            />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/billing" element={<Billing />} />

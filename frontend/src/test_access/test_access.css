@@ -1,0 +1,132 @@
+.test-access-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.test-access-header h1 {
+  margin: 0 0 8px;
+  font-size: var(--text-2xl, 1.6rem);
+  font-weight: 700;
+}
+
+.test-access-header p {
+  margin: 0;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.test-access-section {
+  margin-top: 28px;
+}
+
+.test-access-section h2 {
+  margin: 0 0 8px;
+  font-size: var(--text-lg, 1.15rem);
+  font-weight: 600;
+}
+
+.test-access-section ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.test-access-section li {
+  margin: 4px 0;
+}
+
+.test-access-section code {
+  font-family: monospace;
+  background: var(--color-surface-muted, #f3f4f6);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.test-access-muted {
+  color: var(--color-text-secondary, #6b7280);
+  margin-top: 12px;
+}
+
+.test-access-locked,
+.test-access-unlocked {
+  padding: 16px 18px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border, #e5e7eb);
+}
+
+.test-access-locked {
+  background: var(--color-surface-muted, #f9fafb);
+}
+
+.test-access-unlocked {
+  background: var(--color-success-soft, #ecfdf5);
+  border-color: var(--color-success-border, #a7f3d0);
+}
+
+.test-access-locked h2,
+.test-access-unlocked h2 {
+  margin: 0 0 6px;
+  font-size: var(--text-lg, 1.15rem);
+}
+
+.test-access-denied {
+  color: var(--color-danger-strong, #b91c1c);
+  margin: 8px 0 0;
+}
+
+.test-access-label {
+  display: block;
+  margin-top: 16px;
+}
+
+.test-access-label span {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  font-size: var(--text-md, 0.95rem);
+}
+
+.test-access-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border, #d1d5db);
+  border-radius: var(--radius-md, 8px);
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.test-access-btn {
+  margin-top: 12px;
+  padding: 9px 16px;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-primary-action, #2563eb);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.test-access-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.test-access-error,
+.test-access-success {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md, 8px);
+  font-weight: 600;
+}
+
+.test-access-error {
+  border: 1px solid var(--color-danger-border, #fecaca);
+  background: var(--color-danger-soft, #fef2f2);
+  color: var(--color-danger-strong, #b91c1c);
+}
+
+.test-access-success {
+  border: 1px solid var(--color-success-border, #a7f3d0);
+  background: var(--color-success-soft, #ecfdf5);
+  color: var(--color-success, #047857);
+}

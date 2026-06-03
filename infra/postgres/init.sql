@@ -1208,3 +1208,35 @@ CREATE TABLE IF NOT EXISTS org_key_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_org_key_audit_log_org_time
     ON org_key_audit_log(organization_id, created_at DESC);
+
+-- ── Access requests ──────────────────────────────────────────────────
+-- A user asks to see locked data; the request is routed to a support team
+-- by scope: personal/platform users → the platform support team, an
+-- organization member → that organization's support team. Staff with the
+-- `tickets:manage` permission (support / admin / owner) review and decide.
+-- Both sides attach free-text explanations (request_note / decision_note).
+CREATE TABLE IF NOT EXISTS access_requests (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    resource TEXT NOT NULL DEFAULT 'test_access',
+    target_scope TEXT NOT NULL CHECK (target_scope IN ('platform', 'organization')),
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'denied')),
+    request_note TEXT,
+    decision_note TEXT,
+    decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    decided_at TIMESTAMPTZ
+);
+-- At most one active (pending or approved) request per user + resource.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_access_requests_active
+    ON access_requests(user_id, resource)
+    WHERE status IN ('pending', 'approved');
+CREATE INDEX IF NOT EXISTS idx_access_requests_platform_queue
+    ON access_requests(status, created_at DESC)
+    WHERE target_scope = 'platform';
+CREATE INDEX IF NOT EXISTS idx_access_requests_org_queue
+    ON access_requests(organization_id, status, created_at DESC)
+    WHERE organization_id IS NOT NULL;
