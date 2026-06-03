@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
 
   resolve: {
@@ -53,5 +53,21 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 1000,
+    // Strip all console.* calls and debugger statements from the PRODUCTION
+    // bundle so internal logging never reaches an end user's dev console.
+    // Vite 8 uses Rolldown; dropConsole/dropDebugger live in its minifier's
+    // compress options. Dev (`vite serve`) keeps full logging.
+    rolldownOptions:
+      command === "build"
+        ? {
+            output: {
+              minify: {
+                compress: { dropConsole: true, dropDebugger: true },
+                mangle: true,
+                codegen: { removeWhitespace: true },
+              },
+            },
+          }
+        : {},
   },
-});
+}));

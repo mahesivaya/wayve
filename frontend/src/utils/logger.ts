@@ -42,13 +42,22 @@ function emit(level: Level, scope: string | undefined, args: unknown[]) {
 
   const tag = scope ? `[${level.toUpperCase()} ${ts} ${scope}]` : `[${level.toUpperCase()} ${ts}]`;
 
-  const fn =
-    level === "error" ? console.error
-    : level === "warn" ? console.warn
-    : level === "debug" ? console.debug
-    : console.log;
-
-  fn(tag, ...args);
+  // Direct console.* calls (not an indirect `fn(...)`) so the production
+  // build's drop-console minifier pass strips them — leaving only the ring
+  // buffer in prod. Dev keeps full console output.
+  switch (level) {
+    case "error":
+      console.error(tag, ...args);
+      break;
+    case "warn":
+      console.warn(tag, ...args);
+      break;
+    case "debug":
+      console.debug(tag, ...args);
+      break;
+    default:
+      console.log(tag, ...args);
+  }
 }
 
 interface Logger {
