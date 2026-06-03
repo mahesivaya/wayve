@@ -21,6 +21,31 @@ export type AuditLogFilters = {
   user_id?: string;
 };
 
+export type UserActionRow = {
+  id: number;
+  actor_user_id: number | null;
+  actor_email: string | null;
+  organization_id: number | null;
+  action: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  ip: string | null;
+  created_at: string;
+};
+
+export async function listUserActions(
+  filters: { limit?: number; action?: string } = {},
+): Promise<UserActionRow[]> {
+  const params = new URLSearchParams();
+  if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.action) params.set("action", filters.action);
+  const query = params.toString();
+  return apiFetchJson<UserActionRow[]>(
+    `/api/audit/user-actions${query ? `?${query}` : ""}`,
+    { preserve401: true },
+  );
+}
+
 export type SiemSettings = {
   scope: string;
   organization_id: number | null;

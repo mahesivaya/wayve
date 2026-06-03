@@ -118,6 +118,19 @@ pub async fn cancel_subscription(req: HttpRequest, pool: web::Data<PgPool>) -> A
     .execute(pool.get_ref())
     .await?;
 
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "subscription_cancel",
+            resource_type: "subscription",
+            resource_id: Some(sub_id.to_string()),
+            metadata: None,
+        },
+    )
+    .await;
+
     Ok(HttpResponse::Ok().json(serde_json::json!({ "cancel_at_period_end": true })))
 }
 

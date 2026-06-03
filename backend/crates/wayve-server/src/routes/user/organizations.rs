@@ -1191,6 +1191,18 @@ pub async fn admin_delete_user(
         scope = ?target_ctx.scope,
         "admin deleted user"
     );
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: ctx.user_id,
+            action: "user_delete",
+            resource_type: "user",
+            resource_id: Some(target_user_id.to_string()),
+            metadata: Some(serde_json::json!({ "scope": format!("{:?}", target_ctx.scope) })),
+        },
+    )
+    .await;
 
     Ok(HttpResponse::NoContent().finish())
 }

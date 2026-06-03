@@ -6,11 +6,13 @@ import {
   downloadAuditExport,
   getSiemSettings,
   listAuditLogs,
+  listUserActions,
   saveSiemSettings,
   testSiemSettings,
   type AuditLogFilters,
   type AuditLogRow,
   type SiemSettings,
+  type UserActionRow,
 } from "../api/audit";
 import { fmtDateTime } from "../utils/datetime";
 import "./auditSecurity.css";
@@ -51,6 +53,10 @@ export default function AuditSecurity() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState("");
 
+  const [userActions, setUserActions] = useState<UserActionRow[]>([]);
+  const [userActionsError, setUserActionsError] = useState("");
+  const [userActionSearch, setUserActionSearch] = useState("");
+
   const [siem, setSiem] = useState<SiemSettings | null>(null);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookToken, setWebhookToken] = useState("");
@@ -79,6 +85,18 @@ export default function AuditSecurity() {
     }
   }, [canReadAudit, filters]);
 
+  const loadUserActions = useCallback(async () => {
+    if (!canReadAudit) return;
+    setUserActionsError("");
+    try {
+      setUserActions(await listUserActions({ limit: 200 }));
+    } catch (err) {
+      setUserActionsError(
+        err instanceof Error ? err.message : "Failed to load user actions",
+      );
+    }
+  }, [canReadAudit]);
+
   const loadSiem = useCallback(async () => {
     if (!canManageSiem) return;
     setSiemLoading(true);
@@ -104,10 +122,27 @@ export default function AuditSecurity() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      void loadUserActions();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadUserActions]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
       void loadSiem();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadSiem]);
+
+  const filteredUserActions = useMemo(() => {
+    const q = userActionSearch.trim().toLowerCase();
+    if (!q) return userActions;
+    return userActions.filter((a) =>
+      [a.actor_email, a.action, a.resource_type, a.resource_id, a.ip].some(
+        (v) => (v ?? "").toLowerCase().includes(q),
+      ),
+    );
+  }, [userActions, userActionSearch]);
 
   async function submitSiem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -342,6 +377,69 @@ export default function AuditSecurity() {
                       <td>{row.api_key_name ?? row.key_preview ?? row.api_key_id ?? "-"}</td>
                       <td>{row.user_id ?? "-"}</td>
                       <td>{row.ip ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {canReadAudit && (
+        <section className="audit-security-panel">
+          <div className="audit-security-panel-head">
+            <h2>User actions</h2>
+            <input
+              type="search"
+              className="audit-user-search"
+              placeholder="Search user, action, resource…"
+              value={userActionSearch}
+              onChange={(e) => setUserActionSearch(e.target.value)}
+              aria-label="Search user actions"
+            />
+          </div>
+          <p className="audit-security-sub">
+            Password changes, deletions, file downloads/exports and billing
+            changes. Also written to logs/user_actions.log.
+          </p>
+          {userActionsError && (
+            <div className="audit-security-error">{userActionsError}</div>
+          )}
+          {filteredUserActions.length === 0 ? (
+            <div className="audit-security-empty">
+              {userActions.length === 0
+                ? "No user actions recorded yet."
+                : "No matches for that search."}
+            </div>
+          ) : (
+            <div className="audit-table-wrap">
+              <table className="audit-table">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Actor</th>
+                    <th>Action</th>
+                    <th>Resource</th>
+                    <th>IP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUserActions.map((a) => (
+                    <tr key={a.id}>
+                      <td>{toLocalTime(a.created_at)}</td>
+                      <td>{a.actor_email ?? a.actor_user_id ?? "-"}</td>
+                      <td>
+                        <span className={`audit-outcome ${a.action}`}>
+                          {a.action}
+                        </span>
+                      </td>
+                      <td className="audit-path">
+                        {a.resource_type
+                          ? `${a.resource_type}${a.resource_id ? `#${a.resource_id}` : ""}`
+                          : "-"}
+                      </td>
+                      <td>{a.ip ?? "-"}</td>
                     </tr>
                   ))}
                 </tbody>

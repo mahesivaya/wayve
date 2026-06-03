@@ -58,6 +58,20 @@
   margin-bottom: 14px;
 }
 
+.audit-security-sub {
+  margin: -6px 0 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-md);
+}
+
+.audit-user-search {
+  min-width: 240px;
+  border: 1px solid var(--color-border-muted);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
+  font-size: var(--text-md);
+}
+
 .audit-filters,
 .siem-form {
   display: grid;

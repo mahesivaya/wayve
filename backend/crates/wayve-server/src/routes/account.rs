@@ -87,5 +87,17 @@ pub async fn delete_account(
     invalidate_email_account_cache(id).await;
     invalidate_user_account_list_cache(user_id).await;
     info!("Email account deleted: id={} user_id={}", id, user_id);
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "email_account_delete",
+            resource_type: "email_account",
+            resource_id: Some(id.to_string()),
+            metadata: None,
+        },
+    )
+    .await;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }

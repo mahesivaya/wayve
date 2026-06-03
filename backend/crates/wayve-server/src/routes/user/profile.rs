@@ -300,6 +300,18 @@ pub async fn change_password(
     tx.commit().await?;
 
     info!(target: "auth", user_id, had_password = data.current_password.is_some(), wrap_rotated = data.new_login_wrap.is_some(), "password updated");
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "password_change",
+            resource_type: "user",
+            resource_id: Some(user_id.to_string()),
+            metadata: None,
+        },
+    )
+    .await;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "Password updated" })))
 }
 

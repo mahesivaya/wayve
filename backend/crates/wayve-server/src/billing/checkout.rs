@@ -164,8 +164,22 @@ pub async fn create_checkout(
     };
 
     match provider::create_checkout_session(&params).await {
-        Ok(session) => Ok(HttpResponse::Ok()
-            .json(serde_json::json!({ "url": session.url, "session_id": session.id }))),
+        Ok(session) => {
+            crate::audit::record_action(
+                pool.get_ref(),
+                &req,
+                crate::audit::AuditEvent {
+                    actor_user_id: user_id,
+                    action: "checkout_started",
+                    resource_type: "plan",
+                    resource_id: Some(data.plan_code.trim().to_string()),
+                    metadata: None,
+                },
+            )
+            .await;
+            Ok(HttpResponse::Ok()
+                .json(serde_json::json!({ "url": session.url, "session_id": session.id })))
+        }
         Err(e) => {
             error!(target: "billing", error = ?e, "checkout session create failed");
             Ok(HttpResponse::BadGateway()
@@ -438,6 +452,19 @@ pub async fn set_default_payment_method(
             serde_json::json!({ "message": "Could not update subscription payment method" }),
         ));
     }
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "payment_method_set",
+            resource_type: "payment_method",
+            resource_id: Some(payment_method_id.to_string()),
+            metadata: None,
+        },
+    )
+    .await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "saved": true })))
 }

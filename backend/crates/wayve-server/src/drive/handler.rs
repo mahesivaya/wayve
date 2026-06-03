@@ -499,6 +499,19 @@ pub async fn download_file(
         None => return Ok(HttpResponse::NotFound().finish()),
     };
 
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "file_download",
+            resource_type: "drive_file",
+            resource_id: Some(file_id.to_string()),
+            metadata: Some(serde_json::json!({ "name": file_name.clone() })),
+        },
+    )
+    .await;
+
     serve_file_parts(user_id, file_id, file_name, file_path, file_iv).await
 }
 

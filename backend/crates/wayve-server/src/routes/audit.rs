@@ -33,6 +33,78 @@ pub struct AuditLogView {
 }
 
 #[derive(Deserialize)]
+pub struct UserActionQuery {
+    pub limit: Option<i64>,
+    pub action: Option<String>,
+}
+
+#[derive(Serialize, FromRow)]
+pub struct UserActionView {
+    pub id: i64,
+    pub actor_user_id: Option<i32>,
+    pub actor_email: Option<String>,
+    pub organization_id: Option<i32>,
+    pub action: String,
+    pub resource_type: Option<String>,
+    pub resource_id: Option<String>,
+    pub ip: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+// GET /api/audit/user-actions — security-relevant user actions (password
+// change, deletion, export/download, billing change, …) from `audit_logs`,
+// scoped like the API-key audit: platform staff see everything, an org
+// auditor sees their org, a personal user sees only their own actions.
+#[get("/audit/user-actions")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn list_user_actions(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<UserActionQuery>,
+) -> AppResult {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::AuditRead).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+
+    let limit = query
+        .limit
+        .unwrap_or(AUDIT_LOG_DEFAULT_LIMIT)
+        .clamp(1, AUDIT_LOG_MAX_LIMIT);
+    let action = query
+        .action
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+
+    let rows = sqlx::query_as::<_, UserActionView>(
+        r#"
+        SELECT a.id, a.actor_user_id, u.email AS actor_email, a.organization_id,
+               a.action, a.resource_type, a.resource_id, a.ip, a.created_at
+        FROM audit_logs a
+        LEFT JOIN users u ON u.id = a.actor_user_id
+        WHERE ($1::TEXT IS NULL OR a.action = $1)
+          AND (
+                $2 = 'platform'
+                OR ($2 = 'organization' AND a.organization_id = $3)
+                OR ($2 = 'personal' AND a.actor_user_id = $4)
+          )
+        ORDER BY a.created_at DESC
+        LIMIT $5
+        "#,
+    )
+    .bind(action)
+    .bind(ctx.scope.as_str())
+    .bind(ctx.organization_id)
+    .bind(ctx.user_id)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(rows))
+}
+
+#[derive(Deserialize)]
 pub struct SiemSettingsInput {
     pub webhook_url: String,
     pub webhook_token: Option<String>,

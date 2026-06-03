@@ -1240,3 +1240,29 @@ CREATE INDEX IF NOT EXISTS idx_access_requests_platform_queue
 CREATE INDEX IF NOT EXISTS idx_access_requests_org_queue
     ON access_requests(organization_id, status, created_at DESC)
     WHERE organization_id IS NOT NULL;
+
+-- ── User-action audit log ────────────────────────────────────────────
+-- Security-relevant actions taken by users — password changes, data /
+-- account deletions, file exports/downloads, billing changes, etc. Read by
+-- the Security audit page; also mirrored to logs/user_actions.log. Writes
+-- are best-effort and must never block the action they describe.
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id BIGSERIAL PRIMARY KEY,
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+    action TEXT NOT NULL,
+    resource_type TEXT,
+    resource_id TEXT,
+    metadata JSONB,
+    ip TEXT,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor
+    ON audit_logs(actor_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_org
+    ON audit_logs(organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action
+    ON audit_logs(action, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created
+    ON audit_logs(created_at DESC);
