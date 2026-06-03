@@ -33,6 +33,21 @@ export type AccessRequestView = {
   decided_at: string | null;
 };
 
+// One line from the access-request audit log (logs/access_requests.log),
+// scoped to the caller's support team by the backend.
+export type AccessHistoryEntry = {
+  ts: string;
+  event: "requested" | "updated" | "approved" | "denied";
+  request_id: number;
+  actor_email: string | null;
+  requester_email: string | null;
+  resource: string;
+  target_scope: AccessTarget;
+  organization_id: number | null;
+  status: string;
+  note: string | null;
+};
+
 const DEFAULT_RESOURCE = "test_access";
 
 export const getMyAccessStatus = async (resource: string = DEFAULT_RESOURCE) =>
@@ -71,4 +86,9 @@ export const adminDecideAccessRequest = async (
       method: "PATCH",
       body: JSON.stringify({ status, note }),
     },
+  );
+
+export const getAccessRequestHistory = async (limit = 200) =>
+  apiFetchJson<AccessHistoryEntry[]>(
+    `/api/access-requests/history?limit=${limit}`,
   );

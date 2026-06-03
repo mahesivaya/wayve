@@ -82,6 +82,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(access_requests::my_access_status)
         .service(access_requests::admin_list_access_requests)
         .service(access_requests::admin_decide_access_request)
+        .service(access_requests::access_request_history)
         .service(support::create_ticket)
         .service(support::list_my_tickets)
         .service(support::get_ticket)

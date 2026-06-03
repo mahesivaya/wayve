@@ -5,6 +5,8 @@ import { hasPermission } from "../auth/permissions";
 import {
   adminDecideAccessRequest,
   adminListAccessRequests,
+  getAccessRequestHistory,
+  type AccessHistoryEntry,
   type AccessRequestView,
 } from "../api/accessRequests";
 import { homePathForUser } from "../auth/accountHome";
@@ -35,6 +37,9 @@ export default function AccessRequestsReview() {
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [busyId, setBusyId] = useState<number | null>(null);
 
+  const [history, setHistory] = useState<AccessHistoryEntry[]>([]);
+  const [historyError, setHistoryError] = useState("");
+
   const load = useCallback(async () => {
     if (!canManage) {
       setLoading(false);
@@ -51,16 +56,32 @@ export default function AccessRequestsReview() {
     }
   }, [canManage, statusFilter]);
 
+  const loadHistory = useCallback(async () => {
+    if (!canManage) return;
+    setHistoryError("");
+    try {
+      setHistory(await getAccessRequestHistory());
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error ? err.message : "Failed to load history",
+      );
+    }
+  }, [canManage]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
 
   const decide = async (id: number, status: "approved" | "denied") => {
     setError("");
     setBusyId(id);
     try {
       await adminDecideAccessRequest(id, status, notes[id]?.trim() || undefined);
-      await load();
+      await Promise.all([load(), loadHistory()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update request");
     } finally {
@@ -177,6 +198,57 @@ export default function AccessRequestsReview() {
                     >
                       Deny
                     </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="pt-panel">
+        <div className="pt-panel-head">
+          <h2>History</h2>
+          <span className="pt-stat-sub">
+            Audit trail of every request, approval and denial for your team
+          </span>
+          <button
+            type="button"
+            className="pt-filter-select"
+            onClick={() => void loadHistory()}
+          >
+            Refresh
+          </button>
+        </div>
+
+        {historyError && <div className="pt-banner">{historyError}</div>}
+
+        {history.length === 0 ? (
+          <div className="pt-empty">No activity logged yet.</div>
+        ) : (
+          <table className="pt-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Event</th>
+                <th>Requester</th>
+                <th>By</th>
+                <th>Resource</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((h, i) => (
+                <tr key={`${h.request_id}-${h.ts}-${i}`}>
+                  <td>{fmtDateTime(h.ts)}</td>
+                  <td>
+                    <span className="pt-pill info">{h.event}</span>
+                  </td>
+                  <td>{h.requester_email ?? "—"}</td>
+                  <td>{h.actor_email ?? "—"}</td>
+                  <td>{h.resource}</td>
+                  <td>
+                    {h.note || <small style={{ color: "#6b7280" }}>—</small>}
                   </td>
                 </tr>
               ))}

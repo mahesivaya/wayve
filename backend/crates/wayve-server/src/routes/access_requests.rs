@@ -11,12 +11,60 @@
 use crate::prelude::*;
 use actix_web::patch;
 use chrono::{DateTime, Utc};
-use tracing::{info, instrument};
+use tokio::io::AsyncWriteExt;
+use tracing::{info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::rbac::{self, Permission, Scope};
 
 const DEFAULT_RESOURCE: &str = "test_access";
 const ALLOWED_DECISIONS: &[&str] = &["approved", "denied"];
+
+// Append-only audit log of every access-request event (requested / updated /
+// approved / denied). Written under the project's `logs/` directory — the
+// backend runs at WORKDIR /app and `logs/` is bind-mounted to the repo-root
+// `logs/`, alongside the other rolling logs. One JSON object per line so the
+// support history dashboard can read + filter it back. The `/history` endpoint
+// scopes each line to the caller's support team via `target_scope` /
+// `organization_id`.
+const ACCESS_LOG_DIR: &str = "logs";
+const ACCESS_LOG_PATH: &str = "logs/access_requests.log";
+
+// Look up a user's email for human-readable log lines. Best-effort: a missing
+// row (deleted user) just logs as null rather than failing the request.
+async fn email_of(pool: &PgPool, user_id: i32) -> Option<String> {
+    sqlx::query_scalar::<_, String>("SELECT email FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+}
+
+// Append one event as a JSON line. Best-effort: logging must never break the
+// request, so failures are warned and swallowed.
+async fn append_event(event: serde_json::Value) {
+    let line = match serde_json::to_string(&event) {
+        Ok(s) => s,
+        Err(err) => {
+            warn!(target: "http", error = ?err, "access-request log serialize failed");
+            return;
+        }
+    };
+    let _ = tokio::fs::create_dir_all(ACCESS_LOG_DIR).await;
+    match tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(ACCESS_LOG_PATH)
+        .await
+    {
+        Ok(mut file) => {
+            if let Err(err) = file.write_all(format!("{line}\n").as_bytes()).await {
+                warn!(target: "http", error = ?err, "access-request log write failed");
+            }
+        }
+        Err(err) => warn!(target: "http", error = ?err, "access-request log open failed"),
+    }
+}
 
 // Sample payload revealed once a request for `test_access` is approved. A real
 // resource would fetch the actual protected content here.
@@ -145,6 +193,27 @@ pub async fn create_access_request(
         user_id, request_id = row.id, target_scope, resource = %resource,
         "access request submitted"
     );
+
+    // A fresh insert has created_at == updated_at; an upsert that touched an
+    // existing active request bumped updated_at, so it's an explanation edit.
+    let event = if row.created_at == row.updated_at {
+        "requested"
+    } else {
+        "updated"
+    };
+    append_event(serde_json::json!({
+        "ts": Utc::now().to_rfc3339(),
+        "event": event,
+        "request_id": row.id,
+        "actor_email": email_of(pool.get_ref(), user_id).await,
+        "requester_email": email_of(pool.get_ref(), row.user_id).await,
+        "resource": row.resource,
+        "target_scope": row.target_scope,
+        "organization_id": row.organization_id,
+        "status": row.status,
+        "note": row.request_note,
+    }))
+    .await;
 
     Ok(HttpResponse::Ok().json(row))
 }
@@ -295,7 +364,7 @@ pub async fn admin_decide_access_request(
         Scope::Personal => return Err(AppError::NotFound("access request")),
     };
 
-    let updated: Option<i32> = sqlx::query_scalar(
+    let updated: Option<(i32, Option<i32>, String, String)> = sqlx::query_as(
         r#"
         UPDATE access_requests
         SET status = $2,
@@ -308,7 +377,7 @@ pub async fn admin_decide_access_request(
                 ($5 = 'platform' AND target_scope = 'platform')
                 OR ($5 = 'organization' AND organization_id = $6)
           )
-        RETURNING id
+        RETURNING user_id, organization_id, target_scope, resource
         "#,
     )
     .bind(request_id)
@@ -320,7 +389,8 @@ pub async fn admin_decide_access_request(
     .fetch_optional(pool.get_ref())
     .await?;
 
-    updated.ok_or(AppError::NotFound("access request"))?;
+    let (requester_id, req_org_id, req_target_scope, req_resource) =
+        updated.ok_or(AppError::NotFound("access request"))?;
 
     info!(
         target: "http",
@@ -328,8 +398,74 @@ pub async fn admin_decide_access_request(
         "access request decided"
     );
 
+    append_event(serde_json::json!({
+        "ts": Utc::now().to_rfc3339(),
+        "event": status,
+        "request_id": request_id,
+        "actor_email": email_of(pool.get_ref(), user_id).await,
+        "requester_email": email_of(pool.get_ref(), requester_id).await,
+        "resource": req_resource,
+        "target_scope": req_target_scope,
+        "organization_id": req_org_id,
+        "status": status,
+        "note": note,
+    }))
+    .await;
+
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "id": request_id,
         "status": status,
     })))
+}
+
+#[derive(Deserialize)]
+pub struct HistoryQuery {
+    pub limit: Option<usize>,
+}
+
+// GET /access-requests/history?limit= — the support team's audit history,
+// read back from the JSON-lines log file and scoped to the caller's team
+// (platform staff see platform-targeted events; an org staffer sees only
+// their own org's). Most recent first.
+#[get("/access-requests/history")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn access_request_history(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<HistoryQuery>,
+) -> AppResult {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+    let limit = query.limit.unwrap_or(200).min(1000);
+
+    // Personal scope holds the permission (owner-implies-all) but has no team.
+    let (scope_str, org_id) = match ctx.scope {
+        Scope::Platform => ("platform", None),
+        Scope::Organization => ("organization", ctx.organization_id),
+        Scope::Personal => return Ok(HttpResponse::Ok().json(Vec::<Value>::new())),
+    };
+
+    // Missing file (no events yet) is not an error — return an empty history.
+    let contents = tokio::fs::read_to_string(ACCESS_LOG_PATH)
+        .await
+        .unwrap_or_default();
+
+    let mut entries: Vec<Value> = contents
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(|entry| match scope_str {
+            "platform" => entry.get("target_scope").and_then(Value::as_str) == Some("platform"),
+            _ => {
+                entry.get("organization_id").and_then(Value::as_i64) == org_id.map(i64::from)
+            }
+        })
+        .collect();
+
+    // Newest first, capped to `limit`.
+    entries.reverse();
+    entries.truncate(limit);
+
+    Ok(HttpResponse::Ok().json(entries))
 }
