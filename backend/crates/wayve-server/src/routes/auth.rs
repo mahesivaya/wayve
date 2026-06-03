@@ -9,6 +9,7 @@ use crate::models::message::MessageResponse;
 use crate::models::user::User;
 use wayve_security::jwt::{
     auth_cookie, create_jwt, create_jwt_for_account_with_max_exp, expired_auth_cookie,
+    get_user_id_from_request,
 };
 use wayve_security::password::{hash_password, verify_password};
 use rand::RngCore;
@@ -82,8 +83,12 @@ pub async fn register(pool: web::Data<PgPool>, data: web::Json<RegisterInput>) -
 }
 
 #[post("/login")]
-#[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
-pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) -> AppResult {
+#[instrument(target = "auth", skip(req, pool, data), fields(email = %data.email))]
+pub(crate) async fn login(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<LoginInput>,
+) -> AppResult {
     info!(target: "auth", "login attempt");
 
     let user = sqlx::query_as::<_, User>(
@@ -148,6 +153,18 @@ pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) 
     }
 
     info!("Login success: {}", data.email);
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user.id,
+            action: "login",
+            resource_type: "session",
+            resource_id: None,
+            metadata: None,
+        },
+    )
+    .await;
     // Clamp the JWT's `exp` so it never outlives the account's hard
     // expiry. For non-expiring accounts (the default), `max_exp` is
     // None and the standard 24h TTL applies.
@@ -187,8 +204,24 @@ pub(crate) async fn login(pool: web::Data<PgPool>, data: web::Json<LoginInput>) 
 }
 
 #[post("/logout")]
-#[instrument(target = "auth")]
-pub async fn logout() -> HttpResponse {
+#[instrument(target = "auth", skip(req, pool))]
+pub async fn logout(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
+    // Best-effort: record the action only when the request still carries a
+    // resolvable identity. Logout always succeeds regardless.
+    if let Some(user_id) = get_user_id_from_request(&req) {
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "logout",
+                resource_type: "session",
+                resource_id: None,
+                metadata: None,
+            },
+        )
+        .await;
+    }
     HttpResponse::Ok()
         .cookie(expired_auth_cookie())
         .json(serde_json::json!({ "message": "Logged out" }))

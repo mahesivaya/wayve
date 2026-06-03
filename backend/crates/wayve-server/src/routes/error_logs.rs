@@ -176,11 +176,17 @@ pub async fn list_error_logs(
         Ok(c) => c,
         Err(resp) => return Ok(resp),
     };
-    if ctx.scope != Scope::Platform {
-        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Platform scope required"
-        })));
-    }
+    // Platform staff see all app logs; an organization owner/admin sees only
+    // logs attributed to their own org's members. Personal scope has none.
+    let org_filter: Option<i32> = match ctx.scope {
+        Scope::Platform => None,
+        Scope::Organization => ctx.organization_id,
+        Scope::Personal => {
+            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "Platform or organization scope required"
+            })));
+        }
+    };
 
     let limit = query.limit.unwrap_or(200).clamp(1, 1000);
     let source = query
@@ -213,6 +219,8 @@ pub async fn list_error_logs(
           AND ($2::TEXT IS NULL OR l.severity = $2)
           AND ($3::TEXT IS NULL OR l.message ILIKE $3 OR l.url ILIKE $3
                                 OR u.email   ILIKE $3)
+          AND ($5::INT IS NULL OR l.user_id IN (
+                  SELECT id FROM users WHERE organization_id = $5))
         ORDER BY l.created_at DESC
         LIMIT $4
         "#,
@@ -221,6 +229,7 @@ pub async fn list_error_logs(
     .bind(severity)
     .bind(q)
     .bind(limit)
+    .bind(org_filter)
     .fetch_all(pool.get_ref())
     .await?;
 
@@ -235,8 +244,11 @@ pub async fn list_error_logs(
             COUNT(*) FILTER (WHERE source='server' AND created_at >= NOW() - INTERVAL '24 hours')::BIGINT AS server_24h,
             COUNT(DISTINCT user_id)               FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours' AND user_id IS NOT NULL)::BIGINT AS users_24h
         FROM error_logs
+        WHERE ($1::INT IS NULL OR user_id IN (
+                SELECT id FROM users WHERE organization_id = $1))
         "#,
     )
+    .bind(org_filter)
     .fetch_one(pool.get_ref())
     .await?;
 

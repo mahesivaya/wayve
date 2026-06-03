@@ -30,7 +30,8 @@ function shortStack(stack: string | null, lines = 4): string {
 export default function PlatformLogs() {
   const { user } = useAuth();
   const canView =
-    user?.scope === "platform" &&
+    (user?.scope === "platform" ||
+      (user?.scope === "organization" && user?.effective_role === "owner")) &&
     (hasPermission(user, "logs:read") ||
       hasPermission(user, "logs:read_limited"));
 
@@ -84,7 +85,7 @@ export default function PlatformLogs() {
   return (
     <div className="pt-page">
       <header className="pt-header">
-        <h1>Error Logs</h1>
+        <h1>App Logs</h1>
         <p>
           Every client + server error captured platform-wide · {user?.email}
         </p>

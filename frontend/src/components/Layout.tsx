@@ -419,12 +419,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   }
 
   const hasPlatformSection =
-    canAccessSecurity ||
     canAccessPlatformBilling ||
     canAccessPlatformDeveloper ||
     canAccessPlatformSupport ||
     canAccessPlatformAnalytics ||
-    canAccessPlatformLogs;
+    isPlatformOwner;
+
+  // Logs get their own sidebar group, split out from Platform.
+  const hasLogsSection =
+    canAccessSecurity || canAccessPlatformLogs || isPlatformOwner;
 
   return (
     <div className="app">
@@ -581,13 +584,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           {hasPlatformSection && (
             <div className="sidebar-section">
               <div className="sidebar-section-label">Platform</div>
-              {canAccessSecurity &&
-                renderSidebarLink(
-                  "/security/audit",
-                  "Security",
-                  "🔒",
-                  location.pathname.startsWith("/security"),
-                )}
               {canAccessPlatformBilling &&
                 renderSidebarLink(
                   "/platform/billing",
@@ -618,24 +614,44 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 )}
               {isPlatformOwner &&
                 renderSidebarLink(
-                  "/platform/tracing",
-                  "Tracing",
-                  "📈",
-                  location.pathname === "/platform/tracing",
-                )}
-              {canAccessPlatformLogs &&
-                renderSidebarLink(
-                  "/platform/logs",
-                  "Error Logs",
-                  "🪵",
-                  location.pathname === "/platform/logs",
-                )}
-              {isPlatformOwner &&
-                renderSidebarLink(
                   "/platform/domains",
                   "Domains",
                   "🌐",
                   location.pathname === "/platform/domains",
+                )}
+            </div>
+          )}
+
+          {hasLogsSection && (
+            <div className="sidebar-section">
+              <div className="sidebar-section-label">Logs</div>
+              {canAccessPlatformLogs &&
+                renderSidebarLink(
+                  "/platform/logs",
+                  "App Logs",
+                  "🪵",
+                  location.pathname === "/platform/logs",
+                )}
+              {canAccessSecurity &&
+                renderSidebarLink(
+                  "/platform/user-logs",
+                  "User Logs",
+                  "👤",
+                  location.pathname === "/platform/user-logs",
+                )}
+              {canAccessSecurity &&
+                renderSidebarLink(
+                  "/security/audit",
+                  "Audit Logs",
+                  "🔒",
+                  location.pathname.startsWith("/security"),
+                )}
+              {isPlatformOwner &&
+                renderSidebarLink(
+                  "/platform/tracing",
+                  "Tracing",
+                  "📈",
+                  location.pathname === "/platform/tracing",
                 )}
             </div>
           )}
@@ -650,6 +666,18 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 "Domains",
                 "🌐",
                 location.pathname === "/platform/domains",
+              )}
+              {renderSidebarLink(
+                "/organization/logs",
+                "App Logs",
+                "📊",
+                location.pathname === "/organization/logs",
+              )}
+              {renderSidebarLink(
+                "/security/audit",
+                "Audit Logs",
+                "🔒",
+                location.pathname.startsWith("/security"),
               )}
             </div>
           )}
