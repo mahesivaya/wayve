@@ -711,10 +711,22 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
         Err(e) => return Err(AppError::Db(e)),
     };
 
-    if ctx.scope == Scope::Organization && ctx.role == Role::Owner {
-        return Ok(HttpResponse::Conflict().json(serde_json::json!({
-            "message": "Delete your organization first (Settings → Danger zone), then delete your account."
-        })));
+    // Self-service account deletion is personal-accounts only. Business
+    // (organization) and platform team members can't delete their own account
+    // — an owner/admin must remove them. An org owner deletes the whole org
+    // first (which reverts them to a personal account), then can self-delete.
+    match ctx.scope {
+        Scope::Personal => {}
+        Scope::Organization if ctx.role == Role::Owner => {
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "message": "Delete your organization first (Settings → Danger zone), then delete your account."
+            })));
+        }
+        _ => {
+            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "Team members can't delete their own account. Ask your organization or platform owner to remove you."
+            })));
+        }
     }
 
     let active_sub: Option<i32> = sqlx::query_scalar(

@@ -58,6 +58,9 @@ export default function Settings() {
   const isPlatformUser = user?.scope === "platform";
   const isOrgUser = user?.scope === "organization";
   const hideBilling = isPlatformUser || isOrgUser;
+  // Self-service account deletion is for personal accounts only — business
+  // (organization) and platform team members can't delete their own account.
+  const isPersonal = user?.scope === "personal";
   const [deletingOrg, setDeletingOrg] = useState(false);
   const [deleteOrgError, setDeleteOrgError] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -328,10 +331,10 @@ export default function Settings() {
           </section>
         )}
 
-        {/* Org owners delete the organization above first (their account is
-            the org's anchor), so the personal-account delete is hidden for
-            them. Everyone else can permanently close their account here. */}
-        {!isOrgOwner && (
+        {/* Self-service account deletion is personal-accounts only. Business
+            (organization) and platform team members can't delete their own
+            account here — org owners tear down the whole org above instead. */}
+        {isPersonal && (
           <section className="settings-card settings-danger settings-danger-compact">
             <div className="settings-danger-row">
               <span className="settings-danger-line">
