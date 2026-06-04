@@ -14,73 +14,107 @@
   max-height: 92vh;
   overflow-y: auto;
   background: var(--color-surface);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: 0 24px 60px rgb(0, 0, 0, 0.35);
   color: var(--color-text-primary);
+  /* The app sets `#root { text-align: center }`, which this modal would
+     otherwise inherit and center every label/heading. Reset it so the
+     form reads as a normal left-aligned form. */
+  text-align: left;
 }
 
 .support-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 22px 26px 12px;
+  padding: 20px 24px 16px;
   border-bottom: 1px solid var(--color-border);
 }
 
 .support-modal-header h2 {
   margin: 0;
-  font-size: 1.3rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .support-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   background: none;
   border: none;
-  font-size: 26px;
+  border-radius: 8px;
+  font-size: 22px;
   line-height: 1;
   color: var(--color-text-muted);
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
-.support-contact,
-.support-form-section {
-  padding: 18px 26px;
-}
-
-.support-contact {
-  border-bottom: 1px solid var(--color-border);
+.support-close-btn:hover {
   background: var(--color-email-bg);
-}
-
-.support-contact h3,
-.support-form-section h3 {
-  margin: 0 0 10px;
-  font-size: 1rem;
-  font-weight: 700;
   color: var(--color-text-primary);
 }
 
-.support-contact dl {
+.support-form-section {
+  padding: 18px 24px 22px;
+}
+
+/* Lighter, compact "faster reply" note — a single inline row with a soft
+   tinted card instead of a heavy full-bleed band. */
+.support-contact {
+  margin: 16px 24px 0;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  border: 1px solid var(--color-border-muted);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-email-bg) 55%, var(--color-surface));
+}
+
+.support-contact h3 {
   margin: 0;
-  display: grid;
-  gap: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.support-form-section h3 {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.support-contact dl {
+  margin: 0 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .support-contact dl > div {
-  display: grid;
-  grid-template-columns: 130px 1fr;
+  display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 8px;
 }
 
 .support-contact dt {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
   font-weight: 600;
 }
 
 .support-contact dd {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--color-text-primary);
 }
 
@@ -117,12 +151,12 @@
 
 .support-form {
   display: grid;
-  gap: 12px;
+  gap: 16px;
 }
 
 .support-form label {
   display: grid;
-  gap: 5px;
+  gap: 6px;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--color-text-secondary);
@@ -133,26 +167,61 @@
 .support-form select {
   font: inherit;
   font-size: 0.95rem;
-  padding: 9px 11px;
+  padding: 10px 12px;
   border: 1px solid var(--color-border-muted);
-  border-radius: 8px;
+  border-radius: 9px;
   background: var(--color-surface);
   color: var(--color-text-primary);
   box-sizing: border-box;
   resize: vertical;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.support-form input::placeholder,
+.support-form textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+.support-form textarea {
+  min-height: 120px;
+  line-height: 1.5;
 }
 
 .support-form input:focus,
 .support-form textarea:focus,
 .support-form select:focus{
-  outline: 2px solid var(--color-primary-border);
-  outline-offset: 1px;
+  outline: none;
   border-color: var(--color-primary-action);
+  box-shadow: 0 0 0 3px var(--color-primary-border);
 }
 
+/* Style the native file control: a tidy dropzone-style row with a clean
+   "Choose Files" button. */
 .support-attach-label input[type="file"] {
-  padding: 6px 4px;
   font-size: 0.85rem;
+  padding: 10px 12px;
+  border: 1px dashed var(--color-border-muted);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--color-email-bg) 40%, var(--color-surface));
+  cursor: pointer;
+}
+
+.support-attach-label input[type="file"]::file-selector-button {
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.82rem;
+  margin-right: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--color-border-muted);
+  border-radius: 7px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.support-attach-label input[type="file"]::file-selector-button:hover {
+  background: var(--color-email-bg);
 }
 
 .support-attach-hint {
@@ -223,17 +292,25 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
 }
 
 .support-primary-btn {
-  padding: 8px 18px;
+  padding: 9px 20px;
   border: 1px solid var(--color-primary-action);
   background: var(--color-primary-action);
   color: var(--color-surface);
-  border-radius: 8px;
+  border-radius: 9px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.support-primary-btn:not(:disabled):hover {
+  background: var(--color-primary-action-hover);
+  border-color: var(--color-primary-action-hover);
 }
 
 .support-primary-btn:disabled{
@@ -243,13 +320,14 @@
 }
 
 .support-secondary-btn {
-  padding: 8px 18px;
+  padding: 9px 20px;
   border: 1px solid var(--color-border-muted);
   background: var(--color-surface);
   color: var(--color-text-primary);
-  border-radius: 8px;
+  border-radius: 9px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.12s ease;
 }
 
 .support-secondary-btn:hover{
