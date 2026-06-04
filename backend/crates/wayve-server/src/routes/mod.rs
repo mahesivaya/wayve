@@ -32,6 +32,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(user::admin_create_organization)
         .service(user::create_my_organization)
         .service(user::delete_my_organization)
+        .service(user::delete_my_account)
         .service(user::admin_create_user)
         .service(user::admin_delete_user)
         .service(user::admin_generate_api_key)

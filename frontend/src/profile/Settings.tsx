@@ -6,7 +6,7 @@ import "./profile.css";
 import { deleteAccount, getAccounts } from "../api/email";
 import { getSubscription, type SubscriptionResponse } from "../api/billing";
 import { getProfile, type ProfileData } from "../api/profile";
-import { deleteMyOrganization } from "../api/admin";
+import { deleteMyAccount, deleteMyOrganization } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
 import { listMyTickets, type SupportTicket } from "../api/support";
 import SupportModal from "../support/SupportModal";
@@ -34,7 +34,7 @@ function formatBytes(bytes: number): string {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { user, refresh } = useAuth();
+  const { user, refresh, logout } = useAuth();
   const [profile, setProfile] = useState<(ProfileData & {
     total_emails?: number;
     email_storage_bytes?: number;
@@ -60,6 +60,39 @@ export default function Settings() {
   const hideBilling = isPlatformUser || isOrgUser;
   const [deletingOrg, setDeletingOrg] = useState(false);
   const [deleteOrgError, setDeleteOrgError] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState("");
+
+  const onDeleteAccount = async () => {
+    // Two-step confirmation — this is irreversible. The second prompt asks
+    // the user to type their email so a stray click can't wipe an account.
+    if (!window.confirm(
+      "Permanently delete your account? This removes your emails, chats, " +
+      "files, notes and all connected mailboxes. This cannot be undone."
+    )) {
+      return;
+    }
+    const typed = window.prompt(
+      `To confirm, type your email address (${user?.email ?? ""}):`
+    );
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== (user?.email ?? "").toLowerCase()) {
+      setDeleteAccountError("That didn't match your email — account not deleted.");
+      return;
+    }
+    setDeleteAccountError("");
+    setDeletingAccount(true);
+    try {
+      await deleteMyAccount();
+      // Account is gone — clear the session and land on /login.
+      logout();
+    } catch (err) {
+      setDeleteAccountError(
+        err instanceof Error ? err.message : "Failed to delete account"
+      );
+      setDeletingAccount(false);
+    }
+  };
 
   const onDeleteOrg = async () => {
     const orgName = user?.organization_name ?? "this organization";
@@ -292,6 +325,30 @@ export default function Settings() {
             >
               {deletingOrg ? "Deleting…" : "Delete organization & revert to personal"}
             </button>
+          </section>
+        )}
+
+        {/* Org owners delete the organization above first (their account is
+            the org's anchor), so the personal-account delete is hidden for
+            them. Everyone else can permanently close their account here. */}
+        {!isOrgOwner && (
+          <section className="settings-card settings-danger settings-danger-compact">
+            <div className="settings-danger-row">
+              <span className="settings-danger-line">
+                Permanently delete your account and all of your data.
+              </span>
+              <button
+                type="button"
+                className="settings-danger-btn"
+                onClick={() => void onDeleteAccount()}
+                disabled={deletingAccount}
+              >
+                {deletingAccount ? "Deleting…" : "Delete account"}
+              </button>
+            </div>
+            {deleteAccountError && (
+              <p className="settings-danger-error">{deleteAccountError}</p>
+            )}
           </section>
         )}
 

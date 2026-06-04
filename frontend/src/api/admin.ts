@@ -193,6 +193,21 @@ export async function deleteMyOrganization(): Promise<DeletedMyOrganization> {
   return data;
 }
 
+// Permanently delete the caller's OWN account and all data cascading from it.
+// Refuses with 409 if the caller still owns an organization (delete it first)
+// or has an active Stripe subscription (cancel from /billing first).
+export async function deleteMyAccount(): Promise<void> {
+  const res = await apiFetch("/api/me", {
+    method: "DELETE",
+    preserve401: true,
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || "Failed to delete account");
+  }
+}
+
 // Creates a user as the calling admin. `email` is the full login address; the
 // caller builds it from a handle and the organization domain (or wayve.com for
 // personal accounts).

@@ -682,6 +682,108 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
     })))
 }
 
+/// `DELETE /me` — self-service account deletion. The caller permanently
+/// deletes their OWN account and everything that cascades from `users.id`.
+///
+/// Guards mirror the organization teardown:
+///   - An organization OWNER must delete the organization first — their user
+///     row is the org's anchor (members, shared inboxes, billing all hang off
+///     it). See `delete_my_organization`.
+///   - An active / trialing subscription must be cancelled on /billing first
+///     so we never orphan live Stripe charges.
+#[delete("/me")]
+#[instrument(target = "auth", skip(req, pool))]
+pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Authentication required" })));
+        }
+    };
+
+    let ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
+        Ok(ctx) => ctx,
+        Err(sqlx::Error::RowNotFound) => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Account not found" })));
+        }
+        Err(e) => return Err(AppError::Db(e)),
+    };
+
+    if ctx.scope == Scope::Organization && ctx.role == Role::Owner {
+        return Ok(HttpResponse::Conflict().json(serde_json::json!({
+            "message": "Delete your organization first (Settings → Danger zone), then delete your account."
+        })));
+    }
+
+    let active_sub: Option<i32> = sqlx::query_scalar(
+        r#"
+        SELECT id FROM subscriptions
+         WHERE user_id = $1
+           AND status IN ('active', 'trialing')
+         LIMIT 1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    if active_sub.is_some() {
+        return Ok(HttpResponse::Conflict().json(serde_json::json!({
+            "message": "Cancel your subscription on the Billing page before deleting your account."
+        })));
+    }
+
+    // Capture the email for the audit trail. `audit_logs.actor_user_id` is
+    // ON DELETE SET NULL, so once the row is gone the deletion event would be
+    // anonymized — the email in metadata is what keeps it attributable.
+    let email: Option<String> = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool.get_ref())
+        .await?;
+
+    // Record BEFORE the delete: record_action reads users.organization_id and
+    // inserts actor_user_id, both of which need the row to still exist.
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "account_delete",
+            resource_type: "user",
+            resource_id: Some(user_id.to_string()),
+            metadata: Some(serde_json::json!({ "email": email })),
+        },
+    )
+    .await;
+
+    let mut tx = pool.begin().await?;
+    // `notes.user_id` has no FK (see init.sql), so it doesn't ride the cascade
+    // on `users`. Wipe it explicitly before the user row goes.
+    sqlx::query("DELETE FROM notes WHERE user_id = $1")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    // Everything else referencing users.id is ON DELETE CASCADE / SET NULL.
+    let deleted = sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    if deleted.rows_affected() == 0 {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Account not found" })));
+    }
+    tx.commit().await?;
+
+    invalidate_profile_cache(user_id).await;
+    invalidate_me_cache(user_id).await;
+    rbac::invalidate_role_context(user_id).await;
+
+    info!(target: "auth", user_id, "user self-deleted account");
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
+}
+
 #[post("/admin/users")]
 #[instrument(target = "auth", skip(req, pool, data), fields(email = %data.email))]
 pub async fn admin_create_user(

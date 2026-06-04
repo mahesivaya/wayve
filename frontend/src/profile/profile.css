@@ -319,6 +319,35 @@
   cursor: not-allowed;
 }
 
+/* Compact single-row danger card: one line of text + the button inline.
+   Keep the horizontal padding equal to the other cards (24px) so the
+   button's right edge lines up with the rest of the page; only the
+   vertical padding is reduced to keep the row short. */
+.settings-danger-compact {
+  padding: 14px 24px;
+}
+
+.settings-danger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-danger-line {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+
+.settings-danger-compact .settings-danger-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.settings-danger-compact .settings-danger-error {
+  margin: 10px 0 0;
+}
+
 .settings-empty {
   font-size: var(--text-lg);
   color: var(--color-text-muted);
