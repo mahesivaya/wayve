@@ -337,7 +337,7 @@ export const EmailList: React.FC<EmailListProps> = ({
         </div>
       )}
 
-      {showNoAccounts ? (
+      {showNoAccounts && canAddAccount ? (
         <div className="email-folder-placeholder" role="status">
           <div className="email-folder-placeholder-icon" aria-hidden="true">📭</div>
           <strong>No email accounts connected yet</strong>

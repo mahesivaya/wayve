@@ -439,13 +439,12 @@ export default function Emails() {
   const isPersonalScope = user?.scope
     ? user.scope === "personal"
     : user?.account_type === "personal";
-  const isOrgOwner =
-    (user?.scope === "organization" || user?.account_type === "organization_admin") &&
-    user?.effective_role === "owner";
-  const isPlatformOwner =
-    (user?.scope === "platform" || user?.account_type === "platform_admin") &&
-    user?.effective_role === "owner";
-  const showAccountControls = isPersonalScope || isOrgOwner || isPlatformOwner;
+  // Only personal accounts manage their own connected mailboxes. Business
+  // (organization) and platform teams use their own domain email / shared
+  // addresses, so the email sidebar hides the whole Accounts section for them
+  // — the "+ Add account" button, the "All Accounts" filter, and the
+  // per-account list — leaving just the folder nav (Inbox, Drafts, …) below.
+  const showAccountControls = isPersonalScope;
 
   useEffect(() => {
     if (showAccountControls) return;
