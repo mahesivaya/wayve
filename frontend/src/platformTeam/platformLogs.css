@@ -31,12 +31,17 @@
 
 .logs-table {
   font-size: 0.85rem;
+  /* Fixed layout so the nowrap URL column can't starve the message column
+     (which was collapsing to one word per line under the default auto
+     layout). Column widths are set explicitly via the <colgroup>. */
+  table-layout: fixed;
+  width: 100%;
 }
 
 .logs-table th,
 .logs-table td {
-  vertical-align: top;
-  padding: 8px 10px;
+  vertical-align: middle;
+  padding: 6px 10px;
 }
 
 .logs-row {
@@ -66,8 +71,11 @@
 }
 
 .logs-message {
-  max-width: 420px;
-  word-break: break-word;
+  /* One line per row — full text is in the tooltip and the expand panel.
+     Keeps the table dense so many logs fit on screen. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--color-text-primary);
   font-weight: 500;
 }

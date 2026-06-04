@@ -158,6 +158,17 @@ export default function PlatformLogs() {
           </div>
         ) : (
           <table className="pt-table logs-table">
+            {/* Fixed widths (table-layout: fixed) — Message has no width so it
+                takes all remaining space and ellipsizes instead of collapsing. */}
+            <colgroup>
+              <col style={{ width: "140px" }} />
+              <col style={{ width: "72px" }} />
+              <col style={{ width: "72px" }} />
+              <col style={{ width: "150px" }} />
+              <col />
+              <col style={{ width: "200px" }} />
+              <col style={{ width: "84px" }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>Time</th>
@@ -192,7 +203,9 @@ export default function PlatformLogs() {
                         </span>
                       </td>
                       <td>{r.user_email ?? "anon"}</td>
-                      <td className="logs-message">{r.message}</td>
+                      <td className="logs-message" title={r.message}>
+                        {r.message}
+                      </td>
                       <td className="logs-url" title={r.url ?? ""}>
                         {r.url ?? "—"}
                       </td>
@@ -211,6 +224,10 @@ export default function PlatformLogs() {
                       <tr key={`${r.id}-detail`} className="logs-detail-row">
                         <td colSpan={7}>
                           <div className="logs-detail">
+                            <div className="logs-detail-block">
+                              <strong>Message</strong>
+                              <pre>{r.message}</pre>
+                            </div>
                             {r.stack && (
                               <div className="logs-detail-block">
                                 <strong>Stack</strong>
