@@ -19,8 +19,12 @@ const RESET_TTL_MINUTES: i64 = 30;
 const DUMMY_PASSWORD_HASH: &str = "$2b$12$BeUHqArduWoNmhYKnepJYeYTQdhF/XcdcGFHaxiz0/H3JJUbHyLGe";
 
 #[post("/register")]
-#[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
-pub async fn register(pool: web::Data<PgPool>, data: web::Json<RegisterInput>) -> AppResult {
+#[instrument(target = "auth", skip(req, pool, data), fields(email = %data.email))]
+pub async fn register(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<RegisterInput>,
+) -> AppResult {
     info!(target: "auth", "register attempt");
 
     if data.password != data.confirm_password {
@@ -62,6 +66,24 @@ pub async fn register(pool: web::Data<PgPool>, data: web::Json<RegisterInput>) -
             let user_id: i32 = row.get("id");
             info!("User registered: {}", data.email);
             let token = create_jwt(user_id, data.email.clone());
+            // Registration auto-logs-in (sets the auth cookie), so record a
+            // login event — otherwise a sign-up followed by a sign-out shows an
+            // orphaned logout with no matching login.
+            crate::audit::record_action(
+                pool.get_ref(),
+                &req,
+                crate::audit::AuditEvent {
+                    actor_user_id: user_id,
+                    action: "login",
+                    resource_type: "session",
+                    resource_id: None,
+                    metadata: Some(serde_json::json!({
+                        "method": "password",
+                        "new_user": true,
+                    })),
+                },
+            )
+            .await;
             Ok(HttpResponse::Ok()
                 .cookie(auth_cookie(token.clone()))
                 .json(serde_json::json!({
@@ -161,7 +183,7 @@ pub(crate) async fn login(
             action: "login",
             resource_type: "session",
             resource_id: None,
-            metadata: None,
+            metadata: Some(serde_json::json!({ "method": "password" })),
         },
     )
     .await;

@@ -164,8 +164,9 @@ pub async fn outlook_connect_url(req: HttpRequest, pool: web::Data<PgPool>) -> i
 
 /// `GET /oauth/outlook/callback` — shared callback for sign-in and mailbox
 /// connect; the consumed `state.flow` decides which path runs.
-#[instrument(target = "auth", skip(pool, query))]
+#[instrument(target = "auth", skip(req, pool, query))]
 pub async fn outlook_callback(
+    req: HttpRequest,
     pool: web::Data<PgPool>,
     query: web::Query<OutlookCallbackQuery>,
 ) -> impl Responder {
@@ -219,6 +220,7 @@ pub async fn outlook_callback(
 
     finalize_oauth_session(
         pool.get_ref(),
+        &req,
         OAuthCompletion {
             session_user_id: oauth_state.user_id,
             email: &email,
@@ -244,7 +246,11 @@ struct OAuthCompletion<'a> {
 ///
 /// If `session_user_id` is present, it links the mailbox to that user.
 /// Otherwise, it performs a sign-in/sign-up for the identified email.
-async fn finalize_oauth_session(pool: &PgPool, ctx: OAuthCompletion<'_>) -> HttpResponse {
+async fn finalize_oauth_session(
+    pool: &PgPool,
+    req: &HttpRequest,
+    ctx: OAuthCompletion<'_>,
+) -> HttpResponse {
     let (user_id, account_type): (i32, String) = match ctx.session_user_id {
         Some(id) => (id, "personal".to_string()),
         None => match resolve_user_for_oauth(pool, ctx.email, ctx.provider, ctx.frontend).await {
@@ -315,6 +321,21 @@ async fn finalize_oauth_session(pool: &PgPool, ctx: OAuthCompletion<'_>) -> Http
         } else {
             "home"
         };
+        // App sign-in via Microsoft mints a session here (the `if` branch above
+        // is a mailbox connect for an already-logged-in user). Record the login
+        // so it pairs with the logout audit event.
+        crate::audit::record_action(
+            pool,
+            req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "login",
+                resource_type: "session",
+                resource_id: None,
+                metadata: Some(serde_json::json!({ "method": "microsoft" })),
+            },
+        )
+        .await;
         HttpResponse::Found()
             .cookie(auth_cookie(token))
             .append_header((

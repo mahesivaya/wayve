@@ -493,8 +493,9 @@ pub struct SsoCallbackQuery {
 }
 
 #[get("/auth/sso/callback")]
-#[instrument(target = "auth", skip(pool, q))]
+#[instrument(target = "auth", skip(req, pool, q))]
 pub async fn auth_sso_callback(
+    req: HttpRequest,
     pool: web::Data<PgPool>,
     q: web::Query<SsoCallbackQuery>,
 ) -> AppResult {
@@ -617,6 +618,18 @@ pub async fn auth_sso_callback(
         organization_id = cfg.organization_id,
         "SSO login complete"
     );
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "login",
+            resource_type: "session",
+            resource_id: None,
+            metadata: Some(serde_json::json!({ "method": "sso", "new_user": is_new })),
+        },
+    )
+    .await;
 
     Ok(HttpResponse::Found()
         .append_header(("Location", location))

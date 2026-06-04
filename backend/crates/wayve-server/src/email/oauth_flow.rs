@@ -538,6 +538,24 @@ pub async fn oauth_callback(
     if is_signup {
         let session_token = create_jwt_for_account(user_id, email.to_string(), account_type);
         response.cookie(auth_cookie(session_token));
+        // App sign-in via Google mints a session here — record the login so it
+        // pairs with the logout audit event (the `else` branch is a mailbox
+        // connect, not an app login, so it's intentionally excluded).
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "login",
+                resource_type: "session",
+                resource_id: None,
+                metadata: Some(serde_json::json!({
+                    "method": "google",
+                    "new_user": was_new_user,
+                })),
+            },
+        )
+        .await;
     }
 
     response.finish()
