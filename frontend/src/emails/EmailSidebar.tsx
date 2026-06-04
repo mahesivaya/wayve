@@ -1,7 +1,5 @@
 import React, { useState } from "react";
 import { EmailAccount, EmailFolder } from "./types";
-import ProviderPicker from "./ProviderPicker";
-import type { ProviderId } from "./providers";
 
 interface EmailSidebarProps {
   accounts: EmailAccount[];
@@ -11,9 +9,9 @@ interface EmailSidebarProps {
   setActiveFolder: (folder: EmailFolder) => void;
   viewMode: "email" | "files";
   onOpenFiles: () => void;
-  // Single dispatcher — the parent decides what to do per provider id, so
-  // adding Yahoo/Exchange later doesn't change this component's surface.
-  onAddProvider: (provider: ProviderId) => void;
+  // Opens the "add a mailbox" picker, which the parent owns (so the same
+  // modal is shared with the email-list empty-state CTA).
+  onRequestAddAccount: () => void;
   onCompose: () => void;
   composeDisabled: boolean;
   width: number;
@@ -29,7 +27,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
   setActiveFolder,
   viewMode,
   onOpenFiles,
-  onAddProvider,
+  onRequestAddAccount,
   onCompose,
   composeDisabled,
   width,
@@ -40,7 +38,6 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
   const [draftName, setDraftName] = useState("");
   const [savingAccountId, setSavingAccountId] = useState<number | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   const startEditing = (account: EmailAccount) => {
     setEditingAccountId(account.id);
@@ -81,9 +78,8 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
             <button
               type="button"
               className="mail-section-action"
-              onClick={() => setPickerOpen(true)}
+              onClick={onRequestAddAccount}
               aria-haspopup="dialog"
-              aria-expanded={pickerOpen}
               aria-label="Add account"
               title="Add account"
             >
@@ -212,18 +208,6 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
       })}
           </nav>
         </>
-      )}
-
-      {/* Mount only while open — keeps the picker's state fresh each time
-          and avoids reset-on-close juggling. */}
-      {showAccountControls && pickerOpen && (
-        <ProviderPicker
-          onClose={() => setPickerOpen(false)}
-          onSelect={(provider) => {
-            setPickerOpen(false);
-            onAddProvider(provider);
-          }}
-        />
       )}
 
       <nav className="mail-filters" aria-label="Mail folders">

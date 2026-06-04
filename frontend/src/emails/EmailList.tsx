@@ -16,6 +16,16 @@ interface EmailListProps {
   onBulkMarkRead?: (ids: number[]) => Promise<void> | void;
   onBulkDelete?: (ids: number[]) => Promise<void> | void;
   activeFolder?: EmailFolder;
+  // Whether the user has any email account connected, and whether that
+  // fact is known yet (the accounts fetch has resolved). Together they let
+  // the list show a "connect an account" empty state instead of a blank
+  // panel — but only once we're sure there genuinely are zero accounts.
+  hasAccounts?: boolean;
+  accountsLoaded?: boolean;
+  // Whether this user is allowed to connect mailboxes (personal users and
+  // org owners). Non-owner org members see the empty state without a CTA.
+  canAddAccount?: boolean;
+  onAddAccount?: () => void;
 }
 
 const STUB_FOLDER_LABELS: Record<string, string> = {
@@ -61,10 +71,18 @@ export const EmailList: React.FC<EmailListProps> = ({
   onBulkMarkRead,
   onBulkDelete,
   activeFolder,
+  hasAccounts = true,
+  accountsLoaded = true,
+  canAddAccount = false,
+  onAddAccount,
 }) => {
   const isStubFolder = activeFolder
     ? (STUB_EMAIL_FOLDERS as ReadonlyArray<string>).includes(activeFolder)
     : false;
+  // Show the connect-an-account empty state only once we know there are
+  // genuinely zero accounts — never while the accounts fetch is still in
+  // flight, which would flash the CTA at users who do have mailboxes.
+  const showNoAccounts = accountsLoaded && !hasAccounts;
   const { searchQuery, setSearchQuery } = useGlobalSearch();
 
   // Per-row bulk-select state for list view. Bulk action callbacks are
@@ -247,7 +265,7 @@ export const EmailList: React.FC<EmailListProps> = ({
       </div>
       <div className="mobile-mail-label">Inbox</div>
 
-      {isListView && (
+      {isListView && !showNoAccounts && (
         <div className="email-bulk-bar" role="toolbar" aria-label="Bulk email selection">
           <input
             type="checkbox"
@@ -319,7 +337,26 @@ export const EmailList: React.FC<EmailListProps> = ({
         </div>
       )}
 
-      {isStubFolder ? (
+      {showNoAccounts ? (
+        <div className="email-folder-placeholder" role="status">
+          <div className="email-folder-placeholder-icon" aria-hidden="true">📭</div>
+          <strong>No email accounts connected yet</strong>
+          <span>
+            {canAddAccount
+              ? "Connect a mailbox to start importing and sending email. We support Gmail, Outlook, Yahoo and more."
+              : "No mailboxes have been shared with you yet. Ask an organization owner to grant you access."}
+          </span>
+          {canAddAccount && onAddAccount && (
+            <button
+              type="button"
+              className="email-empty-add-account"
+              onClick={onAddAccount}
+            >
+              ＋ Add email account
+            </button>
+          )}
+        </div>
+      ) : isStubFolder ? (
         <div className="email-folder-placeholder" role="status">
           <div className="email-folder-placeholder-icon" aria-hidden="true">🛠️</div>
           <strong>

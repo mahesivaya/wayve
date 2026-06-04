@@ -8,6 +8,7 @@ import Modal from "../components/Modal";
 import { EmailSidebar } from "./EmailSidebar";
 import { EmailList } from "./EmailList";
 import { EmailDetail } from "./EmailDetail";
+import ProviderPicker from "./ProviderPicker";
 import { useEmailInbox } from "./useEmailInbox";
 import {
   connectYahoo,
@@ -31,12 +32,17 @@ export default function Emails() {
   const { normalizedSearchQuery, emailViewLayout, setEmailViewLayout } = useGlobalSearch();
   
   const {
-    accounts, emails, selectedEmail, setSelectedEmail, activeAccount,
+    accounts, accountsLoaded, emails, selectedEmail, setSelectedEmail, activeAccount,
     setActiveAccount, activeFolder, setActiveFolder, hasMore, loadingMore,
     viewMode, setViewMode, files, filesLoading, filesError,
     fetchAccounts, setRefreshTick, loadMore, openFiles, openEmail, deleteEmail,
     bulkMarkRead, bulkDelete
   } = useEmailInbox(user?.id, normalizedSearchQuery);
+
+  // The "add a mailbox" picker. Lifted here (rather than living inside the
+  // sidebar) so both the sidebar "+" button and the empty-state CTA in the
+  // email list open the same single modal.
+  const [addAccountOpen, setAddAccountOpen] = useState(false);
 
   // Deep-link from other surfaces (e.g. the home dashboard's Inbox
   // card): `/emails?open=<id>` opens that email in the detail pane on
@@ -490,7 +496,7 @@ export default function Emails() {
         setActiveFolder={(f) => { setViewMode("email"); setActiveFolder(f); }}
         viewMode={viewMode}
         onOpenFiles={openFiles}
-        onAddProvider={addProvider}
+        onRequestAddAccount={() => setAddAccountOpen(true)}
         onCompose={() => setComposeOpen(true)}
         composeDisabled={accounts.length === 0}
         width={sidebarWidth}
@@ -521,6 +527,10 @@ export default function Emails() {
           onBulkMarkRead={bulkMarkRead}
           onBulkDelete={bulkDelete}
           activeFolder={activeFolder}
+          hasAccounts={accounts.length > 0}
+          accountsLoaded={accountsLoaded}
+          canAddAccount={showAccountControls}
+          onAddAccount={() => setAddAccountOpen(true)}
         />
       )}
 
@@ -532,6 +542,19 @@ export default function Emails() {
           aria-orientation="vertical"
           aria-label="Resize email list"
           title="Drag to resize email list"
+        />
+      )}
+
+      {/* Mounted only while open — keeps the picker's state fresh each time
+          and avoids reset-on-close juggling. Opened by both the sidebar "+"
+          and the email-list empty-state CTA. */}
+      {showAccountControls && addAccountOpen && (
+        <ProviderPicker
+          onClose={() => setAddAccountOpen(false)}
+          onSelect={(provider) => {
+            setAddAccountOpen(false);
+            addProvider(provider);
+          }}
         />
       )}
 

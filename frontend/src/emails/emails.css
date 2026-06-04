@@ -1067,6 +1067,24 @@
   line-height: 1.5;
 }
 
+/* Primary CTA inside the no-accounts empty state. Matches the Compose
+   button's filled-primary look so the "connect a mailbox" action reads as
+   the obvious next step. */
+.email-empty-add-account {
+  margin-top: 8px;
+  padding: var(--space-5) calc(var(--space-5) * 1.5);
+  background: var(--color-primary);
+  color: var(--color-surface);
+  border: none;
+  border-radius: calc(var(--radius-md) - 3px);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.email-empty-add-account:hover {
+  background: var(--color-primary-hover);
+}
+
 .email-bulk-action:disabled,
 .email-bulk-clear:disabled{
   opacity: 0.5;

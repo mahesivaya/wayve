@@ -15,6 +15,10 @@ import { EmailAccount, EmailFolder, EmailItem, EmailAttachment } from "./types";
 
 export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery: string) {
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
+  // Flips true after the first /api/accounts response (success or failure) so
+  // the UI can tell "still loading" apart from "genuinely zero accounts" and
+  // only show the connect-an-account empty state once we actually know.
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<EmailItem | null>(null);
   const [activeAccount, setActiveAccount] = useState<number | null>(null);
@@ -35,6 +39,8 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
       setAccounts(Array.isArray(data) ? data : []);
     } catch (err) {
       logger.error("Fetch accounts failed", err);
+    } finally {
+      setAccountsLoaded(true);
     }
   }, []);
 
@@ -302,6 +308,7 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
 
   return {
     accounts,
+    accountsLoaded,
     emails,
     selectedEmail,
     setSelectedEmail,
