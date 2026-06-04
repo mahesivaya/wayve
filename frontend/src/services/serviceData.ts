@@ -27,11 +27,11 @@ export const SERVICES: ServiceDetail[] = [
     appPath: "/emails",
     icon: "M",
     accent: "mail",
-    name: "Wayve Mail",
+    name: "Mail",
     eyebrow: "Secure email",
     summary: "Encrypted email for private communication.",
     description:
-      "Wayve Mail helps users send, receive, search, and manage email from a secure workspace. It is designed for daily inbox work with privacy-conscious handling of message content and attachments.",
+      "Mail helps users send, receive, search, and manage email from a secure workspace. It is designed for daily inbox work with privacy-conscious handling of message content and attachments.",
     features: [
       "Send and receive email from one workspace",
       "Search messages quickly",
@@ -49,11 +49,11 @@ export const SERVICES: ServiceDetail[] = [
     appPath: "/chat",
     icon: "C",
     accent: "chat",
-    name: "Wayve Chat",
+    name: "Chat",
     eyebrow: "Team messaging",
     summary: "Direct messages and channels for team communication.",
     description:
-      "Wayve Chat gives users a place for personal messages, public channels, private channels, invites, member roles, and admin-managed channel settings.",
+      "Chat gives users a place for personal messages, public channels, private channels, invites, member roles, and admin-managed channel settings.",
     features: [
       "Direct personal conversations",
       "Public and private channels",
@@ -71,11 +71,11 @@ export const SERVICES: ServiceDetail[] = [
     appPath: "/call",
     icon: "V",
     accent: "meet",
-    name: "Wayve Meet",
+    name: "Meet",
     eyebrow: "Private calling",
     summary: "Voice and video calls for fast conversations.",
     description:
-      "Wayve Meet supports real-time calling so users can move from chat or scheduling into a live conversation when typing is not enough.",
+      "Meet supports real-time calling so users can move from chat or scheduling into a live conversation when typing is not enough.",
     features: [
       "Real-time call experience",
       "Works from the main app layout",
@@ -93,11 +93,11 @@ export const SERVICES: ServiceDetail[] = [
     appPath: "/scheduler",
     icon: "31",
     accent: "calendar",
-    name: "Wayve Calendar",
+    name: "Calendar",
     eyebrow: "Scheduling",
     summary: "A calendar workspace for meetings and planning.",
     description:
-      "Wayve Calendar helps users organize meetings, view schedules, and manage upcoming work from inside the same product suite.",
+      "Calendar helps users organize meetings, view schedules, and manage upcoming work from inside the same product suite.",
     features: [
       "Calendar-based schedule view",
       "Meeting and event planning",
@@ -115,11 +115,11 @@ export const SERVICES: ServiceDetail[] = [
     appPath: "/drive",
     icon: "D",
     accent: "drive",
-    name: "Wayve Drive",
+    name: "Drive",
     eyebrow: "Secure files",
     summary: "Store and manage files in one workspace.",
     description:
-      "Wayve Drive provides a central place to upload, browse, and manage files so important documents are available beside mail, chat, notes, and meetings.",
+      "Drive provides a central place to upload, browse, and manage files so important documents are available beside mail, chat, notes, and meetings.",
     features: [
       "Upload and manage files",
       "Browse workspace documents",
@@ -137,11 +137,11 @@ export const SERVICES: ServiceDetail[] = [
     appPath: "/notes",
     icon: "N",
     accent: "notes",
-    name: "Wayve Notes",
+    name: "Notes",
     eyebrow: "Private notes",
     summary: "Write and store notes across your workspace.",
     description:
-      "Wayve Notes gives users a simple writing area for ideas, meeting notes, planning, and private documentation.",
+      "Notes gives users a simple writing area for ideas, meeting notes, planning, and private documentation.",
     features: [
       "Create and manage notes",
       "Capture ideas quickly",
@@ -159,11 +159,11 @@ export const SERVICES: ServiceDetail[] = [
     appPath: "/tasks",
     icon: "T",
     accent: "tasks",
-    name: "Wayve Tasks",
+    name: "Tasks",
     eyebrow: "Task management",
     summary: "Create and track work items with clear details.",
     description:
-      "Wayve Tasks gives users a focused place to create task names, add descriptions, and keep lightweight work items near mail, chat, files, and notes.",
+      "Tasks gives users a focused place to create task names, add descriptions, and keep lightweight work items near mail, chat, files, and notes.",
     features: [
       "Create tasks with a name and description",
       "Review all tasks in one workspace",
@@ -181,11 +181,11 @@ export const SERVICES: ServiceDetail[] = [
     appPath: "/ai-chat",
     icon: "AI",
     accent: "ai",
-    name: "Wayve AI",
+    name: "AI",
     eyebrow: "AI assistant",
     summary: "Ask questions, draft ideas, and accelerate work.",
     description:
-      "Wayve AI is an assistant experience for drafting, brainstorming, summarizing, and exploring ideas without leaving the workspace.",
+      "AI is an assistant experience for drafting, brainstorming, summarizing, and exploring ideas without leaving the workspace.",
     features: [
       "Chat with an AI assistant",
       "Draft and refine text",
