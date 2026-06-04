@@ -13,7 +13,8 @@ export type EmailFolder =
   | "updates"
   | "spam"
   | "drafts"
-  | "social";
+  | "social"
+  | "trash";
 
 export type EmailListParams = {
   folder: EmailFolder;

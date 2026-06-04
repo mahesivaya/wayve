@@ -226,7 +226,8 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                        OR (e.source <> 'wayve' \
                            AND a.email IS NOT NULL \
                            AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%' \
-                           AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)))) ",
+                           AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)) \
+                           AND NOT ('TRASH' = ANY(e.labels)))) ",
                 );
             }
             "sent" => {
@@ -252,6 +253,9 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
             }
             "drafts" => {
                 qb.push(" AND 'DRAFT' = ANY(e.labels) ");
+            }
+            "trash" => {
+                qb.push(" AND 'TRASH' = ANY(e.labels) ");
             }
             _ => {}
         }

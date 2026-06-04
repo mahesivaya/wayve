@@ -65,6 +65,7 @@ export type EmailFolder =
   | "updates"
   | "spam"
   | "drafts"
-  | "social";
+  | "social"
+  | "trash";
 
 export const STUB_EMAIL_FOLDERS: ReadonlyArray<EmailFolder> = [];
