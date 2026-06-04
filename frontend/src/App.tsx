@@ -60,7 +60,6 @@ const PlatformLogs = lazy(() => import("./platformTeam/PlatformLogs"));
 const PlatformUserLogs = lazy(() => import("./platformTeam/PlatformUserLogs"));
 const PlatformVisitors = lazy(() => import("./platformTeam/PlatformVisitors"));
 const Pricing = lazy(() => import("./pricing/Pricing"));
-const Enterprise = lazy(() => import("./marketing/Enterprise"));
 const Support = lazy(() => import("./marketing/Support"));
 const Developers = lazy(() => import("./marketing/Developers"));
 const Quotas = lazy(() => import("./marketing/Quotas"));
@@ -161,7 +160,6 @@ export default function App() {
             </RequirePricingAccess>
           }
         />
-        <Route path="/enterprise" element={<Enterprise />} />
         <Route path="/support" element={<Support />} />
         {/* ── Documentation surface ──────────────────────────────────
             Every dev-readable page now lives under /docs/* with a
