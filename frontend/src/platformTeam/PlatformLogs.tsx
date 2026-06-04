@@ -27,6 +27,21 @@ function shortStack(stack: string | null, lines = 4): string {
   return stack.split("\n").slice(0, lines).join("\n");
 }
 
+// Resizable columns for the log table. `width` is the default px width;
+// `min` is the floor when dragging. The <tbody> cells are rendered in this
+// same order, so the colgroup widths line up with the data columns.
+const LOG_COLUMNS = [
+  { key: "time", label: "Time", width: 150, min: 110 },
+  { key: "source", label: "Source", width: 84, min: 64 },
+  { key: "severity", label: "Severity", width: 92, min: 70 },
+  { key: "user", label: "User", width: 180, min: 90 },
+  { key: "message", label: "Message", width: 380, min: 140 },
+  { key: "url", label: "URL", width: 240, min: 120 },
+  { key: "status", label: "Status", width: 96, min: 70 },
+] as const;
+
+const COL_WIDTHS_KEY = "rwayve.platformLogs.colWidths";
+
 export default function PlatformLogs() {
   const { user } = useAuth();
   const canView =
@@ -45,6 +60,62 @@ export default function PlatformLogs() {
   const [q, setQ] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  // Per-column widths (px), drag-resizable and persisted. Defaults come from
+  // LOG_COLUMNS; a stored value overrides but is floored at the column's min.
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    const defaults: Record<string, number> = {};
+    for (const c of LOG_COLUMNS) defaults[c.key] = c.width;
+    try {
+      const raw = localStorage.getItem(COL_WIDTHS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        for (const c of LOG_COLUMNS) {
+          const v = parsed[c.key];
+          if (typeof v === "number" && Number.isFinite(v)) {
+            defaults[c.key] = Math.max(c.min, v);
+          }
+        }
+      }
+    } catch {
+      // ignore malformed / unavailable storage — fall back to defaults
+    }
+    return defaults;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(colWidths));
+    } catch {
+      // private mode / quota — widths just won't persist this session
+    }
+  }, [colWidths]);
+
+  // Drag the grip on a header's right edge to resize that column. Listeners
+  // live only for the duration of the drag; the table is wider than the
+  // viewport when needed and its wrapper scrolls horizontally.
+  const startResize = (key: string, min: number) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = colWidths[key];
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.max(min, startW + (ev.clientX - startX));
+      setColWidths((prev) => (prev[key] === next ? prev : { ...prev, [key]: next }));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  const totalWidth = LOG_COLUMNS.reduce((sum, c) => sum + colWidths[c.key], 0);
 
   const reload = useCallback(async () => {
     if (!canView) return;
@@ -157,27 +228,33 @@ export default function PlatformLogs() {
             No errors recorded in the current filter. Quiet skies.
           </div>
         ) : (
-          <table className="pt-table logs-table">
-            {/* Fixed widths (table-layout: fixed) — Message has no width so it
-                takes all remaining space and ellipsizes instead of collapsing. */}
+          <div className="logs-table-scroll">
+          <table
+            className="pt-table logs-table"
+            style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
+          >
+            {/* Widths driven by colWidths state — each header has a drag grip
+                on its right edge (startResize). Body cells below render in the
+                same column order. */}
             <colgroup>
-              <col style={{ width: "140px" }} />
-              <col style={{ width: "72px" }} />
-              <col style={{ width: "72px" }} />
-              <col style={{ width: "150px" }} />
-              <col />
-              <col style={{ width: "200px" }} />
-              <col style={{ width: "84px" }} />
+              {LOG_COLUMNS.map((c) => (
+                <col key={c.key} style={{ width: `${colWidths[c.key]}px` }} />
+              ))}
             </colgroup>
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Source</th>
-                <th>Severity</th>
-                <th>User</th>
-                <th>Message</th>
-                <th>URL</th>
-                <th>Status</th>
+                {LOG_COLUMNS.map((c) => (
+                  <th key={c.key} className="logs-th">
+                    {c.label}
+                    <span
+                      className="col-resize-handle"
+                      onMouseDown={startResize(c.key, c.min)}
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={`Resize ${c.label} column`}
+                    />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -263,6 +340,7 @@ export default function PlatformLogs() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </div>

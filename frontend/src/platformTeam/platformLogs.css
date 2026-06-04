@@ -29,13 +29,50 @@
   user-select: none;
 }
 
+/* Horizontal scroll container — when dragged-wider columns exceed the panel
+   width, the table scrolls sideways instead of squashing. */
+.logs-table-scroll {
+  overflow-x: auto;
+}
+
 .logs-table {
   font-size: 0.85rem;
   /* Fixed layout so the nowrap URL column can't starve the message column
      (which was collapsing to one word per line under the default auto
-     layout). Column widths are set explicitly via the <colgroup>. */
+     layout). Column widths are driven by the colgroup (resizable state). */
   table-layout: fixed;
-  width: 100%;
+}
+
+/* Header cell hosts a drag grip on its right edge for column resizing. */
+.logs-th {
+  position: relative;
+}
+
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px; /* straddle the border so it's easy to grab */
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 1;
+}
+
+.col-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 18%;
+  right: 4px;
+  height: 64%;
+  width: 1px;
+  background: var(--color-border);
+}
+
+.col-resize-handle:hover::after,
+.col-resize-handle:active::after {
+  background: var(--color-primary-action);
+  width: 2px;
 }
 
 .logs-table th,
