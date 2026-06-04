@@ -761,11 +761,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   </button>
                 </div>
                 <div className="split-pane-body">
-                  {children ?? <Outlet />}
+                  <Suspense fallback={<div className="split-loading">Loading…</div>}>
+                    {children ?? <Outlet />}
+                  </Suspense>
                 </div>
               </>
             ) : (
-              children ?? <Outlet />
+              <Suspense fallback={<div className="split-loading">Loading…</div>}>
+                {children ?? <Outlet />}
+              </Suspense>
             )}
           </div>
 

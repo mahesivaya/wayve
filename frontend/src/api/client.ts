@@ -1,5 +1,5 @@
 import { getApiBase } from "../config/env";
-import { clearAuthToken, getAuthToken } from "../auth/token";
+import { clearAuthToken, getAuthToken, noteSessionExpiredOnce } from "../auth/token";
 import { logger } from "../utils/logger";
 import { reportClientError } from "./errorLogs";
 
@@ -181,15 +181,18 @@ export async function apiFetch(
 
     clearAuthToken();
 
-    // Avoid jsdom/Vitest
-    // navigation crashes.
-
+    // Soft session-expiry: clear the token and notify the app ONCE so
+    // AuthContext drops the user and ProtectedRoute does an in-app
+    // React-Router redirect to /login. The old `window.location.href`
+    // hard-reloaded the whole SPA on every 401 — a jarring full-page
+    // "blink" whenever any background request expired.
     if (
-      import.meta.env.MODE !==
-      "test"
+      noteSessionExpiredOnce() &&
+      typeof window !== "undefined"
     ) {
-      window.location.href =
-        "/login";
+      window.dispatchEvent(
+        new Event("rwayve:session-expired")
+      );
     }
 
     throw new Error(

@@ -563,6 +563,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Soft session-expiry: the API client dispatches `rwayve:session-expired`
+  // on a 401 (instead of hard-reloading to /login). Drop the user locally so
+  // ProtectedRoute does an in-app redirect — no full-page "blink".
+  useEffect(() => {
+    const onExpired = () => {
+      authVersion.current += 1;
+      clearAuthToken();
+      setUser(null);
+      setNeedsRecovery(false);
+    };
+    window.addEventListener("rwayve:session-expired", onExpired);
+    return () => window.removeEventListener("rwayve:session-expired", onExpired);
+  }, []);
+
   const logout = () => {
     authVersion.current += 1;
     clearAuthToken();
