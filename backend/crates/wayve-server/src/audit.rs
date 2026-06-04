@@ -72,6 +72,130 @@ pub async fn record_action_system(pool: &PgPool, event: AuditEvent<'_>) {
     record(pool, event, None, None).await;
 }
 
+// ── Billing / financial audit log ────────────────────────────────────
+// Plan changes, entitlement grants and subscription state transitions are a
+// financial + abuse signal. They mostly originate from Stripe webhooks (no
+// HTTP request) and are owned by *either* a user or an organization — so
+// neither [`record_action`] (needs a request) nor [`record_action_system`]
+// (derives the org from a single known user) fits. This writer takes both
+// owner ids explicitly; either may be NULL.
+
+/// One billing audit event. Grouped into a struct so `record_billing` stays
+/// at two arguments (mirrors [`AuditEvent`]).
+pub struct BillingAuditEvent<'a> {
+    pub actor_user_id: Option<i32>,
+    pub organization_id: Option<i32>,
+    pub action: &'a str,
+    pub resource_type: &'a str,
+    pub resource_id: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Record a billing/financial audit event into `audit_logs` (and mirror it to
+/// `user_actions.log`) so it shows up on the Security / User Logs pages
+/// alongside every other audited action. Best-effort on both sinks — a logging
+/// failure is warned and swallowed so it never blocks (or makes Stripe retry)
+/// the billing state change being audited.
+pub async fn record_billing(pool: &PgPool, event: BillingAuditEvent<'_>) {
+    let metadata_text = event.metadata.as_ref().map(|v| v.to_string());
+
+    if let Err(err) = sqlx::query(
+        r#"
+        INSERT INTO audit_logs
+            (actor_user_id, organization_id, action, resource_type,
+             resource_id, metadata, ip, user_agent)
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb, NULL, NULL)
+        "#,
+    )
+    .bind(event.actor_user_id)
+    .bind(event.organization_id)
+    .bind(event.action)
+    .bind(event.resource_type)
+    .bind(event.resource_id.as_deref())
+    .bind(metadata_text.as_deref())
+    .execute(pool)
+    .await
+    {
+        warn!(target: "billing", error = ?err, action = event.action, "audit_logs billing insert failed");
+    }
+
+    append_user_action_log(serde_json::json!({
+        "ts": chrono::Utc::now().to_rfc3339(),
+        "actor_user_id": event.actor_user_id,
+        "organization_id": event.organization_id,
+        "action": event.action,
+        "resource_type": event.resource_type,
+        "resource_id": event.resource_id,
+        "metadata": event.metadata,
+        "ip": serde_json::Value::Null,
+        "user_agent": serde_json::Value::Null,
+    }))
+    .await;
+}
+
+/// Record a FAILED login attempt — the earliest breach signal (credential
+/// stuffing, brute force, password spraying). Unlike [`record_action`], the
+/// actor may be unknown (a login for a non-existent email), so the actor id is
+/// optional and the attempted email + failure `reason` are kept in metadata.
+/// Writes `action = "login_failed"` to `audit_logs` (and mirrors to
+/// `user_actions.log`) so it shows up alongside successful logins on the
+/// Security audit page. Best-effort — never blocks the 401 it accompanies.
+pub async fn record_login_failure(
+    pool: &PgPool,
+    req: &HttpRequest,
+    email: &str,
+    reason: &str,
+    actor_user_id: Option<i32>,
+) {
+    let ip = client_ip(req);
+    let ua = user_agent(req);
+
+    let organization_id: Option<i32> = match actor_user_id {
+        Some(id) => sqlx::query_scalar("SELECT organization_id FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten(),
+        None => None,
+    };
+
+    let metadata = serde_json::json!({ "reason": reason, "email": email });
+    let metadata_text = metadata.to_string();
+
+    if let Err(err) = sqlx::query(
+        r#"
+        INSERT INTO audit_logs
+            (actor_user_id, organization_id, action, resource_type,
+             resource_id, metadata, ip, user_agent)
+        VALUES ($1, $2, 'login_failed', 'session', NULL, $3::jsonb, $4, $5)
+        "#,
+    )
+    .bind(actor_user_id)
+    .bind(organization_id)
+    .bind(&metadata_text)
+    .bind(ip.as_deref())
+    .bind(ua.as_deref())
+    .execute(pool)
+    .await
+    {
+        warn!(target: "auth", error = ?err, "audit_logs login_failed insert failed");
+    }
+
+    append_user_action_log(serde_json::json!({
+        "ts": chrono::Utc::now().to_rfc3339(),
+        "actor_user_id": actor_user_id,
+        "organization_id": organization_id,
+        "action": "login_failed",
+        "resource_type": "session",
+        "resource_id": serde_json::Value::Null,
+        "metadata": metadata,
+        "ip": ip,
+        "user_agent": ua,
+    }))
+    .await;
+}
+
 /// Shared writer: inserts the `audit_logs` row and mirrors it to
 /// `logs/user_actions.log`. Both sinks are best-effort.
 async fn record(pool: &PgPool, event: AuditEvent<'_>, ip: Option<String>, ua: Option<String>) {

@@ -129,6 +129,14 @@ pub(crate) async fn login(
             // intentionally discarded.
             let _ = verify_password(&data.password, DUMMY_PASSWORD_HASH).await;
             warn!("Invalid login attempt: {}", data.email);
+            crate::audit::record_login_failure(
+                pool.get_ref(),
+                &req,
+                &data.email,
+                "unknown_email",
+                None,
+            )
+            .await;
             return Ok(HttpResponse::Unauthorized().json(MessageResponse {
                 message: "Invalid credentials".to_string(),
             }));
@@ -140,6 +148,14 @@ pub(crate) async fn login(
         Some(p) => p,
         None => {
             warn!("Password login rejected for Google account: {}", data.email);
+            crate::audit::record_login_failure(
+                pool.get_ref(),
+                &req,
+                &data.email,
+                "google_account",
+                Some(user.id),
+            )
+            .await;
             return Ok(HttpResponse::Unauthorized().json(MessageResponse {
                 message: "Use 'Sign in with Google' for this account".to_string(),
             }));
@@ -150,6 +166,14 @@ pub(crate) async fn login(
 
     if !valid {
         warn!("Invalid login attempt: {}", data.email);
+        crate::audit::record_login_failure(
+            pool.get_ref(),
+            &req,
+            &data.email,
+            "bad_password",
+            Some(user.id),
+        )
+        .await;
         return Ok(HttpResponse::Unauthorized().json(MessageResponse {
             message: "Invalid credentials".to_string(),
         }));
@@ -169,6 +193,14 @@ pub(crate) async fn login(
             "Expired credential login attempt (password_valid_until={})",
             valid_until,
         );
+        crate::audit::record_login_failure(
+            pool.get_ref(),
+            &req,
+            &data.email,
+            "expired_credential",
+            Some(user.id),
+        )
+        .await;
         return Ok(HttpResponse::Unauthorized().json(MessageResponse {
             message: "Invalid credentials".to_string(),
         }));
