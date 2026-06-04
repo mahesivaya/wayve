@@ -380,8 +380,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     user.scope === "organization" && user.effective_role === "owner";
   // Developers (org or platform scope) get the Code shortcut alongside owners.
   const isDeveloper = user.effective_role === "developer";
-  // Support/admin/owner (any scope) review access requests for their team.
-  const canManageTickets = hasPermission(user, "tickets:manage");
   // Pricing is hidden from roles that don't manage plans/billing (org +
   // platform scope) — only owner / super_admin / billing keep it. Shared with
   // the /pricing route guard so the URL can't bypass the hidden nav link.
@@ -547,7 +545,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             {renderSidebarItem("/tasks", "tasks", "Tasks", "☑")}
             {renderSidebarItem("/ai-chat", "aichat", "AI Chat", "✨")}
             {renderSidebarItem("/test-access", "test_access", "Test Access", "🔓")}
-            {canManageTickets &&
+            {(isOrgOwner || isPlatformOwner) &&
               renderSidebarLink(
                 "/access-requests",
                 "Access Requests",

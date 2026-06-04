@@ -20,7 +20,6 @@ import ResetPassword from "./auth/ResetPassword";
 import RecoverWithMnemonicPage from "./auth/RecoverWithMnemonic";
 import { useAuth } from "./auth/useAuth";
 import { homePathForUser, normalizeAccountType } from "./auth/accountHome";
-import { hasPermission } from "./auth/permissions";
 
 // 🔥 Lazy loaded pages
 const Home = lazy(() => import("./home/Home"));
@@ -294,7 +293,9 @@ export default function App() {
             <Route
               path="/access-requests"
               element={
-                hasPermission(user, "tickets:manage") ? (
+                (user?.scope === "organization" ||
+                  user?.scope === "platform") &&
+                user?.effective_role === "owner" ? (
                   <AccessRequestsReview />
                 ) : (
                   <Navigate to={accountHome} replace />
