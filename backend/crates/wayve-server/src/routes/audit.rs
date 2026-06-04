@@ -65,7 +65,7 @@ pub async fn list_user_actions(
     pool: web::Data<PgPool>,
     query: web::Query<UserActionQuery>,
 ) -> AppResult {
-    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::AuditRead).await {
+    let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
         Ok(ctx) => ctx,
         Err(response) => return Ok(response),
     };
@@ -163,7 +163,7 @@ pub async fn list_audit_logs(
     pool: web::Data<PgPool>,
     query: web::Query<AuditLogQuery>,
 ) -> AppResult {
-    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::AuditRead).await {
+    let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
         Ok(ctx) => ctx,
         Err(response) => return Ok(response),
     };
@@ -286,7 +286,7 @@ pub async fn export_audit_logs(
     pool: web::Data<PgPool>,
     query: web::Query<AuditExportQuery>,
 ) -> AppResult {
-    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::AuditRead).await {
+    let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
         Ok(ctx) => ctx,
         Err(response) => return Ok(response),
     };

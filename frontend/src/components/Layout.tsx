@@ -352,9 +352,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Security/audit surface is platform-team-only. Even a non-platform user
   // with a stray `audit:read` permission stays hidden from the nav — the
   // page is for staff operating the platform, not customers of it.
+  // Audit views (Audit Logs + User Logs) are restricted to the platform
+  // OWNER only — not super_admin / security or any other audit:read holder.
+  // Mirrors the backend require_owner gate on the audit endpoints.
   const canAccessSecurity =
-    user.scope === "platform" &&
-    (hasPermission(user, "audit:read") || hasPermission(user, "webhooks:manage"));
+    user.scope === "platform" && user.effective_role === "owner";
   // Platform-wide billing console: aggregates revenue, customer subscriptions
   // and payroll across the whole platform. Distinct from the per-tenant
   // [/billing](../billing/Billing.tsx) self-service view; staff-only.

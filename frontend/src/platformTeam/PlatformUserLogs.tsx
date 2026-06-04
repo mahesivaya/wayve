@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { hasPermission } from "../auth/permissions";
 import {
   formatUserActionDetails,
   listUserActions,
@@ -15,7 +14,8 @@ import "./platformTeam.css";
 // logs/user_actions.log. Scoped by the backend: platform staff see everyone.
 export default function PlatformUserLogs() {
   const { user } = useAuth();
-  const canView = user?.scope === "platform" && hasPermission(user, "audit:read");
+  // Owner-only: even super_admin / security (who hold audit:read) are excluded.
+  const canView = user?.scope === "platform" && user?.effective_role === "owner";
 
   const [rows, setRows] = useState<UserActionRow[]>([]);
   const [loading, setLoading] = useState(true);

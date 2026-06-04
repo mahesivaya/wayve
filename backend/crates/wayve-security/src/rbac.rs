@@ -536,6 +536,40 @@ pub async fn require_permission(
     Ok(ctx)
 }
 
+/// Authenticate the request and require the caller be the OWNER of a platform
+/// or organization scope. Stricter than any single permission: even roles that
+/// hold the relevant permission (super_admin, security, …) are rejected, and
+/// personal accounts are excluded. Used to lock the audit views to owners only.
+pub async fn require_owner(
+    req: &HttpRequest,
+    pool: &PgPool,
+) -> Result<RoleContext, HttpResponse> {
+    let user_id = get_user_id_from_request(req).ok_or_else(|| {
+        HttpResponse::Unauthorized()
+            .json(serde_json::json!({ "message": "Authentication required" }))
+    })?;
+
+    let ctx = resolve_role_context(pool, user_id).await.map_err(|e| {
+        error!(target: "auth", user_id, error = ?e, "rbac role resolution failed");
+        HttpResponse::InternalServerError().finish()
+    })?;
+
+    if ctx.role != Role::Owner || ctx.scope == Scope::Personal {
+        warn!(
+            target: "auth",
+            user_id,
+            role = ctx.role.as_str(),
+            scope = ctx.scope.as_str(),
+            "rbac owner-only access denied"
+        );
+        return Err(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Only an organization or platform owner can access this."
+        })));
+    }
+
+    Ok(ctx)
+}
+
 /// Like `require_permission`, but also requires the caller to have reach into
 /// `organization_id`: platform-scope staff may act on any organization, an
 /// organization member only on their own.

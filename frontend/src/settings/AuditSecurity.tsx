@@ -39,17 +39,15 @@ export default function AuditSecurity() {
   const canReadAudit = hasPermission(user, "audit:read");
   const canManageSiem = hasPermission(user, "webhooks:manage");
 
-  // Platform-team only. A non-platform user reaching this page via direct
-  // URL / stale bookmark gets bounced to /home rather than seeing an empty
-  // audit table powered by 403s from the backend. We compute the redirect
-  // flag here but DON'T early-return — the hooks below must run on every
-  // render to keep the call order stable (Rules of Hooks).
-  // Platform staff, or an organization owner (who sees only their org's audit
-  // rows — the backend scopes the query). Everyone else is bounced.
-  const shouldRedirect =
-    Boolean(user) &&
-    user!.scope !== "platform" &&
-    !(user!.scope === "organization" && user!.effective_role === "owner");
+  // Owners only — the platform owner, or an organization owner (who sees only
+  // their own org's audit rows, scoped by the backend). Even platform
+  // super_admin / security, who hold audit:read, are bounced. Mirrors the
+  // backend require_owner gate. We compute the flag here but DON'T early-return
+  // — the hooks below must run on every render to keep call order stable.
+  const isOwner =
+    user?.effective_role === "owner" &&
+    (user?.scope === "platform" || user?.scope === "organization");
+  const shouldRedirect = Boolean(user) && !isOwner;
 
   const [filters, setFilters] = useState<AuditLogFilters>({ limit: 100 });
   const [rows, setRows] = useState<AuditLogRow[]>([]);
