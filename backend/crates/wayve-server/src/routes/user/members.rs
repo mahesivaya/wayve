@@ -5,6 +5,7 @@
 use super::shared::{
     invalidate_profile_cache, normalized_org_role, normalized_platform_role, role_label,
 };
+use crate::audit::{self, AuditEvent};
 use crate::email::profile::invalidate_me_cache;
 use crate::prelude::*;
 use actix_web::put;
@@ -203,6 +204,29 @@ pub async fn update_organization_member_role(
         "organization member role updated"
     );
 
+    // Audit the privilege change (Tier-1: escalation/lateral movement). Skip
+    // the no-op case where the role didn't actually change. Best-effort.
+    if current_role != new_role {
+        audit::record_action(
+            pool.get_ref(),
+            &req,
+            AuditEvent {
+                actor_user_id: ctx.user_id,
+                action: "role_change",
+                resource_type: "organization_member",
+                resource_id: Some(target_user_id.to_string()),
+                metadata: Some(serde_json::json!({
+                    "scope": "organization",
+                    "organization_id": organization_id,
+                    "target_user_id": target_user_id,
+                    "from_role": current_role.as_str(),
+                    "to_role": new_role.as_str(),
+                })),
+            },
+        )
+        .await;
+    }
+
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "user_id": target_user_id,
         "role": new_role.as_str(),
@@ -319,6 +343,28 @@ pub async fn update_platform_member_role(
         role = new_role.as_str(),
         "platform member role updated"
     );
+
+    // Audit the privilege change (Tier-1: escalation/lateral movement). Skip
+    // the no-op case where the role didn't actually change. Best-effort.
+    if current_role != new_role {
+        audit::record_action(
+            pool.get_ref(),
+            &req,
+            AuditEvent {
+                actor_user_id: ctx.user_id,
+                action: "role_change",
+                resource_type: "platform_member",
+                resource_id: Some(target_user_id.to_string()),
+                metadata: Some(serde_json::json!({
+                    "scope": "platform",
+                    "target_user_id": target_user_id,
+                    "from_role": current_role.as_str(),
+                    "to_role": new_role.as_str(),
+                })),
+            },
+        )
+        .await;
+    }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "user_id": target_user_id,

@@ -83,7 +83,8 @@ export default function PlatformUserLogs() {
         <h1>User Logs</h1>
         <p>
           User actions across the platform — sign-ins, email sent/received,
-          password changes, deletions, exports and billing changes · {user?.email}
+          password changes, role changes, deletions, exports and billing
+          changes · {user?.email}
         </p>
       </header>
 

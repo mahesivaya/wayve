@@ -9,7 +9,7 @@ mod tests {
     use crate::routes::user::{list_organization_members, update_organization_member_role};
     use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
     use actix_web::{App, http::StatusCode, test as actix_test, web};
-    use sqlx::PgPool;
+    use sqlx::{PgPool, Row};
 
     async fn insert_org(pool: &PgPool, name: &str) -> i32 {
         sqlx::query_scalar::<_, i32>("INSERT INTO organizations (name) VALUES ($1) RETURNING id")
@@ -280,6 +280,76 @@ mod tests {
             );
         }
 
+        cleanup(&pool, &[owner_id, target_id], &[org_id]).await;
+    }
+
+    #[actix_web::test]
+    async fn role_change_is_written_to_audit_log() {
+        // A successful role change must leave a `role_change` row in
+        // `audit_logs` — that's what the User Logs / Security dashboard reads.
+        // The row records the actor, the target, and the from → to roles.
+        let pool = test_pool().await;
+        let org_id = insert_org(&pool, &format!("Audit {}", random_email())).await;
+
+        let owner_email = random_email();
+        let owner_id = insert_local_user(&pool, &owner_email, "password123").await;
+        place_in_org(&pool, owner_id, org_id, "owner").await;
+
+        let target_id = insert_local_user(&pool, &random_email(), "password123").await;
+        place_in_org(&pool, target_id, org_id, "member").await;
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(update_organization_member_role),
+        )
+        .await;
+
+        // Owner promotes the member to support.
+        let req = actix_test::TestRequest::put()
+            .uri(&format!("/organizations/{org_id}/members/{target_id}/role"))
+            .insert_header((
+                "Authorization",
+                format!("Bearer {}", jwt_for(owner_id, &owner_email)),
+            ))
+            .set_json(serde_json::json!({ "role": "support" }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Read the audit row back and verify actor / resource / from → to.
+        let row = sqlx::query(
+            "SELECT actor_user_id, resource_type, metadata \
+             FROM audit_logs \
+             WHERE action = 'role_change' AND resource_id = $1 \
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(target_id.to_string())
+        .fetch_optional(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("query audit row: {e}"))
+        .unwrap_or_else(|| panic!("expected a role_change audit row for target {target_id}"));
+
+        let actor: Option<i32> = row.try_get("actor_user_id").ok().flatten();
+        assert_eq!(
+            actor,
+            Some(owner_id),
+            "actor should be the owner who made the change"
+        );
+        let resource_type: String = row.get("resource_type");
+        assert_eq!(resource_type, "organization_member");
+        let metadata: serde_json::Value = row.get("metadata");
+        assert_eq!(metadata["from_role"], "member");
+        assert_eq!(metadata["to_role"], "support");
+        assert_eq!(metadata["scope"], "organization");
+
+        // Tidy the audit residue — its FKs are ON DELETE SET NULL, so without
+        // this it would linger (orphaned) after the users/org are removed.
+        let _ =
+            sqlx::query("DELETE FROM audit_logs WHERE action = 'role_change' AND resource_id = $1")
+                .bind(target_id.to_string())
+                .execute(&pool)
+                .await;
         cleanup(&pool, &[owner_id, target_id], &[org_id]).await;
     }
 }

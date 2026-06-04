@@ -36,9 +36,68 @@ export type UserActionRow = {
   created_at: string;
 };
 
+// Actions that are a financial / billing signal (plan changes, entitlement
+// grants, payment-method updates, cancellations).
+const BILLING_ACTIONS = new Set([
+  "checkout_started",
+  "subscription_activated",
+  "subscription_updated",
+  "subscription_canceled",
+  "subscription_cancel",
+  "entitlement_grant",
+  "entitlement_revoke",
+  "payment_method_set",
+]);
+
+function fmtBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const value = bytes / 1024 ** i;
+  return `${i === 0 ? value : value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+// Readable one-liner for a billing action's metadata.
+function formatBillingDetails(row: UserActionRow): string {
+  const m = row.metadata ?? {};
+  const str = (k: string) => (typeof m[k] === "string" ? (m[k] as string) : undefined);
+  const num = (k: string) => (typeof m[k] === "number" ? (m[k] as number) : undefined);
+  const parts: string[] = [];
+  switch (row.action) {
+    case "entitlement_grant":
+    case "entitlement_revoke": {
+      const plan = str("plan_code") ?? row.resource_id ?? "free";
+      const prev = str("previous_plan_code");
+      parts.push(prev && prev !== plan ? `${prev} → ${plan}` : plan);
+      const storage = num("storage_limit_bytes");
+      if (storage != null) parts.push(`${fmtBytes(storage)} storage`);
+      const seats = num("seat_limit");
+      if (seats != null) parts.push(`${seats} seat${seats === 1 ? "" : "s"}`);
+      break;
+    }
+    case "subscription_activated":
+    case "subscription_updated":
+    case "subscription_canceled": {
+      const status = str("status");
+      if (status) parts.push(status);
+      if (m.cancel_at_period_end === true) parts.push("cancels at period end");
+      break;
+    }
+    case "payment_method_set":
+      parts.push(`pm ${row.resource_id ?? "updated"}`);
+      break;
+    case "checkout_started":
+      parts.push(`plan ${row.resource_id ?? "?"}`);
+      if (str("flow")) parts.push(`${str("flow")} flow`);
+      break;
+  }
+  return parts.join(" · ");
+}
+
 // Human-readable summary of a user action's metadata for the "Details"
-// column. Email events get a "from → to · subject" line; anything else falls
-// back to compact key=value pairs (or "" when there's no metadata).
+// column. Email events get a "from → to · subject" line; billing events get a
+// plan/status summary; anything else falls back to compact key=value pairs (or
+// "" when there's no metadata).
 export function formatUserActionDetails(row: UserActionRow): string {
   const m = row.metadata;
   if (!m || typeof m !== "object") return "";
@@ -47,6 +106,17 @@ export function formatUserActionDetails(row: UserActionRow): string {
     const to = typeof m.to === "string" ? m.to : "?";
     const subject = typeof m.subject === "string" ? m.subject : "(no subject)";
     return `${from} → ${to} · ${subject}`;
+  }
+  if (row.action === "role_change") {
+    const from = typeof m.from_role === "string" ? m.from_role : "?";
+    const to = typeof m.to_role === "string" ? m.to_role : "?";
+    const target = m.target_user_id != null ? `user#${m.target_user_id}` : "user";
+    const scope = typeof m.scope === "string" ? ` (${m.scope})` : "";
+    return `${target}: ${from} → ${to}${scope}`;
+  }
+  if (BILLING_ACTIONS.has(row.action)) {
+    const details = formatBillingDetails(row);
+    if (details) return details;
   }
   return Object.entries(m)
     .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
