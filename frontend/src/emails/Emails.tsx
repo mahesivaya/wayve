@@ -28,7 +28,7 @@ const ACCOUNT_NAME_STORAGE_KEY = "rwayve.emailAccountNames";
 const EMAIL_LIST_WIDTH_STORAGE_KEY = "rwayve.emailList.width";
 
 export default function Emails() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { normalizedSearchQuery, emailViewLayout, setEmailViewLayout } = useGlobalSearch();
   
   const {
@@ -310,8 +310,8 @@ export default function Emails() {
       // browser paints, so the user sees the banner without a flash.
       const h = window.setTimeout(() => {
         setOauthError(
-          "That email is already connected to another Wayve account. " +
-            "Disconnect it from that account first, or sign in there instead.",
+          "This mailbox is already connected to another Fluxze account. " +
+            "To use it here, sign in to that account and disconnect it first.",
         );
       }, 0);
       window.history.replaceState({}, "", "/emails");
@@ -477,7 +477,6 @@ export default function Emails() {
     >
       {oauthError && (
         <div className="oauth-error-banner" role="alert">
-          <span>{oauthError}</span>
           <button
             type="button"
             className="oauth-error-dismiss"
@@ -486,6 +485,19 @@ export default function Emails() {
           >
             ×
           </button>
+          <span className="oauth-error-message">{oauthError}</span>
+          <div className="oauth-error-actions">
+            <button
+              type="button"
+              className="oauth-error-action"
+              onClick={logout}
+            >
+              Sign in to the other account
+            </button>
+            <span className="oauth-error-hint">
+              You&apos;ll be signed out of this account.
+            </span>
+          </div>
         </div>
       )}
       <EmailSidebar

@@ -10,10 +10,11 @@
   transform: translateX(-50%);
   z-index: 10;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   max-width: min(640px, calc(100% - 32px));
-  padding: 10px 14px;
+  padding: 12px 14px;
   border: 1px solid var(--color-danger-strong-soft);
   border-radius: var(--radius-md);
   background: var(--color-danger-soft-strong);
@@ -23,8 +24,16 @@
   box-shadow: 0 10px 24px rgb(15, 23, 42, 0.12);
 }
 
+.oauth-error-message {
+  /* Leave room for the dismiss × pinned to the top-right corner. */
+  padding-right: 20px;
+  line-height: 1.45;
+}
+
 .oauth-error-dismiss {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 8px;
+  right: 8px;
   border: none;
   background: transparent;
   color: var(--color-danger-strong);
@@ -37,6 +46,35 @@
 
 .oauth-error-dismiss:hover{
   background: var(--color-danger-soft);
+}
+
+.oauth-error-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+/* Primary CTA — mirrors the Compose button's filled-primary look so the
+   "sign in to the other account" action reads as the obvious next step. */
+.oauth-error-action {
+  padding: var(--space-5) calc(var(--space-5) * 1.5);
+  background: var(--color-primary);
+  color: var(--color-surface);
+  border: none;
+  border-radius: calc(var(--radius-md) - 3px);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.oauth-error-action:hover {
+  background: var(--color-primary-hover);
+}
+
+.oauth-error-hint {
+  color: var(--color-danger-strong);
+  font-weight: 400;
+  opacity: 0.85;
 }
 
 /* Page wrapper — stacks the in-page search/layout toolbar above the
