@@ -36,7 +36,7 @@ export default function Home() {
       <div className="public-home">
         <header className="public-home-nav">
           <button className="public-home-brand" onClick={() => navigate("/")}>
-            Wayve
+            Fluxze
           </button>
 
           <nav className="public-home-links" aria-label="Main navigation">
@@ -97,12 +97,12 @@ export default function Home() {
               </div>
 
               <div className="services-more">
-                <h2>More from Wayve</h2>
+                <h2>More from Fluxze</h2>
                 <div className="services-more-grid">
                   <button onClick={() => navigate("/organization")}>
                     <span className="service-icon organization">O</span>
                     <span>
-                      <strong>Wayve Organization</strong>
+                      <strong>Fluxze Organization</strong>
                       <small>Team tools for communication and work.</small>
                     </span>
                   </button>
@@ -203,7 +203,7 @@ export default function Home() {
                   <strong>Bring your existing mail.</strong> Connect Gmail or Outlook.
                 </li>
                 <li>
-                  <strong>Build on Wayve.</strong> Scoped service API keys.
+                  <strong>Build on Fluxze.</strong> Scoped service API keys.
                 </li>
                 <li>
                   <strong>Billing that just works.</strong> Powered by Stripe.
@@ -236,7 +236,7 @@ export default function Home() {
           </section>
 
           <section className="home-info-band">
-            <h2>Who Wayve is for</h2>
+            <h2>Who Fluxze is for</h2>
             <p>One workspace that adapts from solo to organization.</p>
           </section>
 
@@ -362,15 +362,15 @@ export default function Home() {
           <section className="faq-section">
             <div className="faq-header">
               <h2>Frequently Asked Questions</h2>
-              <p>Quick answers about Wayve Enterprise.</p>
+              <p>Quick answers about Fluxze Enterprise.</p>
             </div>
             <div className="faq-grid">
               <div className="faq-item">
-                <h3>What security certifications does Wayve have?</h3>
+                <h3>What security certifications does Fluxze have?</h3>
                 <p>SOC 1 Type II, GDPR, and ISO 27001, audited annually.</p>
               </div>
               <div className="faq-item">
-                <h3>Can I integrate Wayve with my existing identity provider?</h3>
+                <h3>Can I integrate Fluxze with my existing identity provider?</h3>
                 <p>Yes — SAML 2.0 SSO with Okta, Azure AD, and Google Workspace.</p>
               </div>
               <div className="faq-item">
@@ -397,7 +397,7 @@ export default function Home() {
               <div className="public-home-footer-brand">
                 <button type="button" onClick={() => navigate("/")}>
                   <span className="public-home-footer-logo">✉</span>
-                  <span>Wayve</span>
+                  <span>Fluxze</span>
                 </button>
               </div>
 
@@ -410,7 +410,7 @@ export default function Home() {
               </nav>
 
               <nav className="public-home-footer-column" aria-label="Product">
-                <button type="button" onClick={() => navigate("/enterprise")}>Wayve for Business</button>
+                <button type="button" onClick={() => navigate("/enterprise")}>Fluxze for Business</button>
                 <button type="button" onClick={() => navigate("/services/email")}>Email Aliases</button>
                 <button type="button" onClick={() => navigate("/developers")}>Release notes</button>
                 <button type="button" onClick={() => navigate("/services/email")}>Encrypted Email</button>
@@ -439,7 +439,7 @@ export default function Home() {
             </div>
 
             <p className="public-home-footer-legal">
-              © Wayve B.V. {new Date().getFullYear()}
+              © Fluxze B.V. {new Date().getFullYear()}
             </p>
           </footer>
         </main>

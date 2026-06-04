@@ -205,7 +205,7 @@ export default function Login() {
       ) : (
         <form className="login-card" onSubmit={handleLogin}>
           <h2>Welcome back 👋</h2>
-          <p className="subtitle">Login to your Wayve account</p>
+          <p className="subtitle">Login to your Fluxze account</p>
 
           <input
             type="email"

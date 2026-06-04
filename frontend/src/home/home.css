@@ -74,7 +74,7 @@
   font-family: "Inter", system-ui, -apple-system, sans-serif;
 }
 
-/* The wordmark "Wayve" in the top-left becomes the visual anchor
+/* The wordmark "Fluxze" in the top-left becomes the visual anchor
    for the editorial system — rendered in Fraunces so the brand
    reads as part of the same typographic voice as the headings. */
 .public-home .public-home-brand {
@@ -803,7 +803,7 @@
 }
 
 /* =============================
-   👥 ROLES GRID (Who Wayve is for)
+   👥 ROLES GRID (Who Fluxze is for)
 ============================== */
 .home-roles-grid {
   display: grid;

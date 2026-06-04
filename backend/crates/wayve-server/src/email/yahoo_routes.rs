@@ -70,7 +70,7 @@ pub async fn yahoo_connect(
         Ok(Some(other_user)) => {
             warn!(target: "auth", user_id, other_user, email = %email, "yahoo connect rejected: email already owned");
             return HttpResponse::Conflict().json(serde_json::json!({
-                "message": "That email is already connected to another Wayve account."
+                "message": "That email is already connected to another Fluxze account."
             }));
         }
         Ok(None) => {}
