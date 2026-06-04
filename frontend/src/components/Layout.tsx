@@ -629,38 +629,38 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               <div className="sidebar-section-label">Logs</div>
               {canAccessPlatformLogs &&
                 renderSidebarLink(
-                  "/platform/logs",
+                  "/logs/app",
                   "App Logs",
                   "🪵",
-                  location.pathname === "/platform/logs",
+                  location.pathname === "/logs/app",
                 )}
               {isPlatformOwner &&
                 renderSidebarLink(
-                  "/platform/visitors",
+                  "/logs/visitors",
                   "Visitors",
                   "👥",
-                  location.pathname === "/platform/visitors",
+                  location.pathname === "/logs/visitors",
                 )}
               {canAccessSecurity &&
                 renderSidebarLink(
-                  "/platform/user-logs",
+                  "/logs/users",
                   "User Logs",
                   "👤",
-                  location.pathname === "/platform/user-logs",
+                  location.pathname === "/logs/users",
                 )}
               {canAccessSecurity &&
                 renderSidebarLink(
-                  "/security/audit",
+                  "/logs/audit",
                   "Audit Logs",
                   "🔒",
-                  location.pathname.startsWith("/security"),
+                  location.pathname === "/logs/audit",
                 )}
               {isPlatformOwner &&
                 renderSidebarLink(
-                  "/platform/tracing",
+                  "/logs/tracing",
                   "Tracing",
                   "📈",
-                  location.pathname === "/platform/tracing",
+                  location.pathname === "/logs/tracing",
                 )}
             </div>
           )}
@@ -677,16 +677,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 location.pathname === "/platform/domains",
               )}
               {renderSidebarLink(
-                "/organization/logs",
+                "/logs/app",
                 "App Logs",
                 "📊",
-                location.pathname === "/organization/logs",
+                location.pathname === "/logs/app",
               )}
               {renderSidebarLink(
-                "/security/audit",
+                "/logs/audit",
                 "Audit Logs",
                 "🔒",
-                location.pathname.startsWith("/security"),
+                location.pathname === "/logs/audit",
               )}
             </div>
           )}

@@ -430,7 +430,7 @@ export default function Home() {
                 <button type="button" onClick={() => navigate("/about")}>Press</button>
                 <button type="button" onClick={() => navigate("/services/email")}>Private Email</button>
                 <button type="button" onClick={() => navigate("/support")}>Contact</button>
-                <button type="button" onClick={() => navigate("/security/audit")}>Transparency Report</button>
+                <button type="button" onClick={() => navigate("/logs/audit")}>Transparency Report</button>
               </nav>
 
               <div className="public-home-footer-social" aria-label="Follow us">

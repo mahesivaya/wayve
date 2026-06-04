@@ -1,7 +1,7 @@
 // Browser-side error reporting. Wires `window.onerror` and the
 // `unhandledrejection` listener to forward every uncaught failure to
 // the backend's /api/error-logs endpoint. Runs in BOTH dev and prod —
-// the dashboard at /platform/logs is the production observability
+// the dashboard at /logs/app is the production observability
 // surface for client-side faults the user actually experiences.
 //
 // Call once from main.tsx. Idempotent.

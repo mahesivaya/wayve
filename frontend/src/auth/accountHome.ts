@@ -50,7 +50,7 @@ type AccountLike = {
 // its own page. Owner / super_admin / admin still land on the generic home.
 const PLATFORM_ROLE_HOMES: Record<string, string> = {
   billing: "/platform/billing",
-  security: "/security/audit",
+  security: "/logs/audit",
   developer: "/platform/developer",
   support: "/platform/support",
   member: "/platform/welcome",

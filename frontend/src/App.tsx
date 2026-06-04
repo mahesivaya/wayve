@@ -269,7 +269,7 @@ export default function App() {
             />
             {/* Platform-owner only: graphical tracing-log dashboard. */}
             <Route
-              path="/platform/tracing"
+              path="/logs/tracing"
               element={
                 user?.scope === "platform" && user?.effective_role === "owner" ? (
                   <TracingDashboard />
@@ -277,6 +277,10 @@ export default function App() {
                   <Navigate to={accountHome} replace />
                 )
               }
+            />
+            <Route
+              path="/platform/tracing"
+              element={<Navigate to="/logs/tracing" replace />}
             />
             {/* Platform-owner only: domain administration for organizations. */}
             <Route
@@ -318,10 +322,18 @@ export default function App() {
             <Route path="/platform/analytics" element={<PlatformAnalytics />} />
             <Route path="/platform/welcome" element={<PlatformWelcome />} />
             <Route path="/platform/secrets" element={<PlatformSecrets />} />
-            <Route path="/platform/logs" element={<PlatformLogs />} />
-            <Route path="/organization/logs" element={<PlatformLogs />} />
-            <Route path="/platform/user-logs" element={<PlatformUserLogs />} />
-            <Route path="/platform/visitors" element={<PlatformVisitors />} />
+            {/* All log/audit surfaces live under one /logs/* namespace.
+                The old /platform/*, /organization/logs and /security/audit
+                paths below redirect here so bookmarks keep working. */}
+            <Route path="/logs" element={<Navigate to="/logs/app" replace />} />
+            <Route path="/logs/app" element={<PlatformLogs />} />
+            <Route path="/logs/users" element={<PlatformUserLogs />} />
+            <Route path="/logs/audit" element={<AuditSecurity />} />
+            <Route path="/logs/visitors" element={<PlatformVisitors />} />
+            <Route path="/platform/logs" element={<Navigate to="/logs/app" replace />} />
+            <Route path="/organization/logs" element={<Navigate to="/logs/app" replace />} />
+            <Route path="/platform/user-logs" element={<Navigate to="/logs/users" replace />} />
+            <Route path="/platform/visitors" element={<Navigate to="/logs/visitors" replace />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
             {/* Org-master-key flows. Bootstrap shows the 24-word
                 mnemonic ONCE; recovery-key accepts the mnemonic on a
@@ -361,7 +373,7 @@ export default function App() {
               path="/organization/audit/key-access"
               element={<OrgAuditLog />}
             />
-            <Route path="/security/audit" element={<AuditSecurity />} />
+            <Route path="/security/audit" element={<Navigate to="/logs/audit" replace />} />
             <Route path="/recover" element={<RecoverPage />} />
             <Route path="/settings/sso" element={<SsoSettings />} />
             <Route path="/settings/inboxes" element={<SharedInboxes />} />

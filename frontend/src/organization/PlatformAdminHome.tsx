@@ -109,7 +109,7 @@ export default function PlatformAdminHome() {
       key: "security",
       label: "Security",
       description: "Audit logs, outcome filters and SIEM webhook forwarding.",
-      path: "/security/audit",
+      path: "/logs/audit",
       visible: canSeeSecurity,
     },
     {
