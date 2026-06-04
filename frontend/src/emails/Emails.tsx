@@ -44,18 +44,21 @@ export default function Emails() {
   // email list open the same single modal.
   const [addAccountOpen, setAddAccountOpen] = useState(false);
 
-  // Deep-link from other surfaces (e.g. the home dashboard's Inbox
-  // card): `/emails?open=<id>` opens that email in the detail pane on
-  // mount. The handler first checks the already-loaded list to avoid
-  // an extra round-trip; on miss it fetches by id directly. Once the
-  // email is opened, the query param is stripped so a manual refresh
-  // doesn't keep re-opening it after the user navigates away inside
-  // the inbox.
+  // The open email is reflected in the URL as `?open=<id>` so that a page
+  // refresh (or a deep-link from another surface, e.g. the home dashboard's
+  // Inbox card) RESTORES it instead of dropping back to the list. This effect
+  // applies the param → opens the email; the effect below keeps the param in
+  // sync the other way (selectedEmail → URL). It first checks the already-
+  // loaded list to avoid an extra round-trip, and on a miss fetches by id.
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkAppliedRef = useRef<number | null>(null);
   useEffect(() => {
     const raw = searchParams.get("open");
-    if (!raw) return;
+    if (!raw) {
+      // No param — reset the guard so navigating to the same id again works.
+      deepLinkAppliedRef.current = null;
+      return;
+    }
     const id = Number(raw);
     if (!Number.isFinite(id)) {
       // Bad value — drop the param and bail.
@@ -66,14 +69,21 @@ export default function Emails() {
       }, { replace: true });
       return;
     }
+    // The param already matches what's open (typically because the sync effect
+    // below just wrote it after a row click) — nothing to do, and crucially
+    // don't disturb the current layout.
+    if (selectedEmail?.id === id) {
+      deepLinkAppliedRef.current = id;
+      return;
+    }
     if (deepLinkAppliedRef.current === id) return;
     deepLinkAppliedRef.current = id;
 
-    // Force the list-view layout on deep-link arrivals so the opened
-    // email reads as an expanded row, not as the right-hand pane of
-    // the 3-column split. Matches the home dashboard's "click a row →
-    // see that one email full-width" expectation. The user can still
-    // toggle back to split via the SearchBar's layout buttons.
+    // Force the list-view layout when RESTORING/deep-linking an email that
+    // isn't already open, so it reads as an expanded full-width row rather
+    // than the right pane of the 3-column split. Matches the home dashboard's
+    // "click a row → see that one email" expectation. The user can toggle back
+    // to split via the SearchBar's layout buttons.
     if (emailViewLayout !== "list") {
       setEmailViewLayout("list");
     }
@@ -81,17 +91,11 @@ export default function Emails() {
     const fromList = emails.find((email) => email.id === id);
     if (fromList) {
       void openEmail(fromList);
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete("open");
-        return next;
-      }, { replace: true });
       return;
     }
 
-    // Not in the current page — fetch the row directly. The detail
-    // pane is fine with a partial row (body fetches on its own);
-    // useEmailInbox.openEmail does the rest of the work.
+    // Not in the current page — fetch the row directly. The detail pane is fine
+    // with a partial row (body fetches on its own); openEmail does the rest.
     let cancelled = false;
     (async () => {
       try {
@@ -100,24 +104,41 @@ export default function Emails() {
         await openEmail(full);
       } catch (err) {
         logger.warn("deep-link email open failed", { id, err });
-      } finally {
-        if (!cancelled) {
-          setSearchParams((prev) => {
-            const next = new URLSearchParams(prev);
-            next.delete("open");
-            return next;
-          }, { replace: true });
-        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-    // Re-run when the loaded list changes — if the email arrives via
-    // a later page or background sync, this effect picks it up
-    // without needing a second navigate.
-  }, [searchParams, emails, openEmail, setSearchParams, emailViewLayout, setEmailViewLayout]);
+    // Re-run when the loaded list changes — if the email arrives via a later
+    // page or background sync, this effect picks it up without a re-navigate.
+  }, [searchParams, emails, openEmail, setSearchParams, selectedEmail, emailViewLayout, setEmailViewLayout]);
+
+  // Mirror the open email back into the URL (`?open=<id>`) so a refresh keeps
+  // it open. Only reacts to genuine selection changes: on first mount, when
+  // nothing has been selected yet, it leaves the URL alone so the effect above
+  // can still restore from an incoming `?open=` param. Closing an email
+  // (selectedEmail → null) removes the param.
+  const prevSelectedIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    const cur = selectedEmail?.id ?? null;
+    if (cur === prevSelectedIdRef.current) return;
+    const had = prevSelectedIdRef.current;
+    prevSelectedIdRef.current = cur;
+    if (cur !== null) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("open", String(cur));
+        return next;
+      }, { replace: true });
+    } else if (had !== null) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("open");
+        return next;
+      }, { replace: true });
+    }
+  }, [selectedEmail?.id, setSearchParams]);
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [accountNameOverrides, setAccountNameOverrides] = useState<Record<number, string>>(() => {

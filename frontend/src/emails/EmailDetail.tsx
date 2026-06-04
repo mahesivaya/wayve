@@ -408,7 +408,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
               )}
             </div>
             <div className="email-meta-time">
-              {formatEmailDate(selectedEmail.created_at)}
+              {formatEmailDateTime(selectedEmail.created_at)}
             </div>
           </div>
         );
@@ -638,6 +638,24 @@ function formatEmailDate(iso: string | null | undefined): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+  });
+}
+
+// Full date + time for the opened-email header — unlike the compact
+// `formatEmailDate` (used in the list), the reading view always shows the
+// complete received date AND time, e.g. "Wed, Jun 4, 2026, 11:24 AM".
+function formatEmailDateTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-US", {
+    timeZone: APP_TIME_ZONE,
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
