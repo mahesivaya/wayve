@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { BRAND_NAME } from "../config/brand";
 // Note: swagger-ui-react ships its own CSS — has to be loaded once,
 // here, so the UI renders with the expected layout.
 import "swagger-ui-react/swagger-ui.css";
@@ -78,7 +79,7 @@ export default function SwaggerDocs() {
       <article className="swagger-docs-shell">
         <header className="swagger-docs-header">
           <p className="hero-kicker">For developers</p>
-          <h1>Wayve API</h1>
+          <h1>{BRAND_NAME} API</h1>
           <p>
             Interactive reference for the public, API-key-callable
             surface of Wayve. Click any endpoint to expand, then

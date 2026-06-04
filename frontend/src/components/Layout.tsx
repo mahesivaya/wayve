@@ -1,4 +1,5 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { BRAND_NAME } from "../config/brand";
 import { useAuth } from "../auth/useAuth";
 import { canAccessApiKeyAdmin, canViewPricing, hasPermission } from "../auth/permissions";
 import { Suspense, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
@@ -434,7 +435,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           navigation lives in the left sidebar. */}
       <div className="header">
         <div className="header-brand">
-          <div className="logo" onClick={() => navigate("/")}>Wayve</div>
+          <div className="logo" onClick={() => navigate("/")}>{BRAND_NAME}</div>
           <button
             type="button"
             className="sidebar-toggle-btn"

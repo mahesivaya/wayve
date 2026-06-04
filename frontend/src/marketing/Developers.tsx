@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { BRAND_NAME } from "../config/brand";
 import DocsShell from "../docs/DocsShell";
 import "./developers.css";
 
@@ -210,7 +211,7 @@ export default function Developers() {
 
       <header className="dev-hero">
         <div className="dev-hero-inner">
-          <h1>Wayve Developers</h1>
+          <h1>{BRAND_NAME} Developers</h1>
           <p>
             Build on Wayve's email, chat, scheduling, drive, notes, tasks and AI
             primitives with a scoped, audited API. Every request is authenticated

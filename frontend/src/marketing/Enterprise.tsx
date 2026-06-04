@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import MarketingShell from "./MarketingShell";
+import { BRAND_NAME } from "../config/brand";
 
 const STATS = [
   { value: "256-bit", label: "AES-GCM encryption at rest" },
@@ -71,7 +72,7 @@ export default function Enterprise() {
     <MarketingShell>
       <section className="marketing-hero">
         <div className="marketing-hero-copy">
-          <p className="marketing-eyebrow">Wayve for Enterprise</p>
+          <p className="marketing-eyebrow">{BRAND_NAME} for Enterprise</p>
           <h1>One private workspace, ready for the org.</h1>
           <p className="lead">
             Mail, chat, calls, files, scheduling, and AI in one place — with

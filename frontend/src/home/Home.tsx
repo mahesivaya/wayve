@@ -1,4 +1,5 @@
 import { useAuth } from "../auth/useAuth";
+import { BRAND_NAME } from "../config/brand";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { SERVICES } from "../services/serviceData";
@@ -36,7 +37,7 @@ export default function Home() {
       <div className="public-home">
         <header className="public-home-nav">
           <button className="public-home-brand" onClick={() => navigate("/")}>
-            Fluxze
+            {BRAND_NAME}
           </button>
 
           <nav className="public-home-links" aria-label="Main navigation">
@@ -439,7 +440,7 @@ export default function Home() {
             </div>
 
             <p className="public-home-footer-legal">
-              © Fluxze B.V. {new Date().getFullYear()}
+              © {BRAND_NAME} B.V. {new Date().getFullYear()}
             </p>
           </footer>
         </main>
