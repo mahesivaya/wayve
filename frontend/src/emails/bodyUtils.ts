@@ -4,8 +4,15 @@ import type { WayveEncryptedBody } from "./types";
 
 const WAYVE_SECURE_PREFIX = "WAYVE_SECURE_V1";
 
+// Heuristic: does this body look like HTML (vs. plain text)? Matches an opening
+// tag or an entity. Shared by the plaintext normaliser and the detail view's
+// HTML renderer so they agree on what counts as HTML.
+export function isHtmlBody(body: string): boolean {
+  return /[<&][a-zA-Z#/!]/.test(body);
+}
+
 export function normalizeEmailBody(body: string) {
-  if (!/[<&][a-zA-Z#/!]/.test(body)) {
+  if (!isHtmlBody(body)) {
     return body;
   }
 
@@ -128,7 +135,10 @@ export async function decryptWayveBodyIfNeeded(
   const encrypted = parseWayveEncryptedBody(body);
 
   if (!encrypted) {
-    return normalizeEmailBody(body);
+    // Return the body as-is (HTML preserved) — the detail view renders HTML
+    // emails in a sandboxed frame and linkifies plain text. Consumers that
+    // need plain text (reply quoting, previews) flatten it themselves.
+    return body;
   }
 
   const privateKeys: CryptoKey[] = [];
@@ -178,12 +188,13 @@ export async function decryptWayveBodyIfNeeded(
 
   for (const privateKey of privateKeys) {
     try {
+      // Raw decrypted body (HTML preserved); the detail view handles rendering.
       return await decryptMessage(
         new Uint8Array(encrypted.data),
         new Uint8Array(wrappedKeyBytes),
         new Uint8Array(encrypted.iv),
         privateKey
-      ).then(normalizeEmailBody);
+      );
     } catch (err) {
       lastError = err;
     }

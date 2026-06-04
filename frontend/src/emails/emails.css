@@ -1529,11 +1529,11 @@
 }
 
 /* BODY
-   HTML emails are flattened to plaintext upstream (bodyUtils.normalizeEmailBody)
-   and shown with `pre-wrap`. Without a size/width cap the body inherits the
-   large base font and runs the full pane width, which reads as oversized and
-   airy (esp. marketing emails). Cap the measure for readability and bring the
-   text down to the app's type scale. */
+   Plain-text emails are shown with `pre-wrap`; without a size/width cap they
+   inherit the large base font and run the full pane width, reading oversized
+   and airy. Cap the measure for readability and use the app's type scale.
+   HTML emails render inside `.email-html-frame` (a sandboxed iframe) instead —
+   see the override below that lifts the text-only width cap for them. */
 .email-body {
   margin-top: var(--space-5);
   max-width: 680px;
@@ -1542,6 +1542,21 @@
   color: var(--color-text-primary);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* HTML emails carry their own layout (often fixed-width tables); the 680px
+   reading measure meant for plain text would crush them, so relax it and let
+   the sandboxed frame take the full pane width. */
+.email-body:has(.email-html-frame) {
+  max-width: none;
+  white-space: normal;
+}
+
+.email-html-frame {
+  display: block;
+  width: 100%;
+  border: none;
+  background: var(--color-surface);
 }
 
 .email-body a {

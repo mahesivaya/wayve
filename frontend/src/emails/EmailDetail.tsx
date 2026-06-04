@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { downloadEmailAttachment, sendEmail } from "../api/email";
-import { formatFileSize, renderEmailBody } from "./renderUtils";
+import { formatFileSize } from "./renderUtils";
+import EmailBody from "./EmailBody";
 import { EmailItem, EmailAttachment } from "./types";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
@@ -554,7 +555,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
               : "Failed to load email body. Try again."}
           </p>
         ) : (
-          renderEmailBody(selectedEmail.body || "")
+          <EmailBody body={selectedEmail.body || ""} />
         )}
       </div>
 
