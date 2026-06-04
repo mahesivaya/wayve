@@ -28,12 +28,12 @@ interface EmailListProps {
   onAddAccount?: () => void;
 }
 
+// Folders still without a real backing query. Important / Updates / Social are
+// now backed by the synced Gmail category labels (CATEGORY_*/IMPORTANT) and
+// filtered server-side, so they render the list instead of a placeholder.
 const STUB_FOLDER_LABELS: Record<string, string> = {
-  important: "Important",
-  updates: "Updates",
   spam: "Spam",
   drafts: "Drafts",
-  social: "Social",
 };
 
 function formatMobileTime(value: string) {

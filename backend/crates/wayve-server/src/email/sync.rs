@@ -164,6 +164,7 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         "DRAFT",
         "SPAM",
         "TRASH",
+        "IMPORTANT",
         "CATEGORY_PERSONAL",
         "CATEGORY_SOCIAL",
         "CATEGORY_PROMOTIONS",
