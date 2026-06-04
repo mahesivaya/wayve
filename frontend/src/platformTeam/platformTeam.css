@@ -139,6 +139,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Details column (email from/to/subject etc.) — cap width and ellipsize so a
+   long subject doesn't blow out the row; full text is in the title tooltip. */
+.pt-table td.pt-details {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
 .pt-table code {
   font-size: 12px;
   background: var(--panel-subtle, var(--color-surface-hover));

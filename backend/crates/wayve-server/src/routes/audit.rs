@@ -47,6 +47,9 @@ pub struct UserActionView {
     pub action: String,
     pub resource_type: Option<String>,
     pub resource_id: Option<String>,
+    // Free-form event details (e.g. email from/to/subject for email_sent /
+    // email_received). Org/platform-admin readable per the scoping below.
+    pub metadata: Option<serde_json::Value>,
     pub ip: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -80,7 +83,7 @@ pub async fn list_user_actions(
     let rows = sqlx::query_as::<_, UserActionView>(
         r#"
         SELECT a.id, a.actor_user_id, u.email AS actor_email, a.organization_id,
-               a.action, a.resource_type, a.resource_id, a.ip, a.created_at
+               a.action, a.resource_type, a.resource_id, a.metadata, a.ip, a.created_at
         FROM audit_logs a
         LEFT JOIN users u ON u.id = a.actor_user_id
         WHERE ($1::TEXT IS NULL OR a.action = $1)

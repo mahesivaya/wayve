@@ -128,6 +128,29 @@ pub async fn send(
             }),
         )
         .await;
+
+        // Enterprise audit trail (Security → User actions), scoped by org like
+        // every other action. from/to/subject land in metadata, which is
+        // org/platform-admin readable by design.
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "email_sent",
+                resource_type: "email",
+                resource_id: Some(account.id.to_string()),
+                metadata: Some(serde_json::json!({
+                    "direction": "sent",
+                    "from": account.email,
+                    "to": data.to,
+                    "subject": data.subject,
+                    "account_id": account.id,
+                    "sent_at": chrono::Utc::now(),
+                })),
+            },
+        )
+        .await;
     }
 
     Ok(response)

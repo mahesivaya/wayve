@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
-import { listUserActions, type UserActionRow } from "../api/audit";
+import {
+  formatUserActionDetails,
+  listUserActions,
+  type UserActionRow,
+} from "../api/audit";
 import { fmtDateTime } from "../utils/datetime";
 import "./platformTeam.css";
 
@@ -42,9 +46,14 @@ export default function PlatformUserLogs() {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((a) =>
-      [a.actor_email, a.action, a.resource_type, a.resource_id, a.ip].some(
-        (v) => (v ?? "").toLowerCase().includes(q),
-      ),
+      [
+        a.actor_email,
+        a.action,
+        a.resource_type,
+        a.resource_id,
+        a.ip,
+        formatUserActionDetails(a),
+      ].some((v) => (v ?? "").toLowerCase().includes(q)),
     );
   }, [rows, search]);
 
@@ -55,8 +64,8 @@ export default function PlatformUserLogs() {
       <header className="pt-header">
         <h1>User Logs</h1>
         <p>
-          User actions across the platform — sign-ins, password changes,
-          deletions, exports and billing changes · {user?.email}
+          User actions across the platform — sign-ins, email sent/received,
+          password changes, deletions, exports and billing changes · {user?.email}
         </p>
       </header>
 
@@ -91,25 +100,32 @@ export default function PlatformUserLogs() {
                 <th>Actor</th>
                 <th>Action</th>
                 <th>Resource</th>
+                <th>Details</th>
                 <th>IP</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((a) => (
-                <tr key={a.id}>
-                  <td>{fmtDateTime(a.created_at)}</td>
-                  <td>{a.actor_email ?? a.actor_user_id ?? "-"}</td>
-                  <td>
-                    <span className="pt-pill info">{a.action}</span>
-                  </td>
-                  <td>
-                    {a.resource_type
-                      ? `${a.resource_type}${a.resource_id ? `#${a.resource_id}` : ""}`
-                      : "-"}
-                  </td>
-                  <td>{a.ip ?? "-"}</td>
-                </tr>
-              ))}
+              {filtered.map((a) => {
+                const details = formatUserActionDetails(a);
+                return (
+                  <tr key={a.id}>
+                    <td>{fmtDateTime(a.created_at)}</td>
+                    <td>{a.actor_email ?? a.actor_user_id ?? "-"}</td>
+                    <td>
+                      <span className="pt-pill info">{a.action}</span>
+                    </td>
+                    <td>
+                      {a.resource_type
+                        ? `${a.resource_type}${a.resource_id ? `#${a.resource_id}` : ""}`
+                        : "-"}
+                    </td>
+                    <td className="pt-details" title={details}>
+                      {details || "-"}
+                    </td>
+                    <td>{a.ip ?? "-"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

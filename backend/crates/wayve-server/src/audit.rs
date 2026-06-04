@@ -62,7 +62,19 @@ pub struct AuditEvent<'a> {
 pub async fn record_action(pool: &PgPool, req: &HttpRequest, event: AuditEvent<'_>) {
     let ip = client_ip(req);
     let ua = user_agent(req);
+    record(pool, event, ip, ua).await;
+}
 
+/// Like [`record_action`] but for events with no originating HTTP request —
+/// e.g. the background sync worker recording `email_received`. IP and
+/// User-Agent are recorded as NULL.
+pub async fn record_action_system(pool: &PgPool, event: AuditEvent<'_>) {
+    record(pool, event, None, None).await;
+}
+
+/// Shared writer: inserts the `audit_logs` row and mirrors it to
+/// `logs/user_actions.log`. Both sinks are best-effort.
+async fn record(pool: &PgPool, event: AuditEvent<'_>, ip: Option<String>, ua: Option<String>) {
     // The actor's organization at the time of the action — denormalized so
     // the scoped reads on the Security page don't need a live join.
     let organization_id: Option<i32> =

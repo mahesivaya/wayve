@@ -29,9 +29,29 @@ export type UserActionRow = {
   action: string;
   resource_type: string | null;
   resource_id: string | null;
+  // Free-form event details (e.g. email from/to/subject for
+  // email_sent / email_received).
+  metadata: Record<string, unknown> | null;
   ip: string | null;
   created_at: string;
 };
+
+// Human-readable summary of a user action's metadata for the "Details"
+// column. Email events get a "from → to · subject" line; anything else falls
+// back to compact key=value pairs (or "" when there's no metadata).
+export function formatUserActionDetails(row: UserActionRow): string {
+  const m = row.metadata;
+  if (!m || typeof m !== "object") return "";
+  if (row.action === "email_sent" || row.action === "email_received") {
+    const from = typeof m.from === "string" ? m.from : "?";
+    const to = typeof m.to === "string" ? m.to : "?";
+    const subject = typeof m.subject === "string" ? m.subject : "(no subject)";
+    return `${from} → ${to} · ${subject}`;
+  }
+  return Object.entries(m)
+    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .join(" · ");
+}
 
 export async function listUserActions(
   filters: { limit?: number; action?: string } = {},

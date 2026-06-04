@@ -478,6 +478,9 @@ pub struct InsertEmail<'a> {
 
 pub struct InsertResult {
     pub id: i32,
+    /// Provider message id (Gmail message id / Outlook id / IMAP uid). Used as
+    /// the message id in the `email_received` audit event.
+    pub gmail_id: String,
     pub sender: Option<String>,
     pub subject: Option<String>,
     pub created_at: Option<NaiveDateTime>,
@@ -542,7 +545,7 @@ pub async fn upsert_batch(
          created_at = EXCLUDED.created_at, \
          is_read = EXCLUDED.is_read, \
          labels = EXCLUDED.labels \
-         RETURNING id, sender, subject, subject_iv, subject_encrypted, \
+         RETURNING id, gmail_id, sender, subject, subject_iv, subject_encrypted, \
          sender_iv, sender_encrypted, receiver_iv, receiver_encrypted, \
          created_at, (xmax = 0) AS is_new",
     );
@@ -588,6 +591,7 @@ pub async fn upsert_batch(
         .into_iter()
         .map(|r| InsertResult {
             id: r.try_get("id").unwrap_or(0),
+            gmail_id: r.try_get("gmail_id").unwrap_or_default(),
             sender: read_sender(&r),
             subject: read_subject(&r),
             created_at: r.try_get("created_at").ok(),
@@ -711,6 +715,7 @@ pub async fn upsert_one(
     let id: i32 = returned.get("id");
     let result = InsertResult {
         id,
+        gmail_id: row.gmail_id.to_string(),
         sender: None,
         subject: None,
         created_at: returned.try_get("created_at").ok(),
