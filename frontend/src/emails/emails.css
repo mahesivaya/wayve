@@ -1528,12 +1528,20 @@
   padding-top: 4px;
 }
 
-/* BODY */
+/* BODY
+   HTML emails are flattened to plaintext upstream (bodyUtils.normalizeEmailBody)
+   and shown with `pre-wrap`. Without a size/width cap the body inherits the
+   large base font and runs the full pane width, which reads as oversized and
+   airy (esp. marketing emails). Cap the measure for readability and bring the
+   text down to the app's type scale. */
 .email-body {
   margin-top: var(--space-5);
+  max-width: 680px;
+  font-size: var(--text-lg);
   line-height: 1.6;
   color: var(--color-text-primary);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .email-body a {
