@@ -58,6 +58,7 @@ const PlatformWelcome = lazy(() => import("./platformTeam/PlatformWelcome"));
 const PlatformSecrets = lazy(() => import("./platformTeam/PlatformSecrets"));
 const PlatformLogs = lazy(() => import("./platformTeam/PlatformLogs"));
 const PlatformUserLogs = lazy(() => import("./platformTeam/PlatformUserLogs"));
+const PlatformVisitors = lazy(() => import("./platformTeam/PlatformVisitors"));
 const Pricing = lazy(() => import("./pricing/Pricing"));
 const Enterprise = lazy(() => import("./marketing/Enterprise"));
 const Support = lazy(() => import("./marketing/Support"));
@@ -320,6 +321,7 @@ export default function App() {
             <Route path="/platform/logs" element={<PlatformLogs />} />
             <Route path="/organization/logs" element={<PlatformLogs />} />
             <Route path="/platform/user-logs" element={<PlatformUserLogs />} />
+            <Route path="/platform/visitors" element={<PlatformVisitors />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
             {/* Org-master-key flows. Bootstrap shows the 24-word
                 mnemonic ONCE; recovery-key accepts the mnemonic on a

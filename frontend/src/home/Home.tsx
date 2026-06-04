@@ -6,6 +6,7 @@ import { SERVICES } from "../services/serviceData";
 import ActivityDashboard from "./dashboard/ActivityDashboard";
 import PersonalDashboard from "./dashboard/PersonalDashboard";
 import { APP_TIME_ZONE } from "../utils/datetime";
+import { reportVisit } from "../api/visits";
 import "./home.css";
 
 export default function Home() {
@@ -14,6 +15,12 @@ export default function Home() {
   const [servicesOpen, setServicesOpen] = useState(false);
   const servicesMenuRef = useRef<HTMLDivElement | null>(null);
   const servicesDropdownRef = useRef<HTMLElement | null>(null);
+
+  // Record this visit once per session — covers anonymous visitors opening
+  // fluxze.com. The backend captures IP + user-agent server-side.
+  useEffect(() => {
+    reportVisit(window.location.pathname, document.referrer);
+  }, []);
 
   useEffect(() => {
     if (!servicesOpen) return;

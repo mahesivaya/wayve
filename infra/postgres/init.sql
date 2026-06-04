@@ -748,6 +748,25 @@ CREATE INDEX IF NOT EXISTS idx_error_logs_user
 CREATE INDEX IF NOT EXISTS idx_error_logs_source
     ON error_logs (source, created_at DESC);
 
+-- ── Visitor tracking ──
+-- One row per public-site open (POST /api/visits), including anonymous
+-- visitors (user_id NULL). IP + user_agent are captured server-side. Read
+-- back by the platform "Visitors" page (GET /api/platform/visits).
+CREATE TABLE IF NOT EXISTS page_visits (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    ip TEXT,
+    user_agent TEXT,
+    path TEXT NOT NULL,
+    referrer TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_page_visits_created_at
+    ON page_visits (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_page_visits_user
+    ON page_visits (user_id, created_at DESC)
+    WHERE user_id IS NOT NULL;
+
 -- ── Activity dashboard (GET /api/home/summary) supporting indexes ──
 -- Partial index on unread emails — both the COUNT and the "5 most recent
 -- unread" preview use this, so the query is an index-only scan even on a

@@ -633,6 +633,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "🪵",
                   location.pathname === "/platform/logs",
                 )}
+              {isPlatformOwner &&
+                renderSidebarLink(
+                  "/platform/visitors",
+                  "Visitors",
+                  "👥",
+                  location.pathname === "/platform/visitors",
+                )}
               {canAccessSecurity &&
                 renderSidebarLink(
                   "/platform/user-logs",

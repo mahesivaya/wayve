@@ -14,6 +14,7 @@ pub mod sso;
 pub mod support;
 pub mod tracing;
 pub mod user;
+pub mod visits;
 
 use actix_web::web;
 
@@ -99,5 +100,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(support::download_ticket_attachment)
         .service(support::delete_ticket_attachment)
         .service(error_logs::ingest_client_error)
-        .service(error_logs::list_error_logs);
+        .service(error_logs::list_error_logs)
+        .service(visits::ingest_page_visit)
+        .service(visits::list_page_visits);
 }
