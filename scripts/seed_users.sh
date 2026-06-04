@@ -16,11 +16,11 @@
 #
 #   Platform      → owner@platform.com … guest@platform.com
 #                   (also superadmin@platform.com)
-#                   recovery_mode='basic' — password-only login,
-#                   no mnemonic prompt.
+#                   recovery_mode='full' (the only schema-allowed mode)
+#                   — first UI login also shows the mnemonic modal.
 #
 #   Organization  → owner@acme.com … guest@acme.com in org "Acme"
-#                   recovery_mode='basic' — same as platform.
+#                   recovery_mode='full' — same as platform.
 #
 # Usage:
 #   scripts/seed_users.sh
@@ -61,7 +61,7 @@ echo "                   → first UI login generates a 24-word mnemonic"
 echo "                     (save it from the RecoverySeedModal at that moment)"
 echo
 echo "   Platform      : owner@platform.com … guest@platform.com (+ superadmin@platform.com)"
-echo "                   → password-only login, no mnemonic"
+echo "                   → recovery_mode='full'; first UI login shows the mnemonic modal"
 echo
 echo "   Organization  : owner@acme.com … guest@acme.com  (org \"Acme\")"
-echo "                   → password-only login, no mnemonic"
+echo "                   → recovery_mode='full'; first UI login shows the mnemonic modal"

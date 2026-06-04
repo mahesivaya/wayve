@@ -10,9 +10,10 @@
 --                          server → first login generates RSA keys +
 --                          a fresh 24-word mnemonic, RecoverySeedModal
 --                          appears (must save the words then).
---   • Platform users    → recovery_mode='basic' → password-only login,
---                          server escrows the private key, no mnemonic.
---   • Organization users → same as platform — recovery_mode='basic'.
+--   • Platform users    → recovery_mode='full' (the only mode the
+--                          current schema allows — see the
+--                          CHECK (recovery_mode = 'full') constraint).
+--   • Organization users → same as platform — recovery_mode='full'.
 --
 -- The mnemonic is generated client-side; the server never sees it.
 -- That's why this script can't print the words to stdout — only the
@@ -59,12 +60,12 @@ ON CONFLICT (email) DO UPDATE
 
 
 -- ============================================================
--- 2. Platform users (account_type='platform_admin', recovery_mode='basic')
+-- 2. Platform users (account_type='platform_admin', recovery_mode='full')
 -- ============================================================
--- Logged-in scope = Platform. The 'basic' recovery_mode keeps the
--- server-side private-key escrow simple and skips the 24-word UI
--- entirely. Role lives in platform_members.role; account_type is the
--- discriminator that lands them on the platform-admin home.
+-- Logged-in scope = Platform. recovery_mode is 'full' because that is
+-- the only value the current schema permits. Role lives in
+-- platform_members.role; account_type is the discriminator that lands
+-- them on the platform-admin home.
 WITH role_map(local, role) AS (
     VALUES
         ('owner',      'owner'),
@@ -91,7 +92,7 @@ upserted AS (
            'platform-' || local,
            'platform_admin',
            'local',
-           'basic'                                  -- no mnemonic, ever
+           'full'                                   -- only schema-allowed mode
     FROM role_map
     ON CONFLICT (email) DO UPDATE
         SET password      = EXCLUDED.password,
@@ -110,7 +111,7 @@ ON CONFLICT (user_id) DO UPDATE
 
 -- ============================================================
 -- 3. Organization users (account_type='organization_admin',
---    recovery_mode='basic', tied to organization "Acme")
+--    recovery_mode='full', tied to organization "Acme")
 -- ============================================================
 WITH role_map(local, role) AS (
     VALUES
@@ -146,7 +147,7 @@ upserted AS (
            'acme-' || rm.local,
            'organization_admin',
            'local',
-           'basic',                                 -- no mnemonic, ever
+           'full',                                  -- only schema-allowed mode
            (SELECT id FROM org)
     FROM role_map rm
     ON CONFLICT (email) DO UPDATE
