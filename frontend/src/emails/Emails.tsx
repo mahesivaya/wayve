@@ -442,7 +442,10 @@ export default function Emails() {
   const isOrgOwner =
     (user?.scope === "organization" || user?.account_type === "organization_admin") &&
     user?.effective_role === "owner";
-  const showAccountControls = isPersonalScope || isOrgOwner;
+  const isPlatformOwner =
+    (user?.scope === "platform" || user?.account_type === "platform_admin") &&
+    user?.effective_role === "owner";
+  const showAccountControls = isPersonalScope || isOrgOwner || isPlatformOwner;
 
   useEffect(() => {
     if (showAccountControls) return;

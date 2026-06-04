@@ -38,7 +38,7 @@ pub(crate) async fn require_external_mailbox_actor(
     let allowed = match ctx.scope {
         Scope::Personal => true,
         Scope::Organization => ctx.role == Role::Owner,
-        Scope::Platform => false,
+        Scope::Platform => ctx.role == Role::Owner,
     };
 
     if !allowed {
@@ -50,7 +50,7 @@ pub(crate) async fn require_external_mailbox_actor(
             "external mailbox connect denied",
         );
         return Err(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Only personal accounts and organization owners can connect an external mailbox."
+            "message": "Only personal accounts, organization owners, and platform owners can connect an external mailbox."
         })));
     }
 
