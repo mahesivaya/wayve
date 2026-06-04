@@ -121,6 +121,10 @@ pub async fn get_email_body(
     let body_iv: String = row.get("body_iv");
     let attachments_checked: Option<bool> = row.get("attachments_checked");
 
+    // If a decryptable body is already stored, hold onto it as a fallback so a
+    // failed live Gmail refetch (e.g. an OAuth refresh token invalidated by a
+    // client rotation) still serves the body instead of a hard 502.
+    let mut stored_body: Option<String> = None;
     if !body_encrypted.is_empty() && !body_iv.is_empty() {
         match decrypt(&body_iv, &body_encrypted) {
             Ok(body) => {
@@ -134,6 +138,7 @@ pub async fn get_email_body(
                     email_id,
                     "cached email body has no attachment metadata; refreshing Gmail payload"
                 );
+                stored_body = Some(body);
             }
             Err(e) => {
                 warn!(
@@ -165,7 +170,7 @@ pub async fn get_email_body(
         None => {
             error!(target: "gmail", account_id, "email account missing refresh_token");
             return Ok(HttpResponse::Conflict().json(serde_json::json!({
-                "error": "This Gmail account needs to be reconnected before Wayve can load message bodies."
+                "error": "This Gmail account needs to be reconnected before Fluxze can load message bodies."
             })));
         }
     };
@@ -204,7 +209,17 @@ pub async fn get_email_body(
         Ok(t) => t,
         Err(e) => {
             error!(target: "gmail", account_id, error = ?e, "refresh_access_token failed");
-            return Ok(HttpResponse::BadGateway().finish());
+            // The live refresh only adds fresh attachment metadata — if we
+            // already have the body stored, serve it rather than failing.
+            if let Some(body) = stored_body.as_ref() {
+                EMAIL_BODY_CACHE.insert(cache_key, body.clone()).await;
+                return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
+            }
+            // No stored body and the token is dead — the account must be
+            // reconnected (its refresh token was issued by a rotated client).
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "error": "This Gmail account needs to be reconnected to load this message."
+            })));
         }
     };
 
@@ -224,11 +239,19 @@ pub async fn get_email_body(
             Ok(v) => v,
             Err(e) => {
                 error!(target: "gmail", email_id, error = %e, "gmail body json parse failed");
+                if let Some(body) = stored_body.as_ref() {
+                    EMAIL_BODY_CACHE.insert(cache_key, body.clone()).await;
+                    return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
+                }
                 return Ok(HttpResponse::BadGateway().finish());
             }
         },
         Err(e) => {
             error!(target: "gmail", email_id, error = %e, "gmail body request failed");
+            if let Some(body) = stored_body.as_ref() {
+                EMAIL_BODY_CACHE.insert(cache_key, body.clone()).await;
+                return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
+            }
             return Ok(HttpResponse::BadGateway().finish());
         }
     };
