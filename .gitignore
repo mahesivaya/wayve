@@ -55,7 +55,7 @@ frontend/src/**/*.jsx
 # directory named docs anywhere, accidentally suppressing
 # backend/src/docs/ from git tracking and breaking prod builds.
 /docs/
-client_secret.json
+client_secret*.json
 
 # k6 stress test artifacts (generated; the .js script is committed)
 stress/k6-summary.json
