@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { SERVICES } from "../services/serviceData";
 import ActivityDashboard from "./dashboard/ActivityDashboard";
 import PersonalDashboard from "./dashboard/PersonalDashboard";
+import PublicPricingContent from "../pricing/PublicPricingContent";
 import { APP_TIME_ZONE } from "../utils/datetime";
 import { reportVisit } from "../api/visits";
 import "./home.css";
@@ -296,73 +297,9 @@ export default function Home() {
             </article>
           </section>
 
-          {/* Enterprise Pricing Section */}
-          <section className="enterprise-pricing">
-            <div className="enterprise-pricing-header">
-              <h2>Enterprise Pricing</h2>
-              <p>Plans for organizations of all sizes.</p>
-            </div>
-            <div className="pricing-table">
-              <div className="pricing-card pricing-card-standard">
-                <div className="pricing-header">
-                  <h3>Team</h3>
-                  <div className="pricing-price">
-                    <span className="price-amount">$12</span>
-                    <span className="price-period">/user/month</span>
-                  </div>
-                  <p className="pricing-description">For small teams getting started</p>
-                </div>
-                <ul className="pricing-features">
-                  <li>✓ All core features included</li>
-                  <li>✓ 50GB storage per user</li>
-                  <li>✓ Basic admin controls</li>
-                  <li>✓ Email support</li>
-                  <li>✓ 30-day retention</li>
-                </ul>
-                <button className="pricing-cta" onClick={() => navigate("/register")}>Get Started</button>
-              </div>
-              <div className="pricing-card pricing-card-popular">
-                <div className="popular-badge">Most Popular</div>
-                <div className="pricing-header">
-                  <h3>Business</h3>
-                  <div className="pricing-price">
-                    <span className="price-amount">$25</span>
-                    <span className="price-period">/user/month</span>
-                  </div>
-                  <p className="pricing-description">For growing organizations</p>
-                </div>
-                <ul className="pricing-features">
-                  <li>✓ Everything in Team</li>
-                  <li>✓ Unlimited storage</li>
-                  <li>✓ Advanced admin dashboard</li>
-                  <li>✓ Priority support</li>
-                  <li>✓ 1-year retention</li>
-                  <li>✓ SSO integration</li>
-                  <li>✓ API access</li>
-                </ul>
-                <button className="pricing-cta pricing-cta-primary" onClick={() => navigate("/enterprise")}>Contact Sales</button>
-              </div>
-              <div className="pricing-card pricing-card-enterprise">
-                <div className="pricing-header">
-                  <h3>Enterprise</h3>
-                  <div className="pricing-price">
-                    <span className="price-amount">Custom</span>
-                  </div>
-                  <p className="pricing-description">For large-scale deployments</p>
-                </div>
-                <ul className="pricing-features">
-                  <li>✓ Everything in Business</li>
-                  <li>✓ Custom SLA</li>
-                  <li>✓ Dedicated account manager</li>
-                  <li>✓ 24/7 phone support</li>
-                  <li>✓ 7-year retention</li>
-                  <li>✓ Advanced security features</li>
-                  <li>✓ Custom integrations</li>
-                  <li>✓ On-premise deployment option</li>
-                </ul>
-                <button className="pricing-cta" onClick={() => navigate("/enterprise")}>Contact Sales</button>
-              </div>
-            </div>
+          {/* Pricing — same view as the /pricing page (shared component). */}
+          <section className="home-pricing">
+            <PublicPricingContent />
           </section>
 
           {/* FAQ Section */}
