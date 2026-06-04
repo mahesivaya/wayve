@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import MarketingShell from "../marketing/MarketingShell";
 import Layout from "../components/Layout";
@@ -66,9 +66,35 @@ export default function DocsShell({ children, title }: DocsShellProps) {
 
   const breadcrumbLabel = title ?? currentDoc?.title;
 
+  // Which category holds the current doc — its dropdown opens automatically.
+  const activeCategoryId = useMemo(() => {
+    for (const cat of DOC_CATEGORIES) {
+      if (docsInCategory(cat.id).some((d) => d.path === location.pathname)) {
+        return cat.id;
+      }
+    }
+    return undefined;
+  }, [location.pathname]);
+
+  // Collapsible nav sections ("Reference" etc. as dropdowns). Start with the
+  // active doc's category open (or the first category on the index page).
+  const [openCats, setOpenCats] = useState<Set<string>>(
+    () =>
+      new Set(
+        [activeCategoryId ?? DOC_CATEGORIES[0]?.id].filter(Boolean) as string[],
+      ),
+  );
+  // Keep the active category open as the user navigates between docs.
+  useEffect(() => {
+    if (!activeCategoryId) return;
+    setOpenCats((prev) =>
+      prev.has(activeCategoryId) ? prev : new Set(prev).add(activeCategoryId),
+    );
+  }, [activeCategoryId]);
+
   return (
     <OuterShell>
-      <div className="docs-shell">
+      <div className={`docs-shell${user ? " docs-shell--app" : ""}`}>
         <aside className="docs-sidebar" aria-label="Documentation navigation">
           {/* Search is its own form element so Enter doesn't accidentally
               submit the surrounding shell. The filter is live (oninput)
@@ -101,8 +127,21 @@ export default function DocsShell({ children, title }: DocsShellProps) {
               // than showing three empty headings.
               if (items.length === 0) return null;
               return (
-                <section key={cat.id} className="docs-nav-section">
-                  <h4 className="docs-nav-heading">{cat.label}</h4>
+                <details
+                  key={cat.id}
+                  className="docs-nav-section"
+                  open={openCats.has(cat.id) || Boolean(normalizedQuery)}
+                  onToggle={(event) => {
+                    const isOpen = event.currentTarget.open;
+                    setOpenCats((prev) => {
+                      const next = new Set(prev);
+                      if (isOpen) next.add(cat.id);
+                      else next.delete(cat.id);
+                      return next;
+                    });
+                  }}
+                >
+                  <summary className="docs-nav-heading">{cat.label}</summary>
                   <ul className="docs-nav-list">
                     {items.map((d) => {
                       const active = d.path === location.pathname;
@@ -119,7 +158,7 @@ export default function DocsShell({ children, title }: DocsShellProps) {
                       );
                     })}
                   </ul>
-                </section>
+                </details>
               );
             })}
 

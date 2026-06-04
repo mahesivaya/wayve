@@ -20,6 +20,20 @@
   align-items: start;
 }
 
+/* When docs render inside the authenticated app shell (Layout), the content
+   pane is `overflow:hidden` and app pages own their own scroll — so the docs
+   grid must be its OWN scroll container. (The marketing shell scrolls the
+   whole page instead, so this only applies to the app variant.) */
+.docs-shell--app {
+  height: 100%;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+.docs-shell--app .docs-sidebar {
+  top: 0.5rem;
+  max-height: calc(100% - 1rem);
+}
+
 @media (max-width: 800px) {
   .docs-shell {
     grid-template-columns: 1fr;
@@ -90,6 +104,36 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-text-muted, #6b7280);
+}
+
+/* The category heading is a <summary> — render it as a collapsible dropdown
+   with a rotating caret. */
+summary.docs-nav-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 0.25rem;
+  padding: 6px 8px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+  list-style: none;
+}
+summary.docs-nav-heading::-webkit-details-marker {
+  display: none;
+}
+summary.docs-nav-heading::after {
+  content: "▾";
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+.docs-nav-section:not([open]) > summary.docs-nav-heading::after {
+  transform: rotate(-90deg);
+}
+summary.docs-nav-heading:hover {
+  background: var(--color-surface-tint, #f3f4f6);
+  color: var(--color-text, inherit);
 }
 
 .docs-nav-list {

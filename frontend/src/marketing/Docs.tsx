@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { DocFull, DocSummary, getDoc, listDocs } from "../api/docs";
 import DocsShell from "../docs/DocsShell";
+import { BRAND_NAME } from "../config/brand";
 import "./docs.css";
 
 // marked v12 — self-hosted in frontend/public/marked.min.js to avoid a CDN
@@ -130,7 +131,7 @@ export default function Docs() {
     () => (
       <nav className="docs-sidebar" aria-label="Documentation">
         <header>
-          <Link to="/" className="docs-back">← Wayve</Link>
+          <Link to="/" className="docs-back">← {BRAND_NAME}</Link>
           <h2>Docs</h2>
         </header>
         {loadingList ? (
