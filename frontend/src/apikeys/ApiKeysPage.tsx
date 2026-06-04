@@ -321,6 +321,7 @@ export default function ApiKeysPage() {
           ) : auditRows.length === 0 ? (
             <div className="api-keys-empty">No requests recorded yet.</div>
           ) : (
+            <div className="api-keys-audit-scroll">
             <table className="api-keys-audit">
               <thead>
                 <tr>
@@ -345,6 +346,7 @@ export default function ApiKeysPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </section>
       )}

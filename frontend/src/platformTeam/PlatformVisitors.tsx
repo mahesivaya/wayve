@@ -3,7 +3,21 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { listVisits, type VisitRow } from "../api/visits";
 import { fmtDateTime } from "../utils/datetime";
+import { useResizableColumns } from "./useResizableColumns";
 import "./platformTeam.css";
+
+// Drag-resizable columns, in render order. Persisted under VISITORS_COL_WIDTHS.
+const VISITOR_COLUMNS = [
+  { key: "when", label: "When", width: 150, min: 110 },
+  { key: "visitor", label: "Visitor", width: 200, min: 100 },
+  { key: "ip", label: "IP", width: 130, min: 90 },
+  { key: "device", label: "Device", width: 100, min: 70 },
+  { key: "browser", label: "Browser", width: 100, min: 70 },
+  { key: "page", label: "Page", width: 260, min: 120 },
+  { key: "referrer", label: "Referrer", width: 240, min: 120 },
+] as const;
+
+const VISITORS_COL_WIDTHS_KEY = "rwayve.platformVisitors.colWidths";
 
 // Device / browser parsed from the raw User-Agent the backend stored. Cheap
 // substring matching — good enough for an at-a-glance traffic view.
@@ -41,6 +55,11 @@ export default function PlatformVisitors() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+
+  const { colWidths, totalWidth, startResize } = useResizableColumns(
+    VISITOR_COLUMNS,
+    VISITORS_COL_WIDTHS_KEY,
+  );
 
   const load = useCallback(async () => {
     if (!canView) {
@@ -125,16 +144,30 @@ export default function PlatformVisitors() {
               : "No matches for that search."}
           </div>
         ) : (
-          <table className="pt-table">
+          <div className="pt-table-scroll">
+          <table
+            className="pt-table"
+            style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
+          >
+            <colgroup>
+              {VISITOR_COLUMNS.map((c) => (
+                <col key={c.key} style={{ width: `${colWidths[c.key]}px` }} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
-                <th>When</th>
-                <th>Visitor</th>
-                <th>IP</th>
-                <th>Device</th>
-                <th>Browser</th>
-                <th>Page</th>
-                <th>Referrer</th>
+                {VISITOR_COLUMNS.map((c) => (
+                  <th key={c.key} className="pt-th-resizable">
+                    {c.label}
+                    <span
+                      className="pt-col-resize-handle"
+                      onMouseDown={startResize(c.key, c.min)}
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={`Resize ${c.label} column`}
+                    />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -159,6 +192,7 @@ export default function PlatformVisitors() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </div>

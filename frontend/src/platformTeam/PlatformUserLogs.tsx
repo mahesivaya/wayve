@@ -7,7 +7,20 @@ import {
   type UserActionRow,
 } from "../api/audit";
 import { fmtDateTime } from "../utils/datetime";
+import { useResizableColumns } from "./useResizableColumns";
 import "./platformTeam.css";
+
+// Drag-resizable columns, in render order. Persisted under USER_LOGS_COL_WIDTHS.
+const USER_LOG_COLUMNS = [
+  { key: "when", label: "When", width: 150, min: 110 },
+  { key: "actor", label: "Actor", width: 200, min: 100 },
+  { key: "action", label: "Action", width: 140, min: 90 },
+  { key: "resource", label: "Resource", width: 160, min: 90 },
+  { key: "details", label: "Details", width: 320, min: 120 },
+  { key: "ip", label: "IP", width: 130, min: 90 },
+] as const;
+
+const USER_LOGS_COL_WIDTHS_KEY = "rwayve.platformUserLogs.colWidths";
 
 // Security-relevant user actions (sign-in/out, password changes, deletions,
 // file downloads/exports, billing changes) from the audit_logs table. Mirrors
@@ -21,6 +34,11 @@ export default function PlatformUserLogs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+
+  const { colWidths, totalWidth, startResize } = useResizableColumns(
+    USER_LOG_COLUMNS,
+    USER_LOGS_COL_WIDTHS_KEY,
+  );
 
   const load = useCallback(async () => {
     if (!canView) {
@@ -93,15 +111,30 @@ export default function PlatformUserLogs() {
               : "No matches for that search."}
           </div>
         ) : (
-          <table className="pt-table">
+          <div className="pt-table-scroll">
+          <table
+            className="pt-table"
+            style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
+          >
+            <colgroup>
+              {USER_LOG_COLUMNS.map((c) => (
+                <col key={c.key} style={{ width: `${colWidths[c.key]}px` }} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
-                <th>When</th>
-                <th>Actor</th>
-                <th>Action</th>
-                <th>Resource</th>
-                <th>Details</th>
-                <th>IP</th>
+                {USER_LOG_COLUMNS.map((c) => (
+                  <th key={c.key} className="pt-th-resizable">
+                    {c.label}
+                    <span
+                      className="pt-col-resize-handle"
+                      onMouseDown={startResize(c.key, c.min)}
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={`Resize ${c.label} column`}
+                    />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -128,6 +161,7 @@ export default function PlatformUserLogs() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </div>

@@ -216,6 +216,17 @@
   justify-content: space-between;
 }
 
+/* Horizontal scroll container — in a narrow split pane the audit table
+   scrolls sideways instead of squashing its columns; on a wide page the
+   table fills 100% so nothing changes. */
+.api-keys-audit-scroll {
+  overflow-x: auto;
+}
+
+.api-keys-audit-scroll > .api-keys-audit {
+  min-width: max-content;
+}
+
 .api-keys-audit {
   width: 100%;
   border-collapse: collapse;

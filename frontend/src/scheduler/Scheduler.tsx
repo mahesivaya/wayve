@@ -33,6 +33,7 @@ import {
 } from "./dateUtils";
 import { readJson, writeJson } from "./storage";
 import { APP_TIME_ZONE } from "../utils/datetime";
+import { useInSplitPane } from "../components/SplitPaneContext";
 import type { CalendarItem, SchedulerView } from "./types";
 
 type SchedulerEvent = {
@@ -135,7 +136,41 @@ export default function Scheduler() {
   const daySlotsRef = useRef<HTMLDivElement>(null);
   const weekGridRef = useRef<HTMLDivElement>(null);
 
+  // Container-width (not viewport) narrow detection so the scheduler collapses
+  // correctly inside a split pane. Below the threshold we hide the sidebar and
+  // render a single-day column instead of the cramped 7-column week grid.
+  const schedulerRootRef = useRef<HTMLDivElement>(null);
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const el = schedulerRootRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const narrow = entry.contentRect.width < 640;
+        setIsNarrow((prev) => (prev !== narrow ? narrow : prev));
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // A split pane is always too narrow for the sidebar + 7-column week, so we
+  // collapse unconditionally when embedded in one. Outside a split pane we fall
+  // back to the width-based `isNarrow` measurement.
+  const inSplitPane = useInSplitPane();
+  const collapsed = isNarrow || inSplitPane;
+
   const [view, setView] = useState<SchedulerView>("week");
+
+  // When the pane becomes collapsed, the 7-column week can't fit, so default to
+  // the single-day column. This only fires on the collapse transition — it does
+  // NOT override the view, so the Week button still works (the user can switch
+  // back to a horizontally-scrolling week if they really want it).
+  useEffect(() => {
+    if (collapsed) {
+      setView((v) => (v === "week" ? "day" : v));
+    }
+  }, [collapsed]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<SchedulerEvent[]>([]);
   const [calendars, setCalendars] = useState<CalendarItem[]>(() =>
@@ -557,7 +592,10 @@ export default function Scheduler() {
   });
 
   return (
-    <div className="scheduler">
+    <div
+      className={`scheduler${collapsed ? " narrow" : ""}`}
+      ref={schedulerRootRef}
+    >
 
       {/* SIDEBAR */}
       <div className="scheduler-sidebar">
@@ -647,6 +685,14 @@ export default function Scheduler() {
       <div className="calendar">
 
         <div className="calendar-header">
+          {collapsed && (
+            <button
+              className="create-btn"
+              onClick={() => openCreate()}
+            >
+              ＋ Create
+            </button>
+          )}
           <button onClick={() => {
             setCurrentDate(new Date());
             setView("day");
@@ -654,13 +700,17 @@ export default function Scheduler() {
           }}>Today</button>
           <button onClick={() => changeMonth(-1)}>‹</button>
           <button onClick={() => changeMonth(1)}>›</button>
-          <div className="calendar-title">
-            {currentDate.toLocaleDateString("en-US", {
-              timeZone: APP_TIME_ZONE,
-              month: "long",
-              year: "numeric",
-            })}
-          </div>
+          {!collapsed || view === "month" ? (
+            <div className="calendar-title">
+              {currentDate.toLocaleDateString("en-US", {
+                timeZone: APP_TIME_ZONE,
+                month: "long",
+                year: "numeric",
+              })}
+            </div>
+          ) : (
+            <div className="calendar-title-spacer" />
+          )}
           <button onClick={() => {
             setView("day");
             queueDefaultTimeScroll("day");

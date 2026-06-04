@@ -56,6 +56,21 @@
   overflow-y: auto;
 }
 
+/* Narrow container (e.g. a split pane): drop the sidebar and let the calendar
+   take the full width as a single column. Container-width driven via the
+   `.narrow` class set by the ResizeObserver — the viewport media queries below
+   don't fire when only the pane (not the window) is narrow. The component also
+   renders the day view instead of the 7-column week in this state. */
+.scheduler.narrow .scheduler-sidebar {
+  display: none;
+}
+
+.scheduler.narrow .calendar-header {
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
 .scheduler-create-main {
   height: 48px;
   padding: 0 20px 0 16px;
@@ -226,6 +241,12 @@
   color: var(--text);
   font-size: var(--text-3xl);
   font-weight: 500;
+}
+
+/* Stand-in for the hidden month/year title in collapsed view — keeps the
+   right-aligned view switcher (Day/Week/Month) pushed to the far edge. */
+.calendar-title-spacer {
+  margin-right: auto;
 }
 .calendar-header button {
   padding: 7px 14px;

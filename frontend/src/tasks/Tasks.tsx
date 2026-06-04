@@ -16,6 +16,7 @@ import {
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 import Modal from "../components/Modal";
+import { useInSplitPane } from "../components/SplitPaneContext";
 import "./tasks.css";
 
 const PRIORITY_OPTIONS: TaskPriority[] = [5, 4, 3, 2, 1];
@@ -60,6 +61,11 @@ export default function Tasks() {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
   const isPersonal = user?.scope === "personal";
+  // In a split pane the Tasks page collapses to a single column (Create button
+  // → list) and clicking a task expands it inline (accordion) instead of
+  // opening the edit modal.
+  const inSplitPane = useInSplitPane();
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -389,7 +395,7 @@ export default function Tasks() {
 
   return (
     <div className={`tasks-app${isPersonal ? " tasks-app--personal" : ""}`}>
-      {!isPersonal && (
+      {!isPersonal && !inSplitPane && (
         <aside className="tasks-sidebar">
           <button className="create-task-btn" onClick={openCreate}>
             + Create task
@@ -403,6 +409,14 @@ export default function Tasks() {
       )}
 
       <main className="tasks-main">
+        {inSplitPane ? (
+          <button
+            className="create-task-btn create-task-btn--split"
+            onClick={openCreate}
+          >
+            + Create task
+          </button>
+        ) : (
         <div className="tasks-header">
           <div>
             <h2>Tasks</h2>
@@ -442,6 +456,7 @@ export default function Tasks() {
             )}
           </div>
         </div>
+        )}
 
         <Modal
           isOpen={creating}
@@ -703,8 +718,13 @@ export default function Tasks() {
               </span>
             </div>
           ) : (
-            activeTasks.map((task) => (
-              <article key={task.id} className="task-card">
+            activeTasks.map((task) => {
+              const expanded = inSplitPane && expandedId === task.id;
+              return (
+              <article
+                key={task.id}
+                className={`task-card${expanded ? " task-card--expanded" : ""}`}
+              >
                 <div className="task-card-body">
                   <div className="task-card-title">
                     <span
@@ -717,7 +737,14 @@ export default function Tasks() {
                       <button
                         type="button"
                         className="task-card-title-link"
-                        onClick={() => openEdit(task)}
+                        onClick={() =>
+                          inSplitPane
+                            ? setExpandedId((id) =>
+                                id === task.id ? null : task.id,
+                              )
+                            : openEdit(task)
+                        }
+                        aria-expanded={inSplitPane ? expanded : undefined}
                         title="Open task details"
                       >
                         {task.name}
@@ -725,40 +752,52 @@ export default function Tasks() {
                     </h3>
                   </div>
                 </div>
-                <div className="task-card-actions">
-                  <button
-                    type="button"
-                    className="task-edit-btn"
-                    onClick={() => openEdit(task)}
-                    aria-label={`Edit ${task.name}`}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="task-delete-btn"
-                    onClick={() => deleteTask(task)}
-                    aria-label={`Delete ${task.name}`}
-                  >
-                    Delete
-                  </button>
-                  <select
-                    className={`task-status-select task-status-select--${task.status}`}
-                    value={task.status}
-                    onChange={(event) =>
-                      void changeStatus(task, event.target.value as TaskStatus)
-                    }
-                    aria-label={`Status of ${task.name}`}
-                  >
-                    {STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {expanded && (
+                  <div className="task-card-detail">
+                    <p className="task-card-detail-desc">
+                      {task.description?.trim()
+                        ? task.description
+                        : "No description."}
+                    </p>
+                  </div>
+                )}
+                {(!inSplitPane || expanded) && (
+                  <div className="task-card-actions">
+                    <button
+                      type="button"
+                      className="task-edit-btn"
+                      onClick={() => openEdit(task)}
+                      aria-label={`Edit ${task.name}`}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="task-delete-btn"
+                      onClick={() => deleteTask(task)}
+                      aria-label={`Delete ${task.name}`}
+                    >
+                      Delete
+                    </button>
+                    <select
+                      className={`task-status-select task-status-select--${task.status}`}
+                      value={task.status}
+                      onChange={(event) =>
+                        void changeStatus(task, event.target.value as TaskStatus)
+                      }
+                      aria-label={`Status of ${task.name}`}
+                    >
+                      {STATUS_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </article>
-            ))
+              );
+            })
           )}
         </div>
 

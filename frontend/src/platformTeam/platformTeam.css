@@ -111,6 +111,48 @@
   text-decoration: none;
 }
 
+/* Horizontal scroll container for log tables with drag-resizable columns.
+   The table inside carries an explicit pixel width (sum of the column widths),
+   so when the user drags a column wider than the pane it scrolls sideways
+   instead of squashing. See useResizableColumns. */
+.pt-table-scroll {
+  overflow-x: auto;
+}
+
+/* Resizable header cell: hosts a drag grip on its right edge. Generic version
+   of the App Logs `.logs-th` / `.col-resize-handle`, so Visitors / User Logs
+   can share it. */
+.pt-th-resizable {
+  position: relative;
+}
+
+.pt-col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px; /* straddle the border so it's easy to grab */
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 1;
+}
+
+.pt-col-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 18%;
+  right: 4px;
+  height: 64%;
+  width: 1px;
+  background: var(--panel-border, var(--color-border));
+}
+
+.pt-col-resize-handle:hover::after,
+.pt-col-resize-handle:active::after {
+  background: var(--color-primary-action);
+  width: 2px;
+}
+
 .pt-table {
   width: 100%;
   border-collapse: collapse;

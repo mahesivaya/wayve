@@ -10,6 +10,7 @@ import SupportModal from "../support/SupportModal";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import StorageLimitBanner from "./StorageLimitBanner";
+import { SplitPaneContext } from "./SplitPaneContext";
 import "./Layout.css";
 
 // Shared bug-report glyph — amber warning triangle with a dark `!`.
@@ -692,34 +693,53 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
           <div className="sidebar-spacer" />
 
-          <div className="sidebar-section sidebar-section-secondary">
-            {user.account_type !== "platform_admin" &&
-              user.account_type !== "personal" &&
-              canSeePricing &&
-              renderSidebarLink(
-                "/pricing",
-                "Pricing",
-                "💲",
-                location.pathname === "/pricing",
-              )}
-            {user.account_type !== "personal" && (
-              <>
-                {/* Developers is platform-only; organizations get just Docs. */}
-                {user.scope !== "organization" &&
-                  renderSidebarLink(
-                    "/developers",
-                    "Developers",
-                    "🛠",
-                    location.pathname === "/developers",
-                  )}
+          {user.account_type !== "platform_admin" &&
+            user.account_type !== "personal" &&
+            canSeePricing && (
+              <div className="sidebar-section sidebar-section-secondary">
                 {renderSidebarLink(
-                  "/docs",
-                  "Docs",
-                  "📚",
-                  location.pathname.startsWith("/docs"),
+                  "/pricing",
+                  "Pricing",
+                  "💲",
+                  location.pathname === "/pricing",
                 )}
-              </>
+              </div>
             )}
+
+          {/* Developer resources. "Developers" is a non-clickable section
+              heading (like Platform / Logs); the items below link into /docs.
+              Libraries + SDK both land on the Developer overview for now. */}
+          {user.account_type !== "personal" && (
+            <div className="sidebar-section">
+              <div className="sidebar-section-label">Developers</div>
+              {renderSidebarLink(
+                "/docs",
+                "Docs",
+                "📚",
+                location.pathname === "/docs",
+              )}
+              {renderSidebarLink(
+                "/docs/api",
+                "API reference",
+                "📖",
+                location.pathname === "/docs/api",
+              )}
+              {renderSidebarLink(
+                "/docs/developers",
+                "Libraries",
+                "📦",
+                false,
+              )}
+              {renderSidebarLink(
+                "/docs/developers",
+                "SDK",
+                "🧰",
+                location.pathname === "/docs/developers",
+              )}
+            </div>
+          )}
+
+          <div className="sidebar-section sidebar-section-secondary">
             {canAccessApiKeyAdmin(user) &&
               renderSidebarLink(
                 "/api-keys",
@@ -761,9 +781,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   </button>
                 </div>
                 <div className="split-pane-body">
-                  <Suspense fallback={<div className="split-loading">Loading…</div>}>
-                    {children ?? <Outlet />}
-                  </Suspense>
+                  <SplitPaneContext.Provider value={true}>
+                    <Suspense fallback={<div className="split-loading">Loading…</div>}>
+                      {children ?? <Outlet />}
+                    </Suspense>
+                  </SplitPaneContext.Provider>
                 </div>
               </>
             ) : (
@@ -807,9 +829,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               </div>
               <div className="split-pane-body">
                 {MiddleComp && (
-                  <Suspense fallback={<div className="split-loading">Loading…</div>}>
-                    <MiddleComp />
-                  </Suspense>
+                  <SplitPaneContext.Provider value={true}>
+                    <Suspense fallback={<div className="split-loading">Loading…</div>}>
+                      <MiddleComp />
+                    </Suspense>
+                  </SplitPaneContext.Provider>
                 )}
               </div>
             </div>
@@ -849,9 +873,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               </div>
               <div className="split-pane-body">
                 {RightComp && (
-                  <Suspense fallback={<div className="split-loading">Loading…</div>}>
-                    <RightComp />
-                  </Suspense>
+                  <SplitPaneContext.Provider value={true}>
+                    <Suspense fallback={<div className="split-loading">Loading…</div>}>
+                      <RightComp />
+                    </Suspense>
+                  </SplitPaneContext.Provider>
                 )}
               </div>
             </div>

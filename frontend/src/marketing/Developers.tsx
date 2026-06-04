@@ -203,7 +203,7 @@ export default function Developers() {
   const dashboardLink = user ? "/platform/secrets" : "/register";
 
   return (
-    <DocsShell title="Developer overview">
+    <DocsShell title="Developer overview" single>
     <div className="dev-portal">
       {/* dev-header / dev-footer removed — DocsShell now provides the
           brand + nav + footer via MarketingShell. dev-portal stays as
