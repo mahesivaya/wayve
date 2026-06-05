@@ -117,7 +117,7 @@ export default function SecureMessageView() {
           <>
             <p className="subtitle">
               <strong>{state.envelope.sender_email}</strong> sent you a
-              secure message on Wayve.
+              secure message on Fluxze.
               <br />
               Subject: <em>{state.envelope.subject}</em>
               <br />
@@ -126,7 +126,7 @@ export default function SecureMessageView() {
             <p className="subtitle">
               Enter the passphrase the sender shared with you out-of-band
               (Signal, SMS, in person) to decrypt the message in your
-              browser. Wayve never sees the passphrase.
+              browser. Fluxze never sees the passphrase.
             </p>
 
             <form onSubmit={handleSubmit}>

@@ -154,7 +154,7 @@ pub async fn send_secure(
     let link = format!("{frontend}/m/{token}");
     let notification_subject = format!("{sender_email} sent you a secure message");
     let notification_body = format!(
-        "{sender_email} sent you an encrypted message on Wayve.\n\
+        "{sender_email} sent you an encrypted message on Fluxze.\n\
          \n\
          View it here:\n\
          {link}\n\

@@ -31,7 +31,7 @@ export default function BootstrapPage() {
     // pick whichever they want when restoring. No trailing whitespace.
     const numbered = words.map((w, i) => `${i + 1}. ${w}`).join("\n");
     const phrase = words.join(" ");
-    const body = `Wayve organization recovery key\nGenerated ${new Date().toISOString()}\n\n${numbered}\n\nPhrase:\n${phrase}\n`;
+    const body = `Fluxze organization recovery key\nGenerated ${new Date().toISOString()}\n\n${numbered}\n\nPhrase:\n${phrase}\n`;
     const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -126,7 +126,7 @@ export default function BootstrapPage() {
         <h2>Recovery key already set up</h2>
         <p>
           Your organization recovery key was bootstrapped on a previous visit.
-          The 24-word phrase is shown only once at creation — Wayve cannot
+          The 24-word phrase is shown only once at creation — Fluxze cannot
           display it again. If you didn't save it, contact your platform
           administrator to rotate the key.
         </p>
@@ -145,7 +145,7 @@ export default function BootstrapPage() {
         <h2>Recovery key saved</h2>
         <p>
           Your organization master key is bootstrapped. Keep the 24-word
-          phrase you wrote down somewhere safe — Wayve cannot recover it
+          phrase you wrote down somewhere safe — Fluxze cannot recover it
           for you if you lose it.
         </p>
         <button
@@ -163,7 +163,7 @@ export default function BootstrapPage() {
         <h2>🔑 Your organization recovery key</h2>
         <p style={{ color: "#b91c1c", fontWeight: 600 }}>
           Write these 24 words on paper and store them somewhere physically
-          secure. Wayve cannot recover this for you. Without these words,
+          secure. Fluxze cannot recover this for you. Without these words,
           if you lose access to every browser you've used, you cannot
           decrypt any departing-member data — ever.
         </p>

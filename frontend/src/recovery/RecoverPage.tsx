@@ -66,7 +66,7 @@ export default function RecoverPage() {
           <h2>Restore your encryption key</h2>
           <p>
             Paste the {MNEMONIC_WORD_COUNT}-word recovery phrase you
-            wrote down at signup. Wayve will use it to unlock your
+            wrote down at signup. Fluxze will use it to unlock your
             encrypted notes, files, and chat history on this device. The
             phrase never leaves your browser.
           </p>

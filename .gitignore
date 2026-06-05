@@ -63,3 +63,5 @@ stress/k6-samples.json
 stress/k6-stdout.txt
 
 trash/*
+# Local manual-testing credentials (passwords) — never commit
+/test-users.txt

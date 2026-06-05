@@ -349,7 +349,7 @@ export default function PlanAdmin() {
                   onChange={(e) =>
                     setDraft({ ...draft, name: e.target.value })
                   }
-                  placeholder="Wayve Plus"
+                  placeholder="Fluxze Plus"
                   required
                 />
               </label>

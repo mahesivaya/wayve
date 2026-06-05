@@ -36,7 +36,7 @@ export const DOC_CATEGORIES: Array<{ id: DocCategory; label: string; description
   {
     id: "concepts",
     label: "Concepts",
-    description: "Product surfaces and how they fit together in Wayve.",
+    description: "Product surfaces and how they fit together in Fluxze.",
   },
   {
     id: "guides",

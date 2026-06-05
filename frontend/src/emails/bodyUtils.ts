@@ -69,12 +69,12 @@ function parseWayveEncryptedBody(body: string): ParsedWayveEnvelope | null {
 
   const jsonStart = trimmed.indexOf("{");
   if (jsonStart === -1) {
-    throw new Error("Encrypted Wayve email is missing its payload");
+    throw new Error("Encrypted Fluxze email is missing its payload");
   }
 
   const jsonEnd = trimmed.lastIndexOf("}");
   if (jsonEnd < jsonStart) {
-    throw new Error("Encrypted Wayve email payload is incomplete");
+    throw new Error("Encrypted Fluxze email payload is incomplete");
   }
 
   const parsed = JSON.parse(trimmed.slice(jsonStart, jsonEnd + 1));
@@ -107,7 +107,7 @@ function parseWayveEncryptedBody(body: string): ParsedWayveEnvelope | null {
     };
   }
 
-  throw new Error("Encrypted Wayve email payload is invalid");
+  throw new Error("Encrypted Fluxze email payload is invalid");
 }
 
 export function emailBodyErrorMessage(err: unknown) {
@@ -118,7 +118,7 @@ export function emailBodyErrorMessage(err: unknown) {
     message.includes("decrypt") ||
     message.includes("operation failed")
   ) {
-    return "Unable to decrypt this fully encrypted email on this device. Sign out and back in to refresh your Wayve encryption key, then ask the sender to resend it.";
+    return "Unable to decrypt this fully encrypted email on this device. Sign out and back in to refresh your Fluxze encryption key, then ask the sender to resend it.";
   }
 
   if (message) {
@@ -156,7 +156,7 @@ export async function decryptWayveBodyIfNeeded(
   }
 
   if (privateKeys.length === 0) {
-    throw new Error("This device does not have your Wayve private key");
+    throw new Error("This device does not have your Fluxze private key");
   }
 
   // Pick the correct wrapped key per envelope shape:
@@ -172,7 +172,7 @@ export async function decryptWayveBodyIfNeeded(
   } else {
     if (!userId) {
       throw new Error(
-        "Multi-recipient Wayve email decryption requires a userId — no slot to read from `keys`."
+        "Multi-recipient Fluxze email decryption requires a userId — no slot to read from `keys`."
       );
     }
     const slot = encrypted.keys[String(userId)];
@@ -200,5 +200,5 @@ export async function decryptWayveBodyIfNeeded(
     }
   }
 
-  throw lastError || new Error("Unable to decrypt Wayve email");
+  throw lastError || new Error("Unable to decrypt Fluxze email");
 }

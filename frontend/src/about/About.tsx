@@ -3,7 +3,7 @@ import "./about.css";
 const capabilityGroups = [
   {
     title: "Unified Workspace",
-    text: "Wayve brings email, chat, calls, files, notes, tasks, scheduling, and AI into one place so switching between daily tools feels direct instead of scattered.",
+    text: "Fluxze brings email, chat, calls, files, notes, tasks, scheduling, and AI into one place so switching between daily tools feels direct instead of scattered.",
   },
   {
     title: "Team Ready",
@@ -64,16 +64,16 @@ export default function About() {
   return (
     <main className="about-page">
       <section className="about-intro">
-        <p className="about-kicker">About Wayve</p>
+        <p className="about-kicker">About Fluxze</p>
         <h1>One secure workspace for communication, planning, files, and AI.</h1>
         <p>
-          Wayve is designed as a practical work hub: users can manage email,
+          Fluxze is designed as a practical work hub: users can manage email,
           collaborate through chat and calls, organize schedules and files, and
           use AI without jumping between many disconnected apps.
         </p>
       </section>
 
-      <section className="about-grid" aria-label="Wayve capabilities">
+      <section className="about-grid" aria-label="Fluxze capabilities">
         {capabilityGroups.map((group) => (
           <article className="about-card" key={group.title}>
             <h2>{group.title}</h2>

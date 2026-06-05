@@ -13,8 +13,8 @@ export default function ForgotPassword() {
       <div className="login-card">
         <h2>Forgot password?</h2>
         <p className="subtitle">
-          Wayve uses end-to-end encryption, so we can't email you a reset
-          link — no one at Wayve can decrypt your account. Your 24-word
+          Fluxze uses end-to-end encryption, so we can't email you a reset
+          link — no one at Fluxze can decrypt your account. Your 24-word
           recovery phrase is the only way to reset your password. If you
           don't have it, the account is unrecoverable.
         </p>

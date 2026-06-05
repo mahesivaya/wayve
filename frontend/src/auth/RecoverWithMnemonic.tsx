@@ -115,7 +115,7 @@ export default function RecoverWithMnemonicPage() {
         <p className="subtitle">
           Enter your email, the {MNEMONIC_WORD_COUNT}-word recovery phrase
           you saved at signup, and a new password. If you do not have your
-          phrase, your account cannot be recovered — Wayve cannot reset
+          phrase, your account cannot be recovered — Fluxze cannot reset
           end-to-end encrypted accounts on your behalf.
         </p>
 

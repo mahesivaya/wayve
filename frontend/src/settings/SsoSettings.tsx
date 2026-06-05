@@ -209,7 +209,7 @@ export default function SsoSettings() {
                 required
               />
               <small>
-                The base URL of your IdP. Wayve appends
+                The base URL of your IdP. Fluxze appends
                 <code> /.well-known/openid-configuration</code> for discovery.
               </small>
             </label>

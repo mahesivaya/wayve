@@ -199,7 +199,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   }
 
   const handleDelete = async () => {
-    const ok = window.confirm("Delete this email permanently from Wayve and your mail provider?");
+    const ok = window.confirm("Delete this email permanently from Fluxze and your mail provider?");
     if (!ok) return;
 
     setDeleting(true);

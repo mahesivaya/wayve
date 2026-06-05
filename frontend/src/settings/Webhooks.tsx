@@ -174,7 +174,7 @@ export default function Webhooks() {
         <div>
           <h1>Webhooks</h1>
           <p>
-            Receive signed JSON payloads when events happen in Wayve. Every
+            Receive signed JSON payloads when events happen in Fluxze. Every
             request carries a <code>Wayve-Signature</code> header you can verify
             with the signing secret returned at creation.
           </p>
@@ -194,7 +194,7 @@ export default function Webhooks() {
           <strong>Signing secret for {createdSecret.url}:</strong>
           <code>{createdSecret.secret}</code>
           <small>
-            Store this somewhere safe — Wayve only shows it once. Verify
+            Store this somewhere safe — Fluxze only shows it once. Verify
             incoming requests by recomputing HMAC-SHA256 of{" "}
             <code>{`${"<timestamp>.<body>"}`}</code> with this secret and
             comparing against the <code>v1=</code> token in{" "}

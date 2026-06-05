@@ -75,7 +75,7 @@ export default function DocsIndex() {
     <DocsShell title="All docs">
       <header className="docs-index-header">
         <p className="hero-kicker">Documentation</p>
-        <h1>Wayve docs</h1>
+        <h1>Fluxze docs</h1>
         <p className="docs-index-lead">
           API reference, product concepts, and integration guides — all
           in one place. Use the search below or browse by category.

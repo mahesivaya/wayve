@@ -57,12 +57,12 @@ export default function RecoverySeedModal({
 
   function downloadMnemonic() {
     const body = [
-      "Wayve recovery phrase",
+      "Fluxze recovery phrase",
       "=====================",
       "",
       "Keep this file somewhere safe and offline. This is the ONLY way",
       "to recover your account if you forget your password or lose this",
-      "device. Wayve cannot reset it for you.",
+      "device. Fluxze cannot reset it for you.",
       "",
       mnemonic,
       "",
@@ -88,7 +88,7 @@ export default function RecoverySeedModal({
           <p>
             These {MNEMONIC_WORD_COUNT} words are the <strong>only</strong>{" "}
             way to recover your account if you forget your password or
-            switch to a new device. Wayve cannot reset them for you —
+            switch to a new device. Fluxze cannot reset them for you —
             losing both the password and this phrase means your
             encrypted content (emails, chat, drive, tasks, calendar,
             notes) is unrecoverable. Copy or download them and keep
