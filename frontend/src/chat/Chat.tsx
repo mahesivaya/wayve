@@ -57,8 +57,6 @@ export default function Chat() {
 
   const [creatingChannel, setCreatingChannel] = useState(false);
   const [channelName, setChannelName] = useState("");
-  const [inviteRole, setInviteRole] = useState<ChannelRole>("user");
-  const [inviteEmails, setInviteEmails] = useState("");
   const [channelError, setChannelError] = useState("");
 
   // Thread side panel state. `activeThread` is the parent message the user
@@ -418,15 +416,9 @@ export default function Chat() {
     setChannelError("");
 
     try {
-      const channel = await createChatChannel(
-        channelName,
-        inviteRole,
-        parseEmails(inviteEmails),
-      );
+      const channel = await createChatChannel(channelName, "user", []);
       setChannels((prev) => [channel, ...prev]);
       setChannelName("");
-      setInviteRole("user");
-      setInviteEmails("");
       setCreatingChannel(false);
       await loadChannelMessages(channel);
     } catch (err) {
@@ -553,13 +545,9 @@ export default function Chat() {
         selectedConversation={selectedConversation}
         creatingChannel={creatingChannel}
         channelName={channelName}
-        inviteRole={inviteRole}
-        inviteEmails={inviteEmails}
         channelError={channelError}
         onToggleCreateChannel={() => setCreatingChannel((open) => !open)}
         onChannelNameChange={setChannelName}
-        onInviteRoleChange={setInviteRole}
-        onInviteEmailsChange={setInviteEmails}
         onCancelCreateChannel={() => setCreatingChannel(false)}
         onCreateChannel={createChannel}
         onSelectChannel={loadChannelMessages}

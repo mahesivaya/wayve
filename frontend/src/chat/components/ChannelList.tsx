@@ -16,7 +16,6 @@ export default function ChannelList({
 }: Props) {
   return (
     <>
-      <div className="conversation-section-title">Channels</div>
       {channels.map((channel) => (
         <button
           key={channel.id}

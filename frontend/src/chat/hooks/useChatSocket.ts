@@ -16,20 +16,33 @@ export function useChatSocket(
   const wsRef = useRef<WebSocket | null>(null);
   const [readyState, setReadyState] = useState<number>(WebSocket.CLOSED);
 
+  // Read the latest message handler through a ref so the connect effect below
+  // depends only on the user identity. Without this, the socket would tear
+  // down and reconnect every time `onMessage` (which depends on transient UI
+  // state like the open thread) changed identity — and the reconnect churn
+  // could leave `readyState` stuck non-OPEN, disabling the composer.
+  const onMessageRef = useRef(onMessage);
   useEffect(() => {
-    if (!user) {
-      const timeout = window.setTimeout(() => setReadyState(WebSocket.CLOSED), 0);
-      return () => window.clearTimeout(timeout);
-    }
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
+
+  const userId = user?.id;
+
+  useEffect(() => {
+    // No user → no socket. State is already CLOSED here: it's the initial
+    // value, and any prior run's cleanup set it CLOSED on the way out.
+    if (!userId) return;
+
+    // Only this run's socket may update `readyState`. A stale socket's late
+    // close/error (or the cleanup below) must never flip state after a newer
+    // socket has already opened — that race was the "stuck disconnected" bug.
+    let cancelled = false;
 
     const ws = new WebSocket(`${getWsBase()}/ws/chat`);
     wsRef.current = ws;
-    const initialStateTimeout = window.setTimeout(
-      () => setReadyState(ws.readyState),
-      0,
-    );
 
     ws.onopen = () => {
+      if (cancelled) return;
       setReadyState(ws.readyState);
       logger.log("✅ WS connected");
     };
@@ -42,28 +55,30 @@ export function useChatSocket(
       // Self-broadcasts WITH a client_id are the reconciliation echo: pass
       // them through so appendRealtimeMessage can patch the optimistic copy
       // with the server-assigned message_id.
-      if (msg.sender_id === user.id && !msg.client_id) return;
+      if (msg.sender_id === userId && !msg.client_id) return;
 
       if (messageBelongsToSelectedConversation(msg, selectedRef.current)) {
-        void onMessage(msg);
+        void onMessageRef.current(msg);
       }
     };
 
     ws.onclose = () => {
+      if (cancelled) return;
       setReadyState(ws.readyState);
       logger.log("❌ WS disconnected");
     };
 
     ws.onerror = () => {
+      if (cancelled) return;
       setReadyState(ws.readyState);
     };
 
     return () => {
-      window.clearTimeout(initialStateTimeout);
-      window.setTimeout(() => setReadyState(WebSocket.CLOSED), 0);
+      cancelled = true;
+      setReadyState(WebSocket.CLOSED);
       ws.close();
     };
-  }, [onMessage, selectedRef, user]);
+  }, [userId, selectedRef]);
 
   return {
     wsRef,

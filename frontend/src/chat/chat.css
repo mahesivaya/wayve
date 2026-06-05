@@ -130,6 +130,15 @@
   text-transform: uppercase;
 }
 
+/* Section header row: section title on the left, an action (e.g. + Channel)
+   pinned to the right. */
+.conversation-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 14px;
+}
+
 .conversation-item {
   display: flex;
   align-items: center;

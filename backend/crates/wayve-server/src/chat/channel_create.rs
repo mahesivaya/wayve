@@ -44,11 +44,8 @@ pub async fn create_channel(
     member_ids.sort_unstable();
     member_ids.dedup();
 
-    if member_ids.len() < 2 && invite_emails.is_empty() {
-        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "Add at least one invitee email"
-        })));
-    }
+    // A solo channel (just the creator) is allowed: the creator is added as
+    // admin below and every other code path works with a single member.
 
     let mut tx = pool.begin().await?;
 

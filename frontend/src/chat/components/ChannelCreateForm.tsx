@@ -1,26 +1,15 @@
-import type { ChannelRole } from "../types";
-import { roleFromValue } from "../utils";
-
 type Props = {
   channelName: string;
-  inviteRole: ChannelRole;
-  inviteEmails: string;
   error: string;
   onChannelNameChange: (value: string) => void;
-  onInviteRoleChange: (value: ChannelRole) => void;
-  onInviteEmailsChange: (value: string) => void;
   onCancel: () => void;
   onCreate: () => void;
 };
 
 export default function ChannelCreateForm({
   channelName,
-  inviteRole,
-  inviteEmails,
   error,
   onChannelNameChange,
-  onInviteRoleChange,
-  onInviteEmailsChange,
   onCancel,
   onCreate,
 }: Props) {
@@ -32,26 +21,6 @@ export default function ChannelCreateForm({
           value={channelName}
           onChange={(e) => onChannelNameChange(e.target.value)}
           placeholder="project-updates"
-        />
-      </label>
-
-      <label className="channel-field">
-        <span>Invitees role</span>
-        <select
-          value={inviteRole}
-          onChange={(e) => onInviteRoleChange(roleFromValue(e.target.value))}
-        >
-          <option value="user">User</option>
-          <option value="admin">Admin</option>
-        </select>
-      </label>
-
-      <label className="channel-field">
-        <span>Invitee emails</span>
-        <textarea
-          value={inviteEmails}
-          onChange={(e) => onInviteEmailsChange(e.target.value)}
-          placeholder="alex@example.com, priya@example.com"
         />
       </label>
 
