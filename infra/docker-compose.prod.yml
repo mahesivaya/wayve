@@ -58,10 +58,15 @@ services:
     environment:
       <<: *backend-env
       RWAYVE_ROLE: api
+      # Offline IP geolocation for the User Logs page. Best-effort: if the
+      # .mmdb isn't present in ../geoip the backend logs a warning and the
+      # Location column stays blank. Drop GeoLite2-City.mmdb in infra/geoip/.
+      GEOIP_DB_PATH: /app/geoip/GeoLite2-City.mmdb
     volumes:
       - ../client_secret.json:/app/client_secret.json:ro
       - uploads_prod:/app/uploads
       - logs_prod:/app/logs
+      - ./geoip:/app/geoip:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
       interval: 10s

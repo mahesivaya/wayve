@@ -20,10 +20,25 @@
 //!
 //! Existing modules are not migrated — they can switch to these on next touch.
 
-use actix_web::HttpRequest;
+use actix_web::{HttpRequest, web};
 use sqlx::PgPool;
 use tokio::io::AsyncWriteExt;
 use tracing::warn;
+
+use crate::geoip::{GeoIp, GeoLocation};
+
+/// Geolocate `ip` using the shared GeoIP reader pulled from request app state.
+/// Best-effort: returns the empty location when there's no IP, no reader
+/// configured (`GEOIP_DB_PATH` unset), or the lookup misses.
+fn resolve_geo(req: &HttpRequest, ip: Option<&str>) -> GeoLocation {
+    let Some(ip) = ip else {
+        return GeoLocation::default();
+    };
+    match req.app_data::<web::Data<Option<GeoIp>>>().map(web::Data::get_ref) {
+        Some(Some(geo)) => geo.lookup(ip),
+        _ => GeoLocation::default(),
+    }
+}
 
 /// The caller's IP, honoring `X-Forwarded-For` via Actix's `ConnectionInfo`.
 /// Returns `None` when the connection has no peer address (in-process tests).
@@ -62,14 +77,15 @@ pub struct AuditEvent<'a> {
 pub async fn record_action(pool: &PgPool, req: &HttpRequest, event: AuditEvent<'_>) {
     let ip = client_ip(req);
     let ua = user_agent(req);
-    record(pool, event, ip, ua).await;
+    let geo = resolve_geo(req, ip.as_deref());
+    record(pool, event, ip, ua, geo).await;
 }
 
 /// Like [`record_action`] but for events with no originating HTTP request —
 /// e.g. the background sync worker recording `email_received`. IP and
 /// User-Agent are recorded as NULL.
 pub async fn record_action_system(pool: &PgPool, event: AuditEvent<'_>) {
-    record(pool, event, None, None).await;
+    record(pool, event, None, None, GeoLocation::default()).await;
 }
 
 // ── Billing / financial audit log ────────────────────────────────────
@@ -149,6 +165,7 @@ pub async fn record_login_failure(
 ) {
     let ip = client_ip(req);
     let ua = user_agent(req);
+    let geo = resolve_geo(req, ip.as_deref());
 
     let organization_id: Option<i32> = match actor_user_id {
         Some(id) => sqlx::query_scalar("SELECT organization_id FROM users WHERE id = $1")
@@ -167,8 +184,8 @@ pub async fn record_login_failure(
         r#"
         INSERT INTO audit_logs
             (actor_user_id, organization_id, action, resource_type,
-             resource_id, metadata, ip, user_agent)
-        VALUES ($1, $2, 'login_failed', 'session', NULL, $3::jsonb, $4, $5)
+             resource_id, metadata, ip, user_agent, country, region, city)
+        VALUES ($1, $2, 'login_failed', 'session', NULL, $3::jsonb, $4, $5, $6, $7, $8)
         "#,
     )
     .bind(actor_user_id)
@@ -176,6 +193,9 @@ pub async fn record_login_failure(
     .bind(&metadata_text)
     .bind(ip.as_deref())
     .bind(ua.as_deref())
+    .bind(geo.country.as_deref())
+    .bind(geo.region.as_deref())
+    .bind(geo.city.as_deref())
     .execute(pool)
     .await
     {
@@ -192,13 +212,22 @@ pub async fn record_login_failure(
         "metadata": metadata,
         "ip": ip,
         "user_agent": ua,
+        "country": geo.country,
+        "region": geo.region,
+        "city": geo.city,
     }))
     .await;
 }
 
 /// Shared writer: inserts the `audit_logs` row and mirrors it to
 /// `logs/user_actions.log`. Both sinks are best-effort.
-async fn record(pool: &PgPool, event: AuditEvent<'_>, ip: Option<String>, ua: Option<String>) {
+async fn record(
+    pool: &PgPool,
+    event: AuditEvent<'_>,
+    ip: Option<String>,
+    ua: Option<String>,
+    geo: GeoLocation,
+) {
     // The actor's organization at the time of the action — denormalized so
     // the scoped reads on the Security page don't need a live join.
     let organization_id: Option<i32> =
@@ -215,8 +244,8 @@ async fn record(pool: &PgPool, event: AuditEvent<'_>, ip: Option<String>, ua: Op
         r#"
         INSERT INTO audit_logs
             (actor_user_id, organization_id, action, resource_type,
-             resource_id, metadata, ip, user_agent)
-        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+             resource_id, metadata, ip, user_agent, country, region, city)
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11)
         "#,
     )
     .bind(event.actor_user_id)
@@ -227,6 +256,9 @@ async fn record(pool: &PgPool, event: AuditEvent<'_>, ip: Option<String>, ua: Op
     .bind(metadata_text.as_deref())
     .bind(ip.as_deref())
     .bind(ua.as_deref())
+    .bind(geo.country.as_deref())
+    .bind(geo.region.as_deref())
+    .bind(geo.city.as_deref())
     .execute(pool)
     .await
     {
@@ -243,6 +275,9 @@ async fn record(pool: &PgPool, event: AuditEvent<'_>, ip: Option<String>, ua: Op
         "metadata": event.metadata,
         "ip": ip,
         "user_agent": ua,
+        "country": geo.country,
+        "region": geo.region,
+        "city": geo.city,
     }))
     .await;
 }

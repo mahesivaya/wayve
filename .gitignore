@@ -65,3 +65,6 @@ stress/k6-stdout.txt
 trash/*
 # Local manual-testing credentials (passwords) — never commit
 /test-users.txt
+
+# License-restricted MaxMind GeoLite2 DB — provisioned per-host, never committed
+infra/geoip/*.mmdb

@@ -142,6 +142,7 @@ fn user_agent(req: &HttpRequest) -> Option<String> {
 /// Public wrapper around `write_audit_row` for sibling modules. Swallows
 /// errors with a warn log — the audit-write should never block the
 /// caller's response if the DB is briefly unavailable.
+#[allow(clippy::too_many_arguments)]
 pub async fn write_impersonation_audit(
     pool: &PgPool,
     organization_id: i32,
@@ -176,6 +177,7 @@ pub async fn ensure_target_member(
     ensure_member_of(pool, organization_id, target_user_id).await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn write_audit_row(
     pool: &PgPool,
     organization_id: i32,
@@ -843,6 +845,7 @@ pub async fn fetch_org_public_key(
 /// AND the password-derived login wrap atomically with the new user row.
 /// Returning a transaction is awkward; callers compose this with their
 /// own transaction by passing in their pool and we open a short tx here.
+#[allow(clippy::too_many_arguments)]
 pub async fn persist_provisioned_keys(
     pool: &PgPool,
     user_id: i32,

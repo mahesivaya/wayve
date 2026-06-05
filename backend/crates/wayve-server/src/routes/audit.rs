@@ -51,6 +51,11 @@ pub struct UserActionView {
     // email_received). Org/platform-admin readable per the scoping below.
     pub metadata: Option<serde_json::Value>,
     pub ip: Option<String>,
+    // Coarse geolocation of `ip`, resolved offline at write time (NULL for rows
+    // written before the feature, system events, or unresolvable/private IPs).
+    pub country: Option<String>,
+    pub region: Option<String>,
+    pub city: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -83,7 +88,8 @@ pub async fn list_user_actions(
     let rows = sqlx::query_as::<_, UserActionView>(
         r#"
         SELECT a.id, a.actor_user_id, u.email AS actor_email, a.organization_id,
-               a.action, a.resource_type, a.resource_id, a.metadata, a.ip, a.created_at
+               a.action, a.resource_type, a.resource_id, a.metadata, a.ip,
+               a.country, a.region, a.city, a.created_at
         FROM audit_logs a
         LEFT JOIN users u ON u.id = a.actor_user_id
         WHERE ($1::TEXT IS NULL OR a.action = $1)

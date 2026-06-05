@@ -127,6 +127,7 @@ pub async fn ingest_client_error(
 /// the platform logs dashboard. Best-effort — failures are logged but
 /// never returned, so the caller's normal error path is unchanged.
 #[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
 pub async fn log_server_error(
     pool: &PgPool,
     user_id: Option<i32>,

@@ -53,6 +53,7 @@ moka.workspace = true
 mimalloc.workspace = true
 hickory-resolver.workspace = true
 async-trait.workspace = true
+maxminddb.workspace = true
 
 # Yahoo Mail (IMAP + MIME). lettre (above) handles SMTP send.
 async-imap.workspace = true

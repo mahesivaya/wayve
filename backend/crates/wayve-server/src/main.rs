@@ -16,6 +16,7 @@ mod email;
 mod embed;
 mod error;
 mod external;
+mod geoip;
 mod github_proxy;
 mod home;
 mod integrations;
@@ -68,6 +69,11 @@ async fn main() -> std::io::Result<()> {
     startup::spawn_role_workers(role, &pool).await;
     let redis_cache = startup::connect_redis_and_install_cache().await;
 
+    // Offline IP geolocation for the User Logs page. Best-effort: `None` when
+    // GEOIP_DB_PATH is unset/unreadable. The reader isn't `Clone`, so build the
+    // shared `web::Data` (an `Arc`) once and clone the handle into each worker.
+    let geoip_data = web::Data::new(startup::load_geoip());
+
     let frontend_url = crate::config::frontend_url();
     let port = listen_port();
     info!(port, "Listen port selected");
@@ -81,6 +87,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(startup::build_cors(&frontend_url))
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(redis_cache.clone()))
+            .app_data(geoip_data.clone())
             .configure(routing::wire)
     })
     .bind(("0.0.0.0", port))?;

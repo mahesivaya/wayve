@@ -1277,6 +1277,12 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     user_agent TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Coarse geolocation of `ip`, resolved offline (MaxMind GeoLite2) at write time
+-- for the User Logs page. Nullable + additive: existing rows, system events and
+-- private/unresolvable IPs stay NULL.
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS region  TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS city    TEXT;
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor
     ON audit_logs(actor_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_org

@@ -39,14 +39,14 @@ pub async fn register(
     // outright, because the user's intent ("create an account") is
     // unchanged and the constraint will reject anything else at the
     // DB layer anyway.
-    if let Some(requested) = data.recovery_mode.as_deref() {
-        if requested != "full" {
-            warn!(
-                target: "auth",
-                recovery_mode = requested,
-                "register: ignoring legacy recovery_mode; coercing to 'full'"
-            );
-        }
+    if let Some(requested) = data.recovery_mode.as_deref()
+        && requested != "full"
+    {
+        warn!(
+            target: "auth",
+            recovery_mode = requested,
+            "register: ignoring legacy recovery_mode; coercing to 'full'"
+        );
     }
     let recovery_mode = "full";
 

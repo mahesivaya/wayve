@@ -33,6 +33,11 @@ export type UserActionRow = {
   // email_sent / email_received).
   metadata: Record<string, unknown> | null;
   ip: string | null;
+  // Coarse geolocation of `ip`, resolved offline at write time. NULL for older
+  // rows, system events, or private/unresolvable IPs.
+  country: string | null;
+  region: string | null;
+  city: string | null;
   created_at: string;
 };
 

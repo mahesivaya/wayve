@@ -85,9 +85,14 @@ services:
       <<: *backend-env
       RWAYVE_ROLE: api
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      # Offline IP geolocation for the User Logs page. Best-effort: if the
+      # .mmdb isn't present in ../geoip the backend logs a warning and the
+      # Location column stays blank. Drop GeoLite2-City.mmdb in infra/geoip/.
+      GEOIP_DB_PATH: /app/geoip/GeoLite2-City.mmdb
     volumes:
       - ../uploads:/app/uploads
       - ../logs:/app/logs
+      - ./geoip:/app/geoip:ro
     ports:
       - "8080:8080"
     healthcheck:

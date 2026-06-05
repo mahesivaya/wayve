@@ -70,10 +70,7 @@ fn encrypt_address_for_storage(addr: &str) -> (String, String, String) {
     if addr.is_empty() {
         return (String::new(), String::new(), String::new());
     }
-    let (iv, ciphertext) = match wayve_security::encryption::encrypt(addr) {
-        Ok(env) => env,
-        Err(_) => (String::new(), String::new()),
-    };
+    let (iv, ciphertext) = wayve_security::encryption::encrypt(addr).unwrap_or_default();
     let hash = wayve_security::encryption::compute_address_hash(addr)
         .ok()
         .flatten()

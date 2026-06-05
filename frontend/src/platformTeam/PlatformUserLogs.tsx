@@ -34,6 +34,7 @@ const USER_LOG_COLUMNS = [
   { key: "resource", label: "Resource", width: 160, min: 90 },
   { key: "details", label: "Details", width: 320, min: 120 },
   { key: "ip", label: "IP", width: 130, min: 90 },
+  { key: "location", label: "Location", width: 180, min: 110 },
 ] as const;
 
 const USER_LOGS_COL_WIDTHS_KEY = "rwayve.platformUserLogs.colWidths";
@@ -120,7 +121,7 @@ export default function PlatformUserLogs() {
   if (!canView) return <Navigate to="/home" replace />;
 
   return (
-    <div className="pt-page">
+    <div className="pt-page pt-userlogs">
       <header className="pt-header">
         <h1>User Logs</h1>
         <p>
@@ -132,7 +133,7 @@ export default function PlatformUserLogs() {
 
       {error && <div className="pt-banner">{error}</div>}
 
-      <section className="pt-panel">
+      <section className="pt-panel pt-userlogs-reg">
         <div className="pt-panel-head">
           <h2>Registration types</h2>
           <div className="pt-reg-summary">
@@ -179,7 +180,7 @@ export default function PlatformUserLogs() {
         )}
       </section>
 
-      <section className="pt-panel">
+      <section className="pt-panel pt-userlogs-activity">
         <div className="pt-panel-head">
           <h2>Activity</h2>
           <input
@@ -230,6 +231,8 @@ export default function PlatformUserLogs() {
             <tbody>
               {filtered.map((a) => {
                 const details = formatUserActionDetails(a);
+                const location =
+                  [a.city, a.region, a.country].filter(Boolean).join(", ");
                 return (
                   <tr key={a.id}>
                     <td>{fmtDateTime(a.created_at)}</td>
@@ -246,6 +249,9 @@ export default function PlatformUserLogs() {
                       {details || "-"}
                     </td>
                     <td>{a.ip ?? "-"}</td>
+                    <td className="pt-loc" title={location}>
+                      {location || "-"}
+                    </td>
                   </tr>
                 );
               })}

@@ -783,6 +783,19 @@ pub async fn connect_redis_and_install_cache() -> Option<Cache> {
     redis_cache
 }
 
+/// Load the offline GeoLite2-City database (best-effort). Returns `None` when
+/// `GEOIP_DB_PATH` is unset or the file can't be read — the User Logs page then
+/// shows blank locations instead of failing.
+pub fn load_geoip() -> Option<crate::geoip::GeoIp> {
+    match config::geoip_db_path() {
+        Some(path) => crate::geoip::GeoIp::open(&path),
+        None => {
+            info!("GEOIP_DB_PATH unset; IP geolocation disabled");
+            None
+        }
+    }
+}
+
 /// Build the CORS layer. Single-origin allowlist read from `FRONTEND_URL`;
 /// supports credentials so the auth cookie survives.
 pub fn build_cors(frontend_url: &str) -> Cors {

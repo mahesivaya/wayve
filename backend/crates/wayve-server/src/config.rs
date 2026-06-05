@@ -160,6 +160,13 @@ pub fn redis_url() -> String {
     var_or("REDIS_URL", "redis://redis:6379")
 }
 
+// ---- Geolocation --------------------------------------------
+// Path to an offline MaxMind GeoLite2-City `.mmdb`. Optional: when unset the
+// User Logs "Location" column is simply blank (no geolocation performed).
+pub fn geoip_db_path() -> Option<String> {
+    var_opt("GEOIP_DB_PATH")
+}
+
 pub fn local_json_cache_ttl_secs() -> u64 {
     var_opt("LOCAL_JSON_CACHE_TTL_SECS")
         .and_then(|value| value.parse().ok())

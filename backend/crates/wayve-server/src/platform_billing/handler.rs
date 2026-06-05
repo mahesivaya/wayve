@@ -1024,6 +1024,9 @@ pub async fn get_stripe_snapshot(req: HttpRequest, pool: web::Data<PgPool>) -> A
 
     let thirty_days_ago = (Utc::now() - chrono::Duration::days(30)).timestamp();
 
+    // The `unwrap` flagged here is inside the `futures::join!` macro expansion,
+    // not our code — scope the disallowed-method allow to this statement.
+    #[allow(clippy::disallowed_methods)]
     let (balance_res, payouts_res, charges_res, txns_res) = futures::join!(
         stripe::fetch_balance(),
         stripe::list_payouts(10),
@@ -1108,10 +1111,10 @@ pub async fn get_stripe_snapshot(req: HttpRequest, pool: web::Data<PgPool>) -> A
             fees_cents += fee;
             net_cents += net;
             txn_count += 1;
-            if currency.is_none() {
-                if let Some(c) = t.get("currency").and_then(Value::as_str) {
-                    currency = Some(c.to_string());
-                }
+            if currency.is_none()
+                && let Some(c) = t.get("currency").and_then(Value::as_str)
+            {
+                currency = Some(c.to_string());
             }
         }
     }

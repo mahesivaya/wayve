@@ -191,6 +191,16 @@
   color: var(--text-muted, var(--color-text-muted));
 }
 
+/* Location column (city, state, country) — same ellipsize-with-tooltip
+   treatment as Details so a long place name doesn't blow out the row. */
+.pt-table td.pt-loc {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted, var(--color-text-muted));
+}
+
 .pt-table code {
   font-size: 12px;
   background: var(--panel-subtle, var(--color-surface-hover));
@@ -467,4 +477,57 @@ html[data-theme="dark"] .api-secrets-raw {
   background: var(--color-surface);
   color: var(--color-text-primary);
   cursor: pointer;
+}
+
+/* ── User Logs: two stacked blocks that fill the viewport, each scrolling
+   internally instead of growing the whole page. Scoped to .pt-userlogs so
+   other platform-team pages that share .pt-page / .pt-panel are untouched. */
+.pt-userlogs {
+  /* Fill the height the split-pane gives us and never scroll the page itself —
+     the two panels own their own scroll. */
+  flex: 1 1 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pt-userlogs .pt-header {
+  flex: 0 0 auto;
+}
+
+.pt-userlogs .pt-panel {
+  /* Each block is a flex column: fixed head + a scrollable body that takes the
+     rest. min-height:0 lets the inner scroll area actually shrink. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Activity (the main log) gets more room than Registration types. */
+.pt-userlogs .pt-userlogs-reg {
+  flex: 1 1 35%;
+}
+
+.pt-userlogs .pt-userlogs-activity {
+  flex: 2 1 65%;
+}
+
+.pt-userlogs .pt-panel-head {
+  flex: 0 0 auto;
+}
+
+/* The table wrapper becomes the per-block scroll viewport (both axes). */
+.pt-userlogs .pt-table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Keep column headers visible while scrolling rows inside a block. */
+.pt-userlogs .pt-table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel-bg, var(--color-surface));
 }
