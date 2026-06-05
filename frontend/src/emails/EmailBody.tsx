@@ -14,19 +14,23 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
 
 // Reset + sensible defaults injected into the iframe document so emails that
 // rely on the UA defaults still read well, and images/tables can't overflow.
+// Default background + text are tuned for the navy app theme so the email
+// body blends in instead of being a white slab. Emails that hardcode their
+// own colors (tables/cards) keep them — we only set the defaults that
+// uncolored content inherits.
 const FRAME_CSS = `
-  html, body { margin: 0; padding: 0; }
+  html, body { margin: 0; padding: 0; background: #0a1730; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 14px;
     line-height: 1.5;
-    color: #1f2937;
+    color: #c6d2ec;
     word-break: break-word;
     overflow-wrap: anywhere;
   }
   img, video { max-width: 100%; height: auto; }
   table { max-width: 100%; }
-  a { color: #2563eb; }
+  a { color: #60a5fa; }
 `;
 
 // Render a full HTML email in a sandboxed iframe. The HTML is sanitized with

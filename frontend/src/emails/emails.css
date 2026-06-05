@@ -1556,7 +1556,7 @@
   display: block;
   width: 100%;
   border: none;
-  background: var(--color-surface);
+  background: var(--color-email-bg);
 }
 
 .email-body a {

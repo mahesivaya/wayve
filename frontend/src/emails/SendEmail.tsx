@@ -46,6 +46,16 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
   const [secureSend, setSecureSend] = useState(false);
   const [passphrase, setPassphrase] = useState("");
 
+  // Encryption choice for the send (independent of Secure send):
+  //   "standard" — DEFAULT. Plain email via SMTP to the recipient's real
+  //                mailbox (Gmail/Outlook). Reaches external accounts; not E2E.
+  //   "e2e"      — Wayve-to-Wayve internal channel: encrypted in-browser,
+  //                only visible inside Fluxze accounts. Non-Fluxze recipients
+  //                fall back to SMTP (can't E2E without their key).
+  //   "pgp"      — placeholder, disabled in the UI for now.
+  type EncryptionMode = "standard" | "e2e" | "pgp";
+  const [encryptionMode, setEncryptionMode] = useState<EncryptionMode>("standard");
+
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -122,20 +132,24 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
 
       const senderId = user?.id;
 
-      // Resolve each recipient in parallel. A lookup failure is treated
-      // as "not on Wayve" so a transient API hiccup falls back to
-      // standard SMTP rather than blocking the send entirely.
+      // Standard (default) skips the Wayve-user lookups entirely — every
+      // recipient gets a plain SMTP email to their real mailbox. Only the
+      // "e2e" mode needs to detect Fluxze users to route them through the
+      // encrypted internal channel. A lookup failure is treated as "not on
+      // Wayve" so a transient API hiccup falls back to SMTP.
       const lookups: Array<{ email: string; user: WayveRecipient | null }> =
-        await Promise.all(
-          recipients.map(async (email) => {
-            try {
-              return { email, user: await getUserByEmail(email) };
-            } catch (err) {
-              logger.warn("Wayve recipient lookup failed; treating as external", err, email);
-              return { email, user: null };
-            }
-          }),
-        );
+        encryptionMode === "standard"
+          ? recipients.map((email) => ({ email, user: null }))
+          : await Promise.all(
+              recipients.map(async (email) => {
+                try {
+                  return { email, user: await getUserByEmail(email) };
+                } catch (err) {
+                  logger.warn("Wayve recipient lookup failed; treating as external", err, email);
+                  return { email, user: null };
+                }
+              }),
+            );
 
       // Partition the resolved lookups in one pass — anything that
       // resolves to a Wayve user WITH a non-empty public key goes
@@ -233,11 +247,11 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
       //    channel so they're never guessing whether a send was E2E.
       if (internalDelivered > 0 && externalDelivered > 0) {
         setStatus(
-          `Sent E2E to ${internalDelivered} Wayve user${internalDelivered === 1 ? "" : "s"} + standard mail to ${externalDelivered} external recipient${externalDelivered === 1 ? "" : "s"} ✅`,
+          `Sent E2E to ${internalDelivered} Fluxze user${internalDelivered === 1 ? "" : "s"} + standard mail to ${externalDelivered} external recipient${externalDelivered === 1 ? "" : "s"} ✅`,
         );
       } else if (internalDelivered > 0) {
         setStatus(
-          `Sent end-to-end to ${internalDelivered} Wayve user${internalDelivered === 1 ? "" : "s"} via Wayve ✅`,
+          `Sent end-to-end to ${internalDelivered} Fluxze user${internalDelivered === 1 ? "" : "s"} via Fluxze ✅`,
         );
       } else if (externalDelivered > 0) {
         setStatus(
@@ -309,6 +323,57 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
         }}
       />
 
+      {/* Encryption (optional). No "Standard" radio — leaving both unselected
+          IS standard delivery (a plain email to the recipient's real mailbox).
+          Secure send (below) overrides routing, so dim this while it's on. */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          padding: 10,
+          border: "1px solid #d1d5db",
+          borderRadius: 6,
+          background: "#f9fafb",
+          fontSize: 13,
+          opacity: secureSend ? 0.5 : 1,
+          pointerEvents: secureSend ? "none" : "auto",
+        }}
+      >
+        <span style={{ fontWeight: 600, color: "#374151" }}>
+          Advanced Encryption
+        </span>
+
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
+          <input
+            type="radio"
+            name="encryptionMode"
+            checked={encryptionMode === "e2e"}
+            // Clicking the selected radio toggles back to standard, since there
+            // is no separate "Standard" radio to return to.
+            onClick={() =>
+              setEncryptionMode((m) => (m === "e2e" ? "standard" : "e2e"))
+            }
+            readOnly
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            <strong>🛡️ End-to-End Encryption</strong>
+            <br />
+            <small style={{ color: "#6b7280" }}>
+              Only visible to other Fluxze accounts.
+            </small>
+          </span>
+        </label>
+
+        {encryptionMode === "e2e" && (
+          <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
+            Encrypted in your browser — delivered inside Fluxze. Recipients who
+            aren’t on Fluxze get a standard email instead.
+          </small>
+        )}
+      </div>
+
       <div
         style={{
           display: "flex",
@@ -335,7 +400,7 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
             checked={secureSend}
             onChange={(e) => setSecureSend(e.target.checked)}
           />
-          <span>🔒 Secure send (end-to-end via Wayve magic link)</span>
+          <span>🔒 Secure send (end-to-end via Fluxze magic link)</span>
         </label>
         {secureSend && (
           <>
@@ -354,7 +419,7 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
             <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
               The recipient gets a plain email with a link only. They
               click it and enter this passphrase to decrypt your message
-              in their browser. <strong>Wayve never sees the passphrase</strong> —
+              in their browser. <strong>Fluxze never sees the passphrase</strong> —
               if you share it in the same email, you defeat the
               encryption. Use Signal, SMS, or in-person.
             </small>
