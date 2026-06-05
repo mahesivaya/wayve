@@ -131,6 +131,23 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // On narrow viewports the header nav collapses behind a hamburger toggle.
   const [navOpen, setNavOpen] = useState(false);
 
+  // Track whether we're in the ≤768px "overlay" band (sidebar is an
+  // off-canvas panel) vs. wider screens (permanent rail). Kept reactive so
+  // the toggle button's arrow direction always reflects the real state.
+  const [isNarrow, setIsNarrow] = useState<boolean>(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 768px)").matches,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const onChange = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   // "Report a bug" overlay — opened from the red header icon, also reachable
   // from the profile menu's "Help & Report issue" item.
   const [supportOpen, setSupportOpen] = useState(false);
@@ -439,40 +456,47 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       <div className="header">
         <div className="header-brand">
           <div className="logo" onClick={() => navigate("/")}>{BRAND_NAME}</div>
-          <button
-            type="button"
-            className="sidebar-toggle-btn"
-            onClick={() => {
-              // On narrow viewports the sidebar is an overlay — toggle its
-              // open/close state. On wide viewports it's a permanent rail —
-              // toggle between expanded (labels) and collapsed (icon-only).
-              const isNarrow =
-                typeof window !== "undefined" &&
-                window.matchMedia("(max-width: 1100px)").matches;
-              if (isNarrow) {
-                setNavOpen((open) => !open);
-              } else {
-                setSidebarCollapsed((c) => !c);
-              }
-            }}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!sidebarCollapsed}
-          >
-            <svg
-              className="sidebar-toggle-icon"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <rect x="3" y="5" width="18" height="14" rx="2.2" />
-              <line x1="9" y1="5" x2="9" y2="19" />
-              {sidebarCollapsed ? (
-                <polyline points="12 9 14 12 12 15" />
-              ) : (
-                <polyline points="14 9 12 12 14 15" />
-              )}
-            </svg>
-          </button>
+          {(() => {
+            // Whether the sidebar is currently showing (full panel). On the
+            // ≤768px overlay band that's `navOpen`; on wider screens it's the
+            // inverse of the collapsed-rail preference.
+            const sidebarShown = isNarrow ? navOpen : !sidebarCollapsed;
+            return (
+              <button
+                type="button"
+                className="sidebar-toggle-btn"
+                onClick={() => {
+                  // On the narrow overlay band toggle the panel open/close; on
+                  // wider screens toggle expanded (labels) ↔ collapsed (rail).
+                  if (isNarrow) {
+                    setNavOpen((open) => !open);
+                  } else {
+                    setSidebarCollapsed((c) => !c);
+                  }
+                }}
+                title={sidebarShown ? "Hide sidebar" : "Show sidebar"}
+                aria-label={sidebarShown ? "Hide sidebar" : "Show sidebar"}
+                aria-expanded={sidebarShown}
+              >
+                <svg
+                  className="sidebar-toggle-icon"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  {/* Panel frame for context */}
+                  <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                  <line x1="9" y1="5" x2="9" y2="19" />
+                  {/* Arrow points the way the panel will move on click:
+                      shown → left chevron (will hide); hidden → right (show). */}
+                  {sidebarShown ? (
+                    <polyline points="15 9 12 12 15 15" />
+                  ) : (
+                    <polyline points="12 9 15 12 12 15" />
+                  )}
+                </svg>
+              </button>
+            );
+          })()}
         </div>
 
         {!location.pathname.startsWith("/emails") &&
