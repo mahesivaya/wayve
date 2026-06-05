@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { SERVICES } from "../services/serviceData";
 import ActivityDashboard from "./dashboard/ActivityDashboard";
+import HeroMock from "./HeroMock";
 import PersonalDashboard from "./dashboard/PersonalDashboard";
 import PublicPricingContent from "../pricing/PublicPricingContent";
 import { APP_TIME_ZONE } from "../utils/datetime";
@@ -175,57 +176,10 @@ export default function Home() {
                 </button>
               </div>
 
-              <p className="hx-hero-trust">
-                No credit card needed · Free forever for individuals · 256-bit
-                encryption
-              </p>
             </div>
 
-            {/* CSS product mockup — a faux Fluxze app window */}
-            <div className="hx-mock" aria-hidden="true">
-              <div className="hx-mock-bar">
-                <span className="hx-dot hx-dot-r" />
-                <span className="hx-dot hx-dot-y" />
-                <span className="hx-dot hx-dot-g" />
-                <span className="hx-mock-url">app.fluxze.com</span>
-              </div>
-              <div className="hx-mock-body">
-                <aside className="hx-mock-side">
-                  <div className="hx-mock-logo">Fluxze</div>
-                  {["Mail", "Chat", "Meet", "Drive", "Notes", "Tasks", "AI"].map(
-                    (label, i) => (
-                      <div
-                        key={label}
-                        className={`hx-mock-nav ${i === 0 ? "is-active" : ""}`}
-                      >
-                        <span className="hx-mock-navdot" />
-                        {label}
-                      </div>
-                    ),
-                  )}
-                </aside>
-                <div className="hx-mock-main">
-                  <div className="hx-mock-toolbar">
-                    <span className="hx-mock-search" />
-                    <span className="hx-mock-avatar" />
-                  </div>
-                  {[0, 1, 2, 3, 4].map((r) => (
-                    <div key={r} className="hx-mock-mail">
-                      <span className="hx-mock-mavatar" />
-                      <span className="hx-mock-lines">
-                        <span className="hx-mock-line w-70" />
-                        <span className="hx-mock-line w-45" />
-                      </span>
-                      <span className="hx-mock-time" />
-                    </div>
-                  ))}
-                  <div className="hx-mock-cards">
-                    <div className="hx-mock-card" />
-                    <div className="hx-mock-card" />
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Animated product mockup — a faux Fluxze app window */}
+            <HeroMock />
 
             <div className="hx-chips" aria-label="Capabilities">
               {[
@@ -334,9 +288,7 @@ export default function Home() {
           <section className="hx-stats">
             {[
               { v: "8+", l: "Tools replaced in one app" },
-              { v: "9", l: "RBAC roles for fine control" },
               { v: "256-bit", l: "Encryption at rest" },
-              { v: "30s", l: "Mailbox sync cadence" },
               { v: "0", l: "Extensions or installs" },
             ].map((s) => (
               <div key={s.l} className="hx-stat">
