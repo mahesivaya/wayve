@@ -133,172 +133,276 @@ export default function Home() {
             </section>
           )}
 
-          <section className="public-home-hero">
-            <div className="hero-copy">
-              <p className="hero-kicker">Private workspace for modern teams</p>
-              <h1>One home for email, chat, calls, files, notes, and AI.</h1>
+          {/* ===================== HERO ===================== */}
+          <section className="hx-hero">
+            <div className="hx-hero-glow" aria-hidden="true" />
+            <div className="hx-hero-grid" aria-hidden="true" />
+            <div className="hx-hero-inner">
+              <button
+                type="button"
+                className="hx-announce"
+                onClick={() => navigate("/services/meet")}
+              >
+                <span className="hx-announce-tag">New</span>
+                End-to-end encrypted calls &amp; meetings
+                <span className="hx-announce-arrow" aria-hidden="true">→</span>
+              </button>
+
+              <h1 className="hx-hero-title">
+                Your entire workspace,
+                <br />
+                <span className="hx-grad">in one secure tab.</span>
+              </h1>
+
+              <p className="hx-hero-sub">
+                Email, chat, calls, files, notes, tasks, and AI — unified,
+                end-to-end encrypted, and fast. Replace five disconnected tools
+                with one private home for your team.
+              </p>
+
+              <div className="hx-hero-cta">
+                <button
+                  className="hx-btn-primary"
+                  onClick={() => navigate("/register")}
+                >
+                  Start free
+                </button>
+                <button
+                  className="hx-btn-ghost"
+                  onClick={() => navigate("/pricing")}
+                >
+                  See pricing <span aria-hidden="true">→</span>
+                </button>
+              </div>
+
+              <p className="hx-hero-trust">
+                No credit card needed · Free forever for individuals · 256-bit
+                encryption
+              </p>
+            </div>
+
+            {/* CSS product mockup — a faux Fluxze app window */}
+            <div className="hx-mock" aria-hidden="true">
+              <div className="hx-mock-bar">
+                <span className="hx-dot hx-dot-r" />
+                <span className="hx-dot hx-dot-y" />
+                <span className="hx-dot hx-dot-g" />
+                <span className="hx-mock-url">app.fluxze.com</span>
+              </div>
+              <div className="hx-mock-body">
+                <aside className="hx-mock-side">
+                  <div className="hx-mock-logo">Fluxze</div>
+                  {["Mail", "Chat", "Meet", "Drive", "Notes", "Tasks", "AI"].map(
+                    (label, i) => (
+                      <div
+                        key={label}
+                        className={`hx-mock-nav ${i === 0 ? "is-active" : ""}`}
+                      >
+                        <span className="hx-mock-navdot" />
+                        {label}
+                      </div>
+                    ),
+                  )}
+                </aside>
+                <div className="hx-mock-main">
+                  <div className="hx-mock-toolbar">
+                    <span className="hx-mock-search" />
+                    <span className="hx-mock-avatar" />
+                  </div>
+                  {[0, 1, 2, 3, 4].map((r) => (
+                    <div key={r} className="hx-mock-mail">
+                      <span className="hx-mock-mavatar" />
+                      <span className="hx-mock-lines">
+                        <span className="hx-mock-line w-70" />
+                        <span className="hx-mock-line w-45" />
+                      </span>
+                      <span className="hx-mock-time" />
+                    </div>
+                  ))}
+                  <div className="hx-mock-cards">
+                    <div className="hx-mock-card" />
+                    <div className="hx-mock-card" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="hx-chips" aria-label="Capabilities">
+              {[
+                "End-to-end encrypted",
+                "Real-time sync",
+                "9 RBAC roles",
+                "Gmail & Outlook",
+                "Scoped API keys",
+                "Stripe billing",
+                "Audit logs",
+              ].map((c) => (
+                <span key={c} className="hx-chip">
+                  {c}
+                </span>
+              ))}
             </div>
           </section>
 
-          <section className="home-info-band">
-            <h2>Built for fast, secure, scalable work</h2>
-            <p>Fast to use, private by default, and ready to grow with you.</p>
-          </section>
+          {/* ===================== BENTO FEATURES ===================== */}
+          <section className="hx-section">
+            <div className="hx-section-head">
+              <p className="hx-eyebrow">Why Fluxze</p>
+              <h2>One platform. Everything your team runs on.</h2>
+              <p className="hx-section-sub">
+                Fast to use, private by default, and ready to scale from one
+                person to a whole organization — without rebuilding.
+              </p>
+            </div>
 
-          <section className="home-pillars">
-            <article className="home-pillar">
-              <header>
-                <span className="home-pillar-icon">⚡</span>
+            <div className="hx-bento">
+              <article className="hx-bento-card hx-bento-lead">
+                <span className="hx-bento-icon">⚡</span>
                 <h3>Fast — one place to get work done</h3>
-              </header>
-              <p>Every daily action one click away on the same screen.</p>
-              <ul className="home-pillar-features">
-                <li>
-                  <strong>One workspace for everything.</strong> Mail, chat,
-                  calls, files, notes, tasks, and AI.
-                </li>
-                <li>
-                  <strong>Side-by-side apps.</strong> Open two tools at once.
-                </li>
-                <li>
-                  <strong>Lightning-fast loads.</strong> Opens in seconds.
-                </li>
-                <li>
-                  <strong>Real-time everything.</strong> Updates appear live.
-                </li>
-              </ul>
-            </article>
+                <p>
+                  Every daily action one click away on the same screen. Open two
+                  tools side by side, with real-time updates and sub-second
+                  loads.
+                </p>
+                <ul className="hx-bento-list">
+                  <li>One workspace for mail, chat, calls, files, notes & AI</li>
+                  <li>Side-by-side split-pane apps</li>
+                  <li>Live updates — no refresh, no installs</li>
+                </ul>
+              </article>
 
-            <article className="home-pillar">
-              <header>
-                <span className="home-pillar-icon">🛡️</span>
-                <h3>Secure — privacy is the default, not a feature</h3>
-              </header>
-              <p>Your conversations and files are encrypted by default.</p>
-              <ul className="home-pillar-features">
-                <li>
-                  <strong>End-to-end encrypted chat.</strong> Only you can read it.
-                </li>
-                <li>
-                  <strong>Files encrypted at rest.</strong> 256-bit encryption.
-                </li>
-                <li>
-                  <strong>Sign in your way.</strong> Email, Google, or Microsoft.
-                </li>
-                <li>
-                  <strong>Granular roles.</strong> Fine-grained access control.
-                </li>
-                <li>
-                  <strong>Audit-ready.</strong> Every action is logged.
-                </li>
-              </ul>
-            </article>
+              <article className="hx-bento-card">
+                <span className="hx-bento-icon">🛡️</span>
+                <h3>Secure by default</h3>
+                <p>
+                  End-to-end encrypted chat, files encrypted at rest with
+                  256-bit AES, granular roles, and audit-ready logging.
+                </p>
+              </article>
 
-            <article className="home-pillar">
-              <header>
-                <span className="home-pillar-icon">📈</span>
-                <h3>Scalable — grow without rebuilding</h3>
-              </header>
-              <p>From one user to a whole organization on the same rails.</p>
-              <ul className="home-pillar-features">
-                <li>
-                  <strong>Start free, upgrade later.</strong> Pay when you grow.
-                </li>
-                <li>
-                  <strong>Solo → team → organization.</strong> Same data, same login.
-                </li>
-                <li>
-                  <strong>Bring your existing mail.</strong> Connect Gmail or Outlook.
-                </li>
-                <li>
-                  <strong>Build on Fluxze.</strong> Scoped service API keys.
-                </li>
-                <li>
-                  <strong>Billing that just works.</strong> Powered by Stripe.
-                </li>
-              </ul>
-            </article>
-          </section>
+              <article className="hx-bento-card">
+                <span className="hx-bento-icon">📈</span>
+                <h3>Scales with you</h3>
+                <p>
+                  Start free, upgrade when you grow. Solo → team → organization
+                  on the same data and login, billed cleanly through Stripe.
+                </p>
+              </article>
 
-          <section className="home-stats">
-            <div>
-              <p className="home-stat-value">8+</p>
-              <p className="home-stat-label">Tools replaced in one app</p>
-            </div>
-            <div>
-              <p className="home-stat-value">9</p>
-              <p className="home-stat-label">RBAC roles for fine control</p>
-            </div>
-            <div>
-              <p className="home-stat-value">256-bit</p>
-              <p className="home-stat-label">Encryption at rest</p>
-            </div>
-            <div>
-              <p className="home-stat-value">30s</p>
-              <p className="home-stat-label">Mailbox sync cadence</p>
-            </div>
-            <div>
-              <p className="home-stat-value">0</p>
-              <p className="home-stat-label">Extensions or installs</p>
+              <article className="hx-bento-card hx-bento-wide">
+                <span className="hx-bento-icon">🔌</span>
+                <h3>Built to plug into your stack</h3>
+                <p>
+                  Bring your existing Gmail or Outlook, automate with scoped
+                  service API keys, and keep everything observable with
+                  transparent audit trails.
+                </p>
+              </article>
             </div>
           </section>
 
-          <section className="home-info-band">
-            <h2>Who Fluxze is for</h2>
-            <p>One workspace that adapts from solo to organization.</p>
-          </section>
-
-          <section className="home-roles-grid">
-            <article>
-              <h3>🚀 Founders &amp; freelancers</h3>
-              <p>Run your whole business from one tab.</p>
-            </article>
-            <article>
-              <h3>👥 Small teams (2–20)</h3>
-              <p>One login instead of five separate tools.</p>
-            </article>
-            <article>
-              <h3>🏢 Growing organizations (20–100)</h3>
-              <p>Admin controls, roles, and one invoice.</p>
-            </article>
-            <article>
-              <h3>🏛️ Enterprise (100+)</h3>
-              <p>Dedicated support, SLAs, and deeper audit access.</p>
-            </article>
-          </section>
-
-          <section className="home-info-band home-comparison">
-            <h2>Stop paying for five tools to do one job</h2>
-            <p>Everything in one bill, one login, one place.</p>
-            <div className="home-cta-actions">
-              <button onClick={() => navigate("/register")}>Start free</button>
-              <button onClick={() => navigate("/pricing")}>See plans</button>
-              <button onClick={() => navigate("/enterprise")}>For organizations</button>
+          {/* ===================== PRODUCTS ===================== */}
+          <section className="hx-section">
+            <div className="hx-section-head">
+              <p className="hx-eyebrow">Products</p>
+              <h2>Eight apps, one login.</h2>
+            </div>
+            <div className="hx-products">
+              {SERVICES.map((service) => (
+                <button
+                  key={service.slug}
+                  type="button"
+                  className="hx-product"
+                  onClick={() => navigate(`/services/${service.slug}`)}
+                >
+                  <span className={`hx-product-icon ${service.accent}`}>
+                    {service.icon}
+                  </span>
+                  <span className="hx-product-name">
+                    {service.name}
+                    {service.slug === "meet" && (
+                      <span className="hx-product-badge">New</span>
+                    )}
+                  </span>
+                  <span className="hx-product-summary">{service.summary}</span>
+                </button>
+              ))}
             </div>
           </section>
 
-          <section id="pricing" className="home-info-band">
-            <h2>Pricing</h2>
-            <p>Simple plans for individuals and teams.</p>
+          {/* ===================== STATS ===================== */}
+          <section className="hx-stats">
+            {[
+              { v: "8+", l: "Tools replaced in one app" },
+              { v: "9", l: "RBAC roles for fine control" },
+              { v: "256-bit", l: "Encryption at rest" },
+              { v: "30s", l: "Mailbox sync cadence" },
+              { v: "0", l: "Extensions or installs" },
+            ].map((s) => (
+              <div key={s.l} className="hx-stat">
+                <p className="hx-stat-value">{s.v}</p>
+                <p className="hx-stat-label">{s.l}</p>
+              </div>
+            ))}
           </section>
 
-          <section className="home-info-grid">
-            <article id="enterprise">
-              <h2>Enterprise</h2>
-              <p>Secure features for organization workflows.</p>
-            </article>
-            <article id="support">
-              <h2>Support</h2>
-              <p>Help with setup, billing, and workspaces.</p>
-            </article>
-            <article id="organization">
-              <h2>Organization</h2>
-              <p>Collaboration across files, schedules, and notes.</p>
-            </article>
+          {/* ===================== WHO IT'S FOR ===================== */}
+          <section className="hx-section">
+            <div className="hx-section-head">
+              <p className="hx-eyebrow">Who it's for</p>
+              <h2>Built for every stage</h2>
+            </div>
+            <div className="hx-roles">
+              <article className="hx-role">
+                <span className="hx-role-emoji">🚀</span>
+                <h3>Founders &amp; freelancers</h3>
+                <p>Run your whole business from one tab.</p>
+              </article>
+              <article className="hx-role">
+                <span className="hx-role-emoji">👥</span>
+                <h3>Small teams (2–20)</h3>
+                <p>One login instead of five separate tools.</p>
+              </article>
+              <article className="hx-role">
+                <span className="hx-role-emoji">🏢</span>
+                <h3>Growing orgs (20–100)</h3>
+                <p>Admin controls, roles, and one invoice.</p>
+              </article>
+              <article className="hx-role">
+                <span className="hx-role-emoji">🏛️</span>
+                <h3>Enterprise (100+)</h3>
+                <p>Dedicated support, SLAs, and deep audit access.</p>
+              </article>
+            </div>
           </section>
 
-          {/* Pricing — same view as the /pricing page (shared component). */}
-          <section className="home-pricing">
+          {/* ===================== CTA BAND ===================== */}
+          <section className="hx-cta-band">
+            <div className="hx-cta-glow" aria-hidden="true" />
+            <h2>Stop paying for five tools to do one job.</h2>
+            <p>Everything in one bill, one login, one private place.</p>
+            <div className="hx-cta-actions">
+              <button
+                className="hx-btn-primary"
+                onClick={() => navigate("/register")}
+              >
+                Start free
+              </button>
+              <button
+                className="hx-btn-ghost"
+                onClick={() => navigate("/enterprise")}
+              >
+                For organizations <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </section>
+
+          {/* ===================== PRICING ===================== */}
+          <section id="pricing" className="hx-section hx-pricing">
+            <div className="hx-section-head">
+              <p className="hx-eyebrow">Pricing</p>
+              <h2>Simple plans for individuals and teams.</h2>
+            </div>
             <PublicPricingContent />
           </section>
 

@@ -1,9 +1,9 @@
 // Dark-mode hook. Two states only:
-//   "light" — the default for every visitor (OS preference ignored)
-//   "dark"  — user has explicitly chosen dark and we set
-//             data-theme="dark" on <html>
+//   "dark"  — the navy default for every visitor (OS preference ignored)
+//   "light" — user has explicitly chosen light and we set
+//             data-theme="light" on <html>
 //
-// The pre-paint script in index.html sets data-theme="light" or "dark"
+// The pre-paint script in index.html sets data-theme="dark" or "light"
 // before React mounts to avoid any flash. This hook keeps the attribute
 // in sync as the user toggles and writes the choice to localStorage.
 
@@ -16,11 +16,11 @@ const STORAGE_KEY = "wayve-theme";
 function readChoice(): ThemeChoice {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === "dark") return "dark";
+    if (saved === "light") return "light";
   } catch {
     // ignore — storage may be blocked
   }
-  return "light";
+  return "dark";
 }
 
 function applyChoice(choice: ThemeChoice) {
@@ -33,7 +33,9 @@ export function useTheme() {
   const setTheme = useCallback((next: ThemeChoice) => {
     setChoiceState(next);
     try {
-      if (next === "light") localStorage.removeItem(STORAGE_KEY);
+      // Dark is the default (no key stored); only persist an explicit
+      // light override.
+      if (next === "dark") localStorage.removeItem(STORAGE_KEY);
       else localStorage.setItem(STORAGE_KEY, next);
     } catch {
       // ignore — storage blocked

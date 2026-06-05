@@ -82,10 +82,15 @@ export function generatePalette(
   const softChroma = chroma * 0.35 * saturation;
   const accentChroma = chroma * 0.85 * saturation;
 
+  // Subtle background tint toward the chosen hue so picking a color visibly
+  // changes the page background — capped low so surfaces stay readable and
+  // never look "painted". chroma 0 (neutral swatch) keeps surfaces gray.
+  const surfaceChroma = Math.min(chroma * 0.4 * saturation, 0.05);
+
   return {
-    surface: oklch(surfaceL, 0, hue),
-    "surface-soft": oklch(surfaceSoftL, 0, hue),
-    "surface-hover": oklch(surfaceHoverL, 0, hue),
+    surface: oklch(surfaceL, surfaceChroma, hue),
+    "surface-soft": oklch(surfaceSoftL, surfaceChroma, hue),
+    "surface-hover": oklch(surfaceHoverL, surfaceChroma, hue),
     "text-primary": oklch(textPrimaryL, 0, hue),
     "text-secondary": oklch(textSecondaryL, 0, hue),
     "text-muted": oklch(textMutedL, 0, hue),

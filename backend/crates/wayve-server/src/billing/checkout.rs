@@ -257,11 +257,25 @@ pub async fn create_inline_subscription(
     let client_reference = format!("{}:{}:{}", owner.kind(), owner_id(owner), plan_id);
 
     match provider::create_subscription(&customer_id, &price_id, &client_reference).await {
-        Ok(pending) => Ok(HttpResponse::Ok().json(serde_json::json!({
-            "subscription_id": pending.subscription_id,
-            "client_secret": pending.client_secret,
-            "publishable_key": provider::publishable_key(),
-        }))),
+        Ok(pending) => {
+            crate::audit::record_action(
+                pool.get_ref(),
+                &req,
+                crate::audit::AuditEvent {
+                    actor_user_id: user_id,
+                    action: "checkout_started",
+                    resource_type: "plan",
+                    resource_id: Some(data.plan_code.trim().to_string()),
+                    metadata: Some(serde_json::json!({ "flow": "inline" })),
+                },
+            )
+            .await;
+            Ok(HttpResponse::Ok().json(serde_json::json!({
+                "subscription_id": pending.subscription_id,
+                "client_secret": pending.client_secret,
+                "publishable_key": provider::publishable_key(),
+            })))
+        }
         Err(e) => {
             error!(target: "billing", error = ?e, "inline subscription create failed");
             Ok(HttpResponse::BadGateway()

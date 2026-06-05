@@ -77,6 +77,21 @@ pub async fn refresh_entitlements(pool: &PgPool, owner: BillingOwner) -> Result<
         None => (None, FREE_STORAGE_BYTES, 1, serde_json::json!({}), false),
     };
 
+    // Prior snapshot — so the audit row below fires only on a real grant
+    // change (plan or active flip), not on every renewal webhook.
+    let prior = sqlx::query_as::<_, (Option<String>, bool)>(
+        r#"
+        SELECT plan_code, active FROM entitlements
+         WHERE ($1::int IS NOT NULL AND user_id = $1)
+            OR ($2::int IS NOT NULL AND organization_id = $2)
+         LIMIT 1
+        "#,
+    )
+    .bind(owner.user_id())
+    .bind(owner.organization_id())
+    .fetch_optional(pool)
+    .await?;
+
     let updated = sqlx::query(
         r#"
         UPDATE entitlements
@@ -114,6 +129,34 @@ pub async fn refresh_entitlements(pool: &PgPool, owner: BillingOwner) -> Result<
         .bind(active)
         .execute(pool)
         .await?;
+    }
+
+    // Audit the grant only when it materially changed. A grant (active true) or
+    // revoke (active false) is a financial signal worth a permanent row.
+    let (prior_plan, prior_active) = prior.unwrap_or((None, false));
+    if prior_plan != plan_code || prior_active != active {
+        crate::audit::record_billing(
+            pool,
+            crate::audit::BillingAuditEvent {
+                actor_user_id: owner.user_id(),
+                organization_id: owner.organization_id(),
+                action: if active {
+                    "entitlement_grant"
+                } else {
+                    "entitlement_revoke"
+                },
+                resource_type: "entitlement",
+                resource_id: plan_code.clone(),
+                metadata: Some(serde_json::json!({
+                    "plan_code": plan_code,
+                    "previous_plan_code": prior_plan,
+                    "storage_limit_bytes": storage,
+                    "seat_limit": seats,
+                    "active": active,
+                })),
+            },
+        )
+        .await;
     }
 
     Ok(())

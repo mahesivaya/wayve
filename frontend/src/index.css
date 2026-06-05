@@ -106,9 +106,9 @@
   /* Component-local dark overrides reuse these so feature CSS files don't
      hardcode the surface palette inside their own [data-theme="dark"]
      blocks. */
-  --color-surface-darken: #14171f;
+  --color-surface-darken: #0a1730;
   --color-surface-darken-mid: #172033;
-  --color-border-dark: #2c313d;
+  --color-border-dark: #24385f;
   --color-surface-near-white: #fbfbff;
 
   /* Subtle background tints (forms, hover states, table stripes). */
@@ -246,8 +246,8 @@
   --color-brand-blue-marketing: #2f5acb;
 
   /* Dark marketing surfaces */
-  --color-surface-dark-hero: #0f1117;
-  --color-surface-dark-card: #1a1d26;
+  --color-surface-dark-hero: #081229;
+  --color-surface-dark-card: #0f1f3d;
   --color-surface-dark-card-strong: #24283a;
   --color-surface-dark-tinted: #1a2236;
   --color-surface-dark-divider: #1e2c3d;
@@ -460,29 +460,29 @@
 :root[data-theme="dark"] {
   --text: #cbd5e1;
   --text-h: #f3f4f6;
-  --bg: #0f1117;
-  --border: #2e303a;
-  --code-bg: #1f2028;
-  --accent: #c084fc;
-  --accent-bg: rgba(192, 132, 252, 0.15);
-  --accent-border: rgba(192, 132, 252, 0.5);
-  --social-bg: rgba(47, 48, 58, 0.5);
+  --bg: #081229;
+  --border: #24385f;
+  --code-bg: #0d1d3a;
+  --accent: #38bdf8;
+  --accent-bg: rgba(56, 189, 248, 0.15);
+  --accent-border: rgba(56, 189, 248, 0.5);
+  --social-bg: rgba(15, 31, 61, 0.5);
   --shadow:
     rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
 
-  --color-surface: #1a1d26;
+  --color-surface: #0f1f3d;
   /* See light-mode definition: always white, both modes. */
   --color-on-primary: #ffffff;
-  --color-surface-soft: #14171f;
-  --color-surface-hover: #232734;
+  --color-surface-soft: #0a1730;
+  --color-surface-hover: #17284c;
   --color-text-black: #f8fafc;
   --color-text-primary: #f1f5f9;
   --color-text-ink: #e2e8f0;
   --color-text-secondary: #cbd5e1;
   --color-text-slate: #9aa5b8;
   --color-text-muted: #7b8597;
-  --color-border: #2c313d;
-  --color-border-soft: #353b48;
+  --color-border: #24385f;
+  --color-border-soft: #2c4a78;
   --color-border-muted: #3a414f;
   --color-input-border: #3a414f;
   --color-input-border-strong: #525c70;
@@ -516,15 +516,16 @@
   --color-text-slate-medium: #a3aebf;
   --color-text-slate-soft: #6e788a;
 
-  /* Indigo accents — slightly brighter so they read on dark surfaces. */
-  --color-accent-indigo: #a78bfa;
-  --color-accent-indigo-strong: #8b5cf6;
-  --color-accent-indigo-deep: #6d5dd6;
-  --color-accent-indigo-darker: #4c3da3;
-  --color-accent-indigo-darkest: #322864;
-  --color-accent-blue-vivid: #60a5fa;
+  /* Accent cluster — retuned to the login blue/cyan so the whole app reads
+     as one navy-blue surface instead of indigo/purple. */
+  --color-accent-indigo: #60a5fa;
+  --color-accent-indigo-strong: #3b82f6;
+  --color-accent-indigo-deep: #2563eb;
+  --color-accent-indigo-darker: #1d4ed8;
+  --color-accent-indigo-darkest: #1e3a8a;
+  --color-accent-blue-vivid: #38bdf8;
   --color-accent-blue-deep: #1e40af;
-  --color-accent-indigo-soft: rgba(167, 139, 250, 0.16);
+  --color-accent-indigo-soft: rgba(96, 165, 250, 0.16);
 
   /* Round-3 token dark-mode counterparts. Values target readable contrast on
      the dark surface; literal hex stays for elements (deep dark surfaces,
@@ -543,13 +544,13 @@
   --color-danger-vivid: #f87171;
   --color-danger-strong-soft: #fca5a5;
 
-  --color-accent-purple: #c084fc;
-  --color-accent-purple-vivid: #a78bfa;
-  --color-accent-indigo-mid: #6366f1;
-  --color-accent-indigo-bridge: #4338ca;
-  --color-accent-indigo-pale: rgba(167, 139, 250, 0.16);
-  --color-accent-indigo-mist: rgba(167, 139, 250, 0.10);
-  --color-accent-indigo-mist-strong: rgba(167, 139, 250, 0.18);
+  --color-accent-purple: #38bdf8;
+  --color-accent-purple-vivid: #60a5fa;
+  --color-accent-indigo-mid: #3b82f6;
+  --color-accent-indigo-bridge: #2563eb;
+  --color-accent-indigo-pale: rgba(96, 165, 250, 0.16);
+  --color-accent-indigo-mist: rgba(96, 165, 250, 0.10);
+  --color-accent-indigo-mist-strong: rgba(96, 165, 250, 0.18);
 
   --color-text-slate-deep: #cbd5e1;
   --color-text-slate-deeper: #b1bccd;
@@ -558,28 +559,28 @@
   --color-text-slate-soft-mid: #7b8597;
   --color-text-slate-foggy: #6e788a;
 
-  --color-surface-darken: #14171f;
-  --color-surface-darken-mid: #172033;
-  --color-border-dark: #2c313d;
-  --color-surface-near-white: #1a1d26;
+  --color-surface-darken: #0a1730;
+  --color-surface-darken-mid: #112847;
+  --color-border-dark: #24385f;
+  --color-surface-near-white: #0f1f3d;
 
-  /* Subtle tints flip toward darker shades on the dark theme. */
-  --color-surface-tint: #1f2330;
-  --color-surface-tint-cool: #1c2030;
-  --color-surface-tint-blue: #182137;
-  --color-surface-tint-slate: #232a3a;
-  --color-surface-tint-steel: #232a3a;
-  --color-surface-tint-cloud: #1f2532;
+  /* Subtle tints flip toward darker navy shades on the dark theme. */
+  --color-surface-tint: #122847;
+  --color-surface-tint-cool: #101f3c;
+  --color-surface-tint-blue: #122b50;
+  --color-surface-tint-slate: #16294c;
+  --color-surface-tint-steel: #16294c;
+  --color-surface-tint-cloud: #112742;
 
   /* Dark surfaces — same intent in both themes (modals/overlays/heros that
      stay dark regardless of theme), so keep the literal dark values. */
   --color-surface-deep: #0f172a;
   --color-surface-deepest: #0B1220;
   --color-surface-deep-navy: #0d1b2a;
-  --color-email-bg: #14171f;
-  --color-email-list-bg: #1a1d26;
-  --color-email-control-bg: #232734;
-  --color-email-resizer-hover: #353b48;
+  --color-email-bg: #0a1730;
+  --color-email-list-bg: #0f1f3d;
+  --color-email-control-bg: #17284c;
+  --color-email-resizer-hover: #2c4a78;
   --color-overlay-soft: rgba(20, 23, 31, 0.55);
   --color-overlay-strong: rgba(20, 23, 31, 0.65);
   --color-overlay-border: rgba(255, 255, 255, 0.08);
@@ -599,33 +600,34 @@
      identity, not theme.
      ============================================================ */
 
-  /* Brand purple cluster (soft backgrounds need to invert) */
-  --color-brand-purple-soft: rgba(81, 64, 215, 0.18);
-  --color-brand-purple-soft-mid: rgba(81, 64, 215, 0.22);
-  --color-brand-purple-soft-strong: rgba(81, 64, 215, 0.32);
-  --color-brand-purple-pale: rgba(105, 72, 239, 0.15);
-  --color-brand-purple-pale-strong: rgba(105, 72, 239, 0.25);
-  --color-brand-purple-text-pale: rgba(120, 100, 230, 0.18);
-  --color-brand-purple-text-mid: #b8a8ff;
+  /* Brand "purple" cluster — retuned to blue so soft brand backgrounds
+     read as navy-blue tints. */
+  --color-brand-purple-soft: rgba(37, 99, 235, 0.18);
+  --color-brand-purple-soft-mid: rgba(37, 99, 235, 0.22);
+  --color-brand-purple-soft-strong: rgba(37, 99, 235, 0.32);
+  --color-brand-purple-pale: rgba(56, 189, 248, 0.15);
+  --color-brand-purple-pale-strong: rgba(56, 189, 248, 0.25);
+  --color-brand-purple-text-pale: rgba(96, 165, 250, 0.18);
+  --color-brand-purple-text-mid: #93c5fd;
 
-  /* Cool gray surfaces — darken */
-  --color-surface-cool-pale: #1c2030;
-  --color-surface-cool-light: #1a1e2c;
-  --color-surface-cool-faint: #1c2030;
-  --color-surface-cool-mist: #1f2738;
-  --color-surface-cool-haze: #1e2331;
-  --color-surface-cool-blue: #2a3344;
-  --color-surface-cool-blue-light: #1f2a3d;
-  --color-surface-cool-blue-mist: #1c2a36;
-  --color-surface-cool-blue-pale: #1a2530;
-  --color-surface-cool-blue-mid: #1e2533;
+  /* Cool navy surfaces */
+  --color-surface-cool-pale: #101f3c;
+  --color-surface-cool-light: #0f1d3a;
+  --color-surface-cool-faint: #101f3c;
+  --color-surface-cool-mist: #122847;
+  --color-surface-cool-haze: #112440;
+  --color-surface-cool-blue: #1a3056;
+  --color-surface-cool-blue-light: #14264a;
+  --color-surface-cool-blue-mist: #122847;
+  --color-surface-cool-blue-pale: #101f3c;
+  --color-surface-cool-blue-mid: #142a4e;
 
   /* Cool dividers */
-  --color-divider-cool: #2c313d;
-  --color-divider-cool-light: #2c313d;
-  --color-divider-cool-soft: #2c313d;
-  --color-divider-cool-strong: #2c313d;
-  --color-divider-marketing: #2c313d;
+  --color-divider-cool: #24385f;
+  --color-divider-cool-light: #24385f;
+  --color-divider-cool-soft: #24385f;
+  --color-divider-cool-strong: #24385f;
+  --color-divider-marketing: #24385f;
 
   /* Cool text steps */
   --color-text-cool-strong: #cbd5e1;
@@ -643,11 +645,11 @@
   --color-text-generic-mid: #9aa5b8;
   --color-text-generic-light: #7b8597;
   --color-text-generic-mute: #7b8597;
-  --color-border-generic: #2c313d;
-  --color-border-generic-light: #2c313d;
-  --color-surface-generic-pale: #1a1d26;
-  --color-surface-generic-faint: #1a1d26;
-  --color-surface-generic-mid: #232734;
+  --color-border-generic: #24385f;
+  --color-border-generic-light: #24385f;
+  --color-surface-generic-pale: #0f1f3d;
+  --color-surface-generic-faint: #0f1f3d;
+  --color-surface-generic-mid: #17284c;
 
   /* Status chips — keep readable in dark mode */
   --color-status-open-bg: rgba(45, 111, 28, 0.25);
@@ -666,16 +668,24 @@
   --color-info-text-medium: #8fa1d6;
   --color-danger-soft-border: rgba(241, 197, 199, 0.3);
 
-  /* Admin badge cluster */
-  --color-admin-badge-bg: rgba(76, 29, 149, 0.32);
-  --color-admin-badge-text: #c4b5fd;
-  --color-admin-badge-border: rgba(124, 58, 237, 0.4);
+  /* Brand gradient stops — flip indigo→purple to blue→cyan so heroes and
+     primary CTAs read as the same navy-blue family as the login page. */
+  --color-brand-indigo-from: #2563eb;
+  --color-brand-indigo-to: #38bdf8;
+  --color-brand-indigo-hover: #1d4ed8;
+  --color-brand-indigo-deep: #0c1c46;
+  --color-brand-indigo-deep-hover: #122a63;
+
+  /* Admin badge cluster — blue to match the navy theme. */
+  --color-admin-badge-bg: rgba(29, 78, 216, 0.32);
+  --color-admin-badge-text: #bfdbfe;
+  --color-admin-badge-border: rgba(37, 99, 235, 0.4);
 
   /* Misc */
-  --color-billing-empty: #4a5568;
-  --color-billing-empty-strong: #5a6478;
-  --color-surface-cool-divider: #2c313d;
-  --color-surface-cool-pale-bordered: #2c313d;
+  --color-billing-empty: #45597d;
+  --color-billing-empty-strong: #56698c;
+  --color-surface-cool-divider: #24385f;
+  --color-surface-cool-pale-bordered: #24385f;
 }
 
 .u-page-shell {

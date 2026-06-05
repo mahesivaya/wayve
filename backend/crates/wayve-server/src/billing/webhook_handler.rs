@@ -226,6 +226,23 @@ async fn handle_checkout_completed(pool: &PgPool, object: &Value) -> Result<()> 
     refresh_entitlements(pool, owner).await?;
     invalidate_owner_caches(pool, owner).await;
 
+    crate::audit::record_billing(
+        pool,
+        crate::audit::BillingAuditEvent {
+            actor_user_id: owner.user_id(),
+            organization_id: owner.organization_id(),
+            action: "subscription_activated",
+            resource_type: "subscription",
+            resource_id: Some(sub_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "plan_id": plan_id,
+                "status": "active",
+                "stripe_customer_id": customer,
+            })),
+        },
+    )
+    .await;
+
     append_billing_event(serde_json::json!({
         "ts": chrono::Utc::now().to_rfc3339(),
         "event": "subscribed",
@@ -286,6 +303,31 @@ async fn handle_subscription_event(pool: &PgPool, event_type: &str, object: &Val
     if let Some(owner) = subscription_owner(pool, sub_id).await? {
         refresh_entitlements(pool, owner).await?;
         invalidate_owner_caches(pool, owner).await;
+
+        // Stripe ending the subscription is a distinct fact from the user
+        // requesting cancel-at-period-end (audited at the API in
+        // subscriptions.rs); record both under their own action names.
+        let action = if status == "canceled" {
+            "subscription_canceled"
+        } else {
+            "subscription_updated"
+        };
+        crate::audit::record_billing(
+            pool,
+            crate::audit::BillingAuditEvent {
+                actor_user_id: owner.user_id(),
+                organization_id: owner.organization_id(),
+                action,
+                resource_type: "subscription",
+                resource_id: Some(sub_id.to_string()),
+                metadata: Some(serde_json::json!({
+                    "status": status,
+                    "cancel_at_period_end": cancel,
+                })),
+            },
+        )
+        .await;
+
         append_billing_event(serde_json::json!({
             "ts": chrono::Utc::now().to_rfc3339(),
             "event": "upgraded",

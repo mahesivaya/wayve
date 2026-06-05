@@ -23,10 +23,9 @@
 
     <!--
       Pre-paint theme bootstrap. Runs synchronously before React mounts so
-      the page never flashes. Light is the default for every visitor —
-      OS dark preference is intentionally ignored. Dark mode only happens
-      when the user explicitly clicks the toggle (which persists
-      `wayve-theme=dark` in localStorage).
+      the page never flashes. The navy dark theme is the default for every
+      visitor; light mode only happens when the user explicitly toggles it
+      (which persists `wayve-theme=light` in localStorage).
     -->
     <script>
       (function () {
@@ -35,11 +34,11 @@
           saved = localStorage.getItem("wayve-theme");
         } catch (e) {
           /* Storage may be blocked (Safari private mode) — that's fine,
-             we just fall back to the light default. */
+             we just fall back to the dark default. */
         }
         document.documentElement.setAttribute(
           "data-theme",
-          saved === "dark" ? "dark" : "light"
+          saved === "light" ? "light" : "dark"
         );
       })();
     </script>

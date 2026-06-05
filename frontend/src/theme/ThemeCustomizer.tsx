@@ -19,6 +19,21 @@ import "./themeCustomizer.css";
 
 type Tab = "presets" | "custom";
 
+// Macro-style quick background swatches. One click sets the page background
+// (and matching accents) to a curated color + mode — no grid, no hex typing.
+// Each entry runs through the same generator as everything else, so the dot
+// preview is exactly the background you'll get.
+const BACKGROUNDS: { id: string; label: string; mode: ThemeMode; input: PaletteInput }[] = [
+  { id: "bg-navy", label: "Navy", mode: "dark", input: { ...DEFAULT_INPUT, hue: 230, chroma: 0.16 } },
+  { id: "bg-slate", label: "Slate", mode: "dark", input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.05 } },
+  { id: "bg-black", label: "Ink", mode: "dark", input: { ...DEFAULT_INPUT, hue: 250, chroma: 0, depth: 0.04 } },
+  { id: "bg-forest", label: "Forest", mode: "dark", input: { ...DEFAULT_INPUT, hue: 155, chroma: 0.14 } },
+  { id: "bg-plum", label: "Plum", mode: "dark", input: { ...DEFAULT_INPUT, hue: 300, chroma: 0.15 } },
+  { id: "bg-light", label: "Light", mode: "light", input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.12 } },
+  { id: "bg-cream", label: "Cream", mode: "light", input: { ...DEFAULT_INPUT, hue: 75, chroma: 0.12 } },
+  { id: "bg-rose", label: "Rose", mode: "light", input: { ...DEFAULT_INPUT, hue: 350, chroma: 0.12 } },
+];
+
 // Swatch shown on each preset card — uses the same generator the rest of the
 // app uses so the preview matches what the user will see after picking it.
 function PresetSwatch({ preset }: { preset: ThemePreset }) {
@@ -126,6 +141,34 @@ export default function ThemeCustomizer() {
         >
           Reset
         </button>
+      </div>
+
+      <div className="theme-bg-quick" role="group" aria-label="Background color">
+        <span className="theme-bg-quick-label">Background</span>
+        <div className="theme-bg-swatches">
+          {BACKGROUNDS.map((bg) => {
+            const surface = generatePalette(bg.input, bg.mode).surface;
+            const active =
+              choice.kind === "custom" &&
+              choice.mode === bg.mode &&
+              choice.input.hue === bg.input.hue &&
+              choice.input.chroma === bg.input.chroma;
+            return (
+              <button
+                key={bg.id}
+                type="button"
+                className={`theme-bg-swatch ${active ? "active" : ""}`}
+                style={{ background: surface }}
+                title={bg.label}
+                aria-label={`${bg.label} background`}
+                aria-pressed={active}
+                onClick={() =>
+                  setChoice({ kind: "custom", mode: bg.mode, input: bg.input })
+                }
+              />
+            );
+          })}
+        </div>
       </div>
 
       {tab === "presets" && (
