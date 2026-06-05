@@ -239,6 +239,27 @@
   color: var(--color-accent-indigo-deep);
 }
 
+/* Registration-type badges (auth_provider). */
+.pt-pill.provider-google {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+.pt-pill.provider-microsoft {
+  background: var(--color-accent-indigo-soft);
+  color: var(--color-accent-indigo-deep);
+}
+.pt-pill.provider-local {
+  background: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.pt-reg-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .pt-empty {
   padding: 20px;
   text-align: center;
