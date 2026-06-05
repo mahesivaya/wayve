@@ -98,6 +98,20 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Stripe posts subscription/invoice events here. The backend mounts the
+        # webhook at the ROOT (`/billing/webhook`, not under `/api`), so it needs
+        # its own proxy rule. EXACT match only — `/billing` (no /webhook) is a
+        # frontend SPA route, so we must not blanket-proxy `/billing/` to the
+        # backend or the Billing page would 404.
+        location = /billing/webhook {
+            proxy_pass http://backend:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_redirect off;
+        }
+
         # Long-cache the Vite-built bundles. Filenames in /assets/ are
         # content-hashed (e.g. `/assets/index.abc123.js`) so any content
         # change produces a new URL — `immutable` lets browsers skip

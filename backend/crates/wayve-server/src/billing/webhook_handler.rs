@@ -20,13 +20,12 @@ async fn invalidate_owner_caches(pool: &PgPool, owner: BillingOwner) {
             invalidate_profile_cache(uid).await;
         }
         BillingOwner::Organization(org_id) => {
-            let members = sqlx::query_scalar::<_, i32>(
-                "SELECT id FROM users WHERE organization_id = $1",
-            )
-            .bind(org_id)
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default();
+            let members =
+                sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE organization_id = $1")
+                    .bind(org_id)
+                    .fetch_all(pool)
+                    .await
+                    .unwrap_or_default();
             for uid in members {
                 invalidate_me_cache(uid).await;
                 invalidate_profile_cache(uid).await;
@@ -297,8 +296,54 @@ async fn handle_subscription_event(pool: &PgPool, event_type: &str, object: &Val
     .execute(pool)
     .await?;
 
+    // The inline subscribe flow (POST /billing/subscriptions) never inserts a
+    // local row — only hosted checkout does, via checkout.session.completed,
+    // which does not fire for in-page PaymentIntent confirmation. So for inline
+    // subscriptions the very first signal we get is this
+    // customer.subscription.created/updated event. When the UPDATE above
+    // matched nothing, insert the row now, recovering owner + plan from the
+    // metadata we stamped in provider::create_subscription.
     if updated.rows_affected() == 0 {
-        return Ok(());
+        let reference = object
+            .pointer("/metadata/client_reference")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let customer = object.get("customer").and_then(Value::as_str);
+        let Some((owner, plan_id)) = parse_reference(reference) else {
+            warn!(
+                target: "billing",
+                sub_id,
+                "subscription event for unknown subscription with no usable client_reference; ignoring"
+            );
+            return Ok(());
+        };
+        sqlx::query(
+            r#"
+            INSERT INTO subscriptions
+                (user_id, organization_id, plan_id, stripe_subscription_id,
+                 stripe_customer_id, status, current_period_end, cancel_at_period_end)
+            VALUES ($1, $2, $3, $4, $5, $6,
+                CASE WHEN $7::bigint IS NULL THEN NULL ELSE to_timestamp($7::double precision) END,
+                $8)
+            ON CONFLICT (stripe_subscription_id) DO UPDATE SET
+                status = EXCLUDED.status,
+                plan_id = EXCLUDED.plan_id,
+                stripe_customer_id = EXCLUDED.stripe_customer_id,
+                current_period_end = EXCLUDED.current_period_end,
+                cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+                updated_at = NOW()
+            "#,
+        )
+        .bind(owner.user_id())
+        .bind(owner.organization_id())
+        .bind(plan_id)
+        .bind(sub_id)
+        .bind(customer)
+        .bind(&status)
+        .bind(period_end)
+        .bind(cancel)
+        .execute(pool)
+        .await?;
     }
     if let Some(owner) = subscription_owner(pool, sub_id).await? {
         refresh_entitlements(pool, owner).await?;
