@@ -4,16 +4,16 @@ use crate::email::sender::send_mail;
 use crate::models::auth::{
     ForgotInput, LoginInput, LoginResponse, MemberLoginWrap, RegisterInput, ResetInput,
 };
-use crate::organization;
 use crate::models::message::MessageResponse;
 use crate::models::user::User;
+use crate::organization;
+use rand::RngCore;
+use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::{
     auth_cookie, create_jwt, create_jwt_for_account_with_max_exp, expired_auth_cookie,
     get_user_id_from_request,
 };
 use wayve_security::password::{hash_password, verify_password};
-use rand::RngCore;
-use tracing::{error, info, instrument, warn};
 
 const RESET_TTL_MINUTES: i64 = 30;
 const DUMMY_PASSWORD_HASH: &str = "$2b$12$BeUHqArduWoNmhYKnepJYeYTQdhF/XcdcGFHaxiz0/H3JJUbHyLGe";
@@ -64,7 +64,7 @@ pub async fn register(
     match result {
         Ok(row) => {
             let user_id: i32 = row.get("id");
-            info!("User registered: {}", data.email);
+            info!(target: "auth", user_id, email = %data.email, provider = "local", "user registered via local account");
             let token = create_jwt(user_id, data.email.clone());
             // Registration auto-logs-in (sets the auth cookie), so record a
             // login event — otherwise a sign-up followed by a sign-out shows an
@@ -486,9 +486,8 @@ pub async fn recover_with_mnemonic(
         Some(r) => r,
         None => {
             warn!(target: "auth", "recover-with-mnemonic: user not found");
-            return Ok(HttpResponse::BadRequest().json(
-                serde_json::json!({ "message": "Invalid email or recovery phrase" }),
-            ));
+            return Ok(HttpResponse::BadRequest()
+                .json(serde_json::json!({ "message": "Invalid email or recovery phrase" })));
         }
     };
 
@@ -524,12 +523,7 @@ pub async fn recover_with_mnemonic(
         }
     };
     let mut key_bytes = [0u8; 32];
-    pbkdf2::pbkdf2_hmac::<sha2::Sha256>(
-        &entropy,
-        PBKDF2_SALT,
-        PBKDF2_ITERATIONS,
-        &mut key_bytes,
-    );
+    pbkdf2::pbkdf2_hmac::<sha2::Sha256>(&entropy, PBKDF2_SALT, PBKDF2_ITERATIONS, &mut key_bytes);
 
     // Try AES-GCM decrypt. Auth-tag mismatch == wrong mnemonic; no other
     // failure mode produces a successful decrypt with a wrong key.
@@ -552,13 +546,7 @@ pub async fn recover_with_mnemonic(
 
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
     let nonce = Nonce::from_slice(&iv);
-    let decrypt_result = cipher.decrypt(
-        nonce,
-        Payload {
-            msg: &ct,
-            aad: &[],
-        },
-    );
+    let decrypt_result = cipher.decrypt(nonce, Payload { msg: &ct, aad: &[] });
     if decrypt_result.is_err() {
         warn!(
             target: "auth",

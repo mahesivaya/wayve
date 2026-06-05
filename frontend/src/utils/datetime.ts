@@ -70,6 +70,29 @@ export function fmtTime(input: string | number | Date | null | undefined): strin
   }).format(d);
 }
 
+// Inbox-row timestamp: show the time (e.g. "7:48 PM") for messages within
+// the last 24 hours, and a short date for anything older (e.g. "Jun 3", or
+// "Jun 3, 2024" when the year differs from now). Mirrors how mail clients
+// keep recent rows precise while older rows stay compact.
+export function fmtListTimestamp(input: string | number | Date | null | undefined): string {
+  const d = toDate(input);
+  if (!d) return FALLBACK;
+  const now = new Date();
+  const withinDay = now.getTime() - d.getTime() < 24 * 60 * 60 * 1000;
+  if (withinDay) {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  }).format(d);
+}
+
 export function fmtLongDate(input: string | number | Date | null | undefined): string {
   const d = toDate(input);
   if (!d) return FALLBACK;

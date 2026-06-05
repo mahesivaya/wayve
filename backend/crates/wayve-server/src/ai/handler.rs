@@ -1,7 +1,7 @@
 use crate::email::oauth::HTTP_CLIENT;
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
 use tracing::{error, info, instrument, warn};
+use wayve_security::jwt::get_user_id_from_request;
 
 #[derive(Deserialize)]
 pub struct ChatTurn {

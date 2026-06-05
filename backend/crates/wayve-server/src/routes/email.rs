@@ -92,14 +92,9 @@ pub async fn get_emails(
             // the cache in the background so the next click stays fast.
             let pool_clone = pool.get_ref().clone();
             tokio::spawn(async move {
-                if let Err(e) = sync_older_page(
-                    &pool_clone,
-                    user_id,
-                    account_id,
-                    before_secs,
-                    query_limit,
-                )
-                .await
+                if let Err(e) =
+                    sync_older_page(&pool_clone, user_id, account_id, before_secs, query_limit)
+                        .await
                 {
                     warn!(target: "gmail", user_id, error = ?e, "background older email sync failed");
                 }
@@ -166,12 +161,17 @@ pub async fn delete_email(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let email_id = path.id;
+    // LEFT JOIN so account-less Fluxze-native rows (Wayve-to-Wayve messages:
+    // NULL account_id, source='wayve') still match — authorized via the
+    // source/recipient clause, mirroring repo::get_detail.
     let row = match sqlx::query(
         r#"
-        SELECT e.gmail_id, a.id AS account_id, a.refresh_token, a.provider
+        SELECT e.gmail_id, e.source, e.account_id, a.refresh_token, a.provider
         FROM emails e
-        JOIN email_accounts a ON e.account_id = a.id
-        WHERE e.id = $1 AND a.user_id = $2
+        LEFT JOIN email_accounts a ON e.account_id = a.id
+        WHERE e.id = $1
+          AND (a.user_id = $2
+               OR (e.source = 'wayve' AND e.recipient_user_id = $2))
         "#,
     )
     .bind(email_id)
@@ -186,6 +186,19 @@ pub async fn delete_email(
             })));
         }
     };
+
+    // Fluxze-native messages have no provider copy to delete remotely — the
+    // synthetic gmail_id isn't a real Gmail/Graph id. Just drop this user's
+    // local row (each recipient + the sender's Sent copy is its own row).
+    let source: Option<String> = row.try_get("source").ok().flatten();
+    let account_id_opt: Option<i32> = row.try_get("account_id").ok().flatten();
+    if account_id_opt.is_none() || source.as_deref() == Some("wayve") {
+        sqlx::query("DELETE FROM emails WHERE id = $1")
+            .bind(email_id)
+            .execute(pool.get_ref())
+            .await?;
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })));
+    }
 
     let gmail_id: String = row.get("gmail_id");
     let account_id: i32 = row.get("account_id");

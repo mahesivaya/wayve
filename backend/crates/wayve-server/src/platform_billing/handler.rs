@@ -4,13 +4,13 @@
 // or org-scope user who happens to hold a billing role for their own tenant
 // must not see other tenants' revenue.
 
-use crate::prelude::*;
 use crate::billing::provider as stripe;
-use wayve_security::rbac::{Permission, RoleContext, Scope, require_permission};
+use crate::prelude::*;
 use actix_web::{delete, patch, put};
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::Row;
 use tracing::instrument;
+use wayve_security::rbac::{Permission, RoleContext, Scope, require_permission};
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(get_overview)
@@ -364,12 +364,66 @@ fn sample_history() -> Vec<Value> {
         })
     };
     vec![
-        row("2026-06-01T09:14:00Z", "payment", Some("owner@acme.com"), Some("Acme"), "Organization", "organization", 1000, "paid"),
-        row("2026-05-28T16:02:00Z", "upgraded", Some("alice@personal.test"), None, "Advance", "advance_user", 700, "active"),
-        row("2026-05-20T11:31:00Z", "payment", Some("alice@personal.test"), None, "Advance", "advance_user", 700, "paid"),
-        row("2026-05-12T08:45:00Z", "upgraded", Some("owner@acme.com"), Some("Acme"), "Organization", "organization", 1000, "active"),
-        row("2026-05-03T13:20:00Z", "subscribed", Some("bob@personal.test"), None, "Basic", "basic_user", 0, "active"),
-        row("2026-05-01T00:05:00Z", "payment", Some("owner@acme.com"), Some("Acme"), "Organization", "organization", 1000, "paid"),
+        row(
+            "2026-06-01T09:14:00Z",
+            "payment",
+            Some("owner@acme.com"),
+            Some("Acme"),
+            "Organization",
+            "organization",
+            1000,
+            "paid",
+        ),
+        row(
+            "2026-05-28T16:02:00Z",
+            "upgraded",
+            Some("alice@personal.test"),
+            None,
+            "Advance",
+            "advance_user",
+            700,
+            "active",
+        ),
+        row(
+            "2026-05-20T11:31:00Z",
+            "payment",
+            Some("alice@personal.test"),
+            None,
+            "Advance",
+            "advance_user",
+            700,
+            "paid",
+        ),
+        row(
+            "2026-05-12T08:45:00Z",
+            "upgraded",
+            Some("owner@acme.com"),
+            Some("Acme"),
+            "Organization",
+            "organization",
+            1000,
+            "active",
+        ),
+        row(
+            "2026-05-03T13:20:00Z",
+            "subscribed",
+            Some("bob@personal.test"),
+            None,
+            "Basic",
+            "basic_user",
+            0,
+            "active",
+        ),
+        row(
+            "2026-05-01T00:05:00Z",
+            "payment",
+            Some("owner@acme.com"),
+            Some("Acme"),
+            "Organization",
+            "organization",
+            1000,
+            "paid",
+        ),
     ]
 }
 
@@ -695,7 +749,8 @@ pub async fn delete_employee(
         Ok(_) => Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true }))),
         Err(sqlx::Error::Database(db_err)) if db_err.constraint().is_some() => {
             Err(AppError::BadRequest(
-                "Cannot delete employee with payroll history — set status to 'terminated' instead".into(),
+                "Cannot delete employee with payroll history — set status to 'terminated' instead"
+                    .into(),
             ))
         }
         Err(e) => Err(AppError::Db(e)),
@@ -979,8 +1034,8 @@ pub async fn get_stripe_snapshot(req: HttpRequest, pool: web::Data<PgPool>) -> A
     let balance = balance_res.map_err(|e| AppError::Internal(format!("stripe balance: {e}")))?;
     let payouts = payouts_res.map_err(|e| AppError::Internal(format!("stripe payouts: {e}")))?;
     let charges = charges_res.map_err(|e| AppError::Internal(format!("stripe charges: {e}")))?;
-    let txns = txns_res
-        .map_err(|e| AppError::Internal(format!("stripe balance_transactions: {e}")))?;
+    let txns =
+        txns_res.map_err(|e| AppError::Internal(format!("stripe balance_transactions: {e}")))?;
 
     let pending = balance
         .get("pending")

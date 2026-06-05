@@ -3,9 +3,7 @@ mod tests {
     use chrono::{DateTime, TimeZone, Utc};
 
     use crate::models::scheduler::CreateMeeting;
-    use crate::scheduler::create_meeting::{
-        CreateMeetingValidationError, validate_create_meeting,
-    };
+    use crate::scheduler::create_meeting::{CreateMeetingValidationError, validate_create_meeting};
 
     fn now() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 5, 26, 12, 0, 0)
@@ -87,8 +85,8 @@ mod tests {
     fn missing_tz_falls_back_to_utc() {
         let mut raw = base();
         raw.tz = None;
-        let ok =
-            validate_create_meeting(&raw, now()).unwrap_or_else(|err| panic!("expected Ok: {err:?}"));
+        let ok = validate_create_meeting(&raw, now())
+            .unwrap_or_else(|err| panic!("expected Ok: {err:?}"));
         assert_eq!(
             ok.meeting_utc,
             Utc.with_ymd_and_hms(2026, 5, 27, 9, 0, 0)
@@ -135,7 +133,10 @@ mod tests {
             "".into(),
         ];
         let ok = validate_create_meeting(&raw, now()).unwrap_or_else(|err| panic!("Ok: {err:?}"));
-        assert_eq!(ok.participants, vec!["alice@example.com", "bob@example.org"]);
+        assert_eq!(
+            ok.participants,
+            vec!["alice@example.com", "bob@example.org"]
+        );
     }
 
     #[test]

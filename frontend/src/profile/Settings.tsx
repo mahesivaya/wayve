@@ -4,7 +4,12 @@ import { useNavigate } from "react-router-dom";
 import "./profile.css";
 
 import { deleteAccount, getAccounts } from "../api/email";
-import { getSubscription, type SubscriptionResponse } from "../api/billing";
+import {
+  getSubscription,
+  listInvoices,
+  type SubscriptionResponse,
+  type Invoice,
+} from "../api/billing";
 import { getProfile, type ProfileData } from "../api/profile";
 import { deleteMyAccount, deleteMyOrganization } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
@@ -32,6 +37,13 @@ function formatBytes(bytes: number): string {
   return `${(bytes / BYTES_IN_GB).toFixed(2)} GB`;
 }
 
+function formatMoney(cents: number, currency: string): string {
+  return (cents / 100).toLocaleString(undefined, {
+    style: "currency",
+    currency: (currency || "usd").toUpperCase(),
+  });
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   const { user, refresh, logout } = useAuth();
@@ -49,6 +61,9 @@ export default function Settings() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [ticketsLoaded, setTicketsLoaded] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+  const [invoicesError, setInvoicesError] = useState(false);
 
   // Only the org owner can tear the org back down. Mirrors the backend
   // gate so the danger-zone card simply doesn't render for admins,
@@ -145,10 +160,24 @@ export default function Settings() {
     }
   }, []);
 
+  const loadInvoices = useCallback(async () => {
+    try {
+      const rows = await listInvoices();
+      setInvoices(rows);
+      setInvoicesError(false);
+    } catch {
+      // Best effort — the card surfaces a small "couldn't load" note.
+      setInvoicesError(true);
+    } finally {
+      setInvoicesLoaded(true);
+    }
+  }, []);
+
   useEffect(() => {
     void loadData();
     void loadTickets();
-  }, [loadData, loadTickets]);
+    void loadInvoices();
+  }, [loadData, loadTickets, loadInvoices]);
 
   const remove = async (id: number, email: string) => {
     if (!confirm(`Disconnect ${email}? Synced messages will be removed.`)) {
@@ -260,6 +289,53 @@ export default function Settings() {
             </div>
           </section>
         )}
+
+        <section className="settings-card">
+          <h2 className="settings-card-title">Transaction history</h2>
+          {!invoicesLoaded ? (
+            <p className="settings-loading-text">Loading transactions…</p>
+          ) : invoicesError ? (
+            <p className="settings-support-empty">Couldn't load your transactions. Try again later.</p>
+          ) : invoices.length === 0 ? (
+            <p className="settings-support-empty">
+              No transactions yet. Charges and invoices will appear here once you upgrade to a paid plan.
+            </p>
+          ) : (
+            <ul className="settings-txn-list">
+              {invoices.map((inv) => {
+                const link = inv.hosted_invoice_url ?? inv.invoice_pdf;
+                return (
+                  <li key={inv.id} className="settings-txn-row">
+                    <div className="settings-txn-main">
+                      <span className="settings-txn-amount">
+                        {formatMoney(inv.amount_due_cents, inv.currency)}
+                      </span>
+                      <span className="settings-txn-meta">
+                        {fmtDate(inv.created_at)}
+                        {link && (
+                          <>
+                            {" · "}
+                            <a
+                              href={link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="settings-link-button"
+                            >
+                              View invoice
+                            </a>
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    <span className={`settings-txn-status status-${inv.status}`}>
+                      {inv.status}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
 
         <section className="settings-card">
           <div className="settings-support-head">

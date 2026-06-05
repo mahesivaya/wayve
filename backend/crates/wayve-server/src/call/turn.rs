@@ -12,11 +12,11 @@
 //! permissive NATs).
 
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
 use serde_json::Value;
 use std::env;
 use std::time::Duration;
 use tracing::{instrument, warn};
+use wayve_security::jwt::get_user_id_from_request;
 
 const CLOUDFLARE_TURN_ENDPOINT: &str = "https://rtc.live.cloudflare.com/v1/turn/keys";
 
@@ -44,8 +44,12 @@ pub async fn turn_credentials(req: HttpRequest) -> AppResult {
     // must not be mintable by an unauthenticated client.
     let _user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let key_id = env::var("CLOUDFLARE_TURN_KEY_ID").ok().filter(|s| !s.is_empty());
-    let token = env::var("CLOUDFLARE_TURN_API_TOKEN").ok().filter(|s| !s.is_empty());
+    let key_id = env::var("CLOUDFLARE_TURN_KEY_ID")
+        .ok()
+        .filter(|s| !s.is_empty());
+    let token = env::var("CLOUDFLARE_TURN_API_TOKEN")
+        .ok()
+        .filter(|s| !s.is_empty());
 
     let (Some(key_id), Some(token)) = (key_id, token) else {
         // Unconfigured: return 503 so the frontend's STUN-only fallback kicks

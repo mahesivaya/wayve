@@ -4,9 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::{
-    EnvFilter, Layer, fmt, layer::SubscriberExt, util::SubscriberInitExt,
-};
+use tracing_subscriber::{EnvFilter, Layer, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 // Curated default filter for the human-readable stdout layer: show everything
 // at DEBUG except the chatty framework targets (TLS handshakes, connection
@@ -196,7 +194,12 @@ pub fn init_tracing() {
     // forced on/off anywhere with RWAYVE_LOG_STDOUT=1 / =0.
     let stdout_enabled = std::env::var("RWAYVE_LOG_STDOUT")
         .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or_else(|| {
             std::env::var("RWAYVE_ENV")
                 .map(|env| env.eq_ignore_ascii_case("development"))

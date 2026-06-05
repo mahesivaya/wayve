@@ -540,10 +540,7 @@ pub async fn require_permission(
 /// or organization scope. Stricter than any single permission: even roles that
 /// hold the relevant permission (super_admin, security, …) are rejected, and
 /// personal accounts are excluded. Used to lock the audit views to owners only.
-pub async fn require_owner(
-    req: &HttpRequest,
-    pool: &PgPool,
-) -> Result<RoleContext, HttpResponse> {
+pub async fn require_owner(req: &HttpRequest, pool: &PgPool) -> Result<RoleContext, HttpResponse> {
     let user_id = get_user_id_from_request(req).ok_or_else(|| {
         HttpResponse::Unauthorized()
             .json(serde_json::json!({ "message": "Authentication required" }))
@@ -640,8 +637,7 @@ mod tests {
     #[test]
     fn super_admin_is_owner_minus_billing() {
         for perm in Permission::ALL {
-            let expected =
-                !matches!(perm, BillingManage | BillingRead | OrgKeysBootstrap);
+            let expected = !matches!(perm, BillingManage | BillingRead | OrgKeysBootstrap);
             assert_eq!(
                 role_has(Role::SuperAdmin, perm),
                 expected,

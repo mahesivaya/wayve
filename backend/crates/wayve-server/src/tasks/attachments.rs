@@ -31,11 +31,12 @@ fn row_to_attachment(row: sqlx::postgres::PgRow) -> TaskAttachment {
 }
 
 async fn task_belongs_to_user(pool: &PgPool, task_id: i32, user_id: i32) -> sqlx::Result<bool> {
-    let owns: Option<i32> = sqlx::query_scalar("SELECT id FROM tasks WHERE id = $1 AND user_id = $2")
-        .bind(task_id)
-        .bind(user_id)
-        .fetch_optional(pool)
-        .await?;
+    let owns: Option<i32> =
+        sqlx::query_scalar("SELECT id FROM tasks WHERE id = $1 AND user_id = $2")
+            .bind(task_id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
     Ok(owns.is_some())
 }
 
@@ -167,11 +168,7 @@ pub async fn list_attachments(
     .fetch_all(pool.get_ref())
     .await?;
 
-    Ok(HttpResponse::Ok().json(
-        rows.into_iter()
-            .map(row_to_attachment)
-            .collect::<Vec<_>>(),
-    ))
+    Ok(HttpResponse::Ok().json(rows.into_iter().map(row_to_attachment).collect::<Vec<_>>()))
 }
 
 #[get("/task-attachments/{id}/download")]

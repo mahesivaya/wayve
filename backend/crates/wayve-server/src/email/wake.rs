@@ -35,8 +35,7 @@ pub async fn wake_user_accounts(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
     // Reuse the existing per-user account loader — it already pulls
     // every active mailbox the caller owns (Gmail + Outlook + future
     // providers) without leaking other tenants.
-    let accounts =
-        load_user_email_accounts_for_older_sync(pool.get_ref(), user_id, None).await?;
+    let accounts = load_user_email_accounts_for_older_sync(pool.get_ref(), user_id, None).await?;
     if accounts.is_empty() {
         return Ok(HttpResponse::NoContent().finish());
     }

@@ -1,10 +1,10 @@
 use crate::prelude::*;
-use wayve_security::encryption::{decrypt, encrypt};
-use wayve_security::rbac::{self, Permission, Scope};
 use actix_web::{HttpRequest, HttpResponse, get, post, put, web};
 use chrono::{DateTime, Utc};
 use std::time::Duration;
 use tracing::{instrument, warn};
+use wayve_security::encryption::{decrypt, encrypt};
+use wayve_security::rbac::{self, Permission, Scope};
 
 const AUDIT_LOG_DEFAULT_LIMIT: i64 = 100;
 const AUDIT_LOG_MAX_LIMIT: i64 = 500;
@@ -97,6 +97,69 @@ pub async fn list_user_actions(
         "#,
     )
     .bind(action)
+    .bind(ctx.scope.as_str())
+    .bind(ctx.organization_id)
+    .bind(ctx.user_id)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(rows))
+}
+
+#[derive(Deserialize)]
+pub struct RegistrationTypeQuery {
+    pub limit: Option<i64>,
+}
+
+#[derive(Serialize, FromRow)]
+pub struct RegistrationTypeView {
+    pub id: i32,
+    pub email: String,
+    // 'local' (email + password registration), 'google' (Gmail OAuth) or
+    // 'microsoft' (Outlook OAuth) — straight from users.auth_provider.
+    pub auth_provider: String,
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+// GET /api/audit/registration-types — how each user signed up: local password
+// registration vs Gmail (Google OAuth) vs Outlook (Microsoft OAuth), read from
+// users.auth_provider. Owner-gated and scoped like /audit/user-actions
+// (platform sees everyone, an org owner sees their members, a personal user
+// sees only themselves).
+#[get("/audit/registration-types")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn list_registration_types(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<RegistrationTypeQuery>,
+) -> AppResult {
+    let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+
+    let limit = query
+        .limit
+        .unwrap_or(AUDIT_LOG_DEFAULT_LIMIT)
+        .clamp(1, AUDIT_LOG_MAX_LIMIT);
+
+    let rows = sqlx::query_as::<_, RegistrationTypeView>(
+        r#"
+        SELECT u.id,
+               u.email,
+               COALESCE(NULLIF(u.auth_provider, ''), 'local') AS auth_provider,
+               (u.created_at AT TIME ZONE 'UTC') AS created_at
+        FROM users u
+        WHERE (
+                $1 = 'platform'
+                OR ($1 = 'organization' AND u.organization_id = $2)
+                OR ($1 = 'personal' AND u.id = $3)
+        )
+        ORDER BY u.created_at DESC NULLS LAST
+        LIMIT $4
+        "#,
+    )
     .bind(ctx.scope.as_str())
     .bind(ctx.organization_id)
     .bind(ctx.user_id)
@@ -311,8 +374,9 @@ pub async fn export_audit_logs(
     // Scope visibility same as /audit/logs: platform sees all, org sees
     // its own org, personal sees keys they minted or acted as.
     let rows = match ctx.scope {
-        Scope::Platform => sqlx::query_as::<_, AuditLogView>(
-            r#"
+        Scope::Platform => {
+            sqlx::query_as::<_, AuditLogView>(
+                r#"
             SELECT l.id, l.api_key_id, ak.name AS api_key_name, ak.key_preview,
                    l.user_id, l.method, l.path, l.status_code, l.outcome, l.ip, l.created_at
             FROM api_key_audit_log l
@@ -322,14 +386,16 @@ pub async fn export_audit_logs(
             ORDER BY l.id DESC
             LIMIT $3
             "#,
-        )
-        .bind(query.since)
-        .bind(query.before_id)
-        .bind(limit)
-        .fetch_all(pool.get_ref())
-        .await?,
-        Scope::Organization => sqlx::query_as::<_, AuditLogView>(
-            r#"
+            )
+            .bind(query.since)
+            .bind(query.before_id)
+            .bind(limit)
+            .fetch_all(pool.get_ref())
+            .await?
+        }
+        Scope::Organization => {
+            sqlx::query_as::<_, AuditLogView>(
+                r#"
             SELECT l.id, l.api_key_id, ak.name AS api_key_name, ak.key_preview,
                    l.user_id, l.method, l.path, l.status_code, l.outcome, l.ip, l.created_at
             FROM api_key_audit_log l
@@ -344,16 +410,18 @@ pub async fn export_audit_logs(
             ORDER BY l.id DESC
             LIMIT $5
             "#,
-        )
-        .bind(query.since)
-        .bind(query.before_id)
-        .bind(ctx.organization_id)
-        .bind(ctx.user_id)
-        .bind(limit)
-        .fetch_all(pool.get_ref())
-        .await?,
-        Scope::Personal => sqlx::query_as::<_, AuditLogView>(
-            r#"
+            )
+            .bind(query.since)
+            .bind(query.before_id)
+            .bind(ctx.organization_id)
+            .bind(ctx.user_id)
+            .bind(limit)
+            .fetch_all(pool.get_ref())
+            .await?
+        }
+        Scope::Personal => {
+            sqlx::query_as::<_, AuditLogView>(
+                r#"
             SELECT l.id, l.api_key_id, ak.name AS api_key_name, ak.key_preview,
                    l.user_id, l.method, l.path, l.status_code, l.outcome, l.ip, l.created_at
             FROM api_key_audit_log l
@@ -364,21 +432,23 @@ pub async fn export_audit_logs(
             ORDER BY l.id DESC
             LIMIT $4
             "#,
-        )
-        .bind(query.since)
-        .bind(query.before_id)
-        .bind(ctx.user_id)
-        .bind(limit)
-        .fetch_all(pool.get_ref())
-        .await?,
+            )
+            .bind(query.since)
+            .bind(query.before_id)
+            .bind(ctx.user_id)
+            .bind(limit)
+            .fetch_all(pool.get_ref())
+            .await?
+        }
     };
 
     let next_cursor = rows.last().map(|r| r.id);
     let count = rows.len();
 
     let body = if is_csv {
-        let mut out =
-            String::from("id,api_key_id,api_key_name,user_id,method,path,status_code,outcome,ip,created_at\n");
+        let mut out = String::from(
+            "id,api_key_id,api_key_name,user_id,method,path,status_code,outcome,ip,created_at\n",
+        );
         for r in &rows {
             out.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{}\n",

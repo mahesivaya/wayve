@@ -8,10 +8,6 @@
 //! records the outcome in the API-key audit log.
 
 use crate::cache::Cache;
-use wayve_security::api_key::{
-    ApiKeyPrincipal, AuditEntry, AuditOutcome, AuthFailure, required_scope, resolve_api_key,
-    scope_satisfied, write_audit,
-};
 use actix_web::{
     Error, HttpMessage, HttpResponse,
     body::EitherBody,
@@ -25,6 +21,10 @@ use std::{
     task::{Context, Poll},
 };
 use tracing::{error, warn};
+use wayve_security::api_key::{
+    ApiKeyPrincipal, AuditEntry, AuditOutcome, AuthFailure, required_scope, resolve_api_key,
+    scope_satisfied, write_audit,
+};
 
 const API_KEY_HEADER: &str = "X-API-KEY";
 
@@ -178,9 +178,9 @@ where
             if let Some(cache_data) = req.app_data::<web::Data<Option<Cache>>>()
                 && let Some(cache) = cache_data.get_ref().clone()
             {
-                let tier = crate::billing::quotas::effective_for_user(&pool, resolved.user_id).await;
-                let effective_rl =
-                    i32::min(resolved.rate_limit_per_min, tier.rate_limit_per_min);
+                let tier =
+                    crate::billing::quotas::effective_for_user(&pool, resolved.user_id).await;
+                let effective_rl = i32::min(resolved.rate_limit_per_min, tier.rate_limit_per_min);
 
                 let rl_key = format!("apikey_rl:{}", resolved.id);
                 match cache.increment_with_ttl(&rl_key, 60).await {

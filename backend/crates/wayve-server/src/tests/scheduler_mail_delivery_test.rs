@@ -32,7 +32,10 @@ mod tests {
     fn invite_message_contains_required_fields() {
         let msg = build_meeting_message(
             "host@example.com",
-            &["alice@example.com".to_string(), "bob@example.org".to_string()],
+            &[
+                "alice@example.com".to_string(),
+                "bob@example.org".to_string(),
+            ],
             "Quarterly Review",
             date(),
             t(9, 30),
@@ -42,7 +45,10 @@ mod tests {
         );
         let decoded = decode_raw_message(&msg);
 
-        assert!(decoded.contains("From: host@example.com"), "from header missing");
+        assert!(
+            decoded.contains("From: host@example.com"),
+            "from header missing"
+        );
         assert!(
             decoded.contains("To: alice@example.com,bob@example.org"),
             "to header missing"

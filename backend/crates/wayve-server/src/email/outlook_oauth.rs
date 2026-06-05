@@ -14,11 +14,11 @@ use crate::email::outlook::{
     sync_outlook_account,
 };
 use crate::email::provider::MailProvider;
-use wayve_security::jwt::{auth_cookie, create_jwt_for_account, get_user_id_from_request};
-use wayve_security::oauth::{consume_state, create_oauth_state};
 use actix_web::{HttpRequest, HttpResponse, Responder, web};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
+use wayve_security::jwt::{auth_cookie, create_jwt_for_account, get_user_id_from_request};
+use wayve_security::oauth::{consume_state, create_oauth_state};
 
 /// OAuth `state` flow tags — distinct from the Google flows (and each other)
 /// so a state minted for one purpose can't be replayed for another.
@@ -371,7 +371,9 @@ async fn resolve_user_for_oauth(
                     .append_header(("Location", format!("{frontend}/login?error=email_exists")))
                     .finish());
             }
-            (row.get("id"), row.get("account_type"))
+            let existing_id: i32 = row.get("id");
+            info!(target: "auth", user_id = existing_id, email, registered_as = %provider, "sign-in via Outlook/Microsoft OAuth (existing user)");
+            (existing_id, row.get("account_type"))
         }
         Ok(None) => {
             match sqlx::query(
@@ -384,7 +386,11 @@ async fn resolve_user_for_oauth(
             .fetch_one(pool)
             .await
             {
-                Ok(row) => (row.get("id"), row.get("account_type")),
+                Ok(row) => {
+                    let new_id: i32 = row.get("id");
+                    info!(target: "auth", user_id = new_id, email, provider, "user registered via Outlook/Microsoft OAuth");
+                    (new_id, row.get("account_type"))
+                }
                 Err(e) => {
                     error!(target: "auth", error = %e, provider, "OAuth signup user insert failed");
                     return Err(

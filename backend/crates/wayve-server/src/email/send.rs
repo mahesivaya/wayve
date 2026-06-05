@@ -5,11 +5,11 @@ use crate::email::oauth::HTTP_CLIENT;
 use crate::email::outlook::send_outlook_mail;
 use crate::email::provider::refresh_and_persist_email_token;
 use crate::models::email_request::SendEmailRequest;
-use wayve_security::jwt::get_user_id_from_request;
 use actix_web::HttpResponse;
 use base64::Engine;
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
+use wayve_security::jwt::get_user_id_from_request;
 
 #[instrument(target = "gmail", skip(req, data, pool), fields(to = %data.to))]
 pub async fn send(
@@ -222,12 +222,11 @@ pub async fn send_internal(
     }
 
     // ─── Look up sender + recipient emails for the row metadata ────
-    let sender_email: Option<String> =
-        sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_optional(pool.get_ref())
-            .await?
-            .flatten();
+    let sender_email: Option<String> = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool.get_ref())
+        .await?
+        .flatten();
     let sender_email = match sender_email {
         Some(addr) => addr,
         None => return Ok(HttpResponse::Unauthorized().body("Sender account not found")),
@@ -235,12 +234,11 @@ pub async fn send_internal(
 
     // Verify every requested recipient exists. A missing recipient is a
     // 400 (probably a stale browser cache) rather than a silent skip.
-    let recipient_rows: Vec<(i32, String)> = sqlx::query_as::<_, (i32, String)>(
-        "SELECT id, email FROM users WHERE id = ANY($1)",
-    )
-    .bind(&data.recipient_user_ids)
-    .fetch_all(pool.get_ref())
-    .await?;
+    let recipient_rows: Vec<(i32, String)> =
+        sqlx::query_as::<_, (i32, String)>("SELECT id, email FROM users WHERE id = ANY($1)")
+            .bind(&data.recipient_user_ids)
+            .fetch_all(pool.get_ref())
+            .await?;
     if recipient_rows.len() != data.recipient_user_ids.len() {
         return Ok(HttpResponse::BadRequest()
             .body("One or more recipient_user_ids do not resolve to a known user"));

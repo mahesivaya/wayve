@@ -51,7 +51,10 @@ pub async fn refresh_provider_unread_count(
     let body: Value = res.json().await?;
     let unread = body
         .get("messagesUnread")
-        .and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
+        .and_then(|v| {
+            v.as_i64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        })
         .unwrap_or(0);
     // Clamp to i32::MAX — unlikely for any real inbox but protects the
     // INTEGER column from a malformed payload.
@@ -148,13 +151,7 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
 
     // Per-tick backfill of older mail (general window) and the Gmail
     // system/category labels.
-    if let Err(err) = backfill_older(
-        pool,
-        account.id,
-        &account.provider,
-        &token.access_token,
-    )
-    .await
+    if let Err(err) = backfill_older(pool, account.id, &account.provider, &token.access_token).await
     {
         warn!(target: "worker", account_id = account.id, error = ?err, "backfill batch failed");
     }
@@ -171,14 +168,7 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         "CATEGORY_UPDATES",
         "CATEGORY_FORUMS",
     ] {
-        if let Err(err) = backfill_label_older(
-            pool,
-            account.id,
-            &token.access_token,
-            label,
-        )
-        .await
-        {
+        if let Err(err) = backfill_label_older(pool, account.id, &token.access_token, label).await {
             warn!(target: "worker", account_id = account.id, label, error = ?err, "label backfill failed");
         }
     }
@@ -242,8 +232,11 @@ pub async fn sync_due_accounts(
     // Drop entries for accounts that no longer appear in the syncable list
     // (account deleted / OAuth revoked). Without this, the schedule map
     // grows unboundedly across re-syncs.
-    let live_ids: std::collections::HashSet<i32> =
-        due.iter().map(|a| a.id).chain(deferred.iter().map(|a| a.id)).collect();
+    let live_ids: std::collections::HashSet<i32> = due
+        .iter()
+        .map(|a| a.id)
+        .chain(deferred.iter().map(|a| a.id))
+        .collect();
     schedule.retain(|id, _| live_ids.contains(id));
 
     let mut handles = vec![];
@@ -258,16 +251,17 @@ pub async fn sync_due_accounts(
     }
 
     for h in handles {
-        let Ok((account_id, pre)) = h.await else { continue };
+        let Ok((account_id, pre)) = h.await else {
+            continue;
+        };
         // Refresh last_message_at to capture any new mail that landed
         // during this tick. One indexed PK lookup per account; cheap.
-        let post: Option<NaiveDateTime> = sqlx::query_scalar(
-            "SELECT last_message_at FROM email_accounts WHERE id = $1",
-        )
-        .bind(account_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(pre);
+        let post: Option<NaiveDateTime> =
+            sqlx::query_scalar("SELECT last_message_at FROM email_accounts WHERE id = $1")
+                .bind(account_id)
+                .fetch_one(pool)
+                .await
+                .unwrap_or(pre);
 
         // "New mail landed" = the freshness stamp advanced this tick.
         // Reset to the hot interval so the next pickup is fast; otherwise
@@ -373,13 +367,12 @@ async fn backfill_older(
     provider: &crate::email::provider::MailProvider,
     access_token: &str,
 ) -> Result<()> {
-    let oldest: Option<NaiveDateTime> = sqlx::query_scalar(
-        "SELECT MIN(created_at) FROM emails WHERE account_id = $1",
-    )
-    .bind(account_id)
-    .fetch_optional(pool)
-    .await?
-    .flatten();
+    let oldest: Option<NaiveDateTime> =
+        sqlx::query_scalar("SELECT MIN(created_at) FROM emails WHERE account_id = $1")
+            .bind(account_id)
+            .fetch_optional(pool)
+            .await?
+            .flatten();
 
     let Some(oldest_naive) = oldest else {
         // No mail yet — the forward sync (which paginates without a
@@ -390,7 +383,13 @@ async fn backfill_older(
 
     let before_timestamp = oldest_naive.and_utc().timestamp();
     provider
-        .sync_before(pool, account_id, access_token, before_timestamp, BACKFILL_BATCH)
+        .sync_before(
+            pool,
+            account_id,
+            access_token,
+            before_timestamp,
+            BACKFILL_BATCH,
+        )
         .await
 }
 
@@ -766,16 +765,24 @@ pub async fn sync_account(
     // Pull recent SPAM + DRAFT alongside the INBOX scan so the sidebar's
     // Spam/Drafts folders show real data. Errors are warned-then-ignored
     // so a 4xx on one label doesn't poison the whole tick.
-    if let Err(err) = sync_account_label_recent(pool, account_id, token, "SPAM", GMAIL_SPAM_RECENT_CAP).await {
+    if let Err(err) =
+        sync_account_label_recent(pool, account_id, token, "SPAM", GMAIL_SPAM_RECENT_CAP).await
+    {
         warn!(target: "worker", account_id, error = ?err, "spam sync failed");
     }
-    if let Err(err) = sync_account_label_recent(pool, account_id, token, "DRAFT", GMAIL_DRAFT_RECENT_CAP).await {
+    if let Err(err) =
+        sync_account_label_recent(pool, account_id, token, "DRAFT", GMAIL_DRAFT_RECENT_CAP).await
+    {
         warn!(target: "worker", account_id, error = ?err, "draft sync failed");
     }
-    if let Err(err) = sync_account_label_recent(pool, account_id, token, "TRASH", GMAIL_TRASH_RECENT_CAP).await {
+    if let Err(err) =
+        sync_account_label_recent(pool, account_id, token, "TRASH", GMAIL_TRASH_RECENT_CAP).await
+    {
         warn!(target: "worker", account_id, error = ?err, "trash sync failed");
     }
-    if let Err(err) = sync_account_label_recent(pool, account_id, token, "SENT", GMAIL_SENT_RECENT_CAP).await {
+    if let Err(err) =
+        sync_account_label_recent(pool, account_id, token, "SENT", GMAIL_SENT_RECENT_CAP).await
+    {
         warn!(target: "worker", account_id, error = ?err, "sent sync failed");
     }
 
@@ -830,16 +837,24 @@ pub async fn sync_account_recent(
     // Also pull the first page of SPAM and DRAFT so the sidebar Spam/Drafts
     // folders aren't blank for the first 30s after connect. Same
     // best-effort error handling as sync_account.
-    if let Err(err) = sync_account_label_recent(pool, account_id, token, "SPAM", GMAIL_SPAM_RECENT_CAP).await {
+    if let Err(err) =
+        sync_account_label_recent(pool, account_id, token, "SPAM", GMAIL_SPAM_RECENT_CAP).await
+    {
         warn!(target: "worker", account_id, error = ?err, "spam first-sync failed");
     }
-    if let Err(err) = sync_account_label_recent(pool, account_id, token, "DRAFT", GMAIL_DRAFT_RECENT_CAP).await {
+    if let Err(err) =
+        sync_account_label_recent(pool, account_id, token, "DRAFT", GMAIL_DRAFT_RECENT_CAP).await
+    {
         warn!(target: "worker", account_id, error = ?err, "draft first-sync failed");
     }
-    if let Err(err) = sync_account_label_recent(pool, account_id, token, "TRASH", GMAIL_TRASH_RECENT_CAP).await {
+    if let Err(err) =
+        sync_account_label_recent(pool, account_id, token, "TRASH", GMAIL_TRASH_RECENT_CAP).await
+    {
         warn!(target: "worker", account_id, error = ?err, "trash first-sync failed");
     }
-    if let Err(err) = sync_account_label_recent(pool, account_id, token, "SENT", GMAIL_SENT_RECENT_CAP).await {
+    if let Err(err) =
+        sync_account_label_recent(pool, account_id, token, "SENT", GMAIL_SENT_RECENT_CAP).await
+    {
         warn!(target: "worker", account_id, error = ?err, "sent first-sync failed");
     }
 
@@ -911,8 +926,8 @@ where
     use crate::email::repo::{InsertEmail, upsert_batch};
     let insert_batch: Vec<InsertEmail<'_>> = batch
         .iter()
-        .map(|(gmail_id, sender, receiver, subject, gmail_timestamp, is_read, labels)| {
-            InsertEmail {
+        .map(
+            |(gmail_id, sender, receiver, subject, gmail_timestamp, is_read, labels)| InsertEmail {
                 gmail_id,
                 sender,
                 receiver,
@@ -922,8 +937,8 @@ where
                 labels: labels.as_slice(),
                 body: None,
                 attachments_checked: false,
-            }
-        })
+            },
+        )
         .collect();
     let returned = upsert_batch(pool, account_id, &insert_batch).await?;
 

@@ -267,9 +267,7 @@ pub async fn admin_create_organization(
         })
         .await
         .map_err(|e| AppError::Internal(format!("owner keypair spawn_blocking failed: {e}")))?
-        .map_err(|e| {
-            AppError::Internal(format!("org owner keypair provisioning failed: {e}"))
-        })?;
+        .map_err(|e| AppError::Internal(format!("org owner keypair provisioning failed: {e}")))?;
 
         match sqlx::query(
             r#"
@@ -782,8 +780,9 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
         .execute(&mut *tx)
         .await?;
     if deleted.rows_affected() == 0 {
-        return Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Account not found" })));
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Account not found" }))
+        );
     }
     tx.commit().await?;
 

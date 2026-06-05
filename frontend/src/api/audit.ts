@@ -136,6 +136,27 @@ export async function listUserActions(
   );
 }
 
+// How a user registered: 'local' (email + password), 'google' (Gmail OAuth)
+// or 'microsoft' (Outlook OAuth) — from users.auth_provider.
+export type RegistrationTypeRow = {
+  id: number;
+  email: string;
+  auth_provider: string;
+  created_at: string | null;
+};
+
+export async function listRegistrationTypes(
+  filters: { limit?: number } = {},
+): Promise<RegistrationTypeRow[]> {
+  const params = new URLSearchParams();
+  if (filters.limit) params.set("limit", String(filters.limit));
+  const query = params.toString();
+  return apiFetchJson<RegistrationTypeRow[]>(
+    `/api/audit/registration-types${query ? `?${query}` : ""}`,
+    { preserve401: true },
+  );
+}
+
 export type SiemSettings = {
   scope: string;
   organization_id: number | null;

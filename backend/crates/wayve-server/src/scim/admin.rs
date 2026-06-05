@@ -5,10 +5,10 @@
 
 use super::tokens::{generate, sha256_hex};
 use crate::prelude::*;
-use wayve_security::rbac::{self, Permission};
 use actix_web::delete;
 use sqlx::Row;
 use tracing::instrument;
+use wayve_security::rbac::{self, Permission};
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(list_scim_tokens)

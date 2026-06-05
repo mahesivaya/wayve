@@ -76,7 +76,10 @@ impl Event {
 /// Whose event this is — drives which endpoints receive the delivery.
 #[derive(Debug, Clone, Copy)]
 pub enum EventOwner {
-    User { id: i32, organization_id: Option<i32> },
+    User {
+        id: i32,
+        organization_id: Option<i32>,
+    },
 }
 
 impl EventOwner {
@@ -104,13 +107,11 @@ impl EventOwner {
 /// producer's primary mutation has already succeeded; webhooks are
 /// best-effort by contract).
 #[instrument(target = "webhook", skip(pool, data), fields(event = event.as_str()))]
-pub async fn emit(
-    pool: &PgPool,
-    owner: EventOwner,
-    event: Event,
-    data: serde_json::Value,
-) {
-    let EventOwner::User { id: user_id, organization_id } = owner;
+pub async fn emit(pool: &PgPool, owner: EventOwner, event: Event, data: serde_json::Value) {
+    let EventOwner::User {
+        id: user_id,
+        organization_id,
+    } = owner;
     let event_id = format!("evt_{}", Uuid::new_v4().simple());
     let envelope = serde_json::json!({
         "id": event_id,

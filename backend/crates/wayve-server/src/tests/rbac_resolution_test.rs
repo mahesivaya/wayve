@@ -5,9 +5,9 @@
 // against fresh rows rather than mocked.
 #[cfg(test)]
 mod tests {
-    use wayve_security::rbac::{Permission, Role, Scope, resolve_role_context};
     use crate::test_support::{insert_local_user, random_email, test_pool};
     use sqlx::PgPool;
+    use wayve_security::rbac::{Permission, Role, Scope, resolve_role_context};
 
     async fn insert_org(pool: &PgPool, name: &str) -> i32 {
         sqlx::query_scalar::<_, i32>("INSERT INTO organizations (name) VALUES ($1) RETURNING id")

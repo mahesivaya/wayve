@@ -23,10 +23,10 @@ use crate::prelude::*;
 use crate::routes::user::{
     effective_role_for_user, normalized_account_type, normalized_platform_role,
 };
-use wayve_security::jwt::get_user_id_from_request;
 use models::BillingOwner;
 use std::time::Duration;
 use tracing::{error, info};
+use wayve_security::jwt::get_user_id_from_request;
 
 /// Extract the authenticated user id, or an Unauthorized response.
 pub fn current_user(req: &HttpRequest) -> std::result::Result<i32, HttpResponse> {

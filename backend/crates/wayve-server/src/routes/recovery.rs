@@ -27,12 +27,12 @@
 //! All five require an authenticated session.
 
 use crate::prelude::*;
-use wayve_security::encryption;
-use wayve_security::jwt::get_user_id_from_request;
 use actix_web::{HttpRequest, HttpResponse, delete, get, put, web};
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use tracing::{error, instrument, warn};
+use wayve_security::encryption;
+use wayve_security::jwt::get_user_id_from_request;
 
 // Wire format reference (built by frontend/src/crypto/recovery.ts):
 //   { v: 1, iv: <base64 12B>, pub: <base64 SPKI>, ct: <base64 AES-GCM ct> }
@@ -286,12 +286,11 @@ pub async fn get_basic_key(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         Err(resp) => return Ok(resp),
     };
 
-    let row: Option<(Option<String>, Option<String>)> = sqlx::query_as(
-        "SELECT private_key_encrypted, private_key_iv FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
+    let row: Option<(Option<String>, Option<String>)> =
+        sqlx::query_as("SELECT private_key_encrypted, private_key_iv FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
 
     let (ct_b64, iv_b64) = match row {
         Some((Some(ct), Some(iv))) => (ct, iv),

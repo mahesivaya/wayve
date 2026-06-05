@@ -14,12 +14,6 @@ pub fn api_routes(cfg: &mut web::ServiceConfig) {
     // ICE/TURN credentials: canonical /api/call/credentials, legacy /api/turn/credentials.
     // The "turn" name leaks the underlying protocol; "call/credentials" reads as
     // "credentials for placing a call" regardless of WebRTC layer.
-    cfg.route(
-        "/call/credentials",
-        web::get().to(turn::turn_credentials),
-    )
-    .route(
-        "/turn/credentials",
-        web::get().to(turn::turn_credentials),
-    );
+    cfg.route("/call/credentials", web::get().to(turn::turn_credentials))
+        .route("/turn/credentials", web::get().to(turn::turn_credentials));
 }

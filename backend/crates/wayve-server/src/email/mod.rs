@@ -9,13 +9,13 @@ pub mod outlook;
 mod outlook_oauth;
 pub mod profile;
 pub mod provider;
-pub mod repo;
 pub(crate) mod provider_lookup;
+mod rehydrate;
+pub mod repo;
 pub mod secure;
 mod send;
 pub mod sender;
 pub mod shared_inbox;
-mod rehydrate;
 pub mod sync;
 pub mod sync_older;
 pub mod utils;
@@ -40,7 +40,10 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .route("/send", web::post().to(handler::send))
         // Internal send: canonical POST /api/emails/internal, legacy POST /api/email/send-internal.
         .route("/emails/internal", web::post().to(handler::send_internal))
-        .route("/email/send-internal", web::post().to(handler::send_internal))
+        .route(
+            "/email/send-internal",
+            web::post().to(handler::send_internal),
+        )
         // Secure (encrypted) send: canonical POST /api/emails/secure, legacy POST /api/email/send-secure.
         .route("/emails/secure", web::post().to(secure::send_secure))
         .route("/email/send-secure", web::post().to(secure::send_secure))
@@ -80,7 +83,10 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
             "/email-providers/yahoo/connect",
             web::post().to(yahoo_routes::yahoo_connect),
         )
-        .route("/yahoo/connect", web::post().to(yahoo_routes::yahoo_connect))
+        .route(
+            "/yahoo/connect",
+            web::post().to(yahoo_routes::yahoo_connect),
+        )
         // Provider auto-detect from email domain: canonical POST /api/email-providers/lookup,
         // legacy POST /api/email/provider-lookup.
         .route(

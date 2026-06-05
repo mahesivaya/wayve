@@ -59,15 +59,14 @@ pub async fn effective_for_user(pool: &PgPool, user_id: i32) -> EffectiveQuota {
         return q;
     }
 
-    let organization_id = sqlx::query_scalar::<_, Option<i32>>(
-        "SELECT organization_id FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten()
-    .flatten();
+    let organization_id =
+        sqlx::query_scalar::<_, Option<i32>>("SELECT organization_id FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten();
 
     // Use the existing plan-resolution helper so this matches every other
     // place that needs to know the user's plan (entitlements, the /billing
@@ -84,14 +83,12 @@ pub async fn effective_for_user(pool: &PgPool, user_id: i32) -> EffectiveQuota {
         }
     };
 
-    let row = sqlx::query(
-        "SELECT rate_limit_per_min, monthly_quota FROM plans WHERE code = $1",
-    )
-    .bind(&plan_code)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten();
+    let row = sqlx::query("SELECT rate_limit_per_min, monthly_quota FROM plans WHERE code = $1")
+        .bind(&plan_code)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
     let tier = match row {
         Some(row) => EffectiveQuota {
             plan_code,

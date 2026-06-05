@@ -413,3 +413,67 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Personal-users table (Users page) ------------------------------------- */
+.platform-users-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.platform-users-toolbar h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+}
+
+.platform-users-search {
+  flex: 0 1 280px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.platform-users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.platform-users-table th,
+.platform-users-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+.platform-users-table th {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted);
+}
+
+.platform-users-table tbody tr:hover {
+  background: var(--color-surface-muted, var(--color-surface-hover));
+}
+
+.platform-users-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.platform-users-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}

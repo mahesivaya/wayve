@@ -140,9 +140,7 @@ pub async fn github_proxy(
     let cache_enabled = media_override.is_none();
     let key = cache_key(&tail, query);
 
-    if cache_enabled
-        && let Some(cached) = GITHUB_CACHE.get(&key).await
-    {
+    if cache_enabled && let Some(cached) = GITHUB_CACHE.get(&key).await {
         return HttpResponse::build(
             actix_web::http::StatusCode::from_u16(cached.status)
                 .unwrap_or(actix_web::http::StatusCode::OK),
@@ -225,8 +223,7 @@ pub async fn github_proxy(
     });
 
     HttpResponse::build(
-        actix_web::http::StatusCode::from_u16(status)
-            .unwrap_or(actix_web::http::StatusCode::OK),
+        actix_web::http::StatusCode::from_u16(status).unwrap_or(actix_web::http::StatusCode::OK),
     )
     .insert_header(("X-Wayve-Cache", "MISS"))
     .insert_header(("Content-Type", response_content_type))

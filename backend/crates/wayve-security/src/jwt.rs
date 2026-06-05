@@ -146,10 +146,7 @@ pub fn token_from_request(req: &HttpRequest) -> Option<String> {
 pub fn get_user_id_from_request(req: &HttpRequest) -> Option<i32> {
     // An API-key request carries an ApiKeyPrincipal injected by the
     // ApiKeyMiddleware; it authenticates the acting user without a JWT.
-    if let Some(principal) = req
-        .extensions()
-        .get::<crate::api_key::ApiKeyPrincipal>()
-    {
+    if let Some(principal) = req.extensions().get::<crate::api_key::ApiKeyPrincipal>() {
         return Some(principal.user_id);
     }
 

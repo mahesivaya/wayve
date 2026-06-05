@@ -139,6 +139,7 @@ export default function PlatformOrganizations() {
                 <Link
                   key={org.id}
                   to={`/platform/organizations/${org.id}`}
+                  state={{ from: "organizations" }}
                   className="organization-grid-tile"
                   title={org.name}
                 >

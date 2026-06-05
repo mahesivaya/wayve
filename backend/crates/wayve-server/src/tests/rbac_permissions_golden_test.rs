@@ -121,10 +121,7 @@ mod tests {
     }
 
     fn actual_for(role: Role) -> BTreeSet<&'static str> {
-        permissions_for(role)
-            .iter()
-            .map(|p| p.as_str())
-            .collect()
+        permissions_for(role).iter().map(|p| p.as_str()).collect()
     }
 
     #[test]

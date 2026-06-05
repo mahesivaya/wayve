@@ -105,3 +105,31 @@ export type UsersSummary = {
 
 export const getUsersSummary = () =>
   apiFetchJson<UsersSummary>("/api/platform-team/users-summary");
+
+export type PlatformUserRow = {
+  id: number;
+  email: string;
+  username: string | null;
+  created_at: string | null;
+  storage_bytes: number;
+};
+
+export type ListPlatformUsersParams = {
+  accountType?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+};
+
+// Per-user table for the platform Users page: email + memory used. Defaults to
+// personal users. Storage is computed server-side per row (matches /profile).
+export const listPlatformUsers = (params: ListPlatformUsersParams = {}) => {
+  const search = new URLSearchParams();
+  search.set("account_type", params.accountType ?? "personal");
+  if (params.q) search.set("q", params.q);
+  if (params.limit != null) search.set("limit", String(params.limit));
+  if (params.offset != null) search.set("offset", String(params.offset));
+  return apiFetchJson<{ users: PlatformUserRow[] }>(
+    `/api/platform-team/users?${search.toString()}`,
+  );
+};

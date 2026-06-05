@@ -196,12 +196,7 @@ async fn fetch_and_store_uid_range(
             .unwrap_or_default();
         let receiver = parsed
             .to()
-            .map(|list| {
-                list.iter()
-                    .map(format_addr)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            })
+            .map(|list| list.iter().map(format_addr).collect::<Vec<_>>().join(", "))
             .unwrap_or_default();
 
         let body_text = parsed
@@ -326,12 +321,7 @@ pub async fn sync_yahoo_account(
             .unwrap_or_default();
         let receiver = parsed
             .to()
-            .map(|list| {
-                list.iter()
-                    .map(format_addr)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            })
+            .map(|list| list.iter().map(format_addr).collect::<Vec<_>>().join(", "))
             .unwrap_or_default();
 
         let body_text = parsed
@@ -559,16 +549,13 @@ pub async fn mark_read_yahoo(
 
     // UID STORE prevents sequence-number drift between SELECT and
     // STORE (a new message arriving would shift sequence numbers).
-    let _: Vec<_> = timeout(
-        IMAP_TIMEOUT,
-        session.uid_store(uid, "+FLAGS (\\Seen)"),
-    )
-    .await
-    .map_err(|_| anyhow!("yahoo STORE timed out"))?
-    .context("yahoo UID STORE")?
-    .try_collect()
-    .await
-    .context("yahoo STORE collect")?;
+    let _: Vec<_> = timeout(IMAP_TIMEOUT, session.uid_store(uid, "+FLAGS (\\Seen)"))
+        .await
+        .map_err(|_| anyhow!("yahoo STORE timed out"))?
+        .context("yahoo UID STORE")?
+        .try_collect()
+        .await
+        .context("yahoo STORE collect")?;
 
     let _ = timeout(IMAP_TIMEOUT, session.logout()).await;
     Ok(())

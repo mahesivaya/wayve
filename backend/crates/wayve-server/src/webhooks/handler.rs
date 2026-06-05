@@ -3,13 +3,13 @@
 // narrower scope can't silently subscribe its owner to event flows.
 
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
 use crate::webhooks::events::{Event, EventOwner};
 use actix_web::{delete, put};
 use chrono::{DateTime, Utc};
 use rand::RngCore;
 use sqlx::Row;
 use tracing::instrument;
+use wayve_security::jwt::get_user_id_from_request;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(list_webhooks)
@@ -22,12 +22,11 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
 }
 
 async fn user_org(pool: &PgPool, user_id: i32) -> Result<Option<i32>, sqlx::Error> {
-    let row = sqlx::query_scalar::<_, Option<i32>>(
-        "SELECT organization_id FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?;
+    let row =
+        sqlx::query_scalar::<_, Option<i32>>("SELECT organization_id FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
     Ok(row.flatten())
 }
 

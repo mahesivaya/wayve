@@ -1,9 +1,9 @@
 pub mod access_requests;
 pub mod account;
-pub mod chat_keys;
 pub mod api_keys;
 pub mod audit;
 pub mod auth;
+pub mod chat_keys;
 pub mod config;
 pub mod email;
 pub mod error_logs;
@@ -50,6 +50,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(api_keys::api_key_audit)
         .service(audit::list_audit_logs)
         .service(audit::list_user_actions)
+        .service(audit::list_registration_types)
         .service(tracing::tracing_overview)
         .service(chat_keys::provision_chat_keys)
         .service(audit::export_audit_logs)

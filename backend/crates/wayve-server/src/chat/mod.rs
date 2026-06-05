@@ -20,16 +20,16 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         web::get().to(handler::get_messages),
     )
     .route("/messages", web::get().to(handler::get_messages))
-        .service(handler::get_channels)
-        .service(handler::create_channel)
-        .service(handler::update_channel_subject)
-        .service(handler::update_channel_visibility)
-        .service(handler::join_channel)
-        .service(handler::approve_channel_join_request)
-        .service(handler::add_channel_users)
-        .service(handler::remove_channel_user)
-        .service(handler::get_channel_messages)
-        .service(handler::get_channel_thread);
+    .service(handler::get_channels)
+    .service(handler::create_channel)
+    .service(handler::update_channel_subject)
+    .service(handler::update_channel_visibility)
+    .service(handler::join_channel)
+    .service(handler::approve_channel_join_request)
+    .service(handler::add_channel_users)
+    .service(handler::remove_channel_user)
+    .service(handler::get_channel_messages)
+    .service(handler::get_channel_thread);
 }
 
 pub fn ws_routes(cfg: &mut web::ServiceConfig) {

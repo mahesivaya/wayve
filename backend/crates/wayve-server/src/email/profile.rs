@@ -4,10 +4,10 @@ use crate::cache::TtlCache;
 use crate::routes::user::{
     current_plan_for_user, display_organization_name, effective_access_for_user,
 };
-use wayve_security::jwt::get_user_id_from_request;
 use actix_web::{HttpResponse, get, put};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
+use wayve_security::jwt::get_user_id_from_request;
 
 const ME_CACHE_TTL_SECS: u64 = 60;
 const ME_CACHE_MAX_CAPACITY: u64 = 10_000;

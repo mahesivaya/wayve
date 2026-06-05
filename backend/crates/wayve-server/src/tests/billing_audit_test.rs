@@ -54,12 +54,14 @@ mod tests {
             .await
             .unwrap_or_else(|e| panic!("advance_user plan must exist (init.sql): {e}"));
 
-        sqlx::query("INSERT INTO subscriptions (user_id, plan_id, status) VALUES ($1, $2, 'active')")
-            .bind(user_id)
-            .bind(plan_id)
-            .execute(&pool)
-            .await
-            .unwrap_or_else(|e| panic!("insert subscription: {e}"));
+        sqlx::query(
+            "INSERT INTO subscriptions (user_id, plan_id, status) VALUES ($1, $2, 'active')",
+        )
+        .bind(user_id)
+        .bind(plan_id)
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("insert subscription: {e}"));
 
         // First refresh: free → advance_user is a real grant, so it audits.
         refresh_entitlements(&pool, BillingOwner::User(user_id))

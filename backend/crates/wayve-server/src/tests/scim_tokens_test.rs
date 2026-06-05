@@ -53,9 +53,16 @@ mod tests {
         // Sanity: prefix + character set + length consistent with how the
         // dashboard markets the value.
         let (raw, hash, preview) = generate();
-        assert!(raw.starts_with("wv_scim_"), "raw should be wv_scim_-prefixed");
+        assert!(
+            raw.starts_with("wv_scim_"),
+            "raw should be wv_scim_-prefixed"
+        );
         assert_eq!(raw.len(), "wv_scim_".len() + 48, "raw length stable");
-        assert_eq!(sha256_hex(&raw), hash, "stored hash must match sha256_hex(raw)");
+        assert_eq!(
+            sha256_hex(&raw),
+            hash,
+            "stored hash must match sha256_hex(raw)"
+        );
         assert!(preview.contains('…'), "preview should be redacted");
     }
 

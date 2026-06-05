@@ -3,10 +3,10 @@ use crate::email::account::{
     load_account_summaries_for_user,
 };
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
 use actix_web::{delete, put};
 use serde::Deserialize;
 use tracing::{info, instrument};
+use wayve_security::jwt::get_user_id_from_request;
 
 #[get("/accounts")]
 #[instrument(target = "http", skip(req, pool))]

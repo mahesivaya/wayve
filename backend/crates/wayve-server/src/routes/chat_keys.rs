@@ -49,13 +49,15 @@ pub async fn provision_chat_keys(
     body: web::Json<ProvisionInput>,
 ) -> AppResult {
     // Platform owner only — this mints keypairs for other users.
-    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersManage).await {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersManage).await
+    {
         Ok(ctx) => ctx,
         Err(response) => return Ok(response),
     };
     if ctx.scope != Scope::Platform || ctx.role != Role::Owner {
-        return Ok(HttpResponse::Forbidden()
-            .json(serde_json::json!({ "message": "Platform owner only" })));
+        return Ok(
+            HttpResponse::Forbidden().json(serde_json::json!({ "message": "Platform owner only" }))
+        );
     }
 
     let password = body
@@ -100,20 +102,23 @@ pub async fn provision_chat_keys(
         // RSA-2048 keygen is CPU-heavy and holds the plaintext key — keep it
         // off the async executor on a blocking thread.
         let pw = password.clone();
-        let provisioned_keys =
-            match tokio::task::spawn_blocking(move || provision_org_owner_keypair(&pw)).await {
-                Ok(Ok(keys)) => keys,
-                Ok(Err(err)) => {
-                    warn!(target: "auth", user_id = c.id, error = ?err, "keypair provision failed");
-                    skipped += 1;
-                    continue;
-                }
-                Err(err) => {
-                    warn!(target: "auth", user_id = c.id, error = ?err, "provision task join failed");
-                    skipped += 1;
-                    continue;
-                }
-            };
+        let provisioned_keys = match tokio::task::spawn_blocking(move || {
+            provision_org_owner_keypair(&pw)
+        })
+        .await
+        {
+            Ok(Ok(keys)) => keys,
+            Ok(Err(err)) => {
+                warn!(target: "auth", user_id = c.id, error = ?err, "keypair provision failed");
+                skipped += 1;
+                continue;
+            }
+            Err(err) => {
+                warn!(target: "auth", user_id = c.id, error = ?err, "provision task join failed");
+                skipped += 1;
+                continue;
+            }
+        };
 
         sqlx::query("UPDATE users SET public_key = $1 WHERE id = $2")
             .bind(&provisioned_keys.public_key_json)

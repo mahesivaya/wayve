@@ -309,12 +309,25 @@ fn map_list_row(row: PgRow) -> EmailListRow {
         receiver: read_receiver(&row),
         has_body: row.try_get::<bool, _>("has_body").unwrap_or(false),
         has_attachments: row.try_get::<bool, _>("has_attachments").unwrap_or(false),
-        is_read: row.try_get::<Option<bool>, _>("is_read").ok().flatten().unwrap_or(true),
+        is_read: row
+            .try_get::<Option<bool>, _>("is_read")
+            .ok()
+            .flatten()
+            .unwrap_or(true),
         created_at: row.try_get("created_at").ok(),
         is_shared: row.try_get::<bool, _>("is_shared").unwrap_or(false),
-        shared_label: row.try_get::<Option<String>, _>("shared_label").ok().flatten(),
-        inbox_status: row.try_get::<Option<String>, _>("inbox_status").ok().flatten(),
-        inbox_assignee_id: row.try_get::<Option<i32>, _>("inbox_assignee_id").ok().flatten(),
+        shared_label: row
+            .try_get::<Option<String>, _>("shared_label")
+            .ok()
+            .flatten(),
+        inbox_status: row
+            .try_get::<Option<String>, _>("inbox_status")
+            .ok()
+            .flatten(),
+        inbox_assignee_id: row
+            .try_get::<Option<i32>, _>("inbox_assignee_id")
+            .ok()
+            .flatten(),
     }
 }
 
@@ -370,7 +383,11 @@ pub async fn get_detail(
         subject: read_subject(&r),
         sender: read_sender(&r),
         receiver: read_receiver(&r),
-        body_iv: r.try_get::<Option<String>, _>("body_iv").ok().flatten().unwrap_or_default(),
+        body_iv: r
+            .try_get::<Option<String>, _>("body_iv")
+            .ok()
+            .flatten()
+            .unwrap_or_default(),
         body_encrypted: r
             .try_get::<Option<String>, _>("body_encrypted")
             .ok()
@@ -533,6 +550,14 @@ pub async fn upsert_batch(
     query.pop();
     // ON CONFLICT also nulls the legacy `subject` so a re-sync of an
     // already-backfilled row can't accidentally re-leak plaintext.
+    //
+    // `is_read` is monotonic on re-sync (`emails.is_read OR EXCLUDED.is_read`):
+    // a tick may upgrade unread→read, but must NOT resurrect a row the user
+    // already opened back to unread. The forward sync re-fetches the last hour
+    // of mail every tick and the mark-read push to Gmail has propagation lag,
+    // so a plain `is_read = EXCLUDED.is_read` would briefly flip just-opened
+    // mail back to unread until Gmail caught up. Trade-off: an email re-marked
+    // unread in Gmail won't reflect as unread here.
     query.push_str(
         " ON CONFLICT (account_id, gmail_id) DO UPDATE SET \
          sender = EXCLUDED.sender, \
@@ -547,7 +572,7 @@ pub async fn upsert_batch(
          receiver_encrypted = EXCLUDED.receiver_encrypted, \
          receiver_hash = EXCLUDED.receiver_hash, \
          created_at = EXCLUDED.created_at, \
-         is_read = EXCLUDED.is_read, \
+         is_read = emails.is_read OR EXCLUDED.is_read, \
          labels = EXCLUDED.labels \
          RETURNING id, gmail_id, sender, subject, subject_iv, subject_encrypted, \
          sender_iv, sender_encrypted, receiver_iv, receiver_encrypted, \
@@ -659,8 +684,7 @@ pub async fn upsert_one(
 ) -> sqlx::Result<i32> {
     let (body_iv, body_encrypted) = row.body.unwrap_or(("", ""));
     let (subject_iv, subject_encrypted) = encrypt_subject_for_storage(row.subject);
-    let (sender_iv, sender_encrypted, sender_hash) =
-        encrypt_address_for_storage(row.sender);
+    let (sender_iv, sender_encrypted, sender_hash) = encrypt_address_for_storage(row.sender);
     let (receiver_iv, receiver_encrypted, receiver_hash) =
         encrypt_address_for_storage(row.receiver);
     // Same `(xmax = 0) AS is_new` trick as upsert_batch so we can tell a
@@ -690,7 +714,7 @@ pub async fn upsert_one(
           created_at = EXCLUDED.created_at,
           body_encrypted = EXCLUDED.body_encrypted,
           body_iv = EXCLUDED.body_iv,
-          is_read = EXCLUDED.is_read,
+          is_read = emails.is_read OR EXCLUDED.is_read,
           labels = EXCLUDED.labels
         RETURNING id, (xmax = 0) AS is_new, created_at
         "#,

@@ -67,12 +67,19 @@ pub async fn rehydrate_account(
         })));
     };
 
-    let token =
-        refresh_and_persist_email_token(pool.get_ref(), account.id, account.provider, refresh_token)
-            .await
-            .map_err(|e| {
-                AppError::Internal(format!("token refresh failed for account {}: {e}", account.id))
-            })?;
+    let token = refresh_and_persist_email_token(
+        pool.get_ref(),
+        account.id,
+        account.provider,
+        refresh_token,
+    )
+    .await
+    .map_err(|e| {
+        AppError::Internal(format!(
+            "token refresh failed for account {}: {e}",
+            account.id
+        ))
+    })?;
 
     // Pull the gmail_id of every row we already have. We don't bother
     // filtering "looks like a stub" here — the user explicitly asked
@@ -102,9 +109,11 @@ pub async fn rehydrate_account(
     let mut tasks = FuturesUnordered::new();
 
     for gmail_id in gmail_ids {
-        let permit = sem.clone().acquire_owned().await.map_err(|e| {
-            AppError::Internal(format!("semaphore closed unexpectedly: {e}"))
-        })?;
+        let permit = sem
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|e| AppError::Internal(format!("semaphore closed unexpectedly: {e}")))?;
         let token = access_token.clone();
         let pool = pool.get_ref().clone();
         let account_id = account.id;
@@ -213,7 +222,7 @@ async fn rehydrate_one(
            receiver_iv = NULLIF($8, ''), \
            receiver_encrypted = NULLIF($9, ''), \
            receiver_hash = NULLIF($10, ''), \
-           is_read = $11, \
+           is_read = is_read OR $11, \
            labels = $12 \
          WHERE account_id = $13 AND gmail_id = $14",
     )

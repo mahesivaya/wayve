@@ -3,8 +3,8 @@
 
 use super::tokens::{ALLOWED_SCOPES, EMBED_TTL_SECONDS, MintError, mint};
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
 use tracing::instrument;
+use wayve_security::jwt::get_user_id_from_request;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(mint_token).service(list_allowed_scopes);
@@ -18,10 +18,7 @@ pub struct MintTokenInput {
 
 #[post("/embed/tokens")]
 #[instrument(target = "http", skip(req, data))]
-pub async fn mint_token(
-    req: HttpRequest,
-    data: web::Json<MintTokenInput>,
-) -> AppResult {
+pub async fn mint_token(req: HttpRequest, data: web::Json<MintTokenInput>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let token = mint(user_id, &data.origin, &data.scopes).map_err(|e| match e {
         MintError::EmptyScopes | MintError::EmptyOrigin => AppError::BadRequest(e.to_string()),

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { useGlobalSearch } from "../search/SearchContext";
-import { fmtTime } from "../utils/datetime";
+import { fmtListTimestamp } from "../utils/datetime";
 
 interface EmailListProps {
   emails: EmailItem[];
@@ -43,7 +43,7 @@ function formatMobileTime(value: string) {
   if (sameDay && now.getTime() - date.getTime() < 10 * 60 * 1000) {
     return "Now";
   }
-  return fmtTime(date);
+  return fmtListTimestamp(date);
 }
 
 // Strip the "<addr>" tail from a sender header so the list shows a
@@ -484,7 +484,7 @@ export const EmailList: React.FC<EmailListProps> = ({
             <span className="email-row-meta">
               {email.has_attachments && <span className="email-attachment-pin" title="Has attachments">📎</span>}
               <span className="email-time">
-                {fmtTime(email.created_at)}
+                {fmtListTimestamp(email.created_at)}
               </span>
             </span>
           </div>

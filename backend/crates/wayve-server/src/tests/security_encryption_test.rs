@@ -1,12 +1,12 @@
 #[cfg(test)]
 mod tests {
-    use wayve_security::encryption::{decrypt, encrypt};
     use aes_gcm::{
         Aes256Gcm, Key, Nonce,
         aead::{Aead, KeyInit},
     };
     use base64::Engine;
     use base64::engine::general_purpose;
+    use wayve_security::encryption::{decrypt, encrypt};
 
     const HEX64_TEST_KEY: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 

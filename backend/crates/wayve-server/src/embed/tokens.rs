@@ -103,10 +103,7 @@ pub fn verify(token: &str) -> Result<EmbedClaims, VerifyError> {
         &validation,
     )
     .map_err(|e| {
-        if matches!(
-            e.kind(),
-            jsonwebtoken::errors::ErrorKind::ExpiredSignature
-        ) {
+        if matches!(e.kind(), jsonwebtoken::errors::ErrorKind::ExpiredSignature) {
             VerifyError::Expired
         } else {
             VerifyError::Decode

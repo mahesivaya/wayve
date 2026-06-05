@@ -23,8 +23,8 @@
 #[cfg(test)]
 mod tests {
     use crate::organization::keys::{
-        add_key_holder_wrap, bootstrap_keys, get_keys, get_member_escrow,
-        list_member_notes, read_audit_log, reset_member_password,
+        add_key_holder_wrap, bootstrap_keys, get_keys, get_member_escrow, list_member_notes,
+        read_audit_log, reset_member_password,
     };
     use crate::routes::auth::login;
     use crate::routes::user::admin_create_user;
@@ -37,13 +37,11 @@ mod tests {
     // -----------------------------------------------------------------
 
     async fn insert_org(pool: &PgPool, name: &str) -> i32 {
-        sqlx::query_scalar::<_, i32>(
-            "INSERT INTO organizations (name) VALUES ($1) RETURNING id",
-        )
-        .bind(name)
-        .fetch_one(pool)
-        .await
-        .unwrap_or_else(|e| panic!("insert org: {e}"))
+        sqlx::query_scalar::<_, i32>("INSERT INTO organizations (name) VALUES ($1) RETURNING id")
+            .bind(name)
+            .fetch_one(pool)
+            .await
+            .unwrap_or_else(|e| panic!("insert org: {e}"))
     }
 
     async fn place_in_org(pool: &PgPool, user_id: i32, org_id: i32, role: &str) {
@@ -52,15 +50,13 @@ mod tests {
         } else {
             "organization"
         };
-        sqlx::query(
-            "UPDATE users SET account_type = $1, organization_id = $2 WHERE id = $3",
-        )
-        .bind(account_type)
-        .bind(org_id)
-        .bind(user_id)
-        .execute(pool)
-        .await
-        .unwrap_or_else(|e| panic!("attach user: {e}"));
+        sqlx::query("UPDATE users SET account_type = $1, organization_id = $2 WHERE id = $3")
+            .bind(account_type)
+            .bind(org_id)
+            .bind(user_id)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("attach user: {e}"));
 
         sqlx::query(
             "INSERT INTO organization_members (organization_id, user_id, role)
@@ -194,8 +190,7 @@ mod tests {
     #[serial_test::serial]
     async fn bootstrap_second_call_rejected() {
         let pool = test_pool().await;
-        let org_id =
-            insert_org(&pool, &format!("OrgKeyBootstrapTwice-{}", random_email())).await;
+        let org_id = insert_org(&pool, &format!("OrgKeyBootstrapTwice-{}", random_email())).await;
         let owner_email = random_email();
         let owner_id = insert_local_user(&pool, &owner_email, "pw").await;
         place_in_org(&pool, owner_id, org_id, "owner").await;
@@ -232,8 +227,7 @@ mod tests {
     #[serial_test::serial]
     async fn bootstrap_admin_rejected() {
         let pool = test_pool().await;
-        let org_id =
-            insert_org(&pool, &format!("OrgKeyBootstrapAdmin-{}", random_email())).await;
+        let org_id = insert_org(&pool, &format!("OrgKeyBootstrapAdmin-{}", random_email())).await;
         let admin_email = random_email();
         let admin_id = insert_local_user(&pool, &admin_email, "pw").await;
         place_in_org(&pool, admin_id, org_id, "admin").await;
@@ -457,8 +451,7 @@ mod tests {
     #[serial_test::serial]
     async fn add_key_holder_for_non_key_role_rejected() {
         let pool = test_pool().await;
-        let org_id =
-            insert_org(&pool, &format!("OrgKeyAddHolder-{}", random_email())).await;
+        let org_id = insert_org(&pool, &format!("OrgKeyAddHolder-{}", random_email())).await;
         let owner_email = random_email();
         let owner_id = insert_local_user(&pool, &owner_email, "pw").await;
         place_in_org(&pool, owner_id, org_id, "owner").await;
@@ -545,8 +538,7 @@ mod tests {
     #[serial_test::serial]
     async fn list_member_notes_denies_non_key_holder() {
         let pool = test_pool().await;
-        let org_id =
-            insert_org(&pool, &format!("OrgKeyListNotesDeny-{}", random_email())).await;
+        let org_id = insert_org(&pool, &format!("OrgKeyListNotesDeny-{}", random_email())).await;
 
         let target_email = random_email();
         let target_id = insert_local_user(&pool, &target_email, "pw").await;

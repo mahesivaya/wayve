@@ -3,10 +3,26 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import {
   formatUserActionDetails,
+  listRegistrationTypes,
   listUserActions,
+  type RegistrationTypeRow,
   type UserActionRow,
 } from "../api/audit";
 import { fmtDateTime } from "../utils/datetime";
+
+// Maps users.auth_provider to a friendly label + pill style for the
+// "Registration types" table.
+const REGISTRATION_PROVIDERS: Record<string, { label: string; pill: string }> = {
+  google: { label: "Gmail (Google)", pill: "provider-google" },
+  microsoft: { label: "Outlook (Microsoft)", pill: "provider-microsoft" },
+  local: { label: "Email registration", pill: "provider-local" },
+};
+
+function registrationProvider(provider: string) {
+  return (
+    REGISTRATION_PROVIDERS[provider] ?? { label: provider, pill: "provider-local" }
+  );
+}
 import { useResizableColumns } from "./useResizableColumns";
 import "./platformTeam.css";
 
@@ -34,6 +50,8 @@ export default function PlatformUserLogs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [registrations, setRegistrations] = useState<RegistrationTypeRow[]>([]);
+  const [registrationsLoaded, setRegistrationsLoaded] = useState(false);
 
   const { colWidths, totalWidth, startResize } = useResizableColumns(
     USER_LOG_COLUMNS,
@@ -56,9 +74,33 @@ export default function PlatformUserLogs() {
     }
   }, [canView]);
 
+  const loadRegistrations = useCallback(async () => {
+    if (!canView) {
+      setRegistrationsLoaded(true);
+      return;
+    }
+    try {
+      setRegistrations(await listRegistrationTypes({ limit: 500 }));
+    } catch {
+      // Best effort — the registration table just shows its empty state.
+    } finally {
+      setRegistrationsLoaded(true);
+    }
+  }, [canView]);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadRegistrations();
+  }, [load, loadRegistrations]);
+
+  const registrationCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of registrations) {
+      const key = r.auth_provider || "local";
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [registrations]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -89,6 +131,53 @@ export default function PlatformUserLogs() {
       </header>
 
       {error && <div className="pt-banner">{error}</div>}
+
+      <section className="pt-panel">
+        <div className="pt-panel-head">
+          <h2>Registration types</h2>
+          <div className="pt-reg-summary">
+            {(["google", "microsoft", "local"] as const).map((p) => (
+              <span key={p} className={`pt-pill ${registrationProvider(p).pill}`}>
+                {registrationProvider(p).label}: {registrationCounts[p] ?? 0}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {!registrationsLoaded ? (
+          <div className="pt-empty">Loading…</div>
+        ) : registrations.length === 0 ? (
+          <div className="pt-empty">No registered users yet.</div>
+        ) : (
+          <div className="pt-table-scroll">
+            <table className="pt-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Registered via</th>
+                  <th>When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {registrations.map((r) => {
+                  const provider = registrationProvider(r.auth_provider || "local");
+                  return (
+                    <tr key={r.id}>
+                      <td>{r.email}</td>
+                      <td>
+                        <span className={`pt-pill ${provider.pill}`}>
+                          {provider.label}
+                        </span>
+                      </td>
+                      <td>{r.created_at ? fmtDateTime(r.created_at) : "-"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section className="pt-panel">
         <div className="pt-panel-head">

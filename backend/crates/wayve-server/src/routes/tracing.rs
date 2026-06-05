@@ -92,8 +92,9 @@ pub async fn tracing_overview(
         Err(response) => return Ok(response),
     };
     if ctx.scope != Scope::Platform || ctx.role != Role::Owner {
-        return Ok(HttpResponse::Forbidden()
-            .json(serde_json::json!({ "message": "Platform owner only" })));
+        return Ok(
+            HttpResponse::Forbidden().json(serde_json::json!({ "message": "Platform owner only" }))
+        );
     }
 
     let level_filter = query

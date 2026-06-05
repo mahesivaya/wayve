@@ -17,7 +17,6 @@
 //! for deciding which providers to wire up next.
 
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
 use actix_web::{HttpRequest, HttpResponse, web};
 use hickory_resolver::Resolver;
 use hickory_resolver::TokioResolver;
@@ -26,6 +25,7 @@ use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::proto::rr::RData;
 use std::time::Duration;
 use tracing::{info, instrument, warn};
+use wayve_security::jwt::get_user_id_from_request;
 
 #[derive(Deserialize)]
 pub struct ProviderLookupRequest {

@@ -694,8 +694,7 @@ mod tests {
             .to_vec();
 
         let password = "correct-horse-battery-staple";
-        let result = provision_org_member_keypair(password, &org_spki)
-            .expect("provision succeeds");
+        let result = provision_org_member_keypair(password, &org_spki).expect("provision succeeds");
 
         // (a) Owner recovers PKCS8 from the org-pubkey-wrapped envelope.
         let prefix_len = WAYVE_SECURE_PREFIX.len() + 1; // "\n"
@@ -705,8 +704,7 @@ mod tests {
             serde_json::from_value(parsed["key"].clone()).expect("wrapped key");
         let body_ct: Vec<u8> =
             serde_json::from_value(parsed["data"].clone()).expect("body ciphertext");
-        let body_iv: Vec<u8> =
-            serde_json::from_value(parsed["iv"].clone()).expect("body iv");
+        let body_iv: Vec<u8> = serde_json::from_value(parsed["iv"].clone()).expect("body iv");
         let aes_key = org_priv
             .decrypt(Oaep::new::<Sha256>(), &wrapped_aes)
             .expect("rsa unwrap");
@@ -716,8 +714,8 @@ mod tests {
             .expect("aes unwrap via org key");
 
         // (b) Member recovers PKCS8 from the password wrap.
-        let pkcs8_via_password = unwrap_org_member_login(password, &result.login_wrap)
-            .expect("login unwrap");
+        let pkcs8_via_password =
+            unwrap_org_member_login(password, &result.login_wrap).expect("login unwrap");
 
         // (c) Both paths must yield the EXACT same PKCS8 bytes — proves
         //     both wraps describe the same keypair.
@@ -730,8 +728,7 @@ mod tests {
             .to_public_key_der()
             .expect("recovered spki")
             .to_vec();
-        let pub_json: Vec<u8> =
-            serde_json::from_str(&result.public_key_json).expect("pub json");
+        let pub_json: Vec<u8> = serde_json::from_str(&result.public_key_json).expect("pub json");
         assert_eq!(recovered_spki, pub_json);
     }
 
@@ -746,8 +743,7 @@ mod tests {
             .expect("org spki")
             .to_vec();
 
-        let result = provision_org_member_keypair("right-password", &org_spki)
-            .expect("provision");
+        let result = provision_org_member_keypair("right-password", &org_spki).expect("provision");
         let wrong = unwrap_org_member_login("wrong-password", &result.login_wrap);
         assert!(wrong.is_err(), "wrong password must reject");
     }
@@ -768,8 +764,7 @@ mod tests {
         let pkcs8 = unwrap_org_member_login("old-pass", &initial.login_wrap).expect("unwrap");
 
         let new_wrap = rewrap_org_member_login("new-pass", &pkcs8).expect("rewrap");
-        let pkcs8_via_new =
-            unwrap_org_member_login("new-pass", &new_wrap).expect("unwrap via new");
+        let pkcs8_via_new = unwrap_org_member_login("new-pass", &new_wrap).expect("unwrap via new");
         assert_eq!(pkcs8, pkcs8_via_new);
 
         // Salt MUST differ — confirms fresh randomness on rewrap.

@@ -4,12 +4,12 @@ use crate::email::account::{ConnectedEmailAccount, upsert_connected_email_accoun
 use crate::email::oauth::{HTTP_CLIENT, try_load_google_secrets};
 use crate::email::provider::MailProvider;
 use crate::email::sync::sync_account_recent;
-use wayve_security::jwt::{auth_cookie, create_jwt_for_account};
-use wayve_security::oauth::{consume_state, create_oauth_state};
-use wayve_security::rbac::{self, Role, Scope};
 use actix_web::{HttpResponse, Responder, web};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
+use wayve_security::jwt::{auth_cookie, create_jwt_for_account};
+use wayve_security::oauth::{consume_state, create_oauth_state};
+use wayve_security::rbac::{self, Role, Scope};
 
 /// Gate the external-mailbox connect flows: only personal accounts and
 /// organization owners may attach a Gmail / Outlook mailbox to their own
@@ -381,7 +381,7 @@ pub async fn oauth_callback(
                         .finish();
                 }
                 user_id = row.get("id");
-                info!(target: "auth", user_id, "Google sign-in for existing user");
+                info!(target: "auth", user_id, email, provider = "google", "sign-in via Google OAuth (existing user)");
             }
             Ok(None) => {
                 let insert = sqlx::query(
@@ -396,7 +396,7 @@ pub async fn oauth_callback(
                     Ok(row) => {
                         user_id = row.get("id");
                         was_new_user = true;
-                        info!(target: "auth", user_id, email, "Google signup created user");
+                        info!(target: "auth", user_id, email, provider = "google", "user registered via Google OAuth");
                     }
                     Err(e) => {
                         error!(target: "auth", error = %e, "Google signup user insert failed");

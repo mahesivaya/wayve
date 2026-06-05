@@ -103,8 +103,6 @@ Content-Type: text/plain; charset=\"UTF-8\"\r\n\r\n{body}"
 
 #[cfg(test)]
 pub fn decode_raw_message(message: &RawMailMessage) -> String {
-    let bytes = URL_SAFE_NO_PAD
-        .decode(&message.raw_b64)
-        .unwrap_or_default();
+    let bytes = URL_SAFE_NO_PAD.decode(&message.raw_b64).unwrap_or_default();
     String::from_utf8(bytes).unwrap_or_default()
 }

@@ -1,9 +1,6 @@
 use crate::billing::models::BillingOwner;
 use crate::billing::{entitlements::effective_entitlements, resolve_owner, usage_metering};
 use crate::prelude::*;
-use wayve_security::encryption::{decrypt_binary, encrypt_binary};
-use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{self, Scope};
 use actix_multipart::Multipart;
 use actix_web::http::header;
 use actix_web::{Error, HttpResponse, get, post, web};
@@ -13,6 +10,9 @@ use sqlx::{FromRow, PgPool, Row};
 use tokio::{fs, io::AsyncWriteExt};
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
+use wayve_security::encryption::{decrypt_binary, encrypt_binary};
+use wayve_security::jwt::get_user_id_from_request;
+use wayve_security::rbac::{self, Scope};
 
 #[derive(Deserialize)]
 pub struct FilesQuery {
@@ -487,12 +487,13 @@ pub async fn download_file(
 
     // Ownership check: the row is only returned when it belongs to the caller,
     // so a 404 leaks nothing about other users' files.
-    let row =
-        sqlx::query("SELECT name, file_path, file_iv FROM drive_files WHERE id = $1 AND user_id = $2")
-            .bind(file_id)
-            .bind(user_id)
-            .fetch_optional(pool.get_ref())
-            .await?;
+    let row = sqlx::query(
+        "SELECT name, file_path, file_iv FROM drive_files WHERE id = $1 AND user_id = $2",
+    )
+    .bind(file_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
 
     let (file_name, file_path, file_iv): (String, String, Option<String>) = match row {
         Some(row) => (row.get("name"), row.get("file_path"), row.get("file_iv")),

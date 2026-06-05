@@ -75,8 +75,10 @@ export default function PlatformEnterprises() {
 
             <div className="organization-grid organization-grid--stats">
               {enterprises.map((ent) => (
-                <article
+                <Link
                   key={ent.id}
+                  to={`/platform/organizations/${ent.id}`}
+                  state={{ from: "enterprise" }}
                   className="organization-grid-tile organization-grid-tile--stats"
                   title={ent.name}
                 >
@@ -85,7 +87,7 @@ export default function PlatformEnterprises() {
                     <span>{formatBytes(ent.storage_used_bytes ?? 0)} used</span>
                     <span>{(ent.email_account_count ?? 0).toLocaleString()} email accounts</span>
                   </span>
-                </article>
+                </Link>
               ))}
             </div>
           </>

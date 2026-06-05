@@ -9,9 +9,9 @@
 use super::quotas;
 use crate::cache::Cache;
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
 use sqlx::Row;
 use tracing::instrument;
+use wayve_security::jwt::get_user_id_from_request;
 
 #[get("/billing/tiers")]
 #[instrument(target = "http", skip(pool))]

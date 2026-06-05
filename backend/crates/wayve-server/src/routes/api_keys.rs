@@ -3,11 +3,11 @@
 //! `internal` keys additionally require platform scope.
 
 use crate::prelude::*;
-use wayve_security::api_key::{generate_api_key, hash_api_key, is_valid_scope};
-use wayve_security::rbac::{self, Permission, RoleContext, Scope};
 use actix_web::{HttpRequest, HttpResponse, delete, get, post, web};
 use chrono::{DateTime, Utc};
 use tracing::{info, instrument};
+use wayve_security::api_key::{generate_api_key, hash_api_key, is_valid_scope};
+use wayve_security::rbac::{self, Permission, RoleContext, Scope};
 
 const INTERNAL_RATE_DEFAULT: i32 = 6000;
 const EXTERNAL_RATE_DEFAULT: i32 = 120;
@@ -357,9 +357,9 @@ mod tests {
     use super::*;
     use crate::cache::Cache;
     use crate::middleware::api_key::ApiKeyMiddleware;
-    use wayve_security::api_key::{AuditEntry, AuditOutcome, write_audit};
     use crate::test_support::{insert_local_user, random_email, test_pool};
     use actix_web::{App, http::StatusCode, test as actix_test};
+    use wayve_security::api_key::{AuditEntry, AuditOutcome, write_audit};
 
     /// Mounted at `/api/notes`: succeeds only if the request authenticated —
     /// proves the middleware injected an `ApiKeyPrincipal` that

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use wayve_security::jwt::{create_jwt, decode_jwt, get_user_id_from_request};
     use actix_web::test::TestRequest;
+    use wayve_security::jwt::{create_jwt, decode_jwt, get_user_id_from_request};
 
     fn ensure_test_secret() {
         unsafe {

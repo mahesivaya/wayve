@@ -40,10 +40,10 @@ const SECURE_MAX_SUBJECT_BYTES: usize = 1024;
 pub struct SendSecureInput {
     pub recipient_email: String,
     pub subject: String,
-    pub ciphertext: String,   // base64 AES-GCM ciphertext of the body
-    pub iv: String,           // base64 12-byte AES-GCM nonce
-    pub wrapped_key: String,  // base64 wrapped AES key (PBKDF2-derived KEK)
-    pub salt: String,         // base64 PBKDF2 salt (per-message random)
+    pub ciphertext: String,  // base64 AES-GCM ciphertext of the body
+    pub iv: String,          // base64 12-byte AES-GCM nonce
+    pub wrapped_key: String, // base64 wrapped AES key (PBKDF2-derived KEK)
+    pub salt: String,        // base64 PBKDF2 salt (per-message random)
     /// Optional override; defaults to 600,000 to match the recovery
     /// flow's iteration count. Clamped to a sane minimum server-side.
     pub pbkdf2_iterations: Option<i32>,
@@ -96,11 +96,11 @@ pub async fn send_secure(
         return Ok(HttpResponse::BadRequest()
             .body("ciphertext / iv / wrapped_key / salt are all required"));
     }
-    let iterations = data
-        .pbkdf2_iterations
-        .unwrap_or(600_000)
-        .max(100_000); // never accept a weakly-derived KEK
-    let ttl_days = data.ttl_days.unwrap_or(SECURE_DEFAULT_TTL_DAYS).clamp(1, 30);
+    let iterations = data.pbkdf2_iterations.unwrap_or(600_000).max(100_000); // never accept a weakly-derived KEK
+    let ttl_days = data
+        .ttl_days
+        .unwrap_or(SECURE_DEFAULT_TTL_DAYS)
+        .clamp(1, 30);
 
     // ── Mint a URL-safe random token ────────────────────────────────
     // 32 random bytes ⇒ 256 bits, base64url-encoded to ~43 chars. The
@@ -113,17 +113,16 @@ pub async fn send_secure(
     let expires_at = Utc::now() + Duration::days(ttl_days);
 
     // ── Look up sender's email so the notification reads naturally ──
-    let sender_email: String = match sqlx::query_scalar::<_, Option<String>>(
-        "SELECT email FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
-    .await?
-    .flatten()
-    {
-        Some(addr) => addr,
-        None => return Ok(HttpResponse::Unauthorized().body("Sender account not found")),
-    };
+    let sender_email: String =
+        match sqlx::query_scalar::<_, Option<String>>("SELECT email FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?
+            .flatten()
+        {
+            Some(addr) => addr,
+            None => return Ok(HttpResponse::Unauthorized().body("Sender account not found")),
+        };
 
     sqlx::query(
         r#"
@@ -204,10 +203,7 @@ pub async fn send_secure(
 }
 
 #[instrument(target = "http", skip(pool, path))]
-pub async fn get_secure_message(
-    pool: web::Data<PgPool>,
-    path: web::Path<String>,
-) -> AppResult {
+pub async fn get_secure_message(pool: web::Data<PgPool>, path: web::Path<String>) -> AppResult {
     // This endpoint is INTENTIONALLY public — recipients who aren't
     // Wayve users come here to fetch the ciphertext bundle. The token
     // is the bearer credential; possession of the token + the
@@ -298,8 +294,7 @@ pub async fn revoke_secure_message(
             .await?;
     if result.rows_affected() == 0 {
         warn!(target: "gmail", user_id, token = %token, "revoke: no matching row (wrong sender or already gone)");
-        return Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Not found" })));
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Not found" })));
     }
     Ok(HttpResponse::NoContent().finish())
 }

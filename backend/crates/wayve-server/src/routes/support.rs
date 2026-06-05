@@ -67,9 +67,7 @@ fn validate_category(value: &str) -> Result<&str, AppError> {
     if ALLOWED_CATEGORIES.contains(&value) {
         Ok(value)
     } else {
-        Err(AppError::BadRequest(format!(
-            "invalid category '{value}'"
-        )))
+        Err(AppError::BadRequest(format!("invalid category '{value}'")))
     }
 }
 
@@ -104,11 +102,10 @@ pub async fn create_ticket(
 
     // Carry the user's current organization onto the ticket so platform
     // staff can group/filter by tenant later without an extra join.
-    let org_id: Option<i32> =
-        sqlx::query_scalar("SELECT organization_id FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_one(pool.get_ref())
-            .await?;
+    let org_id: Option<i32> = sqlx::query_scalar("SELECT organization_id FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(pool.get_ref())
+        .await?;
 
     let id: i32 = sqlx::query_scalar(
         r#"
@@ -400,7 +397,10 @@ pub async fn upload_ticket_attachments(
         let filename = raw_filename.replace(['/', '\\'], "");
 
         let file_id = Uuid::new_v4().to_string();
-        let filepath = format!("{}/support_{}_{}_{}", upload_dir, ticket_id, file_id, filename);
+        let filepath = format!(
+            "{}/support_{}_{}_{}",
+            upload_dir, ticket_id, file_id, filename
+        );
 
         let mut size: i64 = 0;
         let mut plaintext: Vec<u8> = Vec::new();

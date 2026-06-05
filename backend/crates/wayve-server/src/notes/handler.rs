@@ -1,15 +1,15 @@
 use crate::models::note::{Note, NoteInput};
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
 use actix_web::{delete, put};
 use sqlx::Row;
 use tracing::instrument;
+use wayve_security::jwt::get_user_id_from_request;
 
 fn note_from_row(row: sqlx::postgres::PgRow) -> Note {
     Note {
         id: row.get("id"),
-        // In E2EE mode, the 'title' and 'content' columns contain the 
-        // WAYVE_SECURE_V1 envelope strings directly. We pass them to the 
+        // In E2EE mode, the 'title' and 'content' columns contain the
+        // WAYVE_SECURE_V1 envelope strings directly. We pass them to the
         // frontend as-is for client-side decryption.
         title: row.try_get("title").ok(),
         content: row.try_get("content").ok(),

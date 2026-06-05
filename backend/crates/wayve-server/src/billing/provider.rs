@@ -202,10 +202,7 @@ pub async fn create_subscription(
             "on_subscription".to_string(),
         ),
         ("expand[]", "latest_invoice.payment_intent".to_string()),
-        (
-            "expand[]",
-            "latest_invoice.confirmation_secret".to_string(),
-        ),
+        ("expand[]", "latest_invoice.confirmation_secret".to_string()),
         ("metadata[client_reference]", client_reference.to_string()),
     ];
     let body = post_form("/subscriptions", &params).await?;

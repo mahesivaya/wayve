@@ -164,8 +164,9 @@ pub async fn admin_deactivate_plan(
         .await?;
 
     if result.rows_affected() == 0 {
-        return Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Plan not found" })));
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Plan not found" }))
+        );
     }
 
     Ok(HttpResponse::NoContent().finish())

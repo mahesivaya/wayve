@@ -87,8 +87,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_zoom_meeting_with_propagates_errors() {
-        let out =
-            create_zoom_meeting_with(&FailingZoom, "Sync", utc(2026, 5, 26, 10, 0), 30).await;
+        let out = create_zoom_meeting_with(&FailingZoom, "Sync", utc(2026, 5, 26, 10, 0), 30).await;
         match out {
             Err(ZoomError::CreateStatus(msg)) => assert_eq!(msg, "upstream 500"),
             other => panic!("expected CreateStatus, got {other:?}"),

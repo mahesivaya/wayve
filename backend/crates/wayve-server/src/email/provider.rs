@@ -160,9 +160,7 @@ pub fn mail_provider_client(provider: MailProvider) -> Option<Arc<dyn MailProvid
         // Yahoo has no central credential — each account's app password is
         // self-contained and is decrypted from the DB row on demand by
         // YahooMailClient methods. The client is always available.
-        MailProvider::Yahoo => {
-            Some(Arc::new(YahooMailClient {}) as Arc<dyn MailProviderClient>)
-        }
+        MailProvider::Yahoo => Some(Arc::new(YahooMailClient {}) as Arc<dyn MailProviderClient>),
     }
 }
 
@@ -397,12 +395,10 @@ impl MailSync for YahooMailClient {
         // `access_token` is the decrypted app password from the shoehorn
         // documented above. We don't have the email address here, so look
         // it up from the row.
-        let email: String = sqlx::query_scalar(
-            "SELECT email FROM email_accounts WHERE id = $1",
-        )
-        .bind(account_id)
-        .fetch_one(pool)
-        .await?;
+        let email: String = sqlx::query_scalar("SELECT email FROM email_accounts WHERE id = $1")
+            .bind(account_id)
+            .fetch_one(pool)
+            .await?;
         sync_yahoo_account(pool, account_id, &email, access_token).await
     }
 
@@ -418,11 +414,10 @@ impl MailSync for YahooMailClient {
         // we anchor at the lowest UID we've already stored and request
         // the next `limit` older UIDs. `_before_timestamp` is the OAuth
         // path's idiom and isn't needed here. See `sync_yahoo_account_before`.
-        let email: String =
-            sqlx::query_scalar("SELECT email FROM email_accounts WHERE id = $1")
-                .bind(account_id)
-                .fetch_one(pool)
-                .await?;
+        let email: String = sqlx::query_scalar("SELECT email FROM email_accounts WHERE id = $1")
+            .bind(account_id)
+            .fetch_one(pool)
+            .await?;
         sync_yahoo_account_before(pool, account_id, &email, access_token, limit).await
     }
 }

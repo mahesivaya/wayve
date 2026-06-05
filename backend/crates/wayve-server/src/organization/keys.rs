@@ -269,13 +269,11 @@ pub async fn bootstrap_keys(
         ));
     }
 
-    sqlx::query(
-        "INSERT INTO organization_keys (organization_id, public_key) VALUES ($1, $2)",
-    )
-    .bind(organization_id)
-    .bind(&body.public_key)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("INSERT INTO organization_keys (organization_id, public_key) VALUES ($1, $2)")
+        .bind(organization_id)
+        .bind(&body.public_key)
+        .execute(&mut *tx)
+        .await?;
 
     sqlx::query(
         "INSERT INTO organization_wrapped_keys
@@ -359,12 +357,11 @@ pub async fn get_keys(
         return Err(AppError::Forbidden);
     }
 
-    let pub_row = sqlx::query(
-        "SELECT public_key FROM organization_keys WHERE organization_id = $1",
-    )
-    .bind(organization_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
+    let pub_row =
+        sqlx::query("SELECT public_key FROM organization_keys WHERE organization_id = $1")
+            .bind(organization_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
     let Some(pub_row) = pub_row else {
         return Err(AppError::NotFound("organization_keys"));
     };
@@ -910,10 +907,7 @@ pub async fn persist_provisioned_keys(
 /// the frontend banner that nudges new key-holders to enter the
 /// mnemonic.
 #[allow(dead_code)]
-pub async fn current_user_holds_key_wrap(
-    pool: &PgPool,
-    user_id: i32,
-) -> Result<bool, sqlx::Error> {
+pub async fn current_user_holds_key_wrap(pool: &PgPool, user_id: i32) -> Result<bool, sqlx::Error> {
     let ctx = match resolve_role_context(pool, user_id).await {
         Ok(c) => c,
         Err(e) => return Err(e),

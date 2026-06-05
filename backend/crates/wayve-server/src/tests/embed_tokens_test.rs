@@ -10,7 +10,9 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::embed::tokens::{ALLOWED_SCOPES, EMBED_ISSUER, MintError, VerifyError, mint, verify};
+    use crate::embed::tokens::{
+        ALLOWED_SCOPES, EMBED_ISSUER, MintError, VerifyError, mint, verify,
+    };
     use chrono::{Duration as ChronoDuration, Utc};
     use jsonwebtoken::{EncodingKey, Header, encode};
     use serde::Serialize;
@@ -36,7 +38,10 @@ mod tests {
             );
         }
         // Sanity: catalog isn't accidentally empty.
-        assert!(!ALLOWED_SCOPES.is_empty(), "ALLOWED_SCOPES must not be empty");
+        assert!(
+            !ALLOWED_SCOPES.is_empty(),
+            "ALLOWED_SCOPES must not be empty"
+        );
     }
 
     #[test]

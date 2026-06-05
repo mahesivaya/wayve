@@ -4,11 +4,11 @@ use crate::cache::TtlCache;
 use crate::email::attachments::save_email_attachments;
 use crate::email::oauth::{HTTP_CLIENT, refresh_access_token, try_load_google_secrets};
 use crate::email::utils::{extract_attachments, extract_body};
-use wayve_security::encryption::{decrypt, encrypt};
-use wayve_security::jwt::get_user_id_from_request;
 use actix_web::{HttpResponse, get};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
+use wayve_security::encryption::{decrypt, encrypt};
+use wayve_security::jwt::get_user_id_from_request;
 
 const EMAIL_BODY_CACHE_TTL_SECS: u64 = 300;
 const EMAIL_BODY_CACHE_MAX_CAPACITY: u64 = 10_000;

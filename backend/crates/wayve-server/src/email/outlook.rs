@@ -11,10 +11,10 @@ use crate::prelude::*;
 use crate::email::attachments::save_email_attachments;
 use crate::email::oauth::HTTP_CLIENT;
 use crate::email::utils::AttachmentMeta;
-use wayve_security::encryption::encrypt;
 use actix_web::HttpResponse;
 use actix_web::http::header;
 use tracing::{debug, instrument, warn};
+use wayve_security::encryption::encrypt;
 
 /// Microsoft Graph scopes requested for every Outlook flow — both sign-in and
 /// mailbox connect — so a signed-in account can read and send mail right away.
@@ -384,7 +384,11 @@ pub async fn refresh_outlook_unread_count(
         "{}/v1.0/me/mailFolders/inbox?$select=unreadItemCount",
         crate::external::microsoft_graph_base()
     );
-    let resp = HTTP_CLIENT.get(&url).bearer_auth(access_token).send().await?;
+    let resp = HTTP_CLIENT
+        .get(&url)
+        .bearer_auth(access_token)
+        .send()
+        .await?;
     if !resp.status().is_success() {
         warn!(
             target: "worker",
@@ -531,7 +535,11 @@ async fn sync_outlook_folder_recent(
         cap
     );
 
-    let resp = HTTP_CLIENT.get(&url).bearer_auth(access_token).send().await?;
+    let resp = HTTP_CLIENT
+        .get(&url)
+        .bearer_auth(access_token)
+        .send()
+        .await?;
     let status = resp.status();
     if !status.is_success() {
         // 404 happens when the folder doesn't exist on the user's mailbox

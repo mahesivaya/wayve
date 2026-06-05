@@ -14,11 +14,11 @@
 
 use crate::email::shared_inbox::{InboxMember, StatusUpdate, can_access_account, upsert_state};
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{self, Permission, Scope};
 use actix_web::{HttpRequest, HttpResponse, delete, get, patch, post, web};
 use chrono::{DateTime, Utc};
 use tracing::{info, instrument};
+use wayve_security::jwt::get_user_id_from_request;
+use wayve_security::rbac::{self, Permission, Scope};
 
 // =============================================================
 // Shared DTOs

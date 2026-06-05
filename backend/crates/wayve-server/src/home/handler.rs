@@ -170,7 +170,9 @@ async fn load_inbox(pool: &PgPool, user_id: i32) -> Result<InboxSummary, sqlx::E
             id: row.get("id"),
             sender: row.try_get::<Option<String>, _>("sender").ok().flatten(),
             subject: decrypt_or_legacy(
-                row.try_get::<Option<String>, _>("subject_iv").ok().flatten(),
+                row.try_get::<Option<String>, _>("subject_iv")
+                    .ok()
+                    .flatten(),
                 row.try_get::<Option<String>, _>("subject_encrypted")
                     .ok()
                     .flatten(),
@@ -281,7 +283,9 @@ async fn load_recent(pool: &PgPool, user_id: i32) -> Result<Vec<RecentItem>, sql
     for row in recent_email_rows {
         let id: i32 = row.get("id");
         let subject = decrypt_or_legacy(
-            row.try_get::<Option<String>, _>("subject_iv").ok().flatten(),
+            row.try_get::<Option<String>, _>("subject_iv")
+                .ok()
+                .flatten(),
             row.try_get::<Option<String>, _>("subject_encrypted")
                 .ok()
                 .flatten(),

@@ -23,7 +23,10 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
 
 // ── Auth helper ───────────────────────────────────────────────────────
 
-async fn auth(req: &HttpRequest, pool: &PgPool) -> std::result::Result<ScimPrincipal, HttpResponse> {
+async fn auth(
+    req: &HttpRequest,
+    pool: &PgPool,
+) -> std::result::Result<ScimPrincipal, HttpResponse> {
     let raw = req
         .headers()
         .get("Authorization")
@@ -299,7 +302,10 @@ pub async fn create_user(
     .await?
     {
         let _: i32 = existing.get("id");
-        return Ok(scim_error(409, "User with matching userName or externalId already exists"));
+        return Ok(scim_error(
+            409,
+            "User with matching userName or externalId already exists",
+        ));
     }
 
     // SCIM-provisioned users are seeded with a random throwaway password

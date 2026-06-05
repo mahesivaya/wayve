@@ -7,12 +7,12 @@ use crate::scheduler::email_notifications::{
 };
 use crate::scheduler::time::minutes_to_time;
 use crate::scheduler::zoom::create_zoom_meeting;
-use wayve_security::encryption::{decrypt, encrypt};
 use actix_web::{HttpRequest, HttpResponse, delete, post, put, web};
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
 use tracing::{info, instrument, warn};
+use wayve_security::encryption::{decrypt, encrypt};
 
 use chrono::{NaiveDate, NaiveTime};
 use sqlx::{PgPool, Row};

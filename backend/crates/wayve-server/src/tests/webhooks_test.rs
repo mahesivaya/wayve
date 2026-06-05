@@ -11,8 +11,8 @@
 #[cfg(test)]
 mod tests {
     use crate::test_support::{insert_local_user, random_email, test_pool};
-    use crate::webhooks::{Event, emit};
     use crate::webhooks::events::EventOwner;
+    use crate::webhooks::{Event, emit};
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
     use sqlx::Row;
@@ -185,13 +185,11 @@ mod tests {
     async fn org_wide_endpoint_receives_events_from_any_org_member() {
         let pool = test_pool().await;
         // Two users in the same org.
-        let org_row = sqlx::query(
-            "INSERT INTO organizations (name) VALUES ($1) RETURNING id",
-        )
-        .bind(format!("org-{}", uuid::Uuid::new_v4().simple()))
-        .fetch_one(&pool)
-        .await
-        .expect("create org");
+        let org_row = sqlx::query("INSERT INTO organizations (name) VALUES ($1) RETURNING id")
+            .bind(format!("org-{}", uuid::Uuid::new_v4().simple()))
+            .fetch_one(&pool)
+            .await
+            .expect("create org");
         let org_id: i32 = org_row.get("id");
 
         let owner_id = insert_local_user(&pool, &random_email(), "pw").await;
@@ -244,15 +242,13 @@ mod tests {
         let timestamp = 1_779_629_510i64;
         let body = br#"{"id":"evt_x","type":"wayve.ping"}"#;
 
-        let mut mac =
-            HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC key from bytes");
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC key from bytes");
         mac.update(format!("{timestamp}.").as_bytes());
         mac.update(body);
         let expected = hex(&mac.finalize().into_bytes());
 
         // Re-compute via a freshly-constructed mac to assert determinism.
-        let mut mac2 =
-            HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC key from bytes");
+        let mut mac2 = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC key from bytes");
         mac2.update(format!("{timestamp}.").as_bytes());
         mac2.update(body);
         let again = hex(&mac2.finalize().into_bytes());

@@ -1,10 +1,10 @@
 use crate::models::task::{Task, TaskInput};
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
 use crate::webhooks::{Event, emit, handler::owner_for_user};
 use actix_web::{delete, put};
 use sqlx::Row;
 use tracing::instrument;
+use wayve_security::jwt::get_user_id_from_request;
 
 fn task_from_row(row: sqlx::postgres::PgRow) -> Task {
     Task {
@@ -88,7 +88,13 @@ pub async fn create_task(
 
     let task = task_from_row(row);
     let owner = owner_for_user(pool.get_ref(), user_id).await;
-    emit(pool.get_ref(), owner, Event::TaskCreated, serde_json::to_value(&task).unwrap_or_default()).await;
+    emit(
+        pool.get_ref(),
+        owner,
+        Event::TaskCreated,
+        serde_json::to_value(&task).unwrap_or_default(),
+    )
+    .await;
 
     Ok(HttpResponse::Ok().json(task))
 }
@@ -137,7 +143,13 @@ pub async fn update_task(
 
     let task = task_from_row(row);
     let owner = owner_for_user(pool.get_ref(), user_id).await;
-    emit(pool.get_ref(), owner, Event::TaskUpdated, serde_json::to_value(&task).unwrap_or_default()).await;
+    emit(
+        pool.get_ref(),
+        owner,
+        Event::TaskUpdated,
+        serde_json::to_value(&task).unwrap_or_default(),
+    )
+    .await;
 
     Ok(HttpResponse::Ok().json(task))
 }

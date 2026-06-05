@@ -21,6 +21,9 @@
 //!      with role `member`. Requires `email_verified=true` on the id_token.
 
 use crate::prelude::*;
+use actix_web::{HttpRequest, HttpResponse, delete, get, post, put, web};
+use chrono::{DateTime, Utc};
+use tracing::{info, instrument, warn};
 use wayve_security::encryption::{decrypt, encrypt};
 use wayve_security::jwt::{auth_cookie, create_jwt_for_account};
 use wayve_security::rbac::{self, Permission};
@@ -28,9 +31,6 @@ use wayve_security::sso::{
     IdTokenClaims, build_authorize_url, discovery, exchange_code, pkce_challenge_s256,
     random_token, verify_id_token,
 };
-use actix_web::{HttpRequest, HttpResponse, delete, get, post, put, web};
-use chrono::{DateTime, Utc};
-use tracing::{info, instrument, warn};
 
 // =============================================================
 // Shared DTOs / row types

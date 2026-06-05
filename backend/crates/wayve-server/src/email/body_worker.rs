@@ -214,7 +214,10 @@ pub(crate) async fn process_account(
                     // next worker tick (which now also picks up
                     // attachments_checked=false rows) will retry.
                     if let Err(e) = mark_attachments_checked(pool, fetched.id).await {
-                        println!("body_worker mark_attachments_checked {} failed: {:?}", fetched.id, e);
+                        println!(
+                            "body_worker mark_attachments_checked {} failed: {:?}",
+                            fetched.id, e
+                        );
                     }
                     count += 1;
                 }

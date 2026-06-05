@@ -28,15 +28,13 @@ static CATALOG: Lazy<Vec<Doc>> = Lazy::new(|| {
         Doc {
             slug: "getting-started",
             title: "Getting started with Wayve",
-            description:
-                "The fast path from a new account to a working integration — product surfaces, accounts & roles, the API, webhooks, plans, and the security model.",
+            description: "The fast path from a new account to a working integration — product surfaces, accounts & roles, the API, webhooks, plans, and the security model.",
             body: include_str!("getting_started.md"),
         },
         Doc {
             slug: "price-tier",
             title: "Price Tiers & Event Producers",
-            description:
-                "Rate-limit tiers (Free / Advance / Organization / Enterprise) and the full webhook event catalog with payload shapes.",
+            description: "Rate-limit tiers (Free / Advance / Organization / Enterprise) and the full webhook event catalog with payload shapes.",
             body: include_str!("price_tier.md"),
         },
     ]

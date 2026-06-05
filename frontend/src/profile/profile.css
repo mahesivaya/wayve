@@ -505,3 +505,73 @@
   color: #4b5563;
   border-color: rgb(107, 114, 128, 0.25);
 }
+
+/* Transaction history — mirrors the ticket list layout. */
+.settings-txn-list {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.settings-txn-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.settings-txn-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-txn-amount {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-size: 0.92rem;
+}
+
+.settings-txn-meta {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.settings-txn-status {
+  flex: 0 0 auto;
+  text-transform: capitalize;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: rgb(107, 114, 128, 0.12);
+  color: #4b5563;
+  border-color: rgb(107, 114, 128, 0.25);
+}
+
+.settings-txn-status.status-paid {
+  background: rgb(16, 185, 129, 0.12);
+  color: #047857;
+  border-color: rgb(16, 185, 129, 0.25);
+}
+
+.settings-txn-status.status-open {
+  background: rgb(245, 158, 11, 0.12);
+  color: #b45309;
+  border-color: rgb(245, 158, 11, 0.25);
+}
+
+.settings-txn-status.status-uncollectible,
+.settings-txn-status.status-void {
+  background: rgb(239, 68, 68, 0.12);
+  color: #b91c1c;
+  border-color: rgb(239, 68, 68, 0.25);
+}

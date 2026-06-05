@@ -11,11 +11,11 @@
 // folders owned by other users so the API doesn't leak existence.
 
 use crate::prelude::*;
-use wayve_security::jwt::get_user_id_from_request;
 use actix_web::{HttpResponse, delete, get, post, web};
 use chrono::NaiveDateTime;
 use sqlx::{FromRow, PgPool, Row};
 use tracing::{debug, instrument};
+use wayve_security::jwt::get_user_id_from_request;
 
 #[derive(Serialize, FromRow)]
 pub struct Folder {

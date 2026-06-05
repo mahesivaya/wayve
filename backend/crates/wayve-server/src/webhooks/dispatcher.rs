@@ -96,12 +96,11 @@ async fn run_iteration(pool: &PgPool, client: &reqwest::Client) -> Result<()> {
 
         // Pull the endpoint freshly each delivery — the customer may have
         // disabled, deleted, or moved its URL between attempts.
-        let endpoint = sqlx::query(
-            "SELECT url, secret, enabled FROM webhook_endpoints WHERE id = $1",
-        )
-        .bind(endpoint_id)
-        .fetch_optional(pool)
-        .await?;
+        let endpoint =
+            sqlx::query("SELECT url, secret, enabled FROM webhook_endpoints WHERE id = $1")
+                .bind(endpoint_id)
+                .fetch_optional(pool)
+                .await?;
         let Some(endpoint) = endpoint else {
             // Endpoint was deleted; abandon the delivery.
             mark_abandoned(pool, delivery_id, 0, "endpoint deleted").await;
@@ -178,12 +177,15 @@ async fn deliver(pool: &PgPool, client: &reqwest::Client, job: DeliveryJob<'_>) 
                 .map(|t| t.chars().take(500).collect::<String>())
                 .unwrap_or_default();
             if status.is_success() {
-                mark_delivered(pool, job.delivery_id, job.endpoint_id, status.as_u16(), &excerpt)
-                    .await;
-            } else if status.is_client_error()
-                && status.as_u16() != 408
-                && status.as_u16() != 429
-            {
+                mark_delivered(
+                    pool,
+                    job.delivery_id,
+                    job.endpoint_id,
+                    status.as_u16(),
+                    &excerpt,
+                )
+                .await;
+            } else if status.is_client_error() && status.as_u16() != 408 && status.as_u16() != 429 {
                 // 4xx (other than rate-limit / timeout) means the receiver
                 // is rejecting the request shape — retrying won't help.
                 mark_abandoned_with_response(

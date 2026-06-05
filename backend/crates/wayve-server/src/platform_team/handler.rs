@@ -1,13 +1,14 @@
 use crate::prelude::*;
-use wayve_security::rbac::{Permission, RoleContext, Scope, require_permission};
 use chrono::{DateTime, Utc};
 use sqlx::Row;
 use tracing::instrument;
+use wayve_security::rbac::{Permission, RoleContext, Scope, require_permission};
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(developer_summary)
         .service(support_summary)
-        .service(users_summary);
+        .service(users_summary)
+        .service(platform_users);
 }
 
 async fn gate(
@@ -343,25 +344,39 @@ pub async fn users_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         return Ok(resp);
     }
 
-    // Platform-wide rollups. Storage mirrors the per-user breakdown in
+    // Rollups scoped to PERSONAL users only (the tiles on the Users page show
+    // personal-user figures). Storage mirrors the per-user breakdown in
     // routes/user/profile.rs (drive files + email bodies + chat + notes +
-    // tasks) summed across every user, so the number here matches the sum of
-    // what each user sees on their own profile.
+    // tasks), each component restricted to personal users via a join on
+    // users.account_type, so the total equals the sum of what each personal
+    // user sees on their own profile.
     let row = sqlx::query(
         r#"
         SELECT
-          (SELECT COUNT(*) FROM users)::BIGINT AS users_total,
           (SELECT COUNT(*) FROM users
-             WHERE created_at >= NOW() - INTERVAL '1 month')::BIGINT AS users_new_1m,
+             WHERE account_type = 'personal')::BIGINT AS users_total,
           (SELECT COUNT(*) FROM users
-             WHERE created_at >= NOW() - INTERVAL '1 year')::BIGINT AS users_new_1y,
-          (SELECT COUNT(*) FROM emails)::BIGINT AS emails_total,
+             WHERE account_type = 'personal'
+               AND created_at >= NOW() - INTERVAL '1 month')::BIGINT AS users_new_1m,
+          (SELECT COUNT(*) FROM users
+             WHERE account_type = 'personal'
+               AND created_at >= NOW() - INTERVAL '1 year')::BIGINT AS users_new_1y,
+          (SELECT COUNT(*) FROM emails e
+             JOIN email_accounts ea ON e.account_id = ea.id
+             JOIN users u ON ea.user_id = u.id
+            WHERE u.account_type = 'personal')::BIGINT AS emails_total,
           (
-            (SELECT COALESCE(SUM(size), 0)::BIGINT FROM drive_files)
-          + (SELECT COALESCE(SUM(octet_length(body_encrypted)), 0)::BIGINT FROM emails)
-          + (SELECT COALESCE(SUM(octet_length(content_encrypted)), 0)::BIGINT FROM messages)
-          + (SELECT COALESCE(SUM(octet_length(coalesce(content_encrypted, content, ''))), 0)::BIGINT FROM notes)
-          + (SELECT COALESCE(SUM(octet_length(name) + octet_length(coalesce(description, ''))), 0)::BIGINT FROM tasks)
+            (SELECT COALESCE(SUM(f.size), 0)::BIGINT FROM drive_files f
+               JOIN users u ON f.user_id = u.id WHERE u.account_type = 'personal')
+          + (SELECT COALESCE(SUM(octet_length(e.body_encrypted)), 0)::BIGINT FROM emails e
+               JOIN email_accounts ea ON e.account_id = ea.id
+               JOIN users u ON ea.user_id = u.id WHERE u.account_type = 'personal')
+          + (SELECT COALESCE(SUM(octet_length(m.content_encrypted)), 0)::BIGINT FROM messages m
+               JOIN users u ON m.sender_id = u.id WHERE u.account_type = 'personal')
+          + (SELECT COALESCE(SUM(octet_length(coalesce(n.content_encrypted, n.content, ''))), 0)::BIGINT FROM notes n
+               JOIN users u ON n.user_id = u.id WHERE u.account_type = 'personal')
+          + (SELECT COALESCE(SUM(octet_length(t.name) + octet_length(coalesce(t.description, ''))), 0)::BIGINT FROM tasks t
+               JOIN users u ON t.user_id = u.id WHERE u.account_type = 'personal')
           )::BIGINT AS storage_used_bytes
         "#,
     )
@@ -375,4 +390,86 @@ pub async fn users_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         "emails_total": row.try_get::<i64, _>("emails_total").unwrap_or(0),
         "storage_used_bytes": row.try_get::<i64, _>("storage_used_bytes").unwrap_or(0),
     })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct PlatformUsersQuery {
+    /// Which account type to list. Defaults to "personal".
+    pub account_type: Option<String>,
+    /// Optional case-insensitive email substring filter.
+    pub q: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+/// Per-user table for the platform Users page: email + memory used, one row
+/// per user of the requested `account_type` (default `personal`). `storage_bytes`
+/// reuses the same per-user breakdown as routes/user/profile.rs so each row
+/// matches what that user sees on their own profile. The five correlated
+/// subqueries run only for the returned page (bounded by `limit`).
+#[get("/platform-team/users")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn platform_users(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<PlatformUsersQuery>,
+) -> AppResult {
+    if let Err(resp) = gate(&req, pool.get_ref(), Permission::MembersRead).await {
+        return Ok(resp);
+    }
+
+    let account_type = query
+        .account_type
+        .clone()
+        .unwrap_or_else(|| "personal".to_string());
+    let limit = query.limit.unwrap_or(50).clamp(1, 500);
+    let offset = query.offset.unwrap_or(0).max(0);
+    let search = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("%{s}%"));
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            u.id, u.email, u.username, u.created_at,
+            (
+              (SELECT COALESCE(SUM(octet_length(e.body_encrypted)), 0)::BIGINT FROM emails e
+                 JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id)
+            + (SELECT COALESCE(SUM(f.size), 0)::BIGINT FROM drive_files f WHERE f.user_id = u.id)
+            + (SELECT COALESCE(SUM(octet_length(m.content_encrypted)), 0)::BIGINT FROM messages m WHERE m.sender_id = u.id)
+            + (SELECT COALESCE(SUM(octet_length(coalesce(n.content_encrypted, n.content, ''))), 0)::BIGINT FROM notes n WHERE n.user_id = u.id)
+            + (SELECT COALESCE(SUM(octet_length(t.name) + octet_length(coalesce(t.description, ''))), 0)::BIGINT FROM tasks t WHERE t.user_id = u.id)
+            )::BIGINT AS storage_bytes
+        FROM users u
+        WHERE u.account_type = $1
+          AND ($2::text IS NULL OR u.email ILIKE $2)
+        ORDER BY storage_bytes DESC, u.id
+        LIMIT $3 OFFSET $4
+        "#,
+    )
+    .bind(&account_type)
+    .bind(search.as_deref())
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    let users: Vec<_> = rows
+        .into_iter()
+        .map(|row| {
+            let created_at: Option<DateTime<Utc>> = row.try_get("created_at").ok();
+            serde_json::json!({
+                "id": row.try_get::<i32, _>("id").unwrap_or(0),
+                "email": row.try_get::<String, _>("email").unwrap_or_default(),
+                "username": row.try_get::<Option<String>, _>("username").ok().flatten(),
+                "created_at": created_at,
+                "storage_bytes": row.try_get::<i64, _>("storage_bytes").unwrap_or(0),
+            })
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "users": users })))
 }

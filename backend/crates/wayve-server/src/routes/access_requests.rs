@@ -68,8 +68,7 @@ async fn append_event(event: serde_json::Value) {
 
 // Sample payload revealed once a request for `test_access` is approved. A real
 // resource would fetch the actual protected content here.
-const TEST_ACCESS_SECRET: &str =
-    "🔓 Unlocked: this is the protected sample dataset for the Test Access page. \
+const TEST_ACCESS_SECRET: &str = "🔓 Unlocked: this is the protected sample dataset for the Test Access page. \
      Quarterly figures, internal notes, and the confidential roadmap would live here.";
 
 #[derive(Serialize, FromRow)]
@@ -280,7 +279,8 @@ pub async fn admin_list_access_requests(
     pool: web::Data<PgPool>,
     query: web::Query<AdminListQuery>,
 ) -> AppResult {
-    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await
+    {
         Ok(ctx) => ctx,
         Err(response) => return Ok(response),
     };
@@ -345,7 +345,8 @@ pub async fn admin_decide_access_request(
     path: web::Path<i32>,
     body: web::Json<DecisionBody>,
 ) -> AppResult {
-    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await
+    {
         Ok(ctx) => ctx,
         Err(response) => return Ok(response),
     };
@@ -434,7 +435,8 @@ pub async fn access_request_history(
     pool: web::Data<PgPool>,
     query: web::Query<HistoryQuery>,
 ) -> AppResult {
-    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await
+    {
         Ok(ctx) => ctx,
         Err(response) => return Ok(response),
     };
@@ -457,9 +459,7 @@ pub async fn access_request_history(
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
         .filter(|entry| match scope_str {
             "platform" => entry.get("target_scope").and_then(Value::as_str) == Some("platform"),
-            _ => {
-                entry.get("organization_id").and_then(Value::as_i64) == org_id.map(i64::from)
-            }
+            _ => entry.get("organization_id").and_then(Value::as_i64) == org_id.map(i64::from),
         })
         .collect();
 

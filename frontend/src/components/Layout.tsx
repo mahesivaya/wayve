@@ -572,7 +572,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             {renderSidebarItem("/notes", "notes", "Notes", "📝")}
             {renderSidebarItem("/tasks", "tasks", "Tasks", "☑")}
             {renderSidebarItem("/ai-chat", "aichat", "AI Chat", "✨")}
-            {renderSidebarItem("/test-access", "test_access", "Test Access", "🔓")}
+            {(user.scope === "platform" || user.scope === "organization") &&
+              renderSidebarItem("/test-access", "test_access", "Test Access", "🔓")}
             {(isOrgOwner || isPlatformOwner) &&
               renderSidebarLink(
                 "/access-requests",
