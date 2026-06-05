@@ -10,9 +10,9 @@
      scales every font uniformly across mixed px/var units and only affects
      pages that import home.css, not the app UI. */
   zoom: 0.85;
-  background:
-    linear-gradient(90deg, rgb(111, 92, 214, 0.25), rgb(235, 239, 246, 0.7) 34%, var(--color-hero-gradient-stop) 100%),
-    var(--color-surface-cool-pale);
+  /* Match the signed-in app/dashboard surface (same token, so it tracks the
+     active theme in both light and dark) instead of the marketing gradient. */
+  background: var(--color-email-bg);
   color: var(--color-accent-indigo-darkest);
 
   /* Editorial typography for the public marketing surface — applies
@@ -905,9 +905,10 @@
    the dark surface.
    ============================================================ */
 :root[data-theme="dark"] .public-home {
-  background:
-    linear-gradient(90deg, rgb(96, 165, 250, 0.10), rgb(15, 17, 23, 0.7) 34%, var(--color-surface-dark-hero) 100%),
-    var(--color-surface-dark-hero);
+  /* Match the dark app/dashboard surface (same --color-email-bg token) instead
+     of the marketing gradient — keeps the home page in step with the users
+     page in dark mode too. */
+  background: var(--color-email-bg);
   color: var(--color-input-border);
 }
 :root[data-theme="dark"] .public-home-nav {

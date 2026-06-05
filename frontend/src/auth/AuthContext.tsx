@@ -597,10 +597,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.setTimeout(resolve, 2000),
     );
     void Promise.race([logoutDone, timeout]).finally(() => {
-      // Hard-nav to /login so the user lands on the sign-in screen
-      // and all in-memory state is reset. This runs only after the
-      // logout POST has either completed or hit the 2s safety cap.
-      window.location.href = "/login";
+      // Hard-nav to the home page so the user lands on the public landing
+      // and all in-memory state is reset. This runs only after the logout
+      // POST has either completed or hit the 2s safety cap.
+      window.location.href = "/";
     });
   };
 
