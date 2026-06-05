@@ -73,7 +73,7 @@ export default function Register() {
     <div className="login-page">
       <form className="login-card" onSubmit={handleRegister}>
         <h2>Create account </h2>
-        <p className="subtitle">Join Wayve to get started</p>
+        <p className="subtitle">Join Fluxze to get started</p>
 
         <input
           type="email"
