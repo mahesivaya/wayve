@@ -745,10 +745,14 @@
 .chip span:hover{ opacity: 1; }
 
 .participant-input { display: flex; gap: 6px; align-items: flex-start; }
-.participant-input input { flex: 1; width: 100%; }
+.participant-input input { width: 100%; box-sizing: border-box; }
+/* Keep the Add button at its natural size — never shrink or get overlapped. */
+.participant-input button { flex: 0 0 auto; }
 
-/* Typeahead wrapper anchors the suggestions dropdown to the input. */
-.participant-typeahead { position: relative; flex: 1; }
+/* Typeahead wrapper anchors the suggestions dropdown to the input.
+   min-width: 0 lets this flex item shrink so the input (width:100% + padding)
+   stays inside its column instead of overflowing onto the Add button. */
+.participant-typeahead { position: relative; flex: 1; min-width: 0; }
 
 .participant-suggestions {
   position: absolute;
