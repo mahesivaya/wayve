@@ -94,17 +94,23 @@ pub async fn get_email_body(
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
     }
 
-    // Owner or shared-inbox member may fetch the body.
+    // Owner or shared-inbox member may fetch the body. LEFT JOIN so
+    // account-less Wayve-native rows (e.g. the Sent copy of a Wayve-to-Wayve
+    // message, which has NULL account_id) still match — authorized via the
+    // `source='wayve' AND recipient_user_id` clause, mirroring repo::get_detail.
     let row = sqlx::query(
         r#"
-        SELECT e.id, e.gmail_id, e.body_encrypted, e.body_iv, e.attachments_checked,
-               a.id AS account_id, a.refresh_token
+        SELECT e.id, e.gmail_id, e.source, e.account_id,
+               e.body_encrypted, e.body_iv, e.attachments_checked,
+               a.refresh_token
         FROM emails e
-        JOIN email_accounts a ON e.account_id = a.id
+        LEFT JOIN email_accounts a ON e.account_id = a.id
         LEFT JOIN shared_inbox_members m
                ON m.account_id = a.id AND m.user_id = $2
         WHERE e.id = $1
-          AND (a.user_id = $2 OR m.user_id IS NOT NULL)
+          AND (a.user_id = $2
+               OR m.user_id IS NOT NULL
+               OR (e.source = 'wayve' AND e.recipient_user_id = $2))
         "#,
     )
     .bind(email_id)
@@ -120,6 +126,30 @@ pub async fn get_email_body(
     let body_encrypted: String = row.get("body_encrypted");
     let body_iv: String = row.get("body_iv");
     let attachments_checked: Option<bool> = row.get("attachments_checked");
+
+    // Account-less / Wayve-native messages have no Gmail account to refetch
+    // from — their body is authored locally and stored at send time. Serve it
+    // straight from storage instead of falling through to the Gmail refresh
+    // path, which would 404 on the missing account / synthetic gmail_id.
+    let source: Option<String> = row.try_get("source").ok().flatten();
+    let account_id_opt: Option<i32> = row.try_get("account_id").ok().flatten();
+    if account_id_opt.is_none() || source.as_deref() == Some("wayve") {
+        // Wayve-native rows store the raw client envelope (WAYVE_SECURE_V1…)
+        // with NO backend-AES layer, so body_iv is empty — return it verbatim
+        // for the browser to decrypt. Only apply the storage-at-rest decrypt
+        // when an iv is actually present.
+        let body = if body_encrypted.is_empty() {
+            String::new()
+        } else if body_iv.is_empty() {
+            body_encrypted.clone()
+        } else {
+            decrypt(&body_iv, &body_encrypted).unwrap_or_default()
+        };
+        if !body.is_empty() {
+            EMAIL_BODY_CACHE.insert(cache_key, body.clone()).await;
+        }
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
+    }
 
     // If a decryptable body is already stored, hold onto it as a fallback so a
     // failed live Gmail refetch (e.g. an OAuth refresh token invalidated by a
