@@ -11,33 +11,32 @@ pub struct AttachmentMeta {
 }
 
 pub fn extract_body(payload: &Value) -> Option<String> {
-    // ✅ 1. direct body
-    if let Some(data) = payload["body"]["data"].as_str() {
+    // A `multipart/alternative` email carries the SAME content twice —
+    // text/plain first, then text/html. We want the rich HTML part so the
+    // reading view renders it like Gmail instead of a flattened text dump.
+    // Scan the WHOLE tree for HTML first; only if there's none fall back to
+    // plain text. (The old code returned the first matching part, so the
+    // leading text/plain part always won.)
+    find_part_by_mime(payload, "text/html")
+        .or_else(|| find_part_by_mime(payload, "text/plain"))
+        // Last resort: a single-part message whose body.data sits at the top
+        // level with an unusual / missing mimeType.
+        .or_else(|| payload["body"]["data"].as_str().map(decode_base64))
+}
+
+// Depth-first search for the first part whose mimeType matches `want`,
+// returning its decoded body. Recurses through nested multiparts.
+fn find_part_by_mime(payload: &Value, want: &str) -> Option<String> {
+    if payload["mimeType"].as_str() == Some(want)
+        && let Some(data) = payload["body"]["data"].as_str()
+    {
         return Some(decode_base64(data));
     }
 
-    // ✅ 2. parts (most important)
     if let Some(parts) = payload["parts"].as_array() {
         for part in parts {
-            let mime = part["mimeType"].as_str().unwrap_or("");
-
-            // 🔥 prefer HTML
-            if mime == "text/html"
-                && let Some(data) = part["body"]["data"].as_str()
-            {
-                return Some(decode_base64(data));
-            }
-
-            // fallback text
-            if mime == "text/plain"
-                && let Some(data) = part["body"]["data"].as_str()
-            {
-                return Some(decode_base64(data));
-            }
-
-            // 🔁 recursive (VERY IMPORTANT)
-            if let Some(nested) = extract_body(part) {
-                return Some(nested);
+            if let Some(found) = find_part_by_mime(part, want) {
+                return Some(found);
             }
         }
     }
