@@ -3,30 +3,35 @@ import { useEffect, useRef, useState } from "react";
 type BuildKey = "mac-arm64" | "mac-x64" | "windows" | "linux";
 type IconKind = "apple" | "windows" | "linux";
 
+// Installers are hosted on S3 (public-read, Content-Disposition: attachment so
+// they download cross-origin). Updating a build = re-upload to this bucket; no
+// frontend redeploy needed.
+const S3 = "https://fluxze-desktop-downloads.s3.us-east-1.amazonaws.com";
+
 const BUILDS: Record<
   BuildKey,
   { href: string; label: string; sub: string; icon: IconKind }
 > = {
   "mac-arm64": {
-    href: "/download/Fluxze-arm64.dmg",
+    href: `${S3}/Fluxze-arm64.dmg`,
     label: "macOS",
     sub: "Apple Silicon",
     icon: "apple",
   },
   "mac-x64": {
-    href: "/download/Fluxze-x64.dmg",
+    href: `${S3}/Fluxze-x64.dmg`,
     label: "macOS",
     sub: "Intel",
     icon: "apple",
   },
   windows: {
-    href: "/download/Fluxze-Setup.exe",
+    href: `${S3}/Fluxze-Setup.exe`,
     label: "Windows",
     sub: "64-bit installer",
     icon: "windows",
   },
   linux: {
-    href: "/download/Fluxze.AppImage",
+    href: `${S3}/Fluxze.AppImage`,
     label: "Linux",
     sub: "App Image",
     icon: "linux",
