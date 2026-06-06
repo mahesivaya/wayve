@@ -5,11 +5,10 @@
      the internal scroll here, the bottom of the page would be clipped. */
   height: 100svh;
   overflow-y: scroll;
+  /* Clip horizontal overrun so the marketing surface never scrolls sideways on
+     mobile (paired with the border-box rule below). */
+  overflow-x: hidden;
   scrollbar-gutter: stable;
-  /* Shrink the whole marketing surface so the page reads more compact. zoom
-     scales every font uniformly across mixed px/var units and only affects
-     pages that import home.css, not the app UI. */
-  zoom: 0.85;
   /* Match the signed-in app/dashboard surface (same token, so it tracks the
      active theme in both light and dark) instead of the marketing gradient. */
   background: var(--color-email-bg);
@@ -26,6 +25,15 @@
   font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   font-feature-settings: "kern" 1, "liga" 1;
+}
+
+/* Border-box across the whole marketing surface so any `width: 100%` + padding
+   stays inside the viewport — the main cause of mobile sideways-scroll. */
+.public-home,
+.public-home *,
+.public-home *::before,
+.public-home *::after {
+  box-sizing: border-box;
 }
 
 /* Headings get the Fraunces serif. `ss01` turns on Fraunces's
@@ -1655,7 +1663,6 @@
    ========================================================================== */
 
 .public-home {
-  zoom: 1;
   background:
     radial-gradient(1200px 720px at 18% -8%, rgba(56, 189, 248, 0.10), transparent 60%),
     radial-gradient(1000px 680px at 100% 4%, rgba(37, 99, 235, 0.08), transparent 55%),
@@ -2239,4 +2246,18 @@
 @media (max-width: 560px) {
   .hx-bento, .hx-products, .hx-roles, .hx-stats, .faq-grid { grid-template-columns: 1fr; }
   .hx-hero { padding-top: 60px; }
+}
+
+/* Phone tightening: trim horizontal padding and let the hero mock breathe in
+   its single-column (sidebar-hidden ≤900px) form. */
+@media (max-width: 480px) {
+  .public-home-main { padding-left: 14px; padding-right: 14px; }
+  .hx-section, .hx-cta-band { padding-left: 14px; padding-right: 14px; }
+  .hx-mock { margin-top: 36px; }
+  .hx-mock-main { padding: 12px 12px; }
+  .hx-mock-body { min-height: 460px; }
+  .hx-mock-screen { height: 420px; }
+  .hx-mock-week-times span,
+  .hx-mock-event b { font-size: 11px; }
+  .hx-mock-event > span { font-size: 9px; }
 }
