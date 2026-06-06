@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { KeyboardEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
@@ -36,7 +36,6 @@ export default function PlatformAdminHome() {
   const canSeeMembers = canReadMembers;
   const canSeeScim = hasPermission(user, "webhooks:manage");
   const canManagePlans = hasPermission(user, "billing:manage");
-  const isPlatformOwner = user?.effective_role === "owner";
 
   const consoles: ConsoleCard[] = [
     {
@@ -164,18 +163,6 @@ export default function PlatformAdminHome() {
 
   return (
     <div className="platform-admin-home u-page-shell">
-      <div className="platform-admin-header u-panel u-flex-between">
-        <div>
-          <h1>Welcome {user?.role_label ?? "Platform member"}</h1>
-          <p>{user?.email}</p>
-        </div>
-        {isPlatformOwner && (
-          <Link to="/platform/secrets" className="u-btn-primary">
-            Create secrets
-          </Link>
-        )}
-      </div>
-
       {hasAnyConsole && (
         <section className="platform-admin-panel u-panel">
           <div className="platform-admin-section-header">

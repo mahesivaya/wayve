@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../auth/useAuth";
 import {
   getHomeToday,
   getHomeTasks,
@@ -44,7 +43,6 @@ function markRecentlyRead(id: number) {
 }
 import { updateTaskApi } from "../../api/tasks";
 import type { EmailItem } from "../../emails/types";
-import { APP_TIME_ZONE } from "../../utils/datetime";
 import "./personalDashboard.css";
 
 // Three-section personal-user home: welcome strip + Today (meetings +
@@ -86,25 +84,8 @@ const senderName = (sender: string | null | undefined) => {
   return sender;
 };
 
-const greeting = () => {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
-};
-
-const todayLabel = () =>
-  new Date().toLocaleDateString("en-US", {
-    timeZone: APP_TIME_ZONE,
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-
 export default function PersonalDashboard() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const firstName = user?.email?.split("@")[0] ?? "there";
 
   // Seed from sessionStorage so a return visit to /home paints instantly;
   // the mount fetch below still runs and refreshes in the background (same
@@ -119,7 +100,7 @@ export default function PersonalDashboard() {
   const [emails, setEmails] = useState<EmailItem[] | null>(() =>
     loadCached<EmailItem[]>("personal.emails"),
   );
-  const [unreadCount, setUnreadCount] = useState<number>(
+  const [, setUnreadCount] = useState<number>(
     () => loadCached<EmailItem[]>("personal.emails")?.filter((e) => !e.is_read).length ?? 0,
   );
   const [meetingsErr, setMeetingsErr] = useState<string | null>(null);
@@ -239,32 +220,9 @@ export default function PersonalDashboard() {
   const tasksLoading = tasks === null;
   const emailsLoading = emails === null;
 
-  const totalsLabel = [
-    meetings
-      ? `${meetings.length} meeting${meetings.length === 1 ? "" : "s"}`
-      : null,
-    tasks ? `${tasks.length} open task${tasks.length === 1 ? "" : "s"}` : null,
-    emails
-      ? `${unreadCount.toLocaleString()} unread email${unreadCount === 1 ? "" : "s"}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
   return (
     <div className="personal-dashboard">
-      {/* ── 1. Welcome strip ───────────────────────────────────── */}
-      <section className="personal-dashboard-greeting">
-        <h1>
-          {greeting()}, <span>{firstName}</span>
-        </h1>
-        <p>
-          {todayLabel()}
-          {totalsLabel ? ` · ${totalsLabel}` : ""}
-        </p>
-      </section>
-
-      {/* ── 2. Meetings + Tasks (two columns) ──────────────────── */}
+      {/* ── Meetings + Tasks (two columns) ──────────────────── */}
       <div className="personal-dashboard-row">
       <section className="personal-card">
         <header className="personal-card-head">

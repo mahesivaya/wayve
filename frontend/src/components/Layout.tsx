@@ -646,6 +646,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "🌐",
                   location.pathname === "/platform/domains",
                 )}
+              {isPlatformOwner &&
+                renderSidebarLink(
+                  "/platform/secrets",
+                  "Secrets",
+                  "🔑",
+                  location.pathname === "/platform/secrets",
+                )}
             </div>
           )}
 

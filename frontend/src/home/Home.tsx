@@ -7,7 +7,6 @@ import ActivityDashboard from "./dashboard/ActivityDashboard";
 import HeroMock from "./HeroMock";
 import PersonalDashboard from "./dashboard/PersonalDashboard";
 import PublicPricingContent from "../pricing/PublicPricingContent";
-import { APP_TIME_ZONE } from "../utils/datetime";
 import { reportVisit } from "../api/visits";
 import "./home.css";
 
@@ -453,16 +452,7 @@ export default function Home() {
   // Personal users get a three-section vertical dashboard (welcome +
   // Today + Emails) that's shaped around how an individual moves
   // through their day; org and platform-admin users continue to see
-  // the 2×2 ActivityDashboard. The welcome header for ActivityDashboard
-  // stays here because PersonalDashboard renders its own greeting.
-  const firstName = user.email?.split("@")[0] ?? "there";
-  const today = new Date().toLocaleDateString("en-US", {
-    timeZone: APP_TIME_ZONE,
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
-
+  // the 2×2 ActivityDashboard.
   const isPersonalUser =
     user.scope === "personal" || user.account_type === "personal";
 
@@ -479,10 +469,6 @@ export default function Home() {
 
   return (
     <div className="home-authed u-page-shell">
-      <header className="home-authed-greeting">
-        <h1>Welcome back, {firstName}</h1>
-        <p>{today}</p>
-      </header>
       <ActivityDashboard />
     </div>
   );
