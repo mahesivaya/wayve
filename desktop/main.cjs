@@ -12,6 +12,11 @@ const path = require("path");
 
 const APP_URL = process.env.FLUXZE_URL || "https://fluxze.com";
 
+// Force the app/menu name to the brand so the macOS app menu reads "Fluxze"
+// (and "About/Hide/Quit Fluxze") in dev too — not "Electron"/"fluxze-desktop".
+// Packaged builds already get this from build.productName.
+app.name = "Fluxze";
+
 // Hosts allowed to navigate inside the window. Everything else (third-party
 // links, mailto:, etc.) opens in the user's default browser. Google hosts are
 // included so the Gmail OAuth round-trip can complete in-window.
@@ -44,7 +49,10 @@ function createWindow() {
     minWidth: 940,
     minHeight: 600,
     backgroundColor: "#ffffff",
-    titleBarStyle: "hiddenInset",
+    // Standard macOS title bar: the red/yellow/green window controls sit in
+    // their own bar ABOVE the web content. "hiddenInset" floats them over the
+    // top-left of the page, where they collide with the app's logo/header.
+    titleBarStyle: "default",
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -112,18 +120,59 @@ function offlinePage(detail) {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
+/**
+ * "Update" for this thin shell = reload the live web app, bypassing the HTTP
+ * cache so the freshly-deployed index.html (and its new hashed assets) is
+ * fetched. Covers every frontend/backend deploy without rebuilding the .dmg.
+ * (Only changes to the Electron shell itself need a new installer.)
+ */
+function reloadLatest() {
+  const win = mainWindow ?? BrowserWindow.getFocusedWindow();
+  win?.webContents.reloadIgnoringCache();
+}
+
+/** A fresh menu-item literal each call (don't share one object across menus). */
+function checkForUpdatesItem() {
+  return {
+    label: "Check for Updates…",
+    accelerator: "CmdOrCtrl+U",
+    click: reloadLatest,
+  };
+}
+
 /** Native menu so ⌘C/⌘V/⌘A, reload, zoom and window controls work. */
 function buildMenu() {
   const isMac = process.platform === "darwin";
   const template = [
     ...(isMac
-      ? [{ role: "appMenu" }]
+      ? [
+          {
+            // Custom app menu so "Check for Updates…" sits under the app name
+            // (the conventional macOS spot), alongside the standard items.
+            label: app.name,
+            submenu: [
+              { role: "about" },
+              checkForUpdatesItem(),
+              { type: "separator" },
+              { role: "services" },
+              { type: "separator" },
+              { role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          },
+        ]
       : []),
     { role: "fileMenu" },
     { role: "editMenu" },
     {
       label: "View",
       submenu: [
+        // Also in View so it's discoverable and works on non-mac (no app menu).
+        checkForUpdatesItem(),
+        { type: "separator" },
         { role: "reload" },
         { role: "forceReload" },
         { role: "toggleDevTools" },

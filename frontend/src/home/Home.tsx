@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { SERVICES } from "../services/serviceData";
 import ActivityDashboard from "./dashboard/ActivityDashboard";
 import HeroMock from "./HeroMock";
+import DownloadMac from "./DownloadMac";
 import PersonalDashboard from "./dashboard/PersonalDashboard";
 import PublicPricingContent from "../pricing/PublicPricingContent";
 import { reportVisit } from "../api/visits";
@@ -237,6 +238,9 @@ export default function Home() {
                 >
                   See pricing <span aria-hidden="true">→</span>
                 </button>
+                {/* Auto-detects Apple Silicon vs Intel and lets the user
+                    override. Files hosted at /download/Fluxze-<arch>.dmg. */}
+                <DownloadMac />
               </div>
 
             </div>
