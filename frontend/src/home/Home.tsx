@@ -14,8 +14,17 @@ export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [servicesOpen, setServicesOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const servicesMenuRef = useRef<HTMLDivElement | null>(null);
   const servicesDropdownRef = useRef<HTMLElement | null>(null);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  const burgerRef = useRef<HTMLButtonElement | null>(null);
+
+  // Navigate from the mobile hamburger menu, closing it on the way out.
+  const goMobile = (path: string) => {
+    setMobileMenuOpen(false);
+    navigate(path);
+  };
 
   // Record this visit once per session — covers anonymous visitors opening
   // fluxze.com. The backend captures IP + user-agent server-side.
@@ -39,6 +48,25 @@ export default function Home() {
       document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
     };
   }, [servicesOpen]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      // Clicks on the toggle button or inside the menu shouldn't close it
+      // (the button has its own toggle handler).
+      if (burgerRef.current?.contains(target)) return;
+      if (mobileMenuRef.current?.contains(target)) return;
+      setMobileMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
+    };
+  }, [mobileMenuOpen]);
 
   if (!user) {
     return (
@@ -73,6 +101,42 @@ export default function Home() {
               Register
             </button>
           </div>
+
+          {/* Mobile hamburger — collapses the links + actions at ≤1120px. */}
+          <button
+            type="button"
+            ref={burgerRef}
+            className="public-home-burger"
+            aria-label="Menu"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen((open) => !open)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+
+          {mobileMenuOpen && (
+            <div className="public-home-mobile-menu" ref={mobileMenuRef}>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setServicesOpen(true);
+                }}
+              >
+                Products
+              </button>
+              <button onClick={() => goMobile("/pricing")}>Pricing</button>
+              <button onClick={() => goMobile("/support")}>Support</button>
+              <button onClick={() => goMobile("/login")}>Login</button>
+              <button
+                className="home-register-btn"
+                onClick={() => goMobile("/register")}
+              >
+                Register
+              </button>
+            </div>
+          )}
         </header>
 
         <main className="public-home-main">

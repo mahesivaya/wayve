@@ -210,6 +210,74 @@
 }
 .public-home-actions .home-register-btn:hover { filter: brightness(1.06); }
 
+/* Hamburger button — hidden on desktop, shown at ≤1120px via the media query. */
+.public-home-burger {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 42px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--hx-border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--hx-ink);
+  cursor: pointer;
+  justify-self: end;
+}
+.public-home-burger:hover { background: var(--hx-glass-strong); }
+.public-home-burger span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+/* Dropdown that holds the collapsed nav links + actions on mobile. Rendered
+   only when open (Home.tsx); `display: none` here keeps it hidden on desktop
+   even if it was left open across a resize. The media query flips it to flex. */
+.public-home-mobile-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 16px;
+  left: 16px;
+  z-index: 30;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid var(--hx-border);
+  border-radius: 12px;
+  box-shadow: 0 22px 54px -26px rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  backdrop-filter: saturate(140%) blur(14px);
+}
+.public-home-mobile-menu button {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--hx-ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.public-home-mobile-menu button:hover { background: var(--hx-glass-strong); }
+.public-home-mobile-menu .home-register-btn {
+  margin-top: 4px;
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  color: #fff;
+  text-align: center;
+}
+.public-home-mobile-menu .home-register-btn:hover { filter: brightness(1.06); background: linear-gradient(135deg, #2563eb, #38bdf8); }
+
 .public-home-main {
   width: min(1720px, calc(100% - 48px));
   margin: 0 auto;
@@ -622,19 +690,30 @@
 }
 
 @media (max-width: 1120px){
+  /* Single-row mobile header: brand left, hamburger right. The inline links
+     and actions collapse into the hamburger dropdown (.public-home-mobile-menu). */
   .public-home-nav {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 12px 18px;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    padding: 10px 16px;
   }
 
-  .public-home-links {
-    overflow-x: auto;
-    padding-bottom: 4px;
+  .public-home-brand {
+    justify-self: start;
+    text-align: left;
   }
 
+  .public-home-links,
   .public-home-actions {
-    justify-content: flex-start;
+    display: none;
+  }
+
+  .public-home-burger {
+    display: inline-flex;
+  }
+
+  .public-home-mobile-menu {
+    display: flex;
   }
 
   .services-dropdown-panel {
