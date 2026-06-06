@@ -118,10 +118,6 @@ export default function Login() {
     window.location.href = `${getApiBase()}/gmail/login?mode=signup`;
   };
 
-  const handleOutlook = () => {
-    window.location.href = `${getApiBase()}/outlook/login?mode=signup`;
-  };
-
   // Build the SSO start URL for the typed-in work email and redirect.
   // The backend looks up the org by email domain and either redirects to
   // the IdP or returns a 404 we surface inline.
@@ -247,14 +243,6 @@ export default function Login() {
             onClick={handleGoogle}
           >
             Continue with Gmail
-          </button>
-
-          <button
-            type="button"
-            className="outlook-btn"
-            onClick={handleOutlook}
-          >
-            Continue with Outlook
           </button>
 
           {error && <p className="error">{error}</p>}

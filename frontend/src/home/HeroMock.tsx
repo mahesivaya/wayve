@@ -6,14 +6,14 @@ import { useEffect, useState } from "react";
 
 function MailScreen() {
   const mail = [
-    { from: "Priya Nair", subject: "Q3 roadmap — final review before Friday", time: "9:24" },
+    { from: "Emily Carter", subject: "Q3 roadmap — final review before Friday", time: "9:24" },
     { from: "GitHub", subject: "[fluxze] PR #482 merged into main", time: "8:10" },
-    { from: "Stripe", subject: "Your payout of $4,820.00 is on the way", time: "Yest" },
-    { from: "Arjun Mehta", subject: "Re: Design sync notes + Figma link", time: "Yest" },
-    { from: "Notion", subject: "3 pages were shared with your team", time: "Tue" },
-    { from: "Linear", subject: "5 issues moved to In Review", time: "Tue" },
+    { from: "Marco Rossi", subject: "Re: Q3 invoice — approved, payment sent", time: "Yest" },
+    { from: "Camille Laurent", subject: "Re: Design sync notes + Figma link", time: "Yest" },
+    { from: "Hannah Schmidt", subject: "Re: Shared the design pages with you", time: "Tue" },
+    { from: "Yuki Tanaka", subject: "Re: Tokyo office launch plan", time: "Tue" },
     { from: "Vercel", subject: "Production deployment is live", time: "Mon" },
-    { from: "Sarah Chen", subject: "Re: Contract renewal — Q3 terms", time: "Mon" },
+    { from: "Aarav Sharma", subject: "Re: Contract renewal — Q3 terms", time: "Mon" },
   ];
   return (
     <>
@@ -47,8 +47,8 @@ function ChatScreen() {
     <div className="hx-mock-chat">
       <div className="hx-mock-chat-head">
         <span className="hx-mock-chat-peer">
-          <span className="hx-mock-chat-pavatar">P</span>
-          Priya Nair
+          <span className="hx-mock-chat-pavatar">D</span>
+          Daniel Reed
         </span>
         <span className="hx-mock-chat-actions">
           <span className="hx-mock-chat-call" aria-hidden="true">
@@ -90,7 +90,7 @@ function MeetScreen() {
     { col: 0, start: 4, span: 1, title: "Roadmap sync", time: "1:00", color: "green" },
     { col: 1, start: 2, span: 1, title: "Design review", time: "11:00", color: "purple" },
     { col: 2, start: 1, span: 1.5, title: "Client call", time: "10:00", color: "blue" },
-    { col: 3, start: 4, span: 1, title: "1:1 — Priya", time: "1:00", color: "amber" },
+    { col: 3, start: 4, span: 1, title: "1:1 — Daniel", time: "1:00", color: "amber" },
     { col: 4, start: 5, span: 1, title: "Sprint planning", time: "2:00", color: "green" },
   ];
   return (
@@ -180,7 +180,7 @@ function NotesScreen() {
     { t: "Launch checklist", lines: 4 },
     { t: "Customer call — Acme", lines: 2 },
     { t: "Ideas backlog", lines: 3 },
-    { t: "1:1 agenda — Priya", lines: 2 },
+    { t: "1:1 agenda — Daniel", lines: 2 },
     { t: "Release notes draft", lines: 3 },
   ];
   return (
@@ -297,7 +297,6 @@ export default function HeroMock() {
         <div className="hx-mock-main">
           <div className="hx-mock-toolbar">
             <span className="hx-mock-search">{tab.search}</span>
-            <span className="hx-mock-avatar" />
           </div>
           <div className="hx-mock-screen" key={active}>
             <Screen />

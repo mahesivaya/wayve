@@ -9,15 +9,14 @@
     align-items: center;
     padding: 24px 0;
     box-sizing: border-box;
-    /* Dark circuit-board surface: two soft blue glows for depth layered
-       over a tiling SVG of circuit traces + solder nodes, on a deep navy
-       base. Shared by both Login and Register. */
-    background-color: #081229;
+    /* Light surface matching the marketing/home page: white base with two
+       soft brand glows, same IBM Plex Sans typeface. */
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    background-color: #ffffff;
     background-image:
-      radial-gradient(900px 600px at 50% -8%, rgba(56, 189, 248, 0.20), transparent 60%),
-      radial-gradient(760px 520px at 100% 112%, rgba(37, 99, 235, 0.24), transparent 55%),
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg fill='none' stroke='%2360a5fa' stroke-width='1.2' opacity='0.22'%3E%3Cpath d='M20 20H70V55H120'/%3E%3Cpath d='M20 80H45V120'/%3E%3Cpath d='M75 20V45H132'/%3E%3Cpath d='M130 80V110H85V135'/%3E%3Cpath d='M45 55V90H80'/%3E%3Cpath d='M8 55H45'/%3E%3C/g%3E%3Cg fill='%2393c5fd' opacity='0.55'%3E%3Ccircle cx='70' cy='55' r='3'/%3E%3Ccircle cx='45' cy='80' r='3'/%3E%3Ccircle cx='75' cy='45' r='3'/%3E%3Ccircle cx='130' cy='80' r='3'/%3E%3Ccircle cx='85' cy='110' r='3'/%3E%3Ccircle cx='45' cy='55' r='3'/%3E%3C/g%3E%3C/svg%3E");
-    background-repeat: no-repeat, no-repeat, repeat;
+      radial-gradient(900px 600px at 50% -8%, rgba(56, 189, 248, 0.10), transparent 60%),
+      radial-gradient(760px 520px at 100% 112%, rgba(37, 99, 235, 0.08), transparent 55%);
+    background-repeat: no-repeat, no-repeat;
   }
 
   /* CARD */
@@ -27,21 +26,15 @@
   }
 
   .login-card {
-    /* Glassy dark panel with a cyan rim-light + outer glow so it reads as
-       a holographic card floating over the circuit board. */
-    background: rgba(13, 27, 58, 0.72);
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
+    /* Clean white card with a soft lift shadow — matches the marketing cards. */
+    background: #ffffff;
     padding: 36px 36px 30px;
     width: 400px;
     max-width: calc(100vw - 32px);
     border-radius: var(--radius-lg);
-    border: 1px solid rgba(96, 165, 250, 0.45);
-    box-shadow:
-      inset 0 1px 0 rgba(147, 197, 253, 0.18),
-      0 24px 60px -18px rgba(0, 0, 0, 0.7),
-      0 0 42px -8px rgba(56, 189, 248, 0.4);
-    color: #e6eefc;
+    border: 1px solid rgba(20, 40, 90, 0.24);
+    box-shadow: 0 24px 60px -24px rgba(20, 40, 90, 0.25);
+    color: #2b3344;
     display: flex;
     flex-direction: column;
     animation: login-card-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -328,39 +321,39 @@
   }
 
   /* ───────────────────────────────────────────────────────────────
-     Dark circuit-theme overrides. Scoped under .login-page so they
-     only re-skin the public auth surface (Login + Register) and never
-     leak into the rest of the app. Light → light-on-dark for text,
-     translucent inputs, cyan accents.
+     Light theme — matches the marketing/home page (white surface,
+     dark text, brand-blue accents, blue→cyan gradient submit). Scoped
+     under .login-page so it only skins the public auth pages.
      ─────────────────────────────────────────────────────────────── */
   .login-page .login-card h2 {
-    color: #f3f7ff;
+    color: #141a26;
   }
 
   .login-page .subtitle {
-    color: #9fb4d9;
+    color: #3b465c;
+    font-size: 0.9rem;
   }
 
   .login-page .login-card input {
-    background: rgba(8, 18, 40, 0.65);
-    border-color: rgba(96, 165, 250, 0.3);
-    color: #eaf1ff;
+    background: #fbfcfe;
+    border-color: rgba(20, 40, 90, 0.32);
+    color: #141a26;
   }
 
   .login-page .login-card input::placeholder {
-    color: #7e93bd;
+    color: #6b7689;
   }
 
   .login-page .login-card input:hover {
-    border-color: rgba(96, 165, 250, 0.55);
+    border-color: rgba(37, 99, 235, 0.4);
   }
 
   .login-page .login-card input:focus {
-    border-color: #38bdf8;
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
   }
 
-  /* Primary submit: bright blue→cyan gradient to sit on theme. */
+  /* Primary submit: brand blue→cyan gradient (matches the hero CTA). */
   .login-page .login-card button[type="submit"] {
     background: linear-gradient(135deg, #2563eb, #38bdf8);
     color: #ffffff;
@@ -368,46 +361,45 @@
 
   .login-page .login-card button[type="submit"]:hover {
     background: linear-gradient(135deg, #1d4ed8, #22b8e6);
-    box-shadow: 0 8px 22px -8px rgba(56, 189, 248, 0.75);
+    box-shadow: 0 8px 22px -8px rgba(37, 99, 235, 0.55);
   }
 
   .login-page .auth-divider {
-    color: #7e93bd;
+    color: #6b7689;
   }
 
   .login-page .auth-divider::before,
   .login-page .auth-divider::after {
-    background: rgba(148, 170, 210, 0.25);
+    background: rgba(20, 40, 90, 0.22);
   }
 
   .login-page .switch-auth {
-    color: #b9c8e8;
+    color: #2b3344;
   }
 
-  .login-page .switch-auth a {
-    color: #60a5fa;
+  .login-page .switch-auth a,
+  .login-page .switch-auth span {
+    color: #2563eb;
   }
 
-  /* Gmail button: keep it a readable light pill on the dark card. */
+  /* Gmail button: white pill with a defined border on the white card. */
   .login-page .login-card .google-btn {
-    background: #f4f7fc;
+    background: #ffffff;
     color: #1f2937;
-    border-color: rgba(255, 255, 255, 0.25);
+    border-color: rgba(20, 40, 90, 0.3);
   }
 
   .login-page .login-card .google-btn:hover {
-    background: #ffffff;
+    background: #f4f7fc;
   }
 
   .login-page .error {
-    color: #ff8c8c;
+    color: #dc2626;
   }
 
-  /* Defensive: if the recovery-mode / account-kind fieldsets ever render
-     again, keep their text legible on the dark card. */
   .login-page .login-card .recovery-mode-fieldset,
   .login-page .login-card .account-kind-fieldset {
-    border-color: rgba(96, 165, 250, 0.3);
+    border-color: rgba(20, 40, 90, 0.14);
   }
 
   .login-page .login-card legend,
@@ -415,11 +407,11 @@
   .login-page .login-card .account-kind-option,
   .login-page .login-card .recovery-mode-option strong,
   .login-page .login-card .account-kind-option strong {
-    color: #dce6fa;
+    color: #2b3344;
   }
 
   .login-page .login-card .recovery-mode-help,
   .login-page .login-card .recovery-mode-option small,
   .login-page .login-card .account-kind-option small {
-    color: #93a6cc;
+    color: #6b7689;
   }

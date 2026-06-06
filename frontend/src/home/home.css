@@ -73,15 +73,6 @@
   font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
 }
 
-/* The wordmark "Fluxze" in the top-left becomes the visual anchor
-   for the editorial system — rendered in Fraunces so the brand
-   reads as part of the same typographic voice as the headings. */
-.public-home .public-home-brand {
-  font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
 .public-home::-webkit-scrollbar{
   width: 10px;
 }
@@ -100,6 +91,13 @@
   background: var(--color-surface-cool-strong);
 }
 
+/* ============================================================
+   HEADER / NAV — SINGLE SOURCE OF TRUTH for the marketing header.
+   Self-contained + light-theme. Edit the whole header here; there
+   are no other header rules elsewhere in this file. Login/Register
+   are styled independently of the nav links, so no specificity
+   fights and no !important are needed.
+   ============================================================ */
 .public-home-nav {
   position: sticky;
   top: 0;
@@ -109,40 +107,51 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
-  padding: 0 22px;
-  background: rgb(245, 246, 250, 0.94);
-  border-bottom: 1px solid rgb(121, 116, 146, 0.22);
-  backdrop-filter: blur(12px);
+  padding: 0 26px;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid var(--hx-border);
+  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  backdrop-filter: saturate(140%) blur(14px);
 }
 
+/* Brand wordmark (left) */
 .public-home-brand {
   border: 0;
   background: transparent;
-  color: var(--color-brand-purple);
-  font-size: 32px;
-  font-weight: 850;
+  color: var(--hx-ink);
+  font-size: 1.5rem;
+  font-weight: 700;
   line-height: 1;
+  letter-spacing: -0.01em;
   cursor: pointer;
-  letter-spacing: 0;
 }
 
+/* Center nav links: Products / Pricing / Support */
 .public-home-links {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
-
 .public-home-links button,
-.public-home-actions button:not(.theme-toggle) {
+.services-trigger {
   border: 0;
   background: transparent;
-  color: var(--color-accent-indigo-bridge);
+  color: #3b465c;
   font: inherit;
-  font-size: var(--text-xl);
-  font-weight: 750;
-  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
   white-space: nowrap;
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.public-home-links button:hover,
+.services-trigger:hover,
+.services-trigger.active {
+  color: var(--hx-ink);
+  background: var(--hx-glass-strong);
 }
 
 .services-trigger {
@@ -150,49 +159,48 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-height: 34px;
-  padding: 0 9px;
-  border: 2px solid transparent !important;
-  border-radius: var(--radius-md);
 }
-
-.services-trigger.active {
-  border-color: var(--color-brand-purple-link) !important;
-  color: var(--color-brand-purple-strong);
-}
-
 .services-caret {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border-right: 2px solid currentcolor;
   border-bottom: 2px solid currentcolor;
   transform: translateY(-2px) rotate(45deg);
   transition: transform 0.15s ease;
 }
+.services-trigger.active .services-caret { transform: translateY(2px) rotate(225deg); }
 
-.services-trigger.active .services-caret {
-  transform: translateY(2px) rotate(225deg);
-}
-
+/* Right-side actions: Login (ghost) + Register (filled blue) */
 .public-home-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
-
 .public-home-actions .home-login-btn {
-  padding: 7px 10px;
+  background: transparent;
+  color: var(--hx-ink);
+  border: 1px solid var(--hx-border);
+  border-radius: 9px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
+.public-home-actions .home-login-btn:hover { background: var(--hx-glass-strong); }
 
 .public-home-actions .home-register-btn {
-  padding: 7px 12px;
-  border-radius: var(--radius-md);
-  background: var(--color-accent-indigo-strong);
-  color: var(--color-surface);
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  padding: 8px 18px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 22px -10px rgba(37, 99, 235, 0.6);
+  transition: filter 0.15s ease;
 }
+.public-home-actions .home-register-btn:hover { filter: brightness(1.06); }
 
 .public-home-main {
   width: min(1720px, calc(100% - 48px));
@@ -473,10 +481,17 @@
 }
 
 .public-home-footer {
-  padding: 64px 56px 44px;
-  background: var(--color-surface);
-  border-top: 1px solid var(--color-surface-tint-cloud);
-  color: var(--color-text-cool-dark);
+  /* Full-bleed: the footer is a direct child of .public-home (outside the
+     centered .public-home-main), so the surface + top border span the whole
+     page width. Vertical padding only; the inner grid below re-centers the
+     content to the page column. */
+  padding: 32px 0 20px;
+  /* Match the header + page: transparent over the page's surface with a hairline
+     top border, using the shared --hx-* tokens so it tracks light/dark like the
+     rest of the marketing chrome. */
+  background: transparent;
+  border-top: 1px solid var(--hx-border);
+  color: var(--hx-ink);
 }
 
 .public-home-footer-grid {
@@ -484,6 +499,10 @@
   grid-template-columns: 1.15fr repeat(3, minmax(150px, 0.8fr)) 0.85fr;
   gap: 56px;
   align-items: start;
+  /* Align the columns with the rest of the page content (same width as
+     .public-home-main) while the footer band stays full-width. */
+  width: min(1720px, calc(100% - 48px));
+  margin: 0 auto;
 }
 
 .public-home-footer-brand button {
@@ -493,9 +512,10 @@
   border: 0;
   padding: 0;
   background: transparent;
-  color: var(--color-text-cool-darker);
+  color: var(--hx-ink);
   font-size: 30px;
-  font-weight: 850;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   cursor: pointer;
 }
 
@@ -515,7 +535,7 @@
 .public-home-footer-column {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 14px;
   align-items: flex-start;
 }
 
@@ -523,10 +543,10 @@
   border: 0;
   padding: 0;
   background: transparent;
-  color: var(--color-text-cool-mid);
+  color: var(--hx-ink);
   font: inherit;
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.25;
   text-align: left;
   cursor: pointer;
@@ -534,13 +554,17 @@
 
 .public-home-footer-column button:hover,
 .public-home-footer-brand button:hover{
-  color: var(--color-accent-indigo);
+  color: var(--hx-blue);
 }
 
 .public-home-footer-social h2 {
   margin: 0 0 16px;
-  color: var(--color-text-cool-mid);
+  color: var(--hx-ink);
+  /* Sans like the header (not the Fraunces heading serif) so the footer
+     typography matches the nav. */
+  font-family: inherit;
   font-size: 18px;
+  font-weight: 600;
   line-height: 1.25;
 }
 
@@ -557,23 +581,26 @@
   align-items: center;
   justify-content: center;
   border-radius: 7px;
-  color: var(--color-text-cool-medium);
+  border: 1px solid var(--hx-border);
+  color: var(--hx-ink);
   text-decoration: none;
   font-size: 18px;
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1;
 }
 
 .public-home-social-links a:hover{
-  background: var(--color-brand-purple-soft-mid);
-  color: var(--color-accent-indigo);
+  background: var(--hx-glass-strong);
+  color: var(--hx-ink);
 }
 
 .public-home-footer-legal {
-  margin: 96px 0 0;
-  color: var(--color-text-generic-mute);
+  width: min(1720px, calc(100% - 48px));
+  margin: 28px auto 0;
+  color: var(--hx-ink);
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 500;
+  text-align: center;
 }
 
 /* Legacy .dashboard-*, .card chrome (topbar/brand/header/grid/logout-btn)
@@ -903,85 +930,10 @@
    override to a darker neutral so the seams stay visible against
    the dark surface.
    ============================================================ */
-:root[data-theme="dark"] .public-home {
-  /* Match the dark app/dashboard surface (same --color-email-bg token) instead
-     of the marketing gradient — keeps the home page in step with the users
-     page in dark mode too. */
-  background: var(--color-email-bg);
-  color: var(--color-input-border);
-}
-:root[data-theme="dark"] .public-home-nav {
-  background: rgb(20, 23, 31, 0.94);
-  border-bottom-color: rgb(255, 255, 255, 0.08);
-}
-:root[data-theme="dark"] .public-home-brand,
-:root[data-theme="dark"] .public-home-links button {
-  color: var(--color-surface-tint-slate);
-}
-:root[data-theme="dark"] .public-home-hero {
-  background:
-    linear-gradient(90deg, rgb(15, 17, 23, 0.85), rgb(15, 17, 23, 0.5)),
-    url("../assets/hero.png") center / cover;
-}
-
-:root[data-theme="dark"] .home-pillars,
-:root[data-theme="dark"] .home-stats,
-:root[data-theme="dark"] .home-roles-grid {
-  background: var(--color-border-dark);
-  border-top-color: var(--color-border-dark);
-}
-:root[data-theme="dark"] .home-pillar,
-:root[data-theme="dark"] .home-roles-grid article,
-:root[data-theme="dark"] .home-info-band,
-:root[data-theme="dark"] .home-info-grid article,
-:root[data-theme="dark"] .public-home-footer {
-  background: var(--color-surface-dark-card);
-  border-top-color: var(--color-border-dark);
-}
-:root[data-theme="dark"] .home-pillar h3,
-:root[data-theme="dark"] .home-pillar-features li strong,
-:root[data-theme="dark"] .home-roles-grid h3,
-:root[data-theme="dark"] .home-info-band h2,
-:root[data-theme="dark"] .home-info-grid h2,
-:root[data-theme="dark"] .public-home-footer-social h2 {
-  color: var(--color-surface-tint-cool);
-}
-:root[data-theme="dark"] .home-pillar > p,
-:root[data-theme="dark"] .home-pillar-features li,
-:root[data-theme="dark"] .home-roles-grid p,
-:root[data-theme="dark"] .home-info-band p,
-:root[data-theme="dark"] .home-info-grid p {
-  color: var(--color-input-border);
-}
-:root[data-theme="dark"] .home-pillar-features li::before{
-  color: var(--color-accent-purple);
-}
-:root[data-theme="dark"] .home-stats > div {
-  background: linear-gradient(180deg, var(--color-surface-dark-card) 0%, var(--color-surface-darken) 100%);
-}
-:root[data-theme="dark"] .home-stat-value {
-  color: var(--color-accent-purple);
-}
-:root[data-theme="dark"] .home-stat-label {
-  color: var(--color-text-slate-foggy);
-}
-:root[data-theme="dark"] .public-home-footer-brand button,
-:root[data-theme="dark"] .public-home-footer-column button {
-  color: var(--color-surface-tint-slate);
-}
-:root[data-theme="dark"] .public-home-social-links a,
-:root[data-theme="dark"] .public-home-footer-legal {
-  color: var(--color-text-slate-foggy);
-}
-:root[data-theme="dark"] .public-home-social-links a:hover{
-  background: var(--color-surface-dark-card-strong);
-  color: var(--color-accent-purple);
-}
-/* Comparison banner already uses dark indigo gradient — fine in dark mode,
-   but tweak the contrast a touch so it doesn't blend into the page. */
-:root[data-theme="dark"] .home-comparison {
-  border-top: 1px solid var(--color-surface-dark-border);
-}
+/* The marketing/landing surface is intentionally ALWAYS LIGHT (zed.dev-style).
+   The previous `:root[data-theme="dark"] .public-home …` overrides that
+   re-darkened it whenever the app ran in dark mode have been removed, so the
+   light base above applies in both app themes. */
 
 /* OS prefers-color-scheme blocks were removed — dark mode is now
    explicit-only via [data-theme="dark"]. See index.html pre-paint. */
@@ -1708,7 +1660,7 @@
     radial-gradient(1200px 720px at 18% -8%, rgba(56, 189, 248, 0.10), transparent 60%),
     radial-gradient(1000px 680px at 100% 4%, rgba(37, 99, 235, 0.08), transparent 55%),
     radial-gradient(900px 700px at 50% 120%, rgba(124, 58, 237, 0.06), transparent 60%),
-    #f7f6f2;
+    #ffffff;
   color: #2b3344;
   --hx-line: rgba(20, 40, 90, 0.10);
   --hx-glass: rgba(20, 40, 90, 0.03);
@@ -1752,54 +1704,7 @@
 .public-home h2,
 .public-home h3 { color: var(--hx-ink); }
 
-/* ---------- NAV ---------- */
-.public-home-nav {
-  min-height: 64px;
-  padding: 0 26px;
-  background: rgba(247, 246, 242, 0.82);
-  -webkit-backdrop-filter: saturate(140%) blur(14px);
-  backdrop-filter: saturate(140%) blur(14px);
-  border-bottom: 1px solid var(--hx-border);
-}
-
-.public-home-brand { color: var(--hx-ink) !important; font-size: 1.35rem; }
-
-.public-home .public-home-links button,
-.public-home .services-trigger {
-  color: #3b465c !important;
-  background: transparent;
-  border-radius: 8px;
-  padding: 7px 12px;
-  font-weight: 500;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-.public-home .public-home-links button:hover,
-.public-home .services-trigger:hover,
-.public-home .services-trigger.active {
-  color: #141a26 !important;
-  background: var(--hx-glass-strong);
-}
-
-.public-home-actions .home-login-btn {
-  background: transparent;
-  color: var(--hx-ink) !important;
-  border: 1px solid var(--hx-border);
-  border-radius: 9px;
-  padding: 8px 16px;
-  font-weight: 600;
-}
-.public-home-actions .home-login-btn:hover { background: var(--hx-glass-strong); }
-
-.public-home-actions .home-register-btn {
-  background: linear-gradient(135deg, #2563eb, #38bdf8);
-  color: #fff !important;
-  border: none;
-  border-radius: 9px;
-  padding: 8px 18px;
-  font-weight: 700;
-  box-shadow: 0 8px 22px -10px rgba(56, 189, 248, 0.7);
-}
-.public-home-actions .home-register-btn:hover { filter: brightness(1.06); }
+/* Header/nav lives in the single HEADER block near the top of this file. */
 
 .public-home-main { max-width: 1180px; margin: 0 auto; padding: 0 22px; }
 
@@ -1855,10 +1760,10 @@
   padding: 6px 14px 6px 6px;
   border-radius: 999px;
   border: 1px solid var(--hx-border);
-  background: var(--hx-glass);
-  color: #3b465c;
+  background: var(--hx-glass-strong);
+  color: var(--hx-ink);
   font-size: 0.86rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: border-color 0.15s ease, transform 0.15s ease;
 }
@@ -1940,13 +1845,21 @@
   position: relative;
   max-width: 1180px;
   margin: 56px auto 0;
+  /* Always-dark "app screenshot" island on the light page. Re-scope the hx
+     tokens to DARK values so internal elements (which read var(--hx-ink) /
+     --hx-muted / --hx-border / --hx-line / --hx-glass) keep full contrast, and
+     use a SOLID background so the white page can't bleed through and wash it out. */
+  --hx-ink: #f2f6ff;
+  --hx-muted: #9fb2d6;
+  --hx-border: rgba(125, 165, 235, 0.22);
+  --hx-line: rgba(120, 160, 230, 0.18);
+  --hx-glass: rgba(255, 255, 255, 0.05);
+  --hx-glass-strong: rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   border: 1px solid var(--hx-border);
-  background: rgba(13, 27, 58, 0.7);
-  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.9), 0 0 60px -30px rgba(56, 189, 248, 0.5);
+  background: #0e1d40;
+  box-shadow: 0 40px 80px -34px rgba(15, 23, 42, 0.45), 0 0 70px -26px rgba(56, 189, 248, 0.45);
   overflow: hidden;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
 }
 .hx-mock-bar {
   display: flex;
@@ -1954,7 +1867,7 @@
   gap: 8px;
   padding: 11px 16px;
   border-bottom: 1px solid var(--hx-border);
-  background: rgba(8, 16, 34, 0.6);
+  background: rgba(7, 13, 30, 0.9);
 }
 .hx-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
 .hx-dot-r { background: #ff5f57; }
@@ -1973,7 +1886,7 @@
 .hx-mock-side {
   border-right: 1px solid var(--hx-border);
   padding: 16px 12px;
-  background: rgba(8, 16, 34, 0.4);
+  background: rgba(7, 13, 30, 0.55);
 }
 .hx-mock-logo { font-weight: 700; color: var(--hx-ink); font-size: 1.05rem; padding: 4px 10px 14px; }
 .hx-mock-nav {
@@ -2297,23 +2210,23 @@
 
 /* ---------- FOOTER (restyle existing classes) ---------- */
 .public-home-footer {
-  margin-top: 80px;
+  margin-top: 44px;
   border-top: 1px solid var(--hx-border);
   background: rgba(6, 12, 28, 0.6);
 }
-.public-home-footer-grid { padding: 48px 22px 24px; }
+.public-home-footer-grid { padding: 24px 22px 12px; }
 .public-home .public-home-footer-brand button,
 .public-home .public-home-footer-logo { color: var(--hx-ink) !important; }
-.public-home .public-home-footer-column button { color: #aab9dc !important; }
+.public-home .public-home-footer-column button { color: var(--hx-ink) !important; font-weight: 600; }
 .public-home .public-home-footer-column button:hover { color: var(--hx-cyan) !important; }
 .public-home-footer-social h2 { color: var(--hx-ink); }
 .public-home-social-links a {
-  color: #aec0e4;
+  color: var(--hx-ink);
   border: 1px solid var(--hx-border);
   background: var(--hx-glass);
 }
 .public-home-social-links a:hover { color: var(--hx-cyan); border-color: rgba(56,189,248,0.5); }
-.public-home-footer-legal { color: #5f7196; border-top: 1px solid var(--hx-line); }
+.public-home-footer-legal { color: var(--hx-ink); border-top: 1px solid var(--hx-line); }
 
 /* ---------- RESPONSIVE ---------- */
 @media (max-width: 900px) {

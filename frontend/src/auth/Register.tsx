@@ -25,10 +25,6 @@ export default function Register() {
     window.location.href = `${getApiBase()}/gmail/login?mode=signup`;
   };
 
-  const handleOutlookSignup = () => {
-    window.location.href = `${getApiBase()}/outlook/login?mode=signup`;
-  };
-
   const handleRegister = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
@@ -117,14 +113,6 @@ export default function Register() {
             onClick={handleGmailSignup}
           >
             Gmail
-          </button>
-          <button
-            type="button"
-            className="outlook-btn"
-            aria-label="Sign up with Outlook"
-            onClick={handleOutlookSignup}
-          >
-            Outlook
           </button>
         </div>
 
