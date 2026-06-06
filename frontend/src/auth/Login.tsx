@@ -7,6 +7,7 @@ import { useAuth } from "../auth/useAuth";
 import { homePathForUser } from "../auth/accountHome";
 import { getApiBase } from "../config";
 import { ssoStartUrl } from "../api/sso";
+import PublicHeader from "../components/PublicHeader";
 import { parseJwt } from "./bootToken";
 import { unwrapAndCacheMemberKeys } from "../orgKeys/memberLogin";
 import "./login.css";
@@ -161,7 +162,9 @@ export default function Login() {
   };
 
   return (
-    <div className="login-page">
+    <div className="login-page login-page--framed">
+      <PublicHeader showActions={false} />
+      <div className="login-page-body">
       {ssoMode ? (
         <form className="login-card" onSubmit={handleSsoSubmit}>
           <h2>Sign in with SSO</h2>
@@ -257,6 +260,7 @@ export default function Login() {
           </p>
         </form>
       )}
+      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useAuth } from "../auth/useAuth";
 import { homePathForAccount } from "../auth/accountHome";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { getApiBase } from "../config";
+import PublicHeader from "../components/PublicHeader";
 import "./login.css"; // ✅ reuse styles
 
 export default function Register() {
@@ -72,7 +73,9 @@ export default function Register() {
   };
 
   return (
-    <div className="login-page">
+    <div className="login-page login-page--framed">
+      <PublicHeader showActions={false} />
+      <div className="login-page-body">
       <form className="login-card" onSubmit={handleRegister}>
         <h2>Create account </h2>
         <p className="subtitle">Join Fluxze to get started</p>
@@ -125,6 +128,7 @@ export default function Register() {
           <Link to="/login">Login</Link>
         </p>
       </form>
+      </div>
     </div>
   );
 }
