@@ -1929,41 +1929,69 @@
 }
 .hx-btn-ghost:hover { background: var(--hx-glass-strong); border-color: rgba(56, 189, 248, 0.5); transform: translateY(-2px); }
 
-/* Mac download control: one button with a caret that opens an arch menu. */
+/* Cross-platform download control: a button with a caret that opens a polished
+   platform menu (icon + label + arch sub-label, detected build marked). */
 .hx-download { position: relative; display: inline-flex; }
 .hx-download-caret { margin-left: 4px; font-size: 0.78em; opacity: 0.7; }
 .hx-download-menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 10px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
-  min-width: 220px;
+  min-width: 280px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 6px;
-  background: rgba(255, 255, 255, 0.98);
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.99);
   border: 1px solid var(--hx-border);
-  border-radius: 12px;
-  box-shadow: 0 22px 54px -26px rgba(0, 0, 0, 0.5);
-  -webkit-backdrop-filter: saturate(140%) blur(14px);
-  backdrop-filter: saturate(140%) blur(14px);
+  border-radius: 14px;
+  box-shadow: 0 28px 64px -28px rgba(13, 27, 58, 0.55);
+  -webkit-backdrop-filter: saturate(140%) blur(16px);
+  backdrop-filter: saturate(140%) blur(16px);
+  text-align: left;
+}
+.hx-download-menu-head {
+  margin: 4px 12px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hx-muted);
 }
 .hx-download-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
   color: var(--hx-ink);
   text-decoration: none;
-  font-size: 0.95rem;
-  font-weight: 600;
+  transition: background 0.12s ease;
 }
 .hx-download-item:hover { background: var(--hx-glass-strong); }
-.hx-download-check { color: #2563eb; font-weight: 800; }
+.hx-download-ico {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--hx-glass);
+  border: 1px solid var(--hx-border);
+  color: var(--hx-ink);
+}
+.hx-download-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+.hx-download-text strong { font-size: 0.95rem; font-weight: 700; white-space: nowrap; }
+.hx-download-text small { font-size: 0.78rem; color: var(--hx-muted); white-space: nowrap; }
+.hx-download-check { margin-left: auto; color: #2563eb; font-weight: 800; font-size: 1rem; }
 
 .hx-hero-trust { margin-top: 18px; font-size: 0.9rem; color: #6f82a8; }
 
