@@ -105,6 +105,16 @@
   padding: 0;
 }
 
+/* Console tiles sit directly on the page — strip the bordered .u-panel box
+   (border + background) and its padding/margin so there's no framing line and
+   no empty second block below the tiles. Matches the platform admin home. */
+.organization-admin-home .organization-admin-panel {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin-bottom: 0;
+}
+
 .org-home-tiles {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

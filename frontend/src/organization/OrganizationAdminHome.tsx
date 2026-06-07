@@ -4,7 +4,6 @@ import type { KeyboardEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getOrgKeys } from "../orgKeys/api";
-import ActivityDashboard from "../home/dashboard/ActivityDashboard";
 import "../home/home.css";
 import "./admin-ui.css";
 import "./organizationAdmin.css";
@@ -156,8 +155,6 @@ export default function OrganizationAdminHome() {
 
   return (
     <div className="organization-admin-home u-page-shell">
-      <ActivityDashboard />
-
       {hasAnyConsole && (
         <section className="organization-admin-panel u-panel">
           <div className="org-home-tiles">
