@@ -151,6 +151,20 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // "Report a bug" overlay — opened from the red header icon, also reachable
   // from the profile menu's "Help & Report issue" item.
   const [supportOpen, setSupportOpen] = useState(false);
+  // Collapsible sidebar groups. Each starts open when the user is already on a
+  // route inside it (so the active item is visible); otherwise collapsed.
+  const [logsExpanded, setLogsExpanded] = useState(() =>
+    location.pathname.startsWith("/logs"),
+  );
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(() =>
+    location.pathname.startsWith("/github"),
+  );
+  const [platformExpanded, setPlatformExpanded] = useState(() =>
+    location.pathname.startsWith("/platform"),
+  );
+  const [developersExpanded, setDevelopersExpanded] = useState(() =>
+    location.pathname.startsWith("/docs"),
+  );
 
   // Desktop sidebar can be collapsed to an icon-only rail. Persisted so the
   // user's preference survives reloads.
@@ -360,6 +374,29 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     </Link>
   );
 
+  // Clickable header for a collapsible sidebar group (Workspace, Platform,
+  // Logs, Developers). Renders the label + a chevron that rotates with state.
+  const renderSectionToggle = (
+    label: string,
+    expanded: boolean,
+    onToggle: () => void,
+  ) => (
+    <button
+      type="button"
+      className="sidebar-section-label sidebar-section-toggle"
+      aria-expanded={expanded}
+      onClick={onToggle}
+    >
+      <span>{label}</span>
+      <span
+        className={`sidebar-section-chevron${expanded ? " open" : ""}`}
+        aria-hidden="true"
+      >
+        ▾
+      </span>
+    </button>
+  );
+
   // All hooks must run before this guard — an earlier return would change the
   // hook call order between renders (React rules of hooks).
   if (!user) {
@@ -447,6 +484,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Logs get their own sidebar group, split out from Platform.
   const hasLogsSection =
     canAccessSecurity || canAccessPlatformLogs || isPlatformOwner;
+
+  // Code lives in its own "Workspace" group. Same gate as the link itself so
+  // the section header never renders empty.
+  const hasWorkspaceSection =
+    user.scope === "platform" || isOrgOwner || isDeveloper;
 
   return (
     <div className="app">
@@ -581,119 +623,183 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 "🛂",
                 location.pathname === "/access-requests",
               )}
-            {(user.scope === "platform" || isOrgOwner || isDeveloper) &&
-              renderSidebarItem(
-                "/github",
-                "github",
-                "Code",
-                // Folder with a branch tree inside — picks up currentColor
-                // so it follows the link's foreground (white when active).
-                <svg
-                  className="sidebar-icon-svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-                  <circle cx="9" cy="11" r="1.4" />
-                  <circle cx="15" cy="11" r="1.4" />
-                  <circle cx="12" cy="17" r="1.4" />
-                  <path d="M9 12v1a3 3 0 0 0 3 3" />
-                  <path d="M15 12v1a3 3 0 0 1-3 3" />
-                </svg>,
-              )}
           </div>
+
+          {hasWorkspaceSection && (
+            <div className="sidebar-section">
+              {renderSectionToggle("Workspace", workspaceExpanded, () =>
+                setWorkspaceExpanded((open) => !open),
+              )}
+              {(workspaceExpanded || sidebarCollapsed) && (
+                <div className="sidebar-subitems">
+                  {renderSidebarItem(
+                    "/github",
+                    "github",
+                    "Code",
+                    // Folder with a branch tree inside — picks up currentColor
+                    // so it follows the link's foreground (white when active).
+                    <svg
+                      className="sidebar-icon-svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                      <circle cx="9" cy="11" r="1.4" />
+                      <circle cx="15" cy="11" r="1.4" />
+                      <circle cx="12" cy="17" r="1.4" />
+                      <path d="M9 12v1a3 3 0 0 0 3 3" />
+                      <path d="M15 12v1a3 3 0 0 1-3 3" />
+                    </svg>,
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {hasPlatformSection && (
             <div className="sidebar-section">
-              <div className="sidebar-section-label">Platform</div>
-              {canAccessPlatformBilling &&
-                renderSidebarLink(
-                  "/platform/billing",
-                  "Billing",
-                  "💳",
-                  location.pathname === "/platform/billing",
-                )}
-              {canAccessPlatformDeveloper &&
-                renderSidebarLink(
-                  "/platform/developer",
-                  "Developer",
-                  "⚙",
-                  location.pathname === "/platform/developer",
-                )}
-              {canAccessPlatformSupport &&
-                renderSidebarLink(
-                  "/platform/support",
-                  "Support",
-                  <BugReportIcon className="sidebar-bug-icon" />,
-                  location.pathname === "/platform/support",
-                )}
-              {canAccessPlatformAnalytics &&
-                renderSidebarLink(
-                  "/platform/analytics",
-                  "Analytics",
-                  "📊",
-                  location.pathname === "/platform/analytics",
-                )}
-              {isPlatformOwner &&
-                renderSidebarLink(
-                  "/platform/domains",
-                  "Domains",
-                  "🌐",
-                  location.pathname === "/platform/domains",
-                )}
-              {isPlatformOwner &&
-                renderSidebarLink(
-                  "/platform/secrets",
-                  "Secrets",
-                  "🔑",
-                  location.pathname === "/platform/secrets",
-                )}
+              {renderSectionToggle("Platform", platformExpanded, () =>
+                setPlatformExpanded((open) => !open),
+              )}
+              {(platformExpanded || sidebarCollapsed) && (
+                <div className="sidebar-subitems">
+                  {canAccessPlatformBilling &&
+                    renderSidebarLink(
+                      "/platform/billing",
+                      "Billing",
+                      "💳",
+                      location.pathname === "/platform/billing",
+                    )}
+                  {canAccessPlatformDeveloper &&
+                    renderSidebarLink(
+                      "/platform/developer",
+                      "Developer",
+                      "⚙",
+                      location.pathname === "/platform/developer",
+                    )}
+                  {canAccessPlatformSupport &&
+                    renderSidebarLink(
+                      "/platform/support",
+                      "Support",
+                      <BugReportIcon className="sidebar-bug-icon" />,
+                      location.pathname === "/platform/support",
+                    )}
+                  {canAccessPlatformAnalytics &&
+                    renderSidebarLink(
+                      "/platform/analytics",
+                      "Analytics",
+                      "📊",
+                      location.pathname === "/platform/analytics",
+                    )}
+                  {isPlatformOwner &&
+                    renderSidebarLink(
+                      "/platform/domains",
+                      "Domains",
+                      "🌐",
+                      location.pathname === "/platform/domains",
+                    )}
+                  {isPlatformOwner &&
+                    renderSidebarLink(
+                      "/platform/secrets",
+                      "Secrets",
+                      "🔑",
+                      location.pathname === "/platform/secrets",
+                    )}
+                </div>
+              )}
             </div>
           )}
 
           {hasLogsSection && (
             <div className="sidebar-section">
-              <div className="sidebar-section-label">Logs</div>
-              {canAccessPlatformLogs &&
-                renderSidebarLink(
-                  "/logs/app",
-                  "App Logs",
-                  "🪵",
-                  location.pathname === "/logs/app",
-                )}
-              {isPlatformOwner &&
-                renderSidebarLink(
-                  "/logs/visitors",
-                  "Visitors",
-                  "👥",
-                  location.pathname === "/logs/visitors",
-                )}
-              {canAccessSecurity &&
-                renderSidebarLink(
-                  "/logs/users",
-                  "User Logs",
-                  "👤",
-                  location.pathname === "/logs/users",
-                )}
-              {canAccessSecurity &&
-                renderSidebarLink(
-                  "/logs/audit",
-                  "Audit Logs",
-                  "🔒",
-                  location.pathname === "/logs/audit",
-                )}
-              {isPlatformOwner &&
-                renderSidebarLink(
-                  "/logs/tracing",
-                  "Tracing",
-                  "📈",
-                  location.pathname === "/logs/tracing",
-                )}
+              {renderSectionToggle("Logs", logsExpanded, () =>
+                setLogsExpanded((open) => !open),
+              )}
+              {/* In the icon-only rail the header (and thus the toggle) is
+                  hidden, so always show the items there to keep logs reachable. */}
+              {(logsExpanded || sidebarCollapsed) && (
+                <div className="sidebar-subitems">
+                  {canAccessPlatformLogs &&
+                    renderSidebarLink(
+                      "/logs/app",
+                      "App Logs",
+                      "🪵",
+                      location.pathname === "/logs/app",
+                    )}
+                  {isPlatformOwner &&
+                    renderSidebarLink(
+                      "/logs/visitors",
+                      "Visitors",
+                      "👥",
+                      location.pathname === "/logs/visitors",
+                    )}
+                  {canAccessSecurity &&
+                    renderSidebarLink(
+                      "/logs/users",
+                      "User Logs",
+                      "👤",
+                      location.pathname === "/logs/users",
+                    )}
+                  {canAccessSecurity &&
+                    renderSidebarLink(
+                      "/logs/audit",
+                      "Audit Logs",
+                      "🔒",
+                      location.pathname === "/logs/audit",
+                    )}
+                  {isPlatformOwner &&
+                    renderSidebarLink(
+                      "/logs/tracing",
+                      "Tracing",
+                      "📈",
+                      location.pathname === "/logs/tracing",
+                    )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Developer resources. "Developers" is a collapsible section header
+              (like Workspace / Platform / Logs); the items below link into
+              /docs. Libraries + SDK both land on the Developer overview. */}
+          {user.account_type !== "personal" && (
+            <div className="sidebar-section">
+              {renderSectionToggle("Developers", developersExpanded, () =>
+                setDevelopersExpanded((open) => !open),
+              )}
+              {(developersExpanded || sidebarCollapsed) && (
+                <div className="sidebar-subitems">
+                  {renderSidebarLink(
+                    "/docs",
+                    "Docs",
+                    "📚",
+                    location.pathname === "/docs",
+                  )}
+                  {renderSidebarLink(
+                    "/docs/api",
+                    "API reference",
+                    "📖",
+                    location.pathname === "/docs/api",
+                  )}
+                  {renderSidebarLink(
+                    "/docs/developers",
+                    "Libraries",
+                    "📦",
+                    false,
+                  )}
+                  {renderSidebarLink(
+                    "/docs/developers",
+                    "SDK",
+                    "🧰",
+                    location.pathname === "/docs/developers",
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -738,39 +844,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               </div>
             )}
 
-          {/* Developer resources. "Developers" is a non-clickable section
-              heading (like Platform / Logs); the items below link into /docs.
-              Libraries + SDK both land on the Developer overview for now. */}
-          {user.account_type !== "personal" && (
-            <div className="sidebar-section">
-              <div className="sidebar-section-label">Developers</div>
-              {renderSidebarLink(
-                "/docs",
-                "Docs",
-                "📚",
-                location.pathname === "/docs",
-              )}
-              {renderSidebarLink(
-                "/docs/api",
-                "API reference",
-                "📖",
-                location.pathname === "/docs/api",
-              )}
-              {renderSidebarLink(
-                "/docs/developers",
-                "Libraries",
-                "📦",
-                false,
-              )}
-              {renderSidebarLink(
-                "/docs/developers",
-                "SDK",
-                "🧰",
-                location.pathname === "/docs/developers",
-              )}
-            </div>
-          )}
-
           <div className="sidebar-section sidebar-section-secondary">
             {canAccessApiKeyAdmin(user) &&
               renderSidebarLink(
@@ -779,7 +852,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 "🔑",
                 location.pathname === "/api-keys",
               )}
-            {renderSidebarItem("/about", "about", "About", "ⓘ")}
           </div>
         </nav>
 

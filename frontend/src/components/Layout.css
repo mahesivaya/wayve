@@ -22,7 +22,7 @@
   gap: 12px;
   padding: 0 20px;
   flex-shrink: 0;
-  height: 48px;
+  height: 38px;
   position: relative;
   border-bottom: 1px solid var(--color-border);
 }
@@ -71,7 +71,7 @@
 ============================== */
 .logo {
   font-weight: 800;
-  font-size: var(--text-3xl);
+  font-size: var(--text-xl);
   cursor: pointer;
   /* Use the canonical text colour so the wordmark is always high-contrast
      against the header background — near-black in light mode, near-white
@@ -432,7 +432,7 @@
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   padding: 12px 8px;
   flex-shrink: 0;
   overflow-y: auto;
@@ -452,6 +452,55 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-muted);
+}
+
+/* Collapsible section header (e.g. Logs). Reuses .sidebar-section-label for
+   typography; this turns the <button> into a full-width clickable row with a
+   chevron on the right. */
+.sidebar-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s, color 0.15s;
+  /* Darker than the default muted section label so the toggle + chevron read
+     as an interactive control. */
+  color: var(--color-text-primary);
+}
+
+.sidebar-section-toggle:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.sidebar-section-chevron {
+  display: inline-block;
+  font-size: 1.05em;
+  line-height: 1;
+  transition: transform 0.15s ease;
+  transform: rotate(-90deg);
+}
+
+/* Items revealed by a collapsible section header (e.g. Logs) are indented a
+   little so they read as nested under the header. */
+.sidebar-subitems {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 10px;
+}
+
+/* In the icon-only rail there's no header to nest under — keep links centered. */
+.sidebar.collapsed .sidebar-subitems {
+  padding-left: 0;
+}
+
+.sidebar-section-chevron.open {
+  transform: rotate(0deg);
 }
 
 .sidebar-spacer {
@@ -973,7 +1022,7 @@
   }
 
   .logo {
-    font-size: var(--text-2xl);
+    font-size: var(--text-lg);
   }
 
   .duplicate-pane-btn {
@@ -1033,6 +1082,11 @@
 }
 :root[data-theme="dark"] .sidebar-section-label {
   color: var(--color-text-slate);
+}
+/* Keep the collapsible toggle (Logs) brighter than static section labels so
+   its text + chevron read as interactive in dark mode. */
+:root[data-theme="dark"] .sidebar-section-toggle {
+  color: var(--color-on-primary);
 }
 
 /* OS prefers-color-scheme blocks were removed — dark mode is now

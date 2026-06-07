@@ -32,7 +32,7 @@ Frontend (in `frontend/`):
 - Type-check only: `npx tsc --noEmit`.
 
 Docker / full stack (from `infra/` via `just`, or from repo root with `docker compose -f infra/docker-compose.yml ...`):
-- `just docker-up` / `just docker-up-detached` / `just docker-down`.
+- `just up` (build + run the dev stack) / `just up-d` (detached) / `just dev-down`. Frontend/backend dev recipes also exist (`just run`, `just dev`, `just fe-dev`, `just fe-install`); cargo/npm recipes use the `[working-directory]` attribute to run in `../backend` or `../frontend`.
 - `just db-shell` — `psql` into the running `postgres_db` container as `wayve_user`.
 - `just db-reset` — wipes the volume and restarts postgres (re-runs `init.sql`).
 - Smoke: `./scripts/smoke.sh` (set `KEEP_RUNNING=1` to leave the stack up).
@@ -56,7 +56,7 @@ Entry point `backend/src/main.rs`:
 
 ### Database
 
-The schema lives in `infra/postgres/init.sql` and is applied **once** when the Postgres container first initializes (via `docker-entrypoint-initdb.d`). It is **not** managed by `sqlx migrate` despite the `just sqlx-migrate` recipe — the file is idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... IF NOT EXISTS`) and is re-applied verbatim in CI. To evolve the schema, edit this file and `just db-reset` locally.
+The schema lives in `infra/postgres/init.sql` and is applied **once** when the Postgres container first initializes (via `docker-entrypoint-initdb.d`). It is **not** managed by `sqlx migrate` despite the `just sqlx-migrate` recipe (there is no `backend/migrations/` dir, so that recipe reports "no migrations found") — the file is idempotent (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... IF NOT EXISTS`) and is re-applied verbatim in CI. To evolve the schema, edit this file and `just db-reset` locally.
 
 Key tables: `users` (local + Google auth, `auth_provider` discriminator, nullable `password` for OAuth signups; `account_type` is the RBAC scope discriminator), `organizations` + `organization_members` / `platform_members` (RBAC role rows — see Authorization), `email_accounts`, `emails`, `meetings` + `meeting_participants` (with optional Zoom / Google Calendar linkage), `messages` (server-encrypted chat content, `message_status` ENUM `sent|delivered|read`), `files`, `notes`, `password_reset_tokens`, the Stripe billing projection (`plans`, `subscriptions`, `invoices`, `billing_customers`, `entitlements`, `usage_events`), and `api_keys` + `api_key_audit_log`.
 
