@@ -2,15 +2,27 @@
 # 🔧 BASIC
 # =========================
 
+set dotenv-load := true
+
+db_url := "postgres://wayve_user:wayve_password@localhost:5432/wayve_dev"
+
+# cargo/npm recipes run in ../backend or ../frontend. just resolves the
+# [working-directory] path relative to THIS justfile's dir (infra/), and it
+# must be a string literal — a variable like `backend_dir` will not parse.
+
+[working-directory: '../backend']
 run:
     cargo run
 
+[working-directory: '../backend']
 build:
     cargo build
 
+[working-directory: '../backend']
 release:
     cargo build --release
 
+[working-directory: '../backend']
 clean:
     cargo clean
 
@@ -18,26 +30,80 @@ clean:
 # 🧪 DEV
 # =========================
 
+[working-directory: '../backend']
 dev:
     cargo watch -x run
 
+[working-directory: '../backend']
 fmt:
     cargo fmt
 
+[working-directory: '../backend']
 lint:
     cargo clippy -- -D warnings
+
+# Mirrors CI: single-threaded (tests mutate process env / use serial_test).
+# Pass extra args: `just test some_name` or `just test -- --exact path::to::it`.
+[working-directory: '../backend']
+test *ARGS:
+    cargo test --no-fail-fast {{ARGS}} -- --test-threads=1
+
+[working-directory: '../frontend']
+fe-install:
+    npm install
+
+[working-directory: '../frontend']
+fe-dev:
+    npm run dev
+
+[working-directory: '../frontend']
+fe-build:
+    npm run build
+
+[working-directory: '../frontend']
+fe-preview:
+    npm run preview
+
+[working-directory: '../frontend']
+fe-lint:
+    npm run lint
+
+[working-directory: '../frontend']
+fe-lint-css:
+    npm run lint:css
+
+# Type-check only (no emit) — matches the CI `tsc --noEmit` gate.
+[working-directory: '../frontend']
+fe-typecheck:
+    npx tsc --noEmit
+
+# Vitest one-shot. Pass args: `just fe-test path/to/file.test.tsx -t "name"`.
+[working-directory: '../frontend']
+fe-test *ARGS:
+    npm test {{ARGS}}
+
+[working-directory: '../frontend']
+fe-test-watch:
+    npm run test:watch
+
+[working-directory: '../frontend']
+fe-test-ui:
+    npm run test:ui
+
+# Full pre-push gate mirroring CI: backend lint + tests, frontend typecheck + tests.
+check: lint test fe-typecheck fe-test
 
 # =========================
 # 🐳 DOCKER
 # =========================
 
-compose-dev := "docker compose -f docker-compose.dev.yml --env-file .env.development"
-compose-prod := "docker compose -f docker-compose.prod.yml --env-file .env.production"
+compose-dev := "docker compose -f docker-compose.dev.yml --env-file ../.env"
+compose-prod := "docker compose -f docker-compose.prod.yml --env-file ../.env.production"
 
-dev-up:
+up:
     {{compose-dev}} up --build
 
-dev-up-detached:
+up-d:
     {{compose-dev}} up -d --build
 
 dev-up-workers:
@@ -60,15 +126,6 @@ prod-logs:
 
 docker-build:
     {{compose-dev}} build
-
-docker-up:
-    {{compose-dev}} up
-
-docker-up-detached:
-    {{compose-dev}} up -d
-
-docker-down:
-    {{compose-dev}} down
 
 docker-logs:
     {{compose-dev}} logs -f
@@ -95,11 +152,13 @@ db-shell:
 # 🔐 SQLx
 # =========================
 
+[working-directory: '../backend']
 sqlx-prepare:
-    DATABASE_URL=postgres://wayve_user:wayve_password@localhost:5432/wayve_dev cargo sqlx prepare
+    DATABASE_URL={{db_url}} cargo sqlx prepare
 
+[working-directory: '../backend']
 sqlx-migrate:
-    sqlx migrate run
+    DATABASE_URL={{db_url}} sqlx migrate run
 
 # =========================
 # 📧 BACKEND + FRONTEND
@@ -127,7 +186,6 @@ logs-backend:
 
 r: run
 d: dev
-u: docker-up
-ud: docker-up-detached
-dd: docker-down
-
+u: up
+ud: up-d
+dd: dev-down
