@@ -8,12 +8,54 @@
 }
 
 .user-list {
-  width: 320px;
-  min-width: 260px;
-  max-width: 360px;
+  /* Width is driven by the drag-resizer (--chat-sidebar-w, set on
+     .chat-container). flex 0 0 keeps it from growing/shrinking with the
+     message area. */
+  width: var(--chat-sidebar-w, 320px);
+  flex: 0 0 var(--chat-sidebar-w, 320px);
   overflow-y: auto;
   border-right: 1px solid var(--color-border);
   background: var(--color-email-bg);
+}
+
+/* Drag handle between the sidebar and the message area — a thin 5px strip
+   with a centered grip pill that pops on hover (same convention as the email
+   sidebar resizer). */
+.chat-sidebar-resizer {
+  flex: 0 0 5px;
+  align-self: stretch;
+  cursor: col-resize;
+  background: transparent;
+  border-right: 1px solid var(--color-border-soft);
+  position: relative;
+  transition: background 0.15s;
+  touch-action: none;
+}
+
+.chat-sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 28px;
+  background: var(--color-text-muted);
+  border-radius: 1px;
+  opacity: 0.35;
+  transition: opacity 0.15s, height 0.15s;
+  pointer-events: none;
+}
+
+.chat-sidebar-resizer:hover,
+.chat-sidebar-resizer:active {
+  background: var(--color-email-resizer-hover);
+}
+
+.chat-sidebar-resizer:hover::after,
+.chat-sidebar-resizer:active::after {
+  opacity: 1;
+  height: 44px;
 }
 
 .chat-sidebar-header {
@@ -42,6 +84,8 @@
 }
 
 .new-channel-btn {
+  /* Centered on its own line under the "Channels" title. */
+  align-self: center;
   border: 1px solid var(--color-primary-action);
   border-radius: var(--radius-sm);
   background: var(--color-primary-action);
@@ -123,7 +167,7 @@
 
 .conversation-section-title {
   padding: 16px 14px 7px;
-  color: var(--color-text-slate-light);
+  color: var(--color-text-primary);
   font-size: var(--text-xs);
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -133,9 +177,12 @@
 /* Section header row: section title on the left, an action (e.g. + Channel)
    pinned to the right. */
 .conversation-section-header {
+  /* Stack vertically: "Channels" title on line 1, the Add Channel button on
+     line 2, then the channel list below. */
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   padding-right: 14px;
 }
 
@@ -691,6 +738,11 @@
   min-width: 0;
   max-width: none;
   flex: 1;
+}
+
+/* No drag-resizing when the layout is stacked into one column. */
+.chat-container.narrow .chat-sidebar-resizer {
+  display: none;
 }
 
 .chat-container.narrow .chat-area {

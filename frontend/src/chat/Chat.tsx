@@ -98,6 +98,49 @@ export default function Chat() {
   const selectedRef = useRef<Conversation | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  // Drag-resizable sidebar: the user drags the divider between the
+  // channels/people list and the message area to trade width between them.
+  // Persisted so the preference survives reloads. Clamped 200–640px.
+  const CHAT_SIDEBAR_MIN = 200;
+  const CHAT_SIDEBAR_MAX = 640;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const stored = Number(localStorage.getItem("rwayve.chatSidebar.width"));
+    return Number.isFinite(stored) && stored > 0
+      ? Math.min(CHAT_SIDEBAR_MAX, Math.max(CHAT_SIDEBAR_MIN, stored))
+      : 320;
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("rwayve.chatSidebar.width", String(sidebarWidth));
+    } catch {
+      // private mode / quota — width just won't persist this session
+    }
+  }, [sidebarWidth]);
+
+  const startSidebarDrag = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const container = containerRef.current;
+    if (!container) return;
+    const left = container.getBoundingClientRect().left;
+    const onMove = (ev: PointerEvent) => {
+      const next = Math.min(
+        CHAT_SIDEBAR_MAX,
+        Math.max(CHAT_SIDEBAR_MIN, ev.clientX - left),
+      );
+      setSidebarWidth((prev) => (prev === next ? prev : next));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   const selectedChannel =
     selectedConversation?.type === "channel" ? selectedConversation.channel : null;
   const selectedTitle = useMemo(
@@ -538,6 +581,7 @@ export default function Chat() {
       className={`chat-container${isNarrow ? " narrow" : ""}${
         selectedConversation ? " has-active" : ""
       }`}
+      style={{ "--chat-sidebar-w": `${sidebarWidth}px` } as React.CSSProperties}
     >
       <ConversationSidebar
         users={filteredUsers}
@@ -553,6 +597,15 @@ export default function Chat() {
         onSelectChannel={loadChannelMessages}
         onJoinChannel={joinChannel}
         onSelectUser={loadUserMessages}
+      />
+
+      {/* Drag to trade width between the sidebar and the message area. */}
+      <div
+        className="chat-sidebar-resizer"
+        onPointerDown={startSidebarDrag}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize chat sidebar"
       />
 
       <section className="chat-area">

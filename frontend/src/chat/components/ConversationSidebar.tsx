@@ -37,14 +37,10 @@ export default function ConversationSidebar({
 }: Props) {
   return (
     <aside className="user-list">
-      <div className="chat-sidebar-header">
-        <h3>Chat</h3>
-      </div>
-
       <div className="conversation-section-header">
         <span className="conversation-section-title">Channels</span>
         <button type="button" className="new-channel-btn" onClick={onToggleCreateChannel}>
-          + Channel
+          + Add Channel
         </button>
       </div>
 
