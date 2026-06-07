@@ -13,13 +13,15 @@ const BUILDS: Record<
   { href: string; label: string; sub: string; icon: IconKind }
 > = {
   "mac-arm64": {
-    href: `${S3}/Fluxze-arm64.dmg`,
+    // New keys: the original Fluxze-arm64/x64.dmg objects are write-locked on
+    // S3, so the refreshed builds (open at /login) are published under these.
+    href: `${S3}/Fluxze-mac-arm64.dmg`,
     label: "macOS",
     sub: "Apple Silicon",
     icon: "apple",
   },
   "mac-x64": {
-    href: `${S3}/Fluxze-x64.dmg`,
+    href: `${S3}/Fluxze-mac-x64.dmg`,
     label: "macOS",
     sub: "Intel",
     icon: "apple",
