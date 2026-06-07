@@ -15,12 +15,14 @@
     "icon": "node make-icon.cjs"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8"
   },
   "build": {
     "appId": "com.fluxze.desktop",
     "productName": "Fluxze",
+    "afterSign": "notarize.cjs",
     "files": [
       "main.cjs",
       "preload.cjs",
@@ -32,6 +34,10 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "target": [
         {
           "target": "dmg",
