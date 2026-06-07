@@ -8,6 +8,7 @@ import { homePathForUser } from "../auth/accountHome";
 import { getApiBase } from "../config";
 import { ssoStartUrl } from "../api/sso";
 import PublicHeader from "../components/PublicHeader";
+import { isDesktopApp } from "../utils/desktop";
 import { parseJwt } from "./bootToken";
 import { unwrapAndCacheMemberKeys } from "../orgKeys/memberLogin";
 import "./login.css";
@@ -163,7 +164,9 @@ export default function Login() {
 
   return (
     <div className="login-page login-page--framed">
-      <PublicHeader showActions={false} />
+      {/* The public marketing header is for the web app; the desktop (Electron)
+          shell has no marketing chrome, so hide it there. */}
+      {!isDesktopApp() && <PublicHeader showActions={false} />}
       <div className="login-page-body">
       {ssoMode ? (
         <form className="login-card" onSubmit={handleSsoSubmit}>
