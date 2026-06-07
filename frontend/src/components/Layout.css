@@ -412,11 +412,20 @@
   padding: 0;
   background: transparent;
   border-bottom: none;
-  justify-content: center;
+  /* Right-align the search box toward the header actions instead of centering. */
+  justify-content: flex-end;
 }
 
 .header > .global-search-row .global-search-box {
-  width: min(560px, 100%);
+  /* Fluid width — scales with the viewport between a compact minimum and a
+     capped maximum so it grows/shrinks with the page instead of a fixed px. */
+  width: clamp(160px, 26vw, 340px);
+  height: 28px;
+}
+
+/* Smaller magnifier to suit the shorter header search box. */
+.header > .global-search-row .global-search-icon {
+  font-size: var(--text-lg);
 }
 
 /* =============================

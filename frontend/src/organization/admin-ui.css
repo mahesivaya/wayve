@@ -6,7 +6,7 @@
 
 :is(.platform-admin-panel, .organization-admin-create) {
   margin-bottom: 16px;
-  padding: 16px;
+  padding: 10px;
 }
 
 :is(.platform-admin-section-header, .organization-admin-section-header) {

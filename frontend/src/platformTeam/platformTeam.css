@@ -1,5 +1,8 @@
 .pt-page {
-  padding: 16px 20px;
+  /* Slim outer band so the logs/visitors tables use the full pane width.
+     Kept small (not 0) because .pt-header has no padding of its own — 0 would
+     push the page title flush to the corner. */
+  padding: 8px 12px;
   width: 100%;
   box-sizing: border-box;
   display: flex;

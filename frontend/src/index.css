@@ -693,7 +693,9 @@
   height: 100%;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-8);
+  /* No outer padding band — pages own panels/headers carry their own inner
+     padding, so content stays readable while using the full pane width. */
+  padding: 0;
   box-sizing: border-box;
   background: var(--color-email-bg);
 }
