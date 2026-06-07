@@ -165,12 +165,6 @@ export default function PlatformAdminHome() {
     <div className="platform-admin-home u-page-shell">
       {hasAnyConsole && (
         <section className="platform-admin-panel u-panel">
-          <div className="platform-admin-section-header">
-            <div>
-              <h2>Platform consoles</h2>
-              <p>Role-specific dashboards across the platform team.</p>
-            </div>
-          </div>
           <div className="platform-console-rows">
             {rows.map((row, rowIdx) => (
               <div
