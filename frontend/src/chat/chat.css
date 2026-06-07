@@ -184,6 +184,8 @@
   align-items: flex-start;
   gap: 8px;
   padding-right: 14px;
+  /* Breathing room between the Add Channel button and the channel list. */
+  margin-bottom: 10px;
 }
 
 .conversation-item {
