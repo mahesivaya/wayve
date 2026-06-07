@@ -20,6 +20,7 @@ import {
   ROLE_LABELS,
   type Role,
 } from "../auth/permissions";
+import MembersTree from "./MembersTree";
 import "./membersPanel.css";
 
 // Roles offered in the inline "Create new user" form. Intentionally a tight
@@ -43,6 +44,9 @@ export default function MembersRolesPanel(props: Props) {
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  // Members are shown as an org-chart tree by default (click a node for
+  // details); "List" switches to the management rows (role change / delete).
+  const [view, setView] = useState<"tree" | "list">("tree");
 
   // Password-reset modal state. Modal opens with a target member; the
   // form captures the new temp password, computes a fresh login wrap in
@@ -393,7 +397,10 @@ export default function MembersRolesPanel(props: Props) {
                 : "Roles for the members of this workspace."}
             </p>
           </div>
-          {canManage && !createOpen && (
+          {/* The organization page has its own enhanced "Create account" form
+              (with email + role), so this inline creator is platform-only —
+              where it is the only way to create users. */}
+          {props.scope === "platform" && canManage && !createOpen && (
             <button
               type="button"
               className="rbac-create-btn"
@@ -436,7 +443,7 @@ export default function MembersRolesPanel(props: Props) {
         </div>
       )}
 
-      {createOpen && (
+      {props.scope === "platform" && createOpen && (
         <form className="rbac-create-form" onSubmit={(e) => void submitCreate(e)}>
           <label>
             <span>Email</span>
@@ -495,6 +502,26 @@ export default function MembersRolesPanel(props: Props) {
       ) : members.length === 0 ? (
         <div className="rbac-members-empty">No members found.</div>
       ) : (
+        <>
+          <div className="rbac-view-toggle" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={view === "tree" ? "active" : ""}
+              onClick={() => setView("tree")}
+            >
+              Tree
+            </button>
+            <button
+              type="button"
+              className={view === "list" ? "active" : ""}
+              onClick={() => setView("list")}
+            >
+              List
+            </button>
+          </div>
+          {view === "tree" ? (
+            <MembersTree members={members} />
+          ) : (
         <div className="rbac-members-list">
           {members.map((member) => {
             const editable =
@@ -585,6 +612,8 @@ export default function MembersRolesPanel(props: Props) {
             );
           })}
         </div>
+          )}
+        </>
       )}
     </section>
   );

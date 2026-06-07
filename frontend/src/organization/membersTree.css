@@ -1,0 +1,196 @@
+/* Org-chart / tree view of the members list (MembersTree.tsx). Tiers are
+   centered rows connected by a trunk + horizontal bar + per-node stubs, the
+   classic org-chart look. Lines use the theme border color so it works on the
+   dark app surface. */
+
+.members-tree {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 36px;
+  padding: 24px 8px 12px;
+  overflow-x: auto;
+}
+
+.members-tree-tier {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  position: relative;
+}
+
+/* Trunk down from a tier to the bar of the tier below. */
+.members-tree-tier:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -18px;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 18px;
+  background: var(--color-border);
+}
+
+/* Horizontal bar above every tier except the first. */
+.members-tree-tier:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  top: -18px;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  background: var(--color-border);
+}
+
+/* Stub up from each node to the bar (tiers below the first). */
+.members-tree-tier:not(:first-child) .members-tree-node::before {
+  content: "";
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 18px;
+  background: var(--color-border);
+}
+
+/* ---- node ---- */
+.members-tree-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 150px;
+  padding: 14px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.05s;
+}
+
+.members-tree-node:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--u-card-shadow, 0 2px 8px rgb(0, 0, 0, 0.18));
+}
+
+.members-tree-node:active {
+  transform: translateY(1px);
+}
+
+.members-tree-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: var(--text-lg);
+  flex: 0 0 auto;
+}
+
+.members-tree-avatar--lg {
+  width: 52px;
+  height: 52px;
+  font-size: var(--text-2xl);
+}
+
+.members-tree-name {
+  font-weight: 650;
+  font-size: var(--text-md);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.members-tree-role {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+/* ---- detail modal ---- */
+.members-tree-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.members-tree-detail-id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.members-tree-detail-id strong {
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+}
+.members-tree-detail-id span {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.members-tree-detail-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+.members-tree-detail-grid dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  align-self: center;
+}
+.members-tree-detail-grid dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+
+.members-tree-detail-note {
+  margin: 16px 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* ---- Tree / List view toggle ---- */
+.rbac-view-toggle {
+  display: inline-flex;
+  gap: 0;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.rbac-view-toggle button {
+  padding: 6px 16px;
+  border: none;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.rbac-view-toggle button:hover {
+  background: var(--color-surface-hover);
+}
+.rbac-view-toggle button.active {
+  background: var(--color-primary);
+  color: var(--color-surface);
+}

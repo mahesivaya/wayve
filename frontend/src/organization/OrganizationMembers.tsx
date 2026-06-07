@@ -1,12 +1,23 @@
 import { FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
 import { createAdminUser, type AdminCreatedUser } from "../api/admin";
 import { slugify, getEmailDomain } from "../auth/accountHome";
 import { useAuth } from "../auth/useAuth";
-import { hasPermission } from "../auth/permissions";
+import { hasPermission, ROLE_LABELS, type Role } from "../auth/permissions";
 import MembersRolesPanel from "./MembersRolesPanel";
 import "./admin-ui.css";
 import "./organizationAdmin.css";
+
+// Roles an org admin can assign at creation time (below owner / super_admin,
+// which are promoted via the per-member role change instead).
+const CREATE_ROLE_OPTIONS: Role[] = [
+  "member",
+  "guest",
+  "support",
+  "developer",
+  "billing",
+  "security",
+  "admin",
+];
 
 export default function OrganizationMembers() {
   const { user } = useAuth();
@@ -14,6 +25,11 @@ export default function OrganizationMembers() {
 
   const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<Role>("member");
+  // Email defaults to <handle>@<org-domain> but is editable; once the admin
+  // types in it, we stop auto-syncing it from the handle.
+  const [email, setEmail] = useState("");
+  const [emailEdited, setEmailEdited] = useState(false);
   const [createdUsers, setCreatedUsers] = useState<AdminCreatedUser[]>([]);
   const [createError, setCreateError] = useState("");
   const [createSuccess, setCreateSuccess] = useState("");
@@ -22,6 +38,8 @@ export default function OrganizationMembers() {
   const orgSlug =
     user?.organization_slug || slugify(user?.organization_name ?? "");
   const emailDomain = getEmailDomain(orgSlug);
+  const generatedEmail = handle ? `${slugify(handle)}@${emailDomain}` : "";
+  const effectiveEmail = emailEdited ? email.trim() : generatedEmail;
 
   const createUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -30,11 +48,20 @@ export default function OrganizationMembers() {
     setCreating(true);
 
     try {
-      const email = `${slugify(handle)}@${emailDomain}`;
-      const created = await createAdminUser(handle, email, password);
+      const created = await createAdminUser(
+        handle,
+        effectiveEmail,
+        password,
+        "personal",
+        "",
+        role,
+      );
       setCreatedUsers((prev) => [created, ...prev]);
       setHandle("");
       setPassword("");
+      setRole("member");
+      setEmail("");
+      setEmailEdited(false);
       setCreateSuccess(`Created account ${created.email}`);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create user");
@@ -45,15 +72,6 @@ export default function OrganizationMembers() {
 
   return (
     <div className="organization-admin-home u-page-shell">
-      <div className="organization-admin-header u-panel u-flex-between">
-        <div>
-          <h1>Members & roles</h1>
-          <p>Provision accounts inside your organization and manage role assignments.</p>
-        </div>
-        <Link to="/organization/home" className="u-btn-primary">
-          ← Back to organization home
-        </Link>
-      </div>
 
       {canManageMembers && (
         <section className="organization-admin-create u-panel">
@@ -79,14 +97,35 @@ export default function OrganizationMembers() {
               />
             </label>
 
-            {handle && (
-              <p className="organization-admin-hint">
-                Login email will be{" "}
-                <strong>
-                  {slugify(handle)}@{emailDomain}
-                </strong>
-              </p>
-            )}
+            <label className="u-form-label">
+              <span className="u-form-label-text">Email</span>
+              <input
+                className="u-form-control"
+                type="email"
+                value={effectiveEmail}
+                onChange={(event) => {
+                  setEmailEdited(true);
+                  setEmail(event.target.value);
+                }}
+                placeholder={generatedEmail || "name@example.com"}
+                required
+              />
+            </label>
+
+            <label className="u-form-label">
+              <span className="u-form-label-text">Role</span>
+              <select
+                className="u-form-control"
+                value={role}
+                onChange={(event) => setRole(event.target.value as Role)}
+              >
+                {CREATE_ROLE_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <label className="u-form-label">
               <span className="u-form-label-text">Password</span>

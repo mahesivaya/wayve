@@ -486,9 +486,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     canAccessSecurity || canAccessPlatformLogs || isPlatformOwner;
 
   // Code lives in its own "Workspace" group. Same gate as the link itself so
-  // the section header never renders empty.
+  // the section header never renders empty. Visible to platform staff, any
+  // developer, and organization owner / super_admin / admin.
+  const isOrgManager =
+    user.scope === "organization" &&
+    ["owner", "super_admin", "admin"].includes(user.effective_role ?? "");
   const hasWorkspaceSection =
-    user.scope === "platform" || isOrgOwner || isDeveloper;
+    user.scope === "platform" || isOrgManager || isDeveloper;
 
   return (
     <div className="app">

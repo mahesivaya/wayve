@@ -248,16 +248,19 @@ export default function App() {
               path="/aichat"
               element={<Navigate to="/ai-chat" replace />}
             />
-            {/* Platform team, organization owners, and developers (either
-                scope). Hiding the sidebar link isn't enough — guard the route
-                so anyone else typing /github is bounced to their own home
-                instead of seeing the page. */}
+            {/* Platform team, organization owner / super_admin / admin, and
+                developers (either scope). Hiding the sidebar link isn't enough
+                — guard the route so anyone else typing /github is bounced to
+                their own home instead of seeing the page. Keep this in sync
+                with `hasWorkspaceSection` in Layout.tsx. */}
             <Route
               path="/github"
               element={
                 user?.scope === "platform" ||
                 (user?.scope === "organization" &&
-                  user?.effective_role === "owner") ||
+                  ["owner", "super_admin", "admin"].includes(
+                    user?.effective_role ?? "",
+                  )) ||
                 user?.effective_role === "developer" ? (
                   <GitHubRepo />
                 ) : (

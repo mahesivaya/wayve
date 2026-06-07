@@ -216,7 +216,8 @@ export async function createAdminUser(
   email: string,
   password: string,
   accountType = "personal",
-  organizationName = ""
+  organizationName = "",
+  role?: string
 ): Promise<AdminCreatedUser> {
   const res = await apiFetch("/api/admin/users", {
     method: "POST",
@@ -227,6 +228,7 @@ export async function createAdminUser(
       password,
       account_type: accountType,
       organization_name: organizationName,
+      ...(role ? { role } : {}),
     }),
   });
 
