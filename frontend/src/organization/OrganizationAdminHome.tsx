@@ -160,12 +160,6 @@ export default function OrganizationAdminHome() {
 
       {hasAnyConsole && (
         <section className="organization-admin-panel u-panel">
-          <div className="organization-admin-section-header">
-            <div>
-              <h2>Organization consoles</h2>
-              <p>Role-specific dashboards across your organization.</p>
-            </div>
-          </div>
           <div className="org-home-tiles">
             {visibleConsoles.map(renderTile)}
           </div>
