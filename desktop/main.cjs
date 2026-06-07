@@ -1,8 +1,10 @@
 // Fluxze desktop — thin Electron wrapper around the production web app.
 //
-// The window loads https://fluxze.com directly, so OAuth redirects, session
-// cookies, WebSockets (chat/call) and the backend CORS allowlist all behave
-// exactly as they do in a browser. No frontend or backend changes are needed.
+// The window loads https://fluxze.com/login directly (skipping the marketing
+// home page), so OAuth redirects, session cookies, WebSockets (chat/call) and
+// the backend CORS allowlist all behave exactly as they do in a browser. No
+// frontend or backend changes are needed — the web /login route already bounces
+// already-authenticated users to their account home.
 //
 // Override the target with FLUXZE_URL (e.g. FLUXZE_URL=http://localhost:5173
 // npm start) to point the shell at a local dev server.
@@ -11,6 +13,10 @@ const { app, BrowserWindow, Menu, session, shell } = require("electron");
 const path = require("path");
 
 const APP_URL = process.env.FLUXZE_URL || "https://fluxze.com";
+// Open straight to the login screen, skipping the marketing home page. The web
+// app's /login guard redirects already-authenticated users to their account
+// home, so returning users land in the app — not stranded on login.
+const START_URL = `${APP_URL.replace(/\/$/, "")}/login`;
 
 // Force the app/menu name to the brand so the macOS app menu reads "Fluxze"
 // (and "About/Hide/Quit Fluxze") in dev too — not "Electron"/"fluxze-desktop".
@@ -92,7 +98,7 @@ function createWindow() {
     },
   );
 
-  mainWindow.loadURL(APP_URL);
+  mainWindow.loadURL(START_URL);
 }
 
 /** A minimal inline page shown when fluxze.com can't be reached. */
@@ -114,7 +120,7 @@ function offlinePage(detail) {
   <div class="box">
     <h1>Can't reach Fluxze</h1>
     <p>Check your internet connection and try again.<br>${detail || ""}</p>
-    <button onclick="location.replace(${JSON.stringify(APP_URL)})">Retry</button>
+    <button onclick="location.replace(${JSON.stringify(START_URL)})">Retry</button>
   </div>
 </body></html>`;
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
