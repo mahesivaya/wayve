@@ -61,30 +61,9 @@ function appKeyFromPath(pathname: string): AppKey {
 // whole Layout component, which would otherwise reset the split to
 // closed. Round-tripping through localStorage keeps the split intact
 // when the user returns to a Layout-wrapped route.
-// Placeholder projects shown under Workspace → Projects. Each expands to a
-// "Code" entry. Sample scaffolding until real per-project data exists.
+// Placeholder projects shown under Workspace → Projects. Sample scaffolding
+// until real per-project data exists.
 const SAMPLE_PROJECTS = ["project1", "project2"];
-
-// Reused "Code" nav icon — folder with a branch tree, follows currentColor.
-const CODE_ICON = (
-  <svg
-    className="sidebar-icon-svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-    <circle cx="9" cy="11" r="1.4" />
-    <circle cx="15" cy="11" r="1.4" />
-    <circle cx="12" cy="17" r="1.4" />
-    <path d="M9 12v1a3 3 0 0 0 3 3" />
-    <path d="M15 12v1a3 3 0 0 1-3 3" />
-  </svg>
-);
 
 const SPLIT_STORAGE_KEY = "rwayve.layout.split";
 
@@ -184,18 +163,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // no longer auto-expand from the current URL. The user opens what they want.
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
-  // "Projects" is a sub-group under Workspace; each project expands to "Code".
+  // "Projects" is a sub-group under Workspace, listing the project names.
   const [projectsExpanded, setProjectsExpanded] = useState(false);
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(
-    () => new Set(SAMPLE_PROJECTS),
-  );
-  const toggleProject = (name: string) =>
-    setExpandedProjects((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
   const [platformExpanded, setPlatformExpanded] = useState(false);
   const [developersExpanded, setDevelopersExpanded] = useState(false);
 
@@ -715,22 +684,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   {(projectsExpanded || sidebarCollapsed) && (
                     <div className="sidebar-subitems">
                       {SAMPLE_PROJECTS.map((proj) => (
-                        <div key={proj}>
-                          {renderSectionToggle(
-                            proj,
-                            expandedProjects.has(proj),
-                            () => toggleProject(proj),
-                          )}
-                          {(expandedProjects.has(proj) || sidebarCollapsed) && (
-                            <div className="sidebar-subitems">
-                              {renderSidebarItem(
-                                "/github",
-                                "github",
-                                "Code",
-                                CODE_ICON,
-                              )}
-                            </div>
-                          )}
+                        <div key={proj} className="sidebar-project-label">
+                          {proj}
                         </div>
                       ))}
                     </div>

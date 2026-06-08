@@ -568,6 +568,22 @@
   transform: rotate(0deg);
 }
 
+/* Project names listed under Workspace → Projects. Plain (non-interactive)
+   labels that read like the nav links — left-aligned, same size/weight. */
+.sidebar-subitems .sidebar-project-label {
+  display: block;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  font-weight: 400;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .sidebar-spacer {
   flex: 1;
   min-height: 8px;
