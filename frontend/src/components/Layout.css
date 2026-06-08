@@ -706,6 +706,7 @@
    visible 2px line plus a centered grip pill, so it reads as draggable and is
    easy to grab. Negative margin keeps it from pushing the panes apart. Hover/
    active states tint it. */
+.resize-handle,
 .split-resize-handle,
 .sidebar-resize-handle {
   flex: 0 0 10px;
@@ -718,6 +719,7 @@
 }
 
 /* The line down the middle of the handle. */
+.resize-handle::after,
 .split-resize-handle::after,
 .sidebar-resize-handle::after {
   content: "";
@@ -732,6 +734,7 @@
 }
 
 /* Centered grip pill so it's obvious the divider can be dragged. */
+.resize-handle::before,
 .split-resize-handle::before,
 .sidebar-resize-handle::before {
   content: "";
@@ -748,6 +751,8 @@
   z-index: 1;
 }
 
+.resize-handle:hover::after,
+.resize-handle:active::after,
 .split-resize-handle:hover::after,
 .split-resize-handle:active::after,
 .sidebar-resize-handle:hover::after,
@@ -756,6 +761,8 @@
   width: 3px;
 }
 
+.resize-handle:hover::before,
+.resize-handle:active::before,
 .split-resize-handle:hover::before,
 .split-resize-handle:active::before,
 .sidebar-resize-handle:hover::before,

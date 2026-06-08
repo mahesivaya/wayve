@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fmtDateTime } from "../utils/datetime";
+import { useResizableWidth } from "../components/useResizableWidth";
 import "./githubRepo.css";
 
 const OWNER = "mahesivaya";
@@ -507,68 +508,14 @@ export default function GitHubRepo() {
 
   // Resizable split between the file tree and the preview panel. Default
   // 280px gives the tree room for typical file names while leaving the
-  // preview as the larger pane (code reads better with room). Persisted so
-  // the user's adjustment survives reloads.
-  const FILES_PANE_MIN = 180;
-  const FILES_PANE_MAX = 720;
-  const [filesPaneWidth, setFilesPaneWidth] = useState<number>(() => {
-    try {
-      const raw = localStorage.getItem("rwayve.github.filesPaneWidth");
-      const parsed = raw ? Number(raw) : NaN;
-      if (
-        Number.isFinite(parsed) &&
-        parsed >= FILES_PANE_MIN &&
-        parsed <= FILES_PANE_MAX
-      ) {
-        return parsed;
-      }
-    } catch {
-      // ignore
-    }
-    return 280;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        "rwayve.github.filesPaneWidth",
-        String(filesPaneWidth),
-      );
-    } catch {
-      // ignore
-    }
-  }, [filesPaneWidth]);
-
-  const handleFilesPaneResize = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      const startX = e.clientX;
-      const startWidth = filesPaneWidth;
-
-      const onMove = (ev: PointerEvent) => {
-        const next = Math.max(
-          FILES_PANE_MIN,
-          Math.min(FILES_PANE_MAX, startWidth + (ev.clientX - startX)),
-        );
-        setFilesPaneWidth(next);
-      };
-
-      const onUp = () => {
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-        document.removeEventListener("pointercancel", onUp);
-        document.body.style.userSelect = "";
-        document.body.style.cursor = "";
-      };
-
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-      document.addEventListener("pointercancel", onUp);
-      document.body.style.userSelect = "none";
-      document.body.style.cursor = "col-resize";
-    },
-    [filesPaneWidth],
-  );
+  // preview as the larger pane. Persisted; shared useResizableWidth hook.
+  const { width: filesPaneWidth, startResize: handleFilesPaneResize } =
+    useResizableWidth({
+      storageKey: "rwayve.github.filesPaneWidth",
+      defaultWidth: 280,
+      min: 180,
+      max: 720,
+    });
 
   const loadRepo = useCallback(async () => {
     setError("");

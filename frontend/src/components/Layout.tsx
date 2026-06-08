@@ -911,9 +911,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             icon rail or in the narrow off-canvas overlay). */}
         {!sidebarCollapsed && !isNarrow && (
           <ResizeHandle
-            onPointerDown={startSidebarResize(
-              () => sidebarRef.current?.getBoundingClientRect().left ?? 0,
-            )}
+            onPointerDown={startSidebarResize}
             ariaLabel="Resize sidebar"
           />
         )}
