@@ -165,6 +165,40 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   // "Projects" is a sub-group under Workspace, listing the project names.
   const [projectsExpanded, setProjectsExpanded] = useState(false);
+  // Project names are user-editable (rename inline) and persisted locally.
+  const [projectNames, setProjectNames] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("rwayve.projects");
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed) && parsed.every((p) => typeof p === "string")) {
+        return parsed;
+      }
+    } catch {
+      // fall through to defaults
+    }
+    return [...SAMPLE_PROJECTS];
+  });
+  // Index of the project currently being renamed (null = none) + its draft text.
+  const [editingProject, setEditingProject] = useState<number | null>(null);
+  const [projectDraft, setProjectDraft] = useState("");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("rwayve.projects", JSON.stringify(projectNames));
+    } catch {
+      // private mode / quota — names just won't persist this session.
+    }
+  }, [projectNames]);
+
+  const commitProjectName = (index: number) => {
+    const next = projectDraft.trim();
+    if (next) {
+      setProjectNames((prev) =>
+        prev.map((p, i) => (i === index ? next : p)),
+      );
+    }
+    setEditingProject(null);
+  };
   const [platformExpanded, setPlatformExpanded] = useState(false);
   const [developersExpanded, setDevelopersExpanded] = useState(false);
 
@@ -683,11 +717,54 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   )}
                   {(projectsExpanded || sidebarCollapsed) && (
                     <div className="sidebar-subitems">
-                      {SAMPLE_PROJECTS.map((proj) => (
-                        <div key={proj} className="sidebar-project-label">
-                          {proj}
-                        </div>
-                      ))}
+                      {projectNames.map((proj, index) =>
+                        editingProject === index ? (
+                          <input
+                            key={index}
+                            className="sidebar-project-edit"
+                            value={projectDraft}
+                            autoFocus
+                            aria-label="Project name"
+                            onChange={(e) => setProjectDraft(e.target.value)}
+                            onBlur={() => commitProjectName(index)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitProjectName(index);
+                              else if (e.key === "Escape") setEditingProject(null);
+                            }}
+                          />
+                        ) : (
+                          <div key={index} className="sidebar-project-row">
+                            <Link
+                              to="/github"
+                              title={proj}
+                              className="sidebar-project-label"
+                              onClick={(e) => {
+                                setNavOpen(false);
+                                if (splitTarget === "right") {
+                                  e.preventDefault();
+                                  setRightView("github");
+                                }
+                              }}
+                            >
+                              {proj}
+                            </Link>
+                            <button
+                              type="button"
+                              className="sidebar-project-edit-btn"
+                              title="Rename project"
+                              aria-label={`Rename ${proj}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setProjectDraft(proj);
+                                setEditingProject(index);
+                              }}
+                            >
+                              ✎
+                            </button>
+                          </div>
+                        ),
+                      )}
                     </div>
                   )}
                 </div>
