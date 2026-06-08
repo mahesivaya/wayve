@@ -2,8 +2,11 @@
   flex: 1;
   min-height: 0;
   height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
+  /* Fit the whole view inside the pane — no outer page scroll. Each section
+     fills the remaining height and scrolls internally instead. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   /* Tight horizontal padding — the panels inside already have their own
      borders/cards, so a thick outer gutter reads as wasted whitespace on
      wide screens. Vertical padding stays roomier so the top edge of the
@@ -131,6 +134,10 @@
   display: flex;
   align-items: stretch;
   gap: 8px;
+  /* Fill the page's flex column exactly (no growth past it) so the content
+     column's panels stretch to the bottom and the view fits without scroll. */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* The sidebar is now a column of separate card panels (Branch on
@@ -249,10 +256,35 @@
 .github-content {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* The Files view's grid fills the full page height (file tree + preview
+   reading panes). */
+.github-content > .github-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Workflows / Commits / Actions each render one top-level panel as the
+   content child — fill the remaining height and scroll inside the panel so
+   the whole view fits within the page (no outer scroll). */
+.github-content > .github-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Keep each section's header pinned while its body scrolls under it. */
+.github-content > .github-panel > .github-panel-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-surface);
 }
 
 /* Files view has two layouts driven by selection state:
@@ -267,6 +299,9 @@
   display: grid;
   gap: 8px;
   width: 100%;
+  /* Single full-height row so the browser/preview panels stretch to fill
+     the grid (which itself fills the content column). */
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .github-grid.is-single {
@@ -379,6 +414,15 @@
   overflow: hidden;
 }
 
+/* Browser + preview are columns: fixed head on top, a scroll region below
+   that fills the panel's full height (the grid row stretches them). */
+.github-browser,
+.github-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .github-panel-head {
   min-height: 38px;
   padding: 8px 12px;
@@ -414,11 +458,11 @@
 }
 
 .github-file-list {
-  /* Show many more files at once — the panel was previously capped at
-     520px / 62vh which only fit ~15 rows on a tall display. Bumped to
-     ~80% of the viewport so a full directory listing is visible without
-     needing to scroll inside the panel on common desktop heights. */
-  max-height: min(900px, 80vh);
+  /* Fill the remaining panel height (head is fixed above) and scroll
+     internally — the list now reaches the bottom of the page instead of
+     stopping at a fixed cap and leaving empty space below. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 6px;
 }
@@ -536,7 +580,10 @@
 }
 
 .github-preview pre {
-  height: min(520px, 62vh);
+  /* Fill the panel down to the bottom of the page and scroll internally,
+     instead of a fixed 62vh that left grey space below short files. */
+  flex: 1 1 auto;
+  min-height: 0;
   margin: 0;
   padding: 14px;
   overflow: auto;
@@ -1142,6 +1189,13 @@
     grid-template-columns: 1fr;
   }
 
+  /* Stacked (tree above preview) on narrow screens — let rows size to
+     content and the page scroll, rather than squeezing into one 1fr row. */
+  .github-content > .github-grid {
+    flex: 0 0 auto;
+    grid-template-rows: none;
+  }
+
   .github-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1449,4 +1503,38 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ============================================================
+ * Stark, edge-tight layout
+ * ------------------------------------------------------------
+ * Minimal padding around the page and square ("stark") edges on
+ * every block. Kept as one trailing override block so the spacing
+ * / corner styling is easy to tune or revert in one place.
+ * ============================================================ */
+.github-page {
+  padding: 4px;
+}
+
+.github-layout,
+.github-sidebar,
+.github-content,
+.github-grid {
+  gap: 4px;
+}
+
+.github-browser,
+.github-preview,
+.github-panel,
+.github-sidebar-card,
+.github-sidebar-branch select,
+.github-sidebar-link,
+.github-banner,
+.github-stats,
+.github-commit-file,
+.github-commit-fulldiff-btn,
+.github-flow-inline,
+.github-flow-job,
+.github-actions-load-more button {
+  border-radius: 0;
 }
