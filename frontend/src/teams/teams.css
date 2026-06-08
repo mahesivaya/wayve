@@ -13,6 +13,75 @@
   gap: 14px;
 }
 
+.team-header-text {
+  min-width: 0;
+}
+
+/* "Add member" button — pinned to the right of the header (manager-only). */
+.team-add-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-action);
+  color: var(--color-on-primary, #fff);
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, opacity 0.15s;
+}
+
+.team-add-btn:hover {
+  filter: brightness(1.05);
+}
+
+.team-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.team-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.team-add-form input {
+  flex: 1 1 160px;
+  min-width: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+}
+
+.team-add-form-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.team-add-cancel {
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  cursor: pointer;
+}
+
+.team-add-cancel:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-muted);
+}
+
 .team-header-icon {
   width: 48px;
   height: 48px;
