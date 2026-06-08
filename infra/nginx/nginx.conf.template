@@ -43,6 +43,11 @@ http {
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
+            # Keep idle chat/call WebSockets alive — the default 60s read
+            # timeout would silently kill a quiet connection. The backend pings
+            # every 25s, so an hour is comfortable headroom.
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
         }
 
         # ✅ Frontend (ONLY ONE BLOCK)

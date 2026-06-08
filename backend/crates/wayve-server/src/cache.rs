@@ -65,6 +65,24 @@ impl Cache {
         let _: redis::RedisResult<()> = conn.del(key).await;
     }
 
+    /// Publish a payload to a Redis pub/sub channel. Used to fan WebSocket
+    /// messages out across backend instances (the subscriber on whichever
+    /// instance holds the recipient's socket delivers it locally). Returns
+    /// `true` on success so callers can fall back to local delivery if Redis
+    /// is momentarily unavailable.
+    #[instrument(target = "cache", skip(self, payload), fields(channel))]
+    pub async fn publish(&self, channel: &str, payload: &str) -> bool {
+        let mut conn = self.conn.clone();
+        let res: redis::RedisResult<i64> = conn.publish(channel, payload).await;
+        match res {
+            Ok(_) => true,
+            Err(e) => {
+                warn!(target: "cache", channel, error = ?e, "redis PUBLISH failed");
+                false
+            }
+        }
+    }
+
     /// Round-trips a `PING` to confirm Redis is reachable. Used by the
     /// readiness probe; never panics — a transport error just means "down".
     #[instrument(target = "cache", skip(self))]

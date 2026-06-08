@@ -32,37 +32,60 @@ pub async fn get_messages(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    // Two ordered scans (each index-served by idx_messages_conversation /
-    // idx_messages_reverse) merged via UNION ALL, then a final 50-row cap.
-    // Faster than a single OR-predicate which forces a bitmap scan + sort.
-    let rows = sqlx::query(
-        r#"
-        SELECT id, sender_id, receiver_id, content_encrypted, content_iv, status::TEXT AS status, created_at
-        FROM (
-            (
-                SELECT id, sender_id, receiver_id, content_encrypted, content_iv, status, created_at
-                FROM messages
-                WHERE sender_id = $1 AND receiver_id = $2
-                ORDER BY created_at DESC
-                LIMIT 50
-            )
-            UNION ALL
-            (
-                SELECT id, sender_id, receiver_id, content_encrypted, content_iv, status, created_at
-                FROM messages
-                WHERE sender_id = $2 AND receiver_id = $1
-                ORDER BY created_at DESC
-                LIMIT 50
-            )
-        ) AS m
-        ORDER BY created_at DESC
-        LIMIT 50
-        "#,
-    )
-    .bind(query.user1)
-    .bind(query.user2)
-    .fetch_all(pool.get_ref())
-    .await?;
+    // Reconnect resync: when `since_id` is set, return everything newer than
+    // that id (chronological), so a client that briefly dropped can backfill
+    // exactly the messages it missed instead of just re-fetching the latest 50.
+    // Capped to bound the response. Otherwise fall back to "latest 50".
+    let rows = if let Some(since_id) = query.since_id {
+        sqlx::query(
+            r#"
+            SELECT id, sender_id, receiver_id, content_encrypted, content_iv, status::TEXT AS status, created_at
+            FROM messages
+            WHERE ((sender_id = $1 AND receiver_id = $2)
+                OR (sender_id = $2 AND receiver_id = $1))
+              AND id > $3
+            ORDER BY created_at ASC
+            LIMIT 500
+            "#,
+        )
+        .bind(query.user1)
+        .bind(query.user2)
+        .bind(since_id)
+        .fetch_all(pool.get_ref())
+        .await?
+    } else {
+        // Two ordered scans (each index-served by idx_messages_conversation /
+        // idx_messages_reverse) merged via UNION ALL, then a final 50-row cap.
+        // Faster than a single OR-predicate which forces a bitmap scan + sort.
+        sqlx::query(
+            r#"
+            SELECT id, sender_id, receiver_id, content_encrypted, content_iv, status::TEXT AS status, created_at
+            FROM (
+                (
+                    SELECT id, sender_id, receiver_id, content_encrypted, content_iv, status, created_at
+                    FROM messages
+                    WHERE sender_id = $1 AND receiver_id = $2
+                    ORDER BY created_at DESC
+                    LIMIT 50
+                )
+                UNION ALL
+                (
+                    SELECT id, sender_id, receiver_id, content_encrypted, content_iv, status, created_at
+                    FROM messages
+                    WHERE sender_id = $2 AND receiver_id = $1
+                    ORDER BY created_at DESC
+                    LIMIT 50
+                )
+            ) AS m
+            ORDER BY created_at DESC
+            LIMIT 50
+            "#,
+        )
+        .bind(query.user1)
+        .bind(query.user2)
+        .fetch_all(pool.get_ref())
+        .await?
+    };
 
     let _ = sqlx::query(
         r#"
@@ -108,7 +131,11 @@ pub async fn get_messages(
         })
         .collect();
 
-    messages.reverse();
+    // The default ("latest 50") query returns rows newest-first; flip to
+    // chronological for the client. The since_id query already selects ASC.
+    if query.since_id.is_none() {
+        messages.reverse();
+    }
 
     Ok(HttpResponse::Ok().json(messages))
 }

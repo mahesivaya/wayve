@@ -55,11 +55,18 @@ export type ChatChannel = {
 export const getChatUsers = async () =>
   apiFetchJson<ChatUser[]>("/api/users/all");
 
-export const getChatMessages = async (userId: number, otherUserId: number) => {
+export const getChatMessages = async (
+  userId: number,
+  otherUserId: number,
+  // Reconnect resync: when set, the server returns only messages newer than
+  // this id (chronological) so the client backfills exactly what it missed.
+  sinceId?: number,
+) => {
   const params = new URLSearchParams({
     user1: String(userId),
     user2: String(otherUserId),
   });
+  if (sinceId != null) params.set("since_id", String(sinceId));
 
   return apiFetchJson<ChatMessage[]>(
     `/api/chat/direct-messages?${params.toString()}`,
@@ -73,6 +80,7 @@ export const createChatChannel = async (
   name: string,
   inviteRole: "admin" | "user",
   inviteEmails: string[],
+  visibility: "public" | "private",
 ) => {
   const res = await apiFetch("/api/chat/channels", {
     method: "POST",
@@ -80,6 +88,7 @@ export const createChatChannel = async (
       name,
       invite_role: inviteRole,
       invite_emails: inviteEmails,
+      visibility,
     }),
   });
 
@@ -186,10 +195,15 @@ export const removeChatChannelUser = async (
   }
 };
 
-export const getChannelMessages = async (channelId: number) => {
+export const getChannelMessages = async (
+  channelId: number,
+  // Reconnect resync — see getChatMessages.
+  sinceId?: number,
+) => {
   const params = new URLSearchParams({
     channel_id: String(channelId),
   });
+  if (sinceId != null) params.set("since_id", String(sinceId));
 
   return apiFetchJson<ChatMessage[]>(
     `/api/chat/channel-messages?${params.toString()}`,

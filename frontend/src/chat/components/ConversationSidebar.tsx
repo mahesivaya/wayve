@@ -1,5 +1,5 @@
 import type { ChatChannel, ChatUser } from "../../api/chat";
-import type { Conversation } from "../types";
+import type { ChannelVisibility, Conversation } from "../types";
 import ChannelCreateForm from "./ChannelCreateForm";
 import ChannelList from "./ChannelList";
 import PersonalChatList from "./PersonalChatList";
@@ -10,9 +10,11 @@ type Props = {
   selectedConversation: Conversation | null;
   creatingChannel: boolean;
   channelName: string;
+  channelVisibility: ChannelVisibility;
   channelError: string;
   onToggleCreateChannel: () => void;
   onChannelNameChange: (value: string) => void;
+  onChannelVisibilityChange: (value: ChannelVisibility) => void;
   onCancelCreateChannel: () => void;
   onCreateChannel: () => void;
   onSelectChannel: (channel: ChatChannel) => void;
@@ -26,9 +28,11 @@ export default function ConversationSidebar({
   selectedConversation,
   creatingChannel,
   channelName,
+  channelVisibility,
   channelError,
   onToggleCreateChannel,
   onChannelNameChange,
+  onChannelVisibilityChange,
   onCancelCreateChannel,
   onCreateChannel,
   onSelectChannel,
@@ -47,8 +51,10 @@ export default function ConversationSidebar({
       {creatingChannel && (
         <ChannelCreateForm
           channelName={channelName}
+          visibility={channelVisibility}
           error={channelError}
           onChannelNameChange={onChannelNameChange}
+          onVisibilityChange={onChannelVisibilityChange}
           onCancel={onCancelCreateChannel}
           onCreate={onCreateChannel}
         />

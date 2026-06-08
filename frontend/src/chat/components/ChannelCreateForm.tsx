@@ -1,15 +1,21 @@
+import type { ChannelVisibility } from "../types";
+
 type Props = {
   channelName: string;
+  visibility: ChannelVisibility;
   error: string;
   onChannelNameChange: (value: string) => void;
+  onVisibilityChange: (value: ChannelVisibility) => void;
   onCancel: () => void;
   onCreate: () => void;
 };
 
 export default function ChannelCreateForm({
   channelName,
+  visibility,
   error,
   onChannelNameChange,
+  onVisibilityChange,
   onCancel,
   onCreate,
 }: Props) {
@@ -22,6 +28,20 @@ export default function ChannelCreateForm({
           onChange={(e) => onChannelNameChange(e.target.value)}
           placeholder="project-updates"
         />
+      </label>
+
+      <label className="channel-field">
+        <span>Visibility</span>
+        <select
+          value={visibility}
+          onChange={(e) =>
+            onVisibilityChange(e.target.value as ChannelVisibility)
+          }
+          aria-label="Channel visibility"
+        >
+          <option value="public">Public</option>
+          <option value="private">Private</option>
+        </select>
       </label>
 
       {error && <div className="channel-error">{error}</div>}

@@ -25,31 +25,64 @@ pub async fn get_channel_messages(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    let rows = sqlx::query(
-        r#"
-        SELECT m.id,
-               m.channel_id,
-               m.sender_id,
-               m.content_encrypted,
-               m.content_iv,
-               m.created_at,
-               m.parent_message_id,
-               COALESCE((
-                   SELECT COUNT(*) FROM channel_messages r
-                   WHERE r.parent_message_id = m.id
-               ), 0) AS reply_count
-        FROM channel_messages m
-        WHERE m.channel_id = $1 AND m.parent_message_id IS NULL
-        ORDER BY m.created_at DESC
-        LIMIT 50
-        "#,
-    )
-    .bind(query.channel_id)
-    .fetch_all(pool.get_ref())
-    .await?;
+    // Reconnect resync: when `since_id` is set, return top-level messages newer
+    // than that id in chronological order (backfill what was missed while the
+    // socket was down). Otherwise return the latest 50.
+    let rows = if let Some(since_id) = query.since_id {
+        sqlx::query(
+            r#"
+            SELECT m.id,
+                   m.channel_id,
+                   m.sender_id,
+                   m.content_encrypted,
+                   m.content_iv,
+                   m.created_at,
+                   m.parent_message_id,
+                   COALESCE((
+                       SELECT COUNT(*) FROM channel_messages r
+                       WHERE r.parent_message_id = m.id
+                   ), 0) AS reply_count
+            FROM channel_messages m
+            WHERE m.channel_id = $1 AND m.parent_message_id IS NULL
+              AND m.id > $2
+            ORDER BY m.created_at ASC
+            LIMIT 500
+            "#,
+        )
+        .bind(query.channel_id)
+        .bind(since_id)
+        .fetch_all(pool.get_ref())
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT m.id,
+                   m.channel_id,
+                   m.sender_id,
+                   m.content_encrypted,
+                   m.content_iv,
+                   m.created_at,
+                   m.parent_message_id,
+                   COALESCE((
+                       SELECT COUNT(*) FROM channel_messages r
+                       WHERE r.parent_message_id = m.id
+                   ), 0) AS reply_count
+            FROM channel_messages m
+            WHERE m.channel_id = $1 AND m.parent_message_id IS NULL
+            ORDER BY m.created_at DESC
+            LIMIT 50
+            "#,
+        )
+        .bind(query.channel_id)
+        .fetch_all(pool.get_ref())
+        .await?
+    };
 
     let mut messages: Vec<_> = rows.into_iter().map(row_to_message_json).collect();
-    messages.reverse();
+    // The default query is newest-first; the since_id query already ASC.
+    if query.since_id.is_none() {
+        messages.reverse();
+    }
     Ok(HttpResponse::Ok().json(messages))
 }
 

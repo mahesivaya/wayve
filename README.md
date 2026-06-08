@@ -1,5 +1,28 @@
 # Wayve
 
+**Wayve is a private, all-in-one workspace** — everything your team needs to communicate and get work done, brought together in a single app, with privacy built in from the ground up.
+
+Most teams spend their day hopping between half a dozen different tools — one for email, another for chat, others for video calls, file storage, notes, and calendars. Each one is a separate login, a separate bill, and another place your company's information ends up living. Wayve replaces that patchwork with one connected workspace, so your team can do everything in a single place and your business keeps all of its information under one roof.
+
+## What you can do with Wayve
+
+- 📧 **Email** — send and receive messages from one inbox, without leaving the app.
+- 💬 **Chat & calls** — message teammates instantly in one-to-one or group conversations, and jump straight into voice or video calls.
+- 📁 **Drive** — store, organize, and share files and documents with the people who need them.
+- 📝 **Notes** — capture ideas, write things down, and keep your team's knowledge in one searchable place.
+- 📅 **Scheduling** — plan meetings, manage your calendar, and keep everyone on the same page.
+- 🤖 **AI assistant** — get help writing messages, summarizing long threads, and quickly finding answers.
+
+## Why it's different
+
+**Your information stays private — by design.** Your messages and files are locked so that only you and the people you choose can open them. Not even the people running the servers can read your content, so your conversations and documents stay yours alone.
+
+**Your business stays in control.** Because Wayve is self-hosted, your organization runs it on its own systems and fully owns its data — nothing is handed off to an outside provider. That means stronger privacy, no surprise vendor lock-in, and one tool instead of many to manage and pay for.
+
+**Built for teams of any size.** Wayve supports individuals, organizations, and larger platforms, with flexible roles and permissions so the right people have the right level of access.
+
+---
+
 A self-hosted productivity suite — encrypted email, real-time chat & calls, drive, notes, scheduling, and an AI assistant — built around a zero-knowledge encryption model where the server never holds users' private keys in plaintext.
 
 - **Backend** — Rust + Actix Web 4 (Cargo workspace: `wayve-server`/`rwayve`, `wayve-security`, `wayve-db`). Postgres via `sqlx`, Redis cache, Gmail OAuth + sync, WebSocket chat/call, AES-256-GCM at-rest encryption.

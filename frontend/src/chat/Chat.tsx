@@ -58,6 +58,8 @@ export default function Chat() {
 
   const [creatingChannel, setCreatingChannel] = useState(false);
   const [channelName, setChannelName] = useState("");
+  const [channelVisibility, setChannelVisibility] =
+    useState<ChannelVisibility>("public");
   const [channelError, setChannelError] = useState("");
 
   // Thread side panel state. `activeThread` is the parent message the user
@@ -203,10 +205,52 @@ export default function Chat() {
     setMessages((prev) => [...prev, decrypted]);
   }, [user, activeThread]);
 
-  const { wsRef, isConnected: isChatSocketConnected } = useChatSocket(
+  // Reconnect resync (Tier 2): whenever the socket (re)opens, backfill any
+  // messages the open conversation missed while it was down — fetch everything
+  // newer than the highest message id we already hold, then merge deduped by
+  // message_id. Without this, messages sent during a drop are lost until the
+  // user reselects the conversation.
+  const resyncSelectedConversation = useCallback(async () => {
+    const convo = selectedRef.current;
+    if (!user || !convo) return;
+    try {
+      const lastId = messages.reduce(
+        (max, m) =>
+          m.message_id != null && m.message_id > max ? m.message_id : max,
+        0,
+      );
+      const since = lastId > 0 ? lastId : undefined;
+      let missed: ChatMessage[] = [];
+      if (convo.type === "user") {
+        missed = await getChatMessages(user.id, convo.user.id, since);
+      } else if (convo.type === "channel") {
+        missed = await getChannelMessages(convo.channel.id, since);
+      }
+      if (!missed.length) return;
+      const decrypted = await decryptChatMessages(missed, user.id);
+      setMessages((prev) => {
+        const seen = new Set(
+          prev.map((m) => m.message_id).filter((id): id is number => id != null),
+        );
+        const additions = decrypted.filter(
+          (m) => m.message_id == null || !seen.has(m.message_id),
+        );
+        return additions.length ? [...prev, ...additions] : prev;
+      });
+    } catch (err) {
+      logger.error("chat resync failed", err);
+    }
+  }, [user, messages]);
+
+  const {
+    wsRef,
+    isConnected: isChatSocketConnected,
+    isReconnecting: isChatSocketReconnecting,
+  } = useChatSocket(
     user,
     selectedRef,
     appendRealtimeMessage,
+    resyncSelectedConversation,
   );
 
   // The 1:1 call entry point lives in [ChatHeader](./components/ChatHeader.tsx).
@@ -428,9 +472,15 @@ export default function Chat() {
     setChannelError("");
 
     try {
-      const channel = await createChatChannel(channelName, "user", []);
+      const channel = await createChatChannel(
+        channelName,
+        "user",
+        [],
+        channelVisibility,
+      );
       setChannels((prev) => [channel, ...prev]);
       setChannelName("");
+      setChannelVisibility("public");
       setCreatingChannel(false);
       await loadChannelMessages(channel);
     } catch (err) {
@@ -558,9 +608,11 @@ export default function Chat() {
         selectedConversation={selectedConversation}
         creatingChannel={creatingChannel}
         channelName={channelName}
+        channelVisibility={channelVisibility}
         channelError={channelError}
         onToggleCreateChannel={() => setCreatingChannel((open) => !open)}
         onChannelNameChange={setChannelName}
+        onChannelVisibilityChange={setChannelVisibility}
         onCancelCreateChannel={() => setCreatingChannel(false)}
         onCreateChannel={createChannel}
         onSelectChannel={loadChannelMessages}
@@ -643,6 +695,7 @@ export default function Chat() {
           conversation={selectedConversation}
           canChat={canChatInSelectedChannel}
           isConnected={isChatSocketConnected}
+          isReconnecting={isChatSocketReconnecting}
           title={selectedTitle}
           input={input}
           onInputChange={(value) => {

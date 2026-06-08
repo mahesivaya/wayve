@@ -68,6 +68,8 @@ Per-recipient delivery state is intended to live in a separate `message_recipien
 
 Chat uses client-side envelope encryption for new direct and channel messages. The frontend encrypts content into a `WAYVE_CHAT_E2E_V1` RSA/AES hybrid envelope for every participant key before sending; `chat/websocket.rs` rejects plaintext normal messages and then applies the backend AES-GCM layer only as storage-at-rest protection for the envelope. `chat/direct_messages.rs` and `chat/channel_messages.rs` decrypt only the storage layer and return the client envelope, which the browser decrypts locally. Legacy rows or manually inserted plaintext are not E2E.
 
+Realtime / chat reliability (heartbeat + client reconnect, `since_id` reconnect resync, and Redis pub/sub fan-out for multi-instance via `chat/pubsub.rs`) is documented in `docs/architecture/realtime-chat.md`. Cross-instance delivery needs Redis; with Redis down, `fan_out_user` falls back to local delivery so a single instance still works.
+
 `security/jwt.rs` mints HS256 JWTs from `JWT_SECRET`. `get_user_id_from_request` is the single auth chokepoint for HTTP handlers — it also resolves API-key requests (see API keys). The WebSocket endpoints (`chat_ws`, `call_ws`) authenticate via `get_user_id_from_request` with a `?token=` query fallback, deriving `user_id` from verified credentials and **never an unverified query value** — preserve that when adding WS routes.
 
 ### Authorization (RBAC)

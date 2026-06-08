@@ -4,6 +4,7 @@ type Props = {
   conversation: Conversation | null;
   canChat: boolean;
   isConnected: boolean;
+  isReconnecting?: boolean;
   title: string;
   input: string;
   onInputChange: (value: string) => void;
@@ -16,6 +17,7 @@ export default function MessageComposer({
   conversation,
   canChat,
   isConnected,
+  isReconnecting = false,
   input,
   onInputChange,
   onSend,
@@ -41,6 +43,11 @@ export default function MessageComposer({
               ×
             </button>
           )}
+        </div>
+      )}
+      {disabled && (
+        <div className="chat-compose-status" role="status">
+          {isReconnecting ? "Reconnecting…" : "Connecting…"}
         </div>
       )}
       <div className="chat-input-row">

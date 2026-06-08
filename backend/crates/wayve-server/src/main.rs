@@ -69,6 +69,14 @@ async fn main() -> std::io::Result<()> {
     startup::spawn_role_workers(role, &pool).await;
     let redis_cache = startup::connect_redis_and_install_cache().await;
 
+    // Cross-instance realtime fan-out: when Redis is available, subscribe to the
+    // ws:user:* pub/sub channels so chat frames published by any backend
+    // instance are delivered to the socket held here. Without Redis, senders
+    // fall back to local delivery and this is unnecessary.
+    if redis_cache.is_some() {
+        actix_web::rt::spawn(chat::pubsub::run_subscriber());
+    }
+
     // Offline IP geolocation for the User Logs page. Best-effort: `None` when
     // GEOIP_DB_PATH is unset/unreadable. The reader isn't `Clone`, so build the
     // shared `web::Data` (an `Arc`) once and clone the handle into each worker.

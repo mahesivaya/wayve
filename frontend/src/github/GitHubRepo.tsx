@@ -457,6 +457,11 @@ export default function GitHubRepo() {
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<ContentItem | null>(null);
   const [fileText, setFileText] = useState("");
+  // README contents for the Description tab. Fetched per branch (like
+  // workflows/commits) and rendered as raw text — there's no markdown
+  // renderer wired up, and markdown stays human-readable as-is.
+  const [readme, setReadme] = useState("");
+  const [readmeLoading, setReadmeLoading] = useState(false);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [commits, setCommits] = useState<CommitItem[]>([]);
   // Per-commit detail (file diffs) loaded on demand when a commit row
@@ -508,17 +513,25 @@ export default function GitHubRepo() {
 
   // Section nav for the left rail. Persist the user's last view so
   // re-opening /github lands them on the same panel.
-  type Section = "files" | "workflows" | "commits" | "actions";
+  type Section = "description" | "files" | "workflows" | "commits" | "actions";
   const [activeSection, setActiveSection] = useState<Section>(() => {
     try {
       const raw = localStorage.getItem("rwayve.github.section");
-      if (raw === "workflows" || raw === "commits" || raw === "actions") {
+      if (
+        raw === "files" ||
+        raw === "workflows" ||
+        raw === "commits" ||
+        raw === "actions"
+      ) {
         return raw;
       }
     } catch {
       // ignore
     }
-    return "files";
+    // Default landing tab: the project overview, so users grasp what the
+    // project is before diving into code. A previously-selected tab is
+    // remembered above (persisted in the effect below).
+    return "description";
   });
 
   useEffect(() => {
@@ -653,6 +666,33 @@ export default function GitHubRepo() {
       setWorkflows(isContentList(data) ? data.filter((item) => item.type === "file") : []);
     } catch {
       setWorkflows([]);
+    }
+  }, []);
+
+  // README for the Description tab. Resolve the file metadata via the
+  // proxied Contents API, then fetch its raw text from download_url (same
+  // two-step the file preview uses in openFile). Any failure — most
+  // commonly a repo with no README — clears the text so the pane shows
+  // its graceful fallback rather than an error.
+  const loadReadme = useCallback(async (nextBranch: string) => {
+    setReadmeLoading(true);
+    try {
+      const data = await githubJson<ContentItem | ContentItem[]>(
+        `${API_BASE}/contents/README.md?ref=${encodeURIComponent(nextBranch)}`,
+      );
+      const item = isContentList(data) ? data[0] : data;
+      if (!item?.download_url) {
+        setReadme("");
+        return;
+      }
+      const response = await fetch(item.download_url);
+      if (!response.ok) throw new Error(`README request failed (${response.status})`);
+      const text = await response.text();
+      setReadme(text.slice(0, 60000));
+    } catch {
+      setReadme("");
+    } finally {
+      setReadmeLoading(false);
     }
   }, []);
 
@@ -819,6 +859,7 @@ export default function GitHubRepo() {
 
   useEffect(() => {
     if (!repo) return;
+    void loadReadme(branch);
     void loadWorkflows(branch);
     void loadCommits(branch);
     // Actions list is now branch-agnostic (a push to any branch should
@@ -830,7 +871,7 @@ export default function GitHubRepo() {
     setExpandedRunIds(new Set());
     setExpandedJobIds(new Set());
     void loadRuns(1, false);
-  }, [branch, loadCommits, loadRuns, loadWorkflows, repo]);
+  }, [branch, loadCommits, loadReadme, loadRuns, loadWorkflows, repo]);
 
   async function openFile(item: ContentItem) {
     setSelectedFile(item);
@@ -985,6 +1026,14 @@ export default function GitHubRepo() {
           <div className="github-sidebar-card">
             <button
               type="button"
+              className={`github-sidebar-link ${activeSection === "description" ? "active" : ""}`}
+              onClick={() => setActiveSection("description")}
+            >
+              <span className="github-sidebar-icon" aria-hidden="true">📖</span>
+              <span className="github-sidebar-label">Description</span>
+            </button>
+            <button
+              type="button"
               className={`github-sidebar-link ${activeSection === "files" ? "active" : ""}`}
               onClick={() => setActiveSection("files")}
             >
@@ -1025,6 +1074,57 @@ export default function GitHubRepo() {
             view keeps its existing 2-pane (tree + preview) layout
             because file browsing benefits from both being visible. */}
         <div className="github-content">
+          {activeSection === "description" && (
+            <main className="github-description" aria-label="Project description">
+              <section className="github-browser">
+                <div className="github-panel-head">
+                  <h2>{repo?.full_name ?? "Description"}</h2>
+                  {repo?.visibility && (
+                    <span className="github-panel-head-trail">
+                      <span className="github-visibility-chip">{repo.visibility}</span>
+                    </span>
+                  )}
+                </div>
+
+                <p className="github-description-summary">
+                  {repo?.description || "No description provided."}
+                </p>
+
+                {repo && (
+                  <div className="github-description-meta">
+                    {repo.language && <span>{repo.language}</span>}
+                    <span>★ {repo.stargazers_count}</span>
+                    <span>{repo.forks_count} forks</span>
+                    <span>{repo.open_issues_count} open issues</span>
+                    <span>updated {new Date(repo.updated_at).toLocaleDateString()}</span>
+                  </div>
+                )}
+
+                {repo?.html_url && (
+                  <a
+                    className="github-description-link"
+                    href={repo.html_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View on GitHub →
+                  </a>
+                )}
+
+                <div className="github-panel-head github-description-readme-head">
+                  <h2>README</h2>
+                </div>
+                {readmeLoading ? (
+                  <div className="github-empty">Loading README…</div>
+                ) : (
+                  <pre className="github-description-readme">
+                    {readme || "No README found."}
+                  </pre>
+                )}
+              </section>
+            </main>
+          )}
+
           {activeSection === "files" && (
             // Progressive disclosure: until a file is opened, render the
             // file tree as a single full-width list. Once the user picks

@@ -9,6 +9,7 @@ mod direct_messages;
 mod dto;
 pub mod handler;
 mod helpers;
+pub mod pubsub;
 mod websocket;
 
 use actix_web::web;

@@ -651,6 +651,18 @@
   line-height: 1.4;
 }
 
+/* Inline connection status above the composer while the socket is down /
+   reconnecting — replaces the silently-disabled textbox so the user knows the
+   app is recovering, not broken. */
+.chat-compose-status {
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
 .chat-compose-error-dismiss {
   flex: 0 0 auto;
   width: 22px;

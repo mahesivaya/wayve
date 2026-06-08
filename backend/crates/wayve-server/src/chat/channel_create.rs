@@ -2,7 +2,9 @@ use crate::prelude::*;
 use wayve_security::jwt::get_user_id_from_request;
 
 use super::dto::CreateChannelInput;
-use super::helpers::{normalize_channel_role, normalize_invite_emails};
+use super::helpers::{
+    normalize_channel_role, normalize_channel_visibility, normalize_invite_emails,
+};
 
 use sqlx::Row;
 use tracing::{error, instrument};
@@ -24,6 +26,7 @@ pub async fn create_channel(
     }
 
     let invite_role = normalize_channel_role(input.invite_role.as_deref());
+    let visibility = normalize_channel_visibility(input.visibility.as_deref());
     let invite_emails = normalize_invite_emails(&input.invite_emails.clone().unwrap_or_default());
 
     let invited_users = if invite_emails.is_empty() {
@@ -51,13 +54,14 @@ pub async fn create_channel(
 
     let row = sqlx::query(
         r#"
-        INSERT INTO channels (name, created_by)
-        VALUES ($1, $2)
+        INSERT INTO channels (name, created_by, visibility)
+        VALUES ($1, $2, $3)
         RETURNING id, created_at
         "#,
     )
     .bind(name)
     .bind(user_id)
+    .bind(visibility)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -187,7 +191,7 @@ pub async fn create_channel(
     Ok(HttpResponse::Created().json(serde_json::json!({
         "id": channel_id,
         "name": name,
-        "visibility": "private",
+        "visibility": visibility,
         "created_by": user_id,
         "created_at": created_at.to_rfc3339(),
         "current_user_role": "admin",

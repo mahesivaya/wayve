@@ -37,3 +37,13 @@ pub fn normalize_channel_role(role: Option<&str>) -> &'static str {
         _ => "user",
     }
 }
+
+/// Channels default to public at creation time when no (or an unrecognized)
+/// visibility is supplied. Admins can later flip a channel via the settings
+/// endpoint.
+pub fn normalize_channel_visibility(visibility: Option<&str>) -> &'static str {
+    match visibility {
+        Some("private") => "private",
+        _ => "public",
+    }
+}
