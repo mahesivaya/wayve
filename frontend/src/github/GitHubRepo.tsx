@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fmtDateTime } from "../utils/datetime";
 import { useResizableWidth } from "../components/useResizableWidth";
 import "./githubRepo.css";
@@ -429,6 +429,29 @@ export default function GitHubRepo() {
   const [repo, setRepo] = useState<Repo | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branch, setBranch] = useState("main");
+  // Custom branch dropdown (replaces a native <select> so the list reliably
+  // opens downward and the branch names can be themed).
+  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const branchMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the branch menu on outside click or Escape.
+  useEffect(() => {
+    if (!branchMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (branchMenuRef.current && !branchMenuRef.current.contains(e.target as Node)) {
+        setBranchMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setBranchMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [branchMenuOpen]);
   const [treeItems, setTreeItems] = useState<DirectoryCache>({});
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
@@ -921,21 +944,42 @@ export default function GitHubRepo() {
             feels at home with the rest of the app's chrome. */}
         <aside className="github-sidebar" aria-label="GitHub sections">
           <div className="github-sidebar-card">
-            <label className="github-sidebar-branch">
+            <div className="github-sidebar-branch" ref={branchMenuRef}>
               <span className="github-sidebar-branch-label">Branch</span>
-              <select
-                value={branch}
-                onChange={(event) => {
-                  setBranch(event.target.value);
-                }}
+              <button
+                type="button"
+                className="github-branch-trigger"
+                aria-haspopup="listbox"
+                aria-expanded={branchMenuOpen}
+                onClick={() => setBranchMenuOpen((open) => !open)}
               >
-                {branches.map((item) => (
-                  <option key={item.name} value={item.name}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <span className="github-branch-name">{branch}</span>
+                <span
+                  className={`github-branch-caret ${branchMenuOpen ? "open" : ""}`}
+                  aria-hidden="true"
+                >
+                  ⌄
+                </span>
+              </button>
+              {branchMenuOpen && (
+                <ul className="github-branch-menu" role="listbox" aria-label="Branches">
+                  {branches.map((item) => (
+                    <li key={item.name} role="option" aria-selected={item.name === branch}>
+                      <button
+                        type="button"
+                        className={`github-branch-option ${item.name === branch ? "active" : ""}`}
+                        onClick={() => {
+                          setBranch(item.name);
+                          setBranchMenuOpen(false);
+                        }}
+                      >
+                        <span className="github-branch-name">{item.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
 
           <div className="github-sidebar-card">
