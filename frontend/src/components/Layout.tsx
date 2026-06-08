@@ -11,6 +11,8 @@ import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import StorageLimitBanner from "./StorageLimitBanner";
 import { SplitPaneContext } from "./SplitPaneContext";
+import ResizeHandle from "./ResizeHandle";
+import { useResizableWidth } from "./useResizableWidth";
 import "./Layout.css";
 
 // Shared bug-report glyph — amber warning triangle with a dark `!`.
@@ -220,49 +222,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   // Drag-resizable nav sidebar width (when expanded, on non-overlay screens).
   const sidebarRef = useRef<HTMLElement | null>(null);
-  const SIDEBAR_MIN_WIDTH = 132;
-  const SIDEBAR_MAX_WIDTH = 360;
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    try {
-      const v = Number(localStorage.getItem("rwayve.sidebar.width"));
-      return Number.isFinite(v) && v > 0
-        ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, v))
-        : 156;
-    } catch {
-      return 156;
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem("rwayve.sidebar.width", String(sidebarWidth));
-    } catch {
-      // private mode / quota — width just won't persist this session.
-    }
-  }, [sidebarWidth]);
-  const startSidebarResize = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const left = sidebarRef.current?.getBoundingClientRect().left ?? 0;
-    const onMove = (ev: PointerEvent) => {
-      setSidebarWidth(
-        Math.min(
-          SIDEBAR_MAX_WIDTH,
-          Math.max(SIDEBAR_MIN_WIDTH, ev.clientX - left),
-        ),
-      );
-    };
-    const onUp = () => {
-      document.removeEventListener("pointermove", onMove);
-      document.removeEventListener("pointerup", onUp);
-      document.removeEventListener("pointercancel", onUp);
-      document.body.style.userSelect = "";
-      document.body.style.cursor = "";
-    };
-    document.addEventListener("pointermove", onMove);
-    document.addEventListener("pointerup", onUp);
-    document.addEventListener("pointercancel", onUp);
-    document.body.style.userSelect = "none";
-    document.body.style.cursor = "col-resize";
-  };
+  const { width: sidebarWidth, startResize: startSidebarResize } =
+    useResizableWidth({
+      storageKey: "rwayve.sidebar.width",
+      defaultWidth: 156,
+      min: 132,
+      max: 360,
+    });
 
   // Split-pane weights — proportional sizes (flex-grow values) for the
   // left/center/right panes. Stored as numbers because flex-grow is just a
@@ -887,6 +853,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                     "🧰",
                     location.pathname === "/docs/developers",
                   )}
+                  {canAccessApiKeyAdmin(user) &&
+                    renderSidebarLink(
+                      "/api-keys",
+                      "API Keys",
+                      "🔑",
+                      location.pathname === "/api-keys",
+                    )}
                 </div>
               )}
             </div>
@@ -932,27 +905,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 )}
               </div>
             )}
-
-          <div className="sidebar-section sidebar-section-secondary">
-            {canAccessApiKeyAdmin(user) &&
-              renderSidebarLink(
-                "/api-keys",
-                "API Keys",
-                "🔑",
-                location.pathname === "/api-keys",
-              )}
-          </div>
         </nav>
 
         {/* Drag the nav sidebar wider/narrower (hidden when collapsed to the
             icon rail or in the narrow off-canvas overlay). */}
         {!sidebarCollapsed && !isNarrow && (
-          <div
-            className="sidebar-resize-handle"
-            onPointerDown={startSidebarResize}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize sidebar"
+          <ResizeHandle
+            onPointerDown={startSidebarResize(
+              () => sidebarRef.current?.getBoundingClientRect().left ?? 0,
+            )}
+            ariaLabel="Resize sidebar"
           />
         )}
 
