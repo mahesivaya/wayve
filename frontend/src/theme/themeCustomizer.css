@@ -58,54 +58,51 @@
   color: var(--tc-bg);
 }
 
-/* Color wheel button — conic-gradient through all hues, fading to white at
-   the center via a radial overlay. Click toggles light/dark mode. In dark
-   mode the centre fades to black instead of white, mirroring the active
-   theme so the same button reads as either palette. */
-.theme-mode-wheel {
+/* Header tool icons (save · dice · contrast) — thin line-art buttons, pushed
+   to the right next to the name field. Replaces the old conic-gradient wheel. */
+.theme-header-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.theme-icon-btn {
   width: 30px;
   height: 30px;
-  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0;
-  border: 1px solid var(--tc-border);
-  border-radius: 50%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--tc-text-muted);
   cursor: pointer;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 55%),
-    conic-gradient(
-      from 0deg,
-      oklch(65% 0.22 0),
-      oklch(78% 0.18 60),
-      oklch(85% 0.18 120),
-      oklch(72% 0.16 180),
-      oklch(55% 0.22 240),
-      oklch(55% 0.22 300),
-      oklch(65% 0.22 360)
-    );
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: 0.15s;
 }
 
-.theme-mode-wheel:hover {
-  transform: scale(1.08);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+.theme-icon-btn:hover {
+  color: var(--tc-text);
+  border-color: var(--tc-border);
+  background: var(--tc-bg-soft);
 }
 
-/* When pressed/active (dark mode selected) the inner fade flips to black
-   so the button itself previews the active mode. */
-.theme-mode-wheel--dark {
-  background:
-    radial-gradient(circle at 50% 50%, rgba(10, 10, 12, 0.95) 0%, rgba(10, 10, 12, 0) 55%),
-    conic-gradient(
-      from 0deg,
-      oklch(65% 0.22 0),
-      oklch(78% 0.18 60),
-      oklch(85% 0.18 120),
-      oklch(72% 0.16 180),
-      oklch(55% 0.22 240),
-      oklch(55% 0.22 300),
-      oklch(65% 0.22 360)
-    );
+.theme-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Name field in the header (macro layout): sits on the right of the tools. */
+.theme-name-input--header {
+  flex: 0 1 220px;
+  min-width: 130px;
 }
 
 .theme-customizer-reset {
@@ -415,4 +412,248 @@
   border-color: var(--color-primary-action, #38bdf8);
   box-shadow: 0 0 0 2px var(--color-primary-action, #38bdf8),
     inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+/* =================== Advanced toolbar (name · save · 🎲 · 📋 · import) =================== */
+.theme-advanced-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.theme-name-input {
+  flex: 1 1 140px;
+  min-width: 120px;
+  padding: 8px 10px;
+  background: var(--tc-bg-soft);
+  border: 1px solid var(--tc-border);
+  border-radius: var(--radius-sm);
+  color: var(--tc-text);
+  font-size: var(--text-md);
+}
+
+.theme-name-input:focus {
+  outline: none;
+  border-color: var(--tc-text-muted);
+}
+
+.theme-tool-btn {
+  padding: 8px 12px;
+  background: var(--tc-bg-soft);
+  border: 1px solid var(--tc-border);
+  color: var(--tc-text);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-md);
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.theme-tool-btn:hover {
+  border-color: var(--tc-text-muted);
+}
+
+.theme-tool-save {
+  font-weight: 600;
+}
+
+/* ---- import box ---- */
+.theme-import {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.theme-import-text {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  background: var(--tc-bg-soft);
+  border: 1px solid var(--tc-border);
+  border-radius: var(--radius-sm);
+  color: var(--tc-text);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-sm);
+}
+
+.theme-import-error {
+  font-size: var(--text-sm);
+  color: var(--color-danger, #f87171);
+}
+
+.theme-import-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* =================== Library (Themes / UI) =================== */
+.theme-lib {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--tc-border);
+  padding-top: 12px;
+}
+
+.theme-lib-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  background: var(--tc-bg-soft);
+  border: 1px solid var(--tc-border);
+  border-radius: var(--radius-pill);
+  padding: 3px;
+  gap: 2px;
+}
+
+.theme-lib-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.theme-lib-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--tc-bg-soft);
+  border: 1px solid var(--tc-border);
+  border-radius: var(--radius-sm);
+}
+
+.theme-lib-row.active {
+  border-color: var(--tc-handle);
+  box-shadow: 0 0 0 1px var(--tc-handle);
+}
+
+.theme-lib-apply {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--tc-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.theme-row-swatch {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 26px;
+  border: 1px solid;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.theme-row-swatch > span {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+}
+
+.theme-row-swatch > span:nth-child(1) { left: 5px; }
+.theme-row-swatch > span:nth-child(2) { left: 17px; }
+.theme-row-swatch > span:nth-child(3) { left: 29px; }
+
+.theme-lib-name {
+  font-size: var(--text-md);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.theme-lib-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  background: var(--tc-bg);
+  border: 1px solid var(--tc-text-muted);
+  border-radius: var(--radius-sm);
+  color: var(--tc-text);
+  font-size: var(--text-md);
+}
+
+.theme-lib-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--tc-text-muted);
+  cursor: pointer;
+  font-size: var(--text-md);
+  transition: 0.15s;
+}
+
+.theme-lib-icon:hover {
+  border-color: var(--tc-border);
+  color: var(--tc-text);
+}
+
+.theme-lib-delete:hover {
+  color: var(--color-danger, #f87171);
+  border-color: var(--color-danger, #f87171);
+}
+
+.theme-lib-empty {
+  font-size: var(--text-sm);
+  color: var(--tc-text-muted);
+  padding: 6px 2px;
+}
+
+/* =================== UI scoped knobs =================== */
+.theme-ui-knobs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.theme-ui-warning {
+  font-size: var(--text-sm);
+  color: var(--color-warning, #fbbf24);
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  line-height: 1.35;
+}
+
+.theme-ui-row {
+  display: grid;
+  grid-template-columns: 90px 40px auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.theme-ui-row label {
+  font-size: var(--text-md);
+  color: var(--tc-text-muted);
+  font-weight: 500;
+}
+
+.theme-ui-color {
+  width: 40px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--tc-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
 }

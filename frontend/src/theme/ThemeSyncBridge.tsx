@@ -1,18 +1,17 @@
 // Bridges the (auth-unaware) CustomThemeContext to backend persistence.
 //
-// On user login, hydrates the theme from `user.theme_json` (delivered by
-// /api/me). The hydrate happens once per user id — re-hydrating on every
-// /api/me poll would clobber unsaved local changes.
+// On user login, hydrates the full theme state (active choice + named library
+// + UI overrides) from `user.theme_json` (delivered by /api/me). The hydrate
+// happens once per user id — re-hydrating on every /api/me poll would clobber
+// unsaved local changes.
 //
-// On every theme choice change, PUTs the serialized choice to
-// /api/me/theme — but only when the user is authenticated and only when
-// the value differs from what we last sent/received. The
-// lastRemoteRef guard prevents the hydrate-then-PUT echo: after we apply
-// a server-sent theme, we immediately mark it as already-remote so the
-// subsequent change effect skips the redundant PUT.
+// On any theme-state change, PUTs the serialized v2 blob to /api/me/theme —
+// debounced (~600ms) so rapid library edits/renames don't spam the API, and
+// only when authenticated and only when the value differs from what we last
+// sent/received. The lastRemoteRef guard prevents the hydrate-then-PUT echo.
 //
-// The bridge renders its children unchanged — its only job is the
-// side-effect coupling.
+// The bridge renders its children unchanged — its only job is the side-effect
+// coupling.
 
 import { useEffect, useRef, type ReactNode } from "react";
 
@@ -20,30 +19,16 @@ import { putTheme } from "../api/profile";
 import { useAuth } from "../auth/useAuth";
 import { logger } from "../utils/logger";
 import { useCustomTheme } from "./useCustomTheme";
-import type { ThemeChoice } from "./customThemeShared";
+import { parsePersisted, serializePersisted } from "./themeStorage";
 
-function serialize(choice: ThemeChoice): string | null {
-  return choice.kind === "default" ? null : JSON.stringify(choice);
-}
-
-function parseChoice(json: string | null | undefined): ThemeChoice | null {
-  if (!json) return null;
-  try {
-    const parsed = JSON.parse(json) as ThemeChoice;
-    if (parsed.kind === "default" || parsed.kind === "preset" || parsed.kind === "custom") {
-      return parsed;
-    }
-  } catch {
-    // ignore — server-side blob is opaque; bad JSON falls back to local.
-  }
-  return null;
-}
+const SYNC_DEBOUNCE_MS = 600;
 
 export default function ThemeSyncBridge({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const { choice, setChoice } = useCustomTheme();
+  const { choice, library, ui, hydrate } = useCustomTheme();
   const lastRemoteRef = useRef<string | null>(null);
   const hydratedForUserRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Hydrate from server when a new user lands. Only runs once per user id.
   useEffect(() => {
@@ -54,27 +39,35 @@ export default function ThemeSyncBridge({ children }: { children: ReactNode }) {
     }
     if (hydratedForUserRef.current === user.id) return;
     hydratedForUserRef.current = user.id;
-    const remote = parseChoice(user.theme_json);
+    const remote = parsePersisted(user.theme_json);
     if (remote) {
-      lastRemoteRef.current = serialize(remote);
-      setChoice(remote);
+      lastRemoteRef.current = serializePersisted(remote);
+      hydrate(remote);
     } else {
-      // Server has no override. Treat current local choice as "to be synced
-      // up" so the PUT effect picks it up on the next tick.
+      // Server has no override. Treat current local state as "to be synced up"
+      // so the PUT effect picks it up on the next tick.
       lastRemoteRef.current = null;
     }
-  }, [user, setChoice]);
+  }, [user, hydrate]);
 
-  // Push local changes up to the server (only when authenticated).
+  // Push local changes up to the server (debounced, only when authenticated).
   useEffect(() => {
     if (!user) return;
-    const serialized = serialize(choice);
+    const serialized = serializePersisted({ active: choice, library, ui });
     if (serialized === lastRemoteRef.current) return;
-    lastRemoteRef.current = serialized;
-    putTheme(serialized).catch((err) => {
-      logger.warn("theme sync to backend failed", err);
-    });
-  }, [choice, user]);
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      lastRemoteRef.current = serialized;
+      putTheme(serialized).catch((err) => {
+        logger.warn("theme sync to backend failed", err);
+      });
+    }, SYNC_DEBOUNCE_MS);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [choice, library, ui, user]);
 
   return <>{children}</>;
 }

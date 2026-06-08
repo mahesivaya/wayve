@@ -44,6 +44,41 @@ export const PRESETS: ThemePreset[] = [
     mode: "dark",
     input: { hue: 270, chroma: 0.17, saturation: 1.1, contrast: 0.7, depth: 0.02 },
   },
+  {
+    id: "forest",
+    name: "Forest",
+    description: "Calm green, easy on the eyes.",
+    mode: "dark",
+    input: { hue: 155, chroma: 0.14, saturation: 1, contrast: 0.6, depth: 0.01 },
+  },
+  {
+    id: "plum",
+    name: "Plum",
+    description: "Rich magenta on near-black.",
+    mode: "dark",
+    input: { hue: 300, chroma: 0.16, saturation: 1.1, contrast: 0.65, depth: 0.02 },
+  },
+  {
+    id: "rose",
+    name: "Rose",
+    description: "Warm pink, soft light surfaces.",
+    mode: "light",
+    input: { hue: 350, chroma: 0.13, saturation: 1, contrast: 0.55, depth: 0 },
+  },
+  {
+    id: "cream",
+    name: "Cream",
+    description: "Warm paper tones, amber accent.",
+    mode: "light",
+    input: { hue: 75, chroma: 0.12, saturation: 0.95, contrast: 0.5, depth: 0.01 },
+  },
+  {
+    id: "slate",
+    name: "Slate",
+    description: "Muted neutral grey-blue.",
+    mode: "dark",
+    input: { hue: 220, chroma: 0.05, saturation: 0.8, contrast: 0.6, depth: 0 },
+  },
 ];
 
 export function tokensForPreset(preset: ThemePreset): TokenOverrides {

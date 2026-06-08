@@ -1,16 +1,18 @@
-// Runtime theme store. Holds the user's choice (preset id OR custom inputs +
-// mode) and applies it to :root as CSS variable overrides. Persistence is
-// localStorage-only here; the optional backend sync layer wraps this.
+// Runtime theme store. Holds the user's active choice (preset id, custom
+// inputs + mode, a saved library entry, or default) PLUS the named theme
+// library and the scoped UI-tab color overrides, and applies the result to
+// :root as CSS variable overrides. Persistence is localStorage-only here; the
+// optional backend sync layer (ThemeSyncBridge) wraps this.
 //
 // The applied tokens are the union of:
-//   1. the selected preset's palette (if any), OR
-//   2. the generated palette from the custom inputs (if any)
-// Either way, the result is the same shape: a map of role → CSS color string.
+//   1. the base palette (preset / generated-from-custom / saved-from-library), then
+//   2. the scoped UI overrides layered on top (they win).
+// Either way the result is the same shape: a map of role → CSS color string.
 //
 // Apply order matters: writing each token as
 // `document.documentElement.style.setProperty("--color-foo", "...")` takes
-// precedence over the stylesheet rules in src/index.css. To revert to the
-// stylesheet default, we call `removeProperty` for that role.
+// precedence over the stylesheet rules in src/index.css. To revert a role to
+// the stylesheet default, we call `removeProperty` for it.
 
 import {
   useCallback,
@@ -20,53 +22,94 @@ import {
   type ReactNode,
 } from "react";
 
-import { ALL_ROLES, TOKEN_VAR, type TokenOverrides } from "./customTokens";
+import { ALL_ROLES, TOKEN_VAR, type TokenOverrides, type TokenRole } from "./customTokens";
 import {
   CustomThemeContext,
   type CustomThemeValue,
+  type SavedTheme,
   type ThemeChoice,
   type ThemeMode,
+  type UiOverrides,
 } from "./customThemeShared";
 import { generatePalette, type PaletteInput } from "./palette";
 import { findPreset, tokensForPreset } from "./themePresets";
+import {
+  EMPTY_PERSISTED,
+  parsePersisted,
+  serializePersisted,
+  type PersistedTheme,
+} from "./themeStorage";
 
-const STORAGE_KEY = "wayve-custom-theme-v1";
+const STORAGE_KEY = "wayve-custom-theme-v2";
+// The previous (v1) key — read once for migration, then removed.
+const LEGACY_STORAGE_KEY = "wayve-custom-theme-v1";
 
-interface PersistedShape {
-  choice: ThemeChoice;
-}
-
-function loadFromStorage(): ThemeChoice {
+function loadFromStorage(): PersistedTheme {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { kind: "default" };
-    const parsed = JSON.parse(raw) as PersistedShape;
-    if (parsed.choice) return parsed.choice;
+    const current = parsePersisted(localStorage.getItem(STORAGE_KEY));
+    if (current) return current;
+    // Migrate a v1 blob forward, then drop the old key.
+    const legacy = parsePersisted(localStorage.getItem(LEGACY_STORAGE_KEY));
+    if (legacy) {
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      return legacy;
+    }
   } catch {
     // ignore — storage may be blocked or value corrupted
   }
-  return { kind: "default" };
+  return EMPTY_PERSISTED;
 }
 
-function saveToStorage(choice: ThemeChoice) {
+function saveToStorage(state: PersistedTheme) {
   try {
-    if (choice.kind === "default") {
+    const serialized = serializePersisted(state);
+    if (serialized === null) {
       localStorage.removeItem(STORAGE_KEY);
     } else {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ choice }));
+      localStorage.setItem(STORAGE_KEY, serialized);
     }
   } catch {
     // ignore — storage blocked
   }
 }
 
-function tokensForChoice(choice: ThemeChoice): TokenOverrides {
-  if (choice.kind === "default") return {};
-  if (choice.kind === "preset") {
-    const p = findPreset(choice.presetId);
+function genId(): string {
+  try {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // fall through
+  }
+  // Math.random fallback is fine for a local id.
+  return `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Base palette (before UI overrides) for the active choice.
+function baseTokensFor(
+  active: ThemeChoice,
+  library: SavedTheme[],
+): TokenOverrides {
+  if (active.kind === "default") return {};
+  if (active.kind === "preset") {
+    const p = findPreset(active.presetId);
     return p ? tokensForPreset(p) : {};
   }
-  return generatePalette(choice.input, choice.mode);
+  if (active.kind === "saved") {
+    const saved = library.find((t) => t.id === active.id);
+    return saved ? generatePalette(saved.input, saved.mode) : {};
+  }
+  return generatePalette(active.input, active.mode);
+}
+
+// Effective mode for the active choice (drives data-theme).
+function modeFor(active: ThemeChoice, library: SavedTheme[]): ThemeMode | null {
+  if (active.kind === "default") return null;
+  if (active.kind === "preset") return findPreset(active.presetId)?.mode ?? "light";
+  if (active.kind === "saved") {
+    return library.find((t) => t.id === active.id)?.mode ?? "light";
+  }
+  return active.mode;
 }
 
 function applyTokensToRoot(tokens: TokenOverrides) {
@@ -82,51 +125,186 @@ function applyTokensToRoot(tokens: TokenOverrides) {
   }
 }
 
-// Sets data-theme on <html> to match the choice's effective mode. This keeps
-// the existing light/dark stylesheet rules (those that target
-// `:root[data-theme="dark"]` in index.css) in step with the override layer.
-function applyMode(choice: ThemeChoice) {
-  const root = document.documentElement;
-  if (choice.kind === "default") {
-    // Keep whatever mode the existing useTheme hook set.
-    return;
-  }
-  const mode = choice.kind === "preset"
-    ? findPreset(choice.presetId)?.mode ?? "light"
-    : choice.mode;
-  root.setAttribute("data-theme", mode);
-}
-
 export function CustomThemeProvider({ children }: { children: ReactNode }) {
-  const [choice, setChoiceState] = useState<ThemeChoice>(() => loadFromStorage());
+  const [state, setState] = useState<PersistedTheme>(() => loadFromStorage());
+  const { active, library, ui } = state;
 
+  const baseTokens = useMemo(
+    () => baseTokensFor(active, library),
+    [active, library],
+  );
+
+  // Apply base palette + UI overrides whenever any of them change.
   useEffect(() => {
-    applyTokensToRoot(tokensForChoice(choice));
-    applyMode(choice);
-  }, [choice]);
+    applyTokensToRoot({ ...baseTokens, ...ui });
+    const mode = modeFor(active, library);
+    if (mode) document.documentElement.setAttribute("data-theme", mode);
+  }, [baseTokens, ui, active, library]);
 
-  const setChoice = useCallback((next: ThemeChoice) => {
-    setChoiceState(next);
+  const setChoice = useCallback(
+    (next: ThemeChoice) => {
+      setState((prev) => {
+        const updated = { ...prev, active: next };
+        saveToStorage(updated);
+        return updated;
+      });
+    },
+    [],
+  );
+
+  const resetToDefault = useCallback(() => {
+    setState((prev) => {
+      // Restore stylesheet defaults: clear the active palette and UI overrides
+      // (but keep the saved library — that would be destructive to wipe).
+      const updated: PersistedTheme = {
+        ...prev,
+        active: { kind: "default" },
+        ui: {},
+      };
+      saveToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  // --- Library ---------------------------------------------------------------
+  const saveTheme = useCallback(
+    (name: string, mode: ThemeMode, input: PaletteInput) => {
+      const id = genId();
+      setState((prev) => {
+        const entry: SavedTheme = {
+          id,
+          name: name.trim() || "Untitled",
+          mode,
+          input,
+        };
+        const updated: PersistedTheme = {
+          ...prev,
+          library: [...prev.library, entry],
+          active: { kind: "saved", id },
+        };
+        saveToStorage(updated);
+        return updated;
+      });
+      return id;
+    },
+    [],
+  );
+
+  const renameTheme = useCallback((id: string, name: string) => {
+    setState((prev) => {
+      const updated: PersistedTheme = {
+        ...prev,
+        library: prev.library.map((t) =>
+          t.id === id ? { ...t, name: name.trim() || t.name } : t,
+        ),
+      };
+      saveToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const deleteTheme = useCallback((id: string) => {
+    setState((prev) => {
+      const library = prev.library.filter((t) => t.id !== id);
+      // If the deleted theme was active, fall back to default.
+      const active: ThemeChoice =
+        prev.active.kind === "saved" && prev.active.id === id
+          ? { kind: "default" }
+          : prev.active;
+      const updated: PersistedTheme = { ...prev, library, active };
+      saveToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  // --- Scoped UI overrides ---------------------------------------------------
+  const setUiOverride = useCallback((role: TokenRole, color: string) => {
+    setState((prev) => {
+      const updated: PersistedTheme = {
+        ...prev,
+        ui: { ...prev.ui, [role]: color },
+      };
+      saveToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const clearUiOverride = useCallback((role: TokenRole) => {
+    setState((prev) => {
+      const next: UiOverrides = { ...prev.ui };
+      delete next[role];
+      const updated: PersistedTheme = { ...prev, ui: next };
+      saveToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const resetUi = useCallback(() => {
+    setState((prev) => {
+      const updated: PersistedTheme = { ...prev, ui: {} };
+      saveToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  // Replace the whole state (backend hydration on login). Persists locally too
+  // so a later offline reload keeps the server-sourced theme.
+  const hydrate = useCallback((next: PersistedTheme) => {
+    setState(next);
     saveToStorage(next);
   }, []);
 
-  const resetToDefault = useCallback(() => {
-    setChoice({ kind: "default" });
-  }, [setChoice]);
-
-  const previewInput = useCallback((input: PaletteInput, mode: ThemeMode) => {
-    applyTokensToRoot(generatePalette(input, mode));
-    document.documentElement.setAttribute("data-theme", mode);
-  }, []);
+  // --- Live preview (no persist) — used while dragging sliders/grid ----------
+  const previewInput = useCallback(
+    (input: PaletteInput, mode: ThemeMode) => {
+      // Layer current UI overrides on top so preview matches the saved result.
+      applyTokensToRoot({ ...generatePalette(input, mode), ...ui });
+      document.documentElement.setAttribute("data-theme", mode);
+    },
+    [ui],
+  );
 
   const clearPreview = useCallback(() => {
-    applyTokensToRoot(tokensForChoice(choice));
-    applyMode(choice);
-  }, [choice]);
+    applyTokensToRoot({ ...baseTokens, ...ui });
+    const mode = modeFor(active, library);
+    if (mode) document.documentElement.setAttribute("data-theme", mode);
+  }, [baseTokens, ui, active, library]);
 
   const value = useMemo<CustomThemeValue>(
-    () => ({ choice, setChoice, resetToDefault, previewInput, clearPreview }),
-    [choice, setChoice, resetToDefault, previewInput, clearPreview],
+    () => ({
+      choice: active,
+      setChoice,
+      resetToDefault,
+      previewInput,
+      clearPreview,
+      library,
+      saveTheme,
+      renameTheme,
+      deleteTheme,
+      ui,
+      setUiOverride,
+      clearUiOverride,
+      resetUi,
+      baseTokens,
+      hydrate,
+    }),
+    [
+      active,
+      setChoice,
+      resetToDefault,
+      previewInput,
+      clearPreview,
+      library,
+      saveTheme,
+      renameTheme,
+      deleteTheme,
+      ui,
+      setUiOverride,
+      clearUiOverride,
+      resetUi,
+      baseTokens,
+      hydrate,
+    ],
   );
 
   return (

@@ -120,3 +120,77 @@ export function generatePalette(
 export function rolesFromMap(map: Partial<Record<TokenRole, string>>): TokenOverrides {
   return { ...map };
 }
+
+// A random-but-tasteful PaletteInput for the "Randomize" (🎲) action. Bounds
+// keep chroma/contrast in a readable range so the result is never garish or
+// illegible.
+export function randomInput(): PaletteInput {
+  const rand = (min: number, max: number) => min + Math.random() * (max - min);
+  return {
+    hue: Math.round(rand(0, 360)),
+    chroma: Number(rand(0.06, 0.2).toFixed(3)),
+    saturation: Number(rand(0.7, 1.2).toFixed(2)),
+    contrast: Number(rand(0.45, 0.7).toFixed(2)),
+    depth: Number(rand(-0.02, 0.02).toFixed(3)),
+  };
+}
+
+// Normalize any CSS color string (oklch, hex, rgb, named) to [r,g,b] 0..255
+// using the canvas trick: the 2D context normalizes fillStyle to #rrggbb /
+// rgba(). Returns null if the color can't be resolved (e.g. SSR / no canvas).
+function cssColorToRgb(color: string): [number, number, number] | null {
+  try {
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#000";
+    ctx.fillStyle = color;
+    const normalized = ctx.fillStyle; // "#rrggbb" or "rgba(r, g, b, a)"
+    if (normalized.startsWith("#")) {
+      const r = parseInt(normalized.slice(1, 3), 16);
+      const g = parseInt(normalized.slice(3, 5), 16);
+      const b = parseInt(normalized.slice(5, 7), 16);
+      return [r, g, b];
+    }
+    const m = normalized.match(/rgba?\(([^)]+)\)/);
+    if (m) {
+      const [r, g, b] = m[1].split(",").map((p) => parseFloat(p));
+      return [r, g, b];
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+// Convert any CSS color to a #rrggbb hex string (for seeding <input type=color>).
+export function cssColorToHex(color: string, fallback = "#888888"): string {
+  const rgb = cssColorToRgb(color);
+  if (!rgb) return fallback;
+  return (
+    "#" +
+    rgb
+      .map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0"))
+      .join("")
+  );
+}
+
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const lin = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+// WCAG contrast ratio (1..21) between two CSS colors. Returns null if either
+// color can't be resolved.
+export function contrastRatio(fg: string, bg: string): number | null {
+  const a = cssColorToRgb(fg);
+  const b = cssColorToRgb(bg);
+  if (!a || !b) return null;
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
+}
