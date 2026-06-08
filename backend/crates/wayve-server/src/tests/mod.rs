@@ -12,9 +12,11 @@
 // authorization, JWT, signing) plus the new long-term API contracts
 // (webhooks event catalog, embed tokens, SCIM, rate-limit tiers).
 mod billing_audit_test;
+mod chat_logging_test;
 mod email_provider_isp_test;
 mod org_keys_test;
 mod platform_users_test;
+mod redis_pubsub_perf_test;
 mod rbac_authorization_test;
 mod rbac_permissions_golden_test;
 mod rbac_resolution_test;

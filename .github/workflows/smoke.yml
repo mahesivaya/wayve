@@ -32,6 +32,15 @@ jobs:
         env:
           MP_SMTP_AUTH_ACCEPT_ANY: "true"
           MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/rwayve_test
@@ -40,6 +49,9 @@ jobs:
       MAILPIT_API: http://localhost:8025
       MAILPIT_SMTP_HOST: localhost
       MAILPIT_SMTP_PORT: "1025"
+      # Lets the Redis pub/sub performance tests actually run in CI (they skip
+      # gracefully when Redis is unreachable). Points at the redis service above.
+      REDIS_URL: redis://localhost:6379
       RUST_BACKTRACE: 1
 
     steps:
