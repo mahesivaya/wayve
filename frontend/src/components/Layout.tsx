@@ -545,47 +545,37 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       <div className="header">
         <div className="header-brand">
           <div className="logo" onClick={() => navigate("/")}>{BRAND_NAME}</div>
-          {(() => {
-            // Whether the sidebar is currently showing (full panel). On the
-            // ≤768px overlay band that's `navOpen`; on wider screens it's the
-            // inverse of the collapsed-rail preference.
-            const sidebarShown = isNarrow ? navOpen : !sidebarCollapsed;
-            return (
-              <button
-                type="button"
-                className="sidebar-toggle-btn"
-                onClick={() => {
-                  // On the narrow overlay band toggle the panel open/close; on
-                  // wider screens toggle expanded (labels) ↔ collapsed (rail).
-                  if (isNarrow) {
-                    setNavOpen((open) => !open);
-                  } else {
-                    setSidebarCollapsed((c) => !c);
-                  }
-                }}
-                title={sidebarShown ? "Hide sidebar" : "Show sidebar"}
-                aria-label={sidebarShown ? "Hide sidebar" : "Show sidebar"}
-                aria-expanded={sidebarShown}
+          {/* Header toggle is the mobile hamburger ONLY. On wide screens the
+              show/hide control lives on the sidebar divider (see
+              .sidebar-divider-toggle below); there's no persistent divider in
+              the ≤768px off-canvas overlay, so the header button stays for it. */}
+          {isNarrow && (
+            <button
+              type="button"
+              className="sidebar-toggle-btn"
+              onClick={() => setNavOpen((open) => !open)}
+              title={navOpen ? "Hide sidebar" : "Show sidebar"}
+              aria-label={navOpen ? "Hide sidebar" : "Show sidebar"}
+              aria-expanded={navOpen}
+            >
+              <svg
+                className="sidebar-toggle-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
               >
-                <svg
-                  className="sidebar-toggle-icon"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  {/* Panel frame for context */}
-                  <rect x="3" y="5" width="18" height="14" rx="2.2" />
-                  <line x1="9" y1="5" x2="9" y2="19" />
-                  {/* Arrow points the way the panel will move on click:
-                      shown → left chevron (will hide); hidden → right (show). */}
-                  {sidebarShown ? (
-                    <polyline points="15 9 12 12 15 15" />
-                  ) : (
-                    <polyline points="12 9 15 12 12 15" />
-                  )}
-                </svg>
-              </button>
-            );
-          })()}
+                {/* Panel frame for context */}
+                <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                <line x1="9" y1="5" x2="9" y2="19" />
+                {/* Arrow points the way the panel will move on click:
+                    open → left chevron (will hide); closed → right (show). */}
+                {navOpen ? (
+                  <polyline points="15 9 12 12 15 15" />
+                ) : (
+                  <polyline points="12 9 15 12 12 15" />
+                )}
+              </svg>
+            </button>
+          )}
         </div>
 
         {!location.pathname.startsWith("/emails") &&
@@ -657,6 +647,40 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           }
           aria-label="Primary navigation"
         >
+          {/* Wide-screen show/hide control — a small chevron pinned at the top
+              of the panel, above Home. Stays put whether expanded or collapsed
+              to the icon rail. The ≤768px overlay uses the header hamburger
+              instead, so this is desktop-only. */}
+          {!isNarrow && (
+            <div className="sidebar-collapse-row">
+              <button
+                type="button"
+                className="sidebar-collapse-btn"
+                onClick={() => setSidebarCollapsed((c) => !c)}
+                title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+                aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+                aria-expanded={!sidebarCollapsed}
+              >
+                <svg
+                  className="sidebar-collapse-icon"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  {/* Same panel-frame glyph the header toggle used. The arrow
+                      points the way the panel will move on click:
+                      expanded → left (will hide); collapsed → right (will show). */}
+                  <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                  <line x1="9" y1="5" x2="9" y2="19" />
+                  {sidebarCollapsed ? (
+                    <polyline points="12 9 15 12 12 15" />
+                  ) : (
+                    <polyline points="15 9 12 12 15 15" />
+                  )}
+                </svg>
+              </button>
+            </div>
+          )}
+
           <div className="sidebar-section">
             {renderSidebarItem("/", "home", "Home", "🏠")}
             {renderSidebarItem("/emails", "emails", "Emails", "📧", emailsUnreadCount)}

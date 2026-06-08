@@ -301,6 +301,53 @@
   overflow: hidden;
 }
 
+/* Wide-screen sidebar show/hide control — a small, dimmed chevron pinned at the
+   top of the sidebar, above Home. A hairline beneath it sets it apart from the
+   nav list so it reads as a control, not a destination. Right-aligned when
+   expanded; centered in the icon rail when collapsed. */
+.sidebar-collapse-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sidebar.collapsed .sidebar-collapse-row {
+  justify-content: center;
+}
+
+.sidebar-collapse-btn {
+  width: 26px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.sidebar-collapse-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
+}
+
+.sidebar-collapse-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .global-search-row {
   height: 40px;
   flex-shrink: 0;
@@ -1126,6 +1173,16 @@
 :root[data-theme="dark"] .sidebar {
   background: var(--color-surface-darken);
   border-right: 1px solid var(--color-border-dark);
+}
+:root[data-theme="dark"] .sidebar-collapse-row {
+  border-bottom-color: var(--color-border-dark);
+}
+:root[data-theme="dark"] .sidebar-collapse-btn {
+  color: var(--color-on-primary);
+}
+:root[data-theme="dark"] .sidebar-collapse-btn:hover {
+  color: var(--color-on-primary);
+  background: var(--color-surface-hover);
 }
 :root[data-theme="dark"] .sidebar-link {
   /* Near-white so the nav labels read clearly on the dark sidebar (the old
