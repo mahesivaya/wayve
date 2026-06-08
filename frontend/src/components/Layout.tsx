@@ -178,16 +178,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const [supportOpen, setSupportOpen] = useState(false);
   // Collapsible sidebar groups. Each starts open when the user is already on a
   // route inside it (so the active item is visible); otherwise collapsed.
-  const [logsExpanded, setLogsExpanded] = useState(() =>
-    location.pathname.startsWith("/logs"),
-  );
-  const [workspaceExpanded, setWorkspaceExpanded] = useState(() =>
-    location.pathname.startsWith("/github"),
-  );
+  // Collapsible sidebar groups always start collapsed on mount/reload — they
+  // no longer auto-expand from the current URL. The user opens what they want.
+  const [logsExpanded, setLogsExpanded] = useState(false);
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   // "Projects" is a sub-group under Workspace; each project expands to "Code".
-  const [projectsExpanded, setProjectsExpanded] = useState(() =>
-    location.pathname.startsWith("/github"),
-  );
+  const [projectsExpanded, setProjectsExpanded] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(
     () => new Set(SAMPLE_PROJECTS),
   );
@@ -198,12 +194,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       else next.add(name);
       return next;
     });
-  const [platformExpanded, setPlatformExpanded] = useState(() =>
-    location.pathname.startsWith("/platform"),
-  );
-  const [developersExpanded, setDevelopersExpanded] = useState(() =>
-    location.pathname.startsWith("/docs"),
-  );
+  const [platformExpanded, setPlatformExpanded] = useState(false);
+  const [developersExpanded, setDevelopersExpanded] = useState(false);
 
   // Desktop sidebar can be collapsed to an icon-only rail. Persisted so the
   // user's preference survives reloads.
