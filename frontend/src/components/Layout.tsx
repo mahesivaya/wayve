@@ -59,6 +59,31 @@ function appKeyFromPath(pathname: string): AppKey {
 // whole Layout component, which would otherwise reset the split to
 // closed. Round-tripping through localStorage keeps the split intact
 // when the user returns to a Layout-wrapped route.
+// Placeholder projects shown under Workspace → Projects. Each expands to a
+// "Code" entry. Sample scaffolding until real per-project data exists.
+const SAMPLE_PROJECTS = ["project1", "project2"];
+
+// Reused "Code" nav icon — folder with a branch tree, follows currentColor.
+const CODE_ICON = (
+  <svg
+    className="sidebar-icon-svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+    <circle cx="9" cy="11" r="1.4" />
+    <circle cx="15" cy="11" r="1.4" />
+    <circle cx="12" cy="17" r="1.4" />
+    <path d="M9 12v1a3 3 0 0 0 3 3" />
+    <path d="M15 12v1a3 3 0 0 1-3 3" />
+  </svg>
+);
+
 const SPLIT_STORAGE_KEY = "rwayve.layout.split";
 
 function isValidAppKey(value: unknown): value is AppKey {
@@ -159,6 +184,20 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const [workspaceExpanded, setWorkspaceExpanded] = useState(() =>
     location.pathname.startsWith("/github"),
   );
+  // "Projects" is a sub-group under Workspace; each project expands to "Code".
+  const [projectsExpanded, setProjectsExpanded] = useState(() =>
+    location.pathname.startsWith("/github"),
+  );
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(
+    () => new Set(SAMPLE_PROJECTS),
+  );
+  const toggleProject = (name: string) =>
+    setExpandedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
   const [platformExpanded, setPlatformExpanded] = useState(() =>
     location.pathname.startsWith("/platform"),
   );
@@ -186,6 +225,52 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       // private mode / quota — preference just won't persist this session.
     }
   }, [sidebarCollapsed]);
+
+  // Drag-resizable nav sidebar width (when expanded, on non-overlay screens).
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const SIDEBAR_MIN_WIDTH = 132;
+  const SIDEBAR_MAX_WIDTH = 360;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const v = Number(localStorage.getItem("rwayve.sidebar.width"));
+      return Number.isFinite(v) && v > 0
+        ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, v))
+        : 156;
+    } catch {
+      return 156;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("rwayve.sidebar.width", String(sidebarWidth));
+    } catch {
+      // private mode / quota — width just won't persist this session.
+    }
+  }, [sidebarWidth]);
+  const startSidebarResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const left = sidebarRef.current?.getBoundingClientRect().left ?? 0;
+    const onMove = (ev: PointerEvent) => {
+      setSidebarWidth(
+        Math.min(
+          SIDEBAR_MAX_WIDTH,
+          Math.max(SIDEBAR_MIN_WIDTH, ev.clientX - left),
+        ),
+      );
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+  };
 
   // Split-pane weights — proportional sizes (flex-grow values) for the
   // left/center/right panes. Stored as numbers because flex-grow is just a
@@ -605,7 +690,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       <div className="body">
         {/* PRIMARY SIDEBAR — every app nav surface lives here. */}
         <nav
+          ref={sidebarRef}
           className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`.trim()}
+          style={
+            !sidebarCollapsed && !isNarrow
+              ? { width: `${sidebarWidth}px` }
+              : undefined
+          }
           aria-label="Primary navigation"
         >
           <div className="sidebar-section">
@@ -636,29 +727,31 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               )}
               {(workspaceExpanded || sidebarCollapsed) && (
                 <div className="sidebar-subitems">
-                  {renderSidebarItem(
-                    "/github",
-                    "github",
-                    "Code",
-                    // Folder with a branch tree inside — picks up currentColor
-                    // so it follows the link's foreground (white when active).
-                    <svg
-                      className="sidebar-icon-svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-                      <circle cx="9" cy="11" r="1.4" />
-                      <circle cx="15" cy="11" r="1.4" />
-                      <circle cx="12" cy="17" r="1.4" />
-                      <path d="M9 12v1a3 3 0 0 0 3 3" />
-                      <path d="M15 12v1a3 3 0 0 1-3 3" />
-                    </svg>,
+                  {renderSectionToggle("Projects", projectsExpanded, () =>
+                    setProjectsExpanded((open) => !open),
+                  )}
+                  {(projectsExpanded || sidebarCollapsed) && (
+                    <div className="sidebar-subitems">
+                      {SAMPLE_PROJECTS.map((proj) => (
+                        <div key={proj}>
+                          {renderSectionToggle(
+                            proj,
+                            expandedProjects.has(proj),
+                            () => toggleProject(proj),
+                          )}
+                          {(expandedProjects.has(proj) || sidebarCollapsed) && (
+                            <div className="sidebar-subitems">
+                              {renderSidebarItem(
+                                "/github",
+                                "github",
+                                "Code",
+                                CODE_ICON,
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
@@ -858,6 +951,18 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               )}
           </div>
         </nav>
+
+        {/* Drag the nav sidebar wider/narrower (hidden when collapsed to the
+            icon rail or in the narrow off-canvas overlay). */}
+        {!sidebarCollapsed && !isNarrow && (
+          <div
+            className="sidebar-resize-handle"
+            onPointerDown={startSidebarResize}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+          />
+        )}
 
         {/* Scrim catches taps outside the sidebar overlay on narrow screens. */}
         {navOpen && (
