@@ -65,6 +65,13 @@ function appKeyFromPath(pathname: string): AppKey {
 // until real per-project data exists.
 const SAMPLE_PROJECTS = ["project1", "project2"];
 
+// Sample teams the user belongs to, shown under the "Teams" group. Sample
+// scaffolding until the real per-user team list is wired up.
+const SAMPLE_TEAMS = [
+  { name: "Team A", slug: "team-a" },
+  { name: "Team B", slug: "team-b" },
+];
+
 const SPLIT_STORAGE_KEY = "rwayve.layout.split";
 
 function isValidAppKey(value: unknown): value is AppKey {
@@ -199,6 +206,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     }
     setEditingProject(null);
   };
+  const [teamsExpanded, setTeamsExpanded] = useState(false);
   const [platformExpanded, setPlatformExpanded] = useState(false);
   const [developersExpanded, setDevelopersExpanded] = useState(false);
 
@@ -771,6 +779,25 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               )}
             </div>
           )}
+
+          {/* Teams the user belongs to (sample data for now). */}
+          <div className="sidebar-section">
+            {renderSectionToggle("Teams", teamsExpanded, () =>
+              setTeamsExpanded((open) => !open),
+            )}
+            {(teamsExpanded || sidebarCollapsed) && (
+              <div className="sidebar-subitems">
+                {SAMPLE_TEAMS.map((team) =>
+                  renderSidebarLink(
+                    `/teams/${team.slug}`,
+                    team.name,
+                    "👥",
+                    location.pathname === `/teams/${team.slug}`,
+                  ),
+                )}
+              </div>
+            )}
+          </div>
 
           {hasPlatformSection && (
             <div className="sidebar-section">

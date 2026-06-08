@@ -32,6 +32,7 @@ const Notes = lazy(() => import("./notes/Notes"));
 const Tasks = lazy(() => import("./tasks/Tasks"));
 const AIChat = lazy(() => import("./aichat/AIChat"));
 const GitHubRepo = lazy(() => import("./github/GitHubRepo"));
+const TeamPage = lazy(() => import("./teams/TeamPage"));
 const DomainVerification = lazy(() => import("./orgDomains/DomainVerification"));
 const About = lazy(() => import("./about/About"));
 const Profile = lazy(() => import("./profile/Profile"));
@@ -243,6 +244,7 @@ export default function App() {
             <Route path="/notes" element={<Notes />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/ai-chat" element={<AIChat />} />
+            <Route path="/teams/:slug" element={<TeamPage />} />
             {/* Legacy alias (no hyphen — original spelling). */}
             <Route
               path="/aichat"

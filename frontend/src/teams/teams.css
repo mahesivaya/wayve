@@ -1,0 +1,158 @@
+/* Team detail page — description + member list. Uses the shared u-page-shell /
+   u-panel surfaces so it matches the org/platform pages. */
+
+.team-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.team-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.team-header-icon {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  border-radius: 12px;
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+}
+
+.team-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.team-tagline {
+  margin: 2px 0 0;
+  font-size: var(--text-md);
+  color: var(--color-text-muted);
+}
+
+.team-section-title {
+  margin: 0 0 10px;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-member-count {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-on-primary, #fff);
+  background: var(--color-primary-action);
+  border-radius: 999px;
+  padding: 1px 9px;
+  line-height: 1.6;
+}
+
+.team-description {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.team-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.team-member {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: var(--radius-sm);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.team-member:last-child {
+  border-bottom: none;
+}
+
+.team-member:hover {
+  background: var(--color-surface-hover);
+}
+
+.team-avatar {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-primary-action);
+  color: var(--color-on-primary, #fff);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.team-member-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.team-member-name {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.team-member-role {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.team-member-email {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  color: var(--color-primary-action);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.team-member-email:hover {
+  text-decoration: underline;
+}
+
+.team-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.team-back-link {
+  color: var(--color-primary-action);
+  text-decoration: none;
+}
+
+.team-back-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .team-member-email {
+    display: none;
+  }
+}
