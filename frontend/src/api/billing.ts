@@ -191,3 +191,17 @@ export const cancelSubscription = () =>
 
 export const getStripeStatus = () =>
   json<StripeStatus>("/api/billing/provider-status");
+
+export type DefaultCard = {
+  payment_method_id: string;
+  brand: string;
+  last4: string;
+};
+
+// The requesting owner's saved default card, or null when none is on file
+// (e.g. a Basic user who has never paid). Drives the "use saved card" radio
+// on the org create form.
+export const getDefaultPaymentMethod = () =>
+  json<{ default: DefaultCard | null }>(
+    "/api/billing/payment-method/default",
+  );

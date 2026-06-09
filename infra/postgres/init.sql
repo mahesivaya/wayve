@@ -87,6 +87,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS organizations_slug_unique_idx
 -- re-running init.sql safe.
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS place TEXT;
 
+-- Administrative contact email for the organization, captured on the
+-- payment-gated self-serve create flow. Defaults to the founder's personal
+-- email in the UI but is editable. Idempotent ALTER keeps re-runs safe.
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS admin_email TEXT;
+
 CREATE TABLE IF NOT EXISTS organization_members (
     organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -943,6 +948,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS billing_customers_user_idx
     ON billing_customers(user_id) WHERE user_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS billing_customers_org_idx
     ON billing_customers(organization_id) WHERE organization_id IS NOT NULL;
+-- The payment-gated org signup bills the founder's *personal* Stripe customer
+-- (so an Advance user's saved card just works), then links that SAME customer
+-- to the new organization on success. That means one Stripe customer id is
+-- shared by two billing_customers rows (the user's and the org's), so the
+-- original column-level UNIQUE on stripe_customer_id is dropped in favor of a
+-- plain lookup index. Per-owner uniqueness is still enforced by the two
+-- partial indexes above. Idempotent: no-op once the constraint is gone.
+ALTER TABLE billing_customers DROP CONSTRAINT IF EXISTS billing_customers_stripe_customer_id_key;
+CREATE INDEX IF NOT EXISTS billing_customers_stripe_customer_idx
+    ON billing_customers(stripe_customer_id);
 
 -- Plan catalog. Managed by platform admins. Amounts are integer minor units
 -- (e.g. cents). audience constrains which owner type may subscribe.
@@ -1075,6 +1090,32 @@ CREATE TABLE IF NOT EXISTS webhook_events (
     event_type TEXT NOT NULL,
     processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Payment-gated organization signup intent. A personal user fills the
+-- create-org form + pays BEFORE any organization row exists, so the org
+-- details live here transiently keyed by the Stripe subscription that must
+-- be paid first. On a confirmed charge the row is "finalized": the org +
+-- owner membership + entitlement are created and `organization_id` is
+-- stamped back here. The finalize step is idempotent (client confirm AND
+-- the Stripe webhook both call it) — `status` + the FOR UPDATE lock prevent
+-- a double-create. Abandoned/unpaid intents stay 'pending' and are harmless
+-- (Stripe auto-cancels the incomplete subscription).
+CREATE TABLE IF NOT EXISTS pending_org_signups (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    place TEXT,
+    admin_email TEXT,
+    plan_code TEXT NOT NULL,
+    stripe_customer_id TEXT NOT NULL,
+    stripe_subscription_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'finalized', 'failed')),
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS pending_org_signups_user_idx
+    ON pending_org_signups(user_id);
 
 -- ============================================================
 -- 🔑 API KEYS — programmatic access scoped to an organization.

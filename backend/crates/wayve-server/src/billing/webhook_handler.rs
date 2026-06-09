@@ -304,6 +304,26 @@ async fn handle_subscription_event(pool: &PgPool, event_type: &str, object: &Val
     // matched nothing, insert the row now, recovering owner + plan from the
     // metadata we stamped in provider::create_subscription.
     if updated.rows_affected() == 0 {
+        // Payment-gated org signup: the subscription carries no parseable
+        // client_reference, only `org_pending=<pending_id>`. Once it's paid,
+        // create the organization (idempotent — the client confirm may have
+        // already done it). This is the backstop for "browser closed right
+        // after paying".
+        if let Some(pending) = object
+            .pointer("/metadata/org_pending")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse::<i32>().ok())
+        {
+            if status == "active" || status == "trialing" {
+                crate::routes::user::finalize_org_signup_inner(pool, pending)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("org finalize from webhook failed: {e}"))?;
+            }
+            // Either finalized just now, or not paid yet — nothing else to do
+            // for this subscription on the generic path.
+            return Ok(());
+        }
+
         let reference = object
             .pointer("/metadata/client_reference")
             .and_then(Value::as_str)

@@ -21,7 +21,10 @@ fn frontend_url() -> String {
 }
 
 /// Fetch the requesting user's email — used as the Stripe customer contact.
-async fn actor_email(pool: &PgPool, user_id: i32) -> std::result::Result<String, HttpResponse> {
+pub(crate) async fn actor_email(
+    pool: &PgPool,
+    user_id: i32,
+) -> std::result::Result<String, HttpResponse> {
     match sqlx::query_scalar::<_, String>("SELECT email FROM users WHERE id = $1")
         .bind(user_id)
         .fetch_optional(pool)
@@ -38,7 +41,7 @@ async fn actor_email(pool: &PgPool, user_id: i32) -> std::result::Result<String,
 
 /// Return the owner's Stripe customer id, creating the customer (and the
 /// `billing_customers` row) on first use.
-async fn ensure_customer(
+pub(crate) async fn ensure_customer(
     pool: &PgPool,
     owner: BillingOwner,
     email: &str,
@@ -481,4 +484,58 @@ pub async fn set_default_payment_method(
     .await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "saved": true })))
+}
+
+/// Return the requesting owner's saved default card (brand + last4 + id), or
+/// `{ "default": null }` when none is on file. Drives the "use my saved card"
+/// radio on the org create form — a Basic user with no card gets `null` and
+/// the UI shows the new-card form directly.
+#[get("/billing/payment-method/default")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn get_default_payment_method(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = match super::current_user(&req) {
+        Ok(id) => id,
+        Err(resp) => return Ok(resp),
+    };
+    if !provider::is_configured() {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "default": null })));
+    }
+
+    let owner = match resolve_owner(pool.get_ref(), user_id).await {
+        Ok(owner) => owner,
+        Err(resp) => return Ok(resp),
+    };
+
+    let customer_id = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT stripe_customer_id FROM billing_customers
+         WHERE ($1::int IS NOT NULL AND user_id = $1)
+            OR ($2::int IS NOT NULL AND organization_id = $2)
+         LIMIT 1
+        "#,
+    )
+    .bind(owner.user_id())
+    .bind(owner.organization_id())
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let Some(customer_id) = customer_id else {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "default": null })));
+    };
+
+    match provider::get_default_payment_method(&customer_id).await {
+        Ok(Some(card)) => Ok(HttpResponse::Ok().json(serde_json::json!({
+            "default": {
+                "payment_method_id": card.payment_method_id,
+                "brand": card.brand,
+                "last4": card.last4,
+            }
+        }))),
+        Ok(None) => Ok(HttpResponse::Ok().json(serde_json::json!({ "default": null }))),
+        Err(e) => {
+            error!(target: "billing", error = ?e, "default payment method lookup failed");
+            // Non-fatal: the form just falls back to the new-card path.
+            Ok(HttpResponse::Ok().json(serde_json::json!({ "default": null })))
+        }
+    }
 }

@@ -18,6 +18,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(checkout::create_portal)
         .service(checkout::create_payment_method_setup_intent)
         .service(checkout::set_default_payment_method)
+        .service(checkout::get_default_payment_method)
         // Provider status: canonical /api/billing/provider-status, legacy /api/billing/stripe-status.
         // The "stripe" name leaks the vendor; provider-status survives a future switch.
         .route(

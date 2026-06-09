@@ -118,6 +118,48 @@
   color: var(--color-text-muted);
 }
 
+.create-org-payment {
+  margin: 4px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-tint);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.create-org-payment legend {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  padding: 0 4px;
+}
+
+.create-org-pay-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.create-org-pay-option input {
+  margin: 0;
+}
+
+.create-org-card-fields {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#org-card-element {
+  padding: 4px 0;
+}
+
 .create-org-warning {
   margin: 0;
   padding: 10px 12px;
