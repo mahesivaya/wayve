@@ -317,6 +317,18 @@ ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS provider_unread_count INTEGE
 -- which tracks when WE last looked, not when the mailbox last got mail.
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP;
 
+-- Generic IMAP/SMTP connection details, used only when provider = 'imap'
+-- (any custom-domain mailbox not on Google/Microsoft). NULL for OAuth
+-- providers. The IMAP/SMTP password is stored encrypted (AES-256-GCM,
+-- `<iv>.<cipher>`) in the existing `refresh_token` column — there's no OAuth
+-- refresh token for these accounts. `mail_security` is 'ssl' (implicit TLS)
+-- or 'starttls'. The IMAP MailSync impl loads these by account_id.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS imap_host TEXT;
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS imap_port INTEGER;
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS smtp_host TEXT;
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS smtp_port INTEGER;
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS mail_security TEXT;
+
 -- =========================================================================
 -- Shared inboxes (org + platform).
 -- =========================================================================

@@ -3,6 +3,8 @@ pub mod attachments;
 mod body_handlers;
 pub mod body_worker;
 pub mod handler;
+pub mod imap;
+mod imap_routes;
 pub mod oauth;
 mod oauth_flow;
 pub mod outlook;
@@ -86,6 +88,20 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .route(
             "/yahoo/connect",
             web::post().to(yahoo_routes::yahoo_connect),
+        )
+        // Generic IMAP/SMTP (any custom-domain mailbox): autodiscover settings,
+        // verify credentials without persisting, then connect.
+        .route(
+            "/email-providers/imap/autodiscover",
+            web::post().to(imap_routes::imap_autodiscover),
+        )
+        .route(
+            "/email-providers/imap/test-login",
+            web::post().to(imap_routes::imap_test_login),
+        )
+        .route(
+            "/email-providers/imap/connect",
+            web::post().to(imap_routes::imap_connect),
         )
         // Provider auto-detect from email domain: canonical POST /api/email-providers/lookup,
         // legacy POST /api/email/provider-lookup.

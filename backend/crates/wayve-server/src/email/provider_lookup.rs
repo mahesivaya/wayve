@@ -127,7 +127,7 @@ pub async fn provider_lookup(
 }
 
 /// Static domain → provider map for the major consumer providers we support.
-fn provider_for_known_domain(domain: &str) -> Option<&'static str> {
+pub(crate) fn provider_for_known_domain(domain: &str) -> Option<&'static str> {
     match domain {
         // Google consumer + the alias Google still routes for legacy users.
         "gmail.com" | "googlemail.com" => Some("gmail"),
@@ -144,7 +144,7 @@ fn provider_for_known_domain(domain: &str) -> Option<&'static str> {
 /// Ask DNS for the domain's MX records and classify by their target.
 /// Returns `None` if the lookup fails (timeout, NXDOMAIN, no MX records) or
 /// if no MX target matches a known provider.
-async fn mx_provider(domain: &str) -> Option<&'static str> {
+pub(crate) async fn mx_provider(domain: &str) -> Option<&'static str> {
     let lookup_fut = RESOLVER.mx_lookup(domain);
     // Belt-and-suspenders: the resolver itself has a timeout, but a flapping
     // nameserver can still take longer than that worst-case. Cap end-to-end.

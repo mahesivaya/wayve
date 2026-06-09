@@ -1,18 +1,21 @@
-// Modal picker for adding a mailbox. Three flows:
+// Modal picker for adding a mailbox. Flows:
 //
 //   1. User clicks Gmail/Outlook  → onSelect fires immediately, parent
 //      kicks off the existing OAuth redirect.
-//   2. User clicks Yahoo          → disabled "Coming soon" row, no-op.
-//   3. User clicks "Other"        → inline email form; on submit, asks the
-//      backend [provider_lookup](../../../backend/src/email/provider_lookup.rs)
-//      whether the domain has OAuth wired up. If yes, dispatches as that
-//      provider; if no, surfaces the error and redirects to /home (per
-//      product spec — clean reset rather than leaving the user stranded
-//      with a dead-end form).
+//   2. User clicks "Other"        → inline email form; on submit we
+//      autodiscover the domain. If it's on Google/Microsoft we dispatch the
+//      OAuth flow; otherwise we open the IMAP form pre-filled with the
+//      guessed host/port for the user to test + connect.
+//   3. IMAP form                  → password + (editable) server settings,
+//      a "Test connection" check, then "Connect" (any custom-domain mailbox).
 
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { lookupEmailProvider } from "../api/email";
+import {
+  connectImap,
+  imapAutodiscover,
+  imapTestLogin,
+  type ImapSettings,
+} from "../api/email";
 import {
   EMAIL_PROVIDERS,
   type ProviderConfig,
@@ -21,25 +24,33 @@ import {
 
 type Props = {
   onSelect: (id: ProviderId) => void;
+  onConnected: () => void;
   onClose: () => void;
 };
 
-type Mode = "list" | "other";
+type Mode = "list" | "other" | "imap";
 
-// How long the error stays visible inside the modal before we redirect home.
-// Long enough that a user can read it, short enough that they don't think
-// the form is hung.
-const ERROR_REDIRECT_DELAY_MS = 1800;
+const DEFAULT_IMAP: ImapSettings = {
+  imap_host: "",
+  imap_port: 993,
+  smtp_host: "",
+  smtp_port: 465,
+  security: "ssl",
+};
 
-// The picker is mounted only while open (parent does `{open && <ProviderPicker />}`).
-// That makes state reset on close automatic — no `open` prop, no reset effect.
-export default function ProviderPicker({ onSelect, onClose }: Props) {
-  const navigate = useNavigate();
+export default function ProviderPicker({ onSelect, onConnected, onClose }: Props) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [mode, setMode] = useState<Mode>("list");
   const [otherEmail, setOtherEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // IMAP form state.
+  const [imapEmail, setImapEmail] = useState("");
+  const [cfg, setCfg] = useState<ImapSettings>(DEFAULT_IMAP);
+  const [password, setPassword] = useState("");
+  const [testState, setTestState] = useState<"idle" | "ok">("idle");
+  const [imapError, setImapError] = useState<string | null>(null);
 
   // ESC closes; first interactive control gets focus on mount / mode switch.
   useEffect(() => {
@@ -49,9 +60,9 @@ export default function ProviderPicker({ onSelect, onClose }: Props) {
     window.addEventListener("keydown", onKey);
     const t = window.setTimeout(() => {
       const target = cardRef.current?.querySelector<HTMLElement>(
-        mode === "other"
-          ? "input[name='other-email']"
-          : "button.provider-option:not([disabled])",
+        mode === "list"
+          ? "button.provider-option:not([disabled])"
+          : "input",
       );
       target?.focus();
     }, 0);
@@ -76,30 +87,83 @@ export default function ProviderPicker({ onSelect, onClose }: Props) {
     setError(null);
     setSubmitting(true);
     try {
-      const provider = (await lookupEmailProvider(email)) as ProviderId;
-      // Hand off to the parent — same dispatch arm as a direct Gmail/Outlook
-      // click. The OAuth redirect path is unchanged.
-      onSelect(provider);
+      const res = await imapAutodiscover(email);
+      if (res.use_oauth) {
+        // Domain is on Google/Microsoft — use the existing OAuth connector.
+        onSelect(res.use_oauth === "microsoft" ? "outlook" : "gmail");
+        return;
+      }
+      // Otherwise open the IMAP form, pre-filled with the guessed settings.
+      setImapEmail(email);
+      setCfg({
+        imap_host: res.imap_host ?? "",
+        imap_port: res.imap_port ?? 993,
+        smtp_host: res.smtp_host ?? "",
+        smtp_port: res.smtp_port ?? 465,
+        security: res.security ?? "ssl",
+      });
+      setPassword("");
+      setTestState("idle");
+      setImapError(null);
+      setMode("imap");
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "We couldn't connect that mailbox.";
-      // Per product spec: show the error briefly so the user knows what
-      // happened, then redirect to /home for a clean reset. The backend has
-      // already logged the unsupported domain.
-      setError(message);
+      setError(
+        err instanceof Error ? err.message : "We couldn't look up that domain.",
+      );
+    } finally {
       setSubmitting(false);
-      window.setTimeout(() => navigate("/home"), ERROR_REDIRECT_DELAY_MS);
     }
   };
+
+  const setField = <K extends keyof ImapSettings>(key: K, value: ImapSettings[K]) => {
+    setCfg((prev) => ({ ...prev, [key]: value }));
+    setTestState("idle");
+  };
+
+  const handleTest = async () => {
+    setImapError(null);
+    setSubmitting(true);
+    try {
+      await imapTestLogin({
+        email: imapEmail,
+        imap_host: cfg.imap_host,
+        imap_port: cfg.imap_port,
+        password,
+      });
+      setTestState("ok");
+    } catch (err) {
+      setTestState("idle");
+      setImapError(
+        err instanceof Error ? err.message : "Connection test failed.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setImapError(null);
+    setSubmitting(true);
+    try {
+      await connectImap({ email: imapEmail, password, ...cfg });
+      onConnected();
+    } catch (err) {
+      setImapError(
+        err instanceof Error ? err.message : "Could not connect the mailbox.",
+      );
+      setSubmitting(false);
+    }
+  };
+
+  const canSubmitImap =
+    !submitting && password.trim().length > 0 && cfg.imap_host.trim().length > 0;
 
   return (
     <div
       className="provider-picker-backdrop"
       role="presentation"
       onClick={() => {
-        // Don't let a stray backdrop click cancel an in-flight request.
         if (!submitting) onClose();
       }}
     >
@@ -112,9 +176,7 @@ export default function ProviderPicker({ onSelect, onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <header className="provider-picker-header">
-          <h2 id="provider-picker-title">
-            {mode === "other" ? "Add a mailbox" : "Add a mailbox"}
-          </h2>
+          <h2 id="provider-picker-title">Add a mailbox</h2>
           <button
             type="button"
             className="provider-picker-close"
@@ -169,8 +231,6 @@ export default function ProviderPicker({ onSelect, onClose }: Props) {
                 );
               })}
 
-              {/* "Other" — opens the inline email form. Visually a peer of
-                  the named providers so users don't have to hunt for it. */}
               <li>
                 <button
                   type="button"
@@ -187,7 +247,7 @@ export default function ProviderPicker({ onSelect, onClose }: Props) {
                   <span className="provider-option-text">
                     <span className="provider-option-name">Other</span>
                     <span className="provider-option-desc">
-                      Enter your email address — we'll figure out the provider
+                      Any custom domain — enter your email and we'll set it up
                     </span>
                   </span>
                 </button>
@@ -199,14 +259,11 @@ export default function ProviderPicker({ onSelect, onClose }: Props) {
         {mode === "other" && (
           <form className="provider-other-form" onSubmit={handleOtherSubmit}>
             <p className="provider-picker-sub">
-              We'll detect the provider from your email's domain. If we don't
-              support it yet, you'll be sent back to the home page.
+              Enter your email address. If it's on Google or Microsoft we'll use
+              secure sign-in; otherwise we'll set up IMAP.
             </p>
 
-            <label
-              className="provider-other-label"
-              htmlFor="provider-other-email"
-            >
+            <label className="provider-other-label" htmlFor="provider-other-email">
               Email address
             </label>
             <input
@@ -214,7 +271,7 @@ export default function ProviderPicker({ onSelect, onClose }: Props) {
               name="other-email"
               type="email"
               className="provider-other-input"
-              placeholder="you@example.com"
+              placeholder="you@yourcompany.com"
               value={otherEmail}
               onChange={(e) => setOtherEmail(e.target.value)}
               disabled={submitting}
@@ -225,9 +282,6 @@ export default function ProviderPicker({ onSelect, onClose }: Props) {
             {error && (
               <div className="provider-other-error" role="alert">
                 {error}
-                <div className="provider-other-redirect-note">
-                  Redirecting to home…
-                </div>
               </div>
             )}
 
@@ -249,6 +303,130 @@ export default function ProviderPicker({ onSelect, onClose }: Props) {
                 disabled={submitting || !otherEmail.trim()}
               >
                 {submitting ? "Checking…" : "Continue"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {mode === "imap" && (
+          <form className="provider-other-form" onSubmit={handleConnect}>
+            <p className="provider-picker-sub">
+              Connecting <strong>{imapEmail}</strong> over IMAP. Use an
+              app password if your provider requires one.
+            </p>
+
+            <label className="provider-other-label" htmlFor="imap-password">
+              Password
+            </label>
+            <input
+              id="imap-password"
+              type="password"
+              className="provider-other-input"
+              placeholder="app password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setTestState("idle");
+              }}
+              disabled={submitting}
+              autoComplete="off"
+              required
+            />
+
+            <details className="provider-imap-advanced">
+              <summary>Server settings</summary>
+              <div className="provider-imap-grid">
+                <label>
+                  IMAP host
+                  <input
+                    type="text"
+                    value={cfg.imap_host}
+                    onChange={(e) => setField("imap_host", e.target.value)}
+                    disabled={submitting}
+                  />
+                </label>
+                <label>
+                  IMAP port
+                  <input
+                    type="number"
+                    value={cfg.imap_port}
+                    onChange={(e) =>
+                      setField("imap_port", Number(e.target.value) || 0)
+                    }
+                    disabled={submitting}
+                  />
+                </label>
+                <label>
+                  SMTP host
+                  <input
+                    type="text"
+                    value={cfg.smtp_host}
+                    onChange={(e) => setField("smtp_host", e.target.value)}
+                    disabled={submitting}
+                  />
+                </label>
+                <label>
+                  SMTP port
+                  <input
+                    type="number"
+                    value={cfg.smtp_port}
+                    onChange={(e) =>
+                      setField("smtp_port", Number(e.target.value) || 0)
+                    }
+                    disabled={submitting}
+                  />
+                </label>
+                <label>
+                  Security
+                  <select
+                    value={cfg.security}
+                    onChange={(e) => setField("security", e.target.value)}
+                    disabled={submitting}
+                  >
+                    <option value="ssl">SSL/TLS</option>
+                    <option value="starttls">STARTTLS</option>
+                  </select>
+                </label>
+              </div>
+            </details>
+
+            {testState === "ok" && (
+              <div className="provider-imap-ok" role="status">
+                Connected ✓ — you're good to go.
+              </div>
+            )}
+            {imapError && (
+              <div className="provider-other-error" role="alert">
+                {imapError}
+              </div>
+            )}
+
+            <div className="provider-other-actions">
+              <button
+                type="button"
+                className="provider-other-back"
+                onClick={() => {
+                  setMode("other");
+                  setImapError(null);
+                }}
+                disabled={submitting}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="provider-other-back"
+                onClick={handleTest}
+                disabled={!canSubmitImap}
+              >
+                {submitting ? "Testing…" : "Test connection"}
+              </button>
+              <button
+                type="submit"
+                className="provider-other-submit"
+                disabled={!canSubmitImap}
+              >
+                {submitting ? "Connecting…" : "Connect"}
               </button>
             </div>
           </form>

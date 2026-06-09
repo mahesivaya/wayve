@@ -461,6 +461,52 @@
   margin-top: 4px;
 }
 
+/* IMAP advanced server-settings disclosure + grid. */
+.provider-imap-advanced {
+  margin: 4px 0;
+}
+
+.provider-imap-advanced summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+.provider-imap-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.provider-imap-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.provider-imap-grid input,
+.provider-imap-grid select {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.provider-imap-ok {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success);
+  color: var(--color-success-strong, var(--color-text-primary));
+  font-size: 13px;
+}
+
 .provider-other-back,
 .provider-other-submit {
   padding: 9px 14px;

@@ -590,6 +590,13 @@ export default function Emails() {
             setAddAccountOpen(false);
             addProvider(provider);
           }}
+          onConnected={() => {
+            // IMAP connect succeeded (no redirect). Close + refresh the list
+            // and nudge the email list so the new mailbox + its mail appear.
+            setAddAccountOpen(false);
+            void fetchAccounts();
+            setRefreshTick((tick) => tick + 1);
+          }}
         />
       )}
 

@@ -143,6 +143,52 @@ export const connectYahoo = async (
 // Persist that the user has opened this email. The frontend flips `is_read`
 // optimistically; this call is what makes the change survive a page refresh.
 // Fire-and-forget — the caller logs failures but doesn't roll the UI back.
+
+// ── Generic IMAP/SMTP (any custom-domain mailbox) ──────────────────────────
+
+export type ImapSettings = {
+  imap_host: string;
+  imap_port: number;
+  smtp_host: string;
+  smtp_port: number;
+  security: string; // "ssl" | "starttls"
+};
+
+// Autodiscover connection settings from the email's domain. Either returns
+// `{ use_oauth }` (the domain is on Google/Microsoft — connect via OAuth
+// instead) or guessed IMAP/SMTP settings (which the user can edit before
+// testing). Never throws on an unknown domain — it falls back to a guess.
+export const imapAutodiscover = async (
+  email: string,
+): Promise<{ use_oauth?: "google" | "microsoft" } & Partial<ImapSettings>> =>
+  apiFetchJson("/api/email-providers/imap/autodiscover", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+
+// Verify credentials with a real IMAP LOGIN without persisting anything.
+// Throws with the backend's user-facing message on failure.
+export const imapTestLogin = async (input: {
+  email: string;
+  imap_host: string;
+  imap_port: number;
+  password: string;
+}): Promise<{ ok: boolean }> =>
+  apiFetchJson("/api/email-providers/imap/test-login", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+// Verify + persist the IMAP/SMTP mailbox. Returns the new account row id.
+// Throws with the backend's user-facing message on failure.
+export const connectImap = async (
+  input: ImapSettings & { email: string; password: string },
+): Promise<{ id: number; email: string; provider: string }> =>
+  apiFetchJson("/api/email-providers/imap/connect", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
 export const markEmailRead = async (emailId: number): Promise<void> => {
   await apiFetchJson(`/api/emails/${emailId}/read`, { method: "POST" });
   // Poke any mounted unread-count badges (Layout sidebar, "All Accounts"

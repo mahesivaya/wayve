@@ -11,6 +11,25 @@ const EMAIL_ACCOUNT_CACHE_MAX_CAPACITY: u64 = 10_000;
 const USER_ACCOUNT_LIST_CACHE_TTL_SECS: u64 = 60;
 const USER_ACCOUNT_LIST_CACHE_MAX_CAPACITY: u64 = 10_000;
 
+// Process-global pool handle, set once at startup. Lets code paths that don't
+// receive a `&PgPool` (e.g. the IMAP `MailSender` trait method, whose signature
+// is fixed across providers) still reach the DB to load connection settings.
+static GLOBAL_POOL: std::sync::OnceLock<PgPool> = std::sync::OnceLock::new();
+
+/// Register the process pool. Call once during startup.
+pub fn init_pool(pool: PgPool) {
+    let _ = GLOBAL_POOL.set(pool);
+}
+
+/// Clone the process pool. Panics only if called before `init_pool` — a
+/// deterministic startup-ordering bug rather than a runtime condition.
+pub fn pool_handle() -> PgPool {
+    GLOBAL_POOL
+        .get()
+        .cloned()
+        .unwrap_or_else(|| panic!("email::account::pool_handle called before init_pool"))
+}
+
 static EMAIL_ACCOUNT_CACHE: Lazy<MokaCache<i32, EmailAccount>> = Lazy::new(|| {
     MokaCache::builder()
         .max_capacity(EMAIL_ACCOUNT_CACHE_MAX_CAPACITY)

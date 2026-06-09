@@ -28,6 +28,9 @@ use crate::email::outlook::{
     OUTLOOK_MAIL_SCOPE, OutlookCredentials, outlook_credentials, refresh_outlook_token,
     sync_outlook_account, sync_outlook_account_before,
 };
+use crate::email::imap::{
+    MailSecurity, decode_secret as decode_imap_secret, send_via_imap, sync_imap_account,
+};
 use crate::email::send::{send_via_gmail, send_via_outlook};
 use crate::email::sync::{sync_account, sync_account_before};
 use crate::email::yahoo::{
@@ -53,6 +56,11 @@ pub enum MailProvider {
     /// Unlike Google/Microsoft we don't hold an OAuth refresh token —
     /// the encrypted app password lives in `email_accounts.refresh_token`.
     Yahoo,
+    /// Generic IMAP (read) + SMTP (send) for any custom-domain mailbox not on
+    /// Google/Microsoft. Like Yahoo, the encrypted app password lives in
+    /// `email_accounts.refresh_token`; the host/port/security live in the
+    /// `imap_*`/`smtp_*`/`mail_security` columns, loaded by account_id.
+    Imap,
 }
 
 impl MailProvider {
@@ -60,6 +68,7 @@ impl MailProvider {
         match value.trim().to_ascii_lowercase().as_str() {
             "microsoft" | "outlook" => Self::Microsoft,
             "yahoo" => Self::Yahoo,
+            "imap" => Self::Imap,
             _ => Self::Google,
         }
     }
@@ -69,6 +78,7 @@ impl MailProvider {
             Self::Google => "google",
             Self::Microsoft => "microsoft",
             Self::Yahoo => "yahoo",
+            Self::Imap => "imap",
         }
     }
 
@@ -82,6 +92,7 @@ impl MailProvider {
             Self::Google => "Gmail",
             Self::Microsoft => "Outlook",
             Self::Yahoo => "Yahoo",
+            Self::Imap => "IMAP",
         }
     }
 }
@@ -161,6 +172,9 @@ pub fn mail_provider_client(provider: MailProvider) -> Option<Arc<dyn MailProvid
         // self-contained and is decrypted from the DB row on demand by
         // YahooMailClient methods. The client is always available.
         MailProvider::Yahoo => Some(Arc::new(YahooMailClient {}) as Arc<dyn MailProviderClient>),
+        // Like Yahoo, IMAP has no central credential — the per-account app
+        // password + connection settings are loaded from the DB row on demand.
+        MailProvider::Imap => Some(Arc::new(ImapMailClient {}) as Arc<dyn MailProviderClient>),
     }
 }
 
@@ -468,6 +482,139 @@ impl MailProviderClient for YahooMailClient {
 }
 
 // ============================================================================
+// Generic IMAP/SMTP implementation.
+// ============================================================================
+//
+// Same worker-pipeline shoehorn as Yahoo: `TokenRefresher` decodes the stored
+// app password and returns it in the `access_token` slot; downstream calls
+// treat that string as the IMAP/SMTP credential. Host/port/security aren't in
+// the enum variant — each method loads them from the account row by id.
+
+pub struct ImapMailClient {}
+
+struct ImapRow {
+    email: String,
+    imap_host: String,
+    imap_port: i32,
+    smtp_host: String,
+    smtp_port: i32,
+    mail_security: Option<String>,
+}
+
+async fn load_imap_row(pool: &PgPool, account_id: i32) -> Result<ImapRow> {
+    let row = sqlx::query(
+        "SELECT email, imap_host, imap_port, smtp_host, smtp_port, mail_security \
+         FROM email_accounts WHERE id = $1",
+    )
+    .bind(account_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(ImapRow {
+        email: row.get("email"),
+        imap_host: row
+            .try_get::<Option<String>, _>("imap_host")?
+            .ok_or_else(|| anyhow::anyhow!("imap account {account_id} missing imap_host"))?,
+        imap_port: row.try_get::<Option<i32>, _>("imap_port")?.unwrap_or(993),
+        smtp_host: row
+            .try_get::<Option<String>, _>("smtp_host")?
+            .unwrap_or_default(),
+        smtp_port: row.try_get::<Option<i32>, _>("smtp_port")?.unwrap_or(465),
+        mail_security: row.try_get::<Option<String>, _>("mail_security")?,
+    })
+}
+
+#[async_trait]
+impl TokenRefresher for ImapMailClient {
+    async fn refresh_token(&self, refresh_token: &str) -> Result<RefreshedEmailToken> {
+        let password = decode_imap_secret(refresh_token)?;
+        Ok(RefreshedEmailToken {
+            access_token: password,
+            refresh_token: None,
+        })
+    }
+}
+
+#[async_trait]
+impl MailSync for ImapMailClient {
+    async fn sync(
+        &self,
+        pool: &PgPool,
+        account_id: i32,
+        access_token: &str,
+        _last_sync: Option<i64>,
+    ) -> Result<()> {
+        // `access_token` is the decrypted app password (see shoehorn above).
+        let r = load_imap_row(pool, account_id).await?;
+        sync_imap_account(
+            pool,
+            account_id,
+            &r.imap_host,
+            r.imap_port as u16,
+            &r.email,
+            access_token,
+        )
+        .await
+    }
+
+    async fn sync_before(
+        &self,
+        _pool: &PgPool,
+        _account_id: i32,
+        _access_token: &str,
+        _before_timestamp: i64,
+        _limit: usize,
+    ) -> Result<()> {
+        // Historical backfill for IMAP is a separate, future feature; the
+        // forward sync already pulls the most recent batch each tick.
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl MailSender for ImapMailClient {
+    async fn send(
+        &self,
+        access_token: &str,
+        from_email: &str,
+        account_id: i32,
+        data: &SendEmailRequest,
+        _user_id: i32,
+    ) -> HttpResponse {
+        let r = match load_imap_row(&crate::email::account::pool_handle(), account_id).await {
+            Ok(r) => r,
+            Err(e) => {
+                return HttpResponse::InternalServerError()
+                    .json(serde_json::json!({ "error": format!("imap account load: {e}") }));
+            }
+        };
+        send_via_imap(
+            &r.smtp_host,
+            r.smtp_port as u16,
+            MailSecurity::from_db(r.mail_security.as_deref()),
+            from_email,
+            access_token,
+            data,
+        )
+        .await
+    }
+}
+
+#[async_trait]
+impl MailRead for ImapMailClient {
+    async fn mark_read(&self, _access_token: &str, _provider_message_id: &str) -> Result<()> {
+        // Best-effort no-op (same stance as Yahoo): the next sync tick re-reads
+        // INBOX \Seen flags and reconciles is_read.
+        Ok(())
+    }
+}
+
+impl MailProviderClient for ImapMailClient {
+    fn provider(&self) -> MailProvider {
+        MailProvider::Imap
+    }
+}
+
+// ============================================================================
 // Enum shims — kept so existing call sites (`account.provider.sync(..)`,
 // `provider.mark_read(..)`, etc.) keep working. Each shim resolves the
 // trait impl through the registry and forwards.
@@ -612,7 +759,7 @@ pub async fn refresh_and_persist_email_token(
     // overwrite `access_token` with the plaintext password — wrong on
     // every axis. Skip the write; the password lives only in the
     // already-stored encrypted `refresh_token`.
-    if !matches!(provider, MailProvider::Yahoo) {
+    if !matches!(provider, MailProvider::Yahoo | MailProvider::Imap) {
         persist_refreshed_token(pool, account_id, &token).await?;
     }
     Ok(token)

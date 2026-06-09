@@ -68,6 +68,9 @@ async fn main() -> std::io::Result<()> {
     info!(?role, "Runtime role selected");
 
     let pool = startup::connect_db_and_migrate(role).await;
+    // Register the process pool so code paths without a `&PgPool` argument
+    // (e.g. the IMAP send path) can reach the DB.
+    email::account::init_pool(pool.clone());
     startup::spawn_role_workers(role, &pool).await;
     let redis_cache = startup::connect_redis_and_install_cache().await;
 
