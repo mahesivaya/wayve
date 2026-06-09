@@ -20,22 +20,20 @@ import ResetPassword from "./auth/ResetPassword";
 import RecoverWithMnemonicPage from "./auth/RecoverWithMnemonic";
 import { useAuth } from "./auth/useAuth";
 import { homePathForUser, normalizeAccountType } from "./auth/accountHome";
+import { SPLIT_APPS } from "./components/LayoutConfig";
 
 // 🔥 Lazy loaded pages
+// Home & GitHubRepo also appear in SPLIT_APPS, but keep dedicated lazy consts
+// here because their routes are guarded/redirecting and declared explicitly
+// below. Emails/Chat/Scheduler/Drive/Notes/Tasks/AIChat/About get their routes
+// generated from SPLIT_APPS (see the Layout block) using the lazy Comps defined
+// in LayoutConfig.ts — single source of truth, no duplicate route here.
 const Home = lazy(() => import("./home/Home"));
-const Emails = lazy(() => import("./emails/Emails"));
-const Chat = lazy(() => import("./chat/Chat"));
 const Call = lazy(() => import("./call/Call"));
-const Scheduler = lazy(() => import("./scheduler/Scheduler"));
-const Drive = lazy(() => import("./drive/DriveBox"));
 const Documents = lazy(() => import("./documents/DocumentsBox"));
-const Notes = lazy(() => import("./notes/Notes"));
-const Tasks = lazy(() => import("./tasks/Tasks"));
-const AIChat = lazy(() => import("./aichat/AIChat"));
 const GitHubRepo = lazy(() => import("./github/GitHubRepo"));
 const TeamPage = lazy(() => import("./teams/TeamPage"));
 const DomainVerification = lazy(() => import("./orgDomains/DomainVerification"));
-const About = lazy(() => import("./about/About"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
 const Organization = lazy(() => import("./organization/Organization"));
@@ -188,6 +186,15 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
 
+            {/* Sidebar split-pane apps — routes generated from the single
+                SPLIT_APPS registry in LayoutConfig.ts. Adding a sidebar app
+                there adds both the sidebar entry AND its route. Guarded /
+                redirecting ones (home, github) opt out via autoRoute:false and
+                are declared explicitly below. */}
+            {SPLIT_APPS.filter((app) => app.autoRoute !== false).map((app) => (
+              <Route key={app.key} path={app.path} element={<app.Comp />} />
+            ))}
+
             <Route
               path="/home"
               element={redirectToAccountHome ?? <Home />}
@@ -233,21 +240,14 @@ export default function App() {
               path="/organization/:slug"
               element={redirectToAccountHome ?? <OrganizationHome />}
             />
-            <Route path="/emails" element={<Emails />} />
             <Route path="/emails/attachments" element={<EmailFiles />} />
             {/* Legacy alias. */}
             <Route
               path="/email-files"
               element={<Navigate to="/emails/attachments" replace />}
             />
-            <Route path="/chat" element={<Chat />} />
             <Route path="/call" element={<Call />} />
-            <Route path="/scheduler" element={<Scheduler />} />
-            <Route path="/drive" element={<Drive />} />
             <Route path="/documents" element={<Documents />} />
-            <Route path="/notes" element={<Notes />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/ai-chat" element={<AIChat />} />
             <Route path="/teams/:slug" element={<TeamPage />} />
             {/* Legacy alias (no hyphen — original spelling). */}
             <Route
@@ -300,7 +300,6 @@ export default function App() {
                 )
               }
             />
-            <Route path="/about" element={<About />} />
             <Route path="/test-access" element={<TestAccess />} />
             <Route
               path="/access-requests"

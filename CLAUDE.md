@@ -41,8 +41,9 @@ Docker / full stack (from `infra/` via `just`, or from repo root with `docker co
 ## Backend architecture
 
 Entry point `backend/src/main.rs`:
-- Registers feature modules (`ai`, `cache`, `call`, `chat`, `drive`, `email`, `notes`, `routes`, `scheduler`, `security`, ...) and wires routes in `app_routes`. New HTTP handlers must be added there to be reachable.
-- Routes are split between **feature modules** (`chat::handler`, `email::handler`, `notes::handler`, etc.) and a **cross-cutting `routes/` module** (`routes/auth.rs`, `routes/user.rs`, `routes/account.rs`, `routes/email.rs`) for endpoints that aren't owned by one feature.
+- Declares the feature modules (`mod ai; mod chat; mod email; …`) and orchestrates startup. **Route wiring lives in one hub: `routing.rs`** (`routing::wire`), which `.configure(...)`s every feature's `routes()`/`public_routes()`/`ws_routes()`. To add a feature endpoint: give the module a `pub fn routes(cfg)`, `mod <feature>;` in `main.rs`, and one `.configure(<feature>::routes)` in `routing.rs`. See [docs/architecture/adding-a-feature.md](docs/architecture/adding-a-feature.md).
+- Routes are split between **feature modules** (each owns its `routes()`) and a **cross-cutting `routes/` module** for endpoints not owned by one feature. `routes/mod.rs` is a thin aggregator — each domain submodule (`routes/auth.rs`, `routes/user/`, `routes/account.rs`, `routes/audit.rs`, …) owns its own `pub fn routes(cfg)`, so a new core endpoint touches only that submodule.
+- Startup side-effects are centralized in `startup.rs`: one-time process state in `init_feature_state`, all background workers + the chat pub/sub subscriber in `spawn_role_workers` (no ad-hoc spawning in `main`).
 - API surface is mounted under `/api`, with `/gmail/login`, `/oauth/callback`, `/ws/chat`, and `/ws/call` mounted at the root. Uploaded drive files are not served statically; they are delivered through authenticated `/api/files/{id}/download`.
 - CORS allowlist is a **single origin** read from `FRONTEND_URL` — change it (or rework the CORS builder) for multi-origin support.
 - Two background workers spawn at startup:
@@ -106,9 +107,9 @@ Auth state lives in `src/auth/AuthContext.tsx`. API base URLs come from `src/con
 
 Client-side RSA/AES hybrid encryption helpers live in `src/crypto/` (key handling). They are used by encrypted email and chat E2E envelopes (`src/chat/e2ee.ts`). Keep chat plaintext out of WebSocket payloads; only encrypted envelopes should cross the backend boundary.
 
-### Stale `.js` siblings — important gotcha
+### Stale `.js` siblings — resolved
 
-Almost every `.tsx`/`.ts` source file under `frontend/src/` has a compiled `.js` sibling checked in (e.g. `AuthContext.tsx` and `AuthContext.js` both exist). Default Vite/Vitest resolution would prefer `.js` and load **stale** transpiled output for transitive imports like `import { AuthProvider } from "./AuthContext"`. The fix is in `vitest.config.ts` — `resolve.extensions` is reordered so `.tsx`/`.ts` win. If you create new modules: either keep the `.js` sibling in sync, delete it, or replicate the same `resolve.extensions` override in any new Vite/Vitest config — otherwise tests and prod builds will silently disagree.
+There are **no** compiled `.js` siblings under `frontend/src/` anymore (they were all removed). As defense-in-depth, `vite.config.ts` and `vitest.config.ts` set `resolve.extensions` to prefer `.tsx`/`.ts` over `.js`. Don't commit a compiled `.js` next to a `.ts(x)` source — if one ever reappears, Vite/Vitest would still pick the TypeScript source, but delete the stray `.js` to keep the tree clean.
 
 ### Frontend tests
 
