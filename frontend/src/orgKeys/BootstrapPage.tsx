@@ -7,6 +7,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { bootstrapOrgMasterKey } from "./orgKeypair";
 import { getOrgKeys } from "./api";
+import "../recovery/recoverySeedModal.css";
 
 type Phase =
   | { kind: "loading" }
@@ -90,31 +91,58 @@ export default function BootstrapPage() {
 
   if (!user) {
     return (
-      <div style={{ padding: 40 }}>You must be signed in to bootstrap.</div>
+      <div className="recovery-modal-backdrop" role="dialog" aria-modal="true">
+        <div className="recovery-modal">
+          <header>
+            <h2>Sign in required</h2>
+            <p>You must be signed in to bootstrap your organization recovery key.</p>
+          </header>
+        </div>
+      </div>
     );
   }
 
   if (phase.kind === "loading") {
     return (
-      <div style={{ padding: 40 }}>
-        <h2>Setting up your organization recovery key</h2>
-        <p style={{ color: "#6b7280" }}>
-          Generating your encryption keypair and the 24-word recovery phrase.
-          This can take up to 20 seconds on a fresh browser — please don't
-          close this tab.
-        </p>
+      <div className="recovery-modal-backdrop" role="dialog" aria-modal="true">
+        <div className="recovery-modal">
+          <header>
+            <h2>Setting up your organization recovery key</h2>
+            <p>
+              Generating your encryption keypair and the 24-word recovery
+              phrase. This can take up to 20 seconds on a fresh browser —
+              please don't close this tab.
+            </p>
+          </header>
+        </div>
       </div>
     );
   }
 
   if (phase.kind === "error") {
     return (
-      <div style={{ padding: 40 }}>
-        <h2 style={{ color: "#b91c1c" }}>Bootstrap failed</h2>
-        <p>{phase.message}</p>
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <button onClick={() => window.location.reload()}>Retry</button>
-          <button onClick={() => navigate("/organization/home")}>Back</button>
+      <div className="recovery-modal-backdrop" role="dialog" aria-modal="true">
+        <div className="recovery-modal">
+          <header>
+            <h2>Bootstrap failed</h2>
+          </header>
+          <p className="recovery-error">{phase.message}</p>
+          <div className="recovery-actions">
+            <button
+              type="button"
+              className="recovery-copy-btn"
+              onClick={() => navigate("/organization/home")}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              className="recovery-primary-btn"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -122,120 +150,112 @@ export default function BootstrapPage() {
 
   if (phase.kind === "already_done") {
     return (
-      <div style={{ padding: 40, maxWidth: 640 }}>
-        <h2>Recovery key already set up</h2>
-        <p>
-          Your organization recovery key was bootstrapped on a previous visit.
-          The 24-word phrase is shown only once at creation — Fluxze cannot
-          display it again. If you didn't save it, contact your platform
-          administrator to rotate the key.
-        </p>
-        <button
-          onClick={() => navigate("/organization/home", { replace: true })}
-        >
-          Go to organization home
-        </button>
+      <div className="recovery-modal-backdrop" role="dialog" aria-modal="true">
+        <div className="recovery-modal">
+          <header>
+            <h2>Recovery key already set up</h2>
+            <p>
+              Your organization recovery key was bootstrapped on a previous
+              visit. The 24-word phrase is shown only once at creation — Fluxze
+              cannot display it again. If you didn't save it, contact your
+              platform administrator to rotate the key.
+            </p>
+          </header>
+          <div className="recovery-actions">
+            <button
+              type="button"
+              className="recovery-primary-btn"
+              onClick={() => navigate("/organization/home", { replace: true })}
+            >
+              Go to organization home
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (phase.kind === "done") {
     return (
-      <div style={{ padding: 40, maxWidth: 640 }}>
-        <h2>Recovery key saved</h2>
-        <p>
-          Your organization master key is bootstrapped. Keep the 24-word
-          phrase you wrote down somewhere safe — Fluxze cannot recover it
-          for you if you lose it.
-        </p>
-        <button
-          onClick={() => navigate("/organization/home", { replace: true })}
-        >
-          Continue to organization home
-        </button>
+      <div className="recovery-modal-backdrop" role="dialog" aria-modal="true">
+        <div className="recovery-modal">
+          <header>
+            <h2>Recovery key saved</h2>
+            <p>
+              Your organization master key is bootstrapped. Keep the 24-word
+              phrase you wrote down somewhere safe — Fluxze cannot recover it
+              for you if you lose it.
+            </p>
+          </header>
+          <div className="recovery-actions">
+            <button
+              type="button"
+              className="recovery-primary-btn"
+              onClick={() => navigate("/organization/home", { replace: true })}
+            >
+              Continue to organization home
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (phase.kind === "display") {
     return (
-      <div style={{ padding: 40, maxWidth: 640 }}>
-        <h2>🔑 Your organization recovery key</h2>
-        <p style={{ color: "#b91c1c", fontWeight: 600 }}>
-          Write these 24 words on paper and store them somewhere physically
-          secure. Fluxze cannot recover this for you. Without these words,
-          if you lose access to every browser you've used, you cannot
-          decrypt any departing-member data — ever.
-        </p>
-        <ol
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 8,
-            padding: 16,
-            background: "#f9fafb",
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-          }}
-        >
-          {phase.mnemonic.map((word, i) => (
-            <li
-              key={i}
-              style={{
-                listStyle: "none",
-                fontFamily: "monospace",
-                fontSize: 14,
+      <div className="recovery-modal-backdrop" role="dialog" aria-modal="true">
+        <div className="recovery-modal">
+          <header>
+            <h2>🔑 Your organization recovery key</h2>
+            <p className="recovery-warning">
+              Write these 24 words on paper and store them somewhere physically
+              secure. Fluxze cannot recover this for you. Without these words,
+              if you lose access to every browser you've used, you cannot
+              decrypt any departing-member data — ever.
+            </p>
+          </header>
+
+          <div className="recovery-grid">
+            {phase.mnemonic.map((word, i) => (
+              <div className="recovery-cell" key={i}>
+                <span className="recovery-index">{i + 1}.</span>
+                <span className="recovery-word">{word}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="recovery-actions">
+            <button
+              type="button"
+              className="recovery-copy-btn"
+              onClick={() => {
+                void navigator.clipboard
+                  ?.writeText(phase.mnemonic.join(" "))
+                  .then(() => {
+                    setCopied(true);
+                    window.setTimeout(() => setCopied(false), 2000);
+                  });
               }}
             >
-              <span
-                style={{
-                  color: "#6b7280",
-                  userSelect: "none",
-                  WebkitUserSelect: "none",
-                }}
-                aria-hidden="true"
-              >
-                {i + 1}.{" "}
-              </span>
-              {word}
-            </li>
-          ))}
-        </ol>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            marginTop: 16,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              void navigator.clipboard
-                ?.writeText(phase.mnemonic.join(" "))
-                .then(() => {
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 2000);
-                });
-            }}
-          >
-            {copied ? "Copied ✓" : "Copy phrase"}
-          </button>
-          <button
-            type="button"
-            onClick={() => downloadMnemonic(phase.mnemonic)}
-          >
-            Download .txt
-          </button>
-          <button
-            onClick={() =>
-              setPhase({ kind: "confirm", mnemonic: phase.mnemonic, entered: "" })
-            }
-          >
-            I have written it down — confirm
-          </button>
+              {copied ? "Copied ✓" : "Copy phrase"}
+            </button>
+            <button
+              type="button"
+              className="recovery-copy-btn"
+              onClick={() => downloadMnemonic(phase.mnemonic)}
+            >
+              Download .txt
+            </button>
+            <button
+              type="button"
+              className="recovery-primary-btn"
+              onClick={() =>
+                setPhase({ kind: "confirm", mnemonic: phase.mnemonic, entered: "" })
+              }
+            >
+              I have written it down — confirm
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -260,31 +280,45 @@ export default function BootstrapPage() {
   };
 
   return (
-    <div style={{ padding: 40, maxWidth: 640 }}>
-      <h2>Confirm your recovery key</h2>
-      <p>Re-type the 24 words separated by spaces to confirm you saved them.</p>
-      <textarea
-        rows={5}
-        value={phase.entered}
-        onChange={(e) =>
-          setPhase({ kind: "confirm", mnemonic: phase.mnemonic, entered: e.target.value })
-        }
-        style={{
-          width: "100%",
-          padding: 12,
-          fontFamily: "monospace",
-          border: "1px solid #d1d5db",
-          borderRadius: 6,
-        }}
-        autoFocus
-      />
-      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-        <button onClick={onConfirm}>Confirm</button>
-        <button
-          onClick={() => setPhase({ kind: "display", mnemonic: phase.mnemonic })}
-        >
-          Back to view words
-        </button>
+    <div className="recovery-modal-backdrop" role="dialog" aria-modal="true">
+      <div className="recovery-modal">
+        <header>
+          <h2>Confirm your recovery key</h2>
+          <p>
+            Re-type the 24 words separated by spaces to confirm you saved them.
+          </p>
+        </header>
+        <textarea
+          className="recovery-confirm-input"
+          rows={5}
+          value={phase.entered}
+          onChange={(e) =>
+            setPhase({
+              kind: "confirm",
+              mnemonic: phase.mnemonic,
+              entered: e.target.value,
+            })
+          }
+          autoFocus
+        />
+        <div className="recovery-actions">
+          <button
+            type="button"
+            className="recovery-copy-btn"
+            onClick={() =>
+              setPhase({ kind: "display", mnemonic: phase.mnemonic })
+            }
+          >
+            Back to view words
+          </button>
+          <button
+            type="button"
+            className="recovery-primary-btn"
+            onClick={onConfirm}
+          >
+            Confirm
+          </button>
+        </div>
       </div>
     </div>
   );
