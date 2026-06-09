@@ -43,7 +43,7 @@ pub async fn list_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
         "SELECT id, name, description, priority, status, assigned_by, assignee, created_at, updated_at
          FROM tasks
          WHERE user_id = $1
-         ORDER BY priority DESC, created_at DESC",
+         ORDER BY priority DESC, created_at ASC, id ASC",
     )
     .bind(user_id)
     .fetch_all(pool.get_ref())

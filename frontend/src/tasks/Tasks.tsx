@@ -46,8 +46,10 @@ const sortTasks = (list: Task[]) =>
   [...list].sort(
     (a, b) =>
       b.priority - a.priority ||
-      new Date(b.created_at ?? 0).getTime() -
-        new Date(a.created_at ?? 0).getTime(),
+      // Within a priority group, oldest first so a newly created task
+      // appears at the bottom of its group.
+      new Date(a.created_at ?? 0).getTime() -
+        new Date(b.created_at ?? 0).getTime(),
   );
 
 const STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
