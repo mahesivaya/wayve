@@ -567,7 +567,13 @@
    cell lets the title ellipsis-truncate inside its own day. */
 .month-view .day-cell {
   min-width: 0;
-  overflow: hidden;
+  /* Clip only horizontally (chips already truncate their own text), and
+     leave the vertical axis visible so the capped chips + the "+N more"
+     button are never cut off — `overflow: hidden` on both axes was clipping
+     the button below the fold. `clip` on one axis with `visible` on the
+     other is a valid pair (no forced scroll). */
+  overflow-x: clip;
+  overflow-y: visible;
   /* Drop the cell's left/right padding so event chips span the full cell
      width, edge to edge. Vertical padding stays. The date number below is
      re-inset so it doesn't jam against the cell border. */
@@ -598,6 +604,35 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* "+N more" affordance shown when a day has more events than the cell caps.
+   A plain text button (no chip background) that opens the Day view. */
+.month-view .month-more {
+  align-self: stretch;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-align: left;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.month-view .month-more:hover {
+  color: var(--text);
+  background: var(--surface-alt);
+}
+/* Events are capped per cell, so the column no longer needs to scroll.
+   `flex: 0 0 auto` makes the events box size to its content (instead of
+   filling the cell with `flex: 1` and clipping the overflow) — so the cell
+   grows to fit the 3 chips + the "+N more" button, and the button stays
+   visible. The cap keeps that growth bounded. */
+.month-view .events {
+  overflow: visible;
+  flex: 0 0 auto;
 }
 
 /* ================= MODAL ================= */

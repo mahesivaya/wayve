@@ -941,31 +941,53 @@ export default function Scheduler() {
                   >
                     <div className="date">{i + 1}</div>
                     <div className="events">
-                      {calendarVisibleEvents
-                        .filter((e) => e.date === dayDate)
-                        .sort((a, b) => a.start - b.start)
-                        .map((e) => (
-                          (() => {
-                            const calendar = getCalendarForEvent(e);
-                            return (
-                          <div
-                            key={e.id}
-                            className={`event${e.source === "google" ? " from-google" : ""}`}
-                            style={{ background: calendar?.color }}
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              openEdit(e);
-                            }}
-                          >
-                            <span className="event-time">
-                              {Math.floor(e.start / 60)}:
-                              {(e.start % 60).toString().padStart(2, "0")}
-                            </span>
-                            <span className="event-title">{e.title}</span>
-                          </div>
-                            );
-                          })()
-                        ))}
+                      {(() => {
+                        // Cap how many chips a day cell shows so a busy day
+                        // renders "+N more" instead of ballooning past the
+                        // grid (Google-Calendar style). The link opens that
+                        // day's Day view, where every event is visible.
+                        const MAX_VISIBLE = 3;
+                        const dayEvents = calendarVisibleEvents
+                          .filter((e) => e.date === dayDate)
+                          .sort((a, b) => a.start - b.start);
+                        const hidden = dayEvents.length - MAX_VISIBLE;
+                        return (
+                          <>
+                            {dayEvents.slice(0, MAX_VISIBLE).map((e) => {
+                              const calendar = getCalendarForEvent(e);
+                              return (
+                                <div
+                                  key={e.id}
+                                  className={`event${e.source === "google" ? " from-google" : ""}`}
+                                  style={{ background: calendar?.color }}
+                                  onClick={(ev) => {
+                                    ev.stopPropagation();
+                                    openEdit(e);
+                                  }}
+                                >
+                                  <span className="event-time">
+                                    {Math.floor(e.start / 60)}:
+                                    {(e.start % 60).toString().padStart(2, "0")}
+                                  </span>
+                                  <span className="event-title">{e.title}</span>
+                                </div>
+                              );
+                            })}
+                            {hidden > 0 && (
+                              <button
+                                type="button"
+                                className="month-more"
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  openDay(cellDate);
+                                }}
+                              >
+                                +{hidden} more
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
