@@ -243,9 +243,15 @@
   cursor: pointer;
 }
 
-.task-form-assign-me input {
+/* Scope under .task-form-grid so this beats `.task-form-grid input`
+   (equal specificity, defined later) which otherwise stretches the
+   checkbox to full width and shoves the label off the right edge. */
+.task-form-grid .task-form-assign-me input {
   width: auto;
+  flex: 0 0 auto;
   margin: 0;
+  padding: 0;
+  border: none;
   cursor: pointer;
 }
 
