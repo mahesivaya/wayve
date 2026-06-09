@@ -84,8 +84,15 @@ pub async fn upload_attachments(
             .ok_or_else(|| actix_web::error::ErrorBadRequest("Missing filename"))?;
         let filename = raw_filename.replace(['/', '\\'], "");
 
+        // The on-disk blob is named purely from a UUID — never the user's
+        // filename. The original name lives in the DB `name` column and is
+        // what the download handler serves. Keeping the filename out of the
+        // path avoids path-injection and dodges storage filesystems that
+        // reject characters ext4 allows (e.g. the virtiofs host mount used
+        // in dev rejects the U+202F / colon in macOS screenshot names,
+        // which surfaced as a 500 "File create error").
         let file_id = Uuid::new_v4().to_string();
-        let filepath = format!("{}/task_{}_{}_{}", upload_dir, task_id, file_id, filename);
+        let filepath = format!("{}/task_{}_{}", upload_dir, task_id, file_id);
 
         let mut size: i64 = 0;
         let mut plaintext: Vec<u8> = Vec::new();
