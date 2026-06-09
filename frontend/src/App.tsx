@@ -28,6 +28,7 @@ const Chat = lazy(() => import("./chat/Chat"));
 const Call = lazy(() => import("./call/Call"));
 const Scheduler = lazy(() => import("./scheduler/Scheduler"));
 const Drive = lazy(() => import("./drive/DriveBox"));
+const Documents = lazy(() => import("./documents/DocumentsBox"));
 const Notes = lazy(() => import("./notes/Notes"));
 const Tasks = lazy(() => import("./tasks/Tasks"));
 const AIChat = lazy(() => import("./aichat/AIChat"));
@@ -241,6 +242,7 @@ export default function App() {
             <Route path="/call" element={<Call />} />
             <Route path="/scheduler" element={<Scheduler />} />
             <Route path="/drive" element={<Drive />} />
+            <Route path="/documents" element={<Documents />} />
             <Route path="/notes" element={<Notes />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/ai-chat" element={<AIChat />} />

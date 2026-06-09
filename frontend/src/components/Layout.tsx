@@ -13,6 +13,15 @@ import StorageLimitBanner from "./StorageLimitBanner";
 import { SplitPaneContext } from "./SplitPaneContext";
 import ResizeHandle from "./ResizeHandle";
 import { useResizableWidth } from "./useResizableWidth";
+import {
+  listProjects,
+  createProject,
+  updateProject,
+  listTeams,
+  createTeam,
+  type Project,
+  type Team,
+} from "../api/workspace";
 import "./Layout.css";
 
 // Shared bug-report glyph — amber warning triangle with a dark `!`.
@@ -61,17 +70,6 @@ function appKeyFromPath(pathname: string): AppKey {
 // whole Layout component, which would otherwise reset the split to
 // closed. Round-tripping through localStorage keeps the split intact
 // when the user returns to a Layout-wrapped route.
-// Placeholder projects shown under Workspace → Projects. Sample scaffolding
-// until real per-project data exists.
-const SAMPLE_PROJECTS = ["project1", "project2"];
-
-// Sample teams the user belongs to, shown under the "Teams" group. Sample
-// scaffolding until the real per-user team list is wired up.
-const SAMPLE_TEAMS = [
-  { name: "Team A", slug: "team-a" },
-  { name: "Team B", slug: "team-b" },
-];
-
 const SPLIT_STORAGE_KEY = "rwayve.layout.split";
 
 function isValidAppKey(value: unknown): value is AppKey {
@@ -172,39 +170,67 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   // "Projects" is a sub-group under Workspace, listing the project names.
   const [projectsExpanded, setProjectsExpanded] = useState(false);
-  // Project names are user-editable (rename inline) and persisted locally.
-  const [projectNames, setProjectNames] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem("rwayve.projects");
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (Array.isArray(parsed) && parsed.every((p) => typeof p === "string")) {
-        return parsed;
-      }
-    } catch {
-      // fall through to defaults
-    }
-    return [...SAMPLE_PROJECTS];
-  });
-  // Index of the project currently being renamed (null = none) + its draft text.
+  // Projects + teams are org-scoped and fetched from the backend. Creation and
+  // rename are org-owner-only (the controls are hidden otherwise; the backend
+  // enforces it regardless).
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  // id of the project currently being renamed (null = none) + its draft text.
   const [editingProject, setEditingProject] = useState<number | null>(null);
   const [projectDraft, setProjectDraft] = useState("");
+  // Inline "new project" / "new team" rows (opened by the section "+" button).
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [projectCreateDraft, setProjectCreateDraft] = useState("");
+  const [creatingTeam, setCreatingTeam] = useState(false);
+  const [teamCreateDraft, setTeamCreateDraft] = useState("");
 
+  const userId = user?.id;
   useEffect(() => {
-    try {
-      localStorage.setItem("rwayve.projects", JSON.stringify(projectNames));
-    } catch {
-      // private mode / quota — names just won't persist this session.
-    }
-  }, [projectNames]);
+    if (userId == null) return;
+    let cancelled = false;
+    listProjects()
+      .then((rows) => !cancelled && setProjects(rows))
+      .catch(() => {});
+    listTeams()
+      .then((rows) => !cancelled && setTeams(rows))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
-  const commitProjectName = (index: number) => {
+  const commitProjectName = (id: number) => {
     const next = projectDraft.trim();
-    if (next) {
-      setProjectNames((prev) =>
-        prev.map((p, i) => (i === index ? next : p)),
-      );
-    }
     setEditingProject(null);
+    const current = projects.find((p) => p.id === id);
+    if (!next || !current || next === current.name) return;
+    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: next } : p)));
+    updateProject(id, next).catch(() => {
+      // Revert on failure so the sidebar reflects the persisted name.
+      setProjects((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, name: current.name } : p)),
+      );
+    });
+  };
+
+  const submitNewProject = () => {
+    const name = projectCreateDraft.trim();
+    setCreatingProject(false);
+    setProjectCreateDraft("");
+    if (!name) return;
+    createProject(name)
+      .then((created) => setProjects((prev) => [created, ...prev]))
+      .catch(() => {});
+  };
+
+  const submitNewTeam = () => {
+    const name = teamCreateDraft.trim();
+    setCreatingTeam(false);
+    setTeamCreateDraft("");
+    if (!name) return;
+    createTeam({ name })
+      .then((created) => setTeams((prev) => [created, ...prev]))
+      .catch(() => {});
   };
   const [teamsExpanded, setTeamsExpanded] = useState(false);
   const [platformExpanded, setPlatformExpanded] = useState(false);
@@ -430,25 +456,45 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   // Clickable header for a collapsible sidebar group (Workspace, Platform,
   // Logs, Developers). Renders the label + a chevron that rotates with state.
+  // `onAdd`, when supplied, renders a "+" button right after the chevron — used
+  // to let an org owner create a new project / team from the section header.
   const renderSectionToggle = (
     label: string,
     expanded: boolean,
     onToggle: () => void,
+    onAdd?: () => void,
   ) => (
-    <button
-      type="button"
-      className="sidebar-section-label sidebar-section-toggle"
-      aria-expanded={expanded}
-      onClick={onToggle}
-    >
-      <span>{label}</span>
-      <span
-        className={`sidebar-section-chevron${expanded ? " open" : ""}`}
-        aria-hidden="true"
+    <div className="sidebar-section-header">
+      <button
+        type="button"
+        className="sidebar-section-label sidebar-section-toggle"
+        aria-expanded={expanded}
+        onClick={onToggle}
       >
-        ▾
-      </span>
-    </button>
+        <span>{label}</span>
+        <span
+          className={`sidebar-section-chevron${expanded ? " open" : ""}`}
+          aria-hidden="true"
+        >
+          ▾
+        </span>
+      </button>
+      {onAdd && (
+        <button
+          type="button"
+          className="sidebar-section-add-btn"
+          title={`New ${label}`}
+          aria-label={`New ${label}`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onAdd();
+          }}
+        >
+          +
+        </button>
+      )}
+    </div>
   );
 
   // All hooks must run before this guard — an earlier return would change the
@@ -720,31 +766,70 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               )}
               {(workspaceExpanded || sidebarCollapsed) && (
                 <div className="sidebar-subitems">
-                  {renderSectionToggle("Projects", projectsExpanded, () =>
-                    setProjectsExpanded((open) => !open),
+                  {/* Compact sub-item style (matches the project rows) so it
+                      doesn't tower over its Workspace neighbors. */}
+                  <Link
+                    to="/documents"
+                    title="Documents"
+                    className={`sidebar-project-label${
+                      location.pathname === "/documents" ? " active" : ""
+                    }`}
+                    onClick={() => setNavOpen(false)}
+                  >
+                    📄 Documents
+                  </Link>
+                  {renderSectionToggle(
+                    "Projects",
+                    projectsExpanded,
+                    () => setProjectsExpanded((open) => !open),
+                    isOrgOwner && !sidebarCollapsed
+                      ? () => {
+                          setProjectsExpanded(true);
+                          setProjectCreateDraft("");
+                          setCreatingProject(true);
+                        }
+                      : undefined,
                   )}
                   {(projectsExpanded || sidebarCollapsed) && (
                     <div className="sidebar-subitems">
-                      {projectNames.map((proj, index) =>
-                        editingProject === index ? (
+                      {creatingProject && (
+                        <input
+                          className="sidebar-project-edit"
+                          value={projectCreateDraft}
+                          autoFocus
+                          placeholder="New project…"
+                          aria-label="New project name"
+                          onChange={(e) => setProjectCreateDraft(e.target.value)}
+                          onBlur={submitNewProject}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") submitNewProject();
+                            else if (e.key === "Escape") {
+                              setCreatingProject(false);
+                              setProjectCreateDraft("");
+                            }
+                          }}
+                        />
+                      )}
+                      {projects.map((proj) =>
+                        editingProject === proj.id ? (
                           <input
-                            key={index}
+                            key={proj.id}
                             className="sidebar-project-edit"
                             value={projectDraft}
                             autoFocus
                             aria-label="Project name"
                             onChange={(e) => setProjectDraft(e.target.value)}
-                            onBlur={() => commitProjectName(index)}
+                            onBlur={() => commitProjectName(proj.id)}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") commitProjectName(index);
+                              if (e.key === "Enter") commitProjectName(proj.id);
                               else if (e.key === "Escape") setEditingProject(null);
                             }}
                           />
                         ) : (
-                          <div key={index} className="sidebar-project-row">
+                          <div key={proj.id} className="sidebar-project-row">
                             <Link
                               to="/github"
-                              title={proj}
+                              title={proj.name}
                               className="sidebar-project-label"
                               onClick={(e) => {
                                 setNavOpen(false);
@@ -754,24 +839,29 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                                 }
                               }}
                             >
-                              {proj}
+                              {proj.name}
                             </Link>
-                            <button
-                              type="button"
-                              className="sidebar-project-edit-btn"
-                              title="Rename project"
-                              aria-label={`Rename ${proj}`}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setProjectDraft(proj);
-                                setEditingProject(index);
-                              }}
-                            >
-                              ✎
-                            </button>
+                            {isOrgOwner && (
+                              <button
+                                type="button"
+                                className="sidebar-project-edit-btn"
+                                title="Rename project"
+                                aria-label={`Rename ${proj.name}`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setProjectDraft(proj.name);
+                                  setEditingProject(proj.id);
+                                }}
+                              >
+                                ✎
+                              </button>
+                            )}
                           </div>
                         ),
+                      )}
+                      {!creatingProject && projects.length === 0 && (
+                        <div className="sidebar-empty-hint">No projects yet</div>
                       )}
                     </div>
                   )}
@@ -780,20 +870,50 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             </div>
           )}
 
-          {/* Teams the user belongs to (sample data for now). */}
+          {/* Teams in the user's organization. Org owners can add one via "+". */}
           <div className="sidebar-section">
-            {renderSectionToggle("Teams", teamsExpanded, () =>
-              setTeamsExpanded((open) => !open),
+            {renderSectionToggle(
+              "Teams",
+              teamsExpanded,
+              () => setTeamsExpanded((open) => !open),
+              isOrgOwner && !sidebarCollapsed
+                ? () => {
+                    setTeamsExpanded(true);
+                    setTeamCreateDraft("");
+                    setCreatingTeam(true);
+                  }
+                : undefined,
             )}
             {(teamsExpanded || sidebarCollapsed) && (
               <div className="sidebar-subitems">
-                {SAMPLE_TEAMS.map((team) =>
+                {creatingTeam && (
+                  <input
+                    className="sidebar-project-edit"
+                    value={teamCreateDraft}
+                    autoFocus
+                    placeholder="New team…"
+                    aria-label="New team name"
+                    onChange={(e) => setTeamCreateDraft(e.target.value)}
+                    onBlur={submitNewTeam}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submitNewTeam();
+                      else if (e.key === "Escape") {
+                        setCreatingTeam(false);
+                        setTeamCreateDraft("");
+                      }
+                    }}
+                  />
+                )}
+                {teams.map((team) =>
                   renderSidebarLink(
                     `/teams/${team.slug}`,
                     team.name,
                     "👥",
                     location.pathname === `/teams/${team.slug}`,
                   ),
+                )}
+                {!creatingTeam && teams.length === 0 && (
+                  <div className="sidebar-empty-hint">No teams yet</div>
                 )}
               </div>
             )}

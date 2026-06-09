@@ -282,10 +282,11 @@
   flex: 1;
   overflow: hidden;
   background: var(--surface);
-  margin: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  /* Flush to the calendar area — no surrounding gap (mirrors .week-view). */
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 .day-title {
   padding: 14px 20px;
@@ -316,7 +317,7 @@
   padding: 6px 10px 0 0;
   text-align: right;
   font-size: var(--text-xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   border-right: 1px solid var(--border-soft);
   box-sizing: border-box;
@@ -433,10 +434,11 @@
   flex: 1;
   overflow: hidden;
   background: var(--surface);
-  margin: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  /* Flush to the calendar area — no surrounding gap (mirrors .week-view). */
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 .month-weekday-row {
   display: grid;
@@ -550,6 +552,50 @@
   font-size: 10px;
 }
 .event-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Month-view chips live in normal flow inside their day cell. The shared
+   `.event` rule above is `position: absolute` (for the week/day time-grid,
+   where inline top/left/width drive lane layout) — without this override the
+   chip is pulled out of flow and, with `white-space: nowrap`, sizes to its
+   text and spills into the next day's cell.
+   The `min-width: 0` down the grid→flex chain is what actually contains it:
+   grid/flex items default to `min-width: auto`, so a nowrap title refuses to
+   shrink and overflows the (equal-width) column. Zeroing it + clipping the
+   cell lets the title ellipsis-truncate inside its own day. */
+.month-view .day-cell {
+  min-width: 0;
+  overflow: hidden;
+  /* Drop the cell's left/right padding so event chips span the full cell
+     width, edge to edge. Vertical padding stays. The date number below is
+     re-inset so it doesn't jam against the cell border. */
+  padding-left: 0;
+  padding-right: 0;
+}
+.month-view .date {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.month-view .events {
+  min-width: 0;
+  align-items: stretch;
+}
+.month-view .event {
+  position: static;
+  z-index: auto;
+  display: flex;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.month-view .event-title {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -846,11 +892,6 @@
     font-size: var(--text-sm);
   }
 
-  .day-view,
-  .month-view {
-    margin: 8px;
-  }
-
   /* Slim the time gutter so day/week columns keep usable width. */
   .time-label,
   .time-spacer {
@@ -879,11 +920,6 @@
   .calendar-header button {
     padding: 5px 8px;
     font-size: var(--text-xs);
-  }
-
-  .day-view,
-  .month-view {
-    margin: 6px;
   }
 
   .time-label,

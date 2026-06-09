@@ -11,6 +11,7 @@ mod chat;
 mod config;
 mod db;
 mod docs;
+mod documents;
 mod drive;
 mod email;
 mod embed;
@@ -39,6 +40,7 @@ mod startup;
 mod tasks;
 mod webhooks;
 mod workers;
+mod workspace;
 mod ws_registry;
 
 #[cfg(test)]

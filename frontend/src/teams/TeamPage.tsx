@@ -1,51 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
+import { getTeam, type Team } from "../api/workspace";
 import "./teams.css";
 
-// Fake team data — placeholder until real per-team data is wired to the
-// backend. Keyed by the slug used in the sidebar links (/teams/<slug>).
+// Members aren't yet persisted server-side, so the member list is local-only
+// (an org owner can add rows in-session). The team itself — name, tagline,
+// description — comes from the backend, keyed by the slug in /teams/<slug>.
 type Member = {
   name: string;
   role: string;
   email: string;
-};
-
-type Team = {
-  name: string;
-  tagline: string;
-  description: string;
-  members: Member[];
-};
-
-const TEAMS: Record<string, Team> = {
-  "team-a": {
-    name: "Team A",
-    tagline: "Core platform & infrastructure",
-    description:
-      "Team A owns the core platform: the API gateway, authentication, and the shared services every other team builds on. They keep the lights on and set the engineering standards for the rest of the org.",
-    members: [
-      { name: "Ava Mitchell", role: "Team Lead", email: "ava@example.com" },
-      { name: "Liam Chen", role: "Backend Engineer", email: "liam@example.com" },
-      { name: "Sofia Rossi", role: "Backend Engineer", email: "sofia@example.com" },
-      { name: "Noah Williams", role: "SRE / DevOps", email: "noah@example.com" },
-      { name: "Priya Nair", role: "Product Manager", email: "priya@example.com" },
-    ],
-  },
-  "team-b": {
-    name: "Team B",
-    tagline: "Growth & product experience",
-    description:
-      "Team B focuses on the customer-facing product: onboarding, billing, and the dashboard experience. They run experiments, ship UI improvements, and own the metrics that drive activation and retention.",
-    members: [
-      { name: "Maya Thompson", role: "Team Lead", email: "maya@example.com" },
-      { name: "Ethan Park", role: "Frontend Engineer", email: "ethan@example.com" },
-      { name: "Hana Suzuki", role: "Frontend Engineer", email: "hana@example.com" },
-      { name: "Diego Alvarez", role: "Designer", email: "diego@example.com" },
-      { name: "Grace Okafor", role: "Data Analyst", email: "grace@example.com" },
-    ],
-  },
 };
 
 function initials(name: string): string {
@@ -62,27 +28,46 @@ const EMPTY_DRAFT: Member = { name: "", role: "", email: "" };
 export default function TeamPage() {
   const { slug = "" } = useParams();
   const { user } = useAuth();
-  const team = TEAMS[slug];
+
+  // The team is fetched from the backend by slug. `undefined` = still loading,
+  // `null` = not found (or not in the caller's org).
+  const [team, setTeam] = useState<Team | null | undefined>(undefined);
 
   // Only a team admin / manager may add members. There's no per-team role data
-  // in this sample yet, so we gate on the org/platform "members:manage"
-  // permission — the same capability that governs member management elsewhere.
-  // When real team membership lands, swap this for a per-team manager check.
+  // yet, so we gate on the org/platform "members:manage" permission — the same
+  // capability that governs member management elsewhere. When real team
+  // membership lands, swap this for a per-team manager check.
   const canManageMembers = hasPermission(user, "members:manage");
 
-  // Member list is stateful so the "Add member" button can append. Seeded from
-  // the (fake) team data; resets when navigating between teams (the same
-  // component renders for every /teams/:slug).
-  const [members, setMembers] = useState<Member[]>(team?.members ?? []);
+  // Member list is local-only (not yet persisted); the "Add member" button
+  // appends in-session.
+  const [members, setMembers] = useState<Member[]>([]);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<Member>(EMPTY_DRAFT);
+
+  // Reset view state synchronously when the slug changes (navigating between
+  // teams reuses this component). Done during render via a tracked previous
+  // value rather than in an effect — see Chat.tsx for the same pattern.
   const [lastSlug, setLastSlug] = useState(slug);
   if (lastSlug !== slug) {
     setLastSlug(slug);
-    setMembers(team?.members ?? []);
+    setTeam(undefined);
+    setMembers([]);
     setAdding(false);
     setDraft(EMPTY_DRAFT);
   }
+
+  // The fetch itself stays in an effect; setState runs in the async callbacks
+  // (allowed) rather than synchronously in the effect body.
+  useEffect(() => {
+    let cancelled = false;
+    getTeam(slug)
+      .then((t) => !cancelled && setTeam(t))
+      .catch(() => !cancelled && setTeam(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   const canSubmit = draft.name.trim().length > 0;
   const submitMember = () => {
@@ -99,7 +84,17 @@ export default function TeamPage() {
     setAdding(false);
   };
 
-  if (!team) {
+  if (team === undefined) {
+    return (
+      <div className="team-page u-page-shell">
+        <div className="team-empty">
+          <p>Loading team…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (team === null) {
     return (
       <div className="team-page u-page-shell">
         <div className="team-empty">
@@ -121,7 +116,7 @@ export default function TeamPage() {
         </div>
         <div className="team-header-text">
           <h1 className="team-title">{team.name}</h1>
-          <p className="team-tagline">{team.tagline}</p>
+          {team.tagline && <p className="team-tagline">{team.tagline}</p>}
         </div>
         {/* Add-member action — visible only to a team admin / manager. */}
         {canManageMembers && (
@@ -138,7 +133,9 @@ export default function TeamPage() {
 
       <section className="team-about u-panel">
         <h2 className="team-section-title">About</h2>
-        <p className="team-description">{team.description}</p>
+        <p className="team-description">
+          {team.description || "No description yet."}
+        </p>
       </section>
 
       <section className="team-members u-panel">

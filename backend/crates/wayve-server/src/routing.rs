@@ -11,9 +11,9 @@
 use actix_web::web;
 
 use crate::{
-    ai, billing, call, chat, docs, drive, email, embed, github_proxy, home, integrations, notes,
-    openapi, organization, platform_billing, platform_team, routes, scheduler, scim, tasks,
-    webhooks,
+    ai, billing, call, chat, docs, documents, drive, email, embed, github_proxy, home,
+    integrations, notes, openapi, organization, platform_billing, platform_team, routes, scheduler,
+    scim, tasks, webhooks, workspace,
 };
 
 pub fn wire(cfg: &mut web::ServiceConfig) {
@@ -41,6 +41,8 @@ pub fn wire(cfg: &mut web::ServiceConfig) {
                 .configure(webhooks::routes)
                 .configure(docs::routes)
                 .configure(embed::routes)
+                .configure(workspace::routes)
+                .configure(documents::routes)
                 .configure(scim::api_routes),
         )
         // AUTH / GOOGLE

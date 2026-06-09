@@ -114,6 +114,34 @@ FROM users
 WHERE organization_id IS NOT NULL
 ON CONFLICT (organization_id, user_id) DO NOTHING;
 
+-- Organization-scoped projects listed in the app sidebar's Workspace group.
+-- Created by an org owner (POST /api/projects) and visible to every member of
+-- that org; personal/platform accounts with no home org simply see none.
+CREATE TABLE IF NOT EXISTS projects (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_projects_org ON projects (organization_id);
+
+-- Organization-scoped teams listed in the sidebar's Teams group, each with a
+-- detail page at /teams/<slug>. slug is unique within an org and derived from
+-- the name (lowercase, ASCII-alphanumeric), mirroring the org slug rule.
+CREATE TABLE IF NOT EXISTS teams (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    tagline TEXT,
+    description TEXT,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (organization_id, slug)
+);
+CREATE INDEX IF NOT EXISTS idx_teams_org ON teams (organization_id);
+
 CREATE TABLE IF NOT EXISTS platform_members (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'admin',
@@ -603,6 +631,40 @@ CREATE UNIQUE INDEX IF NOT EXISTS drive_shares_unique_idx
     ON drive_shares(resource_type, resource_id, scope, COALESCE(organization_id, 0));
 CREATE INDEX IF NOT EXISTS drive_shares_org_idx
     ON drive_shares(organization_id, resource_type, resource_id);
+
+-- Organization Documents — a shared "Documents" workspace dashboard. Unlike
+-- drive_files/folders (which are user-owned), these belong to an ORGANIZATION
+-- and EVERY member of that org has full read/write/delete access. Files are
+-- stored on disk under ./uploads, encrypted with the server at-rest key
+-- (wayve_security::encryption) so the server can serve them to any member —
+-- no per-user E2E envelope (which would lock out other members).
+CREATE TABLE IF NOT EXISTS org_document_folders (
+    id BIGSERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    parent_folder_id BIGINT REFERENCES org_document_folders(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_org_doc_folders_org_parent
+    ON org_document_folders(organization_id, parent_folder_id);
+
+CREATE TABLE IF NOT EXISTS org_documents (
+    id BIGSERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    folder_id BIGINT REFERENCES org_document_folders(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    file_type TEXT,
+    file_path TEXT NOT NULL,
+    file_iv TEXT,
+    size BIGINT NOT NULL DEFAULT 0,
+    uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_org_documents_org_folder
+    ON org_documents(organization_id, folder_id);
 
 -- Notes
 CREATE TABLE IF NOT EXISTS notes (

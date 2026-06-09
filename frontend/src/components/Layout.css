@@ -555,13 +555,61 @@
   padding-left: 0;
 }
 
+/* Section header row: the collapsible toggle plus an optional "+" add button
+   (org-owner only) sitting right after the chevron. The toggle flexes to fill
+   so the chevron stays right-aligned and the "+" trails it. */
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-section-header > .sidebar-section-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sidebar-section-add-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 1.1em;
+  line-height: 1;
+  color: var(--color-text-muted);
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-section-add-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
 /* A nested sub-group header (e.g. "Projects" under Workspace) — give the name
    a little vertical breathing room so it isn't crammed against the parent
    group above and its own items below. */
-.sidebar-subitems > .sidebar-section-toggle {
+.sidebar-subitems > .sidebar-section-header {
   margin-top: 4px;
+}
+
+.sidebar-subitems > .sidebar-section-header > .sidebar-section-toggle {
   padding-top: 6px;
   padding-bottom: 6px;
+}
+
+/* Empty-state hint under Projects / Teams when the org has none yet. */
+.sidebar-empty-hint {
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 .sidebar-section-chevron.open {
@@ -589,6 +637,12 @@
 
 .sidebar-subitems .sidebar-project-label:hover {
   background: var(--color-surface-hover);
+}
+
+/* Active state for a navigable sub-item label (e.g. Workspace → Documents). */
+.sidebar-subitems .sidebar-project-label.active {
+  background: var(--color-primary-action);
+  color: var(--color-surface);
 }
 
 /* Row wraps the project link + its (hover-revealed) rename button. */

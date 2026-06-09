@@ -32,3 +32,4 @@ mod embed_tokens_test;
 mod quotas_test;
 mod scim_tokens_test;
 mod webhooks_test;
+mod workspace_test;
