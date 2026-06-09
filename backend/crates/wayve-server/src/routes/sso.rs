@@ -804,3 +804,13 @@ mod sso_state_row {
         pub return_to: Option<String>,
     }
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(get_sso_config)
+        .service(upsert_sso_config)
+        .service(delete_sso_config)
+        .service(test_sso_config)
+        .service(auth_sso_start)
+        .service(auth_sso_callback);
+}

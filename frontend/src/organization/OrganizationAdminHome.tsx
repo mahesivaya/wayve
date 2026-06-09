@@ -64,8 +64,16 @@ export default function OrganizationAdminHome() {
   const canSeeWebhooks = hasPermission(user, "webhooks:manage");
   const canSeeSharedInboxes = hasPermission(user, "inbox:manage");
   const canSeeSso = hasPermission(user, "sso:manage");
+  const canSeeOrgSettings = hasPermission(user, "org:settings");
 
   const consoles: Tile[] = [
+    {
+      icon: "⚙️",
+      label: "Settings",
+      description: "Rename your organization and manage its profile.",
+      path: "/organization/settings",
+      visible: canSeeOrgSettings,
+    },
     {
       icon: "👥",
       label: "Members & roles",

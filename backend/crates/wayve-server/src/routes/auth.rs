@@ -585,3 +585,13 @@ pub async fn recover_with_mnemonic(
         "recovery_mode": recovery_mode,
     })))
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(register)
+        .service(login)
+        .service(logout)
+        .service(forgot_password)
+        .service(reset_password)
+        .service(recover_with_mnemonic);
+}

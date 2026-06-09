@@ -165,3 +165,8 @@ pub async fn provision_chat_keys(
         "skipped": skipped,
     })))
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(provision_chat_keys);
+}

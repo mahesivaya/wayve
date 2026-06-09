@@ -238,3 +238,32 @@ mod auth_regression_tests {
             .await;
     }
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+/// Handlers are defined in the submodules below and re-exported via the globs
+/// above, so they resolve by bare name here.
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(change_password)
+        .service(admin_list_organizations)
+        .service(admin_create_organization)
+        .service(create_my_organization)
+        .service(org_signup_intent)
+        .service(finalize_org_signup)
+        .service(delete_my_organization)
+        .service(update_my_organization)
+        .service(delete_my_account)
+        .service(admin_create_user)
+        .service(admin_delete_user)
+        .service(admin_generate_api_key)
+        .service(admin_list_api_keys)
+        .service(admin_revoke_api_key)
+        .service(api_key_whoami)
+        .service(list_organization_members)
+        .service(update_organization_member_role)
+        .service(list_platform_members)
+        .service(update_platform_member_role)
+        .service(get_user_by_email)
+        .service(get_all_users)
+        .service(get_profile)
+        .service(update_profile);
+}

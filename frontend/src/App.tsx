@@ -41,6 +41,7 @@ const Settings = lazy(() => import("./profile/Settings"));
 const Organization = lazy(() => import("./organization/Organization"));
 const OrganizationAdminHome = lazy(() => import("./organization/OrganizationAdminHome"));
 const OrganizationMembers = lazy(() => import("./organization/OrganizationMembers"));
+const OrgSettings = lazy(() => import("./organization/OrgSettings"));
 const PlatformAdminHome = lazy(() => import("./organization/PlatformAdminHome"));
 const PlatformOrganizations = lazy(() => import("./organization/PlatformOrganizations"));
 const PlatformOrganizationDetail = lazy(() => import("./organization/PlatformOrganizationDetail"));
@@ -227,6 +228,7 @@ export default function App() {
               element={<Navigate to="/platform/home" replace />}
             />
             <Route path="/organization/members" element={<OrganizationMembers />} />
+            <Route path="/organization/settings" element={<OrgSettings />} />
             <Route
               path="/organization/:slug"
               element={redirectToAccountHome ?? <OrganizationHome />}

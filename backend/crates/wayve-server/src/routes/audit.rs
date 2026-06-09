@@ -775,3 +775,14 @@ fn decrypt_siem_token(row: &SiemSettingsRow) -> Result<Option<String>, AppError>
         _ => Ok(None),
     }
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(list_audit_logs)
+        .service(list_user_actions)
+        .service(list_registration_types)
+        .service(export_audit_logs)
+        .service(get_siem_settings)
+        .service(upsert_siem_settings)
+        .service(test_siem_settings);
+}

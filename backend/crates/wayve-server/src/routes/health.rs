@@ -81,3 +81,8 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(health).service(ready);
+}

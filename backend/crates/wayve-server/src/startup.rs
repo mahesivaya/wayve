@@ -718,7 +718,19 @@ pub async fn connect_db_and_migrate(role: RuntimeRole) -> PgPool {
     pool
 }
 
-/// Spawn background tokio tasks appropriate for the runtime role.
+/// Process-wide feature state initialized once at startup, for **every** role
+/// (workers and the API alike). Today that's the global DB pool the IMAP/SMTP
+/// send path reads without a `&PgPool` argument. Call right after the pool is
+/// connected, before `spawn_role_workers`.
+pub fn init_feature_state(pool: &PgPool) {
+    // Register the process pool so code paths without a `&PgPool` argument
+    // (e.g. the IMAP send path) can reach the DB.
+    crate::email::account::init_pool(pool.clone());
+}
+
+/// Spawn background tokio tasks appropriate for the runtime role. The single
+/// place worker/subscriber tasks start, so a new background job is added here
+/// rather than ad-hoc in `main`.
 ///
 /// * `EmailSyncWorker` / `EmailBodyWorker` block until process exit and never
 ///   return; they're modeled as `.await` rather than `spawn` so the binary
@@ -727,7 +739,11 @@ pub async fn connect_db_and_migrate(role: RuntimeRole) -> PgPool {
 ///   by dev compose and small deployments.
 /// * `Api` runs only the lightweight webhook dispatcher next to the API; sync
 ///   and body workers are deployed separately.
-pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool) {
+///
+/// `has_redis` gates the cross-instance chat pub/sub subscriber: it's only
+/// useful on socket-serving roles (`All`/`Api`) and only when Redis is up;
+/// without it senders fall back to local delivery.
+pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, has_redis: bool) {
     match role {
         RuntimeRole::EmailSyncWorker => run_sync_worker(pool.clone()).await,
         RuntimeRole::EmailBodyWorker => run_body_worker(pool.clone()).await,
@@ -748,6 +764,7 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool) {
             tokio::spawn(async move {
                 webhooks::spawn_dispatcher(webhook_pool).await;
             });
+            spawn_chat_pubsub(has_redis);
         }
         RuntimeRole::Api => {
             // The webhook dispatcher is a cheap DB poller; spawning it
@@ -759,7 +776,17 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool) {
             tokio::spawn(async move {
                 webhooks::spawn_dispatcher(webhook_pool).await;
             });
+            spawn_chat_pubsub(has_redis);
         }
+    }
+}
+
+/// Cross-instance realtime fan-out: subscribe to the `ws:user:*` pub/sub
+/// channels so chat frames published by any backend instance reach the socket
+/// held here. No-op without Redis (local delivery still works).
+fn spawn_chat_pubsub(has_redis: bool) {
+    if has_redis {
+        tokio::spawn(crate::chat::pubsub::run_subscriber());
     }
 }
 

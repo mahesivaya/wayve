@@ -68,19 +68,12 @@ async fn main() -> std::io::Result<()> {
     info!(?role, "Runtime role selected");
 
     let pool = startup::connect_db_and_migrate(role).await;
-    // Register the process pool so code paths without a `&PgPool` argument
-    // (e.g. the IMAP send path) can reach the DB.
-    email::account::init_pool(pool.clone());
-    startup::spawn_role_workers(role, &pool).await;
+    startup::init_feature_state(&pool);
+    // Connect Redis before spawning workers so `spawn_role_workers` can gate the
+    // chat pub/sub subscriber on Redis availability. (Worker-only roles block
+    // forever inside `spawn_role_workers`, so everything below it is API/All.)
     let redis_cache = startup::connect_redis_and_install_cache().await;
-
-    // Cross-instance realtime fan-out: when Redis is available, subscribe to the
-    // ws:user:* pub/sub channels so chat frames published by any backend
-    // instance are delivered to the socket held here. Without Redis, senders
-    // fall back to local delivery and this is unnecessary.
-    if redis_cache.is_some() {
-        actix_web::rt::spawn(chat::pubsub::run_subscriber());
-    }
+    startup::spawn_role_workers(role, &pool, redis_cache.is_some()).await;
 
     // Offline IP geolocation for the User Logs page. Best-effort: `None` when
     // GEOIP_DB_PATH is unset/unreadable. The reader isn't `Clone`, so build the

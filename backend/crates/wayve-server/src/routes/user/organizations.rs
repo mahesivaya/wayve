@@ -12,7 +12,7 @@ use crate::billing::provider;
 use crate::email::profile::invalidate_me_cache;
 use crate::organization;
 use crate::prelude::*;
-use actix_web::delete;
+use actix_web::{delete, patch};
 use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::password::hash_password;
@@ -1062,13 +1062,17 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
         }
     };
 
-    // Reject if there's an active/trialing Stripe subscription. Cancelling
-    // it requires hitting the Stripe API, which is the user's job via the
-    // /billing "Cancel subscription" affordance — surfacing that explicitly
-    // is safer than deleting and orphaning charges.
-    let active_sub: Option<i32> = sqlx::query_scalar(
+    // If there's an active/trialing Stripe subscription, the owner must
+    // first express cancel intent (cancel_at_period_end) on the Billing
+    // page — we don't silently kill billing on org delete. Once they have,
+    // we cancel it *immediately* in Stripe here: the local subscription row
+    // is about to be cascade-deleted, so leaving the Stripe subscription
+    // running to period end would orphan a charge against a customer with
+    // no local record.
+    let active_sub: Option<(i32, Option<String>, bool)> = sqlx::query_as(
         r#"
-        SELECT id FROM subscriptions
+        SELECT id, stripe_subscription_id, cancel_at_period_end
+          FROM subscriptions
          WHERE organization_id = $1
            AND status IN ('active', 'trialing')
          LIMIT 1
@@ -1078,10 +1082,20 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
     .fetch_optional(pool.get_ref())
     .await?;
 
-    if active_sub.is_some() {
-        return Ok(HttpResponse::Conflict().json(serde_json::json!({
-            "message": "Cancel the organization's subscription on the Billing page before deleting the organization."
-        })));
+    if let Some((_, stripe_id, cancel_at_period_end)) = active_sub {
+        if !cancel_at_period_end {
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "message": "Cancel the organization's subscription on the Billing page before deleting the organization."
+            })));
+        }
+        if let Some(stripe_id) = stripe_id.filter(|s| !s.is_empty())
+            && let Err(e) = provider::cancel_now(&stripe_id).await
+        {
+            error!(target: "billing", error = ?e, "stripe immediate-cancel on org delete failed");
+            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Could not cancel the subscription with the payment provider. Try again."
+            })));
+        }
     }
 
     // Snapshot invitee user ids (everyone in the org except the owner).
@@ -1164,6 +1178,118 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
         "deleted_organization_id": organization_id,
         "deleted_member_count": invitee_ids.len(),
         "account_type": "personal"
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateOrganizationInput {
+    pub name: String,
+}
+
+/// `PATCH /organizations/me` — rename the caller's organization. Owner-only,
+/// mirroring the gate on [`delete_my_organization`]. The slug is re-derived
+/// from the new name with the same expression used at creation. The org name
+/// is denormalized into every member's `/api/me` + profile payloads, so those
+/// caches are busted for the whole org on success.
+#[patch("/organizations/me")]
+#[instrument(target = "auth", skip(req, pool, data))]
+pub async fn update_my_organization(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<UpdateOrganizationInput>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Authentication required" })));
+        }
+    };
+
+    let ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
+        Ok(ctx) => ctx,
+        Err(sqlx::Error::RowNotFound) => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Account not found" })));
+        }
+        Err(e) => return Err(AppError::Db(e)),
+    };
+    if ctx.scope != Scope::Organization || ctx.role != Role::Owner {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Only the organization owner can rename the organization"
+        })));
+    }
+    let organization_id = match ctx.organization_id {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "message": "Your account is not bound to an organization"
+            })));
+        }
+    };
+
+    let name = data.name.trim();
+    if name.is_empty() {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Organization name is required" })));
+    }
+    if name.chars().count() > 120 {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Organization name is too long" })));
+    }
+
+    // Re-derive the slug from the new name with the same expression used at
+    // creation (see create_my_organization). A unique violation on name/slug
+    // means another organization already uses it.
+    let updated = match sqlx::query(
+        r#"
+        UPDATE organizations
+           SET name = $1,
+               slug = lower(regexp_replace($1, '[^a-zA-Z0-9]+', '', 'g'))
+         WHERE id = $2
+        RETURNING id, name, slug
+        "#,
+    )
+    .bind(name)
+    .bind(organization_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(row) => row,
+        Err(sqlx::Error::Database(db)) if db.is_unique_violation() => {
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "message": "Another organization already uses that name"
+            })));
+        }
+        Err(e) => return Err(AppError::Db(e)),
+    };
+
+    let Some(row) = updated else {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Organization not found" })));
+    };
+
+    let new_name: String = row.get("name");
+    let new_slug: Option<String> = row.get("slug");
+
+    // The org name is denormalized into every member's /api/me + profile
+    // payloads — bust those caches for the whole org.
+    let member_ids: Vec<i32> =
+        sqlx::query_scalar("SELECT id FROM users WHERE organization_id = $1")
+            .bind(organization_id)
+            .fetch_all(pool.get_ref())
+            .await?;
+    for member_id in &member_ids {
+        invalidate_profile_cache(*member_id).await;
+        invalidate_me_cache(*member_id).await;
+    }
+
+    info!(target: "auth", user_id, organization_id, "organization renamed");
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "id": organization_id,
+        "name": new_name,
+        "slug": new_slug,
     })))
 }
 

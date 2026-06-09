@@ -565,3 +565,16 @@ pub async fn delete_ticket_attachment(
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(create_ticket)
+        .service(list_my_tickets)
+        .service(get_ticket)
+        .service(admin_list_tickets)
+        .service(admin_update_ticket)
+        .service(upload_ticket_attachments)
+        .service(list_ticket_attachments)
+        .service(download_ticket_attachment)
+        .service(delete_ticket_attachment);
+}

@@ -262,6 +262,33 @@ export async function deleteMyOrganization(): Promise<DeletedMyOrganization> {
   return data;
 }
 
+export type UpdatedOrganization = {
+  id: number;
+  name: string;
+  slug: string | null;
+};
+
+// Rename the caller's organization. Owner-only on the backend; the slug is
+// re-derived server-side from the new name. 409 if another org already uses
+// the name.
+export async function updateMyOrganization(
+  name: string,
+): Promise<UpdatedOrganization> {
+  const res = await apiFetch("/api/organizations/me", {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+    preserve401: true,
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to rename organization");
+  }
+
+  return data;
+}
+
 // Permanently delete the caller's OWN account and all data cascading from it.
 // Refuses with 409 if the caller still owns an organization (delete it first)
 // or has an active Stripe subscription (cancel from /billing first).

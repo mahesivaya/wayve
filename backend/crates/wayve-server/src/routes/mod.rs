@@ -16,94 +16,26 @@ pub mod tracing;
 pub mod user;
 pub mod visits;
 
-use actix_web::web;
-
-pub fn routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(health::health)
-        .service(health::ready)
-        .service(config::public_config)
-        .service(auth::register)
-        .service(auth::login)
-        .service(auth::logout)
-        .service(auth::forgot_password)
-        .service(auth::reset_password)
-        .service(auth::recover_with_mnemonic)
-        .service(user::change_password)
-        .service(user::admin_list_organizations)
-        .service(user::admin_create_organization)
-        .service(user::create_my_organization)
-        .service(user::org_signup_intent)
-        .service(user::finalize_org_signup)
-        .service(user::delete_my_organization)
-        .service(user::delete_my_account)
-        .service(user::admin_create_user)
-        .service(user::admin_delete_user)
-        .service(user::admin_generate_api_key)
-        .service(user::admin_list_api_keys)
-        .service(user::admin_revoke_api_key)
-        .service(user::api_key_whoami)
-        .service(user::list_organization_members)
-        .service(user::update_organization_member_role)
-        .service(user::list_platform_members)
-        .service(user::update_platform_member_role)
-        .service(api_keys::create_api_key)
-        .service(api_keys::list_api_keys)
-        .service(api_keys::revoke_api_key)
-        .service(api_keys::api_key_audit)
-        .service(audit::list_audit_logs)
-        .service(audit::list_user_actions)
-        .service(audit::list_registration_types)
-        .service(tracing::tracing_overview)
-        .service(chat_keys::provision_chat_keys)
-        .service(audit::export_audit_logs)
-        .service(audit::get_siem_settings)
-        .service(audit::upsert_siem_settings)
-        .service(audit::test_siem_settings)
-        .service(account::get_accounts)
-        .service(account::update_account_display_name)
-        .service(user::get_user_by_email)
-        .service(user::get_all_users)
-        .service(user::get_profile)
-        .service(user::update_profile)
-        .service(account::delete_account)
-        .service(sso::get_sso_config)
-        .service(sso::upsert_sso_config)
-        .service(sso::delete_sso_config)
-        .service(sso::test_sso_config)
-        .service(sso::auth_sso_start)
-        .service(sso::auth_sso_callback)
-        .service(shared_inbox::list_shared_inboxes)
-        .service(shared_inbox::create_shared_inbox)
-        .service(shared_inbox::update_shared_inbox)
-        .service(shared_inbox::delete_shared_inbox)
-        .service(shared_inbox::list_inbox_members)
-        .service(shared_inbox::add_inbox_member)
-        .service(shared_inbox::remove_inbox_member)
-        .service(shared_inbox::update_email_state)
-        .service(recovery::get_wrapped_key)
-        .service(recovery::put_wrapped_key)
-        .service(recovery::delete_wrapped_key)
-        .service(recovery::put_login_wrap)
-        .service(recovery::delete_login_wrap)
-        .service(recovery::get_basic_key)
-        .service(recovery::put_basic_key)
-        .service(recovery::delete_basic_key)
-        .service(access_requests::create_access_request)
-        .service(access_requests::my_access_status)
-        .service(access_requests::admin_list_access_requests)
-        .service(access_requests::admin_decide_access_request)
-        .service(access_requests::access_request_history)
-        .service(support::create_ticket)
-        .service(support::list_my_tickets)
-        .service(support::get_ticket)
-        .service(support::admin_list_tickets)
-        .service(support::admin_update_ticket)
-        .service(support::upload_ticket_attachments)
-        .service(support::list_ticket_attachments)
-        .service(support::download_ticket_attachment)
-        .service(support::delete_ticket_attachment)
-        .service(error_logs::ingest_client_error)
-        .service(error_logs::list_error_logs)
-        .service(visits::ingest_page_visit)
-        .service(visits::list_page_visits);
+/// Aggregator for the cross-cutting "core platform" routes (auth, user/org
+/// management, account, audit, SSO, recovery, support, …). Each domain owns its
+/// own `routes()` in its submodule, so adding an endpoint means editing only
+/// that submodule — this fn just delegates. Mounted under `/api` from
+/// `routing.rs`, the single route-wiring hub.
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    health::routes(cfg);
+    config::routes(cfg);
+    auth::routes(cfg);
+    user::routes(cfg);
+    api_keys::routes(cfg);
+    audit::routes(cfg);
+    account::routes(cfg);
+    sso::routes(cfg);
+    shared_inbox::routes(cfg);
+    recovery::routes(cfg);
+    access_requests::routes(cfg);
+    support::routes(cfg);
+    error_logs::routes(cfg);
+    visits::routes(cfg);
+    chat_keys::routes(cfg);
+    tracing::routes(cfg);
 }

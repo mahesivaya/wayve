@@ -241,3 +241,8 @@ pub async fn tracing_overview(
         "recent": recent,
     })))
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(tracing_overview);
+}

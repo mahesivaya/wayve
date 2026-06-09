@@ -341,3 +341,15 @@ pub async fn delete_basic_key(req: HttpRequest, pool: web::Data<PgPool>) -> AppR
     .await?;
     Ok(HttpResponse::NoContent().finish())
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(get_wrapped_key)
+        .service(put_wrapped_key)
+        .service(delete_wrapped_key)
+        .service(put_login_wrap)
+        .service(delete_login_wrap)
+        .service(get_basic_key)
+        .service(put_basic_key)
+        .service(delete_basic_key);
+}

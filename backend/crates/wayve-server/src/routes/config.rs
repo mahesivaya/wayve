@@ -25,3 +25,8 @@ pub async fn public_config() -> impl Responder {
         "version": env!("CARGO_PKG_VERSION"),
     }))
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(public_config);
+}

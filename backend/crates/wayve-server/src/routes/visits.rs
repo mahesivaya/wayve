@@ -134,3 +134,8 @@ pub async fn list_page_visits(
 
     Ok(HttpResponse::Ok().json(rows))
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(ingest_page_visit).service(list_page_visits);
+}

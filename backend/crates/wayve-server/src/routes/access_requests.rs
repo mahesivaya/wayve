@@ -469,3 +469,12 @@ pub async fn access_request_history(
 
     Ok(HttpResponse::Ok().json(entries))
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(create_access_request)
+        .service(my_access_status)
+        .service(admin_list_access_requests)
+        .service(admin_decide_access_request)
+        .service(access_request_history);
+}

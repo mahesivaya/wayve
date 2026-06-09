@@ -516,3 +516,11 @@ mod tests {
             .await;
     }
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(create_api_key)
+        .service(list_api_keys)
+        .service(revoke_api_key)
+        .service(api_key_audit);
+}

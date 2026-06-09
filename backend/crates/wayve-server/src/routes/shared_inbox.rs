@@ -447,3 +447,15 @@ pub async fn update_email_state(
         }))),
     }
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(list_shared_inboxes)
+        .service(create_shared_inbox)
+        .service(update_shared_inbox)
+        .service(delete_shared_inbox)
+        .service(list_inbox_members)
+        .service(add_inbox_member)
+        .service(remove_inbox_member)
+        .service(update_email_state);
+}

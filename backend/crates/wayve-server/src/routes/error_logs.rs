@@ -264,3 +264,8 @@ pub async fn list_error_logs(
         },
     })))
 }
+
+/// Register this domain's routes. Called from `routes::routes` (the aggregator).
+pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(ingest_client_error).service(list_error_logs);
+}

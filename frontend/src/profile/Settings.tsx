@@ -203,11 +203,16 @@ export default function Settings() {
             <div className="settings-usage-row">
               <span>Memory Used</span>
               <strong className={!loaded ? "settings-loading-text" : ""}>
-                {profile?.memory_used_bytes !== undefined
-                  ? `${formatBytes(profile.memory_used_bytes)} / ${(
-                      (profile.memory_limit_bytes ?? DEFAULT_MEMORY_LIMIT) / BYTES_IN_GB
-                    ).toFixed(0)} GB`
-                  : "Loading…"}
+                {profile?.memory_used_bytes === undefined
+                  ? "Loading…"
+                  : (profile.memory_limit_bytes ?? DEFAULT_MEMORY_LIMIT) < 0
+                    ? // A negative limit is the "unlimited" sentinel
+                      // (org/enterprise plans store storage_limit_bytes = -1).
+                      `${formatBytes(profile.memory_used_bytes)} / Unlimited`
+                    : `${formatBytes(profile.memory_used_bytes)} / ${(
+                        (profile.memory_limit_bytes ?? DEFAULT_MEMORY_LIMIT) /
+                        BYTES_IN_GB
+                      ).toFixed(0)} GB`}
               </strong>
             </div>
             <div className="settings-usage-row">
@@ -257,7 +262,7 @@ export default function Settings() {
           </div>
         </section>
 
-        {!hideBilling && (
+        {(!hideBilling || isOrgOwner) && (
           <section className="settings-card">
             <h2 className="settings-card-title">Billing &amp; Plans</h2>
             <div className="settings-rows">

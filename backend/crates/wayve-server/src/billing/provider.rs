@@ -72,6 +72,18 @@ async fn get_json(path: &str, query: &[(&str, String)]) -> Result<Value> {
     Ok(body)
 }
 
+async fn delete_request(path: &str) -> Result<Value> {
+    let key = secret_key().ok_or_else(|| anyhow!("STRIPE_SECRET_KEY not configured"))?;
+    let url = format!("{}/v1{}", api_base(), path);
+    let resp = HTTP.delete(&url).bearer_auth(key).send().await?;
+    let status = resp.status();
+    let body: Value = resp.json().await?;
+    if !status.is_success() {
+        return Err(anyhow!("stripe {path} returned {status}: {body}"));
+    }
+    Ok(body)
+}
+
 /// Look up a recurring price by its `lookup_key`. Returns Some(price_id) if
 /// found, None if the search returns no results. Used by `ensure_test_prices`
 /// to keep startup idempotent — re-running with the same plan code returns
@@ -458,6 +470,16 @@ pub async fn set_subscription_default_payment_method(
 pub async fn cancel_at_period_end(subscription_id: &str) -> Result<()> {
     let params = vec![("cancel_at_period_end", "true".to_string())];
     post_form(&format!("/subscriptions/{subscription_id}"), &params).await?;
+    Ok(())
+}
+
+/// Cancel a subscription *immediately* (Stripe `POST /subscriptions/{id}/cancel`),
+/// as opposed to [`cancel_at_period_end`]. Used when the organization itself is
+/// being deleted: the local subscription row is about to be cascade-removed, so
+/// we must stop Stripe billing right now rather than leave it running to period
+/// end with no local record.
+pub async fn cancel_now(subscription_id: &str) -> Result<()> {
+    delete_request(&format!("/subscriptions/{subscription_id}")).await?;
     Ok(())
 }
 
