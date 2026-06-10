@@ -16,7 +16,10 @@ export default function PersonalChatList({
     <>
       <div className="conversation-section-title">People</div>
       {users.map((u) => {
-        const name = u.email.split("@")[0];
+        // Show the full email — it's unique per user, so two people with the
+        // same local-part on different domains (alice@acme.com vs
+        // alice@gmail.com) stay distinguishable instead of both showing "alice".
+        const name = u.email;
         return (
           <button
             key={u.id}
