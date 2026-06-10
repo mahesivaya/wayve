@@ -3,7 +3,7 @@ use crate::billing::{entitlements::effective_entitlements, resolve_owner, usage_
 use crate::prelude::*;
 use actix_multipart::Multipart;
 use actix_web::http::header;
-use actix_web::{Error, HttpResponse, get, post, web};
+use actix_web::{Error, HttpResponse, get, web};
 use chrono::NaiveDateTime;
 use futures_util::StreamExt;
 use sqlx::{FromRow, PgPool, Row};
@@ -12,7 +12,6 @@ use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{self, Scope};
 
 #[derive(Deserialize)]
 pub struct FilesQuery {
@@ -34,24 +33,6 @@ struct FileResponse {
     created_at: NaiveDateTime,
     shared: bool,
     permission: Option<String>,
-}
-
-#[derive(Serialize, FromRow)]
-struct SharedDriveItem {
-    id: i64,
-    resource_type: String,
-    name: String,
-    file_type: Option<String>,
-    size: Option<i64>,
-    permission: String,
-    owner_user_id: i32,
-    created_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Deserialize)]
-pub struct ShareDriveInput {
-    pub scope: String,
-    pub permission: String,
 }
 
 //
@@ -285,190 +266,6 @@ pub async fn get_files(
         .collect();
 
     Ok(HttpResponse::Ok().json(files))
-}
-
-#[get("/drive/shared")]
-#[instrument(target = "http", skip(req, pool))]
-pub async fn shared_drive_items(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
-    let ctx = match rbac::require_permission(&req, pool.get_ref(), rbac::Permission::AppsUse).await
-    {
-        Ok(ctx) => ctx,
-        Err(response) => return Ok(response),
-    };
-    if ctx.scope == Scope::Personal {
-        return Ok(HttpResponse::Ok().json(Vec::<SharedDriveItem>::new()));
-    }
-
-    let rows = sqlx::query_as::<_, SharedDriveItem>(
-        r#"
-        SELECT ds.resource_id AS id,
-               ds.resource_type,
-               CASE WHEN ds.resource_type = 'file' THEN f.name ELSE fo.name END AS name,
-               CASE WHEN ds.resource_type = 'file' THEN f.file_type ELSE NULL END AS file_type,
-               CASE WHEN ds.resource_type = 'file' THEN f.size ELSE NULL END AS size,
-               ds.permission,
-               COALESCE(f.user_id, fo.user_id) AS owner_user_id,
-               ds.created_at
-          FROM drive_shares ds
-          LEFT JOIN drive_files f ON ds.resource_type = 'file' AND f.id = ds.resource_id
-          LEFT JOIN folders fo ON ds.resource_type = 'folder' AND fo.id = ds.resource_id
-         WHERE (
-             ($1 = 'organization' AND ds.scope = 'organization' AND ds.organization_id = $2)
-             OR ($1 = 'platform' AND ds.scope = 'platform')
-         )
-           AND COALESCE(f.user_id, fo.user_id) IS NOT NULL
-           AND COALESCE(f.user_id, fo.user_id) <> $3
-         ORDER BY ds.created_at DESC
-        "#,
-    )
-    .bind(ctx.scope.as_str())
-    .bind(ctx.organization_id)
-    .bind(ctx.user_id)
-    .fetch_all(pool.get_ref())
-    .await?;
-
-    Ok(HttpResponse::Ok().json(rows))
-}
-
-#[post("/files/{id}/share")]
-#[instrument(target = "http", skip(req, pool, path, body))]
-pub async fn share_file(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    path: web::Path<i64>,
-    body: web::Json<ShareDriveInput>,
-) -> AppResult {
-    share_resource(req, pool, "file", path.into_inner(), body).await
-}
-
-#[post("/folders/{id}/share")]
-#[instrument(target = "http", skip(req, pool, path, body))]
-pub async fn share_folder(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    path: web::Path<i64>,
-    body: web::Json<ShareDriveInput>,
-) -> AppResult {
-    share_resource(req, pool, "folder", path.into_inner(), body).await
-}
-
-async fn share_resource(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    resource_type: &str,
-    resource_id: i64,
-    body: web::Json<ShareDriveInput>,
-) -> AppResult {
-    let ctx = match rbac::require_permission(&req, pool.get_ref(), rbac::Permission::AppsUse).await
-    {
-        Ok(ctx) => ctx,
-        Err(response) => return Ok(response),
-    };
-    if ctx.scope == Scope::Personal {
-        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Drive sharing is available for organization and platform workspaces"
-        })));
-    }
-    let scope = body.scope.trim();
-    let permission = body.permission.trim();
-    if !matches!(scope, "organization" | "platform") || !matches!(permission, "view" | "edit") {
-        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-            "message": "scope must be organization/platform and permission must be view/edit"
-        })));
-    }
-    if scope == "platform" && ctx.scope != Scope::Platform {
-        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Only platform users can create platform-wide Drive shares"
-        })));
-    }
-
-    let owns = match resource_type {
-        "file" => sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT id FROM drive_files WHERE id = $1 AND user_id = $2",
-        )
-        .bind(resource_id)
-        .bind(ctx.user_id)
-        .fetch_optional(pool.get_ref())
-        .await?
-        .flatten(),
-        _ => sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT id FROM folders WHERE id = $1 AND user_id = $2",
-        )
-        .bind(resource_id)
-        .bind(ctx.user_id)
-        .fetch_optional(pool.get_ref())
-        .await?
-        .flatten(),
-    };
-    if owns.is_none() {
-        return Ok(
-            HttpResponse::NotFound().json(serde_json::json!({ "message": "Drive item not found" }))
-        );
-    }
-
-    let organization_id = if scope == "organization" {
-        ctx.organization_id
-    } else {
-        None
-    };
-    sqlx::query(
-        r#"
-        INSERT INTO drive_shares (resource_type, resource_id, scope, organization_id, permission, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (resource_type, resource_id, scope, (COALESCE(organization_id, 0)))
-        DO UPDATE SET permission = EXCLUDED.permission, created_by = EXCLUDED.created_by, created_at = NOW()
-        "#,
-    )
-    .bind(resource_type)
-    .bind(resource_id)
-    .bind(scope)
-    .bind(organization_id)
-    .bind(permission)
-    .bind(ctx.user_id)
-    .execute(pool.get_ref())
-    .await?;
-
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "shared": true })))
-}
-
-#[get("/drive/shared/files/{id}/download")]
-#[instrument(target = "http", skip(req, pool, path))]
-pub async fn download_shared_file(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    path: web::Path<i64>,
-) -> AppResult {
-    let ctx = match rbac::require_permission(&req, pool.get_ref(), rbac::Permission::AppsUse).await
-    {
-        Ok(ctx) => ctx,
-        Err(response) => return Ok(response),
-    };
-    let file_id = path.into_inner();
-    let row = sqlx::query(
-        r#"
-        SELECT f.name, f.file_path, f.file_iv
-          FROM drive_files f
-          JOIN drive_shares ds ON ds.resource_type = 'file' AND ds.resource_id = f.id
-         WHERE f.id = $1
-           AND f.user_id <> $2
-           AND (
-             ($3 = 'organization' AND ds.scope = 'organization' AND ds.organization_id = $4)
-             OR ($3 = 'platform' AND ds.scope = 'platform')
-           )
-         LIMIT 1
-        "#,
-    )
-    .bind(file_id)
-    .bind(ctx.user_id)
-    .bind(ctx.scope.as_str())
-    .bind(ctx.organization_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
-
-    let Some(row) = row else {
-        return Ok(HttpResponse::NotFound().finish());
-    };
-    serve_file_row(ctx.user_id, file_id, row).await
 }
 
 //

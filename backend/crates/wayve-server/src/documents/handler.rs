@@ -63,9 +63,16 @@ struct DocumentFile {
     created_at: DateTime<Utc>,
 }
 
-/// The caller's `(user_id, organization_id)` if they belong to an org, else an
-/// HTTP error. Documents is an org-only workspace.
-async fn org_context(req: &HttpRequest, pool: &PgPool) -> Result<(i32, i32), HttpResponse> {
+/// The caller's `(user_id, scope)` for Documents. `scope` is the value matched
+/// against `org_documents.organization_id`: `Some(org_id)` for an organization
+/// member (their org's shared workspace) or `None` for platform team (the
+/// platform-wide shared set — platform staff have no org). Personal accounts
+/// get a 403. Callers bind `scope` (an `Option<i32>`) and match rows with
+/// `organization_id IS NOT DISTINCT FROM $n`, so `None` matches the NULL rows.
+async fn org_context(
+    req: &HttpRequest,
+    pool: &PgPool,
+) -> Result<(i32, Option<i32>), HttpResponse> {
     let user_id = get_user_id_from_request(req).ok_or_else(|| {
         HttpResponse::Unauthorized().json(serde_json::json!({ "message": "Authentication required" }))
     })?;
@@ -74,9 +81,10 @@ async fn org_context(req: &HttpRequest, pool: &PgPool) -> Result<(i32, i32), Htt
         HttpResponse::InternalServerError().finish()
     })?;
     match (ctx.scope, ctx.organization_id) {
-        (Scope::Organization, Some(org_id)) => Ok((user_id, org_id)),
+        (Scope::Organization, Some(org_id)) => Ok((user_id, Some(org_id))),
+        (Scope::Platform, _) => Ok((user_id, None)),
         _ => Err(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Documents is an organization workspace; only organization members can access it."
+            "message": "Documents is a shared workspace for organization and platform members."
         }))),
     }
 }
@@ -106,7 +114,7 @@ pub async fn list_folders(
     let rows = sqlx::query_as::<_, DocumentFolder>(
         "SELECT id, name, parent_folder_id, created_at
          FROM org_document_folders
-         WHERE organization_id = $1 AND parent_folder_id IS NOT DISTINCT FROM $2
+         WHERE organization_id IS NOT DISTINCT FROM $1 AND parent_folder_id IS NOT DISTINCT FROM $2
          ORDER BY name ASC",
     )
     .bind(org_id)
@@ -176,7 +184,7 @@ pub async fn rename_folder(
 
     let updated: Option<i64> = sqlx::query_scalar(
         "UPDATE org_document_folders SET name = $1, updated_at = NOW()
-         WHERE id = $2 AND organization_id = $3 RETURNING id",
+         WHERE id = $2 AND organization_id IS NOT DISTINCT FROM $3 RETURNING id",
     )
     .bind(&name)
     .bind(path.into_inner())
@@ -210,7 +218,7 @@ pub async fn delete_folder(
     // cascade only removes rows, not files.
     let paths: Vec<String> = sqlx::query_scalar(
         "WITH RECURSIVE sub AS (
-             SELECT id FROM org_document_folders WHERE id = $1 AND organization_id = $2
+             SELECT id FROM org_document_folders WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2
              UNION ALL
              SELECT f.id FROM org_document_folders f JOIN sub ON f.parent_folder_id = sub.id
          )
@@ -222,7 +230,7 @@ pub async fn delete_folder(
     .await?;
 
     let removed: Option<i64> = sqlx::query_scalar(
-        "DELETE FROM org_document_folders WHERE id = $1 AND organization_id = $2 RETURNING id",
+        "DELETE FROM org_document_folders WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2 RETURNING id",
     )
     .bind(folder_id)
     .bind(org_id)
@@ -256,7 +264,7 @@ pub async fn list_documents(
     let rows = sqlx::query_as::<_, DocumentFile>(
         "SELECT id, name, file_type, size, created_at
          FROM org_documents
-         WHERE organization_id = $1 AND folder_id IS NOT DISTINCT FROM $2
+         WHERE organization_id IS NOT DISTINCT FROM $1 AND folder_id IS NOT DISTINCT FROM $2
          ORDER BY created_at DESC",
     )
     .bind(org_id)
@@ -280,20 +288,26 @@ pub async fn upload_documents(
         Err(resp) => return Ok(resp),
     };
 
-    // Storage limit is enforced against the org's billing entitlement, summing
-    // the documents already stored for this org.
-    let owner = match resolve_owner(pool.get_ref(), user_id).await {
-        Ok(owner) => owner,
-        Err(resp) => return Ok(resp),
+    // Storage limit is enforced against the org's billing entitlement only for
+    // org-scoped uploads; the platform-wide shared set (scope None) isn't billed
+    // per-org, so skip the entitlement lookup + running total entirely there.
+    let (storage_limit_bytes, mut used): (i64, i64) = if org_id.is_some() {
+        let owner = match resolve_owner(pool.get_ref(), user_id).await {
+            Ok(owner) => owner,
+            Err(resp) => return Ok(resp),
+        };
+        let entitlement = effective_entitlements(pool.get_ref(), owner).await;
+        let used: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(size), 0)::BIGINT FROM org_documents WHERE organization_id IS NOT DISTINCT FROM $1",
+        )
+        .bind(org_id)
+        .fetch_one(pool.get_ref())
+        .await
+        .map_err(|_| actix_web::error::ErrorInternalServerError("DB error"))?;
+        (entitlement.storage_limit_bytes, used)
+    } else {
+        (-1, 0) // -1 = unlimited; platform-wide set is not capped here
     };
-    let entitlement = effective_entitlements(pool.get_ref(), owner).await;
-    let mut used: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(size), 0)::BIGINT FROM org_documents WHERE organization_id = $1",
-    )
-    .bind(org_id)
-    .fetch_one(pool.get_ref())
-    .await
-    .map_err(|_| actix_web::error::ErrorInternalServerError("DB error"))?;
 
     let upload_dir = "./uploads";
     fs::create_dir_all(upload_dir)
@@ -351,12 +365,14 @@ pub async fn upload_documents(
             plaintext.extend_from_slice(&data);
         }
 
-        if entitlement.storage_limit_bytes >= 0
-            && used.saturating_add(size) > entitlement.storage_limit_bytes
+        // `storage_limit_bytes` is -1 (unlimited) for the platform-wide set, so
+        // this check is naturally skipped there; it only bites org uploads.
+        if storage_limit_bytes >= 0
+            && used.saturating_add(size) > storage_limit_bytes
         {
             return Ok(HttpResponse::PaymentRequired().json(serde_json::json!({
                 "message": "Storage limit exceeded. Remove files or upgrade your plan.",
-                "storage_limit_bytes": entitlement.storage_limit_bytes,
+                "storage_limit_bytes": storage_limit_bytes,
                 "storage_used_bytes": used,
                 "upload_size_bytes": size
             })));
@@ -410,7 +426,7 @@ pub async fn download_document(
     };
 
     let row = sqlx::query(
-        "SELECT name, file_path, file_iv FROM org_documents WHERE id = $1 AND organization_id = $2",
+        "SELECT name, file_path, file_iv FROM org_documents WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2",
     )
     .bind(path.into_inner())
     .bind(org_id)
@@ -468,7 +484,7 @@ pub async fn rename_document(
 
     let updated: Option<i64> = sqlx::query_scalar(
         "UPDATE org_documents SET name = $1, updated_at = NOW()
-         WHERE id = $2 AND organization_id = $3 RETURNING id",
+         WHERE id = $2 AND organization_id IS NOT DISTINCT FROM $3 RETURNING id",
     )
     .bind(&name)
     .bind(path.into_inner())
@@ -497,7 +513,7 @@ pub async fn delete_document(
     };
 
     let removed: Option<String> = sqlx::query_scalar(
-        "DELETE FROM org_documents WHERE id = $1 AND organization_id = $2 RETURNING file_path",
+        "DELETE FROM org_documents WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2 RETURNING file_path",
     )
     .bind(path.into_inner())
     .bind(org_id)
@@ -514,10 +530,15 @@ pub async fn delete_document(
     }
 }
 
-/// Whether `folder_id` exists within `org_id`.
-async fn folder_in_org(pool: &PgPool, folder_id: i64, org_id: i32) -> Result<bool, AppError> {
+/// Whether `folder_id` exists within the caller's scope (`Some(org)` or the
+/// platform-wide `None` set).
+async fn folder_in_org(
+    pool: &PgPool,
+    folder_id: i64,
+    org_id: Option<i32>,
+) -> Result<bool, AppError> {
     let found: Option<i64> = sqlx::query_scalar(
-        "SELECT id FROM org_document_folders WHERE id = $1 AND organization_id = $2",
+        "SELECT id FROM org_document_folders WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2",
     )
     .bind(folder_id)
     .bind(org_id)

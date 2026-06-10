@@ -5,16 +5,11 @@ import {
   getDriveFiles,
   uploadDriveFiles,
   downloadDriveFile,
-  downloadSharedDriveFile,
   listFolders,
   createFolder,
   deleteFolder,
-  listSharedDriveItems,
-  shareDriveFile,
-  shareDriveFolder,
   type UploadedFile,
   type Folder,
-  type SharedDriveItem,
 } from "../api/drive";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
@@ -48,12 +43,9 @@ export default function Drive() {
   // === Existing file state ===
   const [files, setFiles] = useState<File[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [sharedItems, setSharedItems] = useState<SharedDriveItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canShareDrive =
-    user?.scope === "organization" || user?.scope === "platform";
 
   // Refetch files + folders whenever the user changes folders. The backend
   // narrows by folder_id; we mirror that on the client so search/filter only
@@ -87,27 +79,16 @@ export default function Drive() {
     }
   }, [user, currentFolderId]);
 
-  const fetchSharedItems = useCallback(async () => {
-    if (!user || !canShareDrive) return;
-    try {
-      const data = await listSharedDriveItems();
-      setSharedItems(Array.isArray(data) ? data : []);
-    } catch (err) {
-      logger.error("listSharedDriveItems failed", err);
-    }
-  }, [user, canShareDrive]);
-
   useEffect(() => {
     if (user?.id) {
       const timer = window.setTimeout(() => {
         void fetchFolders();
         void fetchFiles();
-        void fetchSharedItems();
       }, 0);
       return () => window.clearTimeout(timer);
     }
     return undefined;
-  }, [fetchFolders, fetchFiles, fetchSharedItems, user?.id]);
+  }, [fetchFolders, fetchFiles, user?.id]);
 
   // === Folder operations ===
   const submitNewFolder = async () => {
@@ -151,19 +132,6 @@ export default function Drive() {
     } catch (err) {
       logger.error("deleteFolder failed", err);
       setError("Could not delete folder.");
-    }
-  };
-
-  const shareScope = (): "organization" | "platform" =>
-    user?.scope === "platform" ? "platform" : "organization";
-
-  const shareFolder = async (folder: Folder, permission: "view" | "edit") => {
-    try {
-      setError(null);
-      await shareDriveFolder(folder.id, shareScope(), permission);
-    } catch (err) {
-      logger.error("shareFolder failed", err);
-      setError("Could not share folder.");
     }
   };
 
@@ -230,26 +198,6 @@ export default function Drive() {
     }
   };
 
-  const shareFile = async (file: UploadedFile, permission: "view" | "edit") => {
-    try {
-      setError(null);
-      await shareDriveFile(file.id, shareScope(), permission);
-    } catch (err) {
-      logger.error("shareFile failed", err);
-      setError("Could not share file.");
-    }
-  };
-
-  const downloadShared = async (item: SharedDriveItem) => {
-    if (item.resource_type !== "file") return;
-    try {
-      setError(null);
-      await downloadSharedDriveFile(item.id, item.name);
-    } catch (err) {
-      logger.error("downloadShared failed", err);
-      setError("Download failed.");
-    }
-  };
 
   // === Filtering ===
   const visibleFolders = normalizedSearchQuery
@@ -415,22 +363,6 @@ export default function Drive() {
                     >
                       Delete
                     </button>
-                    {canShareDrive && (
-                      <>
-                        <button
-                          className="file-download-btn"
-                          onClick={() => void shareFolder(folder, "view")}
-                        >
-                          Share view
-                        </button>
-                        <button
-                          className="file-download-btn"
-                          onClick={() => void shareFolder(folder, "edit")}
-                        >
-                          Share edit
-                        </button>
-                      </>
-                    )}
                   </div>
                 </div>
               ))}
@@ -481,71 +413,12 @@ export default function Drive() {
                   >
                     Download
                   </button>
-                  {canShareDrive && (
-                    <>
-                      <button
-                        className="file-download-btn"
-                        onClick={() => void shareFile(file, "view")}
-                      >
-                        Share view
-                      </button>
-                      <button
-                        className="file-download-btn"
-                        onClick={() => void shareFile(file, "edit")}
-                      >
-                        Share edit
-                      </button>
-                    </>
-                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
-
-      {canShareDrive && currentFolderId == null && (
-        <div className="files-section">
-          <h3>🔗 Shared with me</h3>
-          {sharedItems.length === 0 ? (
-            <p>No shared Drive items yet</p>
-          ) : (
-            <div className="file-list">
-              {sharedItems.map((item) => (
-                <div
-                  key={`${item.resource_type}-${item.id}`}
-                  className="file-row"
-                >
-                  <div className="file-left">
-                    <span className="file-icon">
-                      {item.resource_type === "folder" ? "📁" : "📄"}
-                    </span>
-                    <div className="file-main">
-                      <div className="file-name">{item.name}</div>
-                      <div className="file-meta">
-                        {item.resource_type} • {item.permission}
-                        {item.size != null
-                          ? ` • ${formatFileSize(item.size)}`
-                          : ""}
-                      </div>
-                    </div>
-                  </div>
-                  {item.resource_type === "file" && (
-                    <div className="file-right">
-                      <button
-                        className="file-download-btn"
-                        onClick={() => void downloadShared(item)}
-                      >
-                        Download
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

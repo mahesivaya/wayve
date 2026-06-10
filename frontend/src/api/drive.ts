@@ -21,17 +21,6 @@ export type Folder = {
   created_at: string;
 };
 
-export type SharedDriveItem = {
-  id: number;
-  resource_type: "file" | "folder";
-  name: string;
-  file_type: string | null;
-  size: number | null;
-  permission: "view" | "edit";
-  owner_user_id: number;
-  created_at: string;
-};
-
 // Backend scopes files/folders to the authenticated user (JWT). The
 // `folder_id` parameter narrows to a specific folder; `null` (default)
 // means "drive root" (rows where folder_id IS NULL on the server).
@@ -62,29 +51,6 @@ export const deleteFolder = async (folderId: number) => {
   const res = await apiFetch(`/api/folders/${folderId}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Delete folder failed");
 };
-
-export const listSharedDriveItems = async () =>
-  apiFetchJson<SharedDriveItem[]>("/api/drive/shared");
-
-export const shareDriveFile = async (
-  fileId: number,
-  scope: "organization" | "platform",
-  permission: "view" | "edit"
-) =>
-  apiFetchJson<{ shared: boolean }>(`/api/files/${fileId}/share`, {
-    method: "POST",
-    body: JSON.stringify({ scope, permission }),
-  });
-
-export const shareDriveFolder = async (
-  folderId: number,
-  scope: "organization" | "platform",
-  permission: "view" | "edit"
-) =>
-  apiFetchJson<{ shared: boolean }>(`/api/folders/${folderId}/share`, {
-    method: "POST",
-    body: JSON.stringify({ scope, permission }),
-  });
 
 /**
  * Upload files to drive. When `userId` is provided, each file is wrapped
@@ -178,24 +144,6 @@ export const downloadDriveFile = async (
   }
 
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  URL.revokeObjectURL(url);
-};
-
-export const downloadSharedDriveFile = async (
-  fileId: number,
-  fileName: string
-) => {
-  const res = await apiFetch(`/api/drive/shared/files/${fileId}/download`);
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-
   const a = document.createElement("a");
   a.href = url;
   a.download = fileName;

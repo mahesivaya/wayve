@@ -655,21 +655,26 @@ CREATE INDEX IF NOT EXISTS drive_shares_org_idx
 -- stored on disk under ./uploads, encrypted with the server at-rest key
 -- (wayve_security::encryption) so the server can serve them to any member —
 -- no per-user E2E envelope (which would lock out other members).
+-- `organization_id` is NULLABLE: a non-null value scopes the row to that
+-- organization's shared workspace; NULL is the platform-team-wide shared set
+-- (platform staff have no organization). Listing/access resolves the caller's
+-- scope and matches with `organization_id IS NOT DISTINCT FROM <scope>`.
 CREATE TABLE IF NOT EXISTS org_document_folders (
     id BIGSERIAL PRIMARY KEY,
-    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
     parent_folder_id BIGINT REFERENCES org_document_folders(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE org_document_folders ALTER COLUMN organization_id DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_org_doc_folders_org_parent
     ON org_document_folders(organization_id, parent_folder_id);
 
 CREATE TABLE IF NOT EXISTS org_documents (
     id BIGSERIAL PRIMARY KEY,
-    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
     folder_id BIGINT REFERENCES org_document_folders(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     file_type TEXT,
@@ -680,6 +685,7 @@ CREATE TABLE IF NOT EXISTS org_documents (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE org_documents ALTER COLUMN organization_id DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_org_documents_org_folder
     ON org_documents(organization_id, folder_id);
 

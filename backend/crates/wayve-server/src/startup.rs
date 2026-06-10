@@ -412,6 +412,41 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "CREATE INDEX IF NOT EXISTS idx_tasks_user_priority \
          ON tasks(user_id, priority DESC, created_at DESC)",
         // ────────────────────────────────────────────────────────────────
+        // Workspace Documents — a shared store. `organization_id` is NULLABLE:
+        // non-null = that org's shared docs; NULL = the platform-team-wide set
+        // (platform staff have no org). Mirrors infra/postgres/init.sql; the
+        // DROP NOT NULL migrates pre-existing tables that were created with the
+        // old NOT NULL column.
+        // ────────────────────────────────────────────────────────────────
+        "CREATE TABLE IF NOT EXISTS org_document_folders (
+            id BIGSERIAL PRIMARY KEY,
+            organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+            parent_folder_id BIGINT REFERENCES org_document_folders(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "ALTER TABLE org_document_folders ALTER COLUMN organization_id DROP NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_org_doc_folders_org_parent \
+         ON org_document_folders(organization_id, parent_folder_id)",
+        "CREATE TABLE IF NOT EXISTS org_documents (
+            id BIGSERIAL PRIMARY KEY,
+            organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+            folder_id BIGINT REFERENCES org_document_folders(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            file_type TEXT,
+            file_path TEXT NOT NULL,
+            file_iv TEXT,
+            size BIGINT NOT NULL DEFAULT 0,
+            uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "ALTER TABLE org_documents ALTER COLUMN organization_id DROP NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_org_documents_org_folder \
+         ON org_documents(organization_id, folder_id)",
+        // ────────────────────────────────────────────────────────────────
         // Payroll. Lives next to the Stripe billing projection but is
         // independent of it — employees aren't always Wayve users
         // (contractors, hires before account creation) so user_id is
