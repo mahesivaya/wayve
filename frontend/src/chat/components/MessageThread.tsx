@@ -47,11 +47,25 @@ export default function MessageThread({
           !!onOpenThread && msg.message_id != null && selectedChannel != null;
 
         return (
-          <div key={msg.message_id ?? i} className={`message ${mine ? "me" : ""}`}>
+          <div
+            key={msg.message_id ?? i}
+            className={`message ${mine ? "me" : ""}`}
+          >
             <div className={`bubble ${mine ? "me" : "other"}`}>
               <div>{msg.content}</div>
               <div className="message-meta">
-                {formatTime(msg.created_at)} {mine && getStatusIcon(msg.status)}
+                {formatTime(msg.created_at)}{" "}
+                {mine && msg.status && (
+                  <span
+                    className={`message-status${
+                      msg.status === "read" ? " message-status--read" : ""
+                    }`}
+                    title={msg.status}
+                    aria-label={msg.status}
+                  >
+                    {getStatusIcon(msg.status)}
+                  </span>
+                )}
               </div>
               {canOpenThread && (
                 <button

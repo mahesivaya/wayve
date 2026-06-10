@@ -66,6 +66,43 @@ pub async fn fan_out_user(cache: &Option<Cache>, user_id: i32, payload: String) 
     }
 }
 
+/// Mark every direct message addressed to `receiver_id` that is still `sent`
+/// as `delivered`, and notify each distinct sender so their bubble advances
+/// ✓ → ✓✓. Called when the receiver's socket connects, which covers the case
+/// the inline send-time delivered misses: the recipient was offline when the
+/// message was sent and only comes online later.
+async fn mark_delivered_on_connect(pool: &PgPool, cache: &Option<Cache>, receiver_id: i32) {
+    let rows = sqlx::query_as::<_, (i32, i32)>(
+        r#"
+        UPDATE messages
+           SET status = 'delivered'
+         WHERE receiver_id = $1 AND status = 'sent'
+        RETURNING id, sender_id
+        "#,
+    )
+    .bind(receiver_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_else(|e| {
+        warn!(target: "ws", receiver_id, error = ?e, "on-connect delivered sweep failed");
+        Vec::new()
+    });
+
+    if !rows.is_empty() {
+        info!(target: "ws", receiver_id, count = rows.len(), "marked messages delivered on connect");
+    }
+
+    for (message_id, sender_id) in rows {
+        let payload = serde_json::json!({
+            "type": "status_update",
+            "message_id": message_id,
+            "status": "delivered"
+        })
+        .to_string();
+        fan_out_user(cache, sender_id, payload).await;
+    }
+}
+
 // ================= CHAT SESSION =================
 
 pub struct ChatSession {
@@ -124,6 +161,15 @@ impl Actor for ChatSession {
         info!("Chat WS connected: user_id={}", self.user_id);
         SESSIONS.register(self.user_id, ctx.address());
         self.last_seen = Instant::now();
+
+        // Flip any messages addressed to this user that are still `sent` to
+        // `delivered` now that they're online, and notify the senders.
+        let pool = self.pool.clone();
+        let cache = self.cache.clone();
+        let me = self.user_id;
+        actix_web::rt::spawn(async move {
+            mark_delivered_on_connect(&pool, &cache, me).await;
+        });
 
         // Heartbeat: ping the client on an interval, and reap the socket if the
         // client has gone silent past CLIENT_TIMEOUT (the browser auto-pongs,
@@ -473,9 +519,27 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         .fetch_one(&pool)
                         .await?;
 
+                        let message_id: i32 = row.get("id");
+
+                        // If the recipient is connected right now, the message
+                        // is delivered the instant it's stored — persist that
+                        // so it survives a history refetch (the live
+                        // status_update event is sent from the continuation
+                        // below). Covers the recipient-online-at-send case; the
+                        // recipient-comes-online-later case is handled by
+                        // mark_delivered_on_connect.
+                        if SESSIONS.addr(receiver_id).is_some() {
+                            let _ = sqlx::query(
+                                "UPDATE messages SET status = 'delivered' \
+                                 WHERE id = $1 AND status = 'sent'",
+                            )
+                            .bind(message_id)
+                            .execute(&pool)
+                            .await;
+                        }
+
                         // Webhook fan-out. Metadata only — content stays
                         // end-to-end encrypted.
-                        let message_id: i32 = row.get("id");
                         let owner =
                             crate::webhooks::handler::owner_for_user(&pool, sender_id).await;
                         crate::webhooks::emit(
@@ -532,6 +596,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 // cross-instance "delivered" would need a shared
                                 // presence registry (future work).
                                 if SESSIONS.addr(receiver_id).is_some() {
+                                    // Live delivered receipt to the sender. The
+                                    // DB row was already flipped to 'delivered'
+                                    // inside the async block above.
                                     let delivered_json = serde_json::json!({
                                         "type": "status_update",
                                         "message_id": message_id,

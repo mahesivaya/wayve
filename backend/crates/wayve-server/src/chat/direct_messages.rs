@@ -9,11 +9,11 @@ use super::dto::QueryParams;
 use sqlx::Row;
 use tracing::{error, instrument, warn};
 
-#[instrument(target = "http", skip(req, pool, _cache, query), fields(user1 = query.user1, user2 = query.user2))]
+#[instrument(target = "http", skip(req, pool, cache, query), fields(user1 = query.user1, user2 = query.user2))]
 pub async fn get_messages(
     req: HttpRequest,
     pool: web::Data<PgPool>,
-    _cache: web::Data<Option<Cache>>,
+    cache: web::Data<Option<Cache>>,
     query: web::Query<QueryParams>,
 ) -> AppResult {
     // Auth: require a valid JWT and confirm the caller is one of the two
@@ -87,18 +87,33 @@ pub async fn get_messages(
         .await?
     };
 
-    let _ = sqlx::query(
+    // Mark everything the caller (user1) received from user2 as read, and
+    // notify the sender (user2) live so their bubbles flip to the blue
+    // double-check without waiting for their next history fetch.
+    let read_ids: Vec<(i32,)> = sqlx::query_as(
         r#"
         UPDATE messages
         SET status = 'read'
         WHERE receiver_id = $1 AND sender_id = $2
           AND status <> 'read'
+        RETURNING id
         "#,
     )
     .bind(query.user1)
     .bind(query.user2)
-    .execute(pool.get_ref())
-    .await;
+    .fetch_all(pool.get_ref())
+    .await
+    .unwrap_or_default();
+
+    for (message_id,) in &read_ids {
+        let payload = serde_json::json!({
+            "type": "status_update",
+            "message_id": message_id,
+            "status": "read"
+        })
+        .to_string();
+        super::websocket::fan_out_user(cache.get_ref(), query.user2, payload).await;
+    }
 
     let mut messages: Vec<Message> = rows
         .into_iter()

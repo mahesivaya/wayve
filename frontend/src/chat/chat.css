@@ -43,7 +43,9 @@
   background: var(--color-text-muted);
   border-radius: 1px;
   opacity: 0.35;
-  transition: opacity 0.15s, height 0.15s;
+  transition:
+    opacity 0.15s,
+    height 0.15s;
   pointer-events: none;
 }
 
@@ -96,7 +98,7 @@
   white-space: nowrap;
 }
 
-.new-channel-btn:hover{
+.new-channel-btn:hover {
   background: var(--color-primary-action-hover);
 }
 
@@ -218,7 +220,7 @@
   color: var(--color-text-slate-light);
 }
 
-.conversation-item:hover{
+.conversation-item:hover {
   background: var(--color-primary-hover-soft);
 }
 
@@ -345,7 +347,7 @@
   cursor: pointer;
 }
 
-.channel-header-join:disabled{
+.channel-header-join:disabled {
   border-color: var(--color-input-border);
   background: var(--color-surface-tint-slate);
   color: var(--color-text-slate-light);
@@ -353,7 +355,7 @@
 }
 
 .channel-settings-btn:hover,
-.channel-settings-btn.active{
+.channel-settings-btn.active {
   border-color: var(--color-primary-action);
   background: var(--color-primary-panel);
   color: var(--color-accent-blue-deep);
@@ -377,17 +379,17 @@
   cursor: pointer;
 }
 
-.chat-call-btn:hover:not(:disabled){
+.chat-call-btn:hover:not(:disabled) {
   border-color: var(--color-primary-action);
   background: var(--color-primary-panel);
 }
 
-.chat-call-btn:disabled{
+.chat-call-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.chat-call-btn-video:hover:not(:disabled){
+.chat-call-btn-video:hover:not(:disabled) {
   background: var(--color-success-soft);
   border-color: var(--color-success-emerald);
 }
@@ -401,11 +403,11 @@
   display: block;
 }
 
-.chat-call-btn-video:hover:not(:disabled) .chat-call-icon-video{
+.chat-call-btn-video:hover:not(:disabled) .chat-call-icon-video {
   color: var(--color-success-deep);
 }
 
-.chat-call-btn-video:disabled .chat-call-icon-video{
+.chat-call-btn-video:disabled .chat-call-icon-video {
   color: var(--color-text-slate-soft);
 }
 
@@ -418,11 +420,11 @@
   display: block;
 }
 
-.chat-call-btn-audio:hover:not(:disabled) .chat-call-icon-audio{
+.chat-call-btn-audio:hover:not(:disabled) .chat-call-icon-audio {
   color: var(--color-accent-blue-deep);
 }
 
-.chat-call-btn-audio:disabled .chat-call-icon-audio{
+.chat-call-btn-audio:disabled .chat-call-icon-audio {
   color: var(--color-text-slate-soft);
 }
 
@@ -442,7 +444,7 @@
   flex-direction: column;
 }
 
-.messages > .message:first-child{
+.messages > .message:first-child {
   margin-top: auto;
 }
 
@@ -480,7 +482,7 @@
   border-bottom: 1px solid var(--color-surface-cool-haze);
 }
 
-.channel-settings-section:last-child{
+.channel-settings-section:last-child {
   border-bottom: 0;
   margin-bottom: 0;
   padding-bottom: 0;
@@ -623,6 +625,20 @@
   text-align: right;
 }
 
+/* WhatsApp-style delivery ticks. The two check glyphs are pulled together so
+   "✓✓" reads as a single double-tick. Default (sent/delivered) inherits the
+   muted meta color; read flips to blue and full opacity. */
+.message-status {
+  letter-spacing: -3px;
+  padding-right: 2px;
+  font-weight: 700;
+}
+
+.message-status--read {
+  color: #4fc3f7;
+  opacity: 1;
+}
+
 .chat-input {
   display: flex;
   flex-direction: column;
@@ -676,7 +692,7 @@
   cursor: pointer;
 }
 
-.chat-compose-error-dismiss:hover{
+.chat-compose-error-dismiss:hover {
   background: rgb(153, 27, 27, 0.12);
 }
 
@@ -693,7 +709,7 @@
   font: inherit;
 }
 
-.chat-input textarea:focus{
+.chat-input textarea:focus {
   outline: 2px solid var(--color-primary-panel-border);
   border-color: var(--color-primary-action);
 }
@@ -709,7 +725,7 @@
   cursor: pointer;
 }
 
-.chat-input button:hover{
+.chat-input button:hover {
   background: var(--color-primary-action-hover);
 }
 
@@ -720,7 +736,7 @@
    conversation, with a back button to return to the list. */
 
 /* Back button — only shown in the narrow single-pane layout. */
-.chat-back-btn{
+.chat-back-btn {
   display: none;
 }
 
@@ -741,7 +757,7 @@
   cursor: pointer;
 }
 
-.chat-container.narrow .chat-back-btn:hover{
+.chat-container.narrow .chat-back-btn:hover {
   border-color: var(--color-primary-action);
   color: var(--color-accent-blue-deep);
 }
@@ -769,7 +785,7 @@
   display: none;
 }
 
-.chat-container.narrow:not(.has-active) .chat-area{
+.chat-container.narrow:not(.has-active) .chat-area {
   display: none;
 }
 
@@ -837,7 +853,7 @@
 }
 
 .thread-divider::before,
-.thread-divider::after{
+.thread-divider::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -845,8 +861,12 @@
   border-top: 1px solid var(--color-border);
 }
 
-.thread-divider::before{ left: 0; }
-.thread-divider::after{ right: 0; }
+.thread-divider::before {
+  left: 0;
+}
+.thread-divider::after {
+  right: 0;
+}
 
 .thread-panel-composer {
   display: flex;
@@ -877,7 +897,7 @@
   cursor: pointer;
 }
 
-.thread-panel-composer button:disabled{
+.thread-panel-composer button:disabled {
   background: var(--color-primary-border);
   border-color: var(--color-primary-border);
   cursor: default;
@@ -905,7 +925,7 @@
   transition: opacity 120ms ease-in;
 }
 
-.message:hover .message-thread-action{
+.message:hover .message-thread-action {
   opacity: 1;
 }
 
@@ -922,13 +942,13 @@
   cursor: pointer;
 }
 
-.message-reply-count:hover{
+.message-reply-count:hover {
   background: var(--color-primary-panel);
 }
 
 /* Narrow chat: thread panel takes over the conversation pane instead of
    sitting alongside it. */
-.chat-container.narrow .thread-panel{
+.chat-container.narrow .thread-panel {
   width: auto;
   flex: 1;
   border-left: none;

@@ -15,6 +15,9 @@ export function useChatSocket(
   // Called every time the socket (re)opens — used to backfill any messages
   // missed while the socket was down (Tier 2 resync). Optional.
   onOpen?: () => void,
+  // Called for a `status_update` event ({message_id, status}) so the sender's
+  // bubble can advance its delivery tick (sent → delivered → read). Optional.
+  onStatusUpdate?: (messageId: number, status: ChatMessage["status"]) => void
 ) {
   const wsRef = useRef<WebSocket | null>(null);
   const [readyState, setReadyState] = useState<number>(WebSocket.CLOSED);
@@ -29,12 +32,16 @@ export function useChatSocket(
   // state) changed identity — churn that could leave the composer disabled.
   const onMessageRef = useRef(onMessage);
   const onOpenRef = useRef(onOpen);
+  const onStatusUpdateRef = useRef(onStatusUpdate);
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
   useEffect(() => {
     onOpenRef.current = onOpen;
   }, [onOpen]);
+  useEffect(() => {
+    onStatusUpdateRef.current = onStatusUpdate;
+  }, [onStatusUpdate]);
 
   const userId = user?.id;
 
@@ -73,7 +80,14 @@ export function useChatSocket(
 
       ws.onmessage = (event) => {
         const msg: ChatMessage & { type?: string } = JSON.parse(event.data);
-        if (msg.type === "status_update") return;
+        // Delivery-tick update for one of our sent messages (sent → delivered
+        // → read). Patch the bubble's status in place; not a new message.
+        if (msg.type === "status_update") {
+          if (msg.message_id != null && msg.status) {
+            onStatusUpdateRef.current?.(msg.message_id, msg.status);
+          }
+          return;
+        }
         // Self-broadcasts without a client_id are legacy/multi-tab and we drop
         // them — the optimistic local copy already covers the same-tab case.
         // Self-broadcasts WITH a client_id are the reconciliation echo: pass
@@ -128,7 +142,7 @@ export function useChatSocket(
 
 function messageBelongsToSelectedConversation(
   msg: ChatMessage,
-  conversation: Conversation | null,
+  conversation: Conversation | null
 ) {
   if (conversation?.type === "channel") {
     return msg.channel_id === conversation.channel.id;
@@ -137,6 +151,7 @@ function messageBelongsToSelectedConversation(
   return (
     conversation?.type === "user" &&
     !msg.channel_id &&
-    (msg.sender_id === conversation.user.id || msg.receiver_id === conversation.user.id)
+    (msg.sender_id === conversation.user.id ||
+      msg.receiver_id === conversation.user.id)
   );
 }

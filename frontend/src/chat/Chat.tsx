@@ -49,10 +49,15 @@ export default function Chat() {
   const { user } = useAuth();
   const { normalizedSearchQuery } = useGlobalSearch();
 
-  const { users, channels, setChannels, refreshChannels: fetchChannels } =
-    useChatConversations(user?.id);
+  const {
+    users,
+    channels,
+    setChannels,
+    refreshChannels: fetchChannels,
+  } = useChatConversations(user?.id);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [selectedConversation, setSelectedConversation] =
+    useState<Conversation | null>(null);
   const [input, setInput] = useState("");
   const [isNarrow, setIsNarrow] = useState(false);
 
@@ -76,7 +81,7 @@ export default function Chat() {
   // without the extra commit / cascading render (see react.dev:
   // "You Might Not Need an Effect → Adjusting state when a prop changes").
   const [lastResetFor, setLastResetFor] = useState<Conversation | null>(
-    selectedConversation,
+    selectedConversation
   );
   // Surfaced inline above the composer when a send fails (typically because
   // a channel member hasn't finished encryption setup). Distinct from
@@ -94,7 +99,8 @@ export default function Chat() {
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   const [subjectDraft, setSubjectDraft] = useState("");
-  const [visibilityDraft, setVisibilityDraft] = useState<ChannelVisibility>("private");
+  const [visibilityDraft, setVisibilityDraft] =
+    useState<ChannelVisibility>("private");
   const [addUserRole, setAddUserRole] = useState<ChannelRole>("user");
   const [addUserEmails, setAddUserEmails] = useState("");
 
@@ -113,13 +119,16 @@ export default function Chat() {
     });
 
   const selectedChannel =
-    selectedConversation?.type === "channel" ? selectedConversation.channel : null;
+    selectedConversation?.type === "channel"
+      ? selectedConversation.channel
+      : null;
   const selectedTitle = useMemo(
     () => getConversationTitle(selectedConversation),
-    [selectedConversation],
+    [selectedConversation]
   );
   const isSelectedChannelAdmin = isChannelAdmin(selectedChannel, user);
-  const canChatInSelectedChannel = !selectedChannel || selectedChannel.is_member;
+  const canChatInSelectedChannel =
+    !selectedChannel || selectedChannel.is_member;
 
   useEffect(() => {
     selectedRef.current = selectedConversation;
@@ -141,69 +150,74 @@ export default function Chat() {
     return () => observer.disconnect();
   }, []);
 
-  const appendRealtimeMessage = useCallback(async (msg: ChatMessage) => {
-    if (!user) return;
+  const appendRealtimeMessage = useCallback(
+    async (msg: ChatMessage) => {
+      if (!user) return;
 
-    const decrypted = {
-      ...msg,
-      content: await decryptChatContent(msg.content, user.id),
-    };
+      const decrypted = {
+        ...msg,
+        content: await decryptChatContent(msg.content, user.id),
+      };
 
-    // Self-echo reconciliation: the broadcast carries the same client_id we
-    // generated on send, so we patch the optimistic local copy with the real
-    // server-assigned message_id (and refreshed created_at) instead of
-    // appending a duplicate. The reply_count bump on the parent was already
-    // done optimistically in sendThreadReply, so we deliberately do not bump
-    // again here.
-    if (decrypted.sender_id === user.id && decrypted.client_id) {
+      // Self-echo reconciliation: the broadcast carries the same client_id we
+      // generated on send, so we patch the optimistic local copy with the real
+      // server-assigned message_id (and refreshed created_at) instead of
+      // appending a duplicate. The reply_count bump on the parent was already
+      // done optimistically in sendThreadReply, so we deliberately do not bump
+      // again here.
+      if (decrypted.sender_id === user.id && decrypted.client_id) {
+        if (decrypted.parent_message_id != null) {
+          setThreadReplies((prev) =>
+            prev.map((r) =>
+              r.client_id === decrypted.client_id
+                ? {
+                    ...r,
+                    message_id: decrypted.message_id,
+                    created_at: decrypted.created_at,
+                  }
+                : r
+            )
+          );
+        } else {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.client_id === decrypted.client_id
+                ? {
+                    ...m,
+                    message_id: decrypted.message_id,
+                    created_at: decrypted.created_at,
+                  }
+                : m
+            )
+          );
+        }
+        return;
+      }
+
+      // Threaded reply from someone else: keep it out of the main feed
+      // entirely. If the matching thread is open, append it to the panel;
+      // either way, bump the parent's reply_count so the "N replies →"
+      // indicator updates live.
       if (decrypted.parent_message_id != null) {
         setThreadReplies((prev) =>
-          prev.map((r) =>
-            r.client_id === decrypted.client_id
-              ? {
-                  ...r,
-                  message_id: decrypted.message_id,
-                  created_at: decrypted.created_at,
-                }
-              : r,
-          ),
+          activeThread?.message_id === decrypted.parent_message_id
+            ? [...prev, decrypted]
+            : prev
         );
-      } else {
         setMessages((prev) =>
           prev.map((m) =>
-            m.client_id === decrypted.client_id
-              ? {
-                  ...m,
-                  message_id: decrypted.message_id,
-                  created_at: decrypted.created_at,
-                }
-              : m,
-          ),
+            m.message_id === decrypted.parent_message_id
+              ? { ...m, reply_count: (m.reply_count ?? 0) + 1 }
+              : m
+          )
         );
+        return;
       }
-      return;
-    }
 
-    // Threaded reply from someone else: keep it out of the main feed
-    // entirely. If the matching thread is open, append it to the panel;
-    // either way, bump the parent's reply_count so the "N replies →"
-    // indicator updates live.
-    if (decrypted.parent_message_id != null) {
-      setThreadReplies((prev) =>
-        activeThread?.message_id === decrypted.parent_message_id ? [...prev, decrypted] : prev,
-      );
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.message_id === decrypted.parent_message_id
-            ? { ...m, reply_count: (m.reply_count ?? 0) + 1 }
-            : m,
-        ),
-      );
-      return;
-    }
-
-    setMessages((prev) => [...prev, decrypted]);
-  }, [user, activeThread]);
+      setMessages((prev) => [...prev, decrypted]);
+    },
+    [user, activeThread]
+  );
 
   // Reconnect resync (Tier 2): whenever the socket (re)opens, backfill any
   // messages the open conversation missed while it was down — fetch everything
@@ -217,7 +231,7 @@ export default function Chat() {
       const lastId = messages.reduce(
         (max, m) =>
           m.message_id != null && m.message_id > max ? m.message_id : max,
-        0,
+        0
       );
       const since = lastId > 0 ? lastId : undefined;
       let missed: ChatMessage[] = [];
@@ -230,10 +244,10 @@ export default function Chat() {
       const decrypted = await decryptChatMessages(missed, user.id);
       setMessages((prev) => {
         const seen = new Set(
-          prev.map((m) => m.message_id).filter((id): id is number => id != null),
+          prev.map((m) => m.message_id).filter((id): id is number => id != null)
         );
         const additions = decrypted.filter(
-          (m) => m.message_id == null || !seen.has(m.message_id),
+          (m) => m.message_id == null || !seen.has(m.message_id)
         );
         return additions.length ? [...prev, ...additions] : prev;
       });
@@ -241,6 +255,24 @@ export default function Chat() {
       logger.error("chat resync failed", err);
     }
   }, [user, messages]);
+
+  // A `status_update` WS event advances a sent message's delivery tick
+  // (sent → delivered → read). Patch the matching bubble in place, only ever
+  // upgrading — a late 'delivered' must not clobber a 'read' that already won.
+  const handleStatusUpdate = useCallback(
+    (messageId: number, status: ChatMessage["status"]) => {
+      const rank: Record<string, number> = { sent: 0, delivered: 1, read: 2 };
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.message_id === messageId &&
+          (rank[status] ?? 0) > (rank[m.status] ?? 0)
+            ? { ...m, status }
+            : m
+        )
+      );
+    },
+    []
+  );
 
   const {
     wsRef,
@@ -251,6 +283,7 @@ export default function Chat() {
     selectedRef,
     appendRealtimeMessage,
     resyncSelectedConversation,
+    handleStatusUpdate
   );
 
   // The 1:1 call entry point lives in [ChatHeader](./components/ChatHeader.tsx).
@@ -263,12 +296,10 @@ export default function Chat() {
   const callDisabled =
     !callSession.connected || callSession.callState.kind !== "idle";
   const onAudioCall = selectedUser
-    ? () =>
-        callSession.startCall(selectedUser.id, selectedUser.email, "audio")
+    ? () => callSession.startCall(selectedUser.id, selectedUser.email, "audio")
     : null;
   const onVideoCall = selectedUser
-    ? () =>
-        callSession.startCall(selectedUser.id, selectedUser.email, "video")
+    ? () => callSession.startCall(selectedUser.id, selectedUser.email, "video")
     : null;
 
   useEffect(() => {
@@ -303,7 +334,8 @@ export default function Chat() {
   // append decrypted reply + bump the parent's reply_count in the main feed
   // (the WS echo for own messages is filtered out by useChatSocket).
   const sendThreadReply = async (text: string) => {
-    if (!wsRef.current || !user || !activeThread || !selectedConversation) return;
+    if (!wsRef.current || !user || !activeThread || !selectedConversation)
+      return;
     if (selectedConversation.type !== "channel") return;
     if (wsRef.current.readyState !== WebSocket.OPEN) return;
     if (activeThread.message_id == null) return;
@@ -338,8 +370,10 @@ export default function Chat() {
     setThreadReplies((prev) => [...prev, { ...message, content: plaintext }]);
     setMessages((prev) =>
       prev.map((m) =>
-        m.message_id === parentId ? { ...m, reply_count: (m.reply_count ?? 0) + 1 } : m,
-      ),
+        m.message_id === parentId
+          ? { ...m, reply_count: (m.reply_count ?? 0) + 1 }
+          : m
+      )
     );
   };
 
@@ -347,7 +381,9 @@ export default function Chat() {
     const channelData = await fetchChannels();
 
     if (!activeChannelId) return;
-    const activeChannel = channelData.find((channel) => channel.id === activeChannelId);
+    const activeChannel = channelData.find(
+      (channel) => channel.id === activeChannelId
+    );
     if (activeChannel) {
       setSelectedConversation({ type: "channel", channel: activeChannel });
     }
@@ -392,7 +428,9 @@ export default function Chat() {
     const keys = new Map<number, number[] | ArrayBuffer | Uint8Array>();
     const currentUserPublicKey = await loadPublicKey(user.id);
     if (!currentUserPublicKey) {
-      throw new Error("Your chat encryption key is not available on this device");
+      throw new Error(
+        "Your chat encryption key is not available on this device"
+      );
     }
     keys.set(user.id, currentUserPublicKey);
 
@@ -400,7 +438,9 @@ export default function Chat() {
       if (conversation.user.public_key?.length) {
         keys.set(conversation.user.id, conversation.user.public_key);
       } else {
-        throw new Error(`${conversation.user.email} has no chat encryption key`);
+        throw new Error(
+          `${conversation.user.email} has no chat encryption key`
+        );
       }
       return keys;
     }
@@ -420,7 +460,7 @@ export default function Chat() {
       const list = missingEmails.join(", ");
       throw new Error(
         `Can't send — ${list} ${missingEmails.length === 1 ? "hasn't" : "haven't"} ` +
-        `finished encryption setup. Ask them to log out and back in once.`,
+          `finished encryption setup. Ask them to log out and back in once.`
       );
     }
 
@@ -428,7 +468,8 @@ export default function Chat() {
   };
 
   const sendMessage = async () => {
-    if (!wsRef.current || !user || !selectedConversation || !input.trim()) return;
+    if (!wsRef.current || !user || !selectedConversation || !input.trim())
+      return;
     if (wsRef.current.readyState !== WebSocket.OPEN) {
       logger.warn("Chat socket not ready; message send skipped", {
         readyState: wsRef.current.readyState,
@@ -447,7 +488,9 @@ export default function Chat() {
       encryptedContent = await encryptChatContent(plaintext, recipientKeys);
     } catch (err) {
       logger.error("Chat encryption failed", err);
-      setComposeError(err instanceof Error ? err.message : "Chat encryption failed");
+      setComposeError(
+        err instanceof Error ? err.message : "Chat encryption failed"
+      );
       return;
     }
 
@@ -476,7 +519,7 @@ export default function Chat() {
         channelName,
         "user",
         [],
-        channelVisibility,
+        channelVisibility
       );
       setChannels((prev) => [channel, ...prev]);
       setChannelName("");
@@ -484,7 +527,9 @@ export default function Chat() {
       setCreatingChannel(false);
       await loadChannelMessages(channel);
     } catch (err) {
-      setChannelError(err instanceof Error ? err.message : "Failed to create channel");
+      setChannelError(
+        err instanceof Error ? err.message : "Failed to create channel"
+      );
     }
   };
 
@@ -496,7 +541,9 @@ export default function Chat() {
       await joinChatChannel(channel.id);
       await refreshChannels(channel.id);
     } catch (err) {
-      setSettingsError(err instanceof Error ? err.message : "Failed to join channel");
+      setSettingsError(
+        err instanceof Error ? err.message : "Failed to join channel"
+      );
     }
   };
 
@@ -508,7 +555,9 @@ export default function Chat() {
       await updateChatChannelSubject(selectedChannel.id, subjectDraft);
       await refreshChannels(selectedChannel.id);
     } catch (err) {
-      setSettingsError(err instanceof Error ? err.message : "Failed to update subject");
+      setSettingsError(
+        err instanceof Error ? err.message : "Failed to update subject"
+      );
     }
   };
 
@@ -520,7 +569,9 @@ export default function Chat() {
       await updateChatChannelVisibility(selectedChannel.id, visibilityDraft);
       await refreshChannels(selectedChannel.id);
     } catch (err) {
-      setSettingsError(err instanceof Error ? err.message : "Failed to update visibility");
+      setSettingsError(
+        err instanceof Error ? err.message : "Failed to update visibility"
+      );
     }
   };
 
@@ -529,12 +580,18 @@ export default function Chat() {
     setSettingsError("");
 
     try {
-      await addChatChannelUsers(selectedChannel.id, addUserRole, parseEmails(addUserEmails));
+      await addChatChannelUsers(
+        selectedChannel.id,
+        addUserRole,
+        parseEmails(addUserEmails)
+      );
       setAddUserRole("user");
       setAddUserEmails("");
       await refreshChannels(selectedChannel.id);
     } catch (err) {
-      setSettingsError(err instanceof Error ? err.message : "Failed to add users");
+      setSettingsError(
+        err instanceof Error ? err.message : "Failed to add users"
+      );
     }
   };
 
@@ -543,10 +600,15 @@ export default function Chat() {
     setSettingsError("");
 
     try {
-      await removeChatChannelUser(selectedChannel.id, email.replace(" invited", ""));
+      await removeChatChannelUser(
+        selectedChannel.id,
+        email.replace(" invited", "")
+      );
       await refreshChannels(selectedChannel.id);
     } catch (err) {
-      setSettingsError(err instanceof Error ? err.message : "Failed to delete user");
+      setSettingsError(
+        err instanceof Error ? err.message : "Failed to delete user"
+      );
     }
   };
 
@@ -557,11 +619,13 @@ export default function Chat() {
     try {
       await approveChatChannelJoinRequest(
         asChannelId(selectedChannel.id),
-        asUserId(userId),
+        asUserId(userId)
       );
       await refreshChannels(selectedChannel.id);
     } catch (err) {
-      setSettingsError(err instanceof Error ? err.message : "Failed to approve request");
+      setSettingsError(
+        err instanceof Error ? err.message : "Failed to approve request"
+      );
     }
   };
 
@@ -570,7 +634,7 @@ export default function Chat() {
         [channel.name, channel.visibility, ...channel.member_emails]
           .join(" ")
           .toLowerCase()
-          .includes(normalizedSearchQuery),
+          .includes(normalizedSearchQuery)
       )
     : channels;
 
@@ -586,11 +650,11 @@ export default function Chat() {
           msg.created_at,
           selectedConversation?.type === "channel"
             ? selectedConversation.channel.name
-            : selectedConversation?.user.email ?? "",
+            : (selectedConversation?.user.email ?? ""),
         ]
           .join(" ")
           .toLowerCase()
-          .includes(normalizedSearchQuery),
+          .includes(normalizedSearchQuery)
       )
     : messages;
 
@@ -653,7 +717,9 @@ export default function Chat() {
             messages={filteredMessages}
             selectedChannel={selectedChannel}
             currentUserId={user?.id}
-            onOpenThread={selectedChannel ? (msg) => void openThread(msg) : null}
+            onOpenThread={
+              selectedChannel ? (msg) => void openThread(msg) : null
+            }
           />
 
           {selectedChannel && activeThread && (

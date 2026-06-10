@@ -19,14 +19,16 @@ export const formatTime = (dateStr: string) => {
       });
 };
 
+// WhatsApp-style ticks: single check when sent, double check once
+// delivered, double check (colored blue by the bubble's `message-status--read`
+// class) once read.
 export const getStatusIcon = (status: string) => {
   switch (status) {
     case "sent":
       return "✓";
     case "delivered":
-      return "✓✓";
     case "read":
-      return "👁";
+      return "✓✓";
     default:
       return "";
   }
@@ -34,20 +36,22 @@ export const getStatusIcon = (status: string) => {
 
 export const getConversationTitle = (conversation: Conversation | null) => {
   if (!conversation) return "Select a conversation";
-  return conversation.type === "channel" ? conversation.channel.name : conversation.user.email;
+  return conversation.type === "channel"
+    ? conversation.channel.name
+    : conversation.user.email;
 };
 
 export const isChannelAdmin = (
   channel: ChatChannel | null,
-  currentUser?: { id: number; email: string } | null,
+  currentUser?: { id: number; email: string } | null
 ) =>
   Boolean(
     channel &&
-      currentUser &&
-      (channel.created_by === currentUser.id ||
-        (channel.admin_emails ?? []).some(
-          (email) => email.toLowerCase() === currentUser.email.toLowerCase(),
-        )),
+    currentUser &&
+    (channel.created_by === currentUser.id ||
+      (channel.admin_emails ?? []).some(
+        (email) => email.toLowerCase() === currentUser.email.toLowerCase()
+      ))
   );
 
 export const getChannelAdmins = (channel: ChatChannel | null) => [
