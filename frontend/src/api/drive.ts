@@ -103,6 +103,15 @@ export const uploadDriveFiles = async (
 ) => {
   const formData = new FormData();
 
+  // IMPORTANT: append folder_id BEFORE the files. The backend streams
+  // multipart fields in order and inserts each file as it reads it, using the
+  // folder_id seen so far — so if folder_id trails the files it's parsed too
+  // late and every file is stored at root (folder_id = NULL). Sending it first
+  // matches the backend's "non-file fields first" assumption.
+  if (folderId != null) {
+    formData.append("folder_id", String(folderId));
+  }
+
   if (userId != null) {
     const { encryptBlobForSelf } = await import("../crypto/fileEnvelope");
     for (const file of files) {
@@ -118,10 +127,6 @@ export const uploadDriveFiles = async (
     }
   } else {
     files.forEach((file) => formData.append("files", file));
-  }
-
-  if (folderId != null) {
-    formData.append("folder_id", String(folderId));
   }
 
   // Raw fetch (not apiFetch) so the browser sets the multipart boundary.

@@ -179,6 +179,18 @@
   font-size: var(--text-sm);
 }
 
+/* Destination hint so it's clear which folder an upload will land in. */
+.drop-zone p.drive-upload-target {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.drop-zone p.drive-upload-target strong {
+  color: var(--color-text-secondary);
+  font-weight: 700;
+}
+
 .browse-btn {
   display: inline-flex;
   align-items: center;

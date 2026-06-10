@@ -114,10 +114,15 @@ export default function Drive() {
     const name = newFolderName.trim();
     if (!name) return;
     try {
-      await createFolder(name, currentFolderId);
+      const folder = await createFolder(name, currentFolderId);
       setNewFolderName("");
       setCreatingFolder(false);
-      void fetchFolders();
+      // Navigate into the folder we just made. The upload drop-zone targets
+      // `currentFolderId`, so without this the user stays at the parent and an
+      // upload right after creating a folder lands in the parent/root instead
+      // of the new folder. Pushing the crumb also triggers the fetch effect to
+      // load the (empty) new folder's contents.
+      setPath((prev) => [...prev, { id: folder.id, name: folder.name }]);
     } catch (err) {
       logger.error("createFolder failed", err);
       setError("Could not create folder.");
@@ -339,6 +344,9 @@ export default function Drive() {
           onDrop={handleDrop}
         >
           <p>Drag & Drop files here</p>
+          <p className="drive-upload-target">
+            Uploading to <strong>{path[path.length - 1]?.name ?? "Drive"}</strong>
+          </p>
           <span>or</span>
 
           {files.length > 0 ? (
