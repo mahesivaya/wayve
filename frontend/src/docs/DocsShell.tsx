@@ -7,7 +7,6 @@ import {
   DOC_CATEGORIES,
   DOCS,
   docsInCategory,
-  findDocByPath,
   type DocEntry,
 } from "./manifest";
 import "./docsShell.css";
@@ -39,7 +38,7 @@ type DocsShellProps = {
  * render their body content, the shell handles the rest. With `single`
  * the nav becomes a top header and the content goes full-width.
  */
-export default function DocsShell({ children, title, single = false }: DocsShellProps) {
+export default function DocsShell({ children, single = false }: DocsShellProps) {
   const location = useLocation();
   const { user } = useAuth();
   const [query, setQuery] = useState("");
@@ -54,10 +53,6 @@ export default function DocsShell({ children, title, single = false }: DocsShell
   // outside the docs grid changes between the two paths.
   const OuterShell = user ? Layout : MarketingShell;
 
-  const currentDoc = useMemo(() => findDocByPath(location.pathname), [
-    location.pathname,
-  ]);
-
   const normalizedQuery = query.trim().toLowerCase();
   const matchesQuery = (d: DocEntry) => {
     if (!normalizedQuery) return true;
@@ -70,8 +65,6 @@ export default function DocsShell({ children, title, single = false }: DocsShell
       .toLowerCase();
     return haystack.includes(normalizedQuery);
   };
-
-  const breadcrumbLabel = title ?? currentDoc?.title;
 
   // Which category holds the current doc — its dropdown opens automatically
   // in the sidebar layout.
@@ -180,16 +173,6 @@ export default function DocsShell({ children, title, single = false }: DocsShell
 
   const mainBlock = (
     <main className="docs-content">
-      {/* Breadcrumb — "Docs › <Page>". Skipped on the index page
-          itself (location is /docs and currentDoc is undefined). */}
-      {breadcrumbLabel && location.pathname !== "/docs" && (
-        <nav className="docs-breadcrumb" aria-label="Breadcrumb">
-          <Link to="/docs">Docs</Link>
-          <span aria-hidden="true"> › </span>
-          <span>{breadcrumbLabel}</span>
-        </nav>
-      )}
-
       {children}
     </main>
   );

@@ -269,18 +269,3 @@ summary.docs-nav-heading:hover {
 .docs-content :where(pre, table, .swagger-docs-ui, .docs-index-list, .service-feature-grid, .service-usecase-list) {
   max-width: none;
 }
-
-.docs-breadcrumb {
-  font-size: 13px;
-  color: var(--color-text-muted, #6b7280);
-  margin-bottom: 1rem;
-}
-
-.docs-breadcrumb a {
-  color: var(--color-text-muted, #6b7280);
-  text-decoration: none;
-}
-
-.docs-breadcrumb a:hover {
-  text-decoration: underline;
-}
