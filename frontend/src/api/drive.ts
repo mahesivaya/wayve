@@ -123,26 +123,33 @@ export const uploadDriveFiles = async (
  * Pre-E2E plaintext files pass through unchanged so existing rows
  * keep working through the migration.
  */
+// Fetch a Drive file and return its DECRYPTED Blob (the WV1 self-envelope is
+// unwrapped client-side; plaintext uploads pass through). Shared by the
+// download action and by image thumbnails.
+export const fetchDriveFileBlob = async (
+  fileId: number,
+  userId: number | null = null
+): Promise<Blob> => {
+  const res = await apiFetch(`/api/files/${fileId}/download`);
+  const ct = res.headers.get("content-type") ?? "application/octet-stream";
+  const raw = new Uint8Array(await res.arrayBuffer());
+
+  if (userId != null) {
+    const { looksLikeEnvelope, decryptBlobForSelf } =
+      await import("../crypto/fileEnvelope");
+    return looksLikeEnvelope(raw)
+      ? await decryptBlobForSelf(raw, userId, ct)
+      : new Blob([raw], { type: ct });
+  }
+  return new Blob([raw], { type: ct });
+};
+
 export const downloadDriveFile = async (
   fileId: number,
   fileName: string,
   userId: number | null = null
 ) => {
-  const res = await apiFetch(`/api/files/${fileId}/download`);
-  const ct = res.headers.get("content-type") ?? "application/octet-stream";
-  const raw = new Uint8Array(await res.arrayBuffer());
-
-  let blob: Blob;
-  if (userId != null) {
-    const { looksLikeEnvelope, decryptBlobForSelf } =
-      await import("../crypto/fileEnvelope");
-    blob = looksLikeEnvelope(raw)
-      ? await decryptBlobForSelf(raw, userId, ct)
-      : new Blob([raw], { type: ct });
-  } else {
-    blob = new Blob([raw], { type: ct });
-  }
-
+  const blob = await fetchDriveFileBlob(fileId, userId);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

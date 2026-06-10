@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 import { formatFileSize } from "../emails/renderUtils";
+import DriveThumbnail from "./DriveThumbnail";
 
 // Breadcrumb entry. The root is encoded with id=null so the same shape works
 // for "Drive" and any nested folder name.
@@ -468,15 +469,19 @@ export default function Drive() {
             {visibleUploadedFiles.map((file) => (
               <div key={file.id} className="file-row">
                 <div className="file-left">
-                  <span className="file-icon">
-                    {file.file_type === "png" || file.file_type === "jpg"
-                      ? "🖼️"
-                      : file.file_type === "pdf"
-                        ? "📕"
-                        : file.file_type === "zip"
-                          ? "🗜️"
-                          : "📄"}
-                  </span>
+                  <DriveThumbnail
+                    file={file}
+                    userId={user?.id ?? null}
+                    fallback={
+                      file.file_type === "png" || file.file_type === "jpg"
+                        ? "🖼️"
+                        : file.file_type === "pdf"
+                          ? "📕"
+                          : file.file_type === "zip"
+                            ? "🗜️"
+                            : "📄"
+                    }
+                  />
 
                   <div className="file-main">
                     <div className="file-name">{file.name}</div>
