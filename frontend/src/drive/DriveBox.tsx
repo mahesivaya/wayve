@@ -712,7 +712,7 @@ export default function Drive() {
                       <div className="file-name">{file.name}</div>
                     )}
                     <div className="file-meta">
-                      {file.file_type} • {formatFileSize(file.size)}
+                      {formatFileSize(file.size)}
                     </div>
                   </div>
                 </div>
