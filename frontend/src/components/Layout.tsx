@@ -104,6 +104,26 @@ function loadPersistedSplit(): PersistedSplit {
   }
 }
 
+// Sidebar section expand/collapse persisted at MODULE scope. `/docs*` pages
+// render their own <Layout> (DocsShell's OuterShell), a different React
+// instance from the app's layout-route Layout — so navigating to a Developers
+// link (→ /docs) would otherwise mount a fresh Layout with every section
+// collapsed, snapping shut the group the user just clicked from. Persisting
+// here keeps sections open across that instance swap and ordinary navigation.
+// Module-level (not localStorage) so a full page reload still starts collapsed,
+// matching the intended default.
+const persistedSidebarSections: Record<string, boolean> = {};
+
+function usePersistentSection(key: string) {
+  const [open, setOpen] = useState<boolean>(
+    () => persistedSidebarSections[key] ?? false,
+  );
+  useEffect(() => {
+    persistedSidebarSections[key] = open;
+  }, [key, open]);
+  return [open, setOpen] as const;
+}
+
 export default function Layout({ children }: { children?: ReactNode } = {}) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -166,10 +186,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // route inside it (so the active item is visible); otherwise collapsed.
   // Collapsible sidebar groups always start collapsed on mount/reload — they
   // no longer auto-expand from the current URL. The user opens what they want.
-  const [logsExpanded, setLogsExpanded] = useState(false);
-  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
+  const [logsExpanded, setLogsExpanded] = usePersistentSection("logs");
+  const [workspaceExpanded, setWorkspaceExpanded] = usePersistentSection("workspace");
   // "Projects" is a sub-group under Workspace, listing the project names.
-  const [projectsExpanded, setProjectsExpanded] = useState(false);
+  const [projectsExpanded, setProjectsExpanded] = usePersistentSection("projects");
   // Projects + teams are org-scoped and fetched from the backend. Creation and
   // rename are org-owner-only (the controls are hidden otherwise; the backend
   // enforces it regardless).
@@ -232,9 +252,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       .then((created) => setTeams((prev) => [created, ...prev]))
       .catch(() => {});
   };
-  const [teamsExpanded, setTeamsExpanded] = useState(false);
-  const [platformExpanded, setPlatformExpanded] = useState(false);
-  const [developersExpanded, setDevelopersExpanded] = useState(false);
+  const [teamsExpanded, setTeamsExpanded] = usePersistentSection("teams");
+  const [platformExpanded, setPlatformExpanded] = usePersistentSection("platform");
+  const [developersExpanded, setDevelopersExpanded] = usePersistentSection("developers");
 
   // Desktop sidebar can be collapsed to an icon-only rail. Persisted so the
   // user's preference survives reloads.
