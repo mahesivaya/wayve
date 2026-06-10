@@ -3,12 +3,12 @@ use crate::billing::{entitlements::effective_entitlements, resolve_owner, usage_
 use crate::prelude::*;
 use actix_multipart::Multipart;
 use actix_web::http::header;
-use actix_web::{Error, HttpResponse, get, web};
+use actix_web::{Error, HttpResponse, delete, get, patch, web};
 use chrono::NaiveDateTime;
 use futures_util::StreamExt;
 use sqlx::{FromRow, PgPool, Row};
 use tokio::{fs, io::AsyncWriteExt};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
 use wayve_security::jwt::get_user_id_from_request;
@@ -311,6 +311,132 @@ pub async fn download_file(
     .await;
 
     serve_file_parts(user_id, file_id, file_name, file_path, file_iv).await
+}
+
+//
+// ✏️ RENAME FILE
+//
+#[derive(Deserialize)]
+pub struct RenameFileRequest {
+    pub name: String,
+}
+
+#[patch("/files/{id}")]
+#[instrument(target = "http", skip(req, body, pool, path))]
+pub async fn rename_file(
+    req: HttpRequest,
+    body: web::Json<RenameFileRequest>,
+    pool: web::Data<PgPool>,
+    path: web::Path<i64>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let file_id = path.into_inner();
+
+    // Strip any path separators a client might sneak in — `name` is a display
+    // label only; the on-disk path is keyed by a UUID and never changes here.
+    let name = body.name.replace(['/', '\\'], "");
+    let name = name.trim();
+    if name.is_empty() {
+        return Ok(
+            HttpResponse::BadRequest().json(serde_json::json!({ "error": "File name is required" }))
+        );
+    }
+    if name.chars().count() > 255 {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "error": "File name is too long (max 255 chars)" })));
+    }
+
+    // `file_type` is derived from the (new) name's extension so the icon/meta
+    // stays consistent with what `get_files` recomputes on read.
+    let file_type = name.rsplit('.').next().unwrap_or("").to_string();
+
+    // UPDATE ... RETURNING folds the ownership check and "did it exist?" check
+    // into one round-trip; a 404 (not 403) avoids leaking other users' rows.
+    let updated: Option<i64> = sqlx::query_scalar(
+        "UPDATE drive_files SET name = $1, file_type = $2 \
+           WHERE id = $3 AND user_id = $4 RETURNING id",
+    )
+    .bind(name)
+    .bind(&file_type)
+    .bind(file_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    if updated.is_none() {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({ "error": "File not found" })));
+    }
+
+    debug!(target: "http", user_id, file_id, "file renamed");
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "id": file_id, "name": name })))
+}
+
+//
+// 🗑️ DELETE FILE
+//
+#[delete("/files/{id}")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn delete_file(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i64>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let file_id = path.into_inner();
+
+    // DELETE ... RETURNING combines the ownership check, the delete, and the
+    // "did it exist?" check into one round-trip, and hands back the path/size
+    // we need to remove the blob and decrement storage usage.
+    let row = sqlx::query(
+        "DELETE FROM drive_files WHERE id = $1 AND user_id = $2 RETURNING file_path, size, name",
+    )
+    .bind(file_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let (file_path, size, file_name): (String, i64, String) = match row {
+        Some(row) => (row.get("file_path"), row.get("size"), row.get("name")),
+        None => {
+            return Ok(
+                HttpResponse::NotFound().json(serde_json::json!({ "error": "File not found" }))
+            );
+        }
+    };
+
+    // Best-effort blob removal — the DB row is already gone, so a stray file on
+    // disk is harmless (and will never be served again). Log but don't fail.
+    if let Err(e) = fs::remove_file(&file_path).await {
+        warn!(target: "http", user_id, file_id, path = %file_path, error = ?e, "delete_file blob remove failed");
+    }
+
+    // Decrement storage usage with a negative event, mirroring the positive
+    // event recorded on upload.
+    if let Ok(owner) = resolve_owner(pool.get_ref(), user_id).await {
+        let _ = usage_metering::record_event(
+            pool.get_ref(),
+            owner,
+            "drive_storage_bytes",
+            -size,
+        )
+        .await;
+    }
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "file_delete",
+            resource_type: "drive_file",
+            resource_id: Some(file_id.to_string()),
+            metadata: Some(serde_json::json!({ "name": file_name })),
+        },
+    )
+    .await;
+
+    debug!(target: "http", user_id, file_id, "file deleted");
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }
 
 async fn serve_file_row(user_id: i32, file_id: i64, row: sqlx::postgres::PgRow) -> AppResult {

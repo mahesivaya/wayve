@@ -52,6 +52,21 @@ export const deleteFolder = async (folderId: number) => {
   if (!res.ok) throw new Error("Delete folder failed");
 };
 
+// Rename a drive file. The server keeps the on-disk blob keyed by UUID; only
+// the display name (and derived file_type) change.
+export const renameDriveFile = async (fileId: number, name: string) =>
+  apiFetchJson<{ id: number; name: string }>(`/api/files/${fileId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+
+// Delete a drive file (DB row + on-disk blob). Storage usage is decremented
+// server-side.
+export const deleteDriveFile = async (fileId: number) => {
+  const res = await apiFetch(`/api/files/${fileId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Delete file failed");
+};
+
 /**
  * Upload files to drive. When `userId` is provided, each file is wrapped
  * in the WV1 binary envelope (E2E) before upload — the server only ever

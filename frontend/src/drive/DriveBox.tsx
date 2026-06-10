@@ -5,6 +5,8 @@ import {
   getDriveFiles,
   uploadDriveFiles,
   downloadDriveFile,
+  renameDriveFile,
+  deleteDriveFile,
   listFolders,
   createFolder,
   deleteFolder,
@@ -46,6 +48,29 @@ export default function Drive() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // === Per-file action menu (kebab ⋯) ===
+  // `menuOpenId` is the file whose dropdown is currently open (only one at a
+  // time). `renamingId`/`renameValue` drive the inline rename field. `infoFile`
+  // backs the read-only "File info" popup.
+  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [infoFile, setInfoFile] = useState<UploadedFile | null>(null);
+  const fileMenuRef = useRef<HTMLDivElement | null>(null);
+  // Close the open file menu on an outside click (same pattern as the Layout
+  // dropdown). Rename/info stay open — they're explicit modes.
+  useEffect(() => {
+    if (menuOpenId == null) return;
+    const onDown = (e: MouseEvent) => {
+      if (!fileMenuRef.current?.contains(e.target as Node)) {
+        setMenuOpenId(null);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [menuOpenId]);
+
   // Layout for folders/files: list, (small) grid, or large grid. Persisted so
   // the choice sticks. Chosen via the top-right "Layout" dropdown.
   type ViewMode = "list" | "grid" | "large";
@@ -223,6 +248,56 @@ export default function Drive() {
           ? `Download failed: ${err.message}`
           : "Download failed."
       );
+    }
+  };
+
+  const startRename = (file: UploadedFile) => {
+    setMenuOpenId(null);
+    setRenamingId(file.id);
+    setRenameValue(file.name);
+  };
+
+  const submitRename = async (file: UploadedFile) => {
+    const name = renameValue.trim();
+    if (!name || name === file.name) {
+      setRenamingId(null);
+      return;
+    }
+    try {
+      setError(null);
+      await renameDriveFile(file.id, name);
+      // Patch locally so the row updates without a round-trip; file_type is
+      // derived from the new extension to match the server.
+      setUploadedFiles((prev) =>
+        prev.map((f) =>
+          f.id === file.id
+            ? { ...f, name, file_type: name.split(".").pop() ?? f.file_type }
+            : f
+        )
+      );
+    } catch (err) {
+      logger.error("renameDriveFile failed", err);
+      setError("Could not rename file.");
+    } finally {
+      setRenamingId(null);
+    }
+  };
+
+  const removeFile = async (file: UploadedFile) => {
+    setMenuOpenId(null);
+    const confirmed = window.confirm(
+      `Delete "${file.name}"? This can't be undone.`
+    );
+    if (!confirmed) return;
+    try {
+      setError(null);
+      await deleteDriveFile(file.id);
+      setUploadedFiles((prev) => prev.filter((f) => f.id !== file.id));
+      // Storage went down — nudge the global usage banner to re-check.
+      window.dispatchEvent(new Event("rwayve:storage-changed"));
+    } catch (err) {
+      logger.error("deleteDriveFile failed", err);
+      setError("Could not delete file.");
     }
   };
 
@@ -484,7 +559,22 @@ export default function Drive() {
                   />
 
                   <div className="file-main">
-                    <div className="file-name">{file.name}</div>
+                    {renamingId === file.id ? (
+                      <input
+                        type="text"
+                        className="drive-folder-input file-rename-input"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void submitRename(file);
+                          if (e.key === "Escape") setRenamingId(null);
+                        }}
+                        onBlur={() => void submitRename(file)}
+                        autoFocus
+                      />
+                    ) : (
+                      <div className="file-name">{file.name}</div>
+                    )}
                     <div className="file-meta">
                       {file.file_type} • {formatFileSize(file.size)}
                     </div>
@@ -492,18 +582,113 @@ export default function Drive() {
                 </div>
 
                 <div className="file-right">
-                  <button
-                    className="file-download-btn"
-                    onClick={() => downloadFile(file)}
+                  <div
+                    className="drive-file-menu"
+                    ref={menuOpenId === file.id ? fileMenuRef : undefined}
                   >
-                    Download
-                  </button>
+                    <button
+                      type="button"
+                      className="drive-file-menu-trigger"
+                      onClick={() =>
+                        setMenuOpenId((id) => (id === file.id ? null : file.id))
+                      }
+                      title="More actions"
+                      aria-label="More actions"
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpenId === file.id}
+                    >
+                      ⋯
+                    </button>
+                    {menuOpenId === file.id && (
+                      <div className="drive-file-menu-dropdown" role="menu">
+                        <div className="drive-file-menu-name">{file.name}</div>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="drive-file-menu-item"
+                          onClick={() => {
+                            setMenuOpenId(null);
+                            void downloadFile(file);
+                          }}
+                        >
+                          ⬇ Download
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="drive-file-menu-item"
+                          onClick={() => startRename(file)}
+                        >
+                          ✎ Rename
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="drive-file-menu-item"
+                          onClick={() => {
+                            setMenuOpenId(null);
+                            setInfoFile(file);
+                          }}
+                        >
+                          ⓘ File info
+                        </button>
+                        <div className="drive-file-menu-sep" />
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="drive-file-menu-item drive-file-menu-item--danger"
+                          onClick={() => void removeFile(file)}
+                        >
+                          🗑 Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* File info popup — read-only metadata for the selected file. */}
+      {infoFile && (
+        <div
+          className="drive-info-overlay"
+          onClick={() => setInfoFile(null)}
+          role="presentation"
+        >
+          <div
+            className="drive-info-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="File info"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="drive-info-header">
+              <h4 className="drive-info-title">File info</h4>
+              <button
+                type="button"
+                className="drive-info-close"
+                onClick={() => setInfoFile(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <dl className="drive-info-list">
+              <dt>Name</dt>
+              <dd>{infoFile.name}</dd>
+              <dt>Type</dt>
+              <dd>{infoFile.file_type || "—"}</dd>
+              <dt>Size</dt>
+              <dd>{formatFileSize(infoFile.size)}</dd>
+              <dt>Uploaded</dt>
+              <dd>{new Date(infoFile.created_at).toLocaleString()}</dd>
+            </dl>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

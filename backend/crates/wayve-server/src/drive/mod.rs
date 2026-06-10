@@ -9,6 +9,8 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .route("/files/upload", web::post().to(handler::upload_file))
         .service(handler::get_files)
         .service(handler::download_file)
+        .service(handler::rename_file)
+        .service(handler::delete_file)
         .service(folders::create_folder)
         .service(folders::list_folders)
         .service(folders::delete_folder);
