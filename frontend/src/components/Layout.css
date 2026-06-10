@@ -518,6 +518,10 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-muted);
+  /* Pin left so a standalone label (e.g. "Organization") stays at the left
+     edge like the section toggles, instead of drifting toward center as the
+     sidebar widens (it was inheriting a centered text-align from an ancestor). */
+  text-align: left;
 }
 
 /* Collapsible section header (e.g. Logs). Reuses .sidebar-section-label for
