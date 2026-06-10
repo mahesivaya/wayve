@@ -9,6 +9,7 @@ import {
   deleteDriveFile,
   listFolders,
   createFolder,
+  renameFolder,
   deleteFolder,
   type UploadedFile,
   type Folder,
@@ -49,15 +50,25 @@ export default function Drive() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // === Per-file action menu (kebab ⋯) ===
-  // `menuOpenId` is the file whose dropdown is currently open (only one at a
-  // time). `renamingId`/`renameValue` drive the inline rename field. `infoFile`
-  // backs the read-only "File info" popup.
+  // === Row action menus (kebab ⋯) ===
+  // Files and folders each get the same menu, but with independent open/rename
+  // state (a file id and a folder id can collide — different tables). `infoItem`
+  // is a shared read-only "info" popup shape used by both.
+  type InfoItem = {
+    name: string;
+    type: string;
+    size: number | null;
+    created_at: string;
+  };
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [infoFile, setInfoFile] = useState<UploadedFile | null>(null);
+  const [menuOpenFolderId, setMenuOpenFolderId] = useState<number | null>(null);
+  const [renamingFolderId, setRenamingFolderId] = useState<number | null>(null);
+  const [renameFolderValue, setRenameFolderValue] = useState("");
+  const [infoItem, setInfoItem] = useState<InfoItem | null>(null);
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
+  const folderMenuRef = useRef<HTMLDivElement | null>(null);
   // Close the open file menu on an outside click (same pattern as the Layout
   // dropdown). Rename/info stay open — they're explicit modes.
   useEffect(() => {
@@ -70,6 +81,16 @@ export default function Drive() {
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [menuOpenId]);
+  useEffect(() => {
+    if (menuOpenFolderId == null) return;
+    const onDown = (e: MouseEvent) => {
+      if (!folderMenuRef.current?.contains(e.target as Node)) {
+        setMenuOpenFolderId(null);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [menuOpenFolderId]);
 
   // Layout for folders/files: list, (small) grid, or large grid. Persisted so
   // the choice sticks. Chosen via the top-right "Layout" dropdown.
@@ -181,7 +202,34 @@ export default function Drive() {
     setPath((prev) => prev.slice(0, index + 1));
   };
 
+  const startRenameFolder = (folder: Folder) => {
+    setMenuOpenFolderId(null);
+    setRenamingFolderId(folder.id);
+    setRenameFolderValue(folder.name);
+  };
+
+  const submitRenameFolder = async (folder: Folder) => {
+    const name = renameFolderValue.trim();
+    if (!name || name === folder.name) {
+      setRenamingFolderId(null);
+      return;
+    }
+    try {
+      setError(null);
+      await renameFolder(folder.id, name);
+      setFolders((prev) =>
+        prev.map((f) => (f.id === folder.id ? { ...f, name } : f))
+      );
+    } catch (err) {
+      logger.error("renameFolder failed", err);
+      setError("Could not rename folder.");
+    } finally {
+      setRenamingFolderId(null);
+    }
+  };
+
   const removeFolder = async (folder: Folder) => {
+    setMenuOpenFolderId(null);
     const confirmed = window.confirm(
       `Delete "${folder.name}" and everything inside it? This can't be undone.`
     );
@@ -501,24 +549,112 @@ export default function Drive() {
             <div className={fileListClass}>
               {visibleFolders.map((folder) => (
                 <div key={folder.id} className="file-row">
-                  <button
-                    type="button"
-                    className="file-left drive-folder-open"
-                    onClick={() => openFolder(folder)}
-                  >
-                    <span className="file-icon">📁</span>
-                    <div className="file-main">
-                      <div className="file-name">{folder.name}</div>
-                      <div className="file-meta">Folder</div>
+                  {renamingFolderId === folder.id ? (
+                    // While renaming, the row's left side can't be the
+                    // "open folder" button (an <input> can't live inside a
+                    // <button>), so render a plain container with the field.
+                    <div className="file-left">
+                      <span className="file-icon">📁</span>
+                      <div className="file-main">
+                        <input
+                          type="text"
+                          className="drive-folder-input file-rename-input"
+                          value={renameFolderValue}
+                          onChange={(e) => setRenameFolderValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void submitRenameFolder(folder);
+                            if (e.key === "Escape") setRenamingFolderId(null);
+                          }}
+                          onBlur={() => void submitRenameFolder(folder)}
+                          autoFocus
+                        />
+                        <div className="file-meta">Folder</div>
+                      </div>
                     </div>
-                  </button>
-                  <div className="file-right">
+                  ) : (
                     <button
-                      className="file-download-btn"
-                      onClick={() => void removeFolder(folder)}
+                      type="button"
+                      className="file-left drive-folder-open"
+                      onClick={() => openFolder(folder)}
                     >
-                      Delete
+                      <span className="file-icon">📁</span>
+                      <div className="file-main">
+                        <div className="file-name">{folder.name}</div>
+                        <div className="file-meta">Folder</div>
+                      </div>
                     </button>
+                  )}
+                  <div className="file-right">
+                    <div
+                      className="drive-file-menu"
+                      ref={
+                        menuOpenFolderId === folder.id ? folderMenuRef : undefined
+                      }
+                    >
+                      <button
+                        type="button"
+                        className="drive-file-menu-trigger"
+                        onClick={() =>
+                          setMenuOpenFolderId((id) =>
+                            id === folder.id ? null : folder.id
+                          )
+                        }
+                        title="More actions"
+                        aria-label="More actions"
+                        aria-haspopup="menu"
+                        aria-expanded={menuOpenFolderId === folder.id}
+                      >
+                        ⋯
+                      </button>
+                      {menuOpenFolderId === folder.id && (
+                        <div className="drive-file-menu-dropdown" role="menu">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="drive-file-menu-item"
+                            onClick={() => {
+                              setMenuOpenFolderId(null);
+                              openFolder(folder);
+                            }}
+                          >
+                            📂 Open
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="drive-file-menu-item"
+                            onClick={() => startRenameFolder(folder)}
+                          >
+                            ✎ Rename
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="drive-file-menu-item"
+                            onClick={() => {
+                              setMenuOpenFolderId(null);
+                              setInfoItem({
+                                name: folder.name,
+                                type: "Folder",
+                                size: null,
+                                created_at: folder.created_at,
+                              });
+                            }}
+                          >
+                            ⓘ Folder info
+                          </button>
+                          <div className="drive-file-menu-sep" />
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="drive-file-menu-item drive-file-menu-item--danger"
+                            onClick={() => void removeFolder(folder)}
+                          >
+                            🗑 Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -601,7 +737,6 @@ export default function Drive() {
                     </button>
                     {menuOpenId === file.id && (
                       <div className="drive-file-menu-dropdown" role="menu">
-                        <div className="drive-file-menu-name">{file.name}</div>
                         <button
                           type="button"
                           role="menuitem"
@@ -627,7 +762,12 @@ export default function Drive() {
                           className="drive-file-menu-item"
                           onClick={() => {
                             setMenuOpenId(null);
-                            setInfoFile(file);
+                            setInfoItem({
+                              name: file.name,
+                              type: file.file_type,
+                              size: file.size,
+                              created_at: file.created_at,
+                            });
                           }}
                         >
                           ⓘ File info
@@ -651,26 +791,28 @@ export default function Drive() {
         )}
       </div>
 
-      {/* File info popup — read-only metadata for the selected file. */}
-      {infoFile && (
+      {/* Info popup — read-only metadata for the selected file or folder. */}
+      {infoItem && (
         <div
           className="drive-info-overlay"
-          onClick={() => setInfoFile(null)}
+          onClick={() => setInfoItem(null)}
           role="presentation"
         >
           <div
             className="drive-info-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="File info"
+            aria-label="Info"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drive-info-header">
-              <h4 className="drive-info-title">File info</h4>
+              <h4 className="drive-info-title">
+                {infoItem.size == null ? "Folder info" : "File info"}
+              </h4>
               <button
                 type="button"
                 className="drive-info-close"
-                onClick={() => setInfoFile(null)}
+                onClick={() => setInfoItem(null)}
                 aria-label="Close"
               >
                 ✕
@@ -678,13 +820,17 @@ export default function Drive() {
             </div>
             <dl className="drive-info-list">
               <dt>Name</dt>
-              <dd>{infoFile.name}</dd>
+              <dd>{infoItem.name}</dd>
               <dt>Type</dt>
-              <dd>{infoFile.file_type || "—"}</dd>
-              <dt>Size</dt>
-              <dd>{formatFileSize(infoFile.size)}</dd>
-              <dt>Uploaded</dt>
-              <dd>{new Date(infoFile.created_at).toLocaleString()}</dd>
+              <dd>{infoItem.type || "—"}</dd>
+              {infoItem.size != null && (
+                <>
+                  <dt>Size</dt>
+                  <dd>{formatFileSize(infoItem.size)}</dd>
+                </>
+              )}
+              <dt>Created</dt>
+              <dd>{new Date(infoItem.created_at).toLocaleString()}</dd>
             </dl>
           </div>
         </div>

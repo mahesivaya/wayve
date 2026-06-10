@@ -47,6 +47,12 @@ export const createFolder = async (
     body: JSON.stringify({ name, parent_folder_id: parentFolderId }),
   });
 
+export const renameFolder = async (folderId: number, name: string) =>
+  apiFetchJson<{ id: number; name: string }>(`/api/folders/${folderId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+
 export const deleteFolder = async (folderId: number) => {
   const res = await apiFetch(`/api/folders/${folderId}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Delete folder failed");

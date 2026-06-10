@@ -11,7 +11,7 @@
 // folders owned by other users so the API doesn't leak existence.
 
 use crate::prelude::*;
-use actix_web::{HttpResponse, delete, get, post, web};
+use actix_web::{HttpResponse, delete, get, patch, post, web};
 use chrono::NaiveDateTime;
 use sqlx::{FromRow, PgPool, Row};
 use tracing::{debug, instrument};
@@ -30,6 +30,11 @@ pub struct Folder {
 pub struct CreateFolderRequest {
     pub name: String,
     pub parent_folder_id: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct RenameFolderRequest {
+    pub name: String,
 }
 
 #[derive(Deserialize)]
@@ -131,6 +136,47 @@ pub async fn list_folders(
     .await?;
 
     Ok(HttpResponse::Ok().json(rows))
+}
+
+#[patch("/folders/{id}")]
+#[instrument(target = "http", skip(req, body, pool, path))]
+pub async fn rename_folder(
+    req: HttpRequest,
+    body: web::Json<RenameFolderRequest>,
+    pool: web::Data<PgPool>,
+    path: web::Path<i64>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let folder_id = path.into_inner();
+
+    let name = body.name.trim();
+    if name.is_empty() {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "error": "Folder name is required" })));
+    }
+    if name.chars().count() > 255 {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "error": "Folder name is too long (max 255 chars)" })));
+    }
+
+    // UPDATE ... RETURNING folds the ownership check and "did it exist?" check
+    // into one round-trip; a 404 (not 403) avoids leaking other users' rows.
+    let updated: Option<i64> =
+        sqlx::query_scalar("UPDATE folders SET name = $1 WHERE id = $2 AND user_id = $3 RETURNING id")
+            .bind(name)
+            .bind(folder_id)
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
+
+    if updated.is_none() {
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "error": "Folder not found" }))
+        );
+    }
+
+    debug!(target: "http", user_id, folder_id, "folder renamed");
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "id": folder_id, "name": name })))
 }
 
 #[delete("/folders/{id}")]

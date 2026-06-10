@@ -13,5 +13,6 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(handler::delete_file)
         .service(folders::create_folder)
         .service(folders::list_folders)
+        .service(folders::rename_folder)
         .service(folders::delete_folder);
 }

@@ -396,18 +396,6 @@
   box-shadow: 0 10px 30px rgb(15, 23, 42, 0.14);
 }
 
-.drive-file-menu-name {
-  padding: 4px 8px 8px;
-  color: var(--color-text-primary);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: 4px;
-}
-
 .drive-file-menu-item {
   display: flex;
   align-items: center;
