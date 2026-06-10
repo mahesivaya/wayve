@@ -636,33 +636,15 @@
 
 /* Project links listed under Workspace → Projects. Read like the nav links
    — left-aligned, same size/weight — and open the GitHub code page. */
+/* Sub-item label deltas over the shared row base (defined with `.sidebar-link`
+   below): a single-line block that ellipsis-truncates. Base padding, colors,
+   :hover and .active come from the grouped rules. */
 .sidebar-subitems .sidebar-project-label {
   display: block;
-  padding: 7px 8px;
-  border-radius: var(--radius-sm);
-  text-align: left;
-  text-decoration: none;
-  color: var(--color-text-primary);
-  font-size: var(--text-md);
-  font-weight: 400;
-  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-
-.sidebar-subitems .sidebar-project-label:hover {
-  background: var(--color-surface-hover);
-}
-
-/* Active state for a navigable sub-item label (e.g. Workspace → Documents). */
-.sidebar-subitems .sidebar-project-label.active {
-  background: var(--color-primary-action);
-  color: var(--color-surface);
 }
 
 /* Row wraps the project link + its (hover-revealed) rename button. */
@@ -729,10 +711,11 @@
   min-height: 8px;
 }
 
-.sidebar-link {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* Shared base for navigable sidebar rows — both the top-level `.sidebar-link`
+   and the Workspace sub-item `.sidebar-project-label` (they differ only in
+   layout: flex+icon vs block+ellipsis, set below). */
+.sidebar-link,
+.sidebar-subitems .sidebar-project-label {
   padding: 7px 8px;
   border-radius: var(--radius-sm);
   text-align: left;
@@ -746,11 +729,19 @@
     color 0.15s;
 }
 
-.sidebar-link:hover {
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-link:hover,
+.sidebar-subitems .sidebar-project-label:hover {
   background: var(--color-surface-hover);
 }
 
-.sidebar-link.active {
+.sidebar-link.active,
+.sidebar-subitems .sidebar-project-label.active {
   background: var(--color-primary-action);
   color: var(--color-surface);
 }

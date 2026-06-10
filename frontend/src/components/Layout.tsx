@@ -8,6 +8,7 @@ import {
 } from "../auth/permissions";
 import {
   Suspense,
+  Fragment,
   useState,
   useCallback,
   useEffect,
@@ -125,14 +126,51 @@ function loadPersistedSplit(): PersistedSplit {
 // matching the intended default.
 const persistedSidebarSections: Record<string, boolean> = {};
 
-function usePersistentSection(key: string) {
-  const [open, setOpen] = useState<boolean>(
-    () => persistedSidebarSections[key] ?? false
-  );
+// A single declarative model for the collapsible sidebar groups, so the six
+// near-identical `<div className="sidebar-section">…</div>` blocks collapse
+// into one render loop. Simple sections supply `links`; interactive ones
+// (Workspace, Teams) supply a custom `body`.
+type SidebarLinkDef = {
+  path: string; // navigation target (the <Link to=>)
+  label: string;
+  icon: ReactNode;
+  visible?: boolean; // default true
+  active?: boolean; // explicit active override (e.g. always-inactive links)
+  activeWhen?: string; // pathname to match for active (defaults to `path`);
+  // used when `path` carries a query string the pathname won't equal.
+};
+type SidebarSectionDef = {
+  key: string; // expand-state key (also the React key)
+  label: string;
+  visible: boolean;
+  collapsible?: boolean; // default true; false = plain label, always shown
+  onAdd?: () => void;
+  links?: SidebarLinkDef[];
+  body?: ReactNode; // escape hatch for interactive sections
+};
+
+// One keyed store for every collapsible sidebar group, replacing what used to
+// be a separate useState per section. Seeded from (and synced back to) the
+// module-level record above, so open sections survive the Layout instance swap
+// and reset on a full reload.
+function useSidebarSections() {
+  const [state, setState] = useState<Record<string, boolean>>(() => ({
+    ...persistedSidebarSections,
+  }));
   useEffect(() => {
-    persistedSidebarSections[key] = open;
-  }, [key, open]);
-  return [open, setOpen] as const;
+    Object.assign(persistedSidebarSections, state);
+  }, [state]);
+  const isOpen = useCallback((key: string) => state[key] ?? false, [state]);
+  const setOpen = useCallback(
+    (key: string, open: boolean) =>
+      setState((s) => ({ ...s, [key]: open })),
+    []
+  );
+  const toggle = useCallback(
+    (key: string) => setState((s) => ({ ...s, [key]: !(s[key] ?? false) })),
+    []
+  );
+  return { isOpen, setOpen, toggle };
 }
 
 export default function Layout({ children }: { children?: ReactNode } = {}) {
@@ -197,12 +235,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // route inside it (so the active item is visible); otherwise collapsed.
   // Collapsible sidebar groups always start collapsed on mount/reload — they
   // no longer auto-expand from the current URL. The user opens what they want.
-  const [logsExpanded, setLogsExpanded] = usePersistentSection("logs");
-  const [workspaceExpanded, setWorkspaceExpanded] =
-    usePersistentSection("workspace");
-  // "Projects" is a sub-group under Workspace, listing the project names.
-  const [projectsExpanded, setProjectsExpanded] =
-    usePersistentSection("projects");
+  // One keyed store for every collapsible group (logs/workspace/projects/
+  // teams/platform/developers). `sections.isOpen(key)` / `.toggle(key)` /
+  // `.setOpen(key, bool)`.
+  const sections = useSidebarSections();
   // Projects + teams are org-scoped and fetched from the backend. Creation and
   // rename are org-owner-only (the controls are hidden otherwise; the backend
   // enforces it regardless).
@@ -267,12 +303,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       .then((created) => setTeams((prev) => [created, ...prev]))
       .catch(() => {});
   };
-  const [teamsExpanded, setTeamsExpanded] = usePersistentSection("teams");
-  const [platformExpanded, setPlatformExpanded] =
-    usePersistentSection("platform");
-  const [developersExpanded, setDevelopersExpanded] =
-    usePersistentSection("developers");
-
   // Desktop sidebar can be collapsed to an icon-only rail. Persisted so the
   // user's preference survives reloads.
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -643,6 +673,326 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const hasWorkspaceSection =
     user.scope === "platform" || isOrgManager || isDeveloper;
 
+  const renderLinks = (links?: SidebarLinkDef[]) =>
+    links
+      ?.filter((l) => l.visible !== false)
+      .map((l) => (
+        <Fragment key={`${l.path}|${l.label}`}>
+          {renderSidebarLink(
+            l.path,
+            l.label,
+            l.icon,
+            l.active ?? location.pathname === (l.activeWhen ?? l.path)
+          )}
+        </Fragment>
+      ));
+
+  // Renders one collapsible group from the registry. Non-collapsible groups
+  // (Organization) show a plain label with links directly underneath (no
+  // `.sidebar-subitems` wrapper, matching the prior markup). Collapsible groups
+  // render the toggle, then — when open or in the icon rail — the custom `body`
+  // or the mapped `links`.
+  const renderSection = (s: SidebarSectionDef) => {
+    if (!s.visible) return null;
+    if (s.collapsible === false) {
+      return (
+        <div className="sidebar-section" key={s.key}>
+          <div className="sidebar-section-label">{s.label}</div>
+          {renderLinks(s.links)}
+        </div>
+      );
+    }
+    const open = sections.isOpen(s.key) || sidebarCollapsed;
+    return (
+      <div className="sidebar-section" key={s.key}>
+        {renderSectionToggle(s.label, sections.isOpen(s.key), () =>
+          sections.toggle(s.key)
+        , s.onAdd)}
+        {open &&
+          (s.body ?? (
+            <div className="sidebar-subitems">{renderLinks(s.links)}</div>
+          ))}
+      </div>
+    );
+  };
+
+  const sectionDefs: SidebarSectionDef[] = [
+    {
+      key: "workspace",
+      label: "Workspace",
+      visible: hasWorkspaceSection,
+      body: (
+        <div className="sidebar-subitems">
+          {/* Compact sub-item style (matches the project rows) so it
+              doesn't tower over its Workspace neighbors. */}
+          <Link
+            to="/documents"
+            title="Documents"
+            className={`sidebar-project-label${
+              location.pathname === "/documents" ? " active" : ""
+            }`}
+            onClick={() => setNavOpen(false)}
+          >
+            📄 Documents
+          </Link>
+          {renderSectionToggle(
+            "Projects",
+            sections.isOpen("projects"),
+            () => sections.toggle("projects"),
+            isOrgOwner && !sidebarCollapsed
+              ? () => {
+                  sections.setOpen("projects", true);
+                  setProjectCreateDraft("");
+                  setCreatingProject(true);
+                }
+              : undefined
+          )}
+          {(sections.isOpen("projects") || sidebarCollapsed) && (
+            <div className="sidebar-subitems">
+              {creatingProject && (
+                <input
+                  className="sidebar-project-edit"
+                  value={projectCreateDraft}
+                  autoFocus
+                  placeholder="New project…"
+                  aria-label="New project name"
+                  onChange={(e) => setProjectCreateDraft(e.target.value)}
+                  onBlur={submitNewProject}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitNewProject();
+                    else if (e.key === "Escape") {
+                      setCreatingProject(false);
+                      setProjectCreateDraft("");
+                    }
+                  }}
+                />
+              )}
+              {projects.map((proj) =>
+                editingProject === proj.id ? (
+                  <input
+                    key={proj.id}
+                    className="sidebar-project-edit"
+                    value={projectDraft}
+                    autoFocus
+                    aria-label="Project name"
+                    onChange={(e) => setProjectDraft(e.target.value)}
+                    onBlur={() => commitProjectName(proj.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitProjectName(proj.id);
+                      else if (e.key === "Escape") setEditingProject(null);
+                    }}
+                  />
+                ) : (
+                  <div key={proj.id} className="sidebar-project-row">
+                    <Link
+                      to="/github"
+                      title={proj.name}
+                      className="sidebar-project-label"
+                      onClick={(e) => {
+                        setNavOpen(false);
+                        if (splitTarget === "right") {
+                          e.preventDefault();
+                          setRightView("github");
+                        }
+                      }}
+                    >
+                      {proj.name}
+                    </Link>
+                    {isOrgOwner && (
+                      <button
+                        type="button"
+                        className="sidebar-project-edit-btn"
+                        title="Rename project"
+                        aria-label={`Rename ${proj.name}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setProjectDraft(proj.name);
+                          setEditingProject(proj.id);
+                        }}
+                      >
+                        ✎
+                      </button>
+                    )}
+                  </div>
+                )
+              )}
+              {!creatingProject && projects.length === 0 && (
+                <div className="sidebar-empty-hint">No projects yet</div>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "teams",
+      label: "Teams",
+      visible: true,
+      onAdd:
+        isOrgOwner && !sidebarCollapsed
+          ? () => {
+              sections.setOpen("teams", true);
+              setTeamCreateDraft("");
+              setCreatingTeam(true);
+            }
+          : undefined,
+      body: (
+        <div className="sidebar-subitems">
+          {creatingTeam && (
+            <input
+              className="sidebar-project-edit"
+              value={teamCreateDraft}
+              autoFocus
+              placeholder="New team…"
+              aria-label="New team name"
+              onChange={(e) => setTeamCreateDraft(e.target.value)}
+              onBlur={submitNewTeam}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitNewTeam();
+                else if (e.key === "Escape") {
+                  setCreatingTeam(false);
+                  setTeamCreateDraft("");
+                }
+              }}
+            />
+          )}
+          {teams.map((team) => (
+            <Fragment key={team.slug}>
+              {renderSidebarLink(
+                `/teams/${team.slug}`,
+                team.name,
+                "👥",
+                location.pathname === `/teams/${team.slug}`
+              )}
+            </Fragment>
+          ))}
+          {!creatingTeam && teams.length === 0 && (
+            <div className="sidebar-empty-hint">No teams yet</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "platform",
+      label: "Platform",
+      visible: hasPlatformSection,
+      links: [
+        {
+          path: "/platform/billing",
+          label: "Billing",
+          icon: "💳",
+          visible: canAccessPlatformBilling,
+        },
+        {
+          path: "/platform/developer",
+          label: "Developer",
+          icon: "⚙",
+          visible: canAccessPlatformDeveloper,
+        },
+        {
+          path: "/platform/support",
+          label: "Support",
+          icon: <BugReportIcon className="sidebar-bug-icon" />,
+          visible: canAccessPlatformSupport,
+        },
+        {
+          path: "/platform/analytics",
+          label: "Analytics",
+          icon: "📊",
+          visible: canAccessPlatformAnalytics,
+        },
+        {
+          path: "/platform/domains",
+          label: "Domains",
+          icon: "🌐",
+          visible: isPlatformOwner,
+        },
+        {
+          path: "/platform/secrets",
+          label: "Secrets",
+          icon: "🔑",
+          visible: isPlatformOwner,
+        },
+      ],
+    },
+    {
+      key: "logs",
+      label: "Logs",
+      visible: hasLogsSection,
+      links: [
+        {
+          path: "/logs/app",
+          label: "App Logs",
+          icon: "🪵",
+          visible: canAccessPlatformLogs,
+        },
+        {
+          path: "/logs/visitors",
+          label: "Visitors",
+          icon: "👥",
+          visible: isPlatformOwner,
+        },
+        {
+          path: "/logs/users",
+          label: "User Logs",
+          icon: "👤",
+          visible: canAccessSecurity,
+        },
+        {
+          path: "/logs/audit",
+          label: "Audit Logs",
+          icon: "🔒",
+          visible: canAccessSecurity,
+        },
+        {
+          path: "/logs/tracing",
+          label: "Tracing",
+          icon: "📈",
+          visible: isPlatformOwner,
+        },
+      ],
+    },
+    {
+      key: "developers",
+      label: "Developers",
+      visible: user.account_type !== "personal",
+      links: [
+        { path: "/docs", label: "Docs", icon: "📚" },
+        { path: "/docs/api", label: "API reference", icon: "📖" },
+        // Libraries + SDK both land on the Developer overview; Libraries is
+        // never shown as active (preserves prior behavior), SDK is.
+        { path: "/docs/developers", label: "Libraries", icon: "📦", active: false },
+        { path: "/docs/developers", label: "SDK", icon: "🧰" },
+        {
+          path: "/api-keys",
+          label: "API Keys",
+          icon: "🔑",
+          visible: canAccessApiKeyAdmin(user),
+        },
+      ],
+    },
+    {
+      key: "organization",
+      label: "Organization",
+      visible: isOrgOwner,
+      collapsible: false,
+      links: [
+        {
+          path:
+            user.organization_id != null
+              ? `/platform/domains?org=${user.organization_id}`
+              : "/platform/domains",
+          label: "Domains",
+          icon: "🌐",
+          activeWhen: "/platform/domains",
+        },
+        { path: "/logs/app", label: "App Logs", icon: "📊" },
+        { path: "/logs/audit", label: "Audit Logs", icon: "🔒" },
+      ],
+    },
+  ];
+
   return (
     <div className="app">
       <SearchProvider>
@@ -823,346 +1173,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 )}
             </div>
 
-            {hasWorkspaceSection && (
-              <div className="sidebar-section">
-                {renderSectionToggle("Workspace", workspaceExpanded, () =>
-                  setWorkspaceExpanded((open) => !open)
-                )}
-                {(workspaceExpanded || sidebarCollapsed) && (
-                  <div className="sidebar-subitems">
-                    {/* Compact sub-item style (matches the project rows) so it
-                      doesn't tower over its Workspace neighbors. */}
-                    <Link
-                      to="/documents"
-                      title="Documents"
-                      className={`sidebar-project-label${
-                        location.pathname === "/documents" ? " active" : ""
-                      }`}
-                      onClick={() => setNavOpen(false)}
-                    >
-                      📄 Documents
-                    </Link>
-                    {renderSectionToggle(
-                      "Projects",
-                      projectsExpanded,
-                      () => setProjectsExpanded((open) => !open),
-                      isOrgOwner && !sidebarCollapsed
-                        ? () => {
-                            setProjectsExpanded(true);
-                            setProjectCreateDraft("");
-                            setCreatingProject(true);
-                          }
-                        : undefined
-                    )}
-                    {(projectsExpanded || sidebarCollapsed) && (
-                      <div className="sidebar-subitems">
-                        {creatingProject && (
-                          <input
-                            className="sidebar-project-edit"
-                            value={projectCreateDraft}
-                            autoFocus
-                            placeholder="New project…"
-                            aria-label="New project name"
-                            onChange={(e) =>
-                              setProjectCreateDraft(e.target.value)
-                            }
-                            onBlur={submitNewProject}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") submitNewProject();
-                              else if (e.key === "Escape") {
-                                setCreatingProject(false);
-                                setProjectCreateDraft("");
-                              }
-                            }}
-                          />
-                        )}
-                        {projects.map((proj) =>
-                          editingProject === proj.id ? (
-                            <input
-                              key={proj.id}
-                              className="sidebar-project-edit"
-                              value={projectDraft}
-                              autoFocus
-                              aria-label="Project name"
-                              onChange={(e) => setProjectDraft(e.target.value)}
-                              onBlur={() => commitProjectName(proj.id)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter")
-                                  commitProjectName(proj.id);
-                                else if (e.key === "Escape")
-                                  setEditingProject(null);
-                              }}
-                            />
-                          ) : (
-                            <div key={proj.id} className="sidebar-project-row">
-                              <Link
-                                to="/github"
-                                title={proj.name}
-                                className="sidebar-project-label"
-                                onClick={(e) => {
-                                  setNavOpen(false);
-                                  if (splitTarget === "right") {
-                                    e.preventDefault();
-                                    setRightView("github");
-                                  }
-                                }}
-                              >
-                                {proj.name}
-                              </Link>
-                              {isOrgOwner && (
-                                <button
-                                  type="button"
-                                  className="sidebar-project-edit-btn"
-                                  title="Rename project"
-                                  aria-label={`Rename ${proj.name}`}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setProjectDraft(proj.name);
-                                    setEditingProject(proj.id);
-                                  }}
-                                >
-                                  ✎
-                                </button>
-                              )}
-                            </div>
-                          )
-                        )}
-                        {!creatingProject && projects.length === 0 && (
-                          <div className="sidebar-empty-hint">
-                            No projects yet
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Teams in the user's organization. Org owners can add one via "+". */}
-            <div className="sidebar-section">
-              {renderSectionToggle(
-                "Teams",
-                teamsExpanded,
-                () => setTeamsExpanded((open) => !open),
-                isOrgOwner && !sidebarCollapsed
-                  ? () => {
-                      setTeamsExpanded(true);
-                      setTeamCreateDraft("");
-                      setCreatingTeam(true);
-                    }
-                  : undefined
-              )}
-              {(teamsExpanded || sidebarCollapsed) && (
-                <div className="sidebar-subitems">
-                  {creatingTeam && (
-                    <input
-                      className="sidebar-project-edit"
-                      value={teamCreateDraft}
-                      autoFocus
-                      placeholder="New team…"
-                      aria-label="New team name"
-                      onChange={(e) => setTeamCreateDraft(e.target.value)}
-                      onBlur={submitNewTeam}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") submitNewTeam();
-                        else if (e.key === "Escape") {
-                          setCreatingTeam(false);
-                          setTeamCreateDraft("");
-                        }
-                      }}
-                    />
-                  )}
-                  {teams.map((team) =>
-                    renderSidebarLink(
-                      `/teams/${team.slug}`,
-                      team.name,
-                      "👥",
-                      location.pathname === `/teams/${team.slug}`
-                    )
-                  )}
-                  {!creatingTeam && teams.length === 0 && (
-                    <div className="sidebar-empty-hint">No teams yet</div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {hasPlatformSection && (
-              <div className="sidebar-section">
-                {renderSectionToggle("Platform", platformExpanded, () =>
-                  setPlatformExpanded((open) => !open)
-                )}
-                {(platformExpanded || sidebarCollapsed) && (
-                  <div className="sidebar-subitems">
-                    {canAccessPlatformBilling &&
-                      renderSidebarLink(
-                        "/platform/billing",
-                        "Billing",
-                        "💳",
-                        location.pathname === "/platform/billing"
-                      )}
-                    {canAccessPlatformDeveloper &&
-                      renderSidebarLink(
-                        "/platform/developer",
-                        "Developer",
-                        "⚙",
-                        location.pathname === "/platform/developer"
-                      )}
-                    {canAccessPlatformSupport &&
-                      renderSidebarLink(
-                        "/platform/support",
-                        "Support",
-                        <BugReportIcon className="sidebar-bug-icon" />,
-                        location.pathname === "/platform/support"
-                      )}
-                    {canAccessPlatformAnalytics &&
-                      renderSidebarLink(
-                        "/platform/analytics",
-                        "Analytics",
-                        "📊",
-                        location.pathname === "/platform/analytics"
-                      )}
-                    {isPlatformOwner &&
-                      renderSidebarLink(
-                        "/platform/domains",
-                        "Domains",
-                        "🌐",
-                        location.pathname === "/platform/domains"
-                      )}
-                    {isPlatformOwner &&
-                      renderSidebarLink(
-                        "/platform/secrets",
-                        "Secrets",
-                        "🔑",
-                        location.pathname === "/platform/secrets"
-                      )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {hasLogsSection && (
-              <div className="sidebar-section">
-                {renderSectionToggle("Logs", logsExpanded, () =>
-                  setLogsExpanded((open) => !open)
-                )}
-                {/* In the icon-only rail the header (and thus the toggle) is
-                  hidden, so always show the items there to keep logs reachable. */}
-                {(logsExpanded || sidebarCollapsed) && (
-                  <div className="sidebar-subitems">
-                    {canAccessPlatformLogs &&
-                      renderSidebarLink(
-                        "/logs/app",
-                        "App Logs",
-                        "🪵",
-                        location.pathname === "/logs/app"
-                      )}
-                    {isPlatformOwner &&
-                      renderSidebarLink(
-                        "/logs/visitors",
-                        "Visitors",
-                        "👥",
-                        location.pathname === "/logs/visitors"
-                      )}
-                    {canAccessSecurity &&
-                      renderSidebarLink(
-                        "/logs/users",
-                        "User Logs",
-                        "👤",
-                        location.pathname === "/logs/users"
-                      )}
-                    {canAccessSecurity &&
-                      renderSidebarLink(
-                        "/logs/audit",
-                        "Audit Logs",
-                        "🔒",
-                        location.pathname === "/logs/audit"
-                      )}
-                    {isPlatformOwner &&
-                      renderSidebarLink(
-                        "/logs/tracing",
-                        "Tracing",
-                        "📈",
-                        location.pathname === "/logs/tracing"
-                      )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Developer resources. "Developers" is a collapsible section header
-              (like Workspace / Platform / Logs); the items below link into
-              /docs. Libraries + SDK both land on the Developer overview. */}
-            {user.account_type !== "personal" && (
-              <div className="sidebar-section">
-                {renderSectionToggle("Developers", developersExpanded, () =>
-                  setDevelopersExpanded((open) => !open)
-                )}
-                {(developersExpanded || sidebarCollapsed) && (
-                  <div className="sidebar-subitems">
-                    {renderSidebarLink(
-                      "/docs",
-                      "Docs",
-                      "📚",
-                      location.pathname === "/docs"
-                    )}
-                    {renderSidebarLink(
-                      "/docs/api",
-                      "API reference",
-                      "📖",
-                      location.pathname === "/docs/api"
-                    )}
-                    {renderSidebarLink(
-                      "/docs/developers",
-                      "Libraries",
-                      "📦",
-                      false
-                    )}
-                    {renderSidebarLink(
-                      "/docs/developers",
-                      "SDK",
-                      "🧰",
-                      location.pathname === "/docs/developers"
-                    )}
-                    {canAccessApiKeyAdmin(user) &&
-                      renderSidebarLink(
-                        "/api-keys",
-                        "API Keys",
-                        "🔑",
-                        location.pathname === "/api-keys"
-                      )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {isOrgOwner && (
-              <div className="sidebar-section">
-                <div className="sidebar-section-label">Organization</div>
-                {renderSidebarLink(
-                  user.organization_id != null
-                    ? `/platform/domains?org=${user.organization_id}`
-                    : "/platform/domains",
-                  "Domains",
-                  "🌐",
-                  location.pathname === "/platform/domains"
-                )}
-                {renderSidebarLink(
-                  "/logs/app",
-                  "App Logs",
-                  "📊",
-                  location.pathname === "/logs/app"
-                )}
-                {renderSidebarLink(
-                  "/logs/audit",
-                  "Audit Logs",
-                  "🔒",
-                  location.pathname === "/logs/audit"
-                )}
-              </div>
-            )}
+            {sectionDefs.map(renderSection)}
 
             <div className="sidebar-spacer" />
 
