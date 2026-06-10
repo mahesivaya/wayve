@@ -51,8 +51,14 @@ COPY --from=builder /app/rwayve.bin /app/rwayve
 # is unprivileged, logs go to a bind-mounted /app/logs). A non-root
 # runtime cuts container-escape blast radius and satisfies Trivy DS-0002.
 RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app \
+    && mkdir -p /app/uploads /app/logs \
     && chown -R app:app /app
 USER app
+
+# Pre-create /app/uploads above so a fresh named volume mounted here inherits
+# app ownership. Without it the dir doesn't exist in the image, Docker creates
+# the volume root-owned, and the non-root runtime can't write task/drive
+# attachments ("File create error").
 
 # Default RUST_LOG; override via env. Per-target file layers ignore this.
 ENV RUST_LOG=info
