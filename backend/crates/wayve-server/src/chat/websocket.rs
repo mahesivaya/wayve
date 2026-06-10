@@ -230,32 +230,35 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         };
 
                         actix::spawn(async move {
-                            let updated = sqlx::query(
+                            // Mark everything `other` sent to `reader` as read,
+                            // returning the affected ids so we can notify the
+                            // sender per message. The sender's client keys
+                            // status updates on `message_id`, so the receipt MUST
+                            // carry it (a sender_id/receiver_id-only payload was
+                            // silently ignored — read ticks never went blue live).
+                            let read_ids: Vec<(i32,)> = sqlx::query_as(
                                 r#"
                                 UPDATE messages
                                 SET status = 'read'
                                 WHERE receiver_id = $1 AND sender_id = $2
                                   AND status <> 'read'
+                                RETURNING id
                                 "#,
                             )
                             .bind(reader)
                             .bind(other)
-                            .execute(&pool)
-                            .await;
+                            .fetch_all(&pool)
+                            .await
+                            .unwrap_or_default();
 
                             if let Some(cache) = cache.as_ref() {
                                 cache.del(&chat_history_key(reader, other)).await;
                             }
 
-                            if updated
-                                .as_ref()
-                                .map(|result| result.rows_affected() > 0)
-                                .unwrap_or(false)
-                            {
+                            for (message_id,) in &read_ids {
                                 let receipt = serde_json::json!({
                                     "type": "status_update",
-                                    "sender_id": reader,
-                                    "receiver_id": other,
+                                    "message_id": message_id,
                                     "status": "read"
                                 })
                                 .to_string();
@@ -558,8 +561,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         Ok::<_, sqlx::Error>(row)
                     };
 
-                    let sender_addr = ctx.address();
-
                     ctx.spawn(actix::fut::wrap_future(fut).map(
                         move |res, _act, ctx: &mut WebsocketContext<Self>| {
                             if let Ok(row) = res {
@@ -571,12 +572,29 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                         chrono::Utc,
                                     );
 
+                                // 🔥 DELIVERED — best-effort, gated on LOCAL
+                                // presence. Accurate on a single instance; a
+                                // cross-instance "delivered" would need a shared
+                                // presence registry (future work). The DB row was
+                                // already flipped to 'delivered' inside the async
+                                // block above when the recipient was present.
+                                //
+                                // The delivered status rides on the SAME echo
+                                // frame that carries the server-assigned
+                                // message_id, so the sender's client applies it
+                                // atomically while reconciling its optimistic
+                                // bubble — no separate status_update that could
+                                // race ahead of that reconciliation and be
+                                // dropped (the "delivered only after reload" bug).
+                                let delivered = SESSIONS.addr(receiver_id).is_some();
+                                let status = if delivered { "delivered" } else { "sent" };
+
                                 let msg_json = serde_json::json!({
                                     "message_id": message_id,
                                     "sender_id": sender_id,
                                     "receiver_id": receiver_id,
                                     "content": content,
-                                    "status": "sent",
+                                    "status": status,
                                     "created_at": created_at.to_rfc3339(),
                                     "client_id": client_id,
                                 })
@@ -591,25 +609,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     fan_out_user(&cache_for_fanout, receiver_id, payload).await;
                                 });
 
-                                // 🔥 DELIVERED — best-effort, gated on LOCAL
-                                // presence. Accurate on a single instance; a
-                                // cross-instance "delivered" would need a shared
-                                // presence registry (future work).
-                                if SESSIONS.addr(receiver_id).is_some() {
-                                    // Live delivered receipt to the sender. The
-                                    // DB row was already flipped to 'delivered'
-                                    // inside the async block above.
-                                    let delivered_json = serde_json::json!({
-                                        "type": "status_update",
-                                        "message_id": message_id,
-                                        "status": "delivered"
-                                    })
-                                    .to_string();
-
-                                    sender_addr.do_send(WsMessage(delivered_json));
-                                }
-
-                                // SEND BACK TO SENDER
+                                // SEND BACK TO SENDER (echo carries the delivered
+                                // status above, so the tick advances live).
                                 ctx.text(msg_json);
 
                                 // BUST CACHE for this conversation so the next

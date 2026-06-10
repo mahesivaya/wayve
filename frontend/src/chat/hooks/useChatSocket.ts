@@ -96,6 +96,20 @@ export function useChatSocket(
         if (msg.sender_id === userId && !msg.client_id) return;
 
         if (messageBelongsToSelectedConversation(msg, selectedRef.current)) {
+          // Inbound DM for the conversation we're viewing → send a read receipt,
+          // but only if we're ACTUALLY looking (tab visible + window focused).
+          // WhatsApp-style: a message that lands while the window is backgrounded
+          // stays ✓✓ (delivered) and is marked read later by the focus/visibility
+          // flush below, when the recipient brings the window forward. DMs only —
+          // channels have no read state. The UPDATE is idempotent, so per-message
+          // sends are cheap.
+          if (
+            !msg.channel_id &&
+            msg.sender_id !== userId &&
+            isActivelyViewing()
+          ) {
+            sendReadReceipt(ws, userId, msg.sender_id);
+          }
           void onMessageRef.current(msg);
         }
       };
@@ -133,11 +147,62 @@ export function useChatSocket(
     };
   }, [userId, selectedRef]);
 
+  // Read-receipt flush on focus/visibility. When the window regains focus or
+  // becomes visible and a DM conversation is open, mark its messages read — this
+  // covers messages that arrived while the window was backgrounded (the inbound
+  // handler above deliberately skipped them so "read" means actually-seen). The
+  // backend UPDATE marks all unread-from-that-sender, so one receipt suffices.
+  useEffect(() => {
+    if (!userId) return;
+    const flushRead = () => {
+      if (!isActivelyViewing()) return;
+      const convo = selectedRef.current;
+      const ws = wsRef.current;
+      if (convo?.type === "user" && ws) {
+        sendReadReceipt(ws, userId, convo.user.id);
+      }
+    };
+    window.addEventListener("focus", flushRead);
+    document.addEventListener("visibilitychange", flushRead);
+    return () => {
+      window.removeEventListener("focus", flushRead);
+      document.removeEventListener("visibilitychange", flushRead);
+    };
+  }, [userId, selectedRef]);
+
   return {
     wsRef,
     isConnected: readyState === WebSocket.OPEN,
     isReconnecting: reconnecting,
   };
+}
+
+/** True only when the user is actually looking: tab visible AND window focused. */
+function isActivelyViewing() {
+  return (
+    typeof document !== "undefined" &&
+    document.visibilityState === "visible" &&
+    document.hasFocus()
+  );
+}
+
+/**
+ * Send a read receipt over the socket: marks every message `otherId` sent to us
+ * as read. `content`/`sender_id` are required for the backend to parse this as a
+ * ChatMessage; the read handler returns before reading content and derives the
+ * reader from the authenticated session, so the empty content and our own id
+ * here just satisfy the schema.
+ */
+function sendReadReceipt(ws: WebSocket, readerId: number, otherId: number) {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(
+    JSON.stringify({
+      sender_id: readerId,
+      receiver_id: otherId,
+      content: "",
+      status: "read",
+    })
+  );
 }
 
 function messageBelongsToSelectedConversation(

@@ -166,6 +166,16 @@ export default function Chat() {
       // done optimistically in sendThreadReply, so we deliberately do not bump
       // again here.
       if (decrypted.sender_id === user.id && decrypted.client_id) {
+        // Carry the echo's status onto the optimistic bubble (only ever
+        // upgrading: sent < delivered < read). For a recipient who's online,
+        // the echo already says "delivered", so the ✓✓ tick advances atomically
+        // here — no separate status_update event that could race ahead of this
+        // reconciliation and be dropped (the "delivered only after reload" bug).
+        const rank: Record<string, number> = { sent: 0, delivered: 1, read: 2 };
+        const mergeStatus = (current: ChatMessage["status"]) =>
+          (rank[decrypted.status] ?? 0) > (rank[current] ?? 0)
+            ? decrypted.status
+            : current;
         if (decrypted.parent_message_id != null) {
           setThreadReplies((prev) =>
             prev.map((r) =>
@@ -174,6 +184,7 @@ export default function Chat() {
                     ...r,
                     message_id: decrypted.message_id,
                     created_at: decrypted.created_at,
+                    status: mergeStatus(r.status),
                   }
                 : r
             )
@@ -186,6 +197,7 @@ export default function Chat() {
                     ...m,
                     message_id: decrypted.message_id,
                     created_at: decrypted.created_at,
+                    status: mergeStatus(m.status),
                   }
                 : m
             )
