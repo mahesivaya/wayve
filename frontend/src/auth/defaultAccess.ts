@@ -14,7 +14,7 @@ export type DefaultAccess = {
 };
 
 export function defaultAccessForAccount(
-  accountType?: string | null,
+  accountType?: string | null
 ): DefaultAccess {
   const normalized = normalizeAccountType(accountType);
   if (normalized === "platform_admin") {

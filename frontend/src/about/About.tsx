@@ -65,7 +65,9 @@ export default function About() {
     <main className="about-page">
       <section className="about-intro">
         <p className="about-kicker">About Fluxze</p>
-        <h1>One secure workspace for communication, planning, files, and AI.</h1>
+        <h1>
+          One secure workspace for communication, planning, files, and AI.
+        </h1>
         <p>
           Fluxze is designed as a practical work hub: users can manage email,
           collaborate through chat and calls, organize schedules and files, and

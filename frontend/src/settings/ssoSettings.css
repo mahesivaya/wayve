@@ -56,7 +56,7 @@
   color: var(--color-accent-indigo-darkest);
 }
 
-.sso-form input:focus{
+.sso-form input:focus {
   outline: none;
   border-color: var(--color-accent-indigo);
   background: white;
@@ -105,7 +105,7 @@
   color: white;
 }
 
-.sso-form-actions button:disabled{
+.sso-form-actions button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }

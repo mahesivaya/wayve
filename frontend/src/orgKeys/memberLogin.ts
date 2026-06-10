@@ -27,7 +27,9 @@ export type CachedKeys = {
 // the private key with `extractable=true` and re-exporting the public
 // component. Avoids a round-trip to /api/me/public-key when the server
 // might not have it yet (race during first-login after provisioning).
-async function derivePublicKeyFromPrivate(pkcs8: ArrayBuffer): Promise<ArrayBuffer> {
+async function derivePublicKeyFromPrivate(
+  pkcs8: ArrayBuffer
+): Promise<ArrayBuffer> {
   // To export the public half we need to import with sign-like usages
   // first, but RSA-OAEP keys only export their public half through a
   // separate keypair derive. Easiest portable path: import as
@@ -39,7 +41,7 @@ async function derivePublicKeyFromPrivate(pkcs8: ArrayBuffer): Promise<ArrayBuff
     pkcs8,
     { name: "RSA-OAEP", hash: "SHA-256" },
     true,
-    ["decrypt"],
+    ["decrypt"]
   );
   const jwk = await crypto.subtle.exportKey("jwk", priv);
   // Build a public-only JWK by keeping only the public fields.
@@ -56,7 +58,7 @@ async function derivePublicKeyFromPrivate(pkcs8: ArrayBuffer): Promise<ArrayBuff
     pubJwk,
     { name: "RSA-OAEP", hash: "SHA-256" },
     true,
-    ["encrypt"],
+    ["encrypt"]
   );
   return crypto.subtle.exportKey("spki", pubKey);
 }
@@ -65,7 +67,7 @@ export async function unwrapAndCacheMemberKeys(
   userId: number,
   email: string,
   password: string,
-  loginWrap: NewLoginWrap,
+  loginWrap: NewLoginWrap
 ): Promise<CachedKeys> {
   const enc = new TextEncoder();
   let pkcs8: ArrayBuffer;
@@ -75,10 +77,12 @@ export async function unwrapAndCacheMemberKeys(
       loginWrap.ct,
       enc.encode(password),
       loginWrap.salt,
-      loginWrap.iterations,
+      loginWrap.iterations
     );
   } catch {
-    throw new Error("Could not unwrap your private key — password may be wrong or account corrupted.");
+    throw new Error(
+      "Could not unwrap your private key — password may be wrong or account corrupted."
+    );
   }
 
   const privateKey = await crypto.subtle.importKey(
@@ -86,7 +90,7 @@ export async function unwrapAndCacheMemberKeys(
     pkcs8,
     { name: "RSA-OAEP", hash: "SHA-256" },
     true,
-    ["decrypt"],
+    ["decrypt"]
   );
   const publicKeyBytes = await derivePublicKeyFromPrivate(pkcs8);
 
@@ -105,7 +109,7 @@ export async function unwrapAndCacheMemberKeys(
 export async function rewrapOwnLoginEnvelope(
   oldPassword: string,
   newPassword: string,
-  oldWrap: NewLoginWrap,
+  oldWrap: NewLoginWrap
 ): Promise<NewLoginWrap> {
   const enc = new TextEncoder();
   let pkcs8: ArrayBuffer;
@@ -115,7 +119,7 @@ export async function rewrapOwnLoginEnvelope(
       oldWrap.ct,
       enc.encode(oldPassword),
       oldWrap.salt,
-      oldWrap.iterations,
+      oldWrap.iterations
     );
   } catch {
     throw new Error("Current password is incorrect.");
@@ -126,7 +130,7 @@ export async function rewrapOwnLoginEnvelope(
     enc.encode(newPassword),
     { name: "PBKDF2" },
     false,
-    ["deriveKey"],
+    ["deriveKey"]
   );
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -140,12 +144,12 @@ export async function rewrapOwnLoginEnvelope(
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
-    ["encrypt"],
+    ["encrypt"]
   );
   const ct = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv.slice().buffer },
     aesKey,
-    pkcs8,
+    pkcs8
   );
   function bytesToB64(b: Uint8Array): string {
     let s = "";

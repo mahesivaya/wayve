@@ -49,7 +49,7 @@ export default function RecoverPromptModal({
       if (!envelope) {
         setError(
           "No recovery key is stored for this account. " +
-            "If you signed up before recovery was added, ask support.",
+            "If you signed up before recovery was added, ask support."
         );
         return;
       }
@@ -71,8 +71,8 @@ export default function RecoverPromptModal({
           <p>
             This device doesn't have your encryption keys yet. Paste the{" "}
             {MNEMONIC_WORD_COUNT}-word phrase you saved at registration to
-            unlock your encrypted chat, notes, and email on this device.
-            The phrase never leaves your browser.
+            unlock your encrypted chat, notes, and email on this device. The
+            phrase never leaves your browser.
           </p>
         </header>
 

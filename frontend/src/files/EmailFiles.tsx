@@ -73,7 +73,9 @@ export default function EmailFiles() {
         <div className="email-files-error">{error}</div>
       ) : visibleFiles.length === 0 ? (
         <div className="email-files-empty">
-          {normalizedSearchQuery ? "No files match your search" : "No attached files found"}
+          {normalizedSearchQuery
+            ? "No files match your search"
+            : "No attached files found"}
         </div>
       ) : (
         <div className="email-files-list">
@@ -87,10 +89,13 @@ export default function EmailFiles() {
               <span className="email-files-main">
                 <span className="email-files-name">{file.filename}</span>
                 <span className="email-files-meta">
-                  {file.subject || "No subject"} · {file.sender || "Unknown sender"}
+                  {file.subject || "No subject"} ·{" "}
+                  {file.sender || "Unknown sender"}
                 </span>
               </span>
-              <span className="email-files-size">{formatFileSize(file.size)}</span>
+              <span className="email-files-size">
+                {formatFileSize(file.size)}
+              </span>
             </button>
           ))}
         </div>

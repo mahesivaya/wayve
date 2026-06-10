@@ -16,7 +16,12 @@
   margin-bottom: 14px;
 }
 
-:is(.platform-admin-header, .platform-admin-section-header, .organization-admin-header, .organization-admin-section-header)
+:is(
+    .platform-admin-header,
+    .platform-admin-section-header,
+    .organization-admin-header,
+    .organization-admin-section-header
+  )
   :is(h1, h2) {
   margin: 0;
   color: var(--color-text-primary);
@@ -34,7 +39,13 @@
   margin: 6px 0 0;
 }
 
-:is(.platform-admin-header, .platform-admin-section-header, .organization-admin-header, .organization-admin-section-header) p {
+:is(
+    .platform-admin-header,
+    .platform-admin-section-header,
+    .organization-admin-header,
+    .organization-admin-section-header
+  )
+  p {
   color: var(--color-text-muted);
   font-size: var(--text-md);
 }
@@ -49,7 +60,12 @@
   color: var(--color-primary-action-hover);
 }
 
-:is(.platform-admin-error, .platform-admin-success, .organization-admin-error, .organization-admin-success) {
+:is(
+  .platform-admin-error,
+  .platform-admin-success,
+  .organization-admin-error,
+  .organization-admin-success
+) {
   margin-top: 10px;
   padding: 9px 10px;
   border-radius: var(--radius-md);

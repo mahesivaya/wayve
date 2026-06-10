@@ -27,7 +27,9 @@ function toDate(input: string | number | Date | null | undefined): Date | null {
 // Date and get back a localized string. `null` / invalid → an em-dash so
 // every consumer can drop in without adding null guards.
 
-export function fmtDateTime(input: string | number | Date | null | undefined): string {
+export function fmtDateTime(
+  input: string | number | Date | null | undefined
+): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
   return new Intl.DateTimeFormat(undefined, {
@@ -40,7 +42,9 @@ export function fmtDateTime(input: string | number | Date | null | undefined): s
   }).format(d);
 }
 
-export function fmtDate(input: string | number | Date | null | undefined): string {
+export function fmtDate(
+  input: string | number | Date | null | undefined
+): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
   return new Intl.DateTimeFormat(undefined, {
@@ -50,7 +54,9 @@ export function fmtDate(input: string | number | Date | null | undefined): strin
   }).format(d);
 }
 
-export function fmtShortDate(input: string | number | Date | null | undefined): string {
+export function fmtShortDate(
+  input: string | number | Date | null | undefined
+): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
   return new Intl.DateTimeFormat(undefined, {
@@ -60,7 +66,9 @@ export function fmtShortDate(input: string | number | Date | null | undefined): 
   }).format(d);
 }
 
-export function fmtTime(input: string | number | Date | null | undefined): string {
+export function fmtTime(
+  input: string | number | Date | null | undefined
+): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
   return new Intl.DateTimeFormat(undefined, {
@@ -74,7 +82,9 @@ export function fmtTime(input: string | number | Date | null | undefined): strin
 // the last 24 hours, and a short date for anything older (e.g. "Jun 3", or
 // "Jun 3, 2024" when the year differs from now). Mirrors how mail clients
 // keep recent rows precise while older rows stay compact.
-export function fmtListTimestamp(input: string | number | Date | null | undefined): string {
+export function fmtListTimestamp(
+  input: string | number | Date | null | undefined
+): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
   const now = new Date();
@@ -93,7 +103,9 @@ export function fmtListTimestamp(input: string | number | Date | null | undefine
   }).format(d);
 }
 
-export function fmtLongDate(input: string | number | Date | null | undefined): string {
+export function fmtLongDate(
+  input: string | number | Date | null | undefined
+): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
   return new Intl.DateTimeFormat(undefined, {

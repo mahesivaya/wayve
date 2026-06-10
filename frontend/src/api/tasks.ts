@@ -64,7 +64,7 @@ export const listTaskAttachments = async (taskId: number) =>
 // JSON Content-Type apiFetch always pins would break the multipart parse.
 export const uploadTaskAttachments = async (
   taskId: number,
-  files: File[],
+  files: File[]
 ): Promise<TaskAttachment[]> => {
   if (files.length === 0) return [];
   const formData = new FormData();
@@ -98,7 +98,7 @@ export const deleteTaskAttachment = async (id: number) => {
 };
 
 export const downloadTaskAttachment = async (
-  attachment: TaskAttachment,
+  attachment: TaskAttachment
 ): Promise<void> => {
   const res = await apiFetch(`/api/task-attachments/${attachment.id}/download`);
   const blob = await res.blob();

@@ -50,7 +50,11 @@ export default function PlatformAnalytics() {
           value={data?.users_total ?? 0}
           sub={`+${data?.users_new_24h ?? 0} today · +${data?.users_new_7d ?? 0} this week`}
         />
-        <Stat label="Organizations" value={data?.orgs_total ?? 0} sub="Active tenants" />
+        <Stat
+          label="Organizations"
+          value={data?.orgs_total ?? 0}
+          sub="Active tenants"
+        />
         <Stat
           label="Active subscriptions"
           value={data?.active_subs ?? 0}
@@ -99,7 +103,9 @@ export default function PlatformAnalytics() {
                     </td>
                     <td>
                       {row.plan_name ?? "—"}{" "}
-                      <span className={`pt-pill ${row.sub_status}`}>{row.sub_status}</span>
+                      <span className={`pt-pill ${row.sub_status}`}>
+                        {row.sub_status}
+                      </span>
                     </td>
                     <td className="right">{row.member_count}</td>
                     <td className="right">{row.mailboxes}</td>
@@ -135,7 +141,9 @@ export default function PlatformAnalytics() {
                       {row.username && (
                         <>
                           <br />
-                          <small style={{ color: "#6b7280" }}>{row.username}</small>
+                          <small style={{ color: "#6b7280" }}>
+                            {row.username}
+                          </small>
                         </>
                       )}
                     </td>

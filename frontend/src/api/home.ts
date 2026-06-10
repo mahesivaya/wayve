@@ -43,14 +43,11 @@ export type HomeSummary = {
   recent: RecentItem[];
 };
 
-export const getHomeToday = () =>
-  apiFetchJson<TodaySummary>("/api/home/today");
+export const getHomeToday = () => apiFetchJson<TodaySummary>("/api/home/today");
 
-export const getHomeInbox = () =>
-  apiFetchJson<InboxSummary>("/api/home/inbox");
+export const getHomeInbox = () => apiFetchJson<InboxSummary>("/api/home/inbox");
 
-export const getHomeTasks = () =>
-  apiFetchJson<TasksSummary>("/api/home/tasks");
+export const getHomeTasks = () => apiFetchJson<TasksSummary>("/api/home/tasks");
 
 export const getHomeRecent = () =>
   apiFetchJson<RecentItem[]>("/api/home/recent");

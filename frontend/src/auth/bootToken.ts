@@ -88,7 +88,7 @@ export const resolveBootToken = (): {
     window.history.replaceState(
       {},
       document.title,
-      `${path}${window.location.search}`,
+      `${path}${window.location.search}`
     );
     return { token: tokenFromHash ?? getAuthToken(), isFreshSignup };
   }

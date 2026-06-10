@@ -86,14 +86,13 @@ export default function RecoverySeedModal({
         <header>
           <h2>Save your recovery phrase</h2>
           <p>
-            These {MNEMONIC_WORD_COUNT} words are the <strong>only</strong>{" "}
-            way to recover your account if you forget your password or
-            switch to a new device. Fluxze cannot reset them for you —
-            losing both the password and this phrase means your
-            encrypted content (emails, chat, drive, tasks, calendar,
-            notes) is unrecoverable. Copy or download them and keep
-            them somewhere safe — not in a screenshot, not in another
-            app on this device.
+            These {MNEMONIC_WORD_COUNT} words are the <strong>only</strong> way
+            to recover your account if you forget your password or switch to a
+            new device. Fluxze cannot reset them for you — losing both the
+            password and this phrase means your encrypted content (emails, chat,
+            drive, tasks, calendar, notes) is unrecoverable. Copy or download
+            them and keep them somewhere safe — not in a screenshot, not in
+            another app on this device.
           </p>
         </header>
 

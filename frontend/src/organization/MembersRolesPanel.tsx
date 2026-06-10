@@ -56,7 +56,10 @@ export default function MembersRolesPanel(props: Props) {
   const [resetPassword, setResetPassword] = useState("");
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState("");
-  const [resetDone, setResetDone] = useState<{ email: string; tempPassword: string } | null>(null);
+  const [resetDone, setResetDone] = useState<{
+    email: string;
+    tempPassword: string;
+  } | null>(null);
 
   // Create-user inline form state.
   const [createOpen, setCreateOpen] = useState(false);
@@ -100,7 +103,9 @@ export default function MembersRolesPanel(props: Props) {
       })
       .catch((err) => {
         if (alive) {
-          setError(err instanceof Error ? err.message : "Failed to load members");
+          setError(
+            err instanceof Error ? err.message : "Failed to load members"
+          );
         }
       })
       .finally(() => {
@@ -156,7 +161,7 @@ export default function MembersRolesPanel(props: Props) {
         props.organizationId,
         user.id,
         resetTarget.user_id,
-        resetPassword,
+        resetPassword
       );
       await resetMemberPassword(props.organizationId, resetTarget.user_id, {
         new_password: resetPassword,
@@ -181,7 +186,7 @@ export default function MembersRolesPanel(props: Props) {
     const label = member.username || member.email;
     if (
       !window.confirm(
-        `Permanently delete ${label}? This removes their account, messages, files, and channel memberships. This cannot be undone.`,
+        `Permanently delete ${label}? This removes their account, messages, files, and channel memberships. This cannot be undone.`
       )
     ) {
       return;
@@ -211,7 +216,8 @@ export default function MembersRolesPanel(props: Props) {
       const created = await adminCreateUser({
         email,
         role: createRole,
-        account_type: props.scope === "platform" ? "platform_admin" : "organization",
+        account_type:
+          props.scope === "platform" ? "platform_admin" : "organization",
       });
       setMembers((prev) => [
         ...prev,
@@ -234,7 +240,9 @@ export default function MembersRolesPanel(props: Props) {
       setCreateRole("member");
       setCreateOpen(false);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create user");
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to create user"
+      );
     } finally {
       setCreateBusy(false);
     }
@@ -272,9 +280,9 @@ export default function MembersRolesPanel(props: Props) {
             </code>
           </p>
           <p style={{ margin: "4px 0", fontSize: 12, color: "#92400e" }}>
-            Share this with the member out-of-band (Slack, SMS, in person).
-            They keep all their existing notes / files / messages — only
-            the password changed.
+            Share this with the member out-of-band (Slack, SMS, in person). They
+            keep all their existing notes / files / messages — only the password
+            changed.
           </p>
           <button
             type="button"
@@ -327,10 +335,10 @@ export default function MembersRolesPanel(props: Props) {
               Reset password for {resetTarget.email}
             </h3>
             <p style={{ color: "#6b7280", fontSize: 14 }}>
-              Your browser will re-wrap this member's private key under the
-              new password using the org master key. The member keeps all
-              their existing notes / files / messages — they just log in
-              with the new password. Share the new password out-of-band.
+              Your browser will re-wrap this member's private key under the new
+              password using the org master key. The member keeps all their
+              existing notes / files / messages — they just log in with the new
+              password. Share the new password out-of-band.
             </p>
             <form onSubmit={submitResetPassword}>
               <label style={{ display: "block", margin: "12px 0" }}>
@@ -354,9 +362,13 @@ export default function MembersRolesPanel(props: Props) {
                 />
               </label>
               {resetError && (
-                <p style={{ color: "#b91c1c", margin: "8px 0" }}>{resetError}</p>
+                <p style={{ color: "#b91c1c", margin: "8px 0" }}>
+                  {resetError}
+                </p>
               )}
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <div
+                style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}
+              >
                 <button
                   type="button"
                   disabled={resetBusy}
@@ -418,10 +430,12 @@ export default function MembersRolesPanel(props: Props) {
       {lastCreated && (
         <div className="rbac-create-result" role="alert">
           <div>
-            <strong>{lastCreated.email}</strong> created as {ROLE_LABELS[normalizeRole(lastCreated.role)]}.
+            <strong>{lastCreated.email}</strong> created as{" "}
+            {ROLE_LABELS[normalizeRole(lastCreated.role)]}.
           </div>
           <div className="rbac-create-password">
-            Temporary password (shown once): <code>{lastCreated.tempPassword}</code>
+            Temporary password (shown once):{" "}
+            <code>{lastCreated.tempPassword}</code>
             <button
               type="button"
               className="rbac-create-copy"
@@ -444,7 +458,10 @@ export default function MembersRolesPanel(props: Props) {
       )}
 
       {props.scope === "platform" && createOpen && (
-        <form className="rbac-create-form" onSubmit={(e) => void submitCreate(e)}>
+        <form
+          className="rbac-create-form"
+          onSubmit={(e) => void submitCreate(e)}
+        >
           <label>
             <span>Email</span>
             <input
@@ -522,96 +539,112 @@ export default function MembersRolesPanel(props: Props) {
           {view === "tree" ? (
             <MembersTree members={members} />
           ) : (
-        <div className="rbac-members-list">
-          {members.map((member) => {
-            const editable =
-              canChangeRoles && canModifyMember(permissions, member.role);
-            // Delete shares the same role-management predicate as role
-            // changes, plus the actor must not be deleting themselves and
-            // must still hold members:manage. Server-side enforces all three
-            // again — this is only the UI gate.
-            const canDelete =
-              canManage &&
-              canModifyMember(permissions, member.role) &&
-              member.user_id !== user?.id;
-            return (
-              <div className="rbac-members-row" key={member.user_id}>
-                <div className="rbac-members-identity">
-                  <strong>{member.username || member.email}</strong>
-                  <span>{member.email}</span>
-                </div>
-                <div className="rbac-members-actions">
-                  {editable ? (
-                    <select
-                      value={normalizeRole(member.role)}
-                      disabled={savingId === member.user_id || deletingId === member.user_id}
-                      onChange={(event) => changeRole(member, event.target.value)}
-                    >
-                      {roleOptions.map((role) => (
-                        <option key={role} value={role}>
-                          {ROLE_LABELS[role]}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="rbac-members-role">{member.role_label}</span>
-                  )}
-                  {/* Org master-key flows: only meaningful in organization
+            <div className="rbac-members-list">
+              {members.map((member) => {
+                const editable =
+                  canChangeRoles && canModifyMember(permissions, member.role);
+                // Delete shares the same role-management predicate as role
+                // changes, plus the actor must not be deleting themselves and
+                // must still hold members:manage. Server-side enforces all three
+                // again — this is only the UI gate.
+                const canDelete =
+                  canManage &&
+                  canModifyMember(permissions, member.role) &&
+                  member.user_id !== user?.id;
+                return (
+                  <div className="rbac-members-row" key={member.user_id}>
+                    <div className="rbac-members-identity">
+                      <strong>{member.username || member.email}</strong>
+                      <span>{member.email}</span>
+                    </div>
+                    <div className="rbac-members-actions">
+                      {editable ? (
+                        <select
+                          value={normalizeRole(member.role)}
+                          disabled={
+                            savingId === member.user_id ||
+                            deletingId === member.user_id
+                          }
+                          onChange={(event) =>
+                            changeRole(member, event.target.value)
+                          }
+                        >
+                          {roleOptions.map((role) => (
+                            <option key={role} value={role}>
+                              {ROLE_LABELS[role]}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="rbac-members-role">
+                          {member.role_label}
+                        </span>
+                      )}
+                      {/* Org master-key flows: only meaningful in organization
                       scope, and only for users holding org_keys:use_master
                       (owner / super_admin / admin). Hidden for the caller's
                       own row — recovering your own data is meaningless. */}
-                  {props.scope === "organization" &&
-                    hasPermission(user, "org_keys:use_master") &&
-                    member.user_id !== user?.id && (
-                      <>
-                        <Link
-                          to={`/organization/members/${member.user_id}/impersonate`}
-                          className="rbac-delete-btn"
-                          style={{ textDecoration: "none", color: "#2563eb", borderColor: "#bfdbfe" }}
-                          title="Recover this member's data using the org master key"
-                        >
-                          Recover data
-                        </Link>
-                        {/* Reset password — only for non-key-holder rows.
+                      {props.scope === "organization" &&
+                        hasPermission(user, "org_keys:use_master") &&
+                        member.user_id !== user?.id && (
+                          <>
+                            <Link
+                              to={`/organization/members/${member.user_id}/impersonate`}
+                              className="rbac-delete-btn"
+                              style={{
+                                textDecoration: "none",
+                                color: "#2563eb",
+                                borderColor: "#bfdbfe",
+                              }}
+                              title="Recover this member's data using the org master key"
+                            >
+                              Recover data
+                            </Link>
+                            {/* Reset password — only for non-key-holder rows.
                             Key-holder rows (owner / super_admin / admin)
                             are refused server-side anyway; hiding the
                             button avoids a wasted modal. */}
-                        {!["owner", "super_admin", "admin"].includes(
-                          normalizeRole(member.role),
-                        ) && (
-                          <button
-                            type="button"
-                            className="rbac-delete-btn"
-                            style={{ color: "#a16207", borderColor: "#fde68a" }}
-                            onClick={() => {
-                              setResetTarget(member);
-                              setResetError("");
-                              setResetPassword("");
-                            }}
-                            title="Reset this member's password — they'll keep all their data"
-                          >
-                            Reset password
-                          </button>
+                            {!["owner", "super_admin", "admin"].includes(
+                              normalizeRole(member.role)
+                            ) && (
+                              <button
+                                type="button"
+                                className="rbac-delete-btn"
+                                style={{
+                                  color: "#a16207",
+                                  borderColor: "#fde68a",
+                                }}
+                                onClick={() => {
+                                  setResetTarget(member);
+                                  setResetError("");
+                                  setResetPassword("");
+                                }}
+                                title="Reset this member's password — they'll keep all their data"
+                              >
+                                Reset password
+                              </button>
+                            )}
+                          </>
                         )}
-                      </>
-                    )}
-                  {canDelete && (
-                    <button
-                      type="button"
-                      className="rbac-delete-btn"
-                      disabled={deletingId === member.user_id}
-                      onClick={() => void deleteMember(member)}
-                      title="Delete account"
-                      aria-label={`Delete ${member.email}`}
-                    >
-                      {deletingId === member.user_id ? "Deleting…" : "Delete"}
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          className="rbac-delete-btn"
+                          disabled={deletingId === member.user_id}
+                          onClick={() => void deleteMember(member)}
+                          title="Delete account"
+                          aria-label={`Delete ${member.email}`}
+                        >
+                          {deletingId === member.user_id
+                            ? "Deleting…"
+                            : "Delete"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </>
       )}

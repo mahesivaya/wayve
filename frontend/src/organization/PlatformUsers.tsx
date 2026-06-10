@@ -33,7 +33,8 @@ export default function PlatformUsers() {
         if (alive) setData(summary);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof Error ? err.message : "Failed to load users");
+        if (alive)
+          setError(err instanceof Error ? err.message : "Failed to load users");
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -52,14 +53,21 @@ export default function PlatformUsers() {
     setUsersError("");
 
     const timer = window.setTimeout(() => {
-      listPlatformUsers({ accountType: "personal", q: search, limit: PAGE_SIZE })
+      listPlatformUsers({
+        accountType: "personal",
+        q: search,
+        limit: PAGE_SIZE,
+      })
         .then((res) => {
           if (!alive) return;
           setUsers(res.users);
           setHasMore(res.users.length === PAGE_SIZE);
         })
         .catch((err) => {
-          if (alive) setUsersError(err instanceof Error ? err.message : "Failed to load users");
+          if (alive)
+            setUsersError(
+              err instanceof Error ? err.message : "Failed to load users"
+            );
         })
         .finally(() => {
           if (alive) setUsersLoading(false);
@@ -84,7 +92,9 @@ export default function PlatformUsers() {
       setUsers((prev) => [...prev, ...res.users]);
       setHasMore(res.users.length === PAGE_SIZE);
     } catch (err) {
-      setUsersError(err instanceof Error ? err.message : "Failed to load more users");
+      setUsersError(
+        err instanceof Error ? err.message : "Failed to load more users"
+      );
     } finally {
       setLoadingMore(false);
     }
@@ -93,7 +103,10 @@ export default function PlatformUsers() {
   const stats = data
     ? [
         { label: "Total users", value: data.users_total.toLocaleString() },
-        { label: "New (last month)", value: data.users_new_1m.toLocaleString() },
+        {
+          label: "New (last month)",
+          value: data.users_new_1m.toLocaleString(),
+        },
         { label: "New (last year)", value: data.users_new_1y.toLocaleString() },
         { label: "Total emails", value: data.emails_total.toLocaleString() },
         { label: "Database used", value: formatBytes(data.storage_used_bytes) },
@@ -161,7 +174,9 @@ export default function PlatformUsers() {
                 {users.map((u) => (
                   <tr key={u.id}>
                     <td>{u.email}</td>
-                    <td className="platform-users-num">{formatBytes(u.storage_bytes)}</td>
+                    <td className="platform-users-num">
+                      {formatBytes(u.storage_bytes)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

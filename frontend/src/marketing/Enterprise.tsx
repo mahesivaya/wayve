@@ -75,9 +75,9 @@ export default function Enterprise() {
           <p className="marketing-eyebrow">{BRAND_NAME} for Enterprise</p>
           <h1>One private workspace, ready for the org.</h1>
           <p className="lead">
-            Mail, chat, calls, files, scheduling, and AI in one place — with
-            the encryption, RBAC, and audit story your security team actually
-            wants to read.
+            Mail, chat, calls, files, scheduling, and AI in one place — with the
+            encryption, RBAC, and audit story your security team actually wants
+            to read.
           </p>
           <div className="marketing-hero-actions">
             <button onClick={() => navigate("/register")}>Start a trial</button>
@@ -140,8 +140,8 @@ export default function Enterprise() {
           <p className="marketing-eyebrow">Capabilities</p>
           <h2>What you get out of the box</h2>
           <p>
-            No plugin sprawl. Every capability below ships with the platform
-            and is governed by the same RBAC and audit layer.
+            No plugin sprawl. Every capability below ships with the platform and
+            is governed by the same RBAC and audit layer.
           </p>
         </div>
 

@@ -35,7 +35,7 @@ export default function RecoveryKeyPage() {
       const keys = await getOrgKeys(orgId, { includeMnemonic: true });
       if (!keys.wrapped_mnemonic) {
         throw new Error(
-          "This organization has no mnemonic-wrapped envelope on file — owner must complete bootstrap.",
+          "This organization has no mnemonic-wrapped envelope on file — owner must complete bootstrap."
         );
       }
       await unwrapOrgKeyWithMnemonic(
@@ -43,11 +43,13 @@ export default function RecoveryKeyPage() {
         user.id,
         user.email,
         mnemonic,
-        keys.wrapped_mnemonic,
+        keys.wrapped_mnemonic
       );
       navigate("/organization/home", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to unwrap recovery key.");
+      setError(
+        err instanceof Error ? err.message : "Failed to unwrap recovery key."
+      );
     } finally {
       setBusy(false);
     }
@@ -60,8 +62,8 @@ export default function RecoveryKeyPage() {
       <h2>🔑 Enter your organization recovery key</h2>
       <p>
         Type the 24 words separated by spaces. They unlock the organization
-        master key on this device. Once unwrapped, this device will
-        auto-load the master key on future sessions without re-asking.
+        master key on this device. Once unwrapped, this device will auto-load
+        the master key on future sessions without re-asking.
       </p>
       <form onSubmit={submit}>
         <textarea

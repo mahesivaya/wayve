@@ -83,12 +83,19 @@ export default function Support() {
             a real person reads every message, usually within a business day.
           </p>
           <div className="marketing-hero-actions">
-            <button onClick={() => (window.location.href = "mailto:support@maheshg.me")}>
+            <button
+              onClick={() =>
+                (window.location.href = "mailto:support@maheshg.me")
+              }
+            >
               Email support
             </button>
-            {user?.account_type !== "platform_admin" && !user?.username?.startsWith("platform-") && (
-              <button onClick={() => navigate("/pricing")}>See pricing</button>
-            )}
+            {user?.account_type !== "platform_admin" &&
+              !user?.username?.startsWith("platform-") && (
+                <button onClick={() => navigate("/pricing")}>
+                  See pricing
+                </button>
+              )}
           </div>
         </div>
 
@@ -96,17 +103,23 @@ export default function Support() {
           <div className="marketing-hero-card">
             <div className="marketing-hero-card-row">
               <span className="marketing-hero-card-icon">✅</span>
-              <span className="marketing-hero-card-text">All systems operational</span>
+              <span className="marketing-hero-card-text">
+                All systems operational
+              </span>
               <span className="marketing-hero-card-meta">Live</span>
             </div>
             <div className="marketing-hero-card-row">
               <span className="marketing-hero-card-icon">📬</span>
-              <span className="marketing-hero-card-text">Mail sync — healthy</span>
+              <span className="marketing-hero-card-text">
+                Mail sync — healthy
+              </span>
               <span className="marketing-hero-card-meta">30s</span>
             </div>
             <div className="marketing-hero-card-row">
               <span className="marketing-hero-card-icon">💬</span>
-              <span className="marketing-hero-card-text">WebSocket chat — healthy</span>
+              <span className="marketing-hero-card-text">
+                WebSocket chat — healthy
+              </span>
               <span className="marketing-hero-card-meta">0ms</span>
             </div>
             <div className="marketing-hero-card-row">
@@ -116,7 +129,9 @@ export default function Support() {
             </div>
             <div className="marketing-hero-card-row">
               <span className="marketing-hero-card-icon">💳</span>
-              <span className="marketing-hero-card-text">Billing — healthy</span>
+              <span className="marketing-hero-card-text">
+                Billing — healthy
+              </span>
               <span className="marketing-hero-card-meta">Stripe</span>
             </div>
           </div>
@@ -172,9 +187,14 @@ export default function Support() {
 
       <section className="marketing-cta">
         <h2>Still stuck?</h2>
-        <p>Tell us what's happening — we'll dig in and reply within one business day.</p>
+        <p>
+          Tell us what's happening — we'll dig in and reply within one business
+          day.
+        </p>
         <div className="marketing-cta-actions">
-          <button onClick={() => (window.location.href = "mailto:support@maheshg.me")}>
+          <button
+            onClick={() => (window.location.href = "mailto:support@maheshg.me")}
+          >
             Email support
           </button>
           <button onClick={() => navigate("/enterprise")}>

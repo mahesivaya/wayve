@@ -14,8 +14,18 @@ const APP_TILES: Array<{
   desc: string;
 }> = [
   { path: "/emails", icon: "📧", label: "Emails", desc: "Send & receive mail" },
-  { path: "/chat", icon: "💬", label: "Chat", desc: "Direct & channel messages" },
-  { path: "/scheduler", icon: "📅", label: "Scheduler", desc: "Meetings & calendar" },
+  {
+    path: "/chat",
+    icon: "💬",
+    label: "Chat",
+    desc: "Direct & channel messages",
+  },
+  {
+    path: "/scheduler",
+    icon: "📅",
+    label: "Scheduler",
+    desc: "Meetings & calendar",
+  },
   { path: "/drive", icon: "📁", label: "Drive", desc: "Files & folders" },
   { path: "/notes", icon: "📝", label: "Notes", desc: "Personal notes" },
   { path: "/tasks", icon: "☑", label: "Tasks", desc: "Your to-do list" },
@@ -69,7 +79,9 @@ export default function PlatformWelcome() {
                 {(user.permissions ?? []).length === 0
                   ? "None"
                   : (user.permissions ?? []).map((perm) => (
-                      <code key={perm} style={{ marginRight: 6 }}>{perm}</code>
+                      <code key={perm} style={{ marginRight: 6 }}>
+                        {perm}
+                      </code>
                     ))}
               </td>
             </tr>
@@ -95,9 +107,9 @@ export default function PlatformWelcome() {
           <h2>Need more access?</h2>
         </div>
         <p style={{ fontSize: 13, color: "var(--text-muted, #6b7280)" }}>
-          Admin consoles (members, billing, security, developer tooling) require a
-          higher platform role. Reach out to a platform owner or admin to request
-          additional permissions for your account.
+          Admin consoles (members, billing, security, developer tooling) require
+          a higher platform role. Reach out to a platform owner or admin to
+          request additional permissions for your account.
         </p>
       </section>
     </div>

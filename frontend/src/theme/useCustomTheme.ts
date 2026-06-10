@@ -6,7 +6,7 @@ export function useCustomTheme() {
   const ctx = useContext(CustomThemeContext);
   if (!ctx) {
     throw new Error(
-      "useCustomTheme must be used inside a <CustomThemeProvider>",
+      "useCustomTheme must be used inside a <CustomThemeProvider>"
     );
   }
   return ctx;

@@ -1,4 +1,8 @@
-export type AccountType = "personal" | "organization" | "organization_admin" | "platform_admin";
+export type AccountType =
+  | "personal"
+  | "organization"
+  | "organization_admin"
+  | "platform_admin";
 
 export function normalizeAccountType(accountType?: string | null): AccountType {
   if (accountType === "organization_admin") {

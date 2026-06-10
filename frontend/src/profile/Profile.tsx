@@ -25,7 +25,7 @@ export default function Profile() {
           organization_id: user.organization_id ?? null,
           organization_name: user.organization_name ?? null,
         }
-      : null,
+      : null
   );
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -79,14 +79,14 @@ export default function Profile() {
     setPwSaving(true);
     try {
       await changePassword(isCreatingPassword ? null : currentPw, newPw);
-      setPwStatus(isCreatingPassword ? "Password created ✓" : "Password updated ✓");
+      setPwStatus(
+        isCreatingPassword ? "Password created ✓" : "Password updated ✓"
+      );
       setCurrentPw("");
       setNewPw("");
       setConfirmPw("");
       setShowPwForm(false);
-      setProfile((prev) =>
-        prev ? { ...prev, auth_provider: "local" } : prev
-      );
+      setProfile((prev) => (prev ? { ...prev, auth_provider: "local" } : prev));
     } catch (err: unknown) {
       setPwStatus(err instanceof Error ? err.message : "Update failed");
     } finally {
@@ -119,13 +119,13 @@ export default function Profile() {
   }
 
   const accountType = profile.account_type ?? user?.account_type ?? "personal";
-  const roleLabel = profile.role_label ?? user?.role_label ?? "Personal workspace owner";
+  const roleLabel =
+    profile.role_label ?? user?.role_label ?? "Personal workspace owner";
   const roleKey = profile.effective_role ?? user?.effective_role ?? "owner";
 
   return (
     <div className="settings-page">
       <div className="settings-stack">
-
         <h1 className="settings-page-title">My Profile</h1>
 
         <section className="settings-card">
@@ -137,7 +137,9 @@ export default function Profile() {
             </div>
             <div className="settings-usage-row">
               <span>Account Type</span>
-              <strong style={{ textTransform: "capitalize" }}>{accountType}</strong>
+              <strong style={{ textTransform: "capitalize" }}>
+                {accountType}
+              </strong>
             </div>
             <div className="settings-usage-row">
               <span>Access Role</span>
@@ -219,7 +221,9 @@ export default function Profile() {
 
               <div className="profile-row">
                 <label htmlFor="profile-new-pw">
-                  {profile.auth_provider === "google" ? "Password" : "New password"}
+                  {profile.auth_provider === "google"
+                    ? "Password"
+                    : "New password"}
                 </label>
                 <input
                   id="profile-new-pw"
@@ -232,7 +236,9 @@ export default function Profile() {
 
               <div className="profile-row">
                 <label htmlFor="profile-confirm-pw">
-                  {profile.auth_provider === "google" ? "Confirm password" : "Confirm new password"}
+                  {profile.auth_provider === "google"
+                    ? "Confirm password"
+                    : "Confirm new password"}
                 </label>
                 <input
                   id="profile-confirm-pw"
@@ -274,7 +280,6 @@ export default function Profile() {
             </>
           )}
         </section>
-
       </div>
     </div>
   );

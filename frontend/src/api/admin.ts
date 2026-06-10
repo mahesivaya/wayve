@@ -88,11 +88,14 @@ export async function generateOrganizationApiKey(
   organizationId: number,
   name: string
 ): Promise<GeneratedApiKey> {
-  const res = await apiFetch(`/api/admin/organizations/${organizationId}/keys`, {
-    method: "POST",
-    preserve401: true,
-    body: JSON.stringify({ name }),
-  });
+  const res = await apiFetch(
+    `/api/admin/organizations/${organizationId}/keys`,
+    {
+      method: "POST",
+      preserve401: true,
+      body: JSON.stringify({ name }),
+    }
+  );
 
   const data = await res.json().catch(() => ({}));
 
@@ -106,9 +109,12 @@ export async function generateOrganizationApiKey(
 export async function listOrganizationApiKeys(
   organizationId: number
 ): Promise<ApiKey[]> {
-  const res = await apiFetch(`/api/admin/organizations/${organizationId}/keys`, {
-    preserve401: true,
-  });
+  const res = await apiFetch(
+    `/api/admin/organizations/${organizationId}/keys`,
+    {
+      preserve401: true,
+    }
+  );
 
   const data = await res.json().catch(() => ({}));
 
@@ -123,10 +129,10 @@ export async function revokeOrganizationApiKey(
   organizationId: number,
   keyId: number
 ): Promise<void> {
-  await apiFetch(
-    `/api/admin/organizations/${organizationId}/keys/${keyId}`,
-    { method: "DELETE", preserve401: true }
-  );
+  await apiFetch(`/api/admin/organizations/${organizationId}/keys/${keyId}`, {
+    method: "DELETE",
+    preserve401: true,
+  });
 }
 
 // Self-serve: a personal user creates an organization for themselves and
@@ -222,7 +228,7 @@ export async function orgSignupIntent(input: {
 
 // Step 2: verify the charge + create the org. Idempotent server-side.
 export async function finalizeOrgSignup(
-  pendingId: number,
+  pendingId: number
 ): Promise<CreatedMyOrganization> {
   const res = await apiFetch("/api/organizations/finalize", {
     method: "POST",
@@ -231,7 +237,9 @@ export async function finalizeOrgSignup(
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.message || "Could not finish creating the organization");
+    throw new Error(
+      data.message || "Could not finish creating the organization"
+    );
   }
   return data;
 }
@@ -272,7 +280,7 @@ export type UpdatedOrganization = {
 // re-derived server-side from the new name. 409 if another org already uses
 // the name.
 export async function updateMyOrganization(
-  name: string,
+  name: string
 ): Promise<UpdatedOrganization> {
   const res = await apiFetch("/api/organizations/me", {
     method: "PATCH",

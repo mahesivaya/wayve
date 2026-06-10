@@ -32,7 +32,7 @@ export function saveCached<T>(key: string, value: T) {
  */
 export function useCardData<T>(
   cacheKey: string,
-  fetcher: () => Promise<T>,
+  fetcher: () => Promise<T>
 ): { data: T | null; loading: boolean } {
   const [data, setData] = useState<T | null>(() => loadCached<T>(cacheKey));
   const [loading, setLoading] = useState(data === null);

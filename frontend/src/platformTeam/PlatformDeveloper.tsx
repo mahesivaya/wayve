@@ -2,10 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasAnyPermission } from "../auth/permissions";
-import {
-  DeveloperSummary,
-  getDeveloperSummary,
-} from "../api/platformTeam";
+import { DeveloperSummary, getDeveloperSummary } from "../api/platformTeam";
 import { fmtDateTime } from "../utils/datetime";
 import "./platformTeam.css";
 
@@ -22,7 +19,11 @@ export default function PlatformDeveloper() {
   const { user } = useAuth();
   const canView =
     user?.scope === "platform" &&
-    hasAnyPermission(user, ["logs:read", "logs:read_limited", "api_keys:manage"]);
+    hasAnyPermission(user, [
+      "logs:read",
+      "logs:read_limited",
+      "api_keys:manage",
+    ]);
 
   const [data, setData] = useState<DeveloperSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,7 +35,9 @@ export default function PlatformDeveloper() {
     try {
       setData(await getDeveloperSummary());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load developer summary");
+      setError(
+        err instanceof Error ? err.message : "Failed to load developer summary"
+      );
     } finally {
       setLoading(false);
     }
@@ -46,30 +49,48 @@ export default function PlatformDeveloper() {
   }, [reload]);
 
   if (!canView) return <Navigate to="/" replace />;
-  if (loading) return <div className="pt-loader">Loading developer console…</div>;
+  if (loading)
+    return <div className="pt-loader">Loading developer console…</div>;
 
   return (
     <div className="pt-page">
       <header className="pt-header">
         <h1>Developer Console</h1>
         <p>
-          API keys, audit traffic, webhooks and integrations across the platform · {user?.email}
+          API keys, audit traffic, webhooks and integrations across the platform
+          · {user?.email}
         </p>
       </header>
 
       {error && <div className="pt-banner">{error}</div>}
 
       <section className="pt-stats">
-        <Stat label="API keys (active)" value={data?.keys_active ?? 0} sub={`${data?.keys_total ?? 0} total · ${data?.keys_expired ?? 0} expired`} />
-        <Stat label="Calls (24h)" value={data?.audit_24h ?? 0} sub={`${data?.audit_7d ?? 0} last 7 days`} />
+        <Stat
+          label="API keys (active)"
+          value={data?.keys_active ?? 0}
+          sub={`${data?.keys_total ?? 0} total · ${data?.keys_expired ?? 0} expired`}
+        />
+        <Stat
+          label="Calls (24h)"
+          value={data?.audit_24h ?? 0}
+          sub={`${data?.audit_7d ?? 0} last 7 days`}
+        />
         <Stat
           label="Failures (24h)"
           value={data?.audit_failures_24h ?? 0}
           sub={`${data?.rate_limited_24h ?? 0} rate-limited`}
           alert={(data?.audit_failures_24h ?? 0) > 0}
         />
-        <Stat label="Stripe events (7d)" value={data?.webhooks_7d ?? 0} sub="Webhook deliveries processed" />
-        <Stat label="SSO integrations" value={data?.sso_integrations ?? 0} sub="OIDC configs across orgs" />
+        <Stat
+          label="Stripe events (7d)"
+          value={data?.webhooks_7d ?? 0}
+          sub="Webhook deliveries processed"
+        />
+        <Stat
+          label="SSO integrations"
+          value={data?.sso_integrations ?? 0}
+          sub="OIDC configs across orgs"
+        />
       </section>
 
       <div className="pt-grid">
@@ -99,7 +120,9 @@ export default function PlatformDeveloper() {
                     </td>
                     <td>{key.owner_name}</td>
                     <td>
-                      <span className={`pt-pill ${key.key_type === "internal" ? "info" : ""}`}>
+                      <span
+                        className={`pt-pill ${key.key_type === "internal" ? "info" : ""}`}
+                      >
                         {key.key_type}
                       </span>
                     </td>
@@ -130,10 +153,16 @@ export default function PlatformDeveloper() {
               <tbody>
                 {data.top_endpoints.map((ep) => (
                   <tr key={ep.path}>
-                    <td><code>{ep.path}</code></td>
+                    <td>
+                      <code>{ep.path}</code>
+                    </td>
                     <td className="right">{ep.calls}</td>
                     <td className="right">
-                      <span className={ep.errors > 0 ? "pt-pill error" : "pt-pill ok"}>
+                      <span
+                        className={
+                          ep.errors > 0 ? "pt-pill error" : "pt-pill ok"
+                        }
+                      >
                         {ep.errors}
                       </span>
                     </td>
@@ -177,15 +206,21 @@ export default function PlatformDeveloper() {
                     )}
                   </td>
                   <td>
-                    <code>{row.method} {row.path}</code>
+                    <code>
+                      {row.method} {row.path}
+                    </code>
                   </td>
                   <td>
-                    <span className={`pt-pill ${statusClass(row.status_code, row.outcome)}`}>
+                    <span
+                      className={`pt-pill ${statusClass(row.status_code, row.outcome)}`}
+                    >
                       {row.status_code}
                     </span>
                   </td>
                   <td>
-                    <span className={`pt-pill ${row.outcome}`}>{row.outcome}</span>
+                    <span className={`pt-pill ${row.outcome}`}>
+                      {row.outcome}
+                    </span>
                   </td>
                   <td>{row.ip ?? "—"}</td>
                 </tr>

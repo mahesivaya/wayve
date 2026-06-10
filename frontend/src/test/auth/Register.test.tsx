@@ -20,7 +20,7 @@ const renderAt = (initialEntries: string[]) =>
       <AuthProvider>
         <Register />
       </AuthProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 
 describe("Register page", () => {
@@ -30,8 +30,9 @@ describe("Register page", () => {
   });
 
   it("creates an account on submit", async () => {
-    (apiRegister as unknown as { mockResolvedValue: (v: unknown) => void })
-      .mockResolvedValue({ token: "jwt-x" });
+    (
+      apiRegister as unknown as { mockResolvedValue: (v: unknown) => void }
+    ).mockResolvedValue({ token: "jwt-x" });
 
     renderAt(["/register"]);
 
@@ -39,7 +40,7 @@ describe("Register page", () => {
     await userEvent.type(screen.getByPlaceholderText("Password"), "secret123");
     await userEvent.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "secret123",
+      "secret123"
     );
     await userEvent.click(screen.getByRole("button", { name: /^register$/i }));
 
@@ -51,7 +52,12 @@ describe("Register page", () => {
     // the 24-word mnemonic so a user can recover on a fresh device.
     // The form previously defaulted to "basic" (lowest-friction) but
     // that meant new-device sign-ins couldn't decrypt prior content.
-    expect(apiRegister).toHaveBeenCalledWith("x@y.z", "secret123", "secret123", "full");
+    expect(apiRegister).toHaveBeenCalledWith(
+      "x@y.z",
+      "secret123",
+      "secret123",
+      "full"
+    );
   });
 
   it("rejects mismatched passwords without calling API", async () => {
@@ -60,27 +66,25 @@ describe("Register page", () => {
     await userEvent.type(screen.getByPlaceholderText("Password"), "abc123");
     await userEvent.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "different",
+      "different"
     );
     await userEvent.click(screen.getByRole("button", { name: /^register$/i }));
 
     expect(
-      await screen.findByText(/passwords do not match/i),
+      await screen.findByText(/passwords do not match/i)
     ).toBeInTheDocument();
     expect(apiRegister).not.toHaveBeenCalled();
   });
 
   it("shows email_exists banner from OAuth redirect", () => {
     renderAt(["/register?error=email_exists"]);
-    expect(
-      screen.getByText(/already registered/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/already registered/i)).toBeInTheDocument();
   });
 
   it("renders Sign up with Google button", () => {
     renderAt(["/register"]);
     expect(
-      screen.getByRole("button", { name: /sign up with google/i }),
+      screen.getByRole("button", { name: /sign up with google/i })
     ).toBeInTheDocument();
   });
 });

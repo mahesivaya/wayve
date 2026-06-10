@@ -48,7 +48,7 @@ export default function OrgSettings() {
       setSaved(true);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not rename organization",
+        err instanceof Error ? err.message : "Could not rename organization"
       );
     } finally {
       setSaving(false);

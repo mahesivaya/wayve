@@ -54,7 +54,9 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
       await onRenameAccount(account.id, displayName);
       setEditingAccountId(null);
     } catch (err) {
-      setRenameError(err instanceof Error ? err.message : "Could not save account name");
+      setRenameError(
+        err instanceof Error ? err.message : "Could not save account name"
+      );
     } finally {
       setSavingAccountId(null);
     }
@@ -100,7 +102,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
                 // with each row's own pill below.
                 const total = accounts.reduce(
                   (sum, acc) => sum + (acc.unread_count ?? 0),
-                  0,
+                  0
                 );
                 return total > 0 ? (
                   <span
@@ -114,98 +116,109 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
             </button>
 
             {accounts.map((acc) => {
-        const isEditing = editingAccountId === acc.id;
-        // For shared inboxes the human-friendly `shared_label` ("Support")
-        // is the most useful name; `display_name` is the personal nickname
-        // the owner-user gave it, which doesn't carry over for members.
-        const displayName =
-          (acc.is_shared && acc.shared_label?.trim()) ||
-          acc.display_name?.trim() ||
-          acc.email;
+              const isEditing = editingAccountId === acc.id;
+              // For shared inboxes the human-friendly `shared_label` ("Support")
+              // is the most useful name; `display_name` is the personal nickname
+              // the owner-user gave it, which doesn't carry over for members.
+              const displayName =
+                (acc.is_shared && acc.shared_label?.trim()) ||
+                acc.display_name?.trim() ||
+                acc.email;
 
-        return (
-          <div
-            key={acc.id}
-            className={`account-filter ${activeAccount === acc.id ? "active" : ""} ${acc.is_shared ? "shared" : ""}`}
-          >
-            {isEditing ? (
-              <div className="account-edit-row">
-                <input
-                  className="account-name-input"
-                  value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      void saveName(acc);
-                    }
-                    if (e.key === "Escape") {
-                      setEditingAccountId(null);
-                    }
-                  }}
-                  aria-label={`Edit name for ${acc.email}`}
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  className="account-icon-btn"
-                  onClick={() => void saveName(acc)}
-                  disabled={savingAccountId === acc.id}
-                  title="Save name"
-                  aria-label="Save name"
+              return (
+                <div
+                  key={acc.id}
+                  className={`account-filter ${activeAccount === acc.id ? "active" : ""} ${acc.is_shared ? "shared" : ""}`}
                 >
-                  ✓
-                </button>
-                <button
-                  type="button"
-                  className="account-icon-btn"
-                  onClick={() => setEditingAccountId(null)}
-                  title="Cancel"
-                  aria-label="Cancel"
-                >
-                  ×
-                </button>
-                {renameError && <span className="account-rename-error">{renameError}</span>}
-              </div>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="account-filter-main"
-                  onClick={() => setActiveAccount(acc.id)}
-                  title={acc.is_shared ? `Shared inbox · ${acc.email}` : acc.email}
-                >
-                  <span className="account-filter-label">
-                    {displayName}
-                    {acc.is_shared && (
-                      <span className="account-shared-chip" aria-label="Shared inbox">
-                        Shared
-                      </span>
-                    )}
-                  </span>
-                  <span
-                    className="account-unread-count"
-                    aria-label={`${acc.unread_count ?? 0} unread emails`}
-                  >
-                    {acc.unread_count ?? 0}
-                  </span>
-                </button>
-                {/* Only the owner-user may rename. Members see no pencil. */}
-                {acc.is_owner !== false && (
-                  <button
-                    type="button"
-                    className="account-icon-btn"
-                    onClick={() => startEditing(acc)}
-                    title="Edit account name"
-                    aria-label={`Edit name for ${acc.email}`}
-                  >
-                    ✎
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        );
-      })}
+                  {isEditing ? (
+                    <div className="account-edit-row">
+                      <input
+                        className="account-name-input"
+                        value={draftName}
+                        onChange={(e) => setDraftName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            void saveName(acc);
+                          }
+                          if (e.key === "Escape") {
+                            setEditingAccountId(null);
+                          }
+                        }}
+                        aria-label={`Edit name for ${acc.email}`}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className="account-icon-btn"
+                        onClick={() => void saveName(acc)}
+                        disabled={savingAccountId === acc.id}
+                        title="Save name"
+                        aria-label="Save name"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        type="button"
+                        className="account-icon-btn"
+                        onClick={() => setEditingAccountId(null)}
+                        title="Cancel"
+                        aria-label="Cancel"
+                      >
+                        ×
+                      </button>
+                      {renameError && (
+                        <span className="account-rename-error">
+                          {renameError}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="account-filter-main"
+                        onClick={() => setActiveAccount(acc.id)}
+                        title={
+                          acc.is_shared
+                            ? `Shared inbox · ${acc.email}`
+                            : acc.email
+                        }
+                      >
+                        <span className="account-filter-label">
+                          {displayName}
+                          {acc.is_shared && (
+                            <span
+                              className="account-shared-chip"
+                              aria-label="Shared inbox"
+                            >
+                              Shared
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className="account-unread-count"
+                          aria-label={`${acc.unread_count ?? 0} unread emails`}
+                        >
+                          {acc.unread_count ?? 0}
+                        </span>
+                      </button>
+                      {/* Only the owner-user may rename. Members see no pencil. */}
+                      {acc.is_owner !== false && (
+                        <button
+                          type="button"
+                          className="account-icon-btn"
+                          onClick={() => startEditing(acc)}
+                          title="Edit account name"
+                          aria-label={`Edit name for ${acc.email}`}
+                        >
+                          ✎
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </nav>
         </>
       )}

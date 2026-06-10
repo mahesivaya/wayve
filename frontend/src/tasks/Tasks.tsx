@@ -1,4 +1,11 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   createTaskApi,
   deleteTaskApi,
@@ -49,7 +56,7 @@ const sortTasks = (list: Task[]) =>
       // Within a priority group, oldest first so a newly created task
       // appears at the bottom of its group.
       new Date(a.created_at ?? 0).getTime() -
-        new Date(b.created_at ?? 0).getTime(),
+        new Date(b.created_at ?? 0).getTime()
   );
 
 const STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
@@ -95,7 +102,9 @@ export default function Tasks() {
   // re-renders before submit. Reset by closeForm/resetForm.
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   // Server-side attachments for the task currently being edited.
-  const [existingAttachments, setExistingAttachments] = useState<TaskAttachment[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<
+    TaskAttachment[]
+  >([]);
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -112,8 +121,8 @@ export default function Tasks() {
             ...t,
             priority: normalizePriority(t.priority),
             status: normalizeStatus(t.status),
-          })),
-        ),
+          }))
+        )
       );
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load tasks");
@@ -199,11 +208,11 @@ export default function Tasks() {
     try {
       await deleteTaskAttachment(attachment.id);
       setExistingAttachments((prev) =>
-        prev.filter((a) => a.id !== attachment.id),
+        prev.filter((a) => a.id !== attachment.id)
       );
     } catch (err) {
       window.alert(
-        err instanceof Error ? err.message : "Failed to remove attachment",
+        err instanceof Error ? err.message : "Failed to remove attachment"
       );
     }
   };
@@ -213,7 +222,7 @@ export default function Tasks() {
       await downloadTaskAttachment(attachment);
     } catch (err) {
       window.alert(
-        err instanceof Error ? err.message : "Failed to download attachment",
+        err instanceof Error ? err.message : "Failed to download attachment"
       );
     }
   };
@@ -232,9 +241,9 @@ export default function Tasks() {
     setTasks((current) =>
       sortTasks(
         current.map((t) =>
-          t.id === task.id ? { ...t, status: nextStatus } : t,
-        ),
-      ),
+          t.id === task.id ? { ...t, status: nextStatus } : t
+        )
+      )
     );
     try {
       const updated = await updateTaskApi(task.id, {
@@ -254,21 +263,21 @@ export default function Tasks() {
                   priority: normalizePriority(updated.priority),
                   status: normalizeStatus(updated.status),
                 }
-              : t,
-          ),
-        ),
+              : t
+          )
+        )
       );
     } catch (err) {
       setTasks(prev);
       window.alert(
-        err instanceof Error ? err.message : "Failed to update status",
+        err instanceof Error ? err.message : "Failed to update status"
       );
     }
   };
 
   const deleteTask = async (task: Task) => {
     const ok = window.confirm(
-      `Delete task "${task.name}"? This cannot be undone.`,
+      `Delete task "${task.name}"? This cannot be undone.`
     );
     if (!ok) return;
     try {
@@ -279,7 +288,9 @@ export default function Tasks() {
         setCreating(false);
       }
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to delete task");
+      window.alert(
+        err instanceof Error ? err.message : "Failed to delete task"
+      );
     }
   };
 
@@ -289,18 +300,18 @@ export default function Tasks() {
       [task.name, task.description]
         .join(" ")
         .toLowerCase()
-        .includes(normalizedSearchQuery),
+        .includes(normalizedSearchQuery)
     );
   }, [normalizedSearchQuery, tasks]);
 
   const activeTasks = useMemo(
     () => visibleTasks.filter((t) => t.status !== "done"),
-    [visibleTasks],
+    [visibleTasks]
   );
 
   const completedTasks = useMemo(
     () => visibleTasks.filter((t) => t.status === "done"),
-    [visibleTasks],
+    [visibleTasks]
   );
 
   const saveTask = async (event: FormEvent<HTMLFormElement>) => {
@@ -336,9 +347,9 @@ export default function Tasks() {
                     priority: normalizePriority(updated.priority),
                     status: normalizeStatus(updated.status),
                   }
-                : t,
-            ),
-          ),
+                : t
+            )
+          )
         );
       } else {
         const created = await createTaskApi({
@@ -358,7 +369,7 @@ export default function Tasks() {
               priority: normalizePriority(created.priority),
               status: normalizeStatus(created.status),
             },
-          ]),
+          ])
         );
       }
 
@@ -371,7 +382,7 @@ export default function Tasks() {
           setError(
             err instanceof Error
               ? `Task saved, but attachment upload failed: ${err.message}`
-              : "Task saved, but attachment upload failed",
+              : "Task saved, but attachment upload failed"
           );
           setSubmitting(false);
           return;
@@ -419,45 +430,45 @@ export default function Tasks() {
             + Create task
           </button>
         ) : (
-        <div className="tasks-header">
-          <div>
-            <h2>Tasks</h2>
-            <p>Create simple work items with a name and description.</p>
-          </div>
-          <div className="tasks-header-actions">
-            <span className="tasks-count">{tasks.length} total</span>
-            <div className="view-toggle" role="group" aria-label="View mode">
-              <button
-                type="button"
-                className={`view-toggle-btn${view === "list" ? " active" : ""}`}
-                onClick={() => setView("list")}
-                aria-pressed={view === "list"}
-                aria-label="List view"
-                title="List view"
-              >
-                ☰
-              </button>
-              <button
-                type="button"
-                className={`view-toggle-btn${view === "grid" ? " active" : ""}`}
-                onClick={() => setView("grid")}
-                aria-pressed={view === "grid"}
-                aria-label="Grid view"
-                title="Grid view"
-              >
-                ▦
-              </button>
+          <div className="tasks-header">
+            <div>
+              <h2>Tasks</h2>
+              <p>Create simple work items with a name and description.</p>
             </div>
-            {isPersonal && (
-              <button
-                className="create-task-btn create-task-btn--inline"
-                onClick={openCreate}
-              >
-                + Create task
-              </button>
-            )}
+            <div className="tasks-header-actions">
+              <span className="tasks-count">{tasks.length} total</span>
+              <div className="view-toggle" role="group" aria-label="View mode">
+                <button
+                  type="button"
+                  className={`view-toggle-btn${view === "list" ? " active" : ""}`}
+                  onClick={() => setView("list")}
+                  aria-pressed={view === "list"}
+                  aria-label="List view"
+                  title="List view"
+                >
+                  ☰
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-btn${view === "grid" ? " active" : ""}`}
+                  onClick={() => setView("grid")}
+                  aria-pressed={view === "grid"}
+                  aria-label="Grid view"
+                  title="Grid view"
+                >
+                  ▦
+                </button>
+              </div>
+              {isPersonal && (
+                <button
+                  className="create-task-btn create-task-btn--inline"
+                  onClick={openCreate}
+                >
+                  + Create task
+                </button>
+              )}
+            </div>
           </div>
-        </div>
         )}
 
         <Modal
@@ -465,7 +476,10 @@ export default function Tasks() {
           onClose={closeForm}
           title={isEditing ? "Edit Task" : "Create Task"}
         >
-          <form className="task-create-form task-create-form--modal" onSubmit={saveTask}>
+          <form
+            className="task-create-form task-create-form--modal"
+            onSubmit={saveTask}
+          >
             {!isEditing && (
               <p className="task-form-required-hint">
                 Required fields are marked with an asterisk{" "}
@@ -498,8 +512,7 @@ export default function Tasks() {
 
               <label className="task-form-field">
                 <span className="task-form-label">
-                  Summary{" "}
-                  <span className="task-form-required-mark">*</span>
+                  Summary <span className="task-form-required-mark">*</span>
                 </span>
                 <input
                   value={taskName}
@@ -539,7 +552,10 @@ export default function Tasks() {
                   <span className="task-form-assign-me">
                     <input
                       type="checkbox"
-                      checked={assignee.trim().toLowerCase() === user.email.toLowerCase()}
+                      checked={
+                        assignee.trim().toLowerCase() ===
+                        user.email.toLowerCase()
+                      }
                       onChange={(event) =>
                         setAssignee(event.target.checked ? user.email : "")
                       }
@@ -589,13 +605,19 @@ export default function Tasks() {
                 </div>
 
                 {isEditing && attachmentsLoading && (
-                  <div className="task-attachments-empty">Loading attachments…</div>
+                  <div className="task-attachments-empty">
+                    Loading attachments…
+                  </div>
                 )}
 
-                {(existingAttachments.length > 0 || pendingAttachments.length > 0) && (
+                {(existingAttachments.length > 0 ||
+                  pendingAttachments.length > 0) && (
                   <ul className="task-attachments-list">
                     {existingAttachments.map((att) => (
-                      <li key={`saved-${att.id}`} className="task-attachment-item">
+                      <li
+                        key={`saved-${att.id}`}
+                        className="task-attachment-item"
+                      >
                         <button
                           type="button"
                           className="task-attachment-name"
@@ -652,9 +674,7 @@ export default function Tasks() {
                   <input
                     type="checkbox"
                     checked={createAnother}
-                    onChange={(event) =>
-                      setCreateAnother(event.target.checked)
-                    }
+                    onChange={(event) => setCreateAnother(event.target.checked)}
                   />
                   <span>Create another</span>
                 </label>
@@ -723,81 +743,84 @@ export default function Tasks() {
             activeTasks.map((task) => {
               const expanded = inSplitPane && expandedId === task.id;
               return (
-              <article
-                key={task.id}
-                className={`task-card${expanded ? " task-card--expanded" : ""}`}
-              >
-                <div className="task-card-body">
-                  <div className="task-card-title">
-                    <span
-                      className={`task-priority-badge priority-${task.priority}`}
-                      title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-                    >
-                      P{task.priority}
-                    </span>
-                    <h3>
+                <article
+                  key={task.id}
+                  className={`task-card${expanded ? " task-card--expanded" : ""}`}
+                >
+                  <div className="task-card-body">
+                    <div className="task-card-title">
+                      <span
+                        className={`task-priority-badge priority-${task.priority}`}
+                        title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                      >
+                        P{task.priority}
+                      </span>
+                      <h3>
+                        <button
+                          type="button"
+                          className="task-card-title-link"
+                          onClick={() =>
+                            inSplitPane
+                              ? setExpandedId((id) =>
+                                  id === task.id ? null : task.id
+                                )
+                              : openEdit(task)
+                          }
+                          aria-expanded={inSplitPane ? expanded : undefined}
+                          title="Open task details"
+                        >
+                          {task.name}
+                        </button>
+                      </h3>
+                    </div>
+                  </div>
+                  {expanded && (
+                    <div className="task-card-detail">
+                      <p className="task-card-detail-desc">
+                        {task.description?.trim()
+                          ? task.description
+                          : "No description."}
+                      </p>
+                    </div>
+                  )}
+                  {(!inSplitPane || expanded) && (
+                    <div className="task-card-actions">
                       <button
                         type="button"
-                        className="task-card-title-link"
-                        onClick={() =>
-                          inSplitPane
-                            ? setExpandedId((id) =>
-                                id === task.id ? null : task.id,
-                              )
-                            : openEdit(task)
-                        }
-                        aria-expanded={inSplitPane ? expanded : undefined}
-                        title="Open task details"
+                        className="task-edit-btn"
+                        onClick={() => openEdit(task)}
+                        aria-label={`Edit ${task.name}`}
                       >
-                        {task.name}
+                        Edit
                       </button>
-                    </h3>
-                  </div>
-                </div>
-                {expanded && (
-                  <div className="task-card-detail">
-                    <p className="task-card-detail-desc">
-                      {task.description?.trim()
-                        ? task.description
-                        : "No description."}
-                    </p>
-                  </div>
-                )}
-                {(!inSplitPane || expanded) && (
-                  <div className="task-card-actions">
-                    <button
-                      type="button"
-                      className="task-edit-btn"
-                      onClick={() => openEdit(task)}
-                      aria-label={`Edit ${task.name}`}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="task-delete-btn"
-                      onClick={() => deleteTask(task)}
-                      aria-label={`Delete ${task.name}`}
-                    >
-                      Delete
-                    </button>
-                    <select
-                      className={`task-status-select task-status-select--${task.status}`}
-                      value={task.status}
-                      onChange={(event) =>
-                        void changeStatus(task, event.target.value as TaskStatus)
-                      }
-                      aria-label={`Status of ${task.name}`}
-                    >
-                      {STATUS_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </article>
+                      <button
+                        type="button"
+                        className="task-delete-btn"
+                        onClick={() => deleteTask(task)}
+                        aria-label={`Delete ${task.name}`}
+                      >
+                        Delete
+                      </button>
+                      <select
+                        className={`task-status-select task-status-select--${task.status}`}
+                        value={task.status}
+                        onChange={(event) =>
+                          void changeStatus(
+                            task,
+                            event.target.value as TaskStatus
+                          )
+                        }
+                        aria-label={`Status of ${task.name}`}
+                      >
+                        {STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </article>
               );
             })
           )}

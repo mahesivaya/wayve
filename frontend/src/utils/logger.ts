@@ -40,7 +40,9 @@ function emit(level: Level, scope: string | undefined, args: unknown[]) {
   const ts = new Date().toISOString();
   pushBuffer({ ts, level, scope, args });
 
-  const tag = scope ? `[${level.toUpperCase()} ${ts} ${scope}]` : `[${level.toUpperCase()} ${ts}]`;
+  const tag = scope
+    ? `[${level.toUpperCase()} ${ts} ${scope}]`
+    : `[${level.toUpperCase()} ${ts}]`;
 
   // Direct console.* calls (not an indirect `fn(...)`) so the production
   // build's drop-console minifier pass strips them — leaving only the ring
@@ -80,7 +82,12 @@ function make(scope?: string): Logger {
     info: (...args) => emit("info", scope, args),
     warn: (...args) => emit("warn", scope, args),
     error: (...args) => emit("error", scope, args),
-    event: (name, data) => emit("info", scope, data === undefined ? [`• ${name}`] : [`• ${name}`, data]),
+    event: (name, data) =>
+      emit(
+        "info",
+        scope,
+        data === undefined ? [`• ${name}`] : [`• ${name}`, data]
+      ),
     time: async (label, fn) => {
       const start = performance.now();
       try {
@@ -104,7 +111,11 @@ export const logger: Logger = make();
 export const getRecentLogs = (): BufferEntry[] => buffer.slice();
 
 if (isDev && typeof window !== "undefined") {
-  (window as unknown as { __log: { recent: () => BufferEntry[]; logger: Logger } }).__log = {
+  (
+    window as unknown as {
+      __log: { recent: () => BufferEntry[]; logger: Logger };
+    }
+  ).__log = {
     recent: getRecentLogs,
     logger,
   };

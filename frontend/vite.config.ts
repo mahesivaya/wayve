@@ -41,12 +41,7 @@ export default defineConfig(({ command }) => ({
   // Pre-bundle deps used by every page so the first cold load doesn't
   // discover them lazily and trigger a re-bundle mid-session.
   optimizeDeps: {
-    include: [
-      "react",
-      "react-dom",
-      "react-router-dom",
-      "jwt-decode",
-    ],
+    include: ["react", "react-dom", "react-router-dom", "jwt-decode"],
   },
 
   build: {

@@ -13,5 +13,7 @@ declare global {
 }
 
 export function isDesktopApp(): boolean {
-  return typeof window !== "undefined" && window.fluxzeDesktop?.isDesktop === true;
+  return (
+    typeof window !== "undefined" && window.fluxzeDesktop?.isDesktop === true
+  );
 }

@@ -50,7 +50,7 @@ export const listWebhooks = () =>
 
 export const listEventCatalog = () =>
   apiFetchJson<{ events: string[]; api_version: string }>(
-    "/api/webhooks/events",
+    "/api/webhooks/events"
   );
 
 export const createWebhook = (input: CreateWebhookInput) =>

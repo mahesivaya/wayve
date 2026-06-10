@@ -1,0 +1,7 @@
+dist
+coverage
+node_modules
+*.min.js
+package-lock.json
+# Vendored / static assets — not our source, don't reformat
+public

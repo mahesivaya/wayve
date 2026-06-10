@@ -27,7 +27,7 @@ export type ImpersonationContext = {
 // the org private key.
 async function unwrapWayveSecureV1Envelope(
   envelope: string,
-  recipientPrivate: CryptoKey,
+  recipientPrivate: CryptoKey
 ): Promise<ArrayBuffer> {
   // Format: "WAYVE_SECURE_V1\n{json with type/data/key/iv}"
   const newlineIdx = envelope.indexOf("\n");
@@ -50,31 +50,31 @@ async function unwrapWayveSecureV1Envelope(
   const aesRaw = await crypto.subtle.decrypt(
     { name: "RSA-OAEP" },
     recipientPrivate,
-    new Uint8Array(body.key).slice().buffer,
+    new Uint8Array(body.key).slice().buffer
   );
   const aesKey = await crypto.subtle.importKey(
     "raw",
     aesRaw,
     { name: "AES-GCM", length: 256 },
     false,
-    ["decrypt"],
+    ["decrypt"]
   );
   return crypto.subtle.decrypt(
     { name: "AES-GCM", iv: new Uint8Array(body.iv).slice().buffer },
     aesKey,
-    new Uint8Array(body.data).slice().buffer,
+    new Uint8Array(body.data).slice().buffer
   );
 }
 
 export async function impersonateMember(
   orgId: number,
   callerUserId: number,
-  memberUserId: number,
+  memberUserId: number
 ): Promise<ImpersonationContext> {
   const orgPrivate = await loadOrgPrivateKey(orgId, callerUserId);
   if (!orgPrivate) {
     throw new Error(
-      "Org master key not loaded on this device. Enter your recovery mnemonic at /organization/recovery-key.",
+      "Org master key not loaded on this device. Enter your recovery mnemonic at /organization/recovery-key."
     );
   }
   const { envelope } = await getMemberEscrow(orgId, memberUserId);
@@ -84,7 +84,7 @@ export async function impersonateMember(
     pkcs8,
     { name: "RSA-OAEP", hash: "SHA-256" },
     true,
-    ["decrypt"],
+    ["decrypt"]
   );
   return { memberUserId, memberPrivateKey };
 }
@@ -102,7 +102,7 @@ function bytesToB64(bytes: Uint8Array): string {
 
 export async function rewrapPkcs8UnderPassword(
   pkcs8: ArrayBuffer,
-  password: string,
+  password: string
 ): Promise<{ iv: string; ct: string; salt: string; iterations: number }> {
   const enc = new TextEncoder();
   const baseKey = await crypto.subtle.importKey(
@@ -110,7 +110,7 @@ export async function rewrapPkcs8UnderPassword(
     enc.encode(password),
     { name: "PBKDF2" },
     false,
-    ["deriveKey"],
+    ["deriveKey"]
   );
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -124,12 +124,12 @@ export async function rewrapPkcs8UnderPassword(
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
-    ["encrypt"],
+    ["encrypt"]
   );
   const ct = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv.slice().buffer },
     aesKey,
-    pkcs8,
+    pkcs8
   );
   return {
     iv: bytesToB64(iv),
@@ -146,12 +146,12 @@ export async function rewrapMemberForPasswordReset(
   orgId: number,
   callerUserId: number,
   memberUserId: number,
-  newPassword: string,
+  newPassword: string
 ): Promise<{ iv: string; ct: string; salt: string; iterations: number }> {
   const orgPrivate = await loadOrgPrivateKey(orgId, callerUserId);
   if (!orgPrivate) {
     throw new Error(
-      "Org master key not loaded on this device. Enter your recovery mnemonic at /organization/recovery-key.",
+      "Org master key not loaded on this device. Enter your recovery mnemonic at /organization/recovery-key."
     );
   }
   const { envelope } = await getMemberEscrow(orgId, memberUserId);

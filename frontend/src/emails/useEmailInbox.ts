@@ -13,7 +13,10 @@ import { logger } from "../utils/logger";
 import { decryptWayveBodyIfNeeded, emailBodyErrorMessage } from "./bodyUtils";
 import { EmailAccount, EmailFolder, EmailItem, EmailAttachment } from "./types";
 
-export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery: string) {
+export function useEmailInbox(
+  user_id: number | undefined,
+  normalizedSearchQuery: string
+) {
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   // Flips true after the first /api/accounts response (success or failure) so
   // the UI can tell "still loading" apart from "genuinely zero accounts" and
@@ -58,11 +61,13 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
 
   useEffect(() => {
     const fetchInitialEmails = async () => {
-      const { emails: data, hasMore: hasMorePage } = await getEmails<EmailItem>({
-        folder: activeFolder,
-        accountId: activeAccount,
-        query: normalizedSearchQuery,
-      });
+      const { emails: data, hasMore: hasMorePage } = await getEmails<EmailItem>(
+        {
+          folder: activeFolder,
+          accountId: activeAccount,
+          query: normalizedSearchQuery,
+        }
+      );
       setEmails(data);
       // The backend's `hasMore` reflects the DB state only — it doesn't know
       // that the provider (Gmail/Outlook) may have older messages we haven't
@@ -78,7 +83,7 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
       // clear the selection when the email genuinely left the list (account
       // switch, folder change, server-side delete).
       setSelectedEmail((cur) =>
-        cur && data.some((email) => email.id === cur.id) ? cur : null,
+        cur && data.some((email) => email.id === cur.id) ? cur : null
       );
     };
     void fetchInitialEmails();
@@ -102,16 +107,18 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
         beforeId: last.id,
       });
       // Defensive de-dup on append. The backend's keyset pagination
-       // `(created_at, id) < (before, beforeId)` is usually strict, but a
-       // background sync writing a row between the initial fetch and this
-       // loadMore — or two emails sharing the same created_at second — can
-       // produce an id overlap. React keys must be unique, so drop rows we
-       // already have rather than rendering a duplicate.
-       setEmails((prev) => {
-         const seen = new Set(prev.map((email) => email.id));
-         const fresh = data.filter((email) => !seen.has(email.id));
-         return fresh.length === data.length ? [...prev, ...data] : [...prev, ...fresh];
-       });
+      // `(created_at, id) < (before, beforeId)` is usually strict, but a
+      // background sync writing a row between the initial fetch and this
+      // loadMore — or two emails sharing the same created_at second — can
+      // produce an id overlap. React keys must be unique, so drop rows we
+      // already have rather than rendering a duplicate.
+      setEmails((prev) => {
+        const seen = new Set(prev.map((email) => email.id));
+        const fresh = data.filter((email) => !seen.has(email.id));
+        return fresh.length === data.length
+          ? [...prev, ...data]
+          : [...prev, ...fresh];
+      });
       // The backend's `hasMore` reflects only whether *this* SQL page hit the
       // 51-row LIMIT — it doesn't know whether the provider (Gmail/Outlook)
       // still has more older mail past what was pulled in this tick. Treat
@@ -135,7 +142,9 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
       const data = await getAllEmailAttachments();
       setFiles(data);
     } catch (err) {
-      setFilesError(err instanceof Error ? err.message : "Failed to load files");
+      setFilesError(
+        err instanceof Error ? err.message : "Failed to load files"
+      );
     } finally {
       setFilesLoading(false);
     }
@@ -176,7 +185,9 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
     const openedEmail = { ...email, is_read: true };
     const wasUnread = email.is_read === false;
     setEmails((prev) =>
-      prev.map((item) => (item.id === email.id ? { ...item, is_read: true } : item))
+      prev.map((item) =>
+        item.id === email.id ? { ...item, is_read: true } : item
+      )
     );
 
     // Decrement the matching account's unread badge in the sidebar. The
@@ -188,8 +199,8 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
         prev.map((acc) =>
           acc.id === email.account_id
             ? { ...acc, unread_count: Math.max(0, (acc.unread_count ?? 0) - 1) }
-            : acc,
-        ),
+            : acc
+        )
       );
     }
 
@@ -213,21 +224,36 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
       const data = await getEmail<EmailItem>(email.id);
       const emailWithListFields = { ...openedEmail, ...data, is_read: true };
       if (data.body) {
-        const decryptedBody = await decryptWayveBodyIfNeeded(emailWithListFields.body || "", user_id);
+        const decryptedBody = await decryptWayveBodyIfNeeded(
+          emailWithListFields.body || "",
+          user_id
+        );
         let attachments = await getEmailAttachments(email.id);
         if (!data.attachments_checked) {
           await getEmailBody(email.id);
           attachments = await getEmailAttachments(email.id);
         }
-        const full = { ...emailWithListFields, body: decryptedBody, attachments };
+        const full = {
+          ...emailWithListFields,
+          body: decryptedBody,
+          attachments,
+        };
         emailCache.current[email.id] = full;
         setSelectedEmail(full);
       } else {
         setSelectedEmail({ ...emailWithListFields, _bodyLoading: true });
         const { body } = await getEmailBody(email.id);
-        const decryptedBody = await decryptWayveBodyIfNeeded(body || "", user_id);
+        const decryptedBody = await decryptWayveBodyIfNeeded(
+          body || "",
+          user_id
+        );
         const attachments = await getEmailAttachments(email.id);
-        const merged = { ...emailWithListFields, body: decryptedBody, attachments, _bodyLoading: false };
+        const merged = {
+          ...emailWithListFields,
+          body: decryptedBody,
+          attachments,
+          _bodyLoading: false,
+        };
         emailCache.current[email.id] = merged;
         setSelectedEmail((cur) => (cur?.id === email.id ? merged : cur));
       }
@@ -262,30 +288,38 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
         if (email.is_read === false && email.account_id != null) {
           unreadByAccount.set(
             email.account_id,
-            (unreadByAccount.get(email.account_id) ?? 0) + 1,
+            (unreadByAccount.get(email.account_id) ?? 0) + 1
           );
         }
         return { ...email, is_read: true };
-      }),
+      })
     );
     setAccounts((prev) =>
       prev.map((acc) => {
         const drop = unreadByAccount.get(acc.id) ?? 0;
         if (drop === 0) return acc;
-        return { ...acc, unread_count: Math.max(0, (acc.unread_count ?? 0) - drop) };
-      }),
+        return {
+          ...acc,
+          unread_count: Math.max(0, (acc.unread_count ?? 0) - drop),
+        };
+      })
     );
     // Also patch the cache so a subsequent open() doesn't repaint as unread.
     for (const id of ids) {
       const cached = emailCache.current[id];
       if (cached) emailCache.current[id] = { ...cached, is_read: true };
     }
-    await Promise.allSettled(ids.map((id) => markEmailRead(id))).then((results) => {
-      const failed = results.filter((r) => r.status === "rejected").length;
-      if (failed > 0) {
-        logger.warn("bulkMarkRead: some calls failed", { failed, total: ids.length });
+    await Promise.allSettled(ids.map((id) => markEmailRead(id))).then(
+      (results) => {
+        const failed = results.filter((r) => r.status === "rejected").length;
+        if (failed > 0) {
+          logger.warn("bulkMarkRead: some calls failed", {
+            failed,
+            total: ids.length,
+          });
+        }
       }
-    });
+    );
   };
 
   // Optimistic remove from the list, then fire deletes in parallel. On any
@@ -298,12 +332,17 @@ export function useEmailInbox(user_id: number | undefined, normalizedSearchQuery
     setEmails((prev) => prev.filter((email) => !idSet.has(email.id)));
     setSelectedEmail((cur) => (cur && idSet.has(cur.id) ? null : cur));
     for (const id of ids) delete emailCache.current[id];
-    await Promise.allSettled(ids.map((id) => deleteEmailRequest(id))).then((results) => {
-      const failed = results.filter((r) => r.status === "rejected").length;
-      if (failed > 0) {
-        logger.warn("bulkDelete: some calls failed", { failed, total: ids.length });
+    await Promise.allSettled(ids.map((id) => deleteEmailRequest(id))).then(
+      (results) => {
+        const failed = results.filter((r) => r.status === "rejected").length;
+        if (failed > 0) {
+          logger.warn("bulkDelete: some calls failed", {
+            failed,
+            total: ids.length,
+          });
+        }
       }
-    });
+    );
   };
 
   return {

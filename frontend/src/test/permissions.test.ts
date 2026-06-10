@@ -35,8 +35,14 @@ describe("permission matrix", () => {
   it("org_keys:bootstrap is owner-only", () => {
     expect(ROLE_PERMISSIONS.owner).toContain("org_keys:bootstrap");
     for (const role of [
-      "super_admin", "admin", "security", "billing",
-      "developer", "support", "member", "guest",
+      "super_admin",
+      "admin",
+      "security",
+      "billing",
+      "developer",
+      "support",
+      "member",
+      "guest",
     ] as const) {
       expect(ROLE_PERMISSIONS[role]).not.toContain("org_keys:bootstrap");
     }
@@ -47,7 +53,12 @@ describe("permission matrix", () => {
       expect(ROLE_PERMISSIONS[role]).toContain("org_keys:use_master");
     }
     for (const role of [
-      "security", "billing", "developer", "support", "member", "guest",
+      "security",
+      "billing",
+      "developer",
+      "support",
+      "member",
+      "guest",
     ] as const) {
       expect(ROLE_PERMISSIONS[role]).not.toContain("org_keys:use_master");
     }
@@ -101,7 +112,9 @@ describe("hasPermission", () => {
   it("hasAnyPermission ORs the checks", () => {
     const user = { permissions: ["usage:read"] };
     expect(hasAnyPermission(user, ["members:manage", "usage:read"])).toBe(true);
-    expect(hasAnyPermission(user, ["members:manage", "org:delete"])).toBe(false);
+    expect(hasAnyPermission(user, ["members:manage", "org:delete"])).toBe(
+      false
+    );
   });
 });
 
@@ -144,7 +157,9 @@ describe("assignableRoles / canModifyMember", () => {
     expect(canModifyMember(["roles:assign_limited"], "member")).toBe(true);
     expect(canModifyMember(["roles:assign_limited"], "developer")).toBe(true);
     expect(canModifyMember(["roles:assign_limited"], "admin")).toBe(false);
-    expect(canModifyMember(["roles:assign_limited"], "super_admin")).toBe(false);
+    expect(canModifyMember(["roles:assign_limited"], "super_admin")).toBe(
+      false
+    );
     expect(canModifyMember(["roles:assign_limited"], "owner")).toBe(false);
   });
 

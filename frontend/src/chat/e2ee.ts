@@ -23,14 +23,16 @@ const importPublicKey = (bytes: number[] | ArrayBuffer | Uint8Array) =>
       hash: "SHA-256",
     },
     true,
-    ["encrypt"],
+    ["encrypt"]
   );
 
 const parseEnvelope = (content: string): ChatEnvelope | null => {
   if (!content.startsWith(CHAT_E2E_PREFIX)) return null;
 
   try {
-    const parsed = JSON.parse(content.slice(CHAT_E2E_PREFIX.length)) as Partial<ChatEnvelope>;
+    const parsed = JSON.parse(
+      content.slice(CHAT_E2E_PREFIX.length)
+    ) as Partial<ChatEnvelope>;
     if (
       parsed.type !== "wayve_chat_e2e" ||
       !Array.isArray(parsed.data) ||
@@ -46,11 +48,12 @@ const parseEnvelope = (content: string): ChatEnvelope | null => {
   }
 };
 
-export const isEncryptedChatContent = (content: string) => Boolean(parseEnvelope(content));
+export const isEncryptedChatContent = (content: string) =>
+  Boolean(parseEnvelope(content));
 
 export async function encryptChatContent(
   plaintext: string,
-  recipientPublicKeys: Map<number, number[] | ArrayBuffer | Uint8Array>,
+  recipientPublicKeys: Map<number, number[] | ArrayBuffer | Uint8Array>
 ) {
   if (recipientPublicKeys.size === 0) {
     throw new Error("No recipient encryption keys available");
@@ -59,13 +62,13 @@ export async function encryptChatContent(
   const aesKey = await crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
     true,
-    ["encrypt", "decrypt"],
+    ["encrypt", "decrypt"]
   );
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encryptedMessage = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     aesKey,
-    new TextEncoder().encode(plaintext),
+    new TextEncoder().encode(plaintext)
   );
   const rawKey = await crypto.subtle.exportKey("raw", aesKey);
   const keys: Record<string, number[]> = {};
@@ -75,7 +78,7 @@ export async function encryptChatContent(
     const encryptedKey = await crypto.subtle.encrypt(
       { name: "RSA-OAEP" },
       publicKey,
-      rawKey,
+      rawKey
     );
     keys[String(userId)] = Array.from(new Uint8Array(encryptedKey));
   }
@@ -88,7 +91,10 @@ export async function encryptChatContent(
   } satisfies ChatEnvelope)}`;
 }
 
-export async function decryptChatContent(content: string, currentUserId: number) {
+export async function decryptChatContent(
+  content: string,
+  currentUserId: number
+) {
   const envelope = parseEnvelope(content);
   if (!envelope) return content;
 
@@ -104,18 +110,21 @@ export async function decryptChatContent(content: string, currentUserId: number)
       new Uint8Array(envelope.data),
       new Uint8Array(encryptedKey),
       new Uint8Array(envelope.iv),
-      privateKey,
+      privateKey
     );
   } catch {
     return "[encrypted message unavailable on this device]";
   }
 }
 
-export async function decryptChatMessages(messages: ChatMessage[], currentUserId: number) {
+export async function decryptChatMessages(
+  messages: ChatMessage[],
+  currentUserId: number
+) {
   return Promise.all(
     messages.map(async (message) => ({
       ...message,
       content: await decryptChatContent(message.content, currentUserId),
-    })),
+    }))
   );
 }

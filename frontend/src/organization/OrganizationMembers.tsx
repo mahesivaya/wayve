@@ -54,7 +54,7 @@ export default function OrganizationMembers() {
         password,
         "personal",
         "",
-        role,
+        role
       );
       setCreatedUsers((prev) => [created, ...prev]);
       setHandle("");
@@ -64,7 +64,9 @@ export default function OrganizationMembers() {
       setEmailEdited(false);
       setCreateSuccess(`Created account ${created.email}`);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create user");
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to create user"
+      );
     } finally {
       setCreating(false);
     }
@@ -72,7 +74,6 @@ export default function OrganizationMembers() {
 
   return (
     <div className="organization-admin-home u-page-shell">
-
       {canManageMembers && (
         <section className="organization-admin-create u-panel">
           <div className="organization-admin-section-header">
@@ -145,15 +146,24 @@ export default function OrganizationMembers() {
             </button>
           </form>
 
-          {createError && <div className="organization-admin-error">{createError}</div>}
-          {createSuccess && <div className="organization-admin-success">{createSuccess}</div>}
+          {createError && (
+            <div className="organization-admin-error">{createError}</div>
+          )}
+          {createSuccess && (
+            <div className="organization-admin-success">{createSuccess}</div>
+          )}
 
           {createdUsers.length > 0 && (
             <div className="organization-admin-created-list">
               {createdUsers.map((created) => (
-                <div key={created.id} className="organization-admin-created-row">
+                <div
+                  key={created.id}
+                  className="organization-admin-created-row"
+                >
                   <strong>{created.username || created.email}</strong>
-                  <span>{created.email} · {created.account_type}</span>
+                  <span>
+                    {created.email} · {created.account_type}
+                  </span>
                 </div>
               ))}
             </div>

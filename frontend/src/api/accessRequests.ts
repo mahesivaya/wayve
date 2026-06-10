@@ -52,14 +52,14 @@ const DEFAULT_RESOURCE = "test_access";
 
 export const getMyAccessStatus = async (resource: string = DEFAULT_RESOURCE) =>
   apiFetchJson<MyAccessStatus>(
-    `/api/access-requests/me?resource=${encodeURIComponent(resource)}`,
+    `/api/access-requests/me?resource=${encodeURIComponent(resource)}`
   );
 
 // Creates a pending request, or updates the explanation on the existing
 // active one (the backend upserts on user+resource).
 export const createAccessRequest = async (
   resource: string = DEFAULT_RESOURCE,
-  note?: string,
+  note?: string
 ) =>
   apiFetchJson<{ id: number; status: AccessStatus }>("/api/access-requests", {
     method: "POST",
@@ -67,28 +67,26 @@ export const createAccessRequest = async (
   });
 
 export const adminListAccessRequests = async (
-  status?: Exclude<AccessStatus, "none">,
+  status?: Exclude<AccessStatus, "none">
 ) => {
   const qs = status ? `?status=${encodeURIComponent(status)}` : "";
-  return apiFetchJson<AccessRequestView[]>(
-    `/api/access-requests/admin${qs}`,
-  );
+  return apiFetchJson<AccessRequestView[]>(`/api/access-requests/admin${qs}`);
 };
 
 export const adminDecideAccessRequest = async (
   id: number,
   status: "approved" | "denied",
-  note?: string,
+  note?: string
 ) =>
   apiFetchJson<{ id: number; status: AccessStatus }>(
     `/api/access-requests/admin/${id}`,
     {
       method: "PATCH",
       body: JSON.stringify({ status, note }),
-    },
+    }
   );
 
 export const getAccessRequestHistory = async (limit = 200) =>
   apiFetchJson<AccessHistoryEntry[]>(
-    `/api/access-requests/history?limit=${limit}`,
+    `/api/access-requests/history?limit=${limit}`
   );

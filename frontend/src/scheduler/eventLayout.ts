@@ -11,16 +11,14 @@ type EventForLayout = { id: number; start: number; end: number };
 export type LaneAssignment = { lane: number; laneCount: number };
 
 export function computeLanes<T extends EventForLayout>(
-  events: T[],
+  events: T[]
 ): Map<number, LaneAssignment> {
   const result = new Map<number, LaneAssignment>();
   if (events.length === 0) return result;
 
   // Sort by start ascending, then end descending so the longest event
   // in a tie gets the first lane (visually anchors the cluster).
-  const sorted = [...events].sort(
-    (a, b) => a.start - b.start || b.end - a.end,
-  );
+  const sorted = [...events].sort((a, b) => a.start - b.start || b.end - a.end);
 
   // Walk the sorted list, grouping events into clusters of mutually-
   // connected overlaps. A cluster ends as soon as we encounter an event

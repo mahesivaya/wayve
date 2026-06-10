@@ -51,7 +51,9 @@
   line-height: 1;
   color: var(--color-text-muted);
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .support-close-btn:hover {
@@ -74,7 +76,11 @@
   gap: 6px 12px;
   border: 1px solid var(--color-border-muted);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--color-email-bg) 55%, var(--color-surface));
+  background: color-mix(
+    in srgb,
+    var(--color-email-bg) 55%,
+    var(--color-surface)
+  );
 }
 
 .support-contact h3 {
@@ -124,7 +130,7 @@
   font-weight: 600;
 }
 
-.support-contact a:hover{
+.support-contact a:hover {
   text-decoration: underline;
 }
 
@@ -138,7 +144,7 @@
   cursor: pointer;
 }
 
-.support-link-btn:hover{
+.support-link-btn:hover {
   text-decoration: underline;
 }
 
@@ -174,7 +180,9 @@
   color: var(--color-text-primary);
   box-sizing: border-box;
   resize: vertical;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .support-form input::placeholder,
@@ -189,7 +197,7 @@
 
 .support-form input:focus,
 .support-form textarea:focus,
-.support-form select:focus{
+.support-form select:focus {
   outline: none;
   border-color: var(--color-primary-action);
   box-shadow: 0 0 0 3px var(--color-primary-border);
@@ -202,7 +210,11 @@
   padding: 10px 12px;
   border: 1px dashed var(--color-border-muted);
   border-radius: 9px;
-  background: color-mix(in srgb, var(--color-email-bg) 40%, var(--color-surface));
+  background: color-mix(
+    in srgb,
+    var(--color-email-bg) 40%,
+    var(--color-surface)
+  );
   cursor: pointer;
 }
 
@@ -305,7 +317,9 @@
   border-radius: 9px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .support-primary-btn:not(:disabled):hover {
@@ -313,7 +327,7 @@
   border-color: var(--color-primary-action-hover);
 }
 
-.support-primary-btn:disabled{
+.support-primary-btn:disabled {
   background: var(--color-primary-border);
   border-color: var(--color-primary-border);
   cursor: default;
@@ -330,7 +344,7 @@
   transition: background 0.12s ease;
 }
 
-.support-secondary-btn:hover{
+.support-secondary-btn:hover {
   background: var(--color-email-bg);
 }
 
@@ -349,7 +363,7 @@
   cursor: pointer;
 }
 
-.header-support-btn:hover{
+.header-support-btn:hover {
   background: var(--color-email-bg);
   border-color: var(--color-text-slate-soft);
 }

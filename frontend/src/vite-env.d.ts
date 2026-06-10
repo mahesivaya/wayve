@@ -18,7 +18,10 @@ type StripeElementChangeEvent = {
 type StripeCardElement = {
   mount: (selector: string) => void;
   destroy: () => void;
-  on: (event: "change", handler: (event: StripeElementChangeEvent) => void) => void;
+  on: (
+    event: "change",
+    handler: (event: StripeElementChangeEvent) => void
+  ) => void;
 };
 
 type StripePaymentElement = {
@@ -35,7 +38,10 @@ type StripeElements = {
     type: "cardNumber" | "cardExpiry" | "cardCvc",
     options?: Record<string, unknown>
   ): StripeCardElement;
-  create(type: "payment", options?: Record<string, unknown>): StripePaymentElement;
+  create(
+    type: "payment",
+    options?: Record<string, unknown>
+  ): StripePaymentElement;
 };
 
 type StripeSetupIntentResult = {
@@ -84,7 +90,9 @@ type StripeInstance = {
     confirmParams?: { return_url?: string };
     redirect?: "always" | "if_required";
   }) => Promise<StripePaymentIntentResult>;
-  retrieveSetupIntent: (clientSecret: string) => Promise<StripeSetupIntentResult>;
+  retrieveSetupIntent: (
+    clientSecret: string
+  ) => Promise<StripeSetupIntentResult>;
 };
 
 interface Window {

@@ -32,7 +32,7 @@ export default function StorageLimitBanner({ onUpgrade }: Props) {
   const [used, setUsed] = useState<number | null>(null);
   const [limit, setLimit] = useState<number | null>(null);
   const [dismissed, setDismissed] = useState(
-    () => sessionStorage.getItem(DISMISS_KEY) === "1",
+    () => sessionStorage.getItem(DISMISS_KEY) === "1"
   );
 
   const refresh = useCallback(() => {
@@ -79,7 +79,10 @@ export default function StorageLimitBanner({ onUpgrade }: Props) {
   };
 
   return (
-    <div className={`storage-alert ${critical ? "is-critical" : ""}`} role="alert">
+    <div
+      className={`storage-alert ${critical ? "is-critical" : ""}`}
+      role="alert"
+    >
       <span className="storage-alert-text">
         {critical
           ? `You've reached your ${formatBytes(limit)} storage limit (${pctLabel}% used). Uploads are blocked until you free space or upgrade.`

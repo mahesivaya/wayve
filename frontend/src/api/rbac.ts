@@ -85,7 +85,7 @@ export type AdminCreateUserInput = {
 };
 
 export async function adminCreateUser(
-  input: AdminCreateUserInput,
+  input: AdminCreateUserInput
 ): Promise<AdminCreatedUser> {
   const res = await apiFetch("/api/admin/users", {
     method: "POST",

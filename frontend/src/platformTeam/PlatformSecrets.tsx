@@ -32,13 +32,14 @@ type EmbedMintResponse = {
 // Test endpoints — read-only paths so testing a key never mutates state.
 // Each one is annotated with the scope it needs so the owner can predict
 // which keys should succeed vs. be denied for scope-mismatch.
-const TEST_ENDPOINTS: Array<{ method: "GET"; path: string; scope: ApiScope }> = [
-  { method: "GET", path: "/api/me", scope: "profile:read" },
-  { method: "GET", path: "/api/v1/me", scope: "profile:read" },
-  { method: "GET", path: "/api/tasks", scope: "tasks:read" },
-  { method: "GET", path: "/api/notes", scope: "notes:read" },
-  { method: "GET", path: "/api/emails", scope: "email:read" },
-];
+const TEST_ENDPOINTS: Array<{ method: "GET"; path: string; scope: ApiScope }> =
+  [
+    { method: "GET", path: "/api/me", scope: "profile:read" },
+    { method: "GET", path: "/api/v1/me", scope: "profile:read" },
+    { method: "GET", path: "/api/tasks", scope: "tasks:read" },
+    { method: "GET", path: "/api/notes", scope: "notes:read" },
+    { method: "GET", path: "/api/emails", scope: "email:read" },
+  ];
 
 type TestResult = {
   status: number;
@@ -60,7 +61,7 @@ export default function PlatformSecrets() {
   const [keyType, setKeyType] = useState<KeyType>("external");
   const [fullAccess, setFullAccess] = useState(false);
   const [scopes, setScopes] = useState<Set<string>>(
-    () => new Set<string>(["profile:read"]),
+    () => new Set<string>(["profile:read"])
   );
   const [expiresAt, setExpiresAt] = useState("");
   const [rateLimit, setRateLimit] = useState("");
@@ -78,11 +79,13 @@ export default function PlatformSecrets() {
   // ── Embed token mint ──────────────────────────────────────────────
   const [embedOrigin, setEmbedOrigin] = useState("https://customer.example");
   const [embedScopes, setEmbedScopes] = useState<Set<string>>(
-    () => new Set(["profile:read"]),
+    () => new Set(["profile:read"])
   );
   const [embedMinting, setEmbedMinting] = useState(false);
   const [embedError, setEmbedError] = useState("");
-  const [embedResult, setEmbedResult] = useState<EmbedMintResponse | null>(null);
+  const [embedResult, setEmbedResult] = useState<EmbedMintResponse | null>(
+    null
+  );
 
   const toggleEmbedScope = (scope: string) => {
     setEmbedScopes((prev) => {
@@ -99,16 +102,21 @@ export default function PlatformSecrets() {
     setEmbedResult(null);
     setEmbedMinting(true);
     try {
-      const result = await apiFetchJson<EmbedMintResponse>("/api/embed/tokens", {
-        method: "POST",
-        body: JSON.stringify({
-          origin: embedOrigin.trim(),
-          scopes: [...embedScopes],
-        }),
-      });
+      const result = await apiFetchJson<EmbedMintResponse>(
+        "/api/embed/tokens",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            origin: embedOrigin.trim(),
+            scopes: [...embedScopes],
+          }),
+        }
+      );
       setEmbedResult(result);
     } catch (err) {
-      setEmbedError(err instanceof Error ? err.message : "Failed to mint embed token");
+      setEmbedError(
+        err instanceof Error ? err.message : "Failed to mint embed token"
+      );
     } finally {
       setEmbedMinting(false);
     }
@@ -151,7 +159,9 @@ export default function PlatformSecrets() {
       // without copy-paste — the raw key is only available right now.
       setTestKey(result.api_key);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create key");
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to create key"
+      );
     } finally {
       setCreating(false);
     }
@@ -198,14 +208,17 @@ export default function PlatformSecrets() {
         <h1>API Secrets — Owner Console</h1>
         <p>
           Mint API keys (including <code>*</code>-scoped internal keys) and test
-          them against the live API. Only the platform owner can reach this page.
+          them against the live API. Only the platform owner can reach this
+          page.
         </p>
       </header>
 
       <section className="pt-panel">
         <div className="pt-panel-head">
           <h2>1. Create secret</h2>
-          <Link to="/api-keys" className="pt-link">All keys →</Link>
+          <Link to="/api-keys" className="pt-link">
+            All keys →
+          </Link>
         </div>
         <form className="api-secrets-form" onSubmit={submitCreate}>
           <label>
@@ -227,8 +240,12 @@ export default function PlatformSecrets() {
                 setFullAccess(false);
               }}
             >
-              <option value="external">External — explicit scopes, expiry required</option>
-              <option value="internal">Internal — may hold `*` (full access)</option>
+              <option value="external">
+                External — explicit scopes, expiry required
+              </option>
+              <option value="internal">
+                Internal — may hold `*` (full access)
+              </option>
             </select>
           </label>
 
@@ -239,7 +256,9 @@ export default function PlatformSecrets() {
                 checked={fullAccess}
                 onChange={(e) => setFullAccess(e.target.checked)}
               />
-              <span>Full access (<code>*</code> — every scope, no expiry needed)</span>
+              <span>
+                Full access (<code>*</code> — every scope, no expiry needed)
+              </span>
             </label>
           )}
 
@@ -295,7 +314,8 @@ export default function PlatformSecrets() {
             <code className="api-secrets-raw">{created.api_key}</code>
             <p className="pt-stat-sub">
               Created <em>{created.name}</em> · {created.key_type} ·{" "}
-              {created.scopes.join(", ") || "no scopes"} · {created.rate_limit_per_min}/min
+              {created.scopes.join(", ") || "no scopes"} ·{" "}
+              {created.rate_limit_per_min}/min
             </p>
           </div>
         )}
@@ -358,7 +378,9 @@ export default function PlatformSecrets() {
               </span>
               <span className="pt-stat-sub">{testResult.durationMs}ms</span>
             </div>
-            <pre className="api-secrets-result-body">{prettyJson(testResult.body)}</pre>
+            <pre className="api-secrets-result-body">
+              {prettyJson(testResult.body)}
+            </pre>
           </div>
         )}
 
@@ -379,7 +401,10 @@ export default function PlatformSecrets() {
             <code>X-EMBED-TOKEN</code>
           </span>
         </div>
-        <form className="api-secrets-form" onSubmit={(e) => void mintEmbedToken(e)}>
+        <form
+          className="api-secrets-form"
+          onSubmit={(e) => void mintEmbedToken(e)}
+        >
           <label>
             Embedding origin
             <input
@@ -403,7 +428,11 @@ export default function PlatformSecrets() {
             ))}
           </fieldset>
           <div className="api-secrets-actions">
-            <button type="submit" className="pt-link-btn" disabled={embedMinting}>
+            <button
+              type="submit"
+              className="pt-link-btn"
+              disabled={embedMinting}
+            >
               {embedMinting ? "Minting…" : "Mint embed token"}
             </button>
           </div>

@@ -51,7 +51,7 @@ const HUE_WARNING = 75;
 
 export function generatePalette(
   input: PaletteInput,
-  mode: "light" | "dark",
+  mode: "light" | "dark"
 ): TokenOverrides {
   const { hue, chroma, saturation, contrast, depth } = input;
 
@@ -62,11 +62,11 @@ export function generatePalette(
   const surfaceL = isDark ? 0.18 - depth : 0.99 + depth;
   const surfaceSoftL = isDark ? 0.14 - depth : 0.96 + depth;
   const surfaceHoverL = isDark ? 0.24 - depth : 0.94 + depth;
-  const textPrimaryL = isDark ? 0.92 + 0.05 * contrast : 0.18 - 0.10 * contrast;
-  const textSecondaryL = isDark ? 0.80 + 0.05 * contrast : 0.32 - 0.10 * contrast;
-  const textMutedL = isDark ? 0.62 : 0.50;
+  const textPrimaryL = isDark ? 0.92 + 0.05 * contrast : 0.18 - 0.1 * contrast;
+  const textSecondaryL = isDark ? 0.8 + 0.05 * contrast : 0.32 - 0.1 * contrast;
+  const textMutedL = isDark ? 0.62 : 0.5;
   const textInkL = isDark ? 0.88 : 0.22;
-  const borderL = isDark ? 0.28 : 0.90;
+  const borderL = isDark ? 0.28 : 0.9;
   const borderSoftL = isDark ? 0.24 : 0.93;
   const borderMutedL = isDark ? 0.32 : 0.86;
 
@@ -75,7 +75,7 @@ export function generatePalette(
   const primaryL = isDark ? 0.68 : 0.55;
   const primaryHoverL = isDark ? 0.78 : 0.62;
   const primarySoftL = isDark ? 0.22 : 0.94;
-  const primaryActionL = isDark ? 0.62 : 0.50;
+  const primaryActionL = isDark ? 0.62 : 0.5;
   const primaryActionHoverL = isDark ? 0.72 : 0.58;
 
   // Soft variants use a reduced chroma so the page doesn't feel painted.
@@ -117,7 +117,9 @@ export function generatePalette(
 // For preset definitions — convert hex (or any CSS color string) to an
 // override map keyed by role. The preset file uses friendly hex/oklch strings
 // directly without going through the generator.
-export function rolesFromMap(map: Partial<Record<TokenRole, string>>): TokenOverrides {
+export function rolesFromMap(
+  map: Partial<Record<TokenRole, string>>
+): TokenOverrides {
   return { ...map };
 }
 
@@ -169,7 +171,11 @@ export function cssColorToHex(color: string, fallback = "#888888"): string {
   return (
     "#" +
     rgb
-      .map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0"))
+      .map((v) =>
+        Math.max(0, Math.min(255, Math.round(v)))
+          .toString(16)
+          .padStart(2, "0")
+      )
       .join("")
   );
 }

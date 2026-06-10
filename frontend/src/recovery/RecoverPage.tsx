@@ -65,16 +65,16 @@ export default function RecoverPage() {
         <header>
           <h2>Restore your encryption key</h2>
           <p>
-            Paste the {MNEMONIC_WORD_COUNT}-word recovery phrase you
-            wrote down at signup. Fluxze will use it to unlock your
-            encrypted notes, files, and chat history on this device. The
-            phrase never leaves your browser.
+            Paste the {MNEMONIC_WORD_COUNT}-word recovery phrase you wrote down
+            at signup. Fluxze will use it to unlock your encrypted notes, files,
+            and chat history on this device. The phrase never leaves your
+            browser.
           </p>
           <p style={{ marginTop: 6, fontSize: "0.85rem", opacity: 0.75 }}>
             Only works for accounts registered with{" "}
             <em>Full encryption recovery</em>. Accounts on the
-            password-reset-only setting can't restore encrypted content
-            this way.
+            password-reset-only setting can't restore encrypted content this
+            way.
           </p>
         </header>
 
@@ -114,7 +114,11 @@ export default function RecoverPage() {
             >
               Cancel
             </button>
-            <button type="submit" className="recovery-primary-btn" disabled={busy}>
+            <button
+              type="submit"
+              className="recovery-primary-btn"
+              disabled={busy}
+            >
               {busy ? "Restoring…" : "Restore key"}
             </button>
           </div>

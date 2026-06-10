@@ -24,22 +24,30 @@ async function loadMarked(): Promise<MarkedFn> {
   if (already) return (md: string) => already.parse(md);
   await new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(
-      `script[src="${MARKED_SCRIPT}"]`,
+      `script[src="${MARKED_SCRIPT}"]`
     );
     if (existing) {
       existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("marked load failed")), {
-        once: true,
-      });
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("marked load failed")),
+        {
+          once: true,
+        }
+      );
       return;
     }
     const tag = document.createElement("script");
     tag.src = MARKED_SCRIPT;
     tag.async = true;
     tag.addEventListener("load", () => resolve(), { once: true });
-    tag.addEventListener("error", () => reject(new Error("marked load failed")), {
-      once: true,
-    });
+    tag.addEventListener(
+      "error",
+      () => reject(new Error("marked load failed")),
+      {
+        once: true,
+      }
+    );
     document.body.appendChild(tag);
   });
   const loaded = getMarkedFromWindow();
@@ -84,7 +92,8 @@ export default function Docs() {
         }
       })
       .catch((err) => {
-        if (alive) setError(err instanceof Error ? err.message : "Failed to load docs");
+        if (alive)
+          setError(err instanceof Error ? err.message : "Failed to load docs");
       })
       .finally(() => {
         if (alive) setLoadingList(false);
@@ -131,7 +140,9 @@ export default function Docs() {
     () => (
       <nav className="docs-sidebar" aria-label="Documentation">
         <header>
-          <Link to="/" className="docs-back">← {BRAND_NAME}</Link>
+          <Link to="/" className="docs-back">
+            ← {BRAND_NAME}
+          </Link>
           <h2>Docs</h2>
         </header>
         {loadingList ? (
@@ -158,7 +169,7 @@ export default function Docs() {
         </footer>
       </nav>
     ),
-    [catalog, loadingList, slug],
+    [catalog, loadingList, slug]
   );
 
   // The sidebar list of catalog items is now redundant — DocsShell's

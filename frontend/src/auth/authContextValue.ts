@@ -63,7 +63,7 @@ export type AuthType = {
     token: string,
     accountType?: string,
     isFreshRegistration?: boolean,
-    plaintextPassword?: string,
+    plaintextPassword?: string
   ) => void;
   logout: () => void;
   // Re-fetch /api/me and update user state. Called after server-side

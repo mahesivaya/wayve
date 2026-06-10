@@ -1,17 +1,18 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import tseslint from 'typescript-eslint'
-import { defineConfig, globalIgnores } from 'eslint/config'
+import js from "@eslint/js";
+import globals from "globals";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
+import tseslint from "typescript-eslint";
+import prettier from "eslint-config-prettier";
+import { defineConfig, globalIgnores } from "eslint/config";
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(["dist"]),
   {
     // Type-aware linting only applies to source files. Build tooling
     // (vite.config.ts, vitest.config.ts) is excluded so we don't have to
     // add it to a tsconfig just for ESLint.
-    files: ['src/**/*.{ts,tsx}'],
+    files: ["src/**/*.{ts,tsx}"],
     extends: [
       js.configs.recommended,
       tseslint.configs.recommended,
@@ -33,16 +34,16 @@ export default defineConfig([
       // Force every log site through src/utils/logger so we keep the ring
       // buffer + scoping behavior. logger.ts is allowed to call console
       // directly via the override below.
-      'no-console': 'error',
+      "no-console": "error",
       // Type-aware rule: catch promises that are created but never awaited
       // or chained — the single biggest async bug class in this codebase.
-      '@typescript-eslint/no-floating-promises': 'error',
+      "@typescript-eslint/no-floating-promises": "error",
     },
   },
   // Build tooling files at the repo root — non-type-aware so we don't need
   // them in a tsconfig.
   {
-    files: ['vite.config.ts', 'vitest.config.ts'],
+    files: ["vite.config.ts", "vitest.config.ts"],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     languageOptions: {
       ecmaVersion: 2020,
@@ -50,9 +51,12 @@ export default defineConfig([
     },
   },
   {
-    files: ['src/utils/logger.ts'],
+    files: ["src/utils/logger.ts"],
     rules: {
-      'no-console': 'off',
+      "no-console": "off",
     },
   },
-])
+  // Must be last: turns off any ESLint rules that would conflict with
+  // Prettier's formatting. Prettier owns style; ESLint owns correctness.
+  prettier,
+]);

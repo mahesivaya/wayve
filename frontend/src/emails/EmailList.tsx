@@ -100,7 +100,7 @@ export const EmailList: React.FC<EmailListProps> = ({
 
   const visibleEmails = useMemo(
     () => (showUnreadOnly ? emails.filter((e) => e.is_read === false) : emails),
-    [emails, showUnreadOnly],
+    [emails, showUnreadOnly]
   );
 
   useEffect(() => {
@@ -124,13 +124,13 @@ export const EmailList: React.FC<EmailListProps> = ({
     setCheckedIds((prev) =>
       prev.size === visibleEmails.length && visibleEmails.length > 0
         ? new Set()
-        : new Set(visibleEmails.map((e) => e.id)),
+        : new Set(visibleEmails.map((e) => e.id))
     );
   };
 
   const allChecked = useMemo(
     () => visibleEmails.length > 0 && checkedIds.size === visibleEmails.length,
-    [visibleEmails.length, checkedIds.size],
+    [visibleEmails.length, checkedIds.size]
   );
   const someChecked = checkedIds.size > 0 && !allChecked;
 
@@ -156,7 +156,7 @@ export const EmailList: React.FC<EmailListProps> = ({
       return;
     }
     const ok = window.confirm(
-      `Delete ${checkedIds.size} email${checkedIds.size === 1 ? "" : "s"}? This cannot be undone.`,
+      `Delete ${checkedIds.size} email${checkedIds.size === 1 ? "" : "s"}? This cannot be undone.`
     );
     if (!ok) return;
     setBulkBusy(true);
@@ -266,7 +266,11 @@ export const EmailList: React.FC<EmailListProps> = ({
       <div className="mobile-mail-label">Inbox</div>
 
       {isListView && !showNoAccounts && (
-        <div className="email-bulk-bar" role="toolbar" aria-label="Bulk email selection">
+        <div
+          className="email-bulk-bar"
+          role="toolbar"
+          aria-label="Bulk email selection"
+        >
           <input
             type="checkbox"
             className="email-bulk-master"
@@ -303,7 +307,9 @@ export const EmailList: React.FC<EmailListProps> = ({
               setCheckedIds(new Set());
             }}
             aria-pressed={showUnreadOnly}
-            title={showUnreadOnly ? "Show all emails" : "Show only unread emails"}
+            title={
+              showUnreadOnly ? "Show all emails" : "Show only unread emails"
+            }
             disabled={bulkBusy}
           >
             {showUnreadOnly ? "Showing unread" : "Show unread"}
@@ -339,7 +345,9 @@ export const EmailList: React.FC<EmailListProps> = ({
 
       {showNoAccounts && canAddAccount ? (
         <div className="email-folder-placeholder" role="status">
-          <div className="email-folder-placeholder-icon" aria-hidden="true">📭</div>
+          <div className="email-folder-placeholder-icon" aria-hidden="true">
+            📭
+          </div>
           <strong>No email accounts connected yet</strong>
           <span>
             {canAddAccount
@@ -358,10 +366,13 @@ export const EmailList: React.FC<EmailListProps> = ({
         </div>
       ) : isStubFolder ? (
         <div className="email-folder-placeholder" role="status">
-          <div className="email-folder-placeholder-icon" aria-hidden="true">🛠️</div>
+          <div className="email-folder-placeholder-icon" aria-hidden="true">
+            🛠️
+          </div>
           <strong>
-            {(activeFolder && STUB_FOLDER_LABELS[activeFolder]) || "This folder"} —
-            coming soon
+            {(activeFolder && STUB_FOLDER_LABELS[activeFolder]) ||
+              "This folder"}{" "}
+            — coming soon
           </strong>
           <span>
             Gmail-label and Outlook-category sync isn&apos;t wired up yet.
@@ -371,53 +382,54 @@ export const EmailList: React.FC<EmailListProps> = ({
       ) : (
         <>
           {visibleEmails.length === 0 && isListView && showUnreadOnly && (
-            <div className="email-bulk-empty">No unread emails in this list.</div>
+            <div className="email-bulk-empty">
+              No unread emails in this list.
+            </div>
           )}
 
           {visibleEmails.map((email) => (
-        <div
-          key={email.id}
-          className={[
-            "email-item",
-            email.is_read === false ? "unread" : "read",
-            selectedEmailId === email.id ? "active" : "",
-          ].filter(Boolean).join(" ")}
-          onClick={() => onOpenEmail(email)}
-        >
-          <div className="email-top">
-            {isListView && (
-              // Unread indicator pinned to the left of the envelope.
-              // The envelope itself is the hover-to-checkbox toggle;
-              // the unread dot is a separate visual that matches the
-              // reference screenshot — solid orange for unread, empty
-              // slot for read so the row gutter alignment never shifts.
-              <span
-                className={`email-row-unread-dot ${email.is_read === false ? "is-unread" : ""}`}
-                aria-hidden="true"
-              />
-            )}
-            {isListView && (
-              // Envelope icon by default; on row hover (or when the
-              // row is checked) the icon fades out and the checkbox
-              // fades in over the same spot. stopPropagation on the
-              // wrapper so a click on the checkbox doesn't also open
-              // the email.
-              <span
-                className="email-row-toggle"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <input
-                  type="checkbox"
-                  className="email-row-checkbox"
-                  checked={checkedIds.has(email.id)}
-                  onChange={() => toggleChecked(email.id)}
-                  aria-label={`Select email "${email.subject || "(No Subject)"}"`}
-                />
-                <span
-                  className="email-row-icon"
-                  aria-hidden="true"
-                >
-                  {/* Two envelope variants so the read state reads at
+            <div
+              key={email.id}
+              className={[
+                "email-item",
+                email.is_read === false ? "unread" : "read",
+                selectedEmailId === email.id ? "active" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => onOpenEmail(email)}
+            >
+              <div className="email-top">
+                {isListView && (
+                  // Unread indicator pinned to the left of the envelope.
+                  // The envelope itself is the hover-to-checkbox toggle;
+                  // the unread dot is a separate visual that matches the
+                  // reference screenshot — solid orange for unread, empty
+                  // slot for read so the row gutter alignment never shifts.
+                  <span
+                    className={`email-row-unread-dot ${email.is_read === false ? "is-unread" : ""}`}
+                    aria-hidden="true"
+                  />
+                )}
+                {isListView && (
+                  // Envelope icon by default; on row hover (or when the
+                  // row is checked) the icon fades out and the checkbox
+                  // fades in over the same spot. stopPropagation on the
+                  // wrapper so a click on the checkbox doesn't also open
+                  // the email.
+                  <span
+                    className="email-row-toggle"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      className="email-row-checkbox"
+                      checked={checkedIds.has(email.id)}
+                      onChange={() => toggleChecked(email.id)}
+                      aria-label={`Select email "${email.subject || "(No Subject)"}"`}
+                    />
+                    <span className="email-row-icon" aria-hidden="true">
+                      {/* Two envelope variants so the read state reads at
                       a glance from the icon itself:
                         - Unread → closed envelope (V flap pointing down
                           inside the rectangle).
@@ -426,98 +438,122 @@ export const EmailList: React.FC<EmailListProps> = ({
                       Inline SVG so the rendering is consistent across
                       OSes (the unicode `✉` ships as a colorful emoji
                       on macOS/Windows, a plain glyph on Linux). */}
-                  {email.is_read === false ? (
-                    <svg
-                      viewBox="0 0 16 16"
-                      width="14"
-                      height="14"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.4"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <rect x="1.75" y="3.5" width="12.5" height="9" rx="1.5" />
-                      <path d="M2 4.5l6 4.5 6-4.5" />
-                    </svg>
-                  ) : (
-                    <svg
-                      viewBox="0 0 16 16"
-                      width="14"
-                      height="14"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.4"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      {/* Outer envelope with angled top edges — the
+                      {email.is_read === false ? (
+                        <svg
+                          viewBox="0 0 16 16"
+                          width="14"
+                          height="14"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect
+                            x="1.75"
+                            y="3.5"
+                            width="12.5"
+                            height="9"
+                            rx="1.5"
+                          />
+                          <path d="M2 4.5l6 4.5 6-4.5" />
+                        </svg>
+                      ) : (
+                        <svg
+                          viewBox="0 0 16 16"
+                          width="14"
+                          height="14"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          {/* Outer envelope with angled top edges — the
                           flap is pulled back so the silhouette tapers
                           inward at the top, the same shape Lucide's
                           `mail-open` uses. */}
-                      <path d="M14.5 7v5.75a1.5 1.5 0 0 1-1.5 1.5H3a1.5 1.5 0 0 1-1.5-1.5V7a1.5 1.5 0 0 1 .6-1.2l5.25-3.95a1.5 1.5 0 0 1 1.8 0l5.25 3.95A1.5 1.5 0 0 1 14.5 7Z" />
-                      {/* Internal V showing the letter slot. */}
-                      <path d="M14.25 7.25L8 11.5 1.75 7.25" />
-                    </svg>
-                  )}
-                </span>
-              </span>
-            )}
-            <span className="email-primary">
-              {/* Shared-inbox workflow chip. Only renders when the row
+                          <path d="M14.5 7v5.75a1.5 1.5 0 0 1-1.5 1.5H3a1.5 1.5 0 0 1-1.5-1.5V7a1.5 1.5 0 0 1 .6-1.2l5.25-3.95a1.5 1.5 0 0 1 1.8 0l5.25 3.95A1.5 1.5 0 0 1 14.5 7Z" />
+                          {/* Internal V showing the letter slot. */}
+                          <path d="M14.25 7.25L8 11.5 1.75 7.25" />
+                        </svg>
+                      )}
+                    </span>
+                  </span>
+                )}
+                <span className="email-primary">
+                  {/* Shared-inbox workflow chip. Only renders when the row
                   came from a shared account AND has been touched at
                   least once (no chip = no help-desk state yet, i.e.
                   implicit "open" — surfaced by the row's unread style
                   rather than a redundant green chip on every mail). */}
-              {email.is_shared && email.inbox_status && (
-                <span className={`inbox-status-chip ${email.inbox_status}`}>
-                  {email.inbox_status}
+                  {email.is_shared && email.inbox_status && (
+                    <span className={`inbox-status-chip ${email.inbox_status}`}>
+                      {email.inbox_status}
+                    </span>
+                  )}
+                  {isListView && (
+                    <span className="email-list-sender">
+                      {displaySender(email.sender || email.receiver)}
+                    </span>
+                  )}
+                  <span className="email-list-subject">
+                    {email.subject || "(No Subject)"}
+                  </span>
                 </span>
-              )}
-              {isListView && (
-                <span className="email-list-sender">
-                  {displaySender(email.sender || email.receiver)}
-                </span>
-              )}
-              <span className="email-list-subject">{email.subject || "(No Subject)"}</span>
-            </span>
-            <span className="email-row-meta">
-              {email.has_attachments && <span className="email-attachment-pin" title="Has attachments">📎</span>}
-              <span className="email-time">
-                {fmtListTimestamp(email.created_at)}
-              </span>
-            </span>
-          </div>
-          <div className="mobile-email-row">
-            <div className="mobile-email-avatar" aria-hidden="true">
-              {(email.sender || email.receiver || "?").trim().charAt(0).toUpperCase()}
-            </div>
-            <div className="mobile-email-content">
-              <div className="mobile-email-sender-line">
-                <span className="mobile-email-sender">
-                  {email.sender || email.receiver || "Unknown sender"}
-                </span>
-                <span className="mobile-email-time">
-                  {formatMobileTime(email.created_at)}
+                <span className="email-row-meta">
+                  {email.has_attachments && (
+                    <span
+                      className="email-attachment-pin"
+                      title="Has attachments"
+                    >
+                      📎
+                    </span>
+                  )}
+                  <span className="email-time">
+                    {fmtListTimestamp(email.created_at)}
+                  </span>
                 </span>
               </div>
-              <div className="mobile-email-subject">{email.subject || "(No Subject)"}</div>
-              <div className="mobile-email-preview">
-                {email.preview || email.body || "No preview available"}
-              </div>
-              {email.has_attachments && (
-                <div className="mobile-email-attachment">
-                  <span aria-hidden="true">PDF</span>
-                  Attachment
+              <div className="mobile-email-row">
+                <div className="mobile-email-avatar" aria-hidden="true">
+                  {(email.sender || email.receiver || "?")
+                    .trim()
+                    .charAt(0)
+                    .toUpperCase()}
                 </div>
-              )}
+                <div className="mobile-email-content">
+                  <div className="mobile-email-sender-line">
+                    <span className="mobile-email-sender">
+                      {email.sender || email.receiver || "Unknown sender"}
+                    </span>
+                    <span className="mobile-email-time">
+                      {formatMobileTime(email.created_at)}
+                    </span>
+                  </div>
+                  <div className="mobile-email-subject">
+                    {email.subject || "(No Subject)"}
+                  </div>
+                  <div className="mobile-email-preview">
+                    {email.preview || email.body || "No preview available"}
+                  </div>
+                  {email.has_attachments && (
+                    <div className="mobile-email-attachment">
+                      <span aria-hidden="true">PDF</span>
+                      Attachment
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="mobile-email-star"
+                  aria-label="Star email"
+                >
+                  ☆
+                </button>
+              </div>
             </div>
-            <button type="button" className="mobile-email-star" aria-label="Star email">
-              ☆
-            </button>
-          </div>
-        </div>
-      ))}
+          ))}
         </>
       )}
 
@@ -537,7 +573,11 @@ export const EmailList: React.FC<EmailListProps> = ({
       )}
 
       {onCompose && (
-        <button type="button" className="mobile-compose-fab" onClick={onCompose}>
+        <button
+          type="button"
+          className="mobile-compose-fab"
+          onClick={onCompose}
+        >
           ✎ <span>Compose</span>
         </button>
       )}

@@ -20,7 +20,7 @@ const renderAt = (initialEntries: string[]) =>
       <AuthProvider>
         <Login />
       </AuthProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 
 describe("Login page", () => {
@@ -30,8 +30,9 @@ describe("Login page", () => {
   });
 
   it("submits credentials and keeps the token out of localStorage", async () => {
-    (apiLogin as unknown as { mockResolvedValue: (v: unknown) => void })
-      .mockResolvedValue({ token: "jwt-1" });
+    (
+      apiLogin as unknown as { mockResolvedValue: (v: unknown) => void }
+    ).mockResolvedValue({ token: "jwt-1" });
 
     renderAt(["/login"]);
 
@@ -47,8 +48,9 @@ describe("Login page", () => {
   });
 
   it("shows inline error on auth failure", async () => {
-    (apiLogin as unknown as { mockRejectedValue: (v: unknown) => void })
-      .mockRejectedValue(new Error("bad creds"));
+    (
+      apiLogin as unknown as { mockRejectedValue: (v: unknown) => void }
+    ).mockRejectedValue(new Error("bad creds"));
 
     renderAt(["/login"]);
     await userEvent.type(screen.getByPlaceholderText("Email"), "a@b.c");
@@ -61,14 +63,14 @@ describe("Login page", () => {
   it("shows email_exists banner when redirected from OAuth", () => {
     renderAt(["/login?error=email_exists"]);
     expect(
-      screen.getByText(/already registered with a password/i),
+      screen.getByText(/already registered with a password/i)
     ).toBeInTheDocument();
   });
 
   it("renders the Continue with Gmail button and Forgot password link", () => {
     renderAt(["/login"]);
     expect(
-      screen.getByRole("button", { name: /continue with gmail/i }),
+      screen.getByRole("button", { name: /continue with gmail/i })
     ).toBeInTheDocument();
     expect(screen.getByText(/forgot password/i)).toBeInTheDocument();
   });

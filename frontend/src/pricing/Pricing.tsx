@@ -70,7 +70,10 @@ function PlanCard({
       <p className="pricing-plan-price">
         {priceLabel(plan)}
         {!isFree && (
-          <span className="pricing-plan-interval"> / {plan.billing_interval}</span>
+          <span className="pricing-plan-interval">
+            {" "}
+            / {plan.billing_interval}
+          </span>
         )}
       </p>
       {plan.description && (
@@ -128,22 +131,23 @@ function AuthenticatedPricing() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const upgradePlanCode = params.get("plan") ?? user?.current_plan?.code ?? "basic_user";
+  const upgradePlanCode =
+    params.get("plan") ?? user?.current_plan?.code ?? "basic_user";
   const isPersonal = user?.account_type === "personal";
   const currentPlanCode = user?.current_plan?.code ?? null;
   const accountLabel =
     user?.account_type === "personal"
       ? "Personal account"
       : user?.account_type === "platform_admin"
-      ? "Platform account"
-      : "Organization account";
+        ? "Platform account"
+        : "Organization account";
   // For org users with no active org subscription the backend returns the
   // synthetic "organization_free" row — render that as a clearer "no
   // subscription yet" status rather than echoing a plan name.
   const planLabel =
     currentPlanCode === "organization_free"
       ? "No subscription yet"
-      : user?.current_plan?.name ?? upgradePlanCode;
+      : (user?.current_plan?.name ?? upgradePlanCode);
 
   useEffect(() => {
     let alive = true;

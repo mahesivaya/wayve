@@ -60,7 +60,7 @@ export const getChatMessages = async (
   otherUserId: number,
   // Reconnect resync: when set, the server returns only messages newer than
   // this id (chronological) so the client backfills exactly what it missed.
-  sinceId?: number,
+  sinceId?: number
 ) => {
   const params = new URLSearchParams({
     user1: String(userId),
@@ -69,7 +69,7 @@ export const getChatMessages = async (
   if (sinceId != null) params.set("since_id", String(sinceId));
 
   return apiFetchJson<ChatMessage[]>(
-    `/api/chat/direct-messages?${params.toString()}`,
+    `/api/chat/direct-messages?${params.toString()}`
   );
 };
 
@@ -80,7 +80,7 @@ export const createChatChannel = async (
   name: string,
   inviteRole: "admin" | "user",
   inviteEmails: string[],
-  visibility: "public" | "private",
+  visibility: "public" | "private"
 ) => {
   const res = await apiFetch("/api/chat/channels", {
     method: "POST",
@@ -102,7 +102,7 @@ export const createChatChannel = async (
 
 export const updateChatChannelSubject = async (
   channelId: number,
-  name: string,
+  name: string
 ) => {
   const res = await apiFetch(`/api/chat/channels/${channelId}`, {
     method: "PATCH",
@@ -117,7 +117,7 @@ export const updateChatChannelSubject = async (
 
 export const updateChatChannelVisibility = async (
   channelId: number,
-  visibility: "public" | "private",
+  visibility: "public" | "private"
 ) => {
   const res = await apiFetch(`/api/chat/channels/${channelId}/visibility`, {
     method: "PATCH",
@@ -148,12 +148,15 @@ export const joinChatChannel = async (channelId: number) => {
 // otherwise compile. Callers must funnel ids through `asChannelId` / `asUserId`.
 export const approveChatChannelJoinRequest = async (
   channelId: ChannelId,
-  userId: UserId,
+  userId: UserId
 ) => {
-  const res = await apiFetch(`/api/chat/channels/${channelId}/join-requests/approve`, {
-    method: "POST",
-    body: JSON.stringify({ user_id: userId }),
-  });
+  const res = await apiFetch(
+    `/api/chat/channels/${channelId}/join-requests/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    }
+  );
 
   if (!res.ok) {
     const data = await res.json().catch(() => null);
@@ -164,7 +167,7 @@ export const approveChatChannelJoinRequest = async (
 export const addChatChannelUsers = async (
   channelId: number,
   inviteRole: "admin" | "user",
-  inviteEmails: string[],
+  inviteEmails: string[]
 ) => {
   const res = await apiFetch(`/api/chat/channels/${channelId}/members`, {
     method: "POST",
@@ -182,7 +185,7 @@ export const addChatChannelUsers = async (
 
 export const removeChatChannelUser = async (
   channelId: number,
-  email: string,
+  email: string
 ) => {
   const res = await apiFetch(`/api/chat/channels/${channelId}/members`, {
     method: "DELETE",
@@ -198,7 +201,7 @@ export const removeChatChannelUser = async (
 export const getChannelMessages = async (
   channelId: number,
   // Reconnect resync — see getChatMessages.
-  sinceId?: number,
+  sinceId?: number
 ) => {
   const params = new URLSearchParams({
     channel_id: String(channelId),
@@ -206,11 +209,11 @@ export const getChannelMessages = async (
   if (sinceId != null) params.set("since_id", String(sinceId));
 
   return apiFetchJson<ChatMessage[]>(
-    `/api/chat/channel-messages?${params.toString()}`,
+    `/api/chat/channel-messages?${params.toString()}`
   );
 };
 
 export const getChannelThread = async (parentMessageId: number) =>
   apiFetchJson<ChatMessage[]>(
-    `/api/chat/channel-messages/${parentMessageId}/thread`,
+    `/api/chat/channel-messages/${parentMessageId}/thread`
   );

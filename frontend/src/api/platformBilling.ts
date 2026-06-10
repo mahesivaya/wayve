@@ -140,12 +140,12 @@ export const getPlatformBillingOverview = () =>
 
 export const listUserSubscriptions = () =>
   apiFetchJson<UserSubscriptionRow[]>(
-    "/api/platform-billing/user-subscriptions",
+    "/api/platform-billing/user-subscriptions"
   );
 
 export const listOrganizationSubscriptions = () =>
   apiFetchJson<OrganizationSubscriptionRow[]>(
-    "/api/platform-billing/organization-subscriptions",
+    "/api/platform-billing/organization-subscriptions"
   );
 
 export const listPlatformInvoices = () =>
@@ -153,7 +153,7 @@ export const listPlatformInvoices = () =>
 
 export const listBillingHistory = (limit = 200) =>
   apiFetchJson<BillingHistoryRow[]>(
-    `/api/platform-billing/history?limit=${limit}`,
+    `/api/platform-billing/history?limit=${limit}`
   );
 
 export const listEmployees = () =>
@@ -185,11 +185,11 @@ export const createPayrollRun = (input: PayrollRunInput) =>
 
 export const updatePayrollRunStatus = (
   id: number,
-  status: PayrollRun["status"],
+  status: PayrollRun["status"]
 ) =>
   apiFetchJson<{ id: number; status: string; paid_at: string | null }>(
     `/api/platform-billing/payroll-runs/${id}`,
-    { method: "PATCH", body: JSON.stringify({ status }) },
+    { method: "PATCH", body: JSON.stringify({ status }) }
   );
 
 // ── Live Stripe account snapshot ─────────────────────────────────────

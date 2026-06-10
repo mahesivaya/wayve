@@ -6,11 +6,7 @@ type Props = {
   currentDate: Date;
 };
 
-export default function CalendarHeader({
-  view,
-  currentDate,
-}: Props) {
-
+export default function CalendarHeader({ view, currentDate }: Props) {
   const label = useMemo(() => {
     if (view === "month") {
       return currentDate.toLocaleDateString("en-US", {

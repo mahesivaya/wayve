@@ -77,7 +77,9 @@ export default function SsoSettings() {
         setForm(EMPTY_FORM);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load SSO config");
+      setError(
+        err instanceof Error ? err.message : "Failed to load SSO config"
+      );
     } finally {
       setLoading(false);
     }
@@ -107,8 +109,8 @@ export default function SsoSettings() {
       <div className="sso-settings">
         <h1>Single Sign-On</h1>
         <p className="sso-error">
-          SSO is configured per organization. Your account is not attached
-          to an organization yet.
+          SSO is configured per organization. Your account is not attached to an
+          organization yet.
         </p>
         <button onClick={() => navigate("/home")}>Back to Home</button>
       </div>
@@ -161,7 +163,11 @@ export default function SsoSettings() {
 
   async function onDelete() {
     if (!orgId || !existing) return;
-    if (!window.confirm("Remove SSO config? Org members using SSO will fall back to email/password.")) {
+    if (
+      !window.confirm(
+        "Remove SSO config? Org members using SSO will fall back to email/password."
+      )
+    ) {
       return;
     }
     setDeleting(true);
@@ -235,8 +241,8 @@ export default function SsoSettings() {
                 required={!existing}
               />
               <small>
-                Encrypted at rest with AES-256-GCM. Only this server can
-                decrypt it — never returned to the browser.
+                Encrypted at rest with AES-256-GCM. Only this server can decrypt
+                it — never returned to the browser.
               </small>
             </label>
 
@@ -262,8 +268,8 @@ export default function SsoSettings() {
                 onChange={(e) => update("enforce_sso", e.target.checked)}
               />
               <span>
-                <strong>Enforce SSO</strong> — members of this org can only
-                sign in via the IdP (password login disabled).
+                <strong>Enforce SSO</strong> — members of this org can only sign
+                in via the IdP (password login disabled).
               </span>
             </label>
 

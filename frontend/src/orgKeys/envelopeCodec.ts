@@ -24,7 +24,7 @@ export function decodeBase64(s: string): Uint8Array {
 export async function unwrapPkcs8WithRsaKey(
   iv: string,
   ct: string,
-  recipientPrivate: CryptoKey,
+  recipientPrivate: CryptoKey
 ): Promise<ArrayBuffer> {
   const ivBytes = decodeBase64(iv);
   const innerJsonBytes = decodeBase64(ct);
@@ -38,19 +38,19 @@ export async function unwrapPkcs8WithRsaKey(
   const aesRaw = await crypto.subtle.decrypt(
     { name: "RSA-OAEP" },
     recipientPrivate,
-    wrappedAes.slice().buffer,
+    wrappedAes.slice().buffer
   );
   const aesKey = await crypto.subtle.importKey(
     "raw",
     aesRaw,
     { name: "AES-GCM", length: 256 },
     false,
-    ["decrypt"],
+    ["decrypt"]
   );
   return crypto.subtle.decrypt(
     { name: "AES-GCM", iv: ivBytes.slice().buffer },
     aesKey,
-    body.slice().buffer,
+    body.slice().buffer
   );
 }
 
@@ -64,7 +64,7 @@ export async function unwrapPkcs8WithPbkdf2(
   ct: string,
   inputMaterial: BufferSource,
   saltB64: string,
-  iterations: number,
+  iterations: number
 ): Promise<ArrayBuffer> {
   const ivBytes = decodeBase64(iv);
   const ctBytes = decodeBase64(ct);
@@ -74,7 +74,7 @@ export async function unwrapPkcs8WithPbkdf2(
     inputMaterial,
     { name: "PBKDF2" },
     false,
-    ["deriveKey"],
+    ["deriveKey"]
   );
   const aesKey = await crypto.subtle.deriveKey(
     {
@@ -86,12 +86,12 @@ export async function unwrapPkcs8WithPbkdf2(
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
-    ["decrypt"],
+    ["decrypt"]
   );
   return crypto.subtle.decrypt(
     { name: "AES-GCM", iv: ivBytes.slice().buffer },
     aesKey,
-    ctBytes.slice().buffer,
+    ctBytes.slice().buffer
   );
 }
 
@@ -101,31 +101,31 @@ export async function unwrapPkcs8WithPbkdf2(
 // needs to re-wrap (e.g., add a new key-holder) AND by unit tests.
 export async function wrapPkcs8ToRsaPubkey(
   pkcs8: ArrayBuffer,
-  recipientSpkiBytes: ArrayBuffer,
+  recipientSpkiBytes: ArrayBuffer
 ): Promise<{ iv: string; ct: string }> {
   const recipientPub = await crypto.subtle.importKey(
     "spki",
     recipientSpkiBytes,
     { name: "RSA-OAEP", hash: "SHA-256" },
     false,
-    ["encrypt"],
+    ["encrypt"]
   );
   const aesKey = await crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
     true,
-    ["encrypt"],
+    ["encrypt"]
   );
   const aesRaw = await crypto.subtle.exportKey("raw", aesKey);
   const wrappedAes = await crypto.subtle.encrypt(
     { name: "RSA-OAEP" },
     recipientPub,
-    aesRaw,
+    aesRaw
   );
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv.slice().buffer },
     aesKey,
-    pkcs8,
+    pkcs8
   );
   const inner = JSON.stringify({
     wrapped_aes: Array.from(new Uint8Array(wrappedAes)),

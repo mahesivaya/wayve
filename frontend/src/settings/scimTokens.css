@@ -124,7 +124,7 @@
   cursor: pointer;
 }
 
-.scim-create button:disabled{
+.scim-create button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -179,8 +179,14 @@
   font-size: 11px;
   font-weight: 600;
 }
-.scim-pill.ok { background: var(--color-success-soft); color: var(--color-success); }
-.scim-pill.error { background: var(--color-danger-soft); color: var(--color-danger-strong); }
+.scim-pill.ok {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+.scim-pill.error {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
 
 .scim-btn {
   padding: 5px 10px;
@@ -233,7 +239,10 @@ html[data-theme="dark"] .scim-fineprint {
   background: var(--color-text-ink);
   border-color: var(--color-text-secondary);
 }
-html[data-theme="dark"] .scim-table th { background: var(--color-text-primary); color: var(--color-input-border-strong); }
+html[data-theme="dark"] .scim-table th {
+  background: var(--color-text-primary);
+  color: var(--color-input-border-strong);
+}
 html[data-theme="dark"] .scim-table code,
 html[data-theme="dark"] .scim-fineprint code,
 html[data-theme="dark"] .scim-tokens-header code {

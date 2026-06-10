@@ -41,7 +41,9 @@ export default function PlatformSupport() {
     try {
       setData(await getSupportSummary());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load support summary");
+      setError(
+        err instanceof Error ? err.message : "Failed to load support summary"
+      );
     } finally {
       setLoading(false);
     }
@@ -58,7 +60,9 @@ export default function PlatformSupport() {
       const rows = await adminListTickets(statusFilter || undefined);
       setTickets(rows);
     } catch (err) {
-      setTicketsError(err instanceof Error ? err.message : "Failed to load tickets");
+      setTicketsError(
+        err instanceof Error ? err.message : "Failed to load tickets"
+      );
     } finally {
       setTicketsLoading(false);
     }
@@ -81,7 +85,9 @@ export default function PlatformSupport() {
       // the "open" list once the user changes status).
       await loadTickets();
     } catch (err) {
-      setTicketsError(err instanceof Error ? err.message : "Failed to update ticket");
+      setTicketsError(
+        err instanceof Error ? err.message : "Failed to update ticket"
+      );
     } finally {
       setUpdatingId(null);
     }
@@ -109,7 +115,9 @@ export default function PlatformSupport() {
             <select
               className="pt-filter-select"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as TicketStatus | "")}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as TicketStatus | "")
+              }
             >
               <option value="">All statuses</option>
               {STATUS_OPTIONS.map((opt) => (
@@ -175,7 +183,10 @@ export default function PlatformSupport() {
                         value={t.status}
                         disabled={updatingId === t.id}
                         onChange={(e) =>
-                          void setTicketStatus(t.id, e.target.value as TicketStatus)
+                          void setTicketStatus(
+                            t.id,
+                            e.target.value as TicketStatus
+                          )
                         }
                       >
                         {STATUS_OPTIONS.map((opt) => (
@@ -196,7 +207,9 @@ export default function PlatformSupport() {
       <section className="pt-panel">
         <div className="pt-panel-head">
           <h2>Open shared-inbox threads</h2>
-          <span className="pt-stat-sub">Tickets needing a response across customer mailboxes</span>
+          <span className="pt-stat-sub">
+            Tickets needing a response across customer mailboxes
+          </span>
         </div>
         {data && data.open_inbox_queue.length > 0 ? (
           <table className="pt-table">
@@ -216,7 +229,9 @@ export default function PlatformSupport() {
                   <td>{row.inbox_email ?? "—"}</td>
                   <td>{row.assignee_email ?? "Unassigned"}</td>
                   <td>
-                    <span className={`pt-pill ${row.status}`}>{row.status}</span>
+                    <span className={`pt-pill ${row.status}`}>
+                      {row.status}
+                    </span>
                   </td>
                   <td>{fmtDate(row.updated_at)}</td>
                 </tr>

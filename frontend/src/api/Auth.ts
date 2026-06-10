@@ -43,16 +43,12 @@ export async function register(
 
     const ms = Math.round(performance.now() - start);
     const data = await res.json();
-    log.info(`[${reqId}] register ok in ${ms}ms`,{ email });
+    log.info(`[${reqId}] register ok in ${ms}ms`, { email });
     return data;
-  }
-  catch(err){
+  } catch (err) {
     log.warn(`[${reqId}] register failed`, {
       email,
-      error:
-          err instanceof Error
-            ? err.message
-            : "Unknown error",
+      error: err instanceof Error ? err.message : "Unknown error",
     });
     throw err;
   }
@@ -76,7 +72,7 @@ export async function login(email: string, password: string) {
 
     const ms = Math.round(performance.now() - start);
     const data = await res.json();
-    log.info(`[${reqId}] login ok in ${ms}ms`,{ email });
+    log.info(`[${reqId}] login ok in ${ms}ms`, { email });
 
     return data;
   } catch (err) {
@@ -101,8 +97,7 @@ export async function resetPassword(token: string, newPassword: string) {
   const res = await apiFetch(`/api/reset-password`, {
     auth: false,
     method: "POST",
-    body: JSON.stringify({ token,
-      new_password: newPassword }),
+    body: JSON.stringify({ token, new_password: newPassword }),
   });
   return res.json();
 }
@@ -121,23 +116,23 @@ export async function resetPassword(token: string, newPassword: string) {
 export type RecoverWithMnemonicResponse = {
   user_id: number;
   recovery_mode?: _RecoveryMode;
-  wrapped_envelope:
-    | {
-        v: 1;
-        iv: string;
-        pub: string;
-        ct: string;
-      }
-    | null;
+  wrapped_envelope: {
+    v: 1;
+    iv: string;
+    pub: string;
+    ct: string;
+  } | null;
 };
 
 export async function recoverWithMnemonic(
   email: string,
   mnemonicEntropy: Uint8Array,
-  newPassword: string,
+  newPassword: string
 ): Promise<RecoverWithMnemonicResponse> {
   const entropyB64 = btoa(
-    Array.from(mnemonicEntropy).map((b) => String.fromCharCode(b)).join(""),
+    Array.from(mnemonicEntropy)
+      .map((b) => String.fromCharCode(b))
+      .join("")
   );
   const res = await apiFetch("/api/auth/recover-with-mnemonic", {
     auth: false,
@@ -164,14 +159,11 @@ export async function changePassword(
           new_password: newPassword,
         };
 
-  const res = await apiFetch(
-    "/api/profile/password",
-    {
-      method: "POST",
-      preserve401: true,
-      body: JSON.stringify(body),
-    }
-  );
+  const res = await apiFetch("/api/profile/password", {
+    method: "POST",
+    preserve401: true,
+    body: JSON.stringify(body),
+  });
   return res.json();
 }
 

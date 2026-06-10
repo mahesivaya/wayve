@@ -12,4 +12,6 @@ export const listDocs = () =>
   apiFetchJson<DocSummary[]>("/api/docs", { auth: false });
 
 export const getDoc = (slug: string) =>
-  apiFetchJson<DocFull>(`/api/docs/${encodeURIComponent(slug)}`, { auth: false });
+  apiFetchJson<DocFull>(`/api/docs/${encodeURIComponent(slug)}`, {
+    auth: false,
+  });

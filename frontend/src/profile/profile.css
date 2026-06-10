@@ -67,7 +67,7 @@
   transition: 0.15s;
 }
 
-.profile-row input:focus{
+.profile-row input:focus {
   border-color: var(--color-primary-action);
   box-shadow: 0 0 0 3px rgb(37, 99, 235, 0.15);
 }
@@ -100,11 +100,11 @@
   transition: 0.15s;
 }
 
-.profile-save:hover:not(:disabled){
+.profile-save:hover:not(:disabled) {
   background: var(--color-primary-action-hover);
 }
 
-.profile-save:disabled{
+.profile-save:disabled {
   background: var(--color-primary-action);
   opacity: 0.55;
   cursor: default;
@@ -149,7 +149,7 @@
   transition: 0.15s;
 }
 
-.profile-cancel:hover:not(:disabled){
+.profile-cancel:hover:not(:disabled) {
   background: var(--color-surface-hover);
 }
 
@@ -259,7 +259,7 @@
   transition: 0.15s;
 }
 
-.settings-account-delete:hover{
+.settings-account-delete:hover {
   background: var(--color-danger-soft);
 }
 
@@ -275,7 +275,7 @@
   transition: 0.15s;
 }
 
-.settings-billing-link:hover{
+.settings-billing-link:hover {
   background: var(--color-primary-action-hover);
   border-color: var(--color-primary-action-hover);
 }
@@ -379,7 +379,7 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-.settings-usage-row:last-child{
+.settings-usage-row:last-child {
   border-bottom: none;
 }
 

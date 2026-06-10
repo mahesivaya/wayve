@@ -43,7 +43,9 @@ describe("api/client request layer", () => {
   });
 
   it("serves a cached GET within cacheTtlMs without refetching", async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ n: 1 }));
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => jsonResponse({ n: 1 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const a = await apiFetch("/api/y", { cacheTtlMs: 1000 });
@@ -55,7 +57,9 @@ describe("api/client request layer", () => {
   });
 
   it("does not cache GETs without cacheTtlMs", async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ n: 1 }));
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => jsonResponse({ n: 1 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await apiFetch("/api/no-cache");
@@ -65,7 +69,9 @@ describe("api/client request layer", () => {
   });
 
   it("clears the GET cache on any non-GET request", async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ n: 1 }));
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => jsonResponse({ n: 1 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await apiFetch("/api/z", { cacheTtlMs: 1000 }); // 1: populates cache

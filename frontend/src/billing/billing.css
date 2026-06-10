@@ -9,21 +9,21 @@
   background: var(--color-email-bg);
 }
 
-.billing-page::-webkit-scrollbar{
+.billing-page::-webkit-scrollbar {
   width: 10px;
 }
 
-.billing-page::-webkit-scrollbar-track{
+.billing-page::-webkit-scrollbar-track {
   background: rgb(255, 255, 255, 0.35);
 }
 
-.billing-page::-webkit-scrollbar-thumb{
+.billing-page::-webkit-scrollbar-thumb {
   background: var(--color-billing-empty);
   border: 2px solid rgb(255, 255, 255, 0.35);
   border-radius: var(--radius-pill);
 }
 
-.billing-page::-webkit-scrollbar-thumb:hover{
+.billing-page::-webkit-scrollbar-thumb:hover {
   background: var(--color-billing-empty-strong);
 }
 
@@ -268,7 +268,7 @@
   cursor: pointer;
 }
 
-.billing-plan button:disabled{
+.billing-plan button:disabled {
   background: var(--color-primary-border);
   border-color: var(--color-primary-border);
   cursor: default;
@@ -449,8 +449,12 @@
 }
 
 @keyframes billing-stripe-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .billing-payment-form input {
@@ -484,7 +488,7 @@
   cursor: pointer;
 }
 
-.billing-payment-actions button:disabled{
+.billing-payment-actions button:disabled {
   background: var(--color-primary-border);
   border-color: var(--color-primary-border);
   cursor: default;
@@ -603,7 +607,7 @@
   border: 1px solid var(--color-border);
 }
 
-@media (max-width: 720px){
+@media (max-width: 720px) {
   .billing-header {
     flex-direction: column;
     align-items: flex-start;

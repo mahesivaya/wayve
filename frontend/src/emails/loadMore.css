@@ -35,11 +35,11 @@
   font-weight: 600;
 }
 
-.load-more-btn:hover:not(:disabled){
+.load-more-btn:hover:not(:disabled) {
   background: var(--color-primary-hover);
 }
 
-.load-more-btn:disabled{
+.load-more-btn:disabled {
   background: var(--color-input-border-strong);
   cursor: default;
 }

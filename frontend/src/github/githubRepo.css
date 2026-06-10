@@ -71,10 +71,12 @@
   line-height: 1;
   cursor: pointer;
   opacity: 0.7;
-  transition: opacity 0.15s, background 0.15s;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
 }
 
-.github-banner-dismiss:hover{
+.github-banner-dismiss:hover {
   background: var(--color-danger-border);
   opacity: 1;
 }
@@ -280,10 +282,12 @@
   font-weight: 600;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
-.github-sidebar-link:hover{
+.github-sidebar-link:hover {
   background: var(--color-surface-hover);
 }
 
@@ -440,10 +444,13 @@
   font-size: var(--text-md);
   line-height: 1;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 
-.github-preview-close:hover{
+.github-preview-close:hover {
   background: var(--color-danger-soft);
   border-color: var(--color-danger-border);
   color: var(--color-danger-hover);
@@ -560,7 +567,9 @@
   color: var(--color-text-primary);
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 
 .github-tree-node {
@@ -752,7 +761,10 @@
 
 .github-lower-grid {
   display: grid;
-  grid-template-columns: minmax(240px, 0.8fr) minmax(320px, 1.2fr) minmax(320px, 1.2fr);
+  grid-template-columns: minmax(240px, 0.8fr) minmax(320px, 1.2fr) minmax(
+      320px,
+      1.2fr
+    );
   gap: 14px;
   margin-top: 14px;
 }
@@ -882,7 +894,10 @@
   background: var(--color-surface);
   text-decoration: none;
   font-size: var(--text-sm);
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .github-commit-open:hover {
@@ -1037,7 +1052,9 @@
   font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .github-commit-fulldiff-btn:hover:not(:disabled) {
@@ -1135,7 +1152,9 @@
   font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .github-actions-load-more button:hover:not(:disabled) {

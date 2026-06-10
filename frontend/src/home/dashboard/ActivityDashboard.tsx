@@ -85,7 +85,9 @@ export default function ActivityDashboard() {
   return (
     <div className="dashboard">
       <form className="dashboard-capture" onSubmit={submitCapture}>
-        <span className="dashboard-capture-icon" aria-hidden="true">✨</span>
+        <span className="dashboard-capture-icon" aria-hidden="true">
+          ✨
+        </span>
         <input
           type="text"
           className="dashboard-capture-input"
@@ -157,12 +159,10 @@ function TodayCard({ data, loading, onOpen }: CardProps<TodaySummary>) {
       ) : (
         <ul className="dashboard-list">
           {events.map((m) => (
-            <li
-              key={m.id}
-              className="dashboard-item"
-              onClick={onOpen}
-            >
-              <span className="dashboard-item-lead">{formatTime(m.start_time)}</span>
+            <li key={m.id} className="dashboard-item" onClick={onOpen}>
+              <span className="dashboard-item-lead">
+                {formatTime(m.start_time)}
+              </span>
               <span className="dashboard-item-title">{m.title}</span>
               <span className="dashboard-item-trail">
                 {m.participants_count > 0 ? `${m.participants_count} ppl` : ""}
@@ -202,7 +202,9 @@ function InboxCard({ data, loading, onOpen }: CardProps<InboxSummary>) {
               onClick={onOpen}
             >
               <div className="dashboard-item-stack-main">
-                <span className="dashboard-item-lead">{senderName(e.sender)}</span>
+                <span className="dashboard-item-lead">
+                  {senderName(e.sender)}
+                </span>
                 <span className="dashboard-item-title">
                   {e.subject?.trim() || "(no subject)"}
                 </span>
@@ -221,7 +223,11 @@ function InboxCard({ data, loading, onOpen }: CardProps<InboxSummary>) {
   );
 }
 
-function TasksCard({ data, loading, onOpen }: CardProps<{ top: TaskPreview[] }>) {
+function TasksCard({
+  data,
+  loading,
+  onOpen,
+}: CardProps<{ top: TaskPreview[] }>) {
   const items: TaskPreview[] = data?.top ?? [];
   return (
     <section className="dashboard-card">
@@ -238,12 +244,10 @@ function TasksCard({ data, loading, onOpen }: CardProps<{ top: TaskPreview[] }>)
       ) : (
         <ul className="dashboard-list">
           {items.map((t) => (
-            <li
-              key={t.id}
-              className="dashboard-item"
-              onClick={onOpen}
-            >
-              <span className="dashboard-item-lead" aria-hidden="true">◯</span>
+            <li key={t.id} className="dashboard-item" onClick={onOpen}>
+              <span className="dashboard-item-lead" aria-hidden="true">
+                ◯
+              </span>
               <span className="dashboard-item-title">{t.name}</span>
               <span className="dashboard-item-trail">
                 {TASK_STATUS_LABEL[t.status] ?? t.status}
@@ -290,9 +294,12 @@ function RecentCard({
                 {r.kind === "note" ? "📝" : "📧"}
               </span>
               <span className="dashboard-item-title">
-                {r.title?.trim() || (r.kind === "note" ? "(untitled)" : "(no subject)")}
+                {r.title?.trim() ||
+                  (r.kind === "note" ? "(untitled)" : "(no subject)")}
               </span>
-              <span className="dashboard-item-trail">{formatRelative(r.ts)}</span>
+              <span className="dashboard-item-trail">
+                {formatRelative(r.ts)}
+              </span>
             </li>
           ))}
         </ul>

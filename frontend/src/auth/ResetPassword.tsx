@@ -47,9 +47,7 @@ export default function ResetPassword() {
         <h2>Set a new password</h2>
 
         {status === "done" ? (
-          <p className="subtitle">
-            Password updated. Redirecting to login…
-          </p>
+          <p className="subtitle">Password updated. Redirecting to login…</p>
         ) : (
           <>
             <input

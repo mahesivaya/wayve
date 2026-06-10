@@ -16,7 +16,7 @@ declare global {
       init: (
         specUrl: string,
         options: Record<string, unknown>,
-        element: HTMLElement,
+        element: HTMLElement
       ) => void;
     };
   }
@@ -38,7 +38,8 @@ const TUTORIALS: Tutorial[] = [
     scopes: ["email:read", "email:send"],
     steps: [
       {
-        caption: "List connected mailboxes → grab the account_id you want to send from.",
+        caption:
+          "List connected mailboxes → grab the account_id you want to send from.",
         code: `curl https://fluxze.com/api/accounts \\
   -H "X-API-KEY: $WAYVE_KEY"
 
@@ -65,7 +66,8 @@ const TUTORIALS: Tutorial[] = [
     scopes: ["tasks:write"],
     steps: [
       {
-        caption: "Priority is 1 (lowest) to 5 (highest); status defaults to 'in_progress'.",
+        caption:
+          "Priority is 1 (lowest) to 5 (highest); status defaults to 'in_progress'.",
         code: `curl https://fluxze.com/api/tasks \\
   -H "X-API-KEY: $WAYVE_KEY" \\
   -H "Content-Type: application/json" \\
@@ -107,7 +109,8 @@ const TUTORIALS: Tutorial[] = [
     scopes: ["account login"],
     steps: [
       {
-        caption: "POST /api/webhooks with your endpoint and the events you care about. The response carries the signing secret exactly once.",
+        caption:
+          "POST /api/webhooks with your endpoint and the events you care about. The response carries the signing secret exactly once.",
         code: `curl https://fluxze.com/api/webhooks \\
   -H "Authorization: Bearer $WAYVE_JWT" \\
   -H "Content-Type: application/json" \\
@@ -152,7 +155,8 @@ app.post("/wayve/webhook", express.raw({ type: "*/*" }), (req, res) => {
     scopes: ["ai:use"],
     steps: [
       {
-        caption: "First call returns a conversation_id you can pass back to keep context.",
+        caption:
+          "First call returns a conversation_id you can pass back to keep context.",
         code: `curl https://fluxze.com/api/aichat \\
   -H "X-API-KEY: $WAYVE_KEY" \\
   -H "Content-Type: application/json" \\
@@ -171,23 +175,71 @@ curl https://fluxze.com/api/aichat \\
 ];
 
 const SCOPES = [
-  { scope: "profile:read", group: "Read", desc: "Identity, plan, entitlements." },
-  { scope: "email:read", group: "Read", desc: "List accounts and read messages." },
-  { scope: "chat:read", group: "Read", desc: "Read channels and direct messages." },
+  {
+    scope: "profile:read",
+    group: "Read",
+    desc: "Identity, plan, entitlements.",
+  },
+  {
+    scope: "email:read",
+    group: "Read",
+    desc: "List accounts and read messages.",
+  },
+  {
+    scope: "chat:read",
+    group: "Read",
+    desc: "Read channels and direct messages.",
+  },
   { scope: "scheduler:read", group: "Read", desc: "Meetings & calendar." },
   { scope: "drive:read", group: "Read", desc: "List & download files." },
   { scope: "notes:read", group: "Read", desc: "Read notes." },
   { scope: "tasks:read", group: "Read", desc: "Read tasks." },
-  { scope: "email:send", group: "Write", desc: "Send mail, mutate message state." },
-  { scope: "chat:write", group: "Write", desc: "Send messages, create channels." },
-  { scope: "scheduler:write", group: "Write", desc: "Create / update / cancel meetings." },
-  { scope: "drive:write", group: "Write", desc: "Upload, share, delete files." },
-  { scope: "notes:write", group: "Write", desc: "Create / update / delete notes." },
-  { scope: "tasks:write", group: "Write", desc: "Create / update / delete tasks." },
+  {
+    scope: "email:send",
+    group: "Write",
+    desc: "Send mail, mutate message state.",
+  },
+  {
+    scope: "chat:write",
+    group: "Write",
+    desc: "Send messages, create channels.",
+  },
+  {
+    scope: "scheduler:write",
+    group: "Write",
+    desc: "Create / update / cancel meetings.",
+  },
+  {
+    scope: "drive:write",
+    group: "Write",
+    desc: "Upload, share, delete files.",
+  },
+  {
+    scope: "notes:write",
+    group: "Write",
+    desc: "Create / update / delete notes.",
+  },
+  {
+    scope: "tasks:write",
+    group: "Write",
+    desc: "Create / update / delete tasks.",
+  },
   { scope: "ai:use", group: "Write", desc: "Send prompts to the assistant." },
-  { scope: "call:access", group: "Realtime", desc: "Initiate or accept WebRTC calls." },
-  { scope: "admin", group: "Privileged", desc: "Tenant administration. Internal keys only." },
-  { scope: "*", group: "Privileged", desc: "Full access. Internal keys, owner-gated." },
+  {
+    scope: "call:access",
+    group: "Realtime",
+    desc: "Initiate or accept WebRTC calls.",
+  },
+  {
+    scope: "admin",
+    group: "Privileged",
+    desc: "Tenant administration. Internal keys only.",
+  },
+  {
+    scope: "*",
+    group: "Privileged",
+    desc: "Full access. Internal keys, owner-gated.",
+  },
 ];
 
 const SPEC_URL = "/api/openapi.json";
@@ -204,139 +256,150 @@ export default function Developers() {
 
   return (
     <DocsShell title="Developer overview" single>
-    <div className="dev-portal">
-      {/* dev-header / dev-footer removed — DocsShell now provides the
+      <div className="dev-portal">
+        {/* dev-header / dev-footer removed — DocsShell now provides the
           brand + nav + footer via MarketingShell. dev-portal stays as
           the in-page layout container for the hero + sections. */}
 
-      <header className="dev-hero">
-        <div className="dev-hero-inner">
-          <h1>{BRAND_NAME} Developers</h1>
-          <p>
-            Build on Wayve's email, chat, scheduling, drive, notes, tasks and AI
-            primitives with a scoped, audited API. Every request is authenticated
-            with an <code>X-API-KEY</code>; scopes, expiry, rate limits, and an
-            append-only audit log keep tokens accountable.
-          </p>
-          <div className="dev-hero-cta">
-            <Link to={dashboardLink} className="dev-btn primary">
-              {user ? "Mint a key" : "Get an account →"}
-            </Link>
-            <a href={SPEC_URL} className="dev-btn" download="wayve-openapi.json">
-              Download OpenAPI 3.1 spec
-            </a>
-            <Link to="/developers/quotas" className="dev-btn">
-              Compare rate-limit tiers →
-            </Link>
-            <Link to="/docs" className="dev-btn">
-              Browse guides →
-            </Link>
+        <header className="dev-hero">
+          <div className="dev-hero-inner">
+            <h1>{BRAND_NAME} Developers</h1>
+            <p>
+              Build on Wayve's email, chat, scheduling, drive, notes, tasks and
+              AI primitives with a scoped, audited API. Every request is
+              authenticated with an <code>X-API-KEY</code>; scopes, expiry, rate
+              limits, and an append-only audit log keep tokens accountable.
+            </p>
+            <div className="dev-hero-cta">
+              <Link to={dashboardLink} className="dev-btn primary">
+                {user ? "Mint a key" : "Get an account →"}
+              </Link>
+              <a
+                href={SPEC_URL}
+                className="dev-btn"
+                download="wayve-openapi.json"
+              >
+                Download OpenAPI 3.1 spec
+              </a>
+              <Link to="/developers/quotas" className="dev-btn">
+                Compare rate-limit tiers →
+              </Link>
+              <Link to="/docs" className="dev-btn">
+                Browse guides →
+              </Link>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <section className="dev-section">
-        <h2>Quick start</h2>
-        <ol className="dev-steps">
-          <li>
-            <strong>Register or sign in</strong> at{" "}
-            <Link to="/register">/register</Link>.
-          </li>
-          <li>
-            <strong>Mint an API key</strong> from the dashboard with the narrowest
-            scope set that satisfies your integration; set an expiry; copy the raw
-            value — it is shown exactly once.
-          </li>
-          <li>
-            <strong>Verify it works</strong> by hitting <code>/api/me</code>:
-          </li>
-        </ol>
-        <pre className="dev-code">
-{`curl https://fluxze.com/api/me -H "X-API-KEY: wv_sk_..."
+        <section className="dev-section">
+          <h2>Quick start</h2>
+          <ol className="dev-steps">
+            <li>
+              <strong>Register or sign in</strong> at{" "}
+              <Link to="/register">/register</Link>.
+            </li>
+            <li>
+              <strong>Mint an API key</strong> from the dashboard with the
+              narrowest scope set that satisfies your integration; set an
+              expiry; copy the raw value — it is shown exactly once.
+            </li>
+            <li>
+              <strong>Verify it works</strong> by hitting <code>/api/me</code>:
+            </li>
+          </ol>
+          <pre className="dev-code">
+            {`curl https://fluxze.com/api/me -H "X-API-KEY: wv_sk_..."
 # 200 → identity        401 → bad key
 # 403 → wrong scope     429 → rate-limited (retry with backoff)`}
-        </pre>
-      </section>
+          </pre>
+        </section>
 
-      <section id="tutorials" className="dev-section">
-        <h2>Tutorials</h2>
-        <p className="dev-muted">
-          End-to-end worked examples. Each block is copy-pasteable — set{" "}
-          <code>$WAYVE_KEY</code> in your shell first.
-        </p>
-        <div className="dev-tutorial-list">
-          {TUTORIALS.map((tut) => (
-            <article key={tut.id} className="dev-tutorial">
-              <header className="dev-tutorial-head">
-                <h3 id={tut.id}>{tut.title}</h3>
-                <div className="dev-tutorial-meta">
-                  {tut.scopes.map((scope) => (
-                    <code key={scope}>{scope}</code>
-                  ))}
-                </div>
-              </header>
-              <p className="dev-tutorial-goal">{tut.goal}</p>
-              {tut.steps.map((step, idx) => (
-                <div key={idx} className="dev-tutorial-step">
-                  <span className="dev-tutorial-stepnum">{idx + 1}</span>
-                  <div>
-                    <p>{step.caption}</p>
-                    <pre className="dev-code">{step.code}</pre>
+        <section id="tutorials" className="dev-section">
+          <h2>Tutorials</h2>
+          <p className="dev-muted">
+            End-to-end worked examples. Each block is copy-pasteable — set{" "}
+            <code>$WAYVE_KEY</code> in your shell first.
+          </p>
+          <div className="dev-tutorial-list">
+            {TUTORIALS.map((tut) => (
+              <article key={tut.id} className="dev-tutorial">
+                <header className="dev-tutorial-head">
+                  <h3 id={tut.id}>{tut.title}</h3>
+                  <div className="dev-tutorial-meta">
+                    {tut.scopes.map((scope) => (
+                      <code key={scope}>{scope}</code>
+                    ))}
                   </div>
-                </div>
-              ))}
-            </article>
-          ))}
-        </div>
-      </section>
+                </header>
+                <p className="dev-tutorial-goal">{tut.goal}</p>
+                {tut.steps.map((step, idx) => (
+                  <div key={idx} className="dev-tutorial-step">
+                    <span className="dev-tutorial-stepnum">{idx + 1}</span>
+                    <div>
+                      <p>{step.caption}</p>
+                      <pre className="dev-code">{step.code}</pre>
+                    </div>
+                  </div>
+                ))}
+              </article>
+            ))}
+          </div>
+        </section>
 
-      <section className="dev-section">
-        <h2>Scopes</h2>
-        <p className="dev-muted">
-          Scopes are stamped on a key at creation time and checked on every
-          request against an internal route → scope map. A request to a route
-          your key does not cover returns <code>403</code>, never falls back to
-          a wider permission.
-        </p>
-        <div className="dev-scope-grid">
-          {SCOPES.map((s) => (
-            <div className={`dev-scope dev-scope-${s.group.toLowerCase()}`} key={s.scope}>
-              <code>{s.scope}</code>
-              <span className="dev-scope-group">{s.group}</span>
-              <p>{s.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+        <section className="dev-section">
+          <h2>Scopes</h2>
+          <p className="dev-muted">
+            Scopes are stamped on a key at creation time and checked on every
+            request against an internal route → scope map. A request to a route
+            your key does not cover returns <code>403</code>, never falls back
+            to a wider permission.
+          </p>
+          <div className="dev-scope-grid">
+            {SCOPES.map((s) => (
+              <div
+                className={`dev-scope dev-scope-${s.group.toLowerCase()}`}
+                key={s.scope}
+              >
+                <code>{s.scope}</code>
+                <span className="dev-scope-group">{s.group}</span>
+                <p>{s.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
-      <section className="dev-section">
-        <h2>API reference</h2>
-        <p className="dev-muted">
-          The full machine-readable spec is at{" "}
-          <a href={SPEC_URL}>
-            <code>{SPEC_URL}</code>
-          </a>{" "}
-          — import it into Postman, Insomnia, an SDK generator, or any other
-          OpenAPI 3.1-aware tool. For an interactive view with{" "}
-          <strong>Try it out</strong> and <strong>Authorize</strong>
-          (paste your X-API-KEY once, fire live requests against any
-          endpoint), open the Swagger UI:
-        </p>
-        <div className="dev-reference-cta">
-          <Link to="/docs/api" className="dev-btn primary">
-            Open interactive API reference →
-          </Link>
-          <a href={SPEC_URL} className="dev-btn" download="wayve-openapi.json">
-            Download OpenAPI 3.1 spec
-          </a>
-        </div>
-      </section>
+        <section className="dev-section">
+          <h2>API reference</h2>
+          <p className="dev-muted">
+            The full machine-readable spec is at{" "}
+            <a href={SPEC_URL}>
+              <code>{SPEC_URL}</code>
+            </a>{" "}
+            — import it into Postman, Insomnia, an SDK generator, or any other
+            OpenAPI 3.1-aware tool. For an interactive view with{" "}
+            <strong>Try it out</strong> and <strong>Authorize</strong>
+            (paste your X-API-KEY once, fire live requests against any
+            endpoint), open the Swagger UI:
+          </p>
+          <div className="dev-reference-cta">
+            <Link to="/docs/api" className="dev-btn primary">
+              Open interactive API reference →
+            </Link>
+            <a
+              href={SPEC_URL}
+              className="dev-btn"
+              download="wayve-openapi.json"
+            >
+              Download OpenAPI 3.1 spec
+            </a>
+          </div>
+        </section>
 
-      {/* dev-footer block removed — the MarketingShell footer that
+        {/* dev-footer block removed — the MarketingShell footer that
           wraps DocsShell already lists developer / platform / company
           links. Avoiding a duplicate footer keeps the page consistent
           with every other /docs/* page. */}
-    </div>
+      </div>
     </DocsShell>
   );
 }

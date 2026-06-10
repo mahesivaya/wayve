@@ -63,7 +63,7 @@ export default function AccessRequestsReview() {
       setHistory(await getAccessRequestHistory());
     } catch (err) {
       setHistoryError(
-        err instanceof Error ? err.message : "Failed to load history",
+        err instanceof Error ? err.message : "Failed to load history"
       );
     }
   }, [canManage]);
@@ -80,7 +80,11 @@ export default function AccessRequestsReview() {
     setError("");
     setBusyId(id);
     try {
-      await adminDecideAccessRequest(id, status, notes[id]?.trim() || undefined);
+      await adminDecideAccessRequest(
+        id,
+        status,
+        notes[id]?.trim() || undefined
+      );
       await Promise.all([load(), loadHistory()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update request");
@@ -95,7 +99,10 @@ export default function AccessRequestsReview() {
     <div className="pt-page">
       <header className="pt-header">
         <h1>Access Requests</h1>
-        <p>Requests to view locked data, routed to your support team · {user?.email}</p>
+        <p>
+          Requests to view locked data, routed to your support team ·{" "}
+          {user?.email}
+        </p>
       </header>
 
       {error && <div className="pt-banner">{error}</div>}
@@ -179,7 +186,10 @@ export default function AccessRequestsReview() {
                       placeholder="Explanation (optional)"
                       value={notes[r.id] ?? ""}
                       onChange={(e) =>
-                        setNotes((prev) => ({ ...prev, [r.id]: e.target.value }))
+                        setNotes((prev) => ({
+                          ...prev,
+                          [r.id]: e.target.value,
+                        }))
                       }
                       style={{ width: 180, display: "block", marginBottom: 6 }}
                     />

@@ -32,7 +32,7 @@
 }
 
 .audit-security-header button:disabled,
-.audit-security-panel button:disabled{
+.audit-security-panel button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -216,13 +216,13 @@
   gap: 8px;
 }
 
-.siem-actions button:first-child{
+.siem-actions button:first-child {
   background: var(--color-accent-indigo-mid);
   border-color: var(--color-accent-indigo-mid);
   color: var(--color-surface);
 }
 
-@media (max-width: 860px){
+@media (max-width: 860px) {
   .audit-security-header,
   .audit-security-panel-head {
     flex-direction: column;

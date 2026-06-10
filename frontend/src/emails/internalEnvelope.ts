@@ -33,7 +33,9 @@ export type WayveEncryptedMultiEnvelope = {
   keys: Record<string, number[]>;
 };
 
-const toArrayBuffer = (input: number[] | ArrayBuffer | Uint8Array): ArrayBuffer => {
+const toArrayBuffer = (
+  input: number[] | ArrayBuffer | Uint8Array
+): ArrayBuffer => {
   if (input instanceof ArrayBuffer) return input;
   if (input instanceof Uint8Array) return input.slice().buffer;
   return new Uint8Array(input).slice().buffer;
@@ -45,7 +47,7 @@ const importRecipientPublicKey = (bytes: number[] | ArrayBuffer | Uint8Array) =>
     toArrayBuffer(bytes),
     { name: "RSA-OAEP", hash: "SHA-256" },
     true,
-    ["encrypt"],
+    ["encrypt"]
   );
 
 /**
@@ -62,10 +64,12 @@ const importRecipientPublicKey = (bytes: number[] | ArrayBuffer | Uint8Array) =>
  */
 export async function buildInternalEnvelope(
   plaintextBody: string,
-  recipients: InternalRecipientKey[],
+  recipients: InternalRecipientKey[]
 ): Promise<string> {
   if (recipients.length === 0) {
-    throw new Error("buildInternalEnvelope: at least one recipient is required");
+    throw new Error(
+      "buildInternalEnvelope: at least one recipient is required"
+    );
   }
 
   // Fresh AES-256-GCM key for THIS message only — never reused. The
@@ -74,13 +78,13 @@ export async function buildInternalEnvelope(
   const aesKey = await crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
     true,
-    ["encrypt", "decrypt"],
+    ["encrypt", "decrypt"]
   );
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     aesKey,
-    new TextEncoder().encode(plaintextBody),
+    new TextEncoder().encode(plaintextBody)
   );
   const rawAes = await crypto.subtle.exportKey("raw", aesKey);
 
@@ -90,7 +94,7 @@ export async function buildInternalEnvelope(
     const wrapped = await crypto.subtle.encrypt(
       { name: "RSA-OAEP" },
       pubKey,
-      rawAes,
+      rawAes
     );
     wrappedKeys[String(recipient.userId)] = Array.from(new Uint8Array(wrapped));
   }

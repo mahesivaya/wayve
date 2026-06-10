@@ -130,6 +130,6 @@ export const listPlatformUsers = (params: ListPlatformUsersParams = {}) => {
   if (params.limit != null) search.set("limit", String(params.limit));
   if (params.offset != null) search.set("offset", String(params.offset));
   return apiFetchJson<{ users: PlatformUserRow[] }>(
-    `/api/platform-team/users?${search.toString()}`,
+    `/api/platform-team/users?${search.toString()}`
   );
 };

@@ -66,7 +66,7 @@ export default function RecoverWithMnemonicPage() {
       const { user_id, wrapped_envelope } = await recoverWithMnemonic(
         email.trim().toLowerCase(),
         entropy,
-        newPassword,
+        newPassword
       );
 
       // Plan A: the server always returns the envelope on a successful
@@ -97,8 +97,8 @@ export default function RecoverWithMnemonicPage() {
         <div className="login-card">
           <h2>Password updated</h2>
           <p className="subtitle">
-            Your password has been reset and your encryption keys are
-            unlocked on this device. Sign in to continue.
+            Your password has been reset and your encryption keys are unlocked
+            on this device. Sign in to continue.
           </p>
           <button type="button" onClick={() => navigate("/login")}>
             Go to login
@@ -113,10 +113,10 @@ export default function RecoverWithMnemonicPage() {
       <form className="login-card" onSubmit={submit}>
         <h2>Reset with recovery phrase</h2>
         <p className="subtitle">
-          Enter your email, the {MNEMONIC_WORD_COUNT}-word recovery phrase
-          you saved at signup, and a new password. If you do not have your
-          phrase, your account cannot be recovered — Fluxze cannot reset
-          end-to-end encrypted accounts on your behalf.
+          Enter your email, the {MNEMONIC_WORD_COUNT}-word recovery phrase you
+          saved at signup, and a new password. If you do not have your phrase,
+          your account cannot be recovered — Fluxze cannot reset end-to-end
+          encrypted accounts on your behalf.
         </p>
 
         <input

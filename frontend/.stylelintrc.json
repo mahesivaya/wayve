@@ -1,9 +1,12 @@
 {
   "extends": "stylelint-config-standard",
   "rules": {
-    "color-no-hex": [true, {
-      "message": "Use a CSS variable from src/index.css (e.g. var(--color-surface)) instead of a hex literal so the value flips with dark mode."
-    }],
+    "color-no-hex": [
+      true,
+      {
+        "message": "Use a CSS variable from src/index.css (e.g. var(--color-surface)) instead of a hex literal so the value flips with dark mode."
+      }
+    ],
     "no-descending-specificity": null,
     "selector-class-pattern": null,
     "no-duplicate-selectors": null,
@@ -42,9 +45,5 @@
     "font-family-no-missing-generic-family-keyword": null,
     "declaration-property-value-keyword-no-deprecated": null
   },
-  "ignoreFiles": [
-    "src/index.css",
-    "dist/**/*",
-    "node_modules/**/*"
-  ]
+  "ignoreFiles": ["src/index.css", "dist/**/*", "node_modules/**/*"]
 }

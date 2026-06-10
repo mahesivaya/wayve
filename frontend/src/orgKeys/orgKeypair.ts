@@ -43,7 +43,7 @@ export async function waitForPublicKey(
   userId: number,
   email: string,
   timeoutMs = 20_000,
-  intervalMs = 250,
+  intervalMs = 250
 ): Promise<ArrayBuffer | null> {
   const start = performance.now();
   // First attempt is immediate so steady-state (key already present)
@@ -58,14 +58,14 @@ export async function waitForPublicKey(
 
 async function deriveMnemonicKey(
   mnemonicEntropy: Uint8Array,
-  salt: Uint8Array,
+  salt: Uint8Array
 ): Promise<CryptoKey> {
   const baseKey = await crypto.subtle.importKey(
     "raw",
     mnemonicEntropy.slice().buffer,
     { name: "PBKDF2" },
     false,
-    ["deriveKey"],
+    ["deriveKey"]
   );
   return crypto.subtle.deriveKey(
     {
@@ -77,14 +77,14 @@ async function deriveMnemonicKey(
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
-    ["encrypt", "decrypt"],
+    ["encrypt", "decrypt"]
   );
 }
 
 export async function bootstrapOrgMasterKey(
   orgId: number,
   founderUserId: number,
-  founderEmail: string,
+  founderEmail: string
 ): Promise<BootstrapResult> {
   // 1. Generate org RSA-2048 keypair.
   const orgPair = await crypto.subtle.generateKey(
@@ -95,12 +95,18 @@ export async function bootstrapOrgMasterKey(
       hash: "SHA-256",
     },
     true,
-    ["wrapKey", "unwrapKey", "encrypt", "decrypt"],
+    ["wrapKey", "unwrapKey", "encrypt", "decrypt"]
   );
 
   // 2. Export private (PKCS8) for wrapping, public (SPKI) for upload.
-  const orgPrivatePkcs8 = await crypto.subtle.exportKey("pkcs8", orgPair.privateKey);
-  const orgPublicSpki = await crypto.subtle.exportKey("spki", orgPair.publicKey);
+  const orgPrivatePkcs8 = await crypto.subtle.exportKey(
+    "pkcs8",
+    orgPair.privateKey
+  );
+  const orgPublicSpki = await crypto.subtle.exportKey(
+    "spki",
+    orgPair.publicKey
+  );
 
   // 3. Generate the 24-word mnemonic.
   const mnemonic = await generateMnemonic();
@@ -113,7 +119,7 @@ export async function bootstrapOrgMasterKey(
   const mnemonicCt = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv.slice().buffer },
     aesKey,
-    orgPrivatePkcs8,
+    orgPrivatePkcs8
   );
   const wrapped_mnemonic: MnemonicWrap = {
     iv: bytesToB64(iv),
@@ -137,12 +143,12 @@ export async function bootstrapOrgMasterKey(
   const founderPub = await waitForPublicKey(founderUserId, founderEmail);
   if (!founderPub) {
     throw new Error(
-      "Founder personal public key not found on this device — sign in fully first.",
+      "Founder personal public key not found on this device — sign in fully first."
     );
   }
   const wrapped_user: UserPubkeyWrap = await wrapPkcs8ToRsaPubkey(
     orgPrivatePkcs8,
-    founderPub,
+    founderPub
   );
 
   // 6. POST everything to the backend.

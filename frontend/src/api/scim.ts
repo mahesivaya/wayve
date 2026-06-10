@@ -23,7 +23,10 @@ export type ScimTokenCreated = {
 export const listScimTokens = () =>
   apiFetchJson<ScimToken[]>("/api/scim/tokens");
 
-export const createScimToken = (input: { name: string; organization_id: number }) =>
+export const createScimToken = (input: {
+  name: string;
+  organization_id: number;
+}) =>
   apiFetchJson<ScimTokenCreated>("/api/scim/tokens", {
     method: "POST",
     body: JSON.stringify(input),

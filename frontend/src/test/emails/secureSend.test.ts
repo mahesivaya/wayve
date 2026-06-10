@@ -18,7 +18,7 @@ import {
 // that the test doesn't care about.
 function asServerEnvelope(
   bundle: Awaited<ReturnType<typeof sealSecureMessage>>,
-  overrides: Partial<ServerSecureMessage> = {},
+  overrides: Partial<ServerSecureMessage> = {}
 ): ServerSecureMessage {
   return {
     token: "test-token",
@@ -50,7 +50,7 @@ describe("Plan A Phase 3 secure-send passphrase envelope", () => {
 
     const recovered = await openSecureMessage(
       asServerEnvelope(bundle),
-      passphrase,
+      passphrase
     );
     expect(recovered).toBe(plaintext);
   });
@@ -58,19 +58,19 @@ describe("Plan A Phase 3 secure-send passphrase envelope", () => {
   it("rejects the wrong passphrase with a clear error", async () => {
     const bundle = await sealSecureMessage("secret", "correct-horse-battery");
     await expect(
-      openSecureMessage(asServerEnvelope(bundle), "wrong-horse-battery"),
+      openSecureMessage(asServerEnvelope(bundle), "wrong-horse-battery")
     ).rejects.toThrow(/passphrase/i);
   });
 
   it("rejects empty passphrase on encrypt", async () => {
     await expect(sealSecureMessage("body", "")).rejects.toThrow(
-      /at least 6 characters/i,
+      /at least 6 characters/i
     );
   });
 
   it("rejects passphrase shorter than 6 chars on encrypt", async () => {
     await expect(sealSecureMessage("body", "abc")).rejects.toThrow(
-      /at least 6 characters/i,
+      /at least 6 characters/i
     );
   });
 
@@ -96,13 +96,14 @@ describe("Plan A Phase 3 secure-send passphrase envelope", () => {
     for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
     bytes[0] ^= 0xff;
     let reencoded = "";
-    for (let i = 0; i < bytes.length; i++) reencoded += String.fromCharCode(bytes[i]);
+    for (let i = 0; i < bytes.length; i++)
+      reencoded += String.fromCharCode(bytes[i]);
     const tampered = asServerEnvelope({
       ...bundle,
       ciphertext: btoa(reencoded),
     });
     await expect(
-      openSecureMessage(tampered, "secret-passphrase"),
+      openSecureMessage(tampered, "secret-passphrase")
     ).rejects.toThrow();
   });
 
@@ -115,7 +116,7 @@ describe("Plan A Phase 3 secure-send passphrase envelope", () => {
     expect(bundle.pbkdf2_iterations).toBe(600000);
     const recovered = await openSecureMessage(
       asServerEnvelope(bundle, { pbkdf2_iterations: 600000 }),
-      "secret-passphrase",
+      "secret-passphrase"
     );
     expect(recovered).toBe("body");
   });

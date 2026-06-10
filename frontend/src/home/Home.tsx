@@ -95,10 +95,16 @@ export default function Home() {
           </nav>
 
           <div className="public-home-actions">
-            <button className="home-login-btn" onClick={() => navigate("/login")}>
+            <button
+              className="home-login-btn"
+              onClick={() => navigate("/login")}
+            >
               Login
             </button>
-            <button className="home-register-btn" onClick={() => navigate("/register")}>
+            <button
+              className="home-register-btn"
+              onClick={() => navigate("/register")}
+            >
               Register
             </button>
           </div>
@@ -161,9 +167,13 @@ export default function Home() {
                     <span className="service-copy">
                       <span className="service-title-row">
                         <span className="service-title">{service.name}</span>
-                        {service.slug === "meet" && <span className="service-badge">New</span>}
+                        {service.slug === "meet" && (
+                          <span className="service-badge">New</span>
+                        )}
                       </span>
-                      <span className="service-description">{service.summary}</span>
+                      <span className="service-description">
+                        {service.summary}
+                      </span>
                     </span>
                   </button>
                 ))}
@@ -210,7 +220,9 @@ export default function Home() {
               >
                 <span className="hx-announce-tag">New</span>
                 End-to-end encrypted calls &amp; meetings
-                <span className="hx-announce-arrow" aria-hidden="true">→</span>
+                <span className="hx-announce-arrow" aria-hidden="true">
+                  →
+                </span>
               </button>
 
               <h1 className="hx-hero-title">
@@ -242,7 +254,6 @@ export default function Home() {
                     override. Files hosted at /download/Fluxze-<arch>.dmg. */}
                 <DownloadApp />
               </div>
-
             </div>
 
             {/* Animated product mockup — a faux Fluxze app window */}
@@ -286,7 +297,9 @@ export default function Home() {
                   loads.
                 </p>
                 <ul className="hx-bento-list">
-                  <li>One workspace for mail, chat, calls, files, notes & AI</li>
+                  <li>
+                    One workspace for mail, chat, calls, files, notes & AI
+                  </li>
                   <li>Side-by-side split-pane apps</li>
                   <li>Live updates — no refresh, no installs</li>
                 </ul>
@@ -437,8 +450,12 @@ export default function Home() {
                 <p>SOC 1 Type II, GDPR, and ISO 27001, audited annually.</p>
               </div>
               <div className="faq-item">
-                <h3>Can I integrate Fluxze with my existing identity provider?</h3>
-                <p>Yes — SAML 2.0 SSO with Okta, Azure AD, and Google Workspace.</p>
+                <h3>
+                  Can I integrate Fluxze with my existing identity provider?
+                </h3>
+                <p>
+                  Yes — SAML 2.0 SSO with Okta, Azure AD, and Google Workspace.
+                </p>
               </div>
               <div className="faq-item">
                 <h3>What is your data retention policy?</h3>
@@ -470,38 +487,80 @@ export default function Home() {
             </div>
 
             <nav className="public-home-footer-column" aria-label="Company">
-              <button type="button" onClick={() => navigate("/support")}>Support</button>
-              <button type="button" onClick={() => navigate("/pricing")}>Pricing</button>
-              <button type="button" onClick={() => navigate("/about")}>Privacy Policy</button>
-              <button type="button" onClick={() => navigate("/developers")}>Developers</button>
-              <button type="button" onClick={() => navigate("/enterprise")}>Technical white paper</button>
+              <button type="button" onClick={() => navigate("/support")}>
+                Support
+              </button>
+              <button type="button" onClick={() => navigate("/pricing")}>
+                Pricing
+              </button>
+              <button type="button" onClick={() => navigate("/about")}>
+                Privacy Policy
+              </button>
+              <button type="button" onClick={() => navigate("/developers")}>
+                Developers
+              </button>
+              <button type="button" onClick={() => navigate("/enterprise")}>
+                Technical white paper
+              </button>
             </nav>
 
             <nav className="public-home-footer-column" aria-label="Product">
-              <button type="button" onClick={() => navigate("/enterprise")}>Fluxze for Business</button>
-              <button type="button" onClick={() => navigate("/services/email")}>Email Aliases</button>
-              <button type="button" onClick={() => navigate("/developers")}>Release notes</button>
-              <button type="button" onClick={() => navigate("/services/email")}>Encrypted Email</button>
-              <button type="button" onClick={() => navigate("/support")}>Status</button>
+              <button type="button" onClick={() => navigate("/enterprise")}>
+                Fluxze for Business
+              </button>
+              <button type="button" onClick={() => navigate("/services/email")}>
+                Email Aliases
+              </button>
+              <button type="button" onClick={() => navigate("/developers")}>
+                Release notes
+              </button>
+              <button type="button" onClick={() => navigate("/services/email")}>
+                Encrypted Email
+              </button>
+              <button type="button" onClick={() => navigate("/support")}>
+                Status
+              </button>
             </nav>
 
             <nav className="public-home-footer-column" aria-label="Resources">
-              <button type="button" onClick={() => navigate("/about")}>Terms of service</button>
-              <button type="button" onClick={() => navigate("/about")}>Press</button>
-              <button type="button" onClick={() => navigate("/services/email")}>Private Email</button>
-              <button type="button" onClick={() => navigate("/support")}>Contact</button>
-              <button type="button" onClick={() => navigate("/logs/audit")}>Transparency Report</button>
+              <button type="button" onClick={() => navigate("/about")}>
+                Terms of service
+              </button>
+              <button type="button" onClick={() => navigate("/about")}>
+                Press
+              </button>
+              <button type="button" onClick={() => navigate("/services/email")}>
+                Private Email
+              </button>
+              <button type="button" onClick={() => navigate("/support")}>
+                Contact
+              </button>
+              <button type="button" onClick={() => navigate("/logs/audit")}>
+                Transparency Report
+              </button>
             </nav>
 
             <div className="public-home-footer-social" aria-label="Follow us">
               <h2>Follow us</h2>
               <div className="public-home-social-links">
-                <a href="https://www.facebook.com" aria-label="Facebook">f</a>
-                <a href="https://www.instagram.com" aria-label="Instagram">◎</a>
-                <a href="https://www.linkedin.com" aria-label="LinkedIn">in</a>
-                <a href="https://mastodon.social" aria-label="Mastodon">m</a>
-                <a href="https://x.com" aria-label="X">x</a>
-                <a href="https://www.youtube.com" aria-label="YouTube">▶</a>
+                <a href="https://www.facebook.com" aria-label="Facebook">
+                  f
+                </a>
+                <a href="https://www.instagram.com" aria-label="Instagram">
+                  ◎
+                </a>
+                <a href="https://www.linkedin.com" aria-label="LinkedIn">
+                  in
+                </a>
+                <a href="https://mastodon.social" aria-label="Mastodon">
+                  m
+                </a>
+                <a href="https://x.com" aria-label="X">
+                  x
+                </a>
+                <a href="https://www.youtube.com" aria-label="YouTube">
+                  ▶
+                </a>
               </div>
             </div>
           </div>
@@ -513,7 +572,6 @@ export default function Home() {
       </div>
     );
   }
-
 
   // Signed-in personal home — Activity Dashboard replaces the legacy
   // grid of app tiles (which duplicated the left sidebar's navigation).

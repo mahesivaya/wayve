@@ -33,7 +33,10 @@ export default function PlatformOrganizationDetail() {
         if (alive) setOrganizations(items);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof Error ? err.message : "Failed to load business");
+        if (alive)
+          setError(
+            err instanceof Error ? err.message : "Failed to load business"
+          );
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -46,7 +49,7 @@ export default function PlatformOrganizationDetail() {
 
   const org = useMemo(
     () => organizations.find((o) => o.id === orgId) ?? null,
-    [organizations, orgId],
+    [organizations, orgId]
   );
 
   return (
@@ -75,7 +78,9 @@ export default function PlatformOrganizationDetail() {
                 <span className="platform-stat-value">
                   {(org.email_account_count ?? 0).toLocaleString()}
                 </span>
-                <span className="platform-stat-label">Total email accounts</span>
+                <span className="platform-stat-label">
+                  Total email accounts
+                </span>
               </div>
               <div className="platform-stat-block">
                 <span className="platform-stat-value">

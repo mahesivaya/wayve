@@ -51,7 +51,7 @@ export const listErrorLogs = (filters: ErrorLogFilters = {}) => {
   if (filters.limit) params.set("limit", String(filters.limit));
   const qs = params.toString();
   return apiFetchJson<ErrorLogListResponse>(
-    `/api/platform/error-logs${qs ? `?${qs}` : ""}`,
+    `/api/platform/error-logs${qs ? `?${qs}` : ""}`
   );
 };
 
@@ -90,7 +90,8 @@ function sessionId(): string {
     reportSessionId = fresh;
     return fresh;
   } catch {
-    if (!reportSessionId) reportSessionId = `s_${Math.random().toString(36).slice(2)}`;
+    if (!reportSessionId)
+      reportSessionId = `s_${Math.random().toString(36).slice(2)}`;
     return reportSessionId;
   }
 }

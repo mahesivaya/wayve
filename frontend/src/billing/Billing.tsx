@@ -28,27 +28,53 @@ import "./billing.css";
 const BYTES_IN_GB = 1024 * 1024 * 1024;
 const UNLIMITED_STORAGE = -1;
 
-const PLAN_COPY: Record<string, { price: string; features: string[]; action?: string }> = {
+const PLAN_COPY: Record<
+  string,
+  { price: string; features: string[]; action?: string }
+> = {
   basic_user: {
     price: "Free",
-    features: ["Send/receive 1,000 emails per day", "Personal workspace", "Standard storage"],
+    features: [
+      "Send/receive 1,000 emails per day",
+      "Personal workspace",
+      "Standard storage",
+    ],
   },
   advance_user: {
     price: "$7 / month",
-    features: ["Encrypt and decrypt 1,000 items per day", "Personal paid workspace", "Monthly auto-renewal"],
+    features: [
+      "Encrypt and decrypt 1,000 items per day",
+      "Personal paid workspace",
+      "Monthly auto-renewal",
+    ],
   },
   organization: {
     price: "$10 / user / month",
-    features: ["1-100 users", "Unlimited email send and receive", "Unlimited memory", "Organization billing"],
+    features: [
+      "1-100 users",
+      "Unlimited email send and receive",
+      "Unlimited memory",
+      "Organization billing",
+    ],
   },
   enterprise: {
     price: "Discussed",
-    features: ["100+ users", "Unlimited emails", "Unlimited memory", "Custom onboarding"],
+    features: [
+      "100+ users",
+      "Unlimited emails",
+      "Unlimited memory",
+      "Custom onboarding",
+    ],
     action: "Discuss plan",
   },
 };
 
-const PLAN_DISPLAY_ORDER = ["basic_user", "advance_user", "organization", "enterprise"];
+const PLAN_DISPLAY_ORDER = [
+  "basic_user",
+  "advance_user",
+  "organization",
+  "enterprise",
+];
 
 // Display titles for the Business & Enterprise section: the `organization` plan
 // is shown as "Business" so the two business tiers read as Business + Enterprise.
@@ -60,16 +86,28 @@ const PLAN_TITLE: Record<string, string> = {
 function planDisplayRank(plan: Plan): number {
   const codeRank = PLAN_DISPLAY_ORDER.indexOf(plan.code);
   if (codeRank >= 0) return codeRank;
-  const nameRank = PLAN_DISPLAY_ORDER.findIndex((code) =>
-    plan.name.toLowerCase().replace(/\s+/g, "_") === code
+  const nameRank = PLAN_DISPLAY_ORDER.findIndex(
+    (code) => plan.name.toLowerCase().replace(/\s+/g, "_") === code
   );
   return nameRank >= 0 ? nameRank : PLAN_DISPLAY_ORDER.length;
 }
 
 const STRIPE_TEST_CARDS = [
-  { label: "Visa credit", number: "4242 4242 4242 4242", result: "Successful payment" },
-  { label: "Visa debit", number: "4000 0566 5566 5556", result: "Successful debit payment" },
-  { label: "Requires auth", number: "4000 0025 0000 3155", result: "3D Secure challenge" },
+  {
+    label: "Visa credit",
+    number: "4242 4242 4242 4242",
+    result: "Successful payment",
+  },
+  {
+    label: "Visa debit",
+    number: "4000 0566 5566 5556",
+    result: "Successful debit payment",
+  },
+  {
+    label: "Requires auth",
+    number: "4000 0025 0000 3155",
+    result: "3D Secure challenge",
+  },
   { label: "Declined", number: "4000 0000 0000 9995", result: "Decline test" },
 ];
 
@@ -149,9 +187,13 @@ function loadStripeScript(): Promise<void> {
     );
     if (existing) {
       existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Stripe.js failed to load")), {
-        once: true,
-      });
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("Stripe.js failed to load")),
+        {
+          once: true,
+        }
+      );
       return;
     }
 
@@ -419,9 +461,7 @@ export default function Billing() {
       setSubscribeFormOpen(false);
       setSubscribePlan(null);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Could not start subscription",
+        err instanceof Error ? err.message : "Could not start subscription"
       );
     } finally {
       setBusy("");
@@ -473,7 +513,7 @@ export default function Billing() {
       window.setTimeout(() => void refreshAfterUpgrade(), 5000);
     } catch (err) {
       setSubscribeMessage(
-        err instanceof Error ? err.message : "Could not complete payment",
+        err instanceof Error ? err.message : "Could not complete payment"
       );
     } finally {
       setBusy("");
@@ -543,7 +583,11 @@ export default function Billing() {
     } catch (err) {
       clearPaymentElements();
       setPaymentFormOpen(false);
-      setError(err instanceof Error ? err.message : "Could not prepare payment method form");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not prepare payment method form"
+      );
     } finally {
       setBusy("");
     }
@@ -574,7 +618,9 @@ export default function Billing() {
       });
 
       if (result.error) {
-        throw new Error(result.error.message ?? "Could not save payment method");
+        throw new Error(
+          result.error.message ?? "Could not save payment method"
+        );
       }
 
       const paymentMethod = result.setupIntent?.payment_method;
@@ -590,7 +636,9 @@ export default function Billing() {
       clearPaymentElements();
       await reload();
     } catch (err) {
-      setPaymentMessage(err instanceof Error ? err.message : "Could not save payment method");
+      setPaymentMessage(
+        err instanceof Error ? err.message : "Could not save payment method"
+      );
     } finally {
       setBusy("");
     }
@@ -618,7 +666,9 @@ export default function Billing() {
         const result = await stripe.retrieveSetupIntent(intentSecret);
         if (cancelled) return;
         if (result.error) {
-          setError(result.error.message ?? "Could not finish saving payment method");
+          setError(
+            result.error.message ?? "Could not finish saving payment method"
+          );
           return;
         }
         const pm = result.setupIntent?.payment_method;
@@ -631,7 +681,11 @@ export default function Billing() {
         await reload();
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Could not finish saving payment method");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not finish saving payment method"
+        );
       }
     })();
 
@@ -667,9 +721,11 @@ export default function Billing() {
 
   // Personal plans stay under "Plans"; business/enterprise (audience
   // "organization") render in their own section below.
-  const personalPlans = visiblePlans.filter((plan) => plan.audience === "personal");
+  const personalPlans = visiblePlans.filter(
+    (plan) => plan.audience === "personal"
+  );
   const businessPlans = visiblePlans.filter(
-    (plan) => plan.audience === "organization",
+    (plan) => plan.audience === "organization"
   );
 
   const renderPlanCard = (plan: Plan) => {
@@ -687,21 +743,28 @@ export default function Billing() {
       >
         <h3>{PLAN_TITLE[plan.code] ?? plan.name}</h3>
         <p className="billing-plan-price">
-          {copy?.price ?? (isFree
-            ? "Free"
-            : `${formatMoney(plan.amount_cents, plan.currency)} / ${plan.billing_interval}`)}
+          {copy?.price ??
+            (isFree
+              ? "Free"
+              : `${formatMoney(plan.amount_cents, plan.currency)} / ${plan.billing_interval}`)}
         </p>
         {plan.description && (
           <p className="billing-plan-desc">{plan.description}</p>
         )}
         <ul className="billing-plan-features">
-          {(copy?.features ?? [
-            `${formatBytes(plan.storage_limit_bytes)} storage`,
-            `${plan.seat_limit} seat${plan.seat_limit === 1 ? "" : "s"}`,
-          ]).map((feature) => <li key={feature}>{feature}</li>)}
+          {(
+            copy?.features ?? [
+              `${formatBytes(plan.storage_limit_bytes)} storage`,
+              `${plan.seat_limit} seat${plan.seat_limit === 1 ? "" : "s"}`,
+            ]
+          ).map((feature) => (
+            <li key={feature}>{feature}</li>
+          ))}
         </ul>
         {isCurrent ? (
-          <button type="button" disabled>Active</button>
+          <button type="button" disabled>
+            Active
+          </button>
         ) : isEnterprise ? (
           <button type="button" onClick={() => navigate("/support")}>
             Contact sales
@@ -714,7 +777,9 @@ export default function Billing() {
           >
             {busyHere ? "Preparing…" : hasPaidPlan ? "Switch plan" : "Upgrade"}
           </button>
-        ) : !isForOwner && ownerType === "personal" && plan.audience === "organization" ? (
+        ) : !isForOwner &&
+          ownerType === "personal" &&
+          plan.audience === "organization" ? (
           // Personal users self-promote to an organization owner via
           // the dedicated setup page (/organizations/new), which
           // captures org name + place and lets them seed members
@@ -750,9 +815,13 @@ export default function Billing() {
           <button
             className="billing-portal-btn"
             onClick={() => void openPaymentMethodForm()}
-            disabled={busy === "payment-method" || busy === "save-payment-method"}
+            disabled={
+              busy === "payment-method" || busy === "save-payment-method"
+            }
           >
-            {busy === "payment-method" ? "Preparing…" : "Manage payment methods"}
+            {busy === "payment-method"
+              ? "Preparing…"
+              : "Manage payment methods"}
           </button>
         )}
       </header>
@@ -767,7 +836,9 @@ export default function Billing() {
         <div className="billing-banner">Checkout was canceled.</div>
       )}
       {error && <div className="billing-banner error">{error}</div>}
-      {paymentSuccess && <div className="billing-banner success">{paymentSuccess}</div>}
+      {paymentSuccess && (
+        <div className="billing-banner success">{paymentSuccess}</div>
+      )}
 
       {/* ---- Organization billing (focused view) ---- */}
       {isOrg && (
@@ -839,8 +910,8 @@ export default function Billing() {
             <h2>Billing history</h2>
             {invoices.length === 0 && (
               <p className="billing-note billing-sample-note">
-                Sample bills shown for reference. Your real monthly receipts will
-                appear here after the first charge.
+                Sample bills shown for reference. Your real monthly receipts
+                will appear here after the first charge.
               </p>
             )}
             {(invoices.length > 0 ? invoices : SAMPLE_INVOICES).length > 0 ? (
@@ -854,39 +925,45 @@ export default function Billing() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(invoices.length > 0 ? invoices : SAMPLE_INVOICES).map((invoice) => (
-                    <tr key={invoice.id}>
-                      <td>{formatMonth(invoice.created_at)}</td>
-                      <td>
-                        {formatMoney(invoice.amount_paid_cents, invoice.currency)}
-                      </td>
-                      <td>{invoice.status}</td>
-                      <td className="billing-receipt-links">
-                        {invoice.invoice_pdf && (
-                          <a
-                            href={invoice.invoice_pdf}
-                            target="_blank"
-                            rel="noreferrer"
-                            download
-                          >
-                            Download
-                          </a>
-                        )}
-                        {invoice.hosted_invoice_url && (
-                          <a
-                            href={invoice.hosted_invoice_url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            View
-                          </a>
-                        )}
-                        {!invoice.invoice_pdf && !invoice.hosted_invoice_url && (
-                          <span className="billing-muted">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {(invoices.length > 0 ? invoices : SAMPLE_INVOICES).map(
+                    (invoice) => (
+                      <tr key={invoice.id}>
+                        <td>{formatMonth(invoice.created_at)}</td>
+                        <td>
+                          {formatMoney(
+                            invoice.amount_paid_cents,
+                            invoice.currency
+                          )}
+                        </td>
+                        <td>{invoice.status}</td>
+                        <td className="billing-receipt-links">
+                          {invoice.invoice_pdf && (
+                            <a
+                              href={invoice.invoice_pdf}
+                              target="_blank"
+                              rel="noreferrer"
+                              download
+                            >
+                              Download
+                            </a>
+                          )}
+                          {invoice.hosted_invoice_url && (
+                            <a
+                              href={invoice.hosted_invoice_url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View
+                            </a>
+                          )}
+                          {!invoice.invoice_pdf &&
+                            !invoice.hosted_invoice_url && (
+                              <span className="billing-muted">—</span>
+                            )}
+                        </td>
+                      </tr>
+                    )
+                  )}
                 </tbody>
               </table>
             ) : (
@@ -902,9 +979,17 @@ export default function Billing() {
       {paymentFormOpen && (
         <section className="billing-card">
           <h2>Payment method</h2>
-          <form className="billing-payment-form" onSubmit={(event) => void savePaymentMethod(event)}>
-            <div id="billing-payment-element" className="billing-stripe-field" />
-            {paymentMessage && <p className="billing-payment-error">{paymentMessage}</p>}
+          <form
+            className="billing-payment-form"
+            onSubmit={(event) => void savePaymentMethod(event)}
+          >
+            <div
+              id="billing-payment-element"
+              className="billing-stripe-field"
+            />
+            {paymentMessage && (
+              <p className="billing-payment-error">{paymentMessage}</p>
+            )}
             <div className="billing-payment-actions">
               <button
                 type="submit"
@@ -930,16 +1015,11 @@ export default function Billing() {
       {subscribeFormOpen && (
         <section className="billing-card" ref={subscribePanelRef}>
           <h2>
-            {subscribePlan
-              ? `Upgrade — ${subscribePlan.name}`
-              : "Upgrade"}
+            {subscribePlan ? `Upgrade — ${subscribePlan.name}` : "Upgrade"}
           </h2>
           {subscribePlan && (
             <p className="billing-note">
-              {formatMoney(
-                subscribePlan.amount_cents,
-                subscribePlan.currency,
-              )}
+              {formatMoney(subscribePlan.amount_cents, subscribePlan.currency)}
               {subscribePlan.billing_interval
                 ? ` / ${subscribePlan.billing_interval}`
                 : ""}{" "}
@@ -957,10 +1037,7 @@ export default function Billing() {
                 covered the moment the Element paints. */}
             <div className="billing-stripe-field billing-stripe-mount">
               {!subscribeFormReady && (
-                <div
-                  className="billing-stripe-skeleton"
-                  aria-hidden="true"
-                >
+                <div className="billing-stripe-skeleton" aria-hidden="true">
                   <div className="billing-stripe-skeleton-row" />
                   <div className="billing-stripe-skeleton-row" />
                   <div className="billing-stripe-skeleton-row short" />
@@ -1007,114 +1084,116 @@ export default function Billing() {
           the full management surface automatically after the first
           successful checkout. */}
       {hasPaidPlan && !isOrg && (
-      <section className="billing-card">
-        <h2>Subscription</h2>
-        {activeSub ? (
-          <div className="billing-sub">
-            <div className="billing-sub-row">
-              <span>Plan</span>
-              <strong>{activeSub.plan_name ?? activeSub.plan_code ?? "—"}</strong>
+        <section className="billing-card">
+          <h2>Subscription</h2>
+          {activeSub ? (
+            <div className="billing-sub">
+              <div className="billing-sub-row">
+                <span>Plan</span>
+                <strong>
+                  {activeSub.plan_name ?? activeSub.plan_code ?? "—"}
+                </strong>
+              </div>
+              <div className="billing-sub-row">
+                <span>Status</span>
+                <strong className={`billing-status ${activeSub.status}`}>
+                  {activeSub.status}
+                </strong>
+              </div>
+              <div className="billing-sub-row">
+                <span>Price</span>
+                <strong>
+                  {formatMoney(activeSub.amount_cents, activeSub.currency)}
+                  {activeSub.billing_interval
+                    ? ` / ${activeSub.billing_interval}`
+                    : ""}
+                </strong>
+              </div>
+              <div className="billing-sub-row">
+                <span>Renews</span>
+                <strong>{formatDate(activeSub.current_period_end)}</strong>
+              </div>
+              {activeSub.cancel_at_period_end ? (
+                <p className="billing-note">
+                  Cancels at the end of the current period.
+                </p>
+              ) : (
+                <button
+                  className="billing-cancel-btn"
+                  onClick={() => void cancel()}
+                  disabled={busy === "cancel"}
+                >
+                  {busy === "cancel" ? "Canceling…" : "Cancel subscription"}
+                </button>
+              )}
             </div>
-            <div className="billing-sub-row">
-              <span>Status</span>
-              <strong className={`billing-status ${activeSub.status}`}>
-                {activeSub.status}
-              </strong>
-            </div>
-            <div className="billing-sub-row">
-              <span>Price</span>
-              <strong>
-                {formatMoney(activeSub.amount_cents, activeSub.currency)}
-                {activeSub.billing_interval
-                  ? ` / ${activeSub.billing_interval}`
-                  : ""}
-              </strong>
-            </div>
-            <div className="billing-sub-row">
-              <span>Renews</span>
-              <strong>{formatDate(activeSub.current_period_end)}</strong>
-            </div>
-            {activeSub.cancel_at_period_end ? (
-              <p className="billing-note">
-                Cancels at the end of the current period.
-              </p>
-            ) : (
-              <button
-                className="billing-cancel-btn"
-                onClick={() => void cancel()}
-                disabled={busy === "cancel"}
-              >
-                {busy === "cancel" ? "Canceling…" : "Cancel subscription"}
-              </button>
-            )}
-          </div>
-        ) : (
-          <p className="billing-empty">
-            No active subscription — you are on the free tier.
-          </p>
-        )}
-      </section>
+          ) : (
+            <p className="billing-empty">
+              No active subscription — you are on the free tier.
+            </p>
+          )}
+        </section>
       )}
 
       {/* ---- Usage ---- */}
       {hasPaidPlan && !isOrg && (
-      <section className="billing-card">
-        <h2>Usage</h2>
-        {entitlements && (
-          <p className="billing-note">
-            Plan limit: {formatBytes(entitlements.storage_limit_bytes)} storage ·{" "}
-            {entitlements.seat_limit} seats ·{" "}
-            {entitlements.active ? "active" : "free tier"}
-          </p>
-        )}
-        {usage && usage.metrics.length > 0 ? (
-          <table className="billing-table">
-            <thead>
-              <tr>
-                <th>Metric</th>
-                <th>Total</th>
-                <th>Events</th>
-              </tr>
-            </thead>
-            <tbody>
-              {usage.metrics.map((metric) => (
-                <tr key={metric.metric}>
-                  <td>{metric.metric}</td>
-                  <td>{metric.total}</td>
-                  <td>{metric.events}</td>
+        <section className="billing-card">
+          <h2>Usage</h2>
+          {entitlements && (
+            <p className="billing-note">
+              Plan limit: {formatBytes(entitlements.storage_limit_bytes)}{" "}
+              storage · {entitlements.seat_limit} seats ·{" "}
+              {entitlements.active ? "active" : "free tier"}
+            </p>
+          )}
+          {usage && usage.metrics.length > 0 ? (
+            <table className="billing-table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Total</th>
+                  <th>Events</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="billing-empty">No usage recorded yet.</p>
-        )}
-      </section>
+              </thead>
+              <tbody>
+                {usage.metrics.map((metric) => (
+                  <tr key={metric.metric}>
+                    <td>{metric.metric}</td>
+                    <td>{metric.total}</td>
+                    <td>{metric.events}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="billing-empty">No usage recorded yet.</p>
+          )}
+        </section>
       )}
 
       {/* ---- Plans / Checkout (personal accounts only) ---- */}
       {!isOrg && (
-      <section className="billing-card">
-        <div className="billing-section-head">
-          <h2>Plans</h2>
-          <label className="billing-autopay">
-            <span>AutoPay monthly renewals</span>
-            <select
-              value={autopay ? "yes" : "no"}
-              onChange={(event) => setAutopay(event.target.value === "yes")}
-            >
-              <option value="yes">YES</option>
-              <option value="no">NO</option>
-            </select>
-          </label>
-        </div>
-        <div className="billing-plan-grid">
-          {personalPlans.map(renderPlanCard)}
-          {personalPlans.length === 0 && (
-            <p className="billing-empty">No plans available.</p>
-          )}
-        </div>
-      </section>
+        <section className="billing-card">
+          <div className="billing-section-head">
+            <h2>Plans</h2>
+            <label className="billing-autopay">
+              <span>AutoPay monthly renewals</span>
+              <select
+                value={autopay ? "yes" : "no"}
+                onChange={(event) => setAutopay(event.target.value === "yes")}
+              >
+                <option value="yes">YES</option>
+                <option value="no">NO</option>
+              </select>
+            </label>
+          </div>
+          <div className="billing-plan-grid">
+            {personalPlans.map(renderPlanCard)}
+            {personalPlans.length === 0 && (
+              <p className="billing-empty">No plans available.</p>
+            )}
+          </div>
+        </section>
       )}
 
       {/* ---- Business & Enterprise ---- */}
@@ -1137,15 +1216,22 @@ export default function Billing() {
           <h2>Payments</h2>
           <div className="billing-payment-status">
             <span>Stripe status</span>
-            <strong className={stripeStatus?.configured ? "ready" : "not-ready"}>
+            <strong
+              className={stripeStatus?.configured ? "ready" : "not-ready"}
+            >
               {stripeStatus?.configured ? "Connected" : "Not configured"}
             </strong>
             <span>Mode</span>
-            <strong>{stripeStatus?.test_mode ? "Test mode" : "Live/not detected"}</strong>
+            <strong>
+              {stripeStatus?.test_mode ? "Test mode" : "Live/not detected"}
+            </strong>
             <span>Country</span>
             <strong>{stripeStatus?.country ?? "US"}</strong>
             <span>Publishable key</span>
-            <code>{stripeStatus?.publishable_key ?? "pk_test_sample_configure_in_env"}</code>
+            <code>
+              {stripeStatus?.publishable_key ??
+                "pk_test_sample_configure_in_env"}
+            </code>
           </div>
           <p className="billing-note">
             Enter these test-card numbers in the in-page Payment Element above
@@ -1165,45 +1251,45 @@ export default function Billing() {
 
       {/* ---- Invoices ---- */}
       {hasPaidPlan && !isOrg && (
-      <section className="billing-card">
-        <h2>Invoices</h2>
-        {invoices.length > 0 ? (
-          <table className="billing-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((invoice) => (
-                <tr key={invoice.id}>
-                  <td>{formatDate(invoice.created_at)}</td>
-                  <td>
-                    {formatMoney(invoice.amount_paid_cents, invoice.currency)}
-                  </td>
-                  <td>{invoice.status}</td>
-                  <td>
-                    {invoice.hosted_invoice_url && (
-                      <a
-                        href={invoice.hosted_invoice_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        View
-                      </a>
-                    )}
-                  </td>
+        <section className="billing-card">
+          <h2>Invoices</h2>
+          {invoices.length > 0 ? (
+            <table className="billing-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="billing-empty">No invoices yet.</p>
-        )}
-      </section>
+              </thead>
+              <tbody>
+                {invoices.map((invoice) => (
+                  <tr key={invoice.id}>
+                    <td>{formatDate(invoice.created_at)}</td>
+                    <td>
+                      {formatMoney(invoice.amount_paid_cents, invoice.currency)}
+                    </td>
+                    <td>{invoice.status}</td>
+                    <td>
+                      {invoice.hosted_invoice_url && (
+                        <a
+                          href={invoice.hosted_invoice_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="billing-empty">No invoices yet.</p>
+          )}
+        </section>
       )}
     </div>
   );

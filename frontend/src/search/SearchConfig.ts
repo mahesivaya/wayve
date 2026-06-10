@@ -16,6 +16,8 @@ export const SEARCH_LABELS: Record<string, string> = {
 
 export const HIDE_SEARCH_PATHS = ["/scheduler"];
 
-export const getSearchLabel = (path: string) => SEARCH_LABELS[path] ?? "this page";
+export const getSearchLabel = (path: string) =>
+  SEARCH_LABELS[path] ?? "this page";
 
-export const shouldHideSearch = (path: string) => HIDE_SEARCH_PATHS.includes(path);
+export const shouldHideSearch = (path: string) =>
+  HIDE_SEARCH_PATHS.includes(path);

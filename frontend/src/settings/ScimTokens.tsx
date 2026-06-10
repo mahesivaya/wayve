@@ -39,7 +39,9 @@ export default function ScimTokens() {
     try {
       setTokens(await listScimTokens());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load SCIM tokens");
+      setError(
+        err instanceof Error ? err.message : "Failed to load SCIM tokens"
+      );
     } finally {
       setLoading(false);
     }
@@ -53,16 +55,23 @@ export default function ScimTokens() {
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (orgId == null) {
-      setError("SCIM tokens are scoped to an organization. Sign in as an organization admin.");
+      setError(
+        "SCIM tokens are scoped to an organization. Sign in as an organization admin."
+      );
       return;
     }
     setError("");
     setSuccess("");
     setBusy(true);
     try {
-      const result = await createScimToken({ name: name.trim(), organization_id: orgId });
+      const result = await createScimToken({
+        name: name.trim(),
+        organization_id: orgId,
+      });
       setCreated(result);
-      setSuccess("Token created. Copy it now — the raw value is shown only once.");
+      setSuccess(
+        "Token created. Copy it now — the raw value is shown only once."
+      );
       setName("");
       await reload();
     } catch (err) {
@@ -73,7 +82,11 @@ export default function ScimTokens() {
   };
 
   const revoke = async (token: ScimToken) => {
-    if (!window.confirm(`Revoke ${token.name}? Your IdP will start receiving 401s on next sync.`)) {
+    if (
+      !window.confirm(
+        `Revoke ${token.name}? Your IdP will start receiving 401s on next sync.`
+      )
+    ) {
       return;
     }
     setError("");
@@ -105,9 +118,9 @@ export default function ScimTokens() {
         <div>
           <h1>SCIM 2.0 provisioning</h1>
           <p>
-            Mint a bearer token here, then paste it into your IdP (Okta / Entra /
-            Google Workspace / OneLogin). They'll create, update, and deprovision
-            users automatically through{" "}
+            Mint a bearer token here, then paste it into your IdP (Okta / Entra
+            / Google Workspace / OneLogin). They'll create, update, and
+            deprovision users automatically through{" "}
             <code>https://fluxze.com/scim/v2</code>.
           </p>
         </div>
@@ -213,8 +226,7 @@ export default function ScimTokens() {
         <h2>Connecting your IdP</h2>
         <ul>
           <li>
-            <strong>Base URL:</strong>{" "}
-            <code>https://fluxze.com/scim/v2</code>
+            <strong>Base URL:</strong> <code>https://fluxze.com/scim/v2</code>
           </li>
           <li>
             <strong>Authentication:</strong>{" "}

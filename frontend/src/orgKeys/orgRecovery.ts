@@ -30,7 +30,7 @@ export async function unwrapOrgKeyWithMnemonic(
   callerUserId: number,
   callerEmail: string,
   mnemonic: string,
-  wrap: MnemonicWrap,
+  wrap: MnemonicWrap
 ): Promise<UnwrapResult> {
   const entropy = await mnemonicToEntropy(mnemonic);
   let pkcs8: ArrayBuffer;
@@ -40,11 +40,11 @@ export async function unwrapOrgKeyWithMnemonic(
       wrap.ct,
       entropy.slice().buffer,
       wrap.pbkdf2_salt,
-      wrap.pbkdf2_iterations,
+      wrap.pbkdf2_iterations
     );
   } catch {
     throw new Error(
-      "Could not unwrap the org recovery key — please double-check your 24 words.",
+      "Could not unwrap the org recovery key — please double-check your 24 words."
     );
   }
 
@@ -53,7 +53,7 @@ export async function unwrapOrgKeyWithMnemonic(
     pkcs8,
     { name: "RSA-OAEP", hash: "SHA-256" },
     true,
-    ["decrypt"],
+    ["decrypt"]
   );
 
   // Cache for the session and future sessions on this device.
@@ -87,7 +87,7 @@ export async function unwrapOrgKeyWithMnemonic(
 export async function unwrapOrgKeyWithUserPubkey(
   orgId: number,
   callerUserId: number,
-  callerEmail: string,
+  callerEmail: string
 ): Promise<UnwrapResult | null> {
   const { loadPrivateKey } = await import("../crypto/keyStore");
   const callerPriv = await loadPrivateKey(callerUserId, callerEmail);
@@ -102,7 +102,7 @@ export async function unwrapOrgKeyWithUserPubkey(
     pkcs8 = await unwrapPkcs8WithRsaKey(
       keys.wrapped_user.iv,
       keys.wrapped_user.ct,
-      callerPriv,
+      callerPriv
     );
   } catch {
     return null;
@@ -113,7 +113,7 @@ export async function unwrapOrgKeyWithUserPubkey(
     pkcs8,
     { name: "RSA-OAEP", hash: "SHA-256" },
     true,
-    ["decrypt"],
+    ["decrypt"]
   );
   await saveOrgPrivateKey(orgId, callerUserId, privateKey);
   return { privateKey, pkcs8 };

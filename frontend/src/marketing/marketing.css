@@ -13,7 +13,11 @@
   gap: 3rem;
   align-items: center;
   padding: 4rem 2rem;
-  background: linear-gradient(135deg, var(--color-surface-tint-blue) 0%, var(--color-surface) 60%);
+  background: linear-gradient(
+    135deg,
+    var(--color-surface-tint-blue) 0%,
+    var(--color-surface) 60%
+  );
   border-radius: 16px;
   margin: 2rem auto;
   max-width: 1200px;
@@ -55,15 +59,17 @@
   font-weight: 600;
   border: none;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-.marketing-hero-actions button:first-child{
+.marketing-hero-actions button:first-child {
   background: var(--color-accent-blue-vivid);
   color: white;
 }
 
-.marketing-hero-actions button:first-child:hover{
+.marketing-hero-actions button:first-child:hover {
   background: var(--color-brand-blue-marketing);
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgb(58, 109, 240, 0.25);
@@ -75,7 +81,7 @@
   border: 1px solid var(--color-surface-tint-steel);
 }
 
-.marketing-hero-actions button + button:hover{
+.marketing-hero-actions button + button:hover {
   background: var(--color-surface-tint-blue);
   border-color: var(--color-accent-blue-vivid);
 }
@@ -103,7 +109,9 @@
   border-bottom: 1px solid var(--color-divider-marketing);
 }
 
-.marketing-hero-card-row:last-child{ border-bottom: none; }
+.marketing-hero-card-row:last-child {
+  border-bottom: none;
+}
 
 .marketing-hero-card-icon {
   width: 32px;
@@ -203,10 +211,12 @@
   border: 1px solid var(--color-accent-indigo-mist-strong);
   border-radius: 12px;
   padding: 1.5rem;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-.marketing-feature:hover{
+.marketing-feature:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgb(13, 27, 42, 0.08);
 }
@@ -279,7 +289,11 @@
   max-width: 1200px;
   margin: 3rem auto;
   padding: 2.5rem 2rem;
-  background: linear-gradient(135deg, var(--color-accent-blue-vivid) 0%, var(--color-brand-blue-marketing) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--color-accent-blue-vivid) 0%,
+    var(--color-brand-blue-marketing) 100%
+  );
   color: white;
   border-radius: 16px;
   text-align: center;
@@ -312,7 +326,7 @@
   cursor: pointer;
 }
 
-.marketing-cta-actions button:first-child{
+.marketing-cta-actions button:first-child {
   background: white;
   color: var(--color-brand-blue-marketing);
 }
@@ -348,13 +362,15 @@
   align-items: center;
 }
 
-.marketing-faq summary::after{
+.marketing-faq summary::after {
   content: "+";
   font-size: 1.3rem;
   color: var(--color-accent-blue-vivid);
 }
 
-.marketing-faq details[open] summary::after{ content: "−"; }
+.marketing-faq details[open] summary::after {
+  content: "−";
+}
 
 .marketing-faq details > p {
   margin: 0;
@@ -416,7 +432,9 @@
   font-size: 0.9rem;
 }
 
-.marketing-channel-link:hover{ text-decoration: underline; }
+.marketing-channel-link:hover {
+  text-decoration: underline;
+}
 
 /* ---- Footer ---- */
 .marketing-footer {
@@ -470,7 +488,9 @@
   text-align: left;
 }
 
-.marketing-footer-inner button:hover{ color: white; }
+.marketing-footer-inner button:hover {
+  color: white;
+}
 
 .marketing-footer-legal {
   max-width: 1200px;
@@ -482,7 +502,7 @@
   text-align: center;
 }
 
-@media (max-width: 760px){
+@media (max-width: 760px) {
   .marketing-hero {
     grid-template-columns: 1fr;
     padding: 2rem 1.25rem;
@@ -503,7 +523,11 @@
    data-theme="light" unless they've clicked the toggle.
    ============================================================ */
 :root[data-theme="dark"] .marketing-hero {
-  background: linear-gradient(135deg, var(--color-surface-dark-tinted) 0%, var(--color-surface-darken) 60%);
+  background: linear-gradient(
+    135deg,
+    var(--color-surface-dark-tinted) 0%,
+    var(--color-surface-darken) 60%
+  );
 }
 
 :root[data-theme="dark"] .marketing-hero-copy h1,
@@ -560,7 +584,7 @@
 :root[data-theme="dark"] .marketing-faq summary {
   color: var(--color-surface-tint-cool);
 }
-:root[data-theme="dark"] .marketing-faq summary::after{
+:root[data-theme="dark"] .marketing-faq summary::after {
   color: var(--color-primary-border);
 }
 

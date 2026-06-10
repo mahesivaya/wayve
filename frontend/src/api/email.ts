@@ -87,7 +87,9 @@ export const getAccounts = async <T = unknown>() =>
 // Powers the sidebar nav badge (and the "All Accounts" filter badge) without
 // loading the full inbox to count locally.
 export const getEmailsUnreadCount = async (): Promise<number> => {
-  const data = await apiFetchJson<{ count: number }>("/api/emails/unread-count");
+  const data = await apiFetchJson<{ count: number }>(
+    "/api/emails/unread-count"
+  );
   return data.count ?? 0;
 };
 
@@ -110,7 +112,7 @@ export const updateAccountDisplayName = async (
 export const getGmailConnectUrl = async () => {
   const data = await apiFetchJson<{ url: string }>(
     "/api/email-providers/gmail/connect",
-    { method: "POST" },
+    { method: "POST" }
   );
   return data.url;
 };
@@ -118,7 +120,7 @@ export const getGmailConnectUrl = async () => {
 export const getOutlookConnectUrl = async () => {
   const data = await apiFetchJson<{ url: string }>(
     "/api/email-providers/outlook/connect",
-    { method: "POST" },
+    { method: "POST" }
   );
   return data.url;
 };
@@ -129,14 +131,14 @@ export const getOutlookConnectUrl = async () => {
 // on success; throws with the backend's user-facing message on failure.
 export const connectYahoo = async (
   email: string,
-  appPassword: string,
+  appPassword: string
 ): Promise<{ id: number; email: string; provider: string }> => {
   return apiFetchJson<{ id: number; email: string; provider: string }>(
     "/api/email-providers/yahoo/connect",
     {
       method: "POST",
       body: JSON.stringify({ email, app_password: appPassword }),
-    },
+    }
   );
 };
 
@@ -159,7 +161,7 @@ export type ImapSettings = {
 // instead) or guessed IMAP/SMTP settings (which the user can edit before
 // testing). Never throws on an unknown domain — it falls back to a guess.
 export const imapAutodiscover = async (
-  email: string,
+  email: string
 ): Promise<{ use_oauth?: "google" | "microsoft" } & Partial<ImapSettings>> =>
   apiFetchJson("/api/email-providers/imap/autodiscover", {
     method: "POST",
@@ -182,7 +184,7 @@ export const imapTestLogin = async (input: {
 // Verify + persist the IMAP/SMTP mailbox. Returns the new account row id.
 // Throws with the backend's user-facing message on failure.
 export const connectImap = async (
-  input: ImapSettings & { email: string; password: string },
+  input: ImapSettings & { email: string; password: string }
 ): Promise<{ id: number; email: string; provider: string }> =>
   apiFetchJson("/api/email-providers/imap/connect", {
     method: "POST",
@@ -210,7 +212,7 @@ export const lookupEmailProvider = async (email: string): Promise<string> => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
-    },
+    }
   );
   return data.provider;
 };
@@ -258,17 +260,18 @@ export const getAllEmailAttachments = async () =>
  */
 export const downloadEmailAttachment = async (
   attachment: EmailAttachment,
-  userId: number | null = null,
+  userId: number | null = null
 ) => {
-  const res = await apiFetch(`/api/email-attachments/${attachment.id}/download`);
+  const res = await apiFetch(
+    `/api/email-attachments/${attachment.id}/download`
+  );
   const ct = res.headers.get("content-type") ?? "application/octet-stream";
   const raw = new Uint8Array(await res.arrayBuffer());
 
   let blob: Blob;
   if (userId != null) {
-    const { looksLikeEnvelope, decryptBlobForSelf } = await import(
-      "../crypto/fileEnvelope"
-    );
+    const { looksLikeEnvelope, decryptBlobForSelf } =
+      await import("../crypto/fileEnvelope");
     blob = looksLikeEnvelope(raw)
       ? await decryptBlobForSelf(raw, userId, ct)
       : new Blob([raw], { type: ct });
@@ -339,7 +342,7 @@ export type WayveRecipient = {
  * SMTP). Throws on transport errors so retries are explicit.
  */
 export const getUserByEmail = async (
-  email: string,
+  email: string
 ): Promise<WayveRecipient | null> => {
   const trimmed = email.trim();
   if (!trimmed) return null;
@@ -394,7 +397,11 @@ export const sendSecureEmail = async (payload: SecureSendPayload) => {
     method: "POST",
     body: JSON.stringify(payload),
   });
-  return res.json() as Promise<{ token: string; link: string; expires_at: string }>;
+  return res.json() as Promise<{
+    token: string;
+    link: string;
+    expires_at: string;
+  }>;
 };
 
 /**
@@ -403,14 +410,18 @@ export const sendSecureEmail = async (payload: SecureSendPayload) => {
  * Returns null on 404 (invalid token), throws on other errors.
  */
 export const fetchSecureMessage = async (token: string) => {
-  const res = await apiFetch(`/api/secure-messages/${encodeURIComponent(token)}`, {
-    preserve401: true,
-    // 404 = invalid token, 410 = expired; both mean "no message", return
-    // null instead of throwing.
-    preserve404: true,
-    preserve410: true,
-  });
+  const res = await apiFetch(
+    `/api/secure-messages/${encodeURIComponent(token)}`,
+    {
+      preserve401: true,
+      // 404 = invalid token, 410 = expired; both mean "no message", return
+      // null instead of throwing.
+      preserve404: true,
+      preserve410: true,
+    }
+  );
   if (res.status === 404 || res.status === 410) return null;
-  return res.json() as Promise<import("../emails/secureSend").ServerSecureMessage>;
+  return res.json() as Promise<
+    import("../emails/secureSend").ServerSecureMessage
+  >;
 };
-

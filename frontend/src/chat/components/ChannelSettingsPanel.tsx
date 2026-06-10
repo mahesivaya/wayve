@@ -113,7 +113,9 @@ export default function ChannelSettingsPanel({
             <span>Role</span>
             <select
               value={addUserRole}
-              onChange={(e) => onAddUserRoleChange(roleFromValue(e.target.value))}
+              onChange={(e) =>
+                onAddUserRoleChange(roleFromValue(e.target.value))
+              }
             >
               <option value="user">User</option>
               <option value="admin">Admin</option>
@@ -127,7 +129,11 @@ export default function ChannelSettingsPanel({
               placeholder="alex@example.com, priya@example.com"
             />
           </label>
-          <button type="button" className="channel-settings-primary" onClick={onAddUsers}>
+          <button
+            type="button"
+            className="channel-settings-primary"
+            onClick={onAddUsers}
+          >
             Add
           </button>
         </div>

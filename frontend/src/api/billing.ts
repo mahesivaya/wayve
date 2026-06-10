@@ -83,7 +83,12 @@ export type OrganizationBilling = {
     cancel_at_period_end: boolean;
     plan_code: string | null;
   } | null;
-  members: { id: number; email: string; account_type: string; role?: string | null }[];
+  members: {
+    id: number;
+    email: string;
+    account_type: string;
+    role?: string | null;
+  }[];
 };
 
 // ---- Calls -----------------------------------------------------------------
@@ -113,8 +118,7 @@ export type UpsertPlanInput = {
 };
 
 /** Returns ALL plans including deactivated ones — only platform admins may call. */
-export const adminListPlans = () =>
-  json<Plan[]>("/api/billing/admin/plans");
+export const adminListPlans = () => json<Plan[]>("/api/billing/admin/plans");
 
 /**
  * Create or update a plan by `code`. Same payload shape for both — the
@@ -202,6 +206,4 @@ export type DefaultCard = {
 // (e.g. a Basic user who has never paid). Drives the "use saved card" radio
 // on the org create form.
 export const getDefaultPaymentMethod = () =>
-  json<{ default: DefaultCard | null }>(
-    "/api/billing/payment-method/default",
-  );
+  json<{ default: DefaultCard | null }>("/api/billing/payment-method/default");

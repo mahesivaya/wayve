@@ -50,7 +50,8 @@ export default function ApiKeysPage() {
         if (alive) setKeys(items);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof Error ? err.message : "Failed to load keys");
+        if (alive)
+          setError(err instanceof Error ? err.message : "Failed to load keys");
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -95,7 +96,9 @@ export default function ApiKeysPage() {
       setRateLimit("");
       setFullAccess(false);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create key");
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to create key"
+      );
     } finally {
       setCreating(false);
     }
@@ -170,9 +173,13 @@ export default function ApiKeysPage() {
                 setFullAccess(false);
               }}
             >
-              <option value="external">External — explicit scopes, expiry required</option>
+              <option value="external">
+                External — explicit scopes, expiry required
+              </option>
               {isPlatform && (
-                <option value="internal">Internal — may hold full access</option>
+                <option value="internal">
+                  Internal — may hold full access
+                </option>
               )}
             </select>
           </label>
@@ -322,30 +329,30 @@ export default function ApiKeysPage() {
             <div className="api-keys-empty">No requests recorded yet.</div>
           ) : (
             <div className="api-keys-audit-scroll">
-            <table className="api-keys-audit">
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Method</th>
-                  <th>Path</th>
-                  <th>Status</th>
-                  <th>Outcome</th>
-                  <th>IP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditRows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{fmtDateTime(row.created_at)}</td>
-                    <td>{row.method}</td>
-                    <td>{row.path}</td>
-                    <td>{row.status_code}</td>
-                    <td>{row.outcome}</td>
-                    <td>{row.ip ?? "—"}</td>
+              <table className="api-keys-audit">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Method</th>
+                    <th>Path</th>
+                    <th>Status</th>
+                    <th>Outcome</th>
+                    <th>IP</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {auditRows.map((row) => (
+                    <tr key={row.id}>
+                      <td>{fmtDateTime(row.created_at)}</td>
+                      <td>{row.method}</td>
+                      <td>{row.path}</td>
+                      <td>{row.status_code}</td>
+                      <td>{row.outcome}</td>
+                      <td>{row.ip ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createWebhook, listEventCatalog, testWebhook } from "../../api/webhooks";
+import {
+  createWebhook,
+  listEventCatalog,
+  testWebhook,
+} from "../../api/webhooks";
 import { clearAuthToken, setAuthToken } from "../../auth/token";
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? "") as string;
@@ -58,7 +62,9 @@ describe("api/webhooks", () => {
       expect(result.events).toHaveLength(11);
       expect(result.events).toContain("task.created");
       expect(result.events).toContain("chat.message.sent");
-      expect(fetchMock.mock.calls[0][0]).toBe(`${API_BASE}/api/webhooks/events`);
+      expect(fetchMock.mock.calls[0][0]).toBe(
+        `${API_BASE}/api/webhooks/events`
+      );
     });
   });
 

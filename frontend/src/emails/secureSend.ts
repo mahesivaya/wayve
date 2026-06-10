@@ -27,7 +27,8 @@ const dec = new TextDecoder();
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.length; i++)
+    binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
 }
 
@@ -41,7 +42,7 @@ function base64ToBytes(b64: string): Uint8Array {
 async function deriveWrappingKey(
   passphrase: string,
   salt: Uint8Array,
-  iterations: number,
+  iterations: number
 ): Promise<CryptoKey> {
   // Import the raw passphrase bytes as PBKDF2 input material, then
   // derive an AES-GCM key. `false` makes the derived key
@@ -51,22 +52,22 @@ async function deriveWrappingKey(
     enc.encode(passphrase),
     { name: "PBKDF2" },
     false,
-    ["deriveKey"],
+    ["deriveKey"]
   );
   return crypto.subtle.deriveKey(
     { name: "PBKDF2", salt: salt.slice().buffer, iterations, hash: "SHA-256" },
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
-    ["encrypt", "decrypt"],
+    ["encrypt", "decrypt"]
   );
 }
 
 export type SecureSendBundle = {
   ciphertext: string; // base64 AES-GCM body
-  iv: string;         // base64 12-byte body nonce
+  iv: string; // base64 12-byte body nonce
   wrapped_key: string; // base64 AES-GCM(KEK)-wrapped DEK
-  salt: string;        // base64 16-byte PBKDF2 salt
+  salt: string; // base64 16-byte PBKDF2 salt
   pbkdf2_iterations: number;
 };
 
@@ -77,7 +78,7 @@ export type SecureSendBundle = {
  */
 export async function sealSecureMessage(
   plaintextBody: string,
-  passphrase: string,
+  passphrase: string
 ): Promise<SecureSendBundle> {
   if (passphrase.length < 6) {
     // PBKDF2 alone can't rescue a one-character passphrase. Forcing
@@ -104,7 +105,7 @@ export async function sealSecureMessage(
   const wrappedDek = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: wrapIv.slice().buffer },
     kek,
-    dek.slice().buffer,
+    dek.slice().buffer
   );
 
   // 4. Encrypt the body with the DEK + body nonce. Standard AES-GCM.
@@ -113,12 +114,12 @@ export async function sealSecureMessage(
     dek.slice().buffer,
     { name: "AES-GCM" },
     false,
-    ["encrypt"],
+    ["encrypt"]
   );
   const ciphertext = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: bodyIv.slice().buffer },
     dekCryptoKey,
-    enc.encode(plaintextBody).slice().buffer,
+    enc.encode(plaintextBody).slice().buffer
   );
 
   return {
@@ -151,7 +152,7 @@ export type ServerSecureMessage = {
  */
 export async function openSecureMessage(
   envelope: ServerSecureMessage,
-  passphrase: string,
+  passphrase: string
 ): Promise<string> {
   const salt = base64ToBytes(envelope.salt);
   const wrappedKeyBytes = base64ToBytes(envelope.wrapped_key);
@@ -165,7 +166,7 @@ export async function openSecureMessage(
   const kek = await deriveWrappingKey(
     passphrase,
     salt,
-    envelope.pbkdf2_iterations,
+    envelope.pbkdf2_iterations
   );
 
   let dekBytes: ArrayBuffer;
@@ -174,12 +175,12 @@ export async function openSecureMessage(
     dekBytes = await crypto.subtle.decrypt(
       { name: "AES-GCM", iv: wrapIv.slice().buffer },
       kek,
-      wrappedKeyBytes.slice().buffer,
+      wrappedKeyBytes.slice().buffer
     );
   } catch {
     // GCM auth-tag mismatch is the wrong-passphrase signal.
     throw new Error(
-      "Couldn't unlock this message. Double-check the passphrase the sender shared with you.",
+      "Couldn't unlock this message. Double-check the passphrase the sender shared with you."
     );
   }
 
@@ -188,20 +189,22 @@ export async function openSecureMessage(
     dekBytes,
     { name: "AES-GCM" },
     false,
-    ["decrypt"],
+    ["decrypt"]
   );
 
   try {
     const plaintextBytes = await crypto.subtle.decrypt(
       { name: "AES-GCM", iv: bodyIv.slice().buffer },
       dekCryptoKey,
-      ciphertext.slice().buffer,
+      ciphertext.slice().buffer
     );
     return dec.decode(plaintextBytes);
   } catch {
     // Should be impossible if the wrap step succeeded — but a tampered
     // ciphertext could still fail here. Surface a clean message rather
     // than the underlying DOMException.
-    throw new Error("Message body failed to decrypt — the ciphertext may be corrupted.");
+    throw new Error(
+      "Message body failed to decrypt — the ciphertext may be corrupted."
+    );
   }
 }

@@ -43,13 +43,13 @@ export type VisitRow = {
 };
 
 export async function listVisits(
-  filters: { limit?: number } = {},
+  filters: { limit?: number } = {}
 ): Promise<VisitRow[]> {
   const params = new URLSearchParams();
   if (filters.limit) params.set("limit", String(filters.limit));
   const query = params.toString();
   return apiFetchJson<VisitRow[]>(
     `/api/platform/visits${query ? `?${query}` : ""}`,
-    { preserve401: true },
+    { preserve401: true }
   );
 }

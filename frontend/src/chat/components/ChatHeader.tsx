@@ -48,7 +48,7 @@ export default function ChatHeader({
                 ? ` · ${[
                     ...selectedChannel.member_emails,
                     ...(selectedChannel.invite_emails ?? []).map(
-                      (email) => `${email} invited`,
+                      (email) => `${email} invited`
                     ),
                   ].join(", ")}`
                 : selectedChannel.join_status === "pending"

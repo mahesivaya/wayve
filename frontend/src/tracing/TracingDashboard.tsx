@@ -51,7 +51,9 @@ export default function TracingDashboard() {
     try {
       setData(await getTracingOverview(levelFilter || undefined));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load tracing data");
+      setError(
+        err instanceof Error ? err.message : "Failed to load tracing data"
+      );
     } finally {
       setLoading(false);
     }
@@ -62,9 +64,8 @@ export default function TracingDashboard() {
   }, [load]);
 
   const timeline = useMemo(
-    () =>
-      (data?.timeline ?? []).map((p) => ({ ...p, label: hhmm(p.t) })),
-    [data],
+    () => (data?.timeline ?? []).map((p) => ({ ...p, label: hhmm(p.t) })),
+    [data]
   );
 
   if (!isOwner) return <Navigate to="/home" replace />;
@@ -120,10 +121,15 @@ export default function TracingDashboard() {
       <section className="trace-panel">
         <h2>Log volume over time</h2>
         {timeline.length === 0 ? (
-          <div className="trace-empty">No timestamped events in the recent log window.</div>
+          <div className="trace-empty">
+            No timestamped events in the recent log window.
+          </div>
         ) : (
           <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={timeline} margin={{ top: 8, right: 16, bottom: 0, left: -16 }}>
+            <AreaChart
+              data={timeline}
+              margin={{ top: 8, right: 16, bottom: 0, left: -16 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
               <XAxis dataKey="label" fontSize={11} minTickGap={24} />
               <YAxis fontSize={11} allowDecimals={false} />
@@ -150,15 +156,27 @@ export default function TracingDashboard() {
         {(data?.top_targets ?? []).length === 0 ? (
           <div className="trace-empty">No data.</div>
         ) : (
-          <ResponsiveContainer width="100%" height={Math.max(160, (data?.top_targets.length ?? 0) * 26)}>
+          <ResponsiveContainer
+            width="100%"
+            height={Math.max(160, (data?.top_targets.length ?? 0) * 26)}
+          >
             <BarChart
               layout="vertical"
               data={data?.top_targets ?? []}
               margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={false} />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#eee"
+                horizontal={false}
+              />
               <XAxis type="number" fontSize={11} allowDecimals={false} />
-              <YAxis type="category" dataKey="target" width={180} fontSize={11} />
+              <YAxis
+                type="category"
+                dataKey="target"
+                width={180}
+                fontSize={11}
+              />
               <Tooltip />
               <Bar dataKey="count" fill="#2563eb" radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -169,7 +187,9 @@ export default function TracingDashboard() {
       <section className="trace-panel">
         <h2>Slowest spans</h2>
         {(data?.slowest ?? []).length === 0 ? (
-          <div className="trace-empty">No span timings in the recent window.</div>
+          <div className="trace-empty">
+            No span timings in the recent window.
+          </div>
         ) : (
           <div className="trace-table-wrap trace-table-scroll">
             <table className="trace-table">

@@ -51,7 +51,8 @@ export default function CallOverlays({ session }: Props) {
           <div className="call-banner-text">
             <strong>Calling {callState.peerEmail}…</strong>
             <span>
-              {callState.media === "video" ? "Video" : "Audio"} call · waiting for answer
+              {callState.media === "video" ? "Video" : "Audio"} call · waiting
+              for answer
             </span>
           </div>
           <button className="call-btn call-btn-reject" onClick={endCall}>

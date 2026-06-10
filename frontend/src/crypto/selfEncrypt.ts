@@ -46,7 +46,10 @@ async function importOwnPublicKey(userId: number): Promise<CryptoKey> {
  * envelope string suitable for storing in the notes/title columns
  * verbatim. Decrypt later with `decryptForSelf`.
  */
-export async function encryptForSelf(plaintext: string, userId: number): Promise<string> {
+export async function encryptForSelf(
+  plaintext: string,
+  userId: number
+): Promise<string> {
   if (plaintext.length === 0) {
     // Don't waste an AES key on empty strings — and an empty-string
     // envelope would be visually indistinguishable from an empty cell.
@@ -101,7 +104,10 @@ export function isSelfEncrypted(value: string | null | undefined): boolean {
  * string the UI can render directly rather than throwing — losing one
  * note shouldn't crash the whole list.
  */
-export async function decryptForSelf(value: string, userId: number): Promise<string> {
+export async function decryptForSelf(
+  value: string,
+  userId: number
+): Promise<string> {
   if (!isSelfEncrypted(value)) return value;
 
   let envelope: SelfEnvelope;

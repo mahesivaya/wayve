@@ -35,7 +35,7 @@ function isThemeChoice(value: unknown): value is ThemeChoice {
 // Parse a stored blob (from localStorage or the backend `theme_json`) into the
 // v2 shape, migrating v1 (a bare ThemeChoice) and tolerating garbage.
 export function parsePersisted(
-  json: string | null | undefined,
+  json: string | null | undefined
 ): PersistedTheme | null {
   if (!json) return null;
   try {
@@ -52,13 +52,10 @@ export function parsePersisted(
               (t) =>
                 t &&
                 typeof t === "object" &&
-                typeof (t as SavedTheme).id === "string",
+                typeof (t as SavedTheme).id === "string"
             ) as SavedTheme[])
           : [],
-        ui:
-          obj.ui && typeof obj.ui === "object"
-            ? (obj.ui as UiOverrides)
-            : {},
+        ui: obj.ui && typeof obj.ui === "object" ? (obj.ui as UiOverrides) : {},
       };
     }
 

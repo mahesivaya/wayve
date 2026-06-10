@@ -282,13 +282,17 @@ function groupRunsByWorkflow(runs: WorkflowRun[]): WorkflowGroup[] {
   return Array.from(buckets.entries())
     .map(([name, list]): WorkflowGroup => {
       const sorted = [...list].sort((a, b) =>
-        (b.updated_at ?? b.created_at).localeCompare(a.updated_at ?? a.created_at),
+        (b.updated_at ?? b.created_at).localeCompare(
+          a.updated_at ?? a.created_at
+        )
       );
       const latest = sorted[0];
       const rollupState = latest?.conclusion ?? latest?.status ?? "unknown";
       return { name, runs: sorted, rollupState };
     })
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    .sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
 }
 
 function statusLabel(run: WorkflowRun): string {
@@ -332,7 +336,13 @@ function StatusIcon({ state }: { state: string }) {
   switch (state) {
     case "success":
       return (
-        <svg className={cls} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <svg
+          className={cls}
+          viewBox="0 0 16 16"
+          width="16"
+          height="16"
+          aria-hidden="true"
+        >
           <circle cx="8" cy="8" r="7.25" fill="currentColor" />
           <path
             fill="none"
@@ -348,7 +358,13 @@ function StatusIcon({ state }: { state: string }) {
     case "timed_out":
     case "startup_failure":
       return (
-        <svg className={cls} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <svg
+          className={cls}
+          viewBox="0 0 16 16"
+          width="16"
+          height="16"
+          aria-hidden="true"
+        >
           <circle cx="8" cy="8" r="7.25" fill="currentColor" />
           <path
             fill="none"
@@ -361,24 +377,72 @@ function StatusIcon({ state }: { state: string }) {
       );
     case "cancelled":
       return (
-        <svg className={cls} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          <circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <line x1="4.5" y1="4.5" x2="11.5" y2="11.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <svg
+          className={cls}
+          viewBox="0 0 16 16"
+          width="16"
+          height="16"
+          aria-hidden="true"
+        >
+          <circle
+            cx="8"
+            cy="8"
+            r="6.75"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+          />
+          <line
+            x1="4.5"
+            y1="4.5"
+            x2="11.5"
+            y2="11.5"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
         </svg>
       );
     case "skipped":
     case "neutral":
       return (
-        <svg className={cls} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          <circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <line x1="4.5" y1="11.5" x2="11.5" y2="4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <svg
+          className={cls}
+          viewBox="0 0 16 16"
+          width="16"
+          height="16"
+          aria-hidden="true"
+        >
+          <circle
+            cx="8"
+            cy="8"
+            r="6.75"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+          />
+          <line
+            x1="4.5"
+            y1="11.5"
+            x2="11.5"
+            y2="4.5"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
         </svg>
       );
     case "in_progress":
     case "waiting":
     case "requested":
       return (
-        <svg className={`${cls} is-spinning`} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <svg
+          className={`${cls} is-spinning`}
+          viewBox="0 0 16 16"
+          width="16"
+          height="16"
+          aria-hidden="true"
+        >
           <circle
             cx="8"
             cy="8"
@@ -395,8 +459,21 @@ function StatusIcon({ state }: { state: string }) {
     case "pending":
     default:
       return (
-        <svg className={cls} viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <svg
+          className={cls}
+          viewBox="0 0 16 16"
+          width="16"
+          height="16"
+          aria-hidden="true"
+        >
+          <circle
+            cx="8"
+            cy="8"
+            r="6.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+          />
         </svg>
       );
   }
@@ -421,7 +498,9 @@ async function githubJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function isContentList(value: ContentItem | ContentItem[]): value is ContentItem[] {
+function isContentList(
+  value: ContentItem | ContentItem[]
+): value is ContentItem[] {
   return Array.isArray(value);
 }
 
@@ -438,7 +517,10 @@ export default function GitHubRepo() {
   useEffect(() => {
     if (!branchMenuOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (branchMenuRef.current && !branchMenuRef.current.contains(e.target as Node)) {
+      if (
+        branchMenuRef.current &&
+        !branchMenuRef.current.contains(e.target as Node)
+      ) {
         setBranchMenuOpen(false);
       }
     };
@@ -468,24 +550,40 @@ export default function GitHubRepo() {
   // is expanded. Cached by SHA so toggling open → closed → open doesn't
   // re-hit GitHub. Aux maps track which commits are expanded, currently
   // loading, or have an error to surface inline.
-  const [expandedCommitShas, setExpandedCommitShas] = useState<Set<string>>(new Set());
-  const [commitDetailBySha, setCommitDetailBySha] = useState<Record<string, CommitDetail>>({});
-  const [loadingCommitShas, setLoadingCommitShas] = useState<Set<string>>(new Set());
-  const [errorByCommitSha, setErrorByCommitSha] = useState<Record<string, string>>({});
+  const [expandedCommitShas, setExpandedCommitShas] = useState<Set<string>>(
+    new Set()
+  );
+  const [commitDetailBySha, setCommitDetailBySha] = useState<
+    Record<string, CommitDetail>
+  >({});
+  const [loadingCommitShas, setLoadingCommitShas] = useState<Set<string>>(
+    new Set()
+  );
+  const [errorByCommitSha, setErrorByCommitSha] = useState<
+    Record<string, string>
+  >({});
   // Raw unified-diff text fetched on demand via the proxy's
   // `?media=diff` opt-in. This is the fallback for commits where the
   // JSON `files[].patch` is missing (GitHub truncates patches over
   // ~300 KB or for binary-adjacent files). Keyed by SHA so re-opening
   // the same commit's full diff is instant.
-  const [fullDiffBySha, setFullDiffBySha] = useState<Record<string, string>>({});
-  const [loadingFullDiffShas, setLoadingFullDiffShas] = useState<Set<string>>(new Set());
-  const [errorFullDiffBySha, setErrorFullDiffBySha] = useState<Record<string, string>>({});
+  const [fullDiffBySha, setFullDiffBySha] = useState<Record<string, string>>(
+    {}
+  );
+  const [loadingFullDiffShas, setLoadingFullDiffShas] = useState<Set<string>>(
+    new Set()
+  );
+  const [errorFullDiffBySha, setErrorFullDiffBySha] = useState<
+    Record<string, string>
+  >({});
   const [workflows, setWorkflows] = useState<ContentItem[]>([]);
   // Which workflow rows in the Actions tree are expanded. Defaults to
   // empty so every workflow starts collapsed — users can expand the ones
   // they care about. State key is the workflow name (display name from
   // the workflow_run.name field).
-  const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(new Set());
+  const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(
+    new Set()
+  );
   // When the user clicks a run inside the Actions tree we fetch its
   // jobs + steps and render them INLINE beneath the run row — mirroring
   // GitHub's run detail page (jobs as cards, steps as a checklist
@@ -568,7 +666,9 @@ export default function GitHubRepo() {
       // Runs are fetched by the branch-driven effect below (so the list
       // re-filters when the user switches branches).
     } catch (err) {
-      setError(err instanceof Error ? err.message : "GitHub data failed to load");
+      setError(
+        err instanceof Error ? err.message : "GitHub data failed to load"
+      );
     } finally {
       setLoading(false);
     }
@@ -584,86 +684,90 @@ export default function GitHubRepo() {
    * `append` means we're paging through history (preserves runs
    * already loaded); otherwise the result REPLACES the list.
    */
-  const loadRuns = useCallback(
-    async (page: number, append: boolean) => {
-      if (append) setRunsLoadingMore(true);
-      // Clear any stale banner from a previous attempt so a successful
-      // retry doesn't leave the error visible. The other loaders
-      // (loadRepo, loadDirectory) already do this; loadRuns was the
-      // outlier and caused the 404 banner to stick across page state.
-      setError("");
-      try {
-        const url =
-          `${API_BASE}/actions/runs` +
-          `?per_page=${RUNS_PER_PAGE}` +
-          `&page=${page}`;
-        const data = await githubJson<RunsResponse>(url);
-        setRunsTotal(data.total_count ?? 0);
-        setRunsPage(page);
-        setRuns((current) =>
-          append ? [...current, ...data.workflow_runs] : data.workflow_runs,
-        );
-        if (!append) {
-          // Default every workflow group to expanded so the Actions
-          // panel reads as a flat run list out-of-the-box — matches
-          // GitHub's own /actions view. The user can still collapse a
-          // workflow they want to hide; that state survives "Load more"
-          // because we only seed the set on replace, not on append.
-          const names = new Set(
-            data.workflow_runs.map((run) => run.name?.trim() || "Workflow"),
-          );
-          setExpandedWorkflows(names);
-        }
-      } catch (err) {
-        // Surface the error but don't blow up the rest of the page —
-        // the user still has files / commits / workflows on screen.
-        setError(
-          err instanceof Error ? err.message : "Action runs failed to load",
-        );
-        if (!append) {
-          setRuns([]);
-          setRunsTotal(0);
-        }
-      } finally {
-        setRunsLoadingMore(false);
-      }
-    },
-    [],
-  );
-
-  const loadDirectory = useCallback(async (nextPath: string, nextBranch: string) => {
+  const loadRuns = useCallback(async (page: number, append: boolean) => {
+    if (append) setRunsLoadingMore(true);
+    // Clear any stale banner from a previous attempt so a successful
+    // retry doesn't leave the error visible. The other loaders
+    // (loadRepo, loadDirectory) already do this; loadRuns was the
+    // outlier and caused the 404 banner to stick across page state.
     setError("");
-    setLoadingPaths((current) => new Set(current).add(nextPath));
     try {
-      const encodedPath = nextPath
-        .split("/")
-        .filter(Boolean)
-        .map(encodeURIComponent)
-        .join("/");
-      const contentPath = encodedPath ? `/${encodedPath}` : "";
-      const url = `${API_BASE}/contents${contentPath}?ref=${encodeURIComponent(nextBranch)}`;
-      const data = await githubJson<ContentItem | ContentItem[]>(url);
-      setTreeItems((current) => ({
-        ...current,
-        [nextPath]: isContentList(data) ? data : [data],
-      }));
+      const url =
+        `${API_BASE}/actions/runs` +
+        `?per_page=${RUNS_PER_PAGE}` +
+        `&page=${page}`;
+      const data = await githubJson<RunsResponse>(url);
+      setRunsTotal(data.total_count ?? 0);
+      setRunsPage(page);
+      setRuns((current) =>
+        append ? [...current, ...data.workflow_runs] : data.workflow_runs
+      );
+      if (!append) {
+        // Default every workflow group to expanded so the Actions
+        // panel reads as a flat run list out-of-the-box — matches
+        // GitHub's own /actions view. The user can still collapse a
+        // workflow they want to hide; that state survives "Load more"
+        // because we only seed the set on replace, not on append.
+        const names = new Set(
+          data.workflow_runs.map((run) => run.name?.trim() || "Workflow")
+        );
+        setExpandedWorkflows(names);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Directory failed to load");
+      // Surface the error but don't blow up the rest of the page —
+      // the user still has files / commits / workflows on screen.
+      setError(
+        err instanceof Error ? err.message : "Action runs failed to load"
+      );
+      if (!append) {
+        setRuns([]);
+        setRunsTotal(0);
+      }
     } finally {
-      setLoadingPaths((current) => {
-        const next = new Set(current);
-        next.delete(nextPath);
-        return next;
-      });
+      setRunsLoadingMore(false);
     }
   }, []);
+
+  const loadDirectory = useCallback(
+    async (nextPath: string, nextBranch: string) => {
+      setError("");
+      setLoadingPaths((current) => new Set(current).add(nextPath));
+      try {
+        const encodedPath = nextPath
+          .split("/")
+          .filter(Boolean)
+          .map(encodeURIComponent)
+          .join("/");
+        const contentPath = encodedPath ? `/${encodedPath}` : "";
+        const url = `${API_BASE}/contents${contentPath}?ref=${encodeURIComponent(nextBranch)}`;
+        const data = await githubJson<ContentItem | ContentItem[]>(url);
+        setTreeItems((current) => ({
+          ...current,
+          [nextPath]: isContentList(data) ? data : [data],
+        }));
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Directory failed to load"
+        );
+      } finally {
+        setLoadingPaths((current) => {
+          const next = new Set(current);
+          next.delete(nextPath);
+          return next;
+        });
+      }
+    },
+    []
+  );
 
   const loadWorkflows = useCallback(async (nextBranch: string) => {
     try {
       const data = await githubJson<ContentItem | ContentItem[]>(
-        `${API_BASE}/contents/.github/workflows?ref=${encodeURIComponent(nextBranch)}`,
+        `${API_BASE}/contents/.github/workflows?ref=${encodeURIComponent(nextBranch)}`
       );
-      setWorkflows(isContentList(data) ? data.filter((item) => item.type === "file") : []);
+      setWorkflows(
+        isContentList(data) ? data.filter((item) => item.type === "file") : []
+      );
     } catch {
       setWorkflows([]);
     }
@@ -678,7 +782,7 @@ export default function GitHubRepo() {
     setReadmeLoading(true);
     try {
       const data = await githubJson<ContentItem | ContentItem[]>(
-        `${API_BASE}/contents/README.md?ref=${encodeURIComponent(nextBranch)}`,
+        `${API_BASE}/contents/README.md?ref=${encodeURIComponent(nextBranch)}`
       );
       const item = isContentList(data) ? data[0] : data;
       if (!item?.download_url) {
@@ -686,7 +790,8 @@ export default function GitHubRepo() {
         return;
       }
       const response = await fetch(item.download_url);
-      if (!response.ok) throw new Error(`README request failed (${response.status})`);
+      if (!response.ok)
+        throw new Error(`README request failed (${response.status})`);
       const text = await response.text();
       setReadme(text.slice(0, 60000));
     } catch {
@@ -699,7 +804,7 @@ export default function GitHubRepo() {
   const loadCommits = useCallback(async (nextBranch: string) => {
     try {
       const data = await githubJson<CommitItem[]>(
-        `${API_BASE}/commits?sha=${encodeURIComponent(nextBranch)}&per_page=8`,
+        `${API_BASE}/commits?sha=${encodeURIComponent(nextBranch)}&per_page=8`
       );
       setCommits(data);
     } catch {
@@ -736,7 +841,7 @@ export default function GitHubRepo() {
       });
       try {
         const data = await githubJson<CommitDetail>(
-          `${API_BASE}/commits/${encodeURIComponent(sha)}`,
+          `${API_BASE}/commits/${encodeURIComponent(sha)}`
         );
         setCommitDetailBySha((current) => ({ ...current, [sha]: data }));
       } catch (err) {
@@ -753,96 +858,103 @@ export default function GitHubRepo() {
         });
       }
     },
-    [commitDetailBySha],
+    [commitDetailBySha]
   );
 
   // Fetch the raw unified diff for a commit through the proxy's
   // `?media=diff` opt-in. Used when the JSON detail returned
   // `files[]` without a `patch` (large text files, >300 KB). Cached by
   // SHA so re-opening the full diff is instant.
-  const loadFullDiff = useCallback(async (sha: string) => {
-    if (fullDiffBySha[sha]) return;
-    setLoadingFullDiffShas((current) => new Set(current).add(sha));
-    setErrorFullDiffBySha((current) => {
-      const next = { ...current };
-      delete next[sha];
-      return next;
-    });
-    try {
-      const response = await fetch(
-        `${API_BASE}/commits/${encodeURIComponent(sha)}?media=diff`,
-        { credentials: "include" },
-      );
-      if (!response.ok) {
-        throw new Error(`GitHub diff failed (${response.status})`);
-      }
-      const text = await response.text();
-      // Cap at ~2 MB so a runaway commit can't blow the browser tab —
-      // GitHub itself caps the raw diff endpoint at a similar size.
-      const capped =
-        text.length > 2_000_000
-          ? `${text.slice(0, 2_000_000)}\n\n…diff truncated; open on GitHub for the full patch`
-          : text;
-      setFullDiffBySha((current) => ({ ...current, [sha]: capped }));
-    } catch (err) {
-      setErrorFullDiffBySha((current) => ({
-        ...current,
-        [sha]: err instanceof Error ? err.message : "Could not load full diff",
-      }));
-    } finally {
-      setLoadingFullDiffShas((current) => {
-        const next = new Set(current);
-        next.delete(sha);
+  const loadFullDiff = useCallback(
+    async (sha: string) => {
+      if (fullDiffBySha[sha]) return;
+      setLoadingFullDiffShas((current) => new Set(current).add(sha));
+      setErrorFullDiffBySha((current) => {
+        const next = { ...current };
+        delete next[sha];
         return next;
       });
-    }
-  }, [fullDiffBySha]);
+      try {
+        const response = await fetch(
+          `${API_BASE}/commits/${encodeURIComponent(sha)}?media=diff`,
+          { credentials: "include" }
+        );
+        if (!response.ok) {
+          throw new Error(`GitHub diff failed (${response.status})`);
+        }
+        const text = await response.text();
+        // Cap at ~2 MB so a runaway commit can't blow the browser tab —
+        // GitHub itself caps the raw diff endpoint at a similar size.
+        const capped =
+          text.length > 2_000_000
+            ? `${text.slice(0, 2_000_000)}\n\n…diff truncated; open on GitHub for the full patch`
+            : text;
+        setFullDiffBySha((current) => ({ ...current, [sha]: capped }));
+      } catch (err) {
+        setErrorFullDiffBySha((current) => ({
+          ...current,
+          [sha]:
+            err instanceof Error ? err.message : "Could not load full diff",
+        }));
+      } finally {
+        setLoadingFullDiffShas((current) => {
+          const next = new Set(current);
+          next.delete(sha);
+          return next;
+        });
+      }
+    },
+    [fullDiffBySha]
+  );
 
   // Toggle the run-detail flow inline. First open also fetches the
   // jobs (with steps embedded) and caches them keyed by run id so
   // re-toggling the same run doesn't re-hit GitHub's API.
-  const toggleRunFlow = useCallback(async (run: WorkflowRun) => {
-    let opened = false;
-    setExpandedRunIds((current) => {
-      const next = new Set(current);
-      if (next.has(run.id)) {
-        next.delete(run.id);
-      } else {
-        next.add(run.id);
-        opened = true;
-      }
-      return next;
-    });
-    if (!opened) return;
-    // If we've already fetched jobs for this run, the cached entry is
-    // good enough — collapse + re-expand should feel instant.
-    if (jobsByRunId[run.id]) return;
-
-    setLoadingRunIds((current) => new Set(current).add(run.id));
-    setErrorByRunId((current) => {
-      const next = { ...current };
-      delete next[run.id];
-      return next;
-    });
-    try {
-      const data = await githubJson<JobsResponse>(
-        `${API_BASE}/actions/runs/${run.id}/jobs?per_page=100`,
-      );
-      setJobsByRunId((current) => ({ ...current, [run.id]: data.jobs }));
-    } catch (err) {
-      setErrorByRunId((current) => ({
-        ...current,
-        [run.id]:
-          err instanceof Error ? err.message : "Could not load run details",
-      }));
-    } finally {
-      setLoadingRunIds((current) => {
+  const toggleRunFlow = useCallback(
+    async (run: WorkflowRun) => {
+      let opened = false;
+      setExpandedRunIds((current) => {
         const next = new Set(current);
-        next.delete(run.id);
+        if (next.has(run.id)) {
+          next.delete(run.id);
+        } else {
+          next.add(run.id);
+          opened = true;
+        }
         return next;
       });
-    }
-  }, [jobsByRunId]);
+      if (!opened) return;
+      // If we've already fetched jobs for this run, the cached entry is
+      // good enough — collapse + re-expand should feel instant.
+      if (jobsByRunId[run.id]) return;
+
+      setLoadingRunIds((current) => new Set(current).add(run.id));
+      setErrorByRunId((current) => {
+        const next = { ...current };
+        delete next[run.id];
+        return next;
+      });
+      try {
+        const data = await githubJson<JobsResponse>(
+          `${API_BASE}/actions/runs/${run.id}/jobs?per_page=100`
+        );
+        setJobsByRunId((current) => ({ ...current, [run.id]: data.jobs }));
+      } catch (err) {
+        setErrorByRunId((current) => ({
+          ...current,
+          [run.id]:
+            err instanceof Error ? err.message : "Could not load run details",
+        }));
+      } finally {
+        setLoadingRunIds((current) => {
+          const next = new Set(current);
+          next.delete(run.id);
+          return next;
+        });
+      }
+    },
+    [jobsByRunId]
+  );
 
   useEffect(() => {
     void loadRepo();
@@ -881,7 +993,8 @@ export default function GitHubRepo() {
     setFileLoading(true);
     try {
       const response = await fetch(item.download_url);
-      if (!response.ok) throw new Error(`File request failed (${response.status})`);
+      if (!response.ok)
+        throw new Error(`File request failed (${response.status})`);
       const text = await response.text();
       setFileText(text.slice(0, 60000));
     } catch (err) {
@@ -933,7 +1046,10 @@ export default function GitHubRepo() {
               }
             }}
           >
-            <span className={`github-tree-toggle ${isExpanded ? "open" : ""}`} aria-hidden="true">
+            <span
+              className={`github-tree-toggle ${isExpanded ? "open" : ""}`}
+              aria-hidden="true"
+            >
               {isDirectory ? <ChevronIcon /> : null}
             </span>
             <span className="github-file-kind" aria-hidden="true">
@@ -959,7 +1075,9 @@ export default function GitHubRepo() {
   }
 
   if (loading) {
-    return <div className="github-page github-loading">Loading GitHub repo...</div>;
+    return (
+      <div className="github-page github-loading">Loading GitHub repo...</div>
+    );
   }
 
   return (
@@ -1003,9 +1121,17 @@ export default function GitHubRepo() {
                 </span>
               </button>
               {branchMenuOpen && (
-                <ul className="github-branch-menu" role="listbox" aria-label="Branches">
+                <ul
+                  className="github-branch-menu"
+                  role="listbox"
+                  aria-label="Branches"
+                >
                   {branches.map((item) => (
-                    <li key={item.name} role="option" aria-selected={item.name === branch}>
+                    <li
+                      key={item.name}
+                      role="option"
+                      aria-selected={item.name === branch}
+                    >
                       <button
                         type="button"
                         className={`github-branch-option ${item.name === branch ? "active" : ""}`}
@@ -1029,7 +1155,9 @@ export default function GitHubRepo() {
               className={`github-sidebar-link ${activeSection === "description" ? "active" : ""}`}
               onClick={() => setActiveSection("description")}
             >
-              <span className="github-sidebar-icon" aria-hidden="true">📖</span>
+              <span className="github-sidebar-icon" aria-hidden="true">
+                📖
+              </span>
               <span className="github-sidebar-label">Description</span>
             </button>
             <button
@@ -1037,36 +1165,44 @@ export default function GitHubRepo() {
               className={`github-sidebar-link ${activeSection === "files" ? "active" : ""}`}
               onClick={() => setActiveSection("files")}
             >
-              <span className="github-sidebar-icon" aria-hidden="true">📁</span>
+              <span className="github-sidebar-icon" aria-hidden="true">
+                📁
+              </span>
               <span className="github-sidebar-label">Files</span>
             </button>
-          <button
-            type="button"
-            className={`github-sidebar-link ${activeSection === "workflows" ? "active" : ""}`}
-            onClick={() => setActiveSection("workflows")}
-          >
-            <span className="github-sidebar-icon" aria-hidden="true">⚙️</span>
-            <span className="github-sidebar-label">Workflows</span>
-            <span className="github-sidebar-count">{workflows.length}</span>
-          </button>
-          <button
-            type="button"
-            className={`github-sidebar-link ${activeSection === "commits" ? "active" : ""}`}
-            onClick={() => setActiveSection("commits")}
-          >
-            <span className="github-sidebar-icon" aria-hidden="true">📝</span>
-            <span className="github-sidebar-label">Commits</span>
-            <span className="github-sidebar-count">{commits.length}</span>
-          </button>
-          <button
-            type="button"
-            className={`github-sidebar-link ${activeSection === "actions" ? "active" : ""}`}
-            onClick={() => setActiveSection("actions")}
-          >
-            <span className="github-sidebar-icon" aria-hidden="true">▶</span>
-            <span className="github-sidebar-label">Actions</span>
-            <span className="github-sidebar-count">{runs.length}</span>
-          </button>
+            <button
+              type="button"
+              className={`github-sidebar-link ${activeSection === "workflows" ? "active" : ""}`}
+              onClick={() => setActiveSection("workflows")}
+            >
+              <span className="github-sidebar-icon" aria-hidden="true">
+                ⚙️
+              </span>
+              <span className="github-sidebar-label">Workflows</span>
+              <span className="github-sidebar-count">{workflows.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`github-sidebar-link ${activeSection === "commits" ? "active" : ""}`}
+              onClick={() => setActiveSection("commits")}
+            >
+              <span className="github-sidebar-icon" aria-hidden="true">
+                📝
+              </span>
+              <span className="github-sidebar-label">Commits</span>
+              <span className="github-sidebar-count">{commits.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`github-sidebar-link ${activeSection === "actions" ? "active" : ""}`}
+              onClick={() => setActiveSection("actions")}
+            >
+              <span className="github-sidebar-icon" aria-hidden="true">
+                ▶
+              </span>
+              <span className="github-sidebar-label">Actions</span>
+              <span className="github-sidebar-count">{runs.length}</span>
+            </button>
           </div>
         </aside>
 
@@ -1075,13 +1211,18 @@ export default function GitHubRepo() {
             because file browsing benefits from both being visible. */}
         <div className="github-content">
           {activeSection === "description" && (
-            <main className="github-description" aria-label="Project description">
+            <main
+              className="github-description"
+              aria-label="Project description"
+            >
               <section className="github-browser">
                 <div className="github-panel-head">
                   <h2>{repo?.full_name ?? "Description"}</h2>
                   {repo?.visibility && (
                     <span className="github-panel-head-trail">
-                      <span className="github-visibility-chip">{repo.visibility}</span>
+                      <span className="github-visibility-chip">
+                        {repo.visibility}
+                      </span>
                     </span>
                   )}
                 </div>
@@ -1096,7 +1237,9 @@ export default function GitHubRepo() {
                     <span>★ {repo.stargazers_count}</span>
                     <span>{repo.forks_count} forks</span>
                     <span>{repo.open_issues_count} open issues</span>
-                    <span>updated {new Date(repo.updated_at).toLocaleDateString()}</span>
+                    <span>
+                      updated {new Date(repo.updated_at).toLocaleDateString()}
+                    </span>
                   </div>
                 )}
 
@@ -1148,9 +1291,10 @@ export default function GitHubRepo() {
                 </div>
                 <div className="github-file-list">
                   {renderTree()}
-                  {!loadingPaths.has("") && (treeItems[""] ?? []).length === 0 && (
-                    <div className="github-empty">No files found.</div>
-                  )}
+                  {!loadingPaths.has("") &&
+                    (treeItems[""] ?? []).length === 0 && (
+                      <div className="github-empty">No files found.</div>
+                    )}
                 </div>
               </section>
 
@@ -1200,18 +1344,20 @@ export default function GitHubRepo() {
                 <h2>Workflows</h2>
                 <span>{workflows.length}</span>
               </div>
-          {workflows.map((workflow) => (
-            <button
-              key={workflow.path}
-              type="button"
-              className="github-workflow"
-              onClick={() => void openFile(workflow)}
-            >
-              <span>{workflow.name}</span>
-              <small>{formatSize(workflow.size)}</small>
-            </button>
-          ))}
-              {workflows.length === 0 && <div className="github-empty">No workflows found.</div>}
+              {workflows.map((workflow) => (
+                <button
+                  key={workflow.path}
+                  type="button"
+                  className="github-workflow"
+                  onClick={() => void openFile(workflow)}
+                >
+                  <span>{workflow.name}</span>
+                  <small>{formatSize(workflow.size)}</small>
+                </button>
+              ))}
+              {workflows.length === 0 && (
+                <div className="github-empty">No workflows found.</div>
+              )}
             </div>
           )}
 
@@ -1245,7 +1391,9 @@ export default function GitHubRepo() {
                         <span className="github-commit-main">
                           <strong>{firstLine(commit.commit.message)}</strong>
                           <small>
-                            {(commit.author?.login ?? commit.commit.author?.name ?? "Unknown")}
+                            {commit.author?.login ??
+                              commit.commit.author?.name ??
+                              "Unknown"}
                             {" · "}
                             {commit.commit.author
                               ? formatDate(commit.commit.author.date)
@@ -1255,8 +1403,7 @@ export default function GitHubRepo() {
                                 {" · "}
                                 <span className="github-commit-stat is-add">
                                   +{detail.stats.additions}
-                                </span>
-                                {" "}
+                                </span>{" "}
                                 <span className="github-commit-stat is-del">
                                   −{detail.stats.deletions}
                                 </span>
@@ -1301,7 +1448,9 @@ export default function GitHubRepo() {
                                       : file.filename}
                                   </span>
                                   <span className="github-commit-file-meta">
-                                    <em className={`github-commit-status status-${file.status}`}>
+                                    <em
+                                      className={`github-commit-status status-${file.status}`}
+                                    >
                                       {file.status}
                                     </em>
                                     <span className="github-commit-stat is-add">
@@ -1316,10 +1465,17 @@ export default function GitHubRepo() {
                                   <pre className="github-commit-patch">
                                     {file.patch.split("\n").map((line, idx) => {
                                       let cls = "diff-ctx";
-                                      if (line.startsWith("@@")) cls = "diff-hunk";
-                                      else if (line.startsWith("+") && !line.startsWith("+++"))
+                                      if (line.startsWith("@@"))
+                                        cls = "diff-hunk";
+                                      else if (
+                                        line.startsWith("+") &&
+                                        !line.startsWith("+++")
+                                      )
                                         cls = "diff-add";
-                                      else if (line.startsWith("-") && !line.startsWith("---"))
+                                      else if (
+                                        line.startsWith("-") &&
+                                        !line.startsWith("---")
+                                      )
                                         cls = "diff-del";
                                       return (
                                         <span
@@ -1333,8 +1489,8 @@ export default function GitHubRepo() {
                                   </pre>
                                 ) : (
                                   <div className="github-commit-nopatch">
-                                    Binary file or diff not available — open on GitHub to
-                                    view.
+                                    Binary file or diff not available — open on
+                                    GitHub to view.
                                   </div>
                                 )}
                               </article>
@@ -1356,10 +1512,12 @@ export default function GitHubRepo() {
                                 (file) =>
                                   !file.patch &&
                                   file.status !== "added" &&
-                                  file.status !== "removed",
+                                  file.status !== "removed"
                               );
                               const rawDiff = fullDiffBySha[commit.sha];
-                              const fullLoading = loadingFullDiffShas.has(commit.sha);
+                              const fullLoading = loadingFullDiffShas.has(
+                                commit.sha
+                              );
                               const fullError = errorFullDiffBySha[commit.sha];
                               if (!hasMissingPatch && !rawDiff) return null;
                               return (
@@ -1368,7 +1526,9 @@ export default function GitHubRepo() {
                                     <button
                                       type="button"
                                       className="github-commit-fulldiff-btn"
-                                      onClick={() => void loadFullDiff(commit.sha)}
+                                      onClick={() =>
+                                        void loadFullDiff(commit.sha)
+                                      }
                                       disabled={fullLoading}
                                     >
                                       {fullLoading
@@ -1377,7 +1537,9 @@ export default function GitHubRepo() {
                                     </button>
                                   )}
                                   {fullError && (
-                                    <div className="github-banner">{fullError}</div>
+                                    <div className="github-banner">
+                                      {fullError}
+                                    </div>
                                   )}
                                   {rawDiff && (
                                     <pre className="github-commit-patch is-full">
@@ -1385,7 +1547,8 @@ export default function GitHubRepo() {
                                         let cls = "diff-ctx";
                                         if (line.startsWith("diff --git"))
                                           cls = "diff-file";
-                                        else if (line.startsWith("@@")) cls = "diff-hunk";
+                                        else if (line.startsWith("@@"))
+                                          cls = "diff-hunk";
                                         else if (
                                           line.startsWith("+++") ||
                                           line.startsWith("---")
@@ -1422,7 +1585,9 @@ export default function GitHubRepo() {
                   </div>
                 );
               })}
-              {commits.length === 0 && <div className="github-empty">No commits found.</div>}
+              {commits.length === 0 && (
+                <div className="github-empty">No commits found.</div>
+              )}
             </div>
           )}
 
@@ -1446,7 +1611,7 @@ export default function GitHubRepo() {
                 </span>
               </div>
 
-          {/* Tree view of workflow runs:
+              {/* Tree view of workflow runs:
                 Workflow ──▸ (chevron toggles)
                    ├─ ● run #N · branch · 5m ago        success
                    ├─ ● run #M · branch · 1h ago        failure
@@ -1454,211 +1619,259 @@ export default function GitHubRepo() {
               The rollup colored dot on the workflow row mirrors the
               latest run's state so the parent reads at-a-glance even
               when collapsed. */}
-          <div className="github-actions-tree">
-            {groupRunsByWorkflow(runs).map((group) => {
-              const isExpanded = expandedWorkflows.has(group.name);
-              return (
-                <div key={group.name} className="github-actions-node">
-                  <button
-                    type="button"
-                    className="github-actions-row is-workflow"
-                    onClick={() => {
-                      setExpandedWorkflows((current) => {
-                        const next = new Set(current);
-                        if (next.has(group.name)) next.delete(group.name);
-                        else next.add(group.name);
-                        return next;
-                      });
-                    }}
-                    aria-expanded={isExpanded}
-                  >
-                    <span
-                      className={`github-tree-toggle ${isExpanded ? "open" : ""}`}
-                      aria-hidden="true"
-                    >
-                      <ChevronIcon />
-                    </span>
-                    <span
-                      className={`github-status-dot status-${group.rollupState}`}
-                      aria-hidden="true"
-                    />
-                    <span className="github-actions-name">{group.name}</span>
-                    <span className="github-actions-count">
-                      {group.runs.length} {group.runs.length === 1 ? "run" : "runs"}
-                    </span>
-                  </button>
+              <div className="github-actions-tree">
+                {groupRunsByWorkflow(runs).map((group) => {
+                  const isExpanded = expandedWorkflows.has(group.name);
+                  return (
+                    <div key={group.name} className="github-actions-node">
+                      <button
+                        type="button"
+                        className="github-actions-row is-workflow"
+                        onClick={() => {
+                          setExpandedWorkflows((current) => {
+                            const next = new Set(current);
+                            if (next.has(group.name)) next.delete(group.name);
+                            else next.add(group.name);
+                            return next;
+                          });
+                        }}
+                        aria-expanded={isExpanded}
+                      >
+                        <span
+                          className={`github-tree-toggle ${isExpanded ? "open" : ""}`}
+                          aria-hidden="true"
+                        >
+                          <ChevronIcon />
+                        </span>
+                        <span
+                          className={`github-status-dot status-${group.rollupState}`}
+                          aria-hidden="true"
+                        />
+                        <span className="github-actions-name">
+                          {group.name}
+                        </span>
+                        <span className="github-actions-count">
+                          {group.runs.length}{" "}
+                          {group.runs.length === 1 ? "run" : "runs"}
+                        </span>
+                      </button>
 
-                  {isExpanded && (
-                    <div className="github-actions-children" role="list">
-                      {group.runs.map((run) => {
-                        const state = statusLabel(run);
-                        const isOpen = expandedRunIds.has(run.id);
-                        const isLoading = loadingRunIds.has(run.id);
-                        const runError = errorByRunId[run.id];
-                        const runJobs = jobsByRunId[run.id] ?? [];
-                        return (
-                          <div key={run.id} className="github-actions-run-node" role="listitem">
-                            <button
-                              type="button"
-                              className={`github-actions-row is-run ${isOpen ? "is-open" : ""}`}
-                              onClick={() => void toggleRunFlow(run)}
-                              aria-expanded={isOpen}
-                              aria-label={`Toggle ${run.display_title} run details`}
-                            >
-                              <span className="github-actions-rail" aria-hidden="true" />
-                              <span
-                                className={`github-status-dot status-${state}`}
-                                aria-hidden="true"
-                              />
-                              <span className="github-actions-run-main">
-                                <strong>{run.display_title}</strong>
-                                <small>
-                                  {run.head_branch}
-                                  {" · "}
-                                  {formatDate(run.updated_at ?? run.created_at)}
-                                </small>
-                              </span>
-                              <em className={`github-actions-state ${state}`}>{state}</em>
-                            </button>
+                      {isExpanded && (
+                        <div className="github-actions-children" role="list">
+                          {group.runs.map((run) => {
+                            const state = statusLabel(run);
+                            const isOpen = expandedRunIds.has(run.id);
+                            const isLoading = loadingRunIds.has(run.id);
+                            const runError = errorByRunId[run.id];
+                            const runJobs = jobsByRunId[run.id] ?? [];
+                            return (
+                              <div
+                                key={run.id}
+                                className="github-actions-run-node"
+                                role="listitem"
+                              >
+                                <button
+                                  type="button"
+                                  className={`github-actions-row is-run ${isOpen ? "is-open" : ""}`}
+                                  onClick={() => void toggleRunFlow(run)}
+                                  aria-expanded={isOpen}
+                                  aria-label={`Toggle ${run.display_title} run details`}
+                                >
+                                  <span
+                                    className="github-actions-rail"
+                                    aria-hidden="true"
+                                  />
+                                  <span
+                                    className={`github-status-dot status-${state}`}
+                                    aria-hidden="true"
+                                  />
+                                  <span className="github-actions-run-main">
+                                    <strong>{run.display_title}</strong>
+                                    <small>
+                                      {run.head_branch}
+                                      {" · "}
+                                      {formatDate(
+                                        run.updated_at ?? run.created_at
+                                      )}
+                                    </small>
+                                  </span>
+                                  <em
+                                    className={`github-actions-state ${state}`}
+                                  >
+                                    {state}
+                                  </em>
+                                </button>
 
-                            {isOpen && (
-                              <div className="github-flow github-flow-inline">
-                                {isLoading && (
-                                  <div className="github-flow-empty">Loading jobs…</div>
-                                )}
+                                {isOpen && (
+                                  <div className="github-flow github-flow-inline">
+                                    {isLoading && (
+                                      <div className="github-flow-empty">
+                                        Loading jobs…
+                                      </div>
+                                    )}
 
-                                {runError && (
-                                  <div className="github-banner">{runError}</div>
-                                )}
+                                    {runError && (
+                                      <div className="github-banner">
+                                        {runError}
+                                      </div>
+                                    )}
 
-                                {!isLoading && !runError && runJobs.length === 0 && (
-                                  <div className="github-flow-empty">
-                                    This run has no jobs to display.
-                                  </div>
-                                )}
+                                    {!isLoading &&
+                                      !runError &&
+                                      runJobs.length === 0 && (
+                                        <div className="github-flow-empty">
+                                          This run has no jobs to display.
+                                        </div>
+                                      )}
 
-                                {/* Job cards: one column per job. Inside each, steps
+                                    {/* Job cards: one column per job. Inside each, steps
                                     are a vertical checklist with status dots, names,
                                     and durations — same shape as GitHub's job pane.
                                     The cards wrap so multi-job matrices fall onto
                                     multiple rows instead of horizontal-scrolling. */}
-                                {runJobs.length > 0 && (
-                                  <div className="github-flow-jobs">
-                                    {runJobs.map((job) => {
-                                      const jobState = job.conclusion ?? job.status ?? "unknown";
-                                      const isJobOpen = expandedJobIds.has(job.id);
-                                      return (
-                                        <article
-                                          key={job.id}
-                                          className={`github-flow-job state-${jobState} ${isJobOpen ? "is-open" : ""}`}
-                                        >
-                                          <button
-                                            type="button"
-                                            className="github-flow-job-head"
-                                            onClick={() => {
-                                              setExpandedJobIds((current) => {
-                                                const next = new Set(current);
-                                                if (next.has(job.id)) next.delete(job.id);
-                                                else next.add(job.id);
-                                                return next;
-                                              });
-                                            }}
-                                            aria-expanded={isJobOpen}
-                                          >
-                                            <span
-                                              className={`github-tree-toggle ${isJobOpen ? "open" : ""}`}
-                                              aria-hidden="true"
+                                    {runJobs.length > 0 && (
+                                      <div className="github-flow-jobs">
+                                        {runJobs.map((job) => {
+                                          const jobState =
+                                            job.conclusion ??
+                                            job.status ??
+                                            "unknown";
+                                          const isJobOpen = expandedJobIds.has(
+                                            job.id
+                                          );
+                                          return (
+                                            <article
+                                              key={job.id}
+                                              className={`github-flow-job state-${jobState} ${isJobOpen ? "is-open" : ""}`}
                                             >
-                                              <ChevronIcon />
-                                            </span>
-                                            <StatusIcon state={jobState} />
-                                            <span className="github-flow-job-title">
-                                              <strong>{job.name}</strong>
-                                              <small>
-                                                {formatDuration(job.started_at, job.completed_at)}
-                                                {job.runner_name ? ` · ${job.runner_name}` : ""}
-                                              </small>
-                                            </span>
-                                            <a
-                                              className="github-flow-job-link"
-                                              href={job.html_url}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                              aria-label={`Open ${job.name} on GitHub`}
-                                              title="Open on GitHub"
-                                              onClick={(event) => event.stopPropagation()}
-                                            >
-                                              ↗
-                                            </a>
-                                          </button>
-
-                                          {isJobOpen && (
-                                            <ol className="github-flow-steps">
-                                              {job.steps
-                                                .slice()
-                                                .sort((a, b) => a.number - b.number)
-                                                .map((step) => {
-                                                  const stepState =
-                                                    step.conclusion ?? step.status ?? "unknown";
-                                                  return (
-                                                    <li
-                                                      key={`${job.id}-${step.number}`}
-                                                      className="github-flow-step"
-                                                    >
-                                                      <span
-                                                        className="github-tree-toggle"
-                                                        aria-hidden="true"
-                                                      >
-                                                        <ChevronIcon />
-                                                      </span>
-                                                      <StatusIcon state={stepState} />
-                                                      <span className="github-flow-step-name">
-                                                        {step.name}
-                                                      </span>
-                                                    </li>
+                                              <button
+                                                type="button"
+                                                className="github-flow-job-head"
+                                                onClick={() => {
+                                                  setExpandedJobIds(
+                                                    (current) => {
+                                                      const next = new Set(
+                                                        current
+                                                      );
+                                                      if (next.has(job.id))
+                                                        next.delete(job.id);
+                                                      else next.add(job.id);
+                                                      return next;
+                                                    }
                                                   );
-                                                })}
-                                              {job.steps.length === 0 && (
-                                                <li className="github-flow-step is-empty">
-                                                  No steps reported.
-                                                </li>
+                                                }}
+                                                aria-expanded={isJobOpen}
+                                              >
+                                                <span
+                                                  className={`github-tree-toggle ${isJobOpen ? "open" : ""}`}
+                                                  aria-hidden="true"
+                                                >
+                                                  <ChevronIcon />
+                                                </span>
+                                                <StatusIcon state={jobState} />
+                                                <span className="github-flow-job-title">
+                                                  <strong>{job.name}</strong>
+                                                  <small>
+                                                    {formatDuration(
+                                                      job.started_at,
+                                                      job.completed_at
+                                                    )}
+                                                    {job.runner_name
+                                                      ? ` · ${job.runner_name}`
+                                                      : ""}
+                                                  </small>
+                                                </span>
+                                                <a
+                                                  className="github-flow-job-link"
+                                                  href={job.html_url}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  aria-label={`Open ${job.name} on GitHub`}
+                                                  title="Open on GitHub"
+                                                  onClick={(event) =>
+                                                    event.stopPropagation()
+                                                  }
+                                                >
+                                                  ↗
+                                                </a>
+                                              </button>
+
+                                              {isJobOpen && (
+                                                <ol className="github-flow-steps">
+                                                  {job.steps
+                                                    .slice()
+                                                    .sort(
+                                                      (a, b) =>
+                                                        a.number - b.number
+                                                    )
+                                                    .map((step) => {
+                                                      const stepState =
+                                                        step.conclusion ??
+                                                        step.status ??
+                                                        "unknown";
+                                                      return (
+                                                        <li
+                                                          key={`${job.id}-${step.number}`}
+                                                          className="github-flow-step"
+                                                        >
+                                                          <span
+                                                            className="github-tree-toggle"
+                                                            aria-hidden="true"
+                                                          >
+                                                            <ChevronIcon />
+                                                          </span>
+                                                          <StatusIcon
+                                                            state={stepState}
+                                                          />
+                                                          <span className="github-flow-step-name">
+                                                            {step.name}
+                                                          </span>
+                                                        </li>
+                                                      );
+                                                    })}
+                                                  {job.steps.length === 0 && (
+                                                    <li className="github-flow-step is-empty">
+                                                      No steps reported.
+                                                    </li>
+                                                  )}
+                                                </ol>
                                               )}
-                                            </ol>
-                                          )}
-                                        </article>
-                                      );
-                                    })}
+                                            </article>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-            {runs.length === 0 && <div className="github-empty">No runs found.</div>}
+                  );
+                })}
+                {runs.length === 0 && (
+                  <div className="github-empty">No runs found.</div>
+                )}
 
-            {/* "Load more" — fetches the next page of workflow_runs
+                {/* "Load more" — fetches the next page of workflow_runs
                 filtered to the current branch. Hidden when we've
                 already loaded everything GitHub knows about, or when
                 the initial fetch hasn't returned a total yet. */}
-            {runsTotal > runs.length && (
-              <div className="github-actions-load-more">
-                <button
-                  type="button"
-                  onClick={() => void loadRuns(runsPage + 1, true)}
-                  disabled={runsLoadingMore}
-                >
-                  {runsLoadingMore
-                    ? "Loading…"
-                    : `Load more (${runsTotal - runs.length} remaining)`}
-                </button>
-              </div>
-            )}
+                {runsTotal > runs.length && (
+                  <div className="github-actions-load-more">
+                    <button
+                      type="button"
+                      onClick={() => void loadRuns(runsPage + 1, true)}
+                      disabled={runsLoadingMore}
+                    >
+                      {runsLoadingMore
+                        ? "Loading…"
+                        : `Load more (${runsTotal - runs.length} remaining)`}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

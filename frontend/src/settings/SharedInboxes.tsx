@@ -72,7 +72,9 @@ export default function SharedInboxes() {
       setInboxes(inboxList);
       setAccounts(accountList);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load shared inboxes");
+      setError(
+        err instanceof Error ? err.message : "Failed to load shared inboxes"
+      );
     } finally {
       setLoading(false);
     }
@@ -98,7 +100,9 @@ export default function SharedInboxes() {
       })
       .catch((err) => {
         if (alive)
-          setError(err instanceof Error ? err.message : "Failed to load members");
+          setError(
+            err instanceof Error ? err.message : "Failed to load members"
+          );
       });
     return () => {
       alive = false;
@@ -164,7 +168,8 @@ export default function SharedInboxes() {
   }
 
   async function onUnshare(id: number) {
-    if (!window.confirm("Un-share this inbox? Members will lose access.")) return;
+    if (!window.confirm("Un-share this inbox? Members will lose access."))
+      return;
     setError("");
     try {
       await deleteSharedInbox(id);
@@ -249,7 +254,8 @@ export default function SharedInboxes() {
             <h2>Inboxes</h2>
             {inboxes.length === 0 ? (
               <p className="shared-inboxes-empty">
-                No shared inboxes yet. Share an account from the panel on the right.
+                No shared inboxes yet. Share an account from the panel on the
+                right.
               </p>
             ) : (
               <ul>
@@ -302,8 +308,8 @@ export default function SharedInboxes() {
                     ))}
                   </select>
                   <small>
-                    Only mailboxes you connected via Gmail / Outlook OAuth can be
-                    shared. Already-shared mailboxes are hidden.
+                    Only mailboxes you connected via Gmail / Outlook OAuth can
+                    be shared. Already-shared mailboxes are hidden.
                   </small>
                 </label>
                 <label>
@@ -340,7 +346,9 @@ export default function SharedInboxes() {
                 </p>
 
                 <ul className="shared-inboxes-members">
-                  {members.length === 0 && <li className="muted">No members yet.</li>}
+                  {members.length === 0 && (
+                    <li className="muted">No members yet.</li>
+                  )}
                   {members.map((m) => (
                     <li key={m.user_id}>
                       <div>
@@ -361,7 +369,10 @@ export default function SharedInboxes() {
                   ))}
                 </ul>
 
-                <form onSubmit={onAddMember} className="shared-inboxes-add-member">
+                <form
+                  onSubmit={onAddMember}
+                  className="shared-inboxes-add-member"
+                >
                   <input
                     type="email"
                     placeholder="teammate@your-org.com"

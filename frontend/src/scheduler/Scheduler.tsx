@@ -92,7 +92,8 @@ function TimeSelect({
   // the user lands near their existing pick instead of at midnight.
   useEffect(() => {
     if (!open || !listRef.current) return;
-    const selected = listRef.current.querySelector<HTMLLIElement>("li.is-selected");
+    const selected =
+      listRef.current.querySelector<HTMLLIElement>("li.is-selected");
     selected?.scrollIntoView({ block: "nearest" });
   }, [open]);
 
@@ -176,8 +177,8 @@ export default function Scheduler() {
   const [calendars, setCalendars] = useState<CalendarItem[]>(() =>
     readJson(CALENDAR_STORAGE_KEY, DEFAULT_CALENDARS)
   );
-  const [eventCalendars, setEventCalendars] = useState<Record<string, string>>(() =>
-    readJson(EVENT_CALENDAR_STORAGE_KEY, {})
+  const [eventCalendars, setEventCalendars] = useState<Record<string, string>>(
+    () => readJson(EVENT_CALENDAR_STORAGE_KEY, {})
   );
   const [newCalendarName, setNewCalendarName] = useState("");
 
@@ -227,13 +228,13 @@ export default function Scheduler() {
 
   const deleteMeeting = async () => {
     if (!editingEvent) return;
-  
+
     const confirmDelete = confirm("Delete this meeting?");
     if (!confirmDelete) return;
-  
+
     try {
       await deleteMeetingApi(editingEvent.id);
-  
+
       setShowModal(false);
       setEditingEvent(null);
       await fetchMeetings();
@@ -244,17 +245,26 @@ export default function Scheduler() {
 
   const slots = DAY_SLOTS;
 
-  const scrollToDefaultVisibleTime = useCallback((targetView = view) => {
-    const scrollTarget = DEFAULT_VISIBLE_START_HOUR * 2 * 44;
-    const target = targetView === "day" ? daySlotsRef.current : weekGridRef.current;
-    if (target) {
-      target.scrollTop = scrollTarget;
-    }
-  }, [view]);
+  const scrollToDefaultVisibleTime = useCallback(
+    (targetView = view) => {
+      const scrollTarget = DEFAULT_VISIBLE_START_HOUR * 2 * 44;
+      const target =
+        targetView === "day" ? daySlotsRef.current : weekGridRef.current;
+      if (target) {
+        target.scrollTop = scrollTarget;
+      }
+    },
+    [view]
+  );
 
-  const queueDefaultTimeScroll = useCallback((targetView = view) => {
-    window.requestAnimationFrame(() => scrollToDefaultVisibleTime(targetView));
-  }, [scrollToDefaultVisibleTime, view]);
+  const queueDefaultTimeScroll = useCallback(
+    (targetView = view) => {
+      window.requestAnimationFrame(() =>
+        scrollToDefaultVisibleTime(targetView)
+      );
+    },
+    [scrollToDefaultVisibleTime, view]
+  );
 
   useEffect(() => {
     if (view === "day" || view === "week") {
@@ -269,7 +279,9 @@ export default function Scheduler() {
 
   const getCalendarForEvent = (event: SchedulerEvent) => {
     const calendarId = getCalendarIdForEvent(event);
-    return calendars.find((calendar) => calendar.id === calendarId) ?? calendars[0];
+    return (
+      calendars.find((calendar) => calendar.id === calendarId) ?? calendars[0]
+    );
   };
 
   const createCalendar = () => {
@@ -279,10 +291,7 @@ export default function Scheduler() {
     const id = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
     const color = CALENDAR_COLORS[calendars.length % CALENDAR_COLORS.length];
 
-    setCalendars((prev) => [
-      ...prev,
-      { id, name, color, visible: true },
-    ]);
+    setCalendars((prev) => [...prev, { id, name, color, visible: true }]);
     setSelectedCalendarId(id);
     setNewCalendarName("");
   };
@@ -356,7 +365,7 @@ export default function Scheduler() {
 
   // ================= FETCH =================
   const fetchMeetings = useCallback(async () => {
-    const data = await getMeetings() as ApiMeeting[];
+    const data = (await getMeetings()) as ApiMeeting[];
 
     const formatted = data.map((m) => ({
       id: m.id,
@@ -407,12 +416,17 @@ export default function Scheduler() {
     });
     if (conflicts.length > 0) {
       const summary = conflicts
-        .map((c) => `• "${c.title}" (${formatHour(c.start)} – ${formatHour(c.end)})`)
+        .map(
+          (c) =>
+            `• "${c.title}" (${formatHour(c.start)} – ${formatHour(c.end)})`
+        )
         .join("\n");
       const proceed = window.confirm(
         `This meeting conflicts with ${
-          conflicts.length === 1 ? "an existing event" : `${conflicts.length} existing events`
-        }:\n\n${summary}\n\nCreate anyway?`,
+          conflicts.length === 1
+            ? "an existing event"
+            : `${conflicts.length} existing events`
+        }:\n\n${summary}\n\nCreate anyway?`
       );
       if (!proceed) return;
     }
@@ -444,7 +458,7 @@ export default function Scheduler() {
         [String(editingEvent.id)]: selectedCalendarId,
       }));
     } else {
-      const created = await createMeetingApi(payload) as CreatedMeeting;
+      const created = (await createMeetingApi(payload)) as CreatedMeeting;
       if (created?.meeting_id) {
         setEventCalendars((prev) => ({
           ...prev,
@@ -492,7 +506,9 @@ export default function Scheduler() {
     setEditingEvent(null);
     setTitle("");
     setParticipants([]);
-    setSelectedCalendarId(calendars.find((calendar) => calendar.visible)?.id ?? "office");
+    setSelectedCalendarId(
+      calendars.find((calendar) => calendar.visible)?.id ?? "office"
+    );
     setEmailInput("");
     const baseStart = snap15(startTime ?? nowTimeStr());
     setSelectedDate(date ?? todayStr());
@@ -596,7 +612,6 @@ export default function Scheduler() {
       className={`scheduler${collapsed ? " narrow" : ""}`}
       ref={schedulerRootRef}
     >
-
       {/* SIDEBAR */}
       <div className="scheduler-sidebar">
         <button className="scheduler-create-main" onClick={() => openCreate()}>
@@ -627,8 +642,7 @@ export default function Scheduler() {
             const day = i + 1;
             const d = new Date(year, month, day);
 
-            const isActive =
-              d.toDateString() === currentDate.toDateString();
+            const isActive = d.toDateString() === currentDate.toDateString();
 
             return (
               <div
@@ -669,7 +683,10 @@ export default function Scheduler() {
               />
               <span
                 className="calendar-color"
-                style={{ borderColor: calendar.color, background: calendar.visible ? calendar.color : "transparent" }}
+                style={{
+                  borderColor: calendar.color,
+                  background: calendar.visible ? calendar.color : "transparent",
+                }}
               />
               <span>{calendar.name}</span>
             </label>
@@ -677,27 +694,23 @@ export default function Scheduler() {
         </div>
       </div>
 
-
-
-
-
       {/* MAIN */}
       <div className="calendar">
-
         <div className="calendar-header">
           {collapsed && (
-            <button
-              className="create-btn"
-              onClick={() => openCreate()}
-            >
+            <button className="create-btn" onClick={() => openCreate()}>
               ＋ Create
             </button>
           )}
-          <button onClick={() => {
-            setCurrentDate(new Date());
-            setView("day");
-            queueDefaultTimeScroll("day");
-          }}>Today</button>
+          <button
+            onClick={() => {
+              setCurrentDate(new Date());
+              setView("day");
+              queueDefaultTimeScroll("day");
+            }}
+          >
+            Today
+          </button>
           <button onClick={() => changeMonth(-1)}>‹</button>
           <button onClick={() => changeMonth(1)}>›</button>
           {!collapsed || view === "month" ? (
@@ -711,218 +724,229 @@ export default function Scheduler() {
           ) : (
             <div className="calendar-title-spacer" />
           )}
-          <button onClick={() => {
-            setView("day");
-            queueDefaultTimeScroll("day");
-          }}>Day</button>
-          <button onClick={() => {
-            setView("week");
-            queueDefaultTimeScroll("week");
-          }}>Week</button>
+          <button
+            onClick={() => {
+              setView("day");
+              queueDefaultTimeScroll("day");
+            }}
+          >
+            Day
+          </button>
+          <button
+            onClick={() => {
+              setView("week");
+              queueDefaultTimeScroll("week");
+            }}
+          >
+            Week
+          </button>
           <button onClick={() => setView("month")}>Month</button>
         </div>
 
+        {/* DAY VIEW */}
+        {view === "day" && (
+          <div className="day-view">
+            <h3 className="day-title">{currentDate.toDateString()}</h3>
 
-{/* DAY VIEW */}
-{view === "day" && (
-  <div className="day-view">
+            <div className="day-slots" ref={daySlotsRef}>
+              {slots.map((slot) => {
+                const mins = slot * SLOT_MINUTES;
 
-    <h3 className="day-title">
-      {currentDate.toDateString()}
-    </h3>
+                const timeLabel = `${Math.floor(mins / 60)
+                  .toString()
+                  .padStart(2, "0")}:${(mins % 60)
+                  .toString()
+                  .padStart(2, "0")}`;
 
-    <div className="day-slots" ref={daySlotsRef}>
-      {slots.map((slot) => {
-        const mins = slot * SLOT_MINUTES;
+                const dayDate = formatDateLocal(currentDate);
 
-        const timeLabel = `${Math.floor(mins / 60)
-          .toString()
-          .padStart(2, "0")}:${(mins % 60)
-          .toString()
-          .padStart(2, "0")}`;
+                const slotEvents = calendarVisibleEvents.filter(
+                  (e) =>
+                    e.date === dayDate &&
+                    e.start >= mins &&
+                    e.start < mins + SLOT_MINUTES
+                );
 
-        const dayDate = formatDateLocal(currentDate);
+                return (
+                  <div
+                    key={slot}
+                    className="time-row"
+                    onClick={() => openCreate(dayDate, timeLabel)}
+                  >
+                    <div className="time-label">{timeLabel}</div>
 
-        const slotEvents = calendarVisibleEvents.filter(
-          (e) =>
-            e.date === dayDate &&
-            e.start >= mins &&
-            e.start < mins + SLOT_MINUTES
-        );
-
-        return (
-          <div
-            key={slot}
-            className="time-row"
-            onClick={() => openCreate(dayDate, timeLabel)}
-          >
-            <div className="time-label">{timeLabel}</div>
-
-            <div className="time-events">
-              {slotEvents.map((e) => (
-                (() => {
-                  const calendar = getCalendarForEvent(e);
-                  // Time-accurate block + lane positioning for overlap
-                  // resolution: a 30-min event spans half a slot, a 90-min
-                  // event spans 1.5 slots. `top` is the sub-hour offset;
-                  // `left`/`width` split the day column into N columns
-                  // when N events overlap, matching Google / Outlook.
-                  const durationSlots = (e.end - e.start) / SLOT_MINUTES;
-                  const topFraction = (e.start % SLOT_MINUTES) / SLOT_MINUTES;
-                  const layout = lanesByDay.get(e.date)?.get(e.id)
-                    ?? { lane: 0, laneCount: 1 };
-                  const leftPct = (layout.lane / layout.laneCount) * 100;
-                  const widthPct = 100 / layout.laneCount;
-                  return (
-                <div
-                  key={e.id}
-                  className={`event${e.source === "google" ? " from-google" : ""}`}
-                  style={{
-                    background: calendar?.color,
-                    top: `calc(${topFraction} * var(--slot-h, 48px))`,
-                    height: `calc(${durationSlots} * var(--slot-h, 48px) - 4px)`,
-                    left: `calc(${leftPct}% + 2px)`,
-                    width: `calc(${widthPct}% - 4px)`,
-                  }}
-                  onClick={(ev) => {
-                    ev.stopPropagation();
-                    openEdit(e);
-                  }}
-                >
-                  {e.title}
-                </div>
-                  );
-                })()
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-
-  </div>
-)}
-
-
-
-
-{/* WEEK VIEW */}
-{view === "week" && (
-  <div className="week-view">
-
-    <div className="week-header">
-      <div className="time-spacer">Time</div>
-      {weekDays.map((d, i) => {
-        const isToday = formatDateLocal(d) === todayStr();
-
-        return (
-          <div
-            key={i}
-            className={`week-day-header${isToday ? " is-today" : ""}`}
-          >
-            <span className="week-day-name">
-              {d.toLocaleDateString("en-US", { timeZone: APP_TIME_ZONE, weekday: "short" }).toUpperCase()}
-            </span>
-            <span className="week-day-num">{d.getDate()}</span>
-          </div>
-        );
-      })}
-    </div>
-
-    <div className="week-grid" ref={weekGridRef}>
-      {slots.map((slot) => {
-        const mins = slot * SLOT_MINUTES;
-
-        return (
-          <div key={slot} className="week-row">
-
-            <div className="time-label">
-              {Math.floor(mins / 60)
-                .toString()
-                .padStart(2, "0")}
-              :
-              {(mins % 60).toString().padStart(2, "0")}
-            </div>
-
-            {[...Array(7)].map((_, i) => {
-              const d = weekDays[i];
-
-              const dayDate = formatDateLocal(d);
-              const slotTime = `${Math.floor(mins / 60)
-                .toString()
-                .padStart(2, "0")}:${(mins % 60)
-                .toString()
-                .padStart(2, "0")}`;
-
-              const slotEvents = calendarVisibleEvents.filter(
-                (e) =>
-                  e.date === dayDate &&
-                  e.start >= mins &&
-                  e.start < mins + SLOT_MINUTES
-              );
-
-              return (
-                <div
-                  key={i}
-                  className="week-cell"
-                  onClick={() => openCreate(dayDate, slotTime)}
-                >
-                  {slotEvents.map((e) => (
-                    (() => {
-                      const calendar = getCalendarForEvent(e);
-                      // Time-accurate block + lane positioning for overlap
-                      // resolution: a 30-min event spans half a slot; a
-                      // 90-min event spans 1.5 slots. `top` is the sub-hour
-                      // offset; `left`/`width` split the day column into N
-                      // columns when N events overlap.
-                      const durationSlots = (e.end - e.start) / SLOT_MINUTES;
-                      const topFraction = (e.start % SLOT_MINUTES) / SLOT_MINUTES;
-                      const layout = lanesByDay.get(e.date)?.get(e.id)
-                        ?? { lane: 0, laneCount: 1 };
-                      const leftPct = (layout.lane / layout.laneCount) * 100;
-                      const widthPct = 100 / layout.laneCount;
-                      return (
-                    <div
-                      key={e.id}
-                      className={`event${e.source === "google" ? " from-google" : ""}`}
-                      style={{
-                        background: calendar?.color,
-                        top: `calc(${topFraction} * var(--slot-h, 48px))`,
-                        height: `calc(${durationSlots} * var(--slot-h, 48px) - 4px)`,
-                        left: `calc(${leftPct}% + 2px)`,
-                        width: `calc(${widthPct}% - 4px)`,
-                      }}
-                      onClick={(ev) => {
-                        ev.stopPropagation();
-                        openEdit(e);
-                      }}
-                    >
-                      <span className="event-title">{e.title}</span>
-                      <span className="event-time">
-                        {formatHour(e.start)} - {formatHour(e.end)}
-                      </span>
+                    <div className="time-events">
+                      {slotEvents.map((e) =>
+                        (() => {
+                          const calendar = getCalendarForEvent(e);
+                          // Time-accurate block + lane positioning for overlap
+                          // resolution: a 30-min event spans half a slot, a 90-min
+                          // event spans 1.5 slots. `top` is the sub-hour offset;
+                          // `left`/`width` split the day column into N columns
+                          // when N events overlap, matching Google / Outlook.
+                          const durationSlots =
+                            (e.end - e.start) / SLOT_MINUTES;
+                          const topFraction =
+                            (e.start % SLOT_MINUTES) / SLOT_MINUTES;
+                          const layout = lanesByDay.get(e.date)?.get(e.id) ?? {
+                            lane: 0,
+                            laneCount: 1,
+                          };
+                          const leftPct =
+                            (layout.lane / layout.laneCount) * 100;
+                          const widthPct = 100 / layout.laneCount;
+                          return (
+                            <div
+                              key={e.id}
+                              className={`event${e.source === "google" ? " from-google" : ""}`}
+                              style={{
+                                background: calendar?.color,
+                                top: `calc(${topFraction} * var(--slot-h, 48px))`,
+                                height: `calc(${durationSlots} * var(--slot-h, 48px) - 4px)`,
+                                left: `calc(${leftPct}% + 2px)`,
+                                width: `calc(${widthPct}% - 4px)`,
+                              }}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                openEdit(e);
+                              }}
+                            >
+                              {e.title}
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
-                      );
-                    })()
-                  ))}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        );
-      })}
-    </div>
+        )}
 
-  </div>
-)}
-        
+        {/* WEEK VIEW */}
+        {view === "week" && (
+          <div className="week-view">
+            <div className="week-header">
+              <div className="time-spacer">Time</div>
+              {weekDays.map((d, i) => {
+                const isToday = formatDateLocal(d) === todayStr();
+
+                return (
+                  <div
+                    key={i}
+                    className={`week-day-header${isToday ? " is-today" : ""}`}
+                  >
+                    <span className="week-day-name">
+                      {d
+                        .toLocaleDateString("en-US", {
+                          timeZone: APP_TIME_ZONE,
+                          weekday: "short",
+                        })
+                        .toUpperCase()}
+                    </span>
+                    <span className="week-day-num">{d.getDate()}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="week-grid" ref={weekGridRef}>
+              {slots.map((slot) => {
+                const mins = slot * SLOT_MINUTES;
+
+                return (
+                  <div key={slot} className="week-row">
+                    <div className="time-label">
+                      {Math.floor(mins / 60)
+                        .toString()
+                        .padStart(2, "0")}
+                      :{(mins % 60).toString().padStart(2, "0")}
+                    </div>
+
+                    {[...Array(7)].map((_, i) => {
+                      const d = weekDays[i];
+
+                      const dayDate = formatDateLocal(d);
+                      const slotTime = `${Math.floor(mins / 60)
+                        .toString()
+                        .padStart(2, "0")}:${(mins % 60)
+                        .toString()
+                        .padStart(2, "0")}`;
+
+                      const slotEvents = calendarVisibleEvents.filter(
+                        (e) =>
+                          e.date === dayDate &&
+                          e.start >= mins &&
+                          e.start < mins + SLOT_MINUTES
+                      );
+
+                      return (
+                        <div
+                          key={i}
+                          className="week-cell"
+                          onClick={() => openCreate(dayDate, slotTime)}
+                        >
+                          {slotEvents.map((e) =>
+                            (() => {
+                              const calendar = getCalendarForEvent(e);
+                              // Time-accurate block + lane positioning for overlap
+                              // resolution: a 30-min event spans half a slot; a
+                              // 90-min event spans 1.5 slots. `top` is the sub-hour
+                              // offset; `left`/`width` split the day column into N
+                              // columns when N events overlap.
+                              const durationSlots =
+                                (e.end - e.start) / SLOT_MINUTES;
+                              const topFraction =
+                                (e.start % SLOT_MINUTES) / SLOT_MINUTES;
+                              const layout = lanesByDay
+                                .get(e.date)
+                                ?.get(e.id) ?? { lane: 0, laneCount: 1 };
+                              const leftPct =
+                                (layout.lane / layout.laneCount) * 100;
+                              const widthPct = 100 / layout.laneCount;
+                              return (
+                                <div
+                                  key={e.id}
+                                  className={`event${e.source === "google" ? " from-google" : ""}`}
+                                  style={{
+                                    background: calendar?.color,
+                                    top: `calc(${topFraction} * var(--slot-h, 48px))`,
+                                    height: `calc(${durationSlots} * var(--slot-h, 48px) - 4px)`,
+                                    left: `calc(${leftPct}% + 2px)`,
+                                    width: `calc(${widthPct}% - 4px)`,
+                                  }}
+                                  onClick={(ev) => {
+                                    ev.stopPropagation();
+                                    openEdit(e);
+                                  }}
+                                >
+                                  <span className="event-title">{e.title}</span>
+                                  <span className="event-time">
+                                    {formatHour(e.start)} - {formatHour(e.end)}
+                                  </span>
+                                </div>
+                              );
+                            })()
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* MONTH VIEW */}
         {view === "month" && (
           <div className="month-view">
             <div className="month-weekday-row">
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                <div key={d} className="month-weekday">{d}</div>
+                <div key={d} className="month-weekday">
+                  {d}
+                </div>
               ))}
             </div>
             <div className="month-grid">
@@ -995,10 +1019,7 @@ export default function Scheduler() {
             </div>
           </div>
         )}
-
       </div>
-
-
 
       {/* MODAL */}
       <Modal
@@ -1026,10 +1047,7 @@ export default function Scheduler() {
 
           <div className="form-group">
             <label>Title</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
 
           <div className="form-group">
@@ -1159,9 +1177,7 @@ export default function Scheduler() {
           <button onClick={saveMeeting}>
             {editingEvent ? "Update" : "Save"}
           </button>
-          <button onClick={resetModal}>
-            Cancel
-          </button>
+          <button onClick={resetModal}>Cancel</button>
         </div>
       </Modal>
     </div>

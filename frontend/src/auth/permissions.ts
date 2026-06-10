@@ -159,7 +159,7 @@ export const PRICING_HIDDEN_ROLES: Role[] = [
 
 /** Whether this user's role is allowed to view Pricing. */
 export function canViewPricing(
-  user: { effective_role?: string | null } | null | undefined,
+  user: { effective_role?: string | null } | null | undefined
 ): boolean {
   return !PRICING_HIDDEN_ROLES.includes(normalizeRole(user?.effective_role));
 }
@@ -197,9 +197,7 @@ export const ROLES_BELOW_ADMIN: Role[] = [
  * The roles an actor may pick in a role-change dropdown. `roles:manage` holders
  * may assign anything; `roles:assign_limited` holders only roles below admin.
  */
-export function assignableRoles(
-  actorPermissions?: string[] | null
-): Role[] {
+export function assignableRoles(actorPermissions?: string[] | null): Role[] {
   if (actorPermissions?.includes("roles:manage")) {
     return [...ROLES];
   }
@@ -243,7 +241,7 @@ export function canAccessApiKeyAdmin(
   user:
     | { effective_role?: string | null; scope?: string | null }
     | null
-    | undefined,
+    | undefined
 ): boolean {
   if (!user) return false;
   if (user.scope === "personal") return false;

@@ -1,0 +1,7 @@
+# Commits to ignore in `git blame` (bulk reformats, not real authorship changes).
+# Enable locally with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub honors this file automatically.
+#
+# After you commit the initial Prettier reformat, append its full 40-char SHA
+# below (one per line):

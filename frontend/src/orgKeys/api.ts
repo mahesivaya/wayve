@@ -54,7 +54,7 @@ export type NewLoginWrap = {
 
 export async function bootstrapOrgKeys(
   orgId: number,
-  body: BootstrapKeysRequest,
+  body: BootstrapKeysRequest
 ): Promise<void> {
   await apiFetch(`/api/organizations/${orgId}/keys`, {
     method: "POST",
@@ -64,7 +64,7 @@ export async function bootstrapOrgKeys(
 
 export async function getOrgKeys(
   orgId: number,
-  opts: { includeMnemonic?: boolean } = {},
+  opts: { includeMnemonic?: boolean } = {}
 ): Promise<GetKeysResponse> {
   const qs = opts.includeMnemonic ? "?include_mnemonic=true" : "";
   return apiFetchJson<GetKeysResponse>(`/api/organizations/${orgId}/keys${qs}`);
@@ -72,17 +72,17 @@ export async function getOrgKeys(
 
 export async function getMemberEscrow(
   orgId: number,
-  memberUserId: number,
+  memberUserId: number
 ): Promise<MemberEscrowResponse> {
   return apiFetchJson<MemberEscrowResponse>(
-    `/api/organizations/${orgId}/members/${memberUserId}/escrow`,
+    `/api/organizations/${orgId}/members/${memberUserId}/escrow`
   );
 }
 
 export async function addKeyHolderWrap(
   orgId: number,
   newHolderUserId: number,
-  wrap: UserPubkeyWrap,
+  wrap: UserPubkeyWrap
 ): Promise<void> {
   await apiFetch(`/api/organizations/${orgId}/key-holders`, {
     method: "POST",
@@ -92,7 +92,7 @@ export async function addKeyHolderWrap(
 
 export async function readAuditLog(orgId: number): Promise<AuditEntry[]> {
   return apiFetchJson<AuditEntry[]>(
-    `/api/organizations/${orgId}/audit/key-access`,
+    `/api/organizations/${orgId}/audit/key-access`
   );
 }
 
@@ -104,13 +104,13 @@ export type ResetMemberPasswordRequest = {
 export async function resetMemberPassword(
   orgId: number,
   memberUserId: number,
-  body: ResetMemberPasswordRequest,
+  body: ResetMemberPasswordRequest
 ): Promise<void> {
   await apiFetch(
     `/api/organizations/${orgId}/members/${memberUserId}/reset-password`,
     {
       method: "POST",
       body: JSON.stringify(body),
-    },
+    }
   );
 }

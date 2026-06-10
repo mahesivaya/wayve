@@ -101,7 +101,9 @@ export default function PlatformLogs() {
     const startW = colWidths[key];
     const onMove = (ev: MouseEvent) => {
       const next = Math.max(min, startW + (ev.clientX - startX));
-      setColWidths((prev) => (prev[key] === next ? prev : { ...prev, [key]: next }));
+      setColWidths((prev) =>
+        prev[key] === next ? prev : { ...prev, [key]: next }
+      );
     };
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
@@ -165,10 +167,22 @@ export default function PlatformLogs() {
       {error && <div className="pt-banner">{error}</div>}
 
       <section className="pt-stats">
-        <StatCard label="Errors (1h)" value={stats?.errors_1h ?? 0} alert={(stats?.errors_1h ?? 0) > 0} />
+        <StatCard
+          label="Errors (1h)"
+          value={stats?.errors_1h ?? 0}
+          alert={(stats?.errors_1h ?? 0) > 0}
+        />
         <StatCard label="Errors (24h)" value={stats?.errors_24h ?? 0} />
-        <StatCard label="Client (24h)" value={stats?.client_24h ?? 0} sub="JS + network" />
-        <StatCard label="Server (24h)" value={stats?.server_24h ?? 0} sub="Internal faults" />
+        <StatCard
+          label="Client (24h)"
+          value={stats?.client_24h ?? 0}
+          sub="JS + network"
+        />
+        <StatCard
+          label="Server (24h)"
+          value={stats?.server_24h ?? 0}
+          sub="Internal faults"
+        />
         <StatCard label="Users affected (24h)" value={stats?.users_24h ?? 0} />
       </section>
 
@@ -229,117 +243,117 @@ export default function PlatformLogs() {
           </div>
         ) : (
           <div className="logs-table-scroll">
-          <table
-            className="pt-table logs-table"
-            style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
-          >
-            {/* Widths driven by colWidths state — each header has a drag grip
+            <table
+              className="pt-table logs-table"
+              style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
+            >
+              {/* Widths driven by colWidths state — each header has a drag grip
                 on its right edge (startResize). Body cells below render in the
                 same column order. */}
-            <colgroup>
-              {LOG_COLUMNS.map((c) => (
-                <col key={c.key} style={{ width: `${colWidths[c.key]}px` }} />
-              ))}
-            </colgroup>
-            <thead>
-              <tr>
+              <colgroup>
                 {LOG_COLUMNS.map((c) => (
-                  <th key={c.key} className="logs-th">
-                    {c.label}
-                    <span
-                      className="col-resize-handle"
-                      onMouseDown={startResize(c.key, c.min)}
-                      role="separator"
-                      aria-orientation="vertical"
-                      aria-label={`Resize ${c.label} column`}
-                    />
-                  </th>
+                  <col key={c.key} style={{ width: `${colWidths[c.key]}px` }} />
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const isExpanded = expandedId === r.id;
-                return (
-                  <Fragment key={r.id}>
-                    <tr
-                      className={`logs-row ${r.severity}`}
-                      onClick={() =>
-                        setExpandedId(isExpanded ? null : r.id)
-                      }
-                    >
-                      <td className="logs-time">{fmtDate(r.created_at)}</td>
-                      <td>
-                        <span className={`pt-pill ${r.source}`}>
-                          {r.source}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`pt-pill ${r.severity}`}>
-                          {r.severity}
-                        </span>
-                      </td>
-                      <td>{r.user_email ?? "anon"}</td>
-                      <td className="logs-message" title={r.message}>
-                        {r.message}
-                      </td>
-                      <td className="logs-url" title={r.url ?? ""}>
-                        {r.url ?? "—"}
-                      </td>
-                      <td>
-                        {r.status_code != null ? (
-                          <span className={`pt-pill code-${Math.floor(r.status_code / 100)}xx`}>
-                            {r.method ? `${r.method} ` : ""}
-                            {r.status_code}
+              </colgroup>
+              <thead>
+                <tr>
+                  {LOG_COLUMNS.map((c) => (
+                    <th key={c.key} className="logs-th">
+                      {c.label}
+                      <span
+                        className="col-resize-handle"
+                        onMouseDown={startResize(c.key, c.min)}
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label={`Resize ${c.label} column`}
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const isExpanded = expandedId === r.id;
+                  return (
+                    <Fragment key={r.id}>
+                      <tr
+                        className={`logs-row ${r.severity}`}
+                        onClick={() => setExpandedId(isExpanded ? null : r.id)}
+                      >
+                        <td className="logs-time">{fmtDate(r.created_at)}</td>
+                        <td>
+                          <span className={`pt-pill ${r.source}`}>
+                            {r.source}
                           </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                    {isExpanded && (
-                      <tr key={`${r.id}-detail`} className="logs-detail-row">
-                        <td colSpan={7}>
-                          <div className="logs-detail">
-                            <div className="logs-detail-block">
-                              <strong>Message</strong>
-                              <pre>{r.message}</pre>
-                            </div>
-                            {r.stack && (
-                              <div className="logs-detail-block">
-                                <strong>Stack</strong>
-                                <pre>{shortStack(r.stack, 10)}</pre>
-                              </div>
-                            )}
-                            {r.extra != null && (
-                              <div className="logs-detail-block">
-                                <strong>Extra</strong>
-                                <pre>{JSON.stringify(r.extra, null, 2)}</pre>
-                              </div>
-                            )}
-                            <div className="logs-detail-grid">
-                              <span>
-                                <strong>request_id:</strong>{" "}
-                                {r.request_id ?? "—"}
-                              </span>
-                              <span>
-                                <strong>session_id:</strong>{" "}
-                                {r.session_id ?? "—"}
-                              </span>
-                              <span className="logs-detail-ua">
-                                <strong>user_agent:</strong>{" "}
-                                {r.user_agent ?? "—"}
-                              </span>
-                            </div>
-                          </div>
+                        </td>
+                        <td>
+                          <span className={`pt-pill ${r.severity}`}>
+                            {r.severity}
+                          </span>
+                        </td>
+                        <td>{r.user_email ?? "anon"}</td>
+                        <td className="logs-message" title={r.message}>
+                          {r.message}
+                        </td>
+                        <td className="logs-url" title={r.url ?? ""}>
+                          {r.url ?? "—"}
+                        </td>
+                        <td>
+                          {r.status_code != null ? (
+                            <span
+                              className={`pt-pill code-${Math.floor(r.status_code / 100)}xx`}
+                            >
+                              {r.method ? `${r.method} ` : ""}
+                              {r.status_code}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                      {isExpanded && (
+                        <tr key={`${r.id}-detail`} className="logs-detail-row">
+                          <td colSpan={7}>
+                            <div className="logs-detail">
+                              <div className="logs-detail-block">
+                                <strong>Message</strong>
+                                <pre>{r.message}</pre>
+                              </div>
+                              {r.stack && (
+                                <div className="logs-detail-block">
+                                  <strong>Stack</strong>
+                                  <pre>{shortStack(r.stack, 10)}</pre>
+                                </div>
+                              )}
+                              {r.extra != null && (
+                                <div className="logs-detail-block">
+                                  <strong>Extra</strong>
+                                  <pre>{JSON.stringify(r.extra, null, 2)}</pre>
+                                </div>
+                              )}
+                              <div className="logs-detail-grid">
+                                <span>
+                                  <strong>request_id:</strong>{" "}
+                                  {r.request_id ?? "—"}
+                                </span>
+                                <span>
+                                  <strong>session_id:</strong>{" "}
+                                  {r.session_id ?? "—"}
+                                </span>
+                                <span className="logs-detail-ua">
+                                  <strong>user_agent:</strong>{" "}
+                                  {r.user_agent ?? "—"}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </section>

@@ -55,10 +55,10 @@ function bytesToB64(bytes: Uint8Array): string {
 // typed password — no mnemonic prompt unless they forget the password.
 async function uploadPasswordLoginWrap(
   privateKey: CryptoKey,
-  password: string,
+  password: string
 ): Promise<void> {
   const pkcs8 = new Uint8Array(
-    await crypto.subtle.exportKey("pkcs8", privateKey),
+    await crypto.subtle.exportKey("pkcs8", privateKey)
   );
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -68,7 +68,7 @@ async function uploadPasswordLoginWrap(
     new TextEncoder().encode(password),
     { name: "PBKDF2" },
     false,
-    ["deriveKey"],
+    ["deriveKey"]
   );
   const aesKey = await crypto.subtle.deriveKey(
     {
@@ -80,12 +80,12 @@ async function uploadPasswordLoginWrap(
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
-    ["encrypt"],
+    ["encrypt"]
   );
   const ciphertext = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv.slice().buffer },
     aesKey,
-    pkcs8.slice().buffer,
+    pkcs8.slice().buffer
   );
 
   // Zero the plaintext PKCS8 bytes we copied into JS memory. Best-effort
@@ -146,11 +146,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // the envelope happens THEN, so a user who never confirms doesn't end
   // up with a recovery copy they don't know exists.
   const [pendingMnemonic, setPendingMnemonic] = useState<string | null>(null);
-  const [pendingWrapJob, setPendingWrapJob] = useState<(() => Promise<void>) | null>(null);
+  const [pendingWrapJob, setPendingWrapJob] = useState<
+    (() => Promise<void>) | null
+  >(null);
   // Track the user's recovery_mode at modal-open time so the seed-modal
   // copy can adapt (full = "restore on a new device too"; password_only
   // = "this resets a forgotten password only").
-  const [pendingRecoveryMode, setPendingRecoveryMode] = useState<RecoveryMode>("full");
+  const [pendingRecoveryMode, setPendingRecoveryMode] =
+    useState<RecoveryMode>("full");
   const [wrapBusy, setWrapBusy] = useState(false);
   const [wrapError, setWrapError] = useState<string | null>(null);
   // True when a "full"-mode user logs in on a device without local
@@ -169,14 +172,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // yields a usable encrypt key. Returns the SPKI bytes (what
   // savePublicKey + publishPublicKey expect downstream).
   const importPkcs8AndDerivePublicSpki = async (
-    pkcs8: ArrayBuffer,
+    pkcs8: ArrayBuffer
   ): Promise<{ privateKey: CryptoKey; publicKeyBytes: ArrayBuffer }> => {
     const privateKey = await crypto.subtle.importKey(
       "pkcs8",
       pkcs8,
       { name: "RSA-OAEP", hash: "SHA-256" },
       true,
-      ["decrypt"],
+      ["decrypt"]
     );
     const jwk = await crypto.subtle.exportKey("jwk", privateKey);
     const pubJwk: JsonWebKey = {
@@ -191,9 +194,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       pubJwk,
       { name: "RSA-OAEP", hash: "SHA-256" },
       true,
-      ["encrypt"],
+      ["encrypt"]
     );
-    const publicKeyBytes = await crypto.subtle.exportKey("spki", publicCryptoKey);
+    const publicKeyBytes = await crypto.subtle.exportKey(
+      "spki",
+      publicCryptoKey
+    );
     return { privateKey, publicKeyBytes };
   };
 
@@ -226,7 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isFreshRegistration: boolean,
     // Just-typed password, used once to derive the PBKDF2 login-wrap and
     // upload it. Lives only on this stack frame; not stored.
-    plaintextPassword?: string,
+    plaintextPassword?: string
   ) => {
     try {
       // (1) Local key already on this device. A fresh registration
@@ -240,7 +246,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (existingKey && existingPublicKey) {
           await publishPublicKey(existingPublicKey);
-          log.debug("encryption key already in IndexedDB; public key refreshed");
+          log.debug(
+            "encryption key already in IndexedDB; public key refreshed"
+          );
           return;
         }
       }
@@ -269,8 +277,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return null;
         });
         if (legacyPkcs8) {
-          log.info("migration: legacy basic-key found, upgrading to mnemonic-wrap");
-          const { privateKey, publicKeyBytes } = await importPkcs8AndDerivePublicSpki(legacyPkcs8);
+          log.info(
+            "migration: legacy basic-key found, upgrading to mnemonic-wrap"
+          );
+          const { privateKey, publicKeyBytes } =
+            await importPkcs8AndDerivePublicSpki(legacyPkcs8);
           await savePrivateKey(privateKey, userId, email);
           await savePublicKey(publicKeyBytes, userId, email);
           await publishPublicKey(publicKeyBytes);
@@ -281,7 +292,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const envelope = await wrapKeysForRecovery(
               privateKey,
               publicKeyBytes,
-              entropy,
+              entropy
             );
             await uploadWrappedKey(envelope);
             // Once the wrap is on file, drop the legacy server-held
@@ -293,7 +304,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               await deleteBasicKey();
               log.info("migration: legacy basic-key DELETEd from server");
             } catch (err) {
-              log.warn("migration: legacy basic-key DELETE failed (non-fatal)", err);
+              log.warn(
+                "migration: legacy basic-key DELETE failed (non-fatal)",
+                err
+              );
             }
           };
 
@@ -301,7 +315,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setPendingRecoveryMode("full");
           setPendingMnemonic(mnemonic);
           log.info(
-            "migration: imported legacy key, mnemonic generated, awaiting user confirmation",
+            "migration: imported legacy key, mnemonic generated, awaiting user confirmation"
           );
           return;
         }
@@ -324,7 +338,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await savePrivateKey(keyPair.privateKey, userId, email);
 
-      const publicKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
+      const publicKey = await crypto.subtle.exportKey(
+        "spki",
+        keyPair.publicKey
+      );
       await savePublicKey(publicKey, userId, email);
 
       await publishPublicKey(publicKey);
@@ -356,7 +373,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const envelope = await wrapKeysForRecovery(
           keyPair.privateKey,
           publicKey,
-          entropy,
+          entropy
         );
         await uploadWrappedKey(envelope);
       };
@@ -365,7 +382,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setPendingRecoveryMode("full");
       setPendingMnemonic(mnemonic);
 
-      log.info("encryption setup complete; awaiting recovery-seed confirmation");
+      log.info(
+        "encryption setup complete; awaiting recovery-seed confirmation"
+      );
     } catch (err) {
       log.error("encryption setup failed", err);
     }
@@ -460,7 +479,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // trigger a re-render so the tier badge + Upgrade affordance
           // refresh. Comparing the `code` is enough — other plan fields
           // only change when `code` does.
-          (prev.current_plan?.code ?? null) === (nextUser.current_plan?.code ?? null)
+          (prev.current_plan?.code ?? null) ===
+            (nextUser.current_plan?.code ?? null)
             ? prev
             : nextUser
         );
@@ -475,7 +495,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           nextUser.id,
           nextUser.recovery_mode ?? "full",
           nextUser.email,
-          boot.isFreshSignup,
+          boot.isFreshSignup
         ).catch((err) => log.error("background encryption setup failed", err));
       } catch (err) {
         if ((err as { name?: string }).name === "AbortError") return;
@@ -502,7 +522,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // the freshly-generated personal RSA private key, so the user's next
     // login from a new browser can auto-unlock without prompting for the
     // 24-word mnemonic. Never persisted, never logged.
-    plaintextPassword?: string,
+    plaintextPassword?: string
   ) => {
     authVersion.current += 1;
     setAuthToken(token);
@@ -511,7 +531,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const decoded = parseJwt(token);
 
     if (decoded) {
-      const normalizedAccountType = normalizeAccountType(accountType ?? decoded.account_type);
+      const normalizedAccountType = normalizeAccountType(
+        accountType ?? decoded.account_type
+      );
       const access = defaultAccessForAccount(normalizedAccountType);
       setUser({
         email: decoded.email,
@@ -556,8 +578,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             recoveryMode,
             data.email,
             isFreshRegistration,
-            plaintextPassword,
-          ).catch((err) => log.error("background encryption setup failed", err));
+            plaintextPassword
+          ).catch((err) =>
+            log.error("background encryption setup failed", err)
+          );
         })
         .catch((err) => log.error("post-login profile fetch failed", err));
     }
@@ -574,7 +598,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setNeedsRecovery(false);
     };
     window.addEventListener("rwayve:session-expired", onExpired);
-    return () => window.removeEventListener("rwayve:session-expired", onExpired);
+    return () =>
+      window.removeEventListener("rwayve:session-expired", onExpired);
   }, []);
 
   const logout = () => {
@@ -591,10 +616,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // the UI — the local state is already cleared, so we land on
     // /login either way.
     const logoutDone = logoutRequest().catch((err) =>
-      log.error("logout request failed", err),
+      log.error("logout request failed", err)
     );
     const timeout = new Promise<void>((resolve) =>
-      window.setTimeout(resolve, 2000),
+      window.setTimeout(resolve, 2000)
     );
     void Promise.race([logoutDone, timeout]).finally(() => {
       // Hard-nav to the home page so the user lands on the public landing
@@ -635,7 +660,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, initializing, login, logout, refresh }}>
+    <AuthContext.Provider
+      value={{ user, initializing, login, logout, refresh }}
+    >
       {children}
       {pendingMnemonic && (
         <RecoverySeedModal

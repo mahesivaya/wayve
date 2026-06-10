@@ -27,11 +27,16 @@ export type DocEntry = {
   keywords?: string[];
 };
 
-export const DOC_CATEGORIES: Array<{ id: DocCategory; label: string; description: string }> = [
+export const DOC_CATEGORIES: Array<{
+  id: DocCategory;
+  label: string;
+  description: string;
+}> = [
   {
     id: "reference",
     label: "Reference",
-    description: "API surface, rate limits, scopes — the exact contracts integrators rely on.",
+    description:
+      "API surface, rate limits, scopes — the exact contracts integrators rely on.",
   },
   {
     id: "concepts",
@@ -56,7 +61,15 @@ export const DOCS: DocEntry[] = [
     description:
       "Interactive Swagger UI. Authorize with an X-API-KEY, expand any endpoint, run live requests.",
     category: "reference",
-    keywords: ["swagger", "openapi", "rest", "api", "endpoints", "x-api-key", "scopes"],
+    keywords: [
+      "swagger",
+      "openapi",
+      "rest",
+      "api",
+      "endpoints",
+      "x-api-key",
+      "scopes",
+    ],
   },
   {
     path: "/docs/quotas",
@@ -82,14 +95,16 @@ export const DOCS: DocEntry[] = [
   {
     path: "/docs/services/mail",
     title: "Mail",
-    description: "Email account connection, sync, send, and the encrypted-body model.",
+    description:
+      "Email account connection, sync, send, and the encrypted-body model.",
     category: "concepts",
     keywords: ["email", "mail", "gmail", "outlook", "imap", "smtp"],
   },
   {
     path: "/docs/services/chat",
     title: "Chat",
-    description: "Real-time direct messages and channels, with end-to-end encrypted envelopes.",
+    description:
+      "Real-time direct messages and channels, with end-to-end encrypted envelopes.",
     category: "concepts",
     keywords: ["chat", "messaging", "channels", "e2e", "encryption"],
   },
@@ -103,7 +118,8 @@ export const DOCS: DocEntry[] = [
   {
     path: "/docs/services/calendar",
     title: "Calendar",
-    description: "Scheduling, meeting links, Google Calendar / Zoom integration.",
+    description:
+      "Scheduling, meeting links, Google Calendar / Zoom integration.",
     category: "concepts",
     keywords: ["calendar", "scheduler", "meetings", "zoom", "google calendar"],
   },

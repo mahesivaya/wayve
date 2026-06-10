@@ -1,438 +1,467 @@
 /* PAGE BACKGROUND */
 .login-page {
-    /* `min-height` instead of `height` so the longer Register card (with
+  /* `min-height` instead of `height` so the longer Register card (with
        the recovery-mode fieldset) can extend past the viewport without
        being clipped; the body scrolls instead of the card. */
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 24px 0;
-    box-sizing: border-box;
-    /* Light surface matching the marketing/home page: white base with two
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 0;
+  box-sizing: border-box;
+  /* Light surface matching the marketing/home page: white base with two
        soft brand glows, same IBM Plex Sans typeface. */
-    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
-    background-color: #ffffff;
-    background-image:
-      radial-gradient(900px 600px at 50% -8%, rgba(56, 189, 248, 0.10), transparent 60%),
-      radial-gradient(760px 520px at 100% 112%, rgba(37, 99, 235, 0.08), transparent 55%);
-    background-repeat: no-repeat, no-repeat;
-  }
+  font-family:
+    "IBM Plex Sans",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background-color: #ffffff;
+  background-image:
+    radial-gradient(
+      900px 600px at 50% -8%,
+      rgba(56, 189, 248, 0.1),
+      transparent 60%
+    ),
+    radial-gradient(
+      760px 520px at 100% 112%,
+      rgba(37, 99, 235, 0.08),
+      transparent 55%
+    );
+  background-repeat: no-repeat, no-repeat;
+}
 
-  /* Variant used on pages that render the public header on top (Login /
+/* Variant used on pages that render the public header on top (Login /
      Register): stack the header full-width at the top and center the card in
      the remaining space. Other auth pages (forgot/reset/recover) keep the
      default single-card centering above. */
-  .login-page--framed {
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch;
-    padding: 0;
-  }
+.login-page--framed {
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  padding: 0;
+}
 
-  .login-page--framed .login-page-body {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 32px 16px;
-  }
+.login-page--framed .login-page-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 32px 16px;
+}
 
-  /* CARD */
-  @keyframes login-card-in {
-    from { opacity: 0; transform: translateY(12px) scale(0.99); }
-    to   { opacity: 1; transform: none; }
+/* CARD */
+@keyframes login-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.99);
   }
-
-  .login-card {
-    /* Clean white card with a soft lift shadow — matches the marketing cards. */
-    background: #ffffff;
-    padding: 36px 36px 30px;
-    width: 400px;
-    max-width: calc(100vw - 32px);
-    border-radius: var(--radius-lg);
-    border: 1px solid rgba(20, 40, 90, 0.24);
-    box-shadow: 0 24px 60px -24px rgba(20, 40, 90, 0.25);
-    color: #2b3344;
-    display: flex;
-    flex-direction: column;
-    animation: login-card-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  to {
+    opacity: 1;
+    transform: none;
   }
+}
 
-  /* TITLE */
-  .login-card h2 {
-    margin: 0 0 4px;
-    font-size: 1.6rem;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-  }
+.login-card {
+  /* Clean white card with a soft lift shadow — matches the marketing cards. */
+  background: #ffffff;
+  padding: 36px 36px 30px;
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(20, 40, 90, 0.24);
+  box-shadow: 0 24px 60px -24px rgba(20, 40, 90, 0.25);
+  color: #2b3344;
+  display: flex;
+  flex-direction: column;
+  animation: login-card-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
 
-  .subtitle {
-    font-size: var(--text-md);
-    color: var(--color-text-generic-mid);
-    margin-bottom: 22px;
-  }
+/* TITLE */
+.login-card h2 {
+  margin: 0 0 4px;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
 
-  /* INPUTS */
-  .login-card input {
-    margin-bottom: 14px;
-    padding: 12px 14px;
-    border: 1px solid var(--color-border-generic);
-    border-radius: var(--radius-md, 8px);
-    font-size: var(--text-md);
-    box-sizing: border-box;
-    background: var(--color-surface);
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  }
+.subtitle {
+  font-size: var(--text-md);
+  color: var(--color-text-generic-mid);
+  margin-bottom: 22px;
+}
 
-  .login-card input:hover {
-    border-color: color-mix(in srgb, var(--color-brand-indigo-from) 45%, var(--color-border-generic));
-  }
+/* INPUTS */
+.login-card input {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-generic);
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--text-md);
+  box-sizing: border-box;
+  background: var(--color-surface);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
 
-  .login-card input:focus {
-    outline: none;
-    border-color: var(--color-brand-indigo-from);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-indigo-from) 22%, transparent);
-  }
+.login-card input:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--color-brand-indigo-from) 45%,
+    var(--color-border-generic)
+  );
+}
 
-  /* BUTTON */
-  .login-card button {
-    padding: 12px;
-    border: none;
-    background: var(--color-brand-indigo-from);
-    color: var(--color-surface);
-    border-radius: var(--radius-md, 8px);
-    cursor: pointer;
-    font-weight: 700;
-    font-size: var(--text-md);
-    transition: background 0.15s ease, transform 0.06s ease, box-shadow 0.15s ease;
-  }
+.login-card input:focus {
+  outline: none;
+  border-color: var(--color-brand-indigo-from);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--color-brand-indigo-from) 22%, transparent);
+}
 
-  .login-card button:hover{
-    background: var(--color-brand-indigo-hover);
-  }
+/* BUTTON */
+.login-card button {
+  padding: 12px;
+  border: none;
+  background: var(--color-brand-indigo-from);
+  color: var(--color-surface);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  font-weight: 700;
+  font-size: var(--text-md);
+  transition:
+    background 0.15s ease,
+    transform 0.06s ease,
+    box-shadow 0.15s ease;
+}
 
-  /* Lift + glow only on the primary submit so the OAuth/secondary buttons
+.login-card button:hover {
+  background: var(--color-brand-indigo-hover);
+}
+
+/* Lift + glow only on the primary submit so the OAuth/secondary buttons
      keep their own flatter styling. */
-  .login-card button[type="submit"]:hover {
-    box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--color-brand-indigo-from) 75%, transparent);
-  }
+.login-card button[type="submit"]:hover {
+  box-shadow: 0 8px 18px -8px
+    color-mix(in srgb, var(--color-brand-indigo-from) 75%, transparent);
+}
 
-  .login-card button:active {
-    transform: translateY(1px);
-  }
-  
-  /* REGISTER LINK */
-  .switch-auth {
-    margin-top: 15px;
-    font-size: var(--text-lg);
-    text-align: center;
-  }
-  
-  .switch-auth span {
-    color: var(--color-brand-indigo-from);
-    cursor: pointer;
-    font-weight: bold;
-  }
+.login-card button:active {
+  transform: translateY(1px);
+}
 
-  .switch-auth a {
-    color: var(--color-brand-indigo-from);
-    font-weight: 600;
-    text-decoration: none;
-  }
+/* REGISTER LINK */
+.switch-auth {
+  margin-top: 15px;
+  font-size: var(--text-lg);
+  text-align: center;
+}
 
-  .switch-auth a:hover {
-    text-decoration: underline;
-  }
+.switch-auth span {
+  color: var(--color-brand-indigo-from);
+  cursor: pointer;
+  font-weight: bold;
+}
 
-  .error {
-    color: red;
-    font-size: var(--text-md);
-    margin-top: 10px;
-    text-align: center;
-  }
+.switch-auth a {
+  color: var(--color-brand-indigo-from);
+  font-weight: 600;
+  text-decoration: none;
+}
 
-  .auth-divider {
-    display: flex;
-    align-items: center;
-    margin: 14px 0;
-    color: var(--color-text-generic-light);
-    font-size: var(--text-sm);
-  }
+.switch-auth a:hover {
+  text-decoration: underline;
+}
 
-  .auth-divider::before,
-  .auth-divider::after{
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: var(--color-surface-generic-mid);
-  }
+.error {
+  color: red;
+  font-size: var(--text-md);
+  margin-top: 10px;
+  text-align: center;
+}
 
-  .auth-divider span {
-    padding: 0 10px;
-  }
+.auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 14px 0;
+  color: var(--color-text-generic-light);
+  font-size: var(--text-sm);
+}
 
-  /* Side-by-side container for the OAuth (Google + Outlook) buttons on
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-surface-generic-mid);
+}
+
+.auth-divider span {
+  padding: 0 10px;
+}
+
+/* Side-by-side container for the OAuth (Google + Outlook) buttons on
      the registration form. Each button takes equal width so the row
      reads as a single "pick your provider" pair instead of competing
      for emphasis. Collapses to a stacked column on narrow screens. */
+.auth-oauth-row {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-oauth-row > button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 380px) {
   .auth-oauth-row {
-    display: flex;
-    gap: 8px;
-  }
-
-  .auth-oauth-row > button {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  @media (max-width: 380px) {
-    .auth-oauth-row {
-      flex-direction: column;
-    }
-  }
-
-  .login-card .google-btn {
-    background: var(--color-surface);
-    color: var(--color-text-generic-dark);
-    border: 1px solid var(--color-border-generic);
-    font-weight: 500;
-  }
-
-  .login-card .google-btn:hover{
-    background: var(--color-surface-generic-pale);
-  }
-
-  .login-card .outlook-btn {
-    background: var(--color-brand-blue-strong);
-    color: var(--color-surface);
-    border: 1px solid var(--color-brand-blue-strong);
-    font-weight: 500;
-  }
-
-  .login-card .outlook-btn:hover{
-    background: var(--color-brand-blue-strong-hover);
-  }
-
-  .login-card .sso-btn {
-    background: var(--color-brand-indigo-deep);
-    color: var(--color-surface);
-    border: 1px solid var(--color-brand-indigo-deep);
-    font-weight: 600;
-  }
-
-  .login-card .sso-btn:hover{
-    background: var(--color-brand-indigo-deep-hover);
-  }
-
-  .login-card .recovery-mode-fieldset {
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md, 8px);
-    padding: 10px 12px 8px;
-    margin: 2px 0 12px;
-    display: flex;
     flex-direction: column;
-    gap: 8px;
   }
+}
 
-  .login-card .recovery-mode-fieldset legend {
-    padding: 0 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--color-text-primary);
-  }
+.login-card .google-btn {
+  background: var(--color-surface);
+  color: var(--color-text-generic-dark);
+  border: 1px solid var(--color-border-generic);
+  font-weight: 500;
+}
 
-  .login-card .recovery-mode-help {
-    margin: 0 0 2px;
-    font-size: 0.74rem;
-    line-height: 1.35;
-    color: var(--color-text-secondary);
-  }
+.login-card .google-btn:hover {
+  background: var(--color-surface-generic-pale);
+}
 
-  .login-card .recovery-mode-option {
-    display: flex;
-    gap: 8px;
-    align-items: flex-start;
-    cursor: pointer;
-    font-size: 0.8rem;
-    line-height: 1.3;
-  }
+.login-card .outlook-btn {
+  background: var(--color-brand-blue-strong);
+  color: var(--color-surface);
+  border: 1px solid var(--color-brand-blue-strong);
+  font-weight: 500;
+}
 
-  .login-card .recovery-mode-option input[type="radio"] {
-    margin-top: 2px;
-    flex-shrink: 0;
-  }
+.login-card .outlook-btn:hover {
+  background: var(--color-brand-blue-strong-hover);
+}
 
-  .login-card .recovery-mode-option > span {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
+.login-card .sso-btn {
+  background: var(--color-brand-indigo-deep);
+  color: var(--color-surface);
+  border: 1px solid var(--color-brand-indigo-deep);
+  font-weight: 600;
+}
 
-  .login-card .recovery-mode-option strong {
-    font-size: 0.82rem;
-  }
+.login-card .sso-btn:hover {
+  background: var(--color-brand-indigo-deep-hover);
+}
 
-  .login-card .recovery-mode-option small {
-    font-size: 0.7rem;
-    line-height: 1.35;
-    color: var(--color-text-secondary, var(--color-text-generic-mid));
-  }
+.login-card .recovery-mode-fieldset {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  padding: 10px 12px 8px;
+  margin: 2px 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
-  /* Account-type radio group on the Register form. Visual rules mirror
+.login-card .recovery-mode-fieldset legend {
+  padding: 0 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.login-card .recovery-mode-help {
+  margin: 0 0 2px;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--color-text-secondary);
+}
+
+.login-card .recovery-mode-option {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.login-card .recovery-mode-option input[type="radio"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.login-card .recovery-mode-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.login-card .recovery-mode-option strong {
+  font-size: 0.82rem;
+}
+
+.login-card .recovery-mode-option small {
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--color-text-secondary, var(--color-text-generic-mid));
+}
+
+/* Account-type radio group on the Register form. Visual rules mirror
      the recovery-mode-* fieldset above so both choice blocks read as
      the same control system. */
-  .login-card .account-kind-fieldset {
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md, 8px);
-    padding: 10px 12px 8px;
-    margin: 2px 0 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
+.login-card .account-kind-fieldset {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  padding: 10px 12px 8px;
+  margin: 2px 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
-  .login-card .account-kind-fieldset legend {
-    padding: 0 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--color-text-primary);
-  }
+.login-card .account-kind-fieldset legend {
+  padding: 0 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
 
-  .login-card .account-kind-option {
-    display: flex;
-    gap: 8px;
-    align-items: flex-start;
-    cursor: pointer;
-    font-size: 0.8rem;
-    line-height: 1.3;
-  }
+.login-card .account-kind-option {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
 
-  .login-card .account-kind-option input[type="radio"] {
-    margin-top: 2px;
-    flex-shrink: 0;
-  }
+.login-card .account-kind-option input[type="radio"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
 
-  .login-card .account-kind-option > span {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
+.login-card .account-kind-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
 
-  .login-card .account-kind-option strong {
-    font-size: 0.82rem;
-  }
+.login-card .account-kind-option strong {
+  font-size: 0.82rem;
+}
 
-  .login-card .account-kind-option small {
-    font-size: 0.7rem;
-    line-height: 1.35;
-    color: var(--color-text-secondary, var(--color-text-generic-mid));
-  }
+.login-card .account-kind-option small {
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--color-text-secondary, var(--color-text-generic-mid));
+}
 
-  .login-card .link-button {
-    background: none;
-    border: none;
-    color: var(--color-primary, var(--color-accent-indigo));
-    cursor: pointer;
-    padding: 0;
-    font: inherit;
-    text-decoration: underline;
-  }
+.login-card .link-button {
+  background: none;
+  border: none;
+  color: var(--color-primary, var(--color-accent-indigo));
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+}
 
-  /* ───────────────────────────────────────────────────────────────
+/* ───────────────────────────────────────────────────────────────
      Light theme — matches the marketing/home page (white surface,
      dark text, brand-blue accents, blue→cyan gradient submit). Scoped
      under .login-page so it only skins the public auth pages.
      ─────────────────────────────────────────────────────────────── */
-  .login-page .login-card h2 {
-    color: #141a26;
-  }
+.login-page .login-card h2 {
+  color: #141a26;
+}
 
-  .login-page .subtitle {
-    color: #3b465c;
-    font-size: 0.9rem;
-  }
+.login-page .subtitle {
+  color: #3b465c;
+  font-size: 0.9rem;
+}
 
-  .login-page .login-card input {
-    background: #fbfcfe;
-    border-color: rgba(20, 40, 90, 0.32);
-    color: #141a26;
-  }
+.login-page .login-card input {
+  background: #fbfcfe;
+  border-color: rgba(20, 40, 90, 0.32);
+  color: #141a26;
+}
 
-  .login-page .login-card input::placeholder {
-    color: #6b7689;
-  }
+.login-page .login-card input::placeholder {
+  color: #6b7689;
+}
 
-  .login-page .login-card input:hover {
-    border-color: rgba(37, 99, 235, 0.4);
-  }
+.login-page .login-card input:hover {
+  border-color: rgba(37, 99, 235, 0.4);
+}
 
-  .login-page .login-card input:focus {
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
-  }
+.login-page .login-card input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
 
-  /* Primary submit: brand blue→cyan gradient (matches the hero CTA). */
-  .login-page .login-card button[type="submit"] {
-    background: linear-gradient(135deg, #2563eb, #38bdf8);
-    color: #ffffff;
-  }
+/* Primary submit: brand blue→cyan gradient (matches the hero CTA). */
+.login-page .login-card button[type="submit"] {
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  color: #ffffff;
+}
 
-  .login-page .login-card button[type="submit"]:hover {
-    background: linear-gradient(135deg, #1d4ed8, #22b8e6);
-    box-shadow: 0 8px 22px -8px rgba(37, 99, 235, 0.55);
-  }
+.login-page .login-card button[type="submit"]:hover {
+  background: linear-gradient(135deg, #1d4ed8, #22b8e6);
+  box-shadow: 0 8px 22px -8px rgba(37, 99, 235, 0.55);
+}
 
-  .login-page .auth-divider {
-    color: #6b7689;
-  }
+.login-page .auth-divider {
+  color: #6b7689;
+}
 
-  .login-page .auth-divider::before,
-  .login-page .auth-divider::after {
-    background: rgba(20, 40, 90, 0.22);
-  }
+.login-page .auth-divider::before,
+.login-page .auth-divider::after {
+  background: rgba(20, 40, 90, 0.22);
+}
 
-  .login-page .switch-auth {
-    color: #2b3344;
-  }
+.login-page .switch-auth {
+  color: #2b3344;
+}
 
-  .login-page .switch-auth a,
-  .login-page .switch-auth span {
-    color: #2563eb;
-  }
+.login-page .switch-auth a,
+.login-page .switch-auth span {
+  color: #2563eb;
+}
 
-  /* Gmail button: white pill with a defined border on the white card. */
-  .login-page .login-card .google-btn {
-    background: #ffffff;
-    color: #1f2937;
-    border-color: rgba(20, 40, 90, 0.3);
-  }
+/* Gmail button: white pill with a defined border on the white card. */
+.login-page .login-card .google-btn {
+  background: #ffffff;
+  color: #1f2937;
+  border-color: rgba(20, 40, 90, 0.3);
+}
 
-  .login-page .login-card .google-btn:hover {
-    background: #f4f7fc;
-  }
+.login-page .login-card .google-btn:hover {
+  background: #f4f7fc;
+}
 
-  .login-page .error {
-    color: #dc2626;
-  }
+.login-page .error {
+  color: #dc2626;
+}
 
-  .login-page .login-card .recovery-mode-fieldset,
-  .login-page .login-card .account-kind-fieldset {
-    border-color: rgba(20, 40, 90, 0.14);
-  }
+.login-page .login-card .recovery-mode-fieldset,
+.login-page .login-card .account-kind-fieldset {
+  border-color: rgba(20, 40, 90, 0.14);
+}
 
-  .login-page .login-card legend,
-  .login-page .login-card .recovery-mode-option,
-  .login-page .login-card .account-kind-option,
-  .login-page .login-card .recovery-mode-option strong,
-  .login-page .login-card .account-kind-option strong {
-    color: #2b3344;
-  }
+.login-page .login-card legend,
+.login-page .login-card .recovery-mode-option,
+.login-page .login-card .account-kind-option,
+.login-page .login-card .recovery-mode-option strong,
+.login-page .login-card .account-kind-option strong {
+  color: #2b3344;
+}
 
-  .login-page .login-card .recovery-mode-help,
-  .login-page .login-card .recovery-mode-option small,
-  .login-page .login-card .account-kind-option small {
-    color: #6b7689;
-  }
+.login-page .login-card .recovery-mode-help,
+.login-page .login-card .recovery-mode-option small,
+.login-page .login-card .account-kind-option small {
+  color: #6b7689;
+}

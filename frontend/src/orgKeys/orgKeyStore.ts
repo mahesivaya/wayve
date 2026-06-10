@@ -59,7 +59,7 @@ function del(db: IDBDatabase, key: string) {
 export async function saveOrgPrivateKey(
   orgId: number,
   userId: number,
-  privateKey: CryptoKey,
+  privateKey: CryptoKey
 ): Promise<void> {
   const db = await openDB();
   const exported = await crypto.subtle.exportKey("pkcs8", privateKey);
@@ -68,7 +68,7 @@ export async function saveOrgPrivateKey(
 
 export async function loadOrgPrivateKey(
   orgId: number,
-  userId: number,
+  userId: number
 ): Promise<CryptoKey | null> {
   const db = await openDB();
   const direct = await getOne(db, orgPrivateKeyId(orgId, userId));
@@ -78,13 +78,13 @@ export async function loadOrgPrivateKey(
     direct as ArrayBuffer,
     { name: "RSA-OAEP", hash: "SHA-256" },
     true,
-    ["decrypt"],
+    ["decrypt"]
   );
 }
 
 export async function clearOrgPrivateKey(
   orgId: number,
-  userId: number,
+  userId: number
 ): Promise<void> {
   const db = await openDB();
   return del(db, orgPrivateKeyId(orgId, userId));

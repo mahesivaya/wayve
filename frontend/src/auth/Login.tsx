@@ -17,9 +17,11 @@ import "./login.css";
 // goes wrong (state mismatch, token verification, IdP error, etc.). Mapped
 // to a friendly message here instead of leaking the raw code at the user.
 const SSO_ERROR_LABELS: Record<string, string> = {
-  invalid_state: "Your SSO sign-in expired or was tampered with. Please try again.",
+  invalid_state:
+    "Your SSO sign-in expired or was tampered with. Please try again.",
   missing_code: "The identity provider didn't return an authorization code.",
-  token_exchange_failed: "Couldn't complete the SSO handshake with your provider.",
+  token_exchange_failed:
+    "Couldn't complete the SSO handshake with your provider.",
   id_token_invalid: "Your identity provider returned an invalid token.",
   provisioning_failed: "We couldn't create your account from the SSO response.",
   discovery_failed: "Your identity provider is unreachable right now.",
@@ -88,13 +90,13 @@ export default function Login() {
               claims.sub,
               data.email ?? email,
               password,
-              data.login_wrap,
+              data.login_wrap
             );
           }
         } catch (err) {
           logger.error("org member key unwrap failed", err);
           setError(
-            "Couldn't unlock your account keys — please contact your administrator.",
+            "Couldn't unlock your account keys — please contact your administrator."
           );
           return;
         }
@@ -138,7 +140,10 @@ export default function Login() {
       // would either land on the IdP (good) or on /login with an error
       // hash (also OK but we can do better when we already know the
       // outcome).
-      const probe = await fetch(url, { redirect: "manual", credentials: "include" });
+      const probe = await fetch(url, {
+        redirect: "manual",
+        credentials: "include",
+      });
       if (probe.status === 0 || (probe.status >= 300 && probe.status < 400)) {
         // Browsers report opaqueredirect as type/status 0 when we ask
         // redirect:manual — that's the success case.
@@ -146,7 +151,9 @@ export default function Login() {
         return;
       }
       if (probe.status === 404) {
-        setError("No SSO is configured for that email domain. Use email/password or contact your admin.");
+        setError(
+          "No SSO is configured for that email domain. Use email/password or contact your admin."
+        );
         return;
       }
       const body = await probe.json().catch(() => null);
@@ -168,101 +175,98 @@ export default function Login() {
           shell has no marketing chrome, so hide it there. */}
       {!isDesktopApp() && <PublicHeader showActions={false} />}
       <div className="login-page-body">
-      {ssoMode ? (
-        <form className="login-card" onSubmit={handleSsoSubmit}>
-          <h2>Sign in with SSO</h2>
-          <p className="subtitle">
-            Enter your work email. We&apos;ll redirect you to your
-            organization&apos;s identity provider.
-          </p>
+        {ssoMode ? (
+          <form className="login-card" onSubmit={handleSsoSubmit}>
+            <h2>Sign in with SSO</h2>
+            <p className="subtitle">
+              Enter your work email. We&apos;ll redirect you to your
+              organization&apos;s identity provider.
+            </p>
 
-          <input
-            type="email"
-            value={ssoEmail}
-            onChange={(e) => setSsoEmail(e.target.value)}
-            placeholder="you@your-company.com"
-            autoFocus
-            required
-          />
+            <input
+              type="email"
+              value={ssoEmail}
+              onChange={(e) => setSsoEmail(e.target.value)}
+              placeholder="you@your-company.com"
+              autoFocus
+              required
+            />
 
-          <button type="submit" disabled={ssoLoading}>
-            {ssoLoading ? "Connecting…" : "Continue with SSO"}
-          </button>
-
-          {error && <p className="error">{error}</p>}
-
-          <p className="switch-auth">
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => {
-                setSsoMode(false);
-                setError("");
-              }}
-            >
-              ← Back to password sign-in
+            <button type="submit" disabled={ssoLoading}>
+              {ssoLoading ? "Connecting…" : "Continue with SSO"}
             </button>
-          </p>
-        </form>
-      ) : (
-        <form className="login-card" onSubmit={handleLogin}>
-          <p className="subtitle">Login to your Fluxze account</p>
 
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            required
-          />
+            {error && <p className="error">{error}</p>}
 
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            required
-          />
+            <p className="switch-auth">
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setSsoMode(false);
+                  setError("");
+                }}
+              >
+                ← Back to password sign-in
+              </button>
+            </p>
+          </form>
+        ) : (
+          <form className="login-card" onSubmit={handleLogin}>
+            <p className="subtitle">Login to your Fluxze account</p>
 
-          <button type="submit">Login</button>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
+              required
+            />
 
-          <div className="auth-divider"><span>or</span></div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              required
+            />
 
-          {false && (
-            <button
-              type="button"
-              className="sso-btn"
-              disabled
-              title="SSO sign-in is temporarily disabled"
-              onClick={() => {
-                setSsoMode(true);
-                setError("");
-              }}
-            >
-              Sign in with SSO
+            <button type="submit">Login</button>
+
+            <div className="auth-divider">
+              <span>or</span>
+            </div>
+
+            {false && (
+              <button
+                type="button"
+                className="sso-btn"
+                disabled
+                title="SSO sign-in is temporarily disabled"
+                onClick={() => {
+                  setSsoMode(true);
+                  setError("");
+                }}
+              >
+                Sign in with SSO
+              </button>
+            )}
+
+            <button type="button" className="google-btn" onClick={handleGoogle}>
+              Continue with Gmail
             </button>
-          )}
 
-          <button
-            type="button"
-            className="google-btn"
-            onClick={handleGoogle}
-          >
-            Continue with Gmail
-          </button>
+            {error && <p className="error">{error}</p>}
 
-          {error && <p className="error">{error}</p>}
+            <p className="switch-auth">
+              <Link to="/forgot-password">Forgot password?</Link>
+            </p>
 
-          <p className="switch-auth">
-            <Link to="/forgot-password">Forgot password?</Link>
-          </p>
-
-          <p className="switch-auth">
-            Don’t have an account?{" "}
-            <Link to="/register">Register</Link>
-          </p>
-        </form>
-      )}
+            <p className="switch-auth">
+              Don’t have an account? <Link to="/register">Register</Link>
+            </p>
+          </form>
+        )}
       </div>
     </div>
   );

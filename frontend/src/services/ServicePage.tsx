@@ -19,14 +19,20 @@ export default function ServicePage() {
     <DocsShell title={service.name}>
       <main className="service-page-main">
         <section className="service-page-hero">
-          <div className={`service-page-icon ${service.accent}`}>{service.icon}</div>
+          <div className={`service-page-icon ${service.accent}`}>
+            {service.icon}
+          </div>
           <p className="service-page-eyebrow">{service.eyebrow}</p>
           <h1>{service.name}</h1>
           <p className="service-page-summary">{service.summary}</p>
           <p className="service-page-description">{service.description}</p>
           <div className="service-page-actions">
-            <button onClick={() => navigate(service.appPath)}>Open {service.name}</button>
-            <button onClick={() => navigate("/register")}>Create account</button>
+            <button onClick={() => navigate(service.appPath)}>
+              Open {service.name}
+            </button>
+            <button onClick={() => navigate("/register")}>
+              Create account
+            </button>
           </div>
         </section>
 

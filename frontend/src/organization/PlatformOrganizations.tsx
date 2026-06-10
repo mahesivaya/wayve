@@ -42,7 +42,9 @@ export default function PlatformOrganizations() {
       })
       .catch((err) => {
         if (alive) {
-          setError(err instanceof Error ? err.message : "Failed to load organizations");
+          setError(
+            err instanceof Error ? err.message : "Failed to load organizations"
+          );
         }
       })
       .finally(() => {
@@ -66,7 +68,9 @@ export default function PlatformOrganizations() {
     try {
       setApiKeys(await listOrganizationApiKeys(id));
     } catch (err) {
-      setKeyError(err instanceof Error ? err.message : "Failed to load API keys");
+      setKeyError(
+        err instanceof Error ? err.message : "Failed to load API keys"
+      );
     } finally {
       setKeysLoading(false);
     }
@@ -79,7 +83,10 @@ export default function PlatformOrganizations() {
     setNewRawKey("");
     setKeyBusy(true);
     try {
-      const created = await generateOrganizationApiKey(keyOrgId, keyName.trim());
+      const created = await generateOrganizationApiKey(
+        keyOrgId,
+        keyName.trim()
+      );
       setNewRawKey(created.api_key);
       setApiKeys((prev) => [
         {
@@ -94,7 +101,9 @@ export default function PlatformOrganizations() {
       ]);
       setKeyName("");
     } catch (err) {
-      setKeyError(err instanceof Error ? err.message : "Failed to generate key");
+      setKeyError(
+        err instanceof Error ? err.message : "Failed to generate key"
+      );
     } finally {
       setKeyBusy(false);
     }
@@ -132,7 +141,9 @@ export default function PlatformOrganizations() {
           {loading ? (
             <div className="platform-admin-empty">Loading businesses...</div>
           ) : organizations.length === 0 ? (
-            <div className="platform-admin-empty">No businesses created yet.</div>
+            <div className="platform-admin-empty">
+              No businesses created yet.
+            </div>
           ) : (
             <div className="organization-grid">
               {organizations.map((org) => (
@@ -156,7 +167,9 @@ export default function PlatformOrganizations() {
           <div className="platform-admin-section-header">
             <div>
               <h2>API keys</h2>
-              <p>Generate keys for programmatic (external) access to a business.</p>
+              <p>
+                Generate keys for programmatic (external) access to a business.
+              </p>
             </div>
           </div>
 
@@ -178,7 +191,10 @@ export default function PlatformOrganizations() {
 
           {keyOrgId != null && (
             <>
-              <form className="platform-admin-form u-form-stack" onSubmit={generateKey}>
+              <form
+                className="platform-admin-form u-form-stack"
+                onSubmit={generateKey}
+              >
                 <label className="u-form-label">
                   <span className="u-form-label-text">Key name</span>
                   <input
@@ -189,7 +205,11 @@ export default function PlatformOrganizations() {
                     required
                   />
                 </label>
-                <button className="u-btn-primary" type="submit" disabled={keyBusy}>
+                <button
+                  className="u-btn-primary"
+                  type="submit"
+                  disabled={keyBusy}
+                >
                   {keyBusy ? "Generating..." : "Generate key"}
                 </button>
               </form>
@@ -201,7 +221,9 @@ export default function PlatformOrganizations() {
                 </div>
               )}
 
-              {keyError && <div className="platform-admin-error">{keyError}</div>}
+              {keyError && (
+                <div className="platform-admin-error">{keyError}</div>
+              )}
 
               {keysLoading ? (
                 <div className="platform-admin-empty">Loading keys...</div>

@@ -94,7 +94,7 @@
   border-bottom: 2px solid transparent;
 }
 
-.pb-tab:hover{
+.pb-tab:hover {
   color: var(--text-color, var(--color-text-primary));
 }
 
@@ -146,7 +146,7 @@
   background: var(--panel-subtle, var(--color-surface-tint));
 }
 
-.pb-table tbody tr:last-child td{
+.pb-table tbody tr:last-child td {
   border-bottom: none;
 }
 
@@ -228,10 +228,10 @@
   font-weight: 500;
   cursor: pointer;
 }
-.pb-btn:hover{
+.pb-btn:hover {
   filter: brightness(0.95);
 }
-.pb-btn:disabled{
+.pb-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -302,7 +302,7 @@
   color: var(--text-muted, var(--color-text-muted));
 }
 
-@media (prefers-color-scheme: dark){
+@media (prefers-color-scheme: dark) {
   .pb-page {
     --text-color: var(--color-border);
     --text-muted: var(--color-input-border-strong);

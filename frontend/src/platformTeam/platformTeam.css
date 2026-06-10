@@ -80,7 +80,7 @@
   grid-template-columns: 1fr;
 }
 
-@media (max-width: 880px){
+@media (max-width: 880px) {
   .pt-grid {
     grid-template-columns: 1fr;
   }
@@ -303,10 +303,12 @@
   border-radius: 10px;
   text-decoration: none;
   color: inherit;
-  transition: transform 0.12s ease, border-color 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease;
 }
 
-.pt-welcome-tile:hover{
+.pt-welcome-tile:hover {
   transform: translateY(-2px);
   border-color: var(--accent-color, var(--color-primary-action));
 }

@@ -57,7 +57,10 @@ const BILLING_ACTIONS = new Set([
 function fmtBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const i = Math.min(
+    units.length - 1,
+    Math.floor(Math.log(bytes) / Math.log(1024))
+  );
   const value = bytes / 1024 ** i;
   return `${i === 0 ? value : value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
 }
@@ -65,8 +68,10 @@ function fmtBytes(bytes: number): string {
 // Readable one-liner for a billing action's metadata.
 function formatBillingDetails(row: UserActionRow): string {
   const m = row.metadata ?? {};
-  const str = (k: string) => (typeof m[k] === "string" ? (m[k] as string) : undefined);
-  const num = (k: string) => (typeof m[k] === "number" ? (m[k] as number) : undefined);
+  const str = (k: string) =>
+    typeof m[k] === "string" ? (m[k] as string) : undefined;
+  const num = (k: string) =>
+    typeof m[k] === "number" ? (m[k] as number) : undefined;
   const parts: string[] = [];
   switch (row.action) {
     case "entitlement_grant":
@@ -115,7 +120,8 @@ export function formatUserActionDetails(row: UserActionRow): string {
   if (row.action === "role_change") {
     const from = typeof m.from_role === "string" ? m.from_role : "?";
     const to = typeof m.to_role === "string" ? m.to_role : "?";
-    const target = m.target_user_id != null ? `user#${m.target_user_id}` : "user";
+    const target =
+      m.target_user_id != null ? `user#${m.target_user_id}` : "user";
     const scope = typeof m.scope === "string" ? ` (${m.scope})` : "";
     return `${target}: ${from} → ${to}${scope}`;
   }
@@ -129,7 +135,7 @@ export function formatUserActionDetails(row: UserActionRow): string {
 }
 
 export async function listUserActions(
-  filters: { limit?: number; action?: string } = {},
+  filters: { limit?: number; action?: string } = {}
 ): Promise<UserActionRow[]> {
   const params = new URLSearchParams();
   if (filters.limit) params.set("limit", String(filters.limit));
@@ -137,7 +143,7 @@ export async function listUserActions(
   const query = params.toString();
   return apiFetchJson<UserActionRow[]>(
     `/api/audit/user-actions${query ? `?${query}` : ""}`,
-    { preserve401: true },
+    { preserve401: true }
   );
 }
 
@@ -151,14 +157,14 @@ export type RegistrationTypeRow = {
 };
 
 export async function listRegistrationTypes(
-  filters: { limit?: number } = {},
+  filters: { limit?: number } = {}
 ): Promise<RegistrationTypeRow[]> {
   const params = new URLSearchParams();
   if (filters.limit) params.set("limit", String(filters.limit));
   const query = params.toString();
   return apiFetchJson<RegistrationTypeRow[]>(
     `/api/audit/registration-types${query ? `?${query}` : ""}`,
-    { preserve401: true },
+    { preserve401: true }
   );
 }
 
@@ -179,16 +185,21 @@ export type SiemSettingsInput = {
   enabled: boolean;
 };
 
-export async function listAuditLogs(filters: AuditLogFilters): Promise<AuditLogRow[]> {
+export async function listAuditLogs(
+  filters: AuditLogFilters
+): Promise<AuditLogRow[]> {
   const params = new URLSearchParams();
   if (filters.limit) params.set("limit", String(filters.limit));
   if (filters.outcome) params.set("outcome", filters.outcome);
   if (filters.api_key_id) params.set("api_key_id", filters.api_key_id);
   if (filters.user_id) params.set("user_id", filters.user_id);
   const query = params.toString();
-  return apiFetchJson<AuditLogRow[]>(`/api/audit/logs${query ? `?${query}` : ""}`, {
-    preserve401: true,
-  });
+  return apiFetchJson<AuditLogRow[]>(
+    `/api/audit/logs${query ? `?${query}` : ""}`,
+    {
+      preserve401: true,
+    }
+  );
 }
 
 export async function getSiemSettings(): Promise<SiemSettings> {
@@ -197,7 +208,9 @@ export async function getSiemSettings(): Promise<SiemSettings> {
   });
 }
 
-export async function saveSiemSettings(input: SiemSettingsInput): Promise<SiemSettings> {
+export async function saveSiemSettings(
+  input: SiemSettingsInput
+): Promise<SiemSettings> {
   return apiFetchJson<SiemSettings>("/api/audit/siem-settings", {
     method: "PUT",
     preserve401: true,
@@ -207,7 +220,7 @@ export async function saveSiemSettings(input: SiemSettingsInput): Promise<SiemSe
 
 export async function downloadAuditExport(
   format: "jsonl" | "csv",
-  since?: string,
+  since?: string
 ): Promise<{ blob: Blob; nextCursor: string | null; count: number }> {
   const params = new URLSearchParams({ format, limit: "1000" });
   if (since) params.set("since", since);
@@ -221,7 +234,10 @@ export async function downloadAuditExport(
   };
 }
 
-export async function testSiemSettings(): Promise<{ ok: boolean; status: number }> {
+export async function testSiemSettings(): Promise<{
+  ok: boolean;
+  status: number;
+}> {
   const res = await apiFetch("/api/audit/siem-settings/test", {
     method: "POST",
     preserve401: true,

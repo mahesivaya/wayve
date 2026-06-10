@@ -41,7 +41,8 @@
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
   font-size: var(--text-lg);
 }
 
@@ -93,7 +94,7 @@
   line-height: 1;
 }
 
-.scheduler-create-main:hover{
+.scheduler-create-main:hover {
   background: var(--color-surface);
   box-shadow: 0 2px 6px rgb(60, 64, 67, 0.24);
 }
@@ -104,7 +105,11 @@
   align-items: center;
   margin-bottom: 8px;
 }
-.mini-header span { font-weight: 600; font-size: var(--text-lg); color: var(--text); }
+.mini-header span {
+  font-weight: 600;
+  font-size: var(--text-lg);
+  color: var(--text);
+}
 .mini-header button {
   border: none;
   background: transparent;
@@ -118,7 +123,9 @@
   align-items: center;
   justify-content: center;
 }
-.mini-header button:hover{ background: var(--surface-alt); }
+.mini-header button:hover {
+  background: var(--surface-alt);
+}
 
 .mini-weekdays {
   display: grid;
@@ -145,9 +152,14 @@
   border-radius: var(--radius-pill);
   cursor: pointer;
   color: var(--text);
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
-.mini-day:hover{ background: var(--surface-alt); color: var(--text); }
+.mini-day:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
 .mini-day.active {
   background: var(--accent);
   color: var(--color-surface);
@@ -179,7 +191,7 @@
   font-size: var(--text-3xl);
 }
 
-.calendar-create-box button:hover{
+.calendar-create-box button:hover {
   background: var(--color-surface);
 }
 
@@ -257,9 +269,12 @@
   font-size: var(--text-md);
   font-weight: 500;
   color: var(--text);
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
-.calendar-header button:hover{
+.calendar-header button:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent-hover);
@@ -269,7 +284,7 @@
   color: var(--color-surface);
   border-color: var(--accent);
 }
-.calendar-header .create-btn:hover{
+.calendar-header .create-btn:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
   color: var(--color-surface);
@@ -310,7 +325,9 @@
   min-height: var(--slot-h);
   cursor: pointer;
 }
-.time-row:hover{ background: var(--color-primary-hover-soft); }
+.time-row:hover {
+  background: var(--color-primary-hover-soft);
+}
 .time-label {
   width: 72px;
   flex: 0 0 72px;
@@ -326,7 +343,7 @@
    so they can sit at their real start time inside the hour (a 15:30
    event sits at the bottom half of the 15:00 cell, not the top).
    The cell remains a clickable backdrop. */
-.time-events{
+.time-events {
   flex: 1;
   padding: 4px 8px;
   position: relative;
@@ -380,7 +397,9 @@
   gap: 1px;
   box-sizing: border-box;
 }
-.week-day-name { font-weight: 600; }
+.week-day-name {
+  font-weight: 600;
+}
 .week-day-num {
   font-size: 16px;
   font-weight: 400;
@@ -412,7 +431,10 @@
   min-height: var(--slot-h);
   border-bottom: 1px solid var(--border-soft);
 }
-.week-row .time-label { flex: 0 0 72px; width: 72px; }
+.week-row .time-label {
+  flex: 0 0 72px;
+  width: 72px;
+}
 .week-cell {
   flex: 1;
   border-left: 1px solid var(--border-soft);
@@ -425,7 +447,9 @@
   min-width: 0;
   cursor: pointer;
 }
-.week-cell:hover{ background: var(--color-primary-hover-soft); }
+.week-cell:hover {
+  background: var(--color-primary-hover-soft);
+}
 
 /* ================= MONTH VIEW ================= */
 .month-view {
@@ -475,12 +499,16 @@
   transition: background 0.12s;
   cursor: pointer;
 }
-.day-cell:hover{ background: var(--surface-alt); }
+.day-cell:hover {
+  background: var(--surface-alt);
+}
 .day-cell.empty {
   background: var(--surface-alt);
   pointer-events: none;
 }
-.day-cell.is-today { background: var(--accent-soft); }
+.day-cell.is-today {
+  background: var(--accent-soft);
+}
 .day-cell.is-today .date {
   background: var(--accent);
   color: var(--color-surface);
@@ -520,7 +548,9 @@
   gap: 6px;
   line-height: 1.3;
   box-shadow: 0 1px 2px rgb(37, 99, 235, 0.18);
-  transition: background 0.12s, transform 0.05s;
+  transition:
+    background 0.12s,
+    transform 0.05s;
   white-space: nowrap;
   overflow: hidden;
   box-sizing: border-box;
@@ -540,10 +570,21 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.event:hover, .event-block:hover{ filter: brightness(0.94); }
-.event:active, .event-block:active{ transform: translateY(1px); }
-.event.from-google { background: var(--color-success-emerald); box-shadow: 0 1px 2px rgb(22, 163, 74, 0.25); }
-.event.from-google:hover{ background: var(--color-success-deep); }
+.event:hover,
+.event-block:hover {
+  filter: brightness(0.94);
+}
+.event:active,
+.event-block:active {
+  transform: translateY(1px);
+}
+.event.from-google {
+  background: var(--color-success-emerald);
+  box-shadow: 0 1px 2px rgb(22, 163, 74, 0.25);
+}
+.event.from-google:hover {
+  background: var(--color-success-deep);
+}
 .event-time {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -673,12 +714,29 @@
   height: 28px;
   border-radius: var(--radius-sm);
 }
-.close-btn:hover{ color: var(--text); background: var(--bg); }
+.close-btn:hover {
+  color: var(--text);
+  background: var(--bg);
+}
 
-.form { display: flex; flex-direction: column; gap: 12px; }
-.form-group { display: flex; flex-direction: column; gap: 4px; }
-.form-row { display: flex; gap: 12px; }
-.form-row > .form-group { flex: 1; min-width: 0; }
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+.form-row > .form-group {
+  flex: 1;
+  min-width: 0;
+}
 .form-group label {
   font-size: var(--text-xs);
   font-weight: 600;
@@ -697,7 +755,7 @@
   font-family: inherit;
 }
 .form-group input:focus,
-.form-group select:focus{
+.form-group select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgb(26, 115, 232, 0.18);
@@ -777,15 +835,20 @@
   font-size: var(--text-md);
   font-weight: 500;
   color: var(--text);
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
 }
-.modal-actions button:hover{ background: var(--bg); }
-.modal-actions button:nth-last-of-type(2){
+.modal-actions button:hover {
+  background: var(--bg);
+}
+.modal-actions button:nth-last-of-type(2) {
   background: var(--accent);
   color: var(--color-surface);
   border-color: var(--accent);
 }
-.modal-actions button:nth-last-of-type(2):hover{
+.modal-actions button:nth-last-of-type(2):hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
@@ -795,7 +858,7 @@
   color: var(--danger) !important;
   border-color: var(--danger) !important;
 }
-.delete-btn:hover{
+.delete-btn:hover {
   background: var(--danger) !important;
   color: var(--color-surface) !important;
 }
@@ -823,17 +886,32 @@
   font-weight: 700;
   opacity: 0.65;
 }
-.chip span:hover{ opacity: 1; }
+.chip span:hover {
+  opacity: 1;
+}
 
-.participant-input { display: flex; gap: 6px; align-items: flex-start; }
-.participant-input input { width: 100%; box-sizing: border-box; }
+.participant-input {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.participant-input input {
+  width: 100%;
+  box-sizing: border-box;
+}
 /* Keep the Add button at its natural size — never shrink or get overlapped. */
-.participant-input button { flex: 0 0 auto; }
+.participant-input button {
+  flex: 0 0 auto;
+}
 
 /* Typeahead wrapper anchors the suggestions dropdown to the input.
    min-width: 0 lets this flex item shrink so the input (width:100% + padding)
    stays inside its column instead of overflowing onto the Add button. */
-.participant-typeahead { position: relative; flex: 1; min-width: 0; }
+.participant-typeahead {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
 
 .participant-suggestions {
   position: absolute;
@@ -897,7 +975,7 @@
   font-weight: 500;
   cursor: pointer;
 }
-.participant-input button:hover{
+.participant-input button:hover {
   background: var(--accent);
   color: var(--color-surface);
   border-color: var(--accent);
@@ -908,7 +986,7 @@
    fixed sidebar is dropped (Today / month nav / view switch / Schedule all
    live in the header anyway) and the time gutter slims down; below 560px
    everything tightens further for phone widths. */
-@media (max-width: 900px){
+@media (max-width: 900px) {
   .scheduler-sidebar {
     display: none;
   }
@@ -943,7 +1021,7 @@
   }
 }
 
-@media (max-width: 560px){
+@media (max-width: 560px) {
   .calendar-header {
     padding: 8px;
   }

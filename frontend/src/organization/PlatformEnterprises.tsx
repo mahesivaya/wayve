@@ -18,7 +18,10 @@ export default function PlatformEnterprises() {
         if (alive) setEnterprises(items);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof Error ? err.message : "Failed to load enterprises");
+        if (alive)
+          setError(
+            err instanceof Error ? err.message : "Failed to load enterprises"
+          );
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -62,14 +65,18 @@ export default function PlatformEnterprises() {
           <>
             <div className="platform-stat-grid">
               <div className="platform-stat-block">
-                <span className="platform-stat-value">{formatBytes(totals.storage)}</span>
+                <span className="platform-stat-value">
+                  {formatBytes(totals.storage)}
+                </span>
                 <span className="platform-stat-label">Total memory used</span>
               </div>
               <div className="platform-stat-block">
                 <span className="platform-stat-value">
                   {totals.emailAccounts.toLocaleString()}
                 </span>
-                <span className="platform-stat-label">Total email accounts</span>
+                <span className="platform-stat-label">
+                  Total email accounts
+                </span>
               </div>
             </div>
 
@@ -85,7 +92,10 @@ export default function PlatformEnterprises() {
                   <strong>{ent.name}</strong>
                   <span className="organization-tile-stats">
                     <span>{formatBytes(ent.storage_used_bytes ?? 0)} used</span>
-                    <span>{(ent.email_account_count ?? 0).toLocaleString()} email accounts</span>
+                    <span>
+                      {(ent.email_account_count ?? 0).toLocaleString()} email
+                      accounts
+                    </span>
                   </span>
                 </Link>
               ))}

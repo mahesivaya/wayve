@@ -9,19 +9,19 @@ interface AppNavProps {
   onSetRightView: (app: AppKey) => void;
 }
 
-export default function AppNav({ 
-  splitTarget, 
+export default function AppNav({
+  splitTarget,
   middleView,
   rightView,
   onSetMiddleView,
-  onSetRightView 
+  onSetRightView,
 }: AppNavProps) {
   const location = useLocation();
 
   const navItem = (path: string, app: AppKey, label: string) => {
     const isLeftActive = location.pathname === path;
     const isSplitActive = middleView === app || rightView === app;
-    
+
     return (
       <Link
         to={path}
@@ -29,7 +29,9 @@ export default function AppNav({
         className={[
           isLeftActive ? "active" : "",
           isSplitActive ? "active-split" : "",
-        ].filter(Boolean).join(" ")}
+        ]
+          .filter(Boolean)
+          .join(" ")}
         onClick={(e) => {
           if (splitTarget === "middle") {
             e.preventDefault();
@@ -47,9 +49,7 @@ export default function AppNav({
 
   return (
     <div className="nav">
-      {SPLIT_APPS.map((app) => 
-        navItem(app.path, app.key, app.label)
-      )}
+      {SPLIT_APPS.map((app) => navItem(app.path, app.key, app.label))}
     </div>
   );
 }

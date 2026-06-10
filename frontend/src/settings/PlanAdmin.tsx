@@ -214,7 +214,7 @@ export default function PlanAdmin() {
 
   const deactivate = async (plan: Plan) => {
     const ok = window.confirm(
-      `Deactivate plan "${plan.name}"? It will stop appearing on /pricing. Existing subscriptions are unaffected.`,
+      `Deactivate plan "${plan.name}"? It will stop appearing on /pricing. Existing subscriptions are unaffected.`
     );
     if (!ok) return;
     setError("");
@@ -223,7 +223,9 @@ export default function PlanAdmin() {
       setSuccess(`Plan "${plan.name}" deactivated`);
       await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to deactivate plan");
+      setError(
+        err instanceof Error ? err.message : "Failed to deactivate plan"
+      );
     }
   };
 
@@ -233,9 +235,9 @@ export default function PlanAdmin() {
         <div>
           <h1>Plans</h1>
           <p className="plan-admin-sub">
-            Catalog shown to users on <code>/pricing</code>. Deactivated
-            plans stay in the database for historical subscriptions but
-            disappear from the public list.
+            Catalog shown to users on <code>/pricing</code>. Deactivated plans
+            stay in the database for historical subscriptions but disappear from
+            the public list.
           </p>
         </div>
         <button
@@ -272,8 +274,13 @@ export default function PlanAdmin() {
           </thead>
           <tbody>
             {plans.map((plan) => (
-              <tr key={plan.code} className={plan.is_active ? "" : "is-inactive"}>
-                <td><code>{plan.code}</code></td>
+              <tr
+                key={plan.code}
+                className={plan.is_active ? "" : "is-inactive"}
+              >
+                <td>
+                  <code>{plan.code}</code>
+                </td>
                 <td>{plan.name}</td>
                 <td>{plan.audience}</td>
                 <td>{fmtPrice(plan)}</td>
@@ -311,7 +318,11 @@ export default function PlanAdmin() {
       )}
 
       {showForm && (
-        <div className="plan-admin-modal-backdrop" role="dialog" aria-modal="true">
+        <div
+          className="plan-admin-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+        >
           <form className="plan-admin-modal" onSubmit={submit}>
             <header className="plan-admin-modal-head">
               <h2>{editingCode ? `Edit "${editingCode}"` : "New plan"}</h2>
@@ -330,9 +341,7 @@ export default function PlanAdmin() {
                 <span>Code</span>
                 <input
                   value={draft.code}
-                  onChange={(e) =>
-                    setDraft({ ...draft, code: e.target.value })
-                  }
+                  onChange={(e) => setDraft({ ...draft, code: e.target.value })}
                   placeholder="basic_user"
                   required
                   disabled={editingCode !== null}
@@ -346,9 +355,7 @@ export default function PlanAdmin() {
                 <span>Name</span>
                 <input
                   value={draft.name}
-                  onChange={(e) =>
-                    setDraft({ ...draft, name: e.target.value })
-                  }
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                   placeholder="Fluxze Plus"
                   required
                 />
@@ -374,7 +381,9 @@ export default function PlanAdmin() {
                   onChange={(e) =>
                     setDraft({ ...draft, features_text: e.target.value })
                   }
-                  placeholder={"End-to-end encrypted\n1 TB storage\nCustom domain"}
+                  placeholder={
+                    "End-to-end encrypted\n1 TB storage\nCustom domain"
+                  }
                 />
                 <small>
                   Each non-empty line becomes a checkmark on the pricing card.
@@ -481,8 +490,8 @@ export default function PlanAdmin() {
                   placeholder="price_1Ng…"
                 />
                 <small>
-                  Paste from the Stripe dashboard to enable real checkout.
-                  Leave blank to keep the plan as a catalog entry only.
+                  Paste from the Stripe dashboard to enable real checkout. Leave
+                  blank to keep the plan as a catalog entry only.
                 </small>
               </label>
 
@@ -512,7 +521,11 @@ export default function PlanAdmin() {
                 className="plan-admin-primary"
                 disabled={busy}
               >
-                {busy ? "Saving…" : editingCode ? "Save changes" : "Create plan"}
+                {busy
+                  ? "Saving…"
+                  : editingCode
+                    ? "Save changes"
+                    : "Create plan"}
               </button>
             </footer>
           </form>

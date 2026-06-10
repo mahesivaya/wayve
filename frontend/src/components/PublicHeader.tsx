@@ -79,7 +79,10 @@ export default function PublicHeader({
 
         {showActions && (
           <div className="public-home-actions">
-            <button className="home-login-btn" onClick={() => navigate("/login")}>
+            <button
+              className="home-login-btn"
+              onClick={() => navigate("/login")}
+            >
               Login
             </button>
             <button

@@ -27,7 +27,8 @@ type Editing = { kind: "file" | "folder"; id: number } | null;
 
 function iconFor(fileType: string | null): string {
   const t = (fileType ?? "").toLowerCase();
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(t)) return "🖼️";
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(t))
+    return "🖼️";
   if (t === "pdf") return "📕";
   if (["doc", "docx", "txt", "md", "rtf"].includes(t)) return "📝";
   if (["xls", "xlsx", "csv"].includes(t)) return "📊";
@@ -116,7 +117,8 @@ export default function DocumentsBox() {
   };
 
   const removeFolder = async (id: number, name: string) => {
-    if (!window.confirm(`Delete folder "${name}" and everything inside it?`)) return;
+    if (!window.confirm(`Delete folder "${name}" and everything inside it?`))
+      return;
     try {
       await deleteDocumentFolder(id);
       await fetchAll();
@@ -136,8 +138,12 @@ export default function DocumentsBox() {
   };
 
   const q = normalizedSearchQuery.trim().toLowerCase();
-  const shownFolders = q ? folders.filter((f) => f.name.toLowerCase().includes(q)) : folders;
-  const shownFiles = q ? files.filter((f) => f.name.toLowerCase().includes(q)) : files;
+  const shownFolders = q
+    ? folders.filter((f) => f.name.toLowerCase().includes(q))
+    : folders;
+  const shownFiles = q
+    ? files.filter((f) => f.name.toLowerCase().includes(q))
+    : files;
 
   return (
     <div className="drive-container">
@@ -172,7 +178,11 @@ export default function DocumentsBox() {
                   }
                 }}
               />
-              <button type="button" className="drive-folder-create-btn" onClick={() => void submitNewFolder()}>
+              <button
+                type="button"
+                className="drive-folder-create-btn"
+                onClick={() => void submitNewFolder()}
+              >
                 Create
               </button>
               <button
@@ -187,7 +197,11 @@ export default function DocumentsBox() {
               </button>
             </>
           ) : (
-            <button type="button" className="drive-folder-new-btn" onClick={() => setCreatingFolder(true)}>
+            <button
+              type="button"
+              className="drive-folder-new-btn"
+              onClick={() => setCreatingFolder(true)}
+            >
               + New folder
             </button>
           )}
@@ -250,7 +264,12 @@ export default function DocumentsBox() {
                   <button
                     type="button"
                     className="file-left drive-folder-open"
-                    onClick={() => setPath((prev) => [...prev, { id: folder.id, name: folder.name }])}
+                    onClick={() =>
+                      setPath((prev) => [
+                        ...prev,
+                        { id: folder.id, name: folder.name },
+                      ])
+                    }
                   >
                     <span className="file-icon">📁</span>
                     <div className="file-main">

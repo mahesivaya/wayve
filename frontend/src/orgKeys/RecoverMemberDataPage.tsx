@@ -19,13 +19,7 @@ import { useAuth } from "../auth/useAuth";
 import { apiFetchJson } from "../api/client";
 import { impersonateMember } from "./ownerImpersonate";
 
-type Surface =
-  | "notes"
-  | "emails"
-  | "chat"
-  | "drive"
-  | "tasks"
-  | "scheduler";
+type Surface = "notes" | "emails" | "chat" | "drive" | "tasks" | "scheduler";
 
 const TABS: Array<{ key: Surface; label: string; isE2E: boolean }> = [
   { key: "notes", label: "Notes", isE2E: true },
@@ -51,7 +45,7 @@ const td = new TextDecoder();
 async function decryptWayveSecureV1(
   envelope: string,
   userId: number,
-  privateKey: CryptoKey,
+  privateKey: CryptoKey
 ): Promise<string> {
   if (!envelope.startsWith("WAYVE_SECURE_V1\n")) {
     return envelope; // not an envelope, return as-is
@@ -71,15 +65,19 @@ async function decryptWayveSecureV1(
   const aesRaw = await crypto.subtle.decrypt(
     { name: "RSA-OAEP" },
     privateKey,
-    new Uint8Array(wrappedAes).slice().buffer,
+    new Uint8Array(wrappedAes).slice().buffer
   );
   const aesKey = await crypto.subtle.importKey(
-    "raw", aesRaw, { name: "AES-GCM" }, false, ["decrypt"],
+    "raw",
+    aesRaw,
+    { name: "AES-GCM" },
+    false,
+    ["decrypt"]
   );
   const plain = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: new Uint8Array(body.iv).slice().buffer },
     aesKey,
-    new Uint8Array(body.data).slice().buffer,
+    new Uint8Array(body.data).slice().buffer
   );
   return td.decode(plain);
 }
@@ -89,7 +87,7 @@ async function decryptWayveSecureV1(
 async function decryptWayveChatE2E(
   envelope: string,
   userId: number,
-  privateKey: CryptoKey,
+  privateKey: CryptoKey
 ): Promise<string> {
   if (!envelope.startsWith("WAYVE_CHAT_E2E_V1\n")) {
     return envelope;
@@ -102,15 +100,19 @@ async function decryptWayveChatE2E(
   const aesRaw = await crypto.subtle.decrypt(
     { name: "RSA-OAEP" },
     privateKey,
-    new Uint8Array(slot).slice().buffer,
+    new Uint8Array(slot).slice().buffer
   );
   const aesKey = await crypto.subtle.importKey(
-    "raw", aesRaw, { name: "AES-GCM" }, false, ["decrypt"],
+    "raw",
+    aesRaw,
+    { name: "AES-GCM" },
+    false,
+    ["decrypt"]
   );
   const plain = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: new Uint8Array(body.iv).slice().buffer },
     aesKey,
-    new Uint8Array(body.data).slice().buffer,
+    new Uint8Array(body.data).slice().buffer
   );
   return td.decode(plain);
 }
@@ -119,7 +121,12 @@ async function decryptWayveChatE2E(
 //   Row types
 // =====================================================================
 
-type Note = { id: number; title?: string | null; content?: string | null; updated_at?: string | null };
+type Note = {
+  id: number;
+  title?: string | null;
+  content?: string | null;
+  updated_at?: string | null;
+};
 type Email = {
   id: number;
   subject?: string | null;
@@ -172,12 +179,23 @@ type Meeting = {
 //   Fingerprint of the recovered key (for the proof banner at the top)
 // =====================================================================
 
-async function fingerprintOfRecoveredKey(privateKey: CryptoKey): Promise<string> {
+async function fingerprintOfRecoveredKey(
+  privateKey: CryptoKey
+): Promise<string> {
   const jwk = await crypto.subtle.exportKey("jwk", privateKey);
   const pubKey = await crypto.subtle.importKey(
     "jwk",
-    { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: jwk.alg, ext: true, key_ops: ["encrypt"] },
-    { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+    {
+      kty: jwk.kty,
+      n: jwk.n,
+      e: jwk.e,
+      alg: jwk.alg,
+      ext: true,
+      key_ops: ["encrypt"],
+    },
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    true,
+    ["encrypt"]
   );
   const spki = await crypto.subtle.exportKey("spki", pubKey);
   const hash = await crypto.subtle.digest("SHA-256", spki);
@@ -219,7 +237,11 @@ export default function RecoverMemberDataPage() {
       .then(async (ctx) => {
         if (cancelled) return;
         const fp = await fingerprintOfRecoveredKey(ctx.memberPrivateKey);
-        setState({ kind: "ok", memberKey: ctx.memberPrivateKey, fingerprint: fp });
+        setState({
+          kind: "ok",
+          memberKey: ctx.memberPrivateKey,
+          fingerprint: fp,
+        });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -230,7 +252,9 @@ export default function RecoverMemberDataPage() {
           setState({ kind: "error", message });
         }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [user, orgId, memberUserId]);
 
   return (
@@ -257,7 +281,9 @@ export default function RecoverMemberDataPage() {
       )}
 
       {state.kind === "error" && (
-        <p style={{ color: "#b91c1c", whiteSpace: "pre-wrap" }}>{state.message}</p>
+        <p style={{ color: "#b91c1c", whiteSpace: "pre-wrap" }}>
+          {state.message}
+        </p>
       )}
 
       {state.kind === "ok" && (
@@ -357,33 +383,45 @@ export default function RecoverMemberDataPage() {
 type DecryptProps = { orgId: number; memberId: number; memberKey: CryptoKey };
 type PlainProps = { orgId: number; memberId: number };
 
-function useTabFetch<T>(url: string): { data: T[] | null; error: string | null } {
+function useTabFetch<T>(url: string): {
+  data: T[] | null;
+  error: string | null;
+} {
   const [data, setData] = useState<T[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     apiFetchJson<T[]>(url)
-      .then((rows) => { if (!cancelled) setData(rows); })
+      .then((rows) => {
+        if (!cancelled) setData(rows);
+      })
       .catch((err) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Fetch failed.");
         }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
   return { data, error };
 }
 
 function NotesTab({ orgId, memberId, memberKey }: DecryptProps) {
   const { data, error } = useTabFetch<Note>(
-    `/api/organizations/${orgId}/members/${memberId}/notes`,
+    `/api/organizations/${orgId}/members/${memberId}/notes`
   );
-  const [decrypted, setDecrypted] = useState<Map<number, { title: string; content: string; error?: string }>>(new Map());
+  const [decrypted, setDecrypted] = useState<
+    Map<number, { title: string; content: string; error?: string }>
+  >(new Map());
 
   useEffect(() => {
     if (!data) return;
     (async () => {
-      const m = new Map<number, { title: string; content: string; error?: string }>();
+      const m = new Map<
+        number,
+        { title: string; content: string; error?: string }
+      >();
       for (const note of data) {
         try {
           const title = note.title
@@ -417,7 +455,9 @@ function NotesTab({ orgId, memberId, memberKey }: DecryptProps) {
         return (
           <Row key={n.id} id={n.id} updatedAt={n.updated_at}>
             <strong>{d?.title ?? "…"}</strong>
-            <pre style={preStyle(!!d?.error)}>{d?.content ?? "decrypting…"}</pre>
+            <pre style={preStyle(!!d?.error)}>
+              {d?.content ?? "decrypting…"}
+            </pre>
             {d?.error && <small style={{ color: "#b91c1c" }}>{d.error}</small>}
           </Row>
         );
@@ -428,9 +468,11 @@ function NotesTab({ orgId, memberId, memberKey }: DecryptProps) {
 
 function EmailsTab({ orgId, memberId, memberKey }: DecryptProps) {
   const { data, error } = useTabFetch<Email>(
-    `/api/organizations/${orgId}/members/${memberId}/emails`,
+    `/api/organizations/${orgId}/members/${memberId}/emails`
   );
-  const [decrypted, setDecrypted] = useState<Map<number, { body: string; error?: string }>>(new Map());
+  const [decrypted, setDecrypted] = useState<
+    Map<number, { body: string; error?: string }>
+  >(new Map());
 
   useEffect(() => {
     if (!data) return;
@@ -438,10 +480,15 @@ function EmailsTab({ orgId, memberId, memberKey }: DecryptProps) {
       const m = new Map<number, { body: string; error?: string }>();
       for (const email of data) {
         const raw = email.body_encrypted ?? "";
-        if (!raw) { m.set(email.id, { body: "(no body)" }); continue; }
+        if (!raw) {
+          m.set(email.id, { body: "(no body)" });
+          continue;
+        }
         if (!raw.startsWith("WAYVE_SECURE_V1\n")) {
           // legacy server-AES rows: not decryptable client-side
-          m.set(email.id, { body: "(legacy server-AES body — not client-decryptable)" });
+          m.set(email.id, {
+            body: "(legacy server-AES body — not client-decryptable)",
+          });
           continue;
         }
         try {
@@ -484,21 +531,28 @@ function EmailsTab({ orgId, memberId, memberKey }: DecryptProps) {
 
 function ChatTab({ orgId, memberId, memberKey }: DecryptProps) {
   const direct = useTabFetch<DirectMsg>(
-    `/api/organizations/${orgId}/members/${memberId}/messages`,
+    `/api/organizations/${orgId}/members/${memberId}/messages`
   );
   const channel = useTabFetch<ChannelMsg>(
-    `/api/organizations/${orgId}/members/${memberId}/channel-messages`,
+    `/api/organizations/${orgId}/members/${memberId}/channel-messages`
   );
-  const [decrypted, setDecrypted] = useState<Map<string, { text: string; error?: string }>>(new Map());
+  const [decrypted, setDecrypted] = useState<
+    Map<string, { text: string; error?: string }>
+  >(new Map());
 
   useEffect(() => {
-    const tryDecrypt = async (raw: string | null): Promise<{ text: string; error?: string }> => {
+    const tryDecrypt = async (
+      raw: string | null
+    ): Promise<{ text: string; error?: string }> => {
       if (!raw) return { text: "(empty)" };
       if (raw.startsWith("WAYVE_CHAT_E2E_V1\n")) {
         try {
           return { text: await decryptWayveChatE2E(raw, memberId, memberKey) };
         } catch (e) {
-          return { text: "(undecryptable)", error: e instanceof Error ? e.message : "" };
+          return {
+            text: "(undecryptable)",
+            error: e instanceof Error ? e.message : "",
+          };
         }
       }
       // Server-AES legacy chat — not client-decryptable.
@@ -560,7 +614,7 @@ function ChatTab({ orgId, memberId, memberKey }: DecryptProps) {
 
 function DriveTab({ orgId, memberId }: PlainProps) {
   const { data, error } = useTabFetch<DriveFile>(
-    `/api/organizations/${orgId}/members/${memberId}/files`,
+    `/api/organizations/${orgId}/members/${memberId}/files`
   );
 
   if (error) return <p style={{ color: "#b91c1c" }}>{error}</p>;
@@ -571,9 +625,9 @@ function DriveTab({ orgId, memberId }: PlainProps) {
     <>
       <p style={{ color: "#6b7280" }}>
         {data.length} file(s). Names are plaintext in v1; downloading +
-        decrypting the binary blob (WV1 envelope) is a follow-up — the
-        recovered member key is the same one that wrapped each file's
-        content key, so decryption is mechanically possible from here.
+        decrypting the binary blob (WV1 envelope) is a follow-up — the recovered
+        member key is the same one that wrapped each file's content key, so
+        decryption is mechanically possible from here.
       </p>
       <table style={tableStyle}>
         <thead>
@@ -603,7 +657,7 @@ function DriveTab({ orgId, memberId }: PlainProps) {
 
 function TasksTab({ orgId, memberId }: PlainProps) {
   const { data, error } = useTabFetch<Task>(
-    `/api/organizations/${orgId}/members/${memberId}/tasks`,
+    `/api/organizations/${orgId}/members/${memberId}/tasks`
   );
 
   if (error) return <p style={{ color: "#b91c1c" }}>{error}</p>;
@@ -623,7 +677,9 @@ function TasksTab({ orgId, memberId }: PlainProps) {
               p{t.priority} · {t.status}
             </span>
           </div>
-          <pre style={preStyle(false)}>{t.description || "(no description)"}</pre>
+          <pre style={preStyle(false)}>
+            {t.description || "(no description)"}
+          </pre>
         </Row>
       ))}
     </>
@@ -632,12 +688,13 @@ function TasksTab({ orgId, memberId }: PlainProps) {
 
 function SchedulerTab({ orgId, memberId }: PlainProps) {
   const { data, error } = useTabFetch<Meeting>(
-    `/api/organizations/${orgId}/members/${memberId}/meetings`,
+    `/api/organizations/${orgId}/members/${memberId}/meetings`
   );
 
   if (error) return <p style={{ color: "#b91c1c" }}>{error}</p>;
   if (!data) return <p>Loading meetings…</p>;
-  if (data.length === 0) return <p style={{ color: "#6b7280" }}>No meetings.</p>;
+  if (data.length === 0)
+    return <p style={{ color: "#6b7280" }}>No meetings.</p>;
 
   return (
     <>

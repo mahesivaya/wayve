@@ -12,15 +12,19 @@ import { fmtDateTime } from "../utils/datetime";
 
 // Maps users.auth_provider to a friendly label + pill style for the
 // "Registration types" table.
-const REGISTRATION_PROVIDERS: Record<string, { label: string; pill: string }> = {
-  google: { label: "Gmail (Google)", pill: "provider-google" },
-  microsoft: { label: "Outlook (Microsoft)", pill: "provider-microsoft" },
-  local: { label: "Email registration", pill: "provider-local" },
-};
+const REGISTRATION_PROVIDERS: Record<string, { label: string; pill: string }> =
+  {
+    google: { label: "Gmail (Google)", pill: "provider-google" },
+    microsoft: { label: "Outlook (Microsoft)", pill: "provider-microsoft" },
+    local: { label: "Email registration", pill: "provider-local" },
+  };
 
 function registrationProvider(provider: string) {
   return (
-    REGISTRATION_PROVIDERS[provider] ?? { label: provider, pill: "provider-local" }
+    REGISTRATION_PROVIDERS[provider] ?? {
+      label: provider,
+      pill: "provider-local",
+    }
   );
 }
 import { useResizableColumns } from "./useResizableColumns";
@@ -45,7 +49,8 @@ const USER_LOGS_COL_WIDTHS_KEY = "rwayve.platformUserLogs.colWidths";
 export default function PlatformUserLogs() {
   const { user } = useAuth();
   // Owner-only: even super_admin / security (who hold audit:read) are excluded.
-  const canView = user?.scope === "platform" && user?.effective_role === "owner";
+  const canView =
+    user?.scope === "platform" && user?.effective_role === "owner";
 
   const [rows, setRows] = useState<UserActionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +61,7 @@ export default function PlatformUserLogs() {
 
   const { colWidths, totalWidth, startResize } = useResizableColumns(
     USER_LOG_COLUMNS,
-    USER_LOGS_COL_WIDTHS_KEY,
+    USER_LOGS_COL_WIDTHS_KEY
   );
 
   const load = useCallback(async () => {
@@ -114,7 +119,7 @@ export default function PlatformUserLogs() {
         a.resource_id,
         a.ip,
         formatUserActionDetails(a),
-      ].some((v) => (v ?? "").toLowerCase().includes(q)),
+      ].some((v) => (v ?? "").toLowerCase().includes(q))
     );
   }, [rows, search]);
 
@@ -126,8 +131,8 @@ export default function PlatformUserLogs() {
         <h1>User Logs</h1>
         <p>
           User actions across the platform — sign-ins, email sent/received,
-          password changes, role changes, deletions, exports and billing
-          changes · {user?.email}
+          password changes, role changes, deletions, exports and billing changes
+          · {user?.email}
         </p>
       </header>
 
@@ -138,7 +143,10 @@ export default function PlatformUserLogs() {
           <h2>Registration types</h2>
           <div className="pt-reg-summary">
             {(["google", "microsoft", "local"] as const).map((p) => (
-              <span key={p} className={`pt-pill ${registrationProvider(p).pill}`}>
+              <span
+                key={p}
+                className={`pt-pill ${registrationProvider(p).pill}`}
+              >
                 {registrationProvider(p).label}: {registrationCounts[p] ?? 0}
               </span>
             ))}
@@ -161,7 +169,9 @@ export default function PlatformUserLogs() {
               </thead>
               <tbody>
                 {registrations.map((r) => {
-                  const provider = registrationProvider(r.auth_provider || "local");
+                  const provider = registrationProvider(
+                    r.auth_provider || "local"
+                  );
                   return (
                     <tr key={r.id}>
                       <td>{r.email}</td>
@@ -203,60 +213,61 @@ export default function PlatformUserLogs() {
           </div>
         ) : (
           <div className="pt-table-scroll">
-          <table
-            className="pt-table"
-            style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
-          >
-            <colgroup>
-              {USER_LOG_COLUMNS.map((c) => (
-                <col key={c.key} style={{ width: `${colWidths[c.key]}px` }} />
-              ))}
-            </colgroup>
-            <thead>
-              <tr>
+            <table
+              className="pt-table"
+              style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
+            >
+              <colgroup>
                 {USER_LOG_COLUMNS.map((c) => (
-                  <th key={c.key} className="pt-th-resizable">
-                    {c.label}
-                    <span
-                      className="pt-col-resize-handle"
-                      onMouseDown={startResize(c.key, c.min)}
-                      role="separator"
-                      aria-orientation="vertical"
-                      aria-label={`Resize ${c.label} column`}
-                    />
-                  </th>
+                  <col key={c.key} style={{ width: `${colWidths[c.key]}px` }} />
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((a) => {
-                const details = formatUserActionDetails(a);
-                const location =
-                  [a.city, a.region, a.country].filter(Boolean).join(", ");
-                return (
-                  <tr key={a.id}>
-                    <td>{fmtDateTime(a.created_at)}</td>
-                    <td>{a.actor_email ?? a.actor_user_id ?? "-"}</td>
-                    <td>
-                      <span className="pt-pill info">{a.action}</span>
-                    </td>
-                    <td>
-                      {a.resource_type
-                        ? `${a.resource_type}${a.resource_id ? `#${a.resource_id}` : ""}`
-                        : "-"}
-                    </td>
-                    <td className="pt-details" title={details}>
-                      {details || "-"}
-                    </td>
-                    <td>{a.ip ?? "-"}</td>
-                    <td className="pt-loc" title={location}>
-                      {location || "-"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+              </colgroup>
+              <thead>
+                <tr>
+                  {USER_LOG_COLUMNS.map((c) => (
+                    <th key={c.key} className="pt-th-resizable">
+                      {c.label}
+                      <span
+                        className="pt-col-resize-handle"
+                        onMouseDown={startResize(c.key, c.min)}
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label={`Resize ${c.label} column`}
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((a) => {
+                  const details = formatUserActionDetails(a);
+                  const location = [a.city, a.region, a.country]
+                    .filter(Boolean)
+                    .join(", ");
+                  return (
+                    <tr key={a.id}>
+                      <td>{fmtDateTime(a.created_at)}</td>
+                      <td>{a.actor_email ?? a.actor_user_id ?? "-"}</td>
+                      <td>
+                        <span className="pt-pill info">{a.action}</span>
+                      </td>
+                      <td>
+                        {a.resource_type
+                          ? `${a.resource_type}${a.resource_id ? `#${a.resource_id}` : ""}`
+                          : "-"}
+                      </td>
+                      <td className="pt-details" title={details}>
+                        {details || "-"}
+                      </td>
+                      <td>{a.ip ?? "-"}</td>
+                      <td className="pt-loc" title={location}>
+                        {location || "-"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </section>

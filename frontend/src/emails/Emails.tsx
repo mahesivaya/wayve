@@ -29,14 +29,34 @@ const EMAIL_LIST_WIDTH_STORAGE_KEY = "rwayve.emailList.width";
 
 export default function Emails() {
   const { user, logout } = useAuth();
-  const { normalizedSearchQuery, emailViewLayout, setEmailViewLayout } = useGlobalSearch();
-  
+  const { normalizedSearchQuery, emailViewLayout, setEmailViewLayout } =
+    useGlobalSearch();
+
   const {
-    accounts, accountsLoaded, emails, selectedEmail, setSelectedEmail, activeAccount,
-    setActiveAccount, activeFolder, setActiveFolder, hasMore, loadingMore,
-    viewMode, setViewMode, files, filesLoading, filesError,
-    fetchAccounts, setRefreshTick, loadMore, openFiles, openEmail, deleteEmail,
-    bulkMarkRead, bulkDelete
+    accounts,
+    accountsLoaded,
+    emails,
+    selectedEmail,
+    setSelectedEmail,
+    activeAccount,
+    setActiveAccount,
+    activeFolder,
+    setActiveFolder,
+    hasMore,
+    loadingMore,
+    viewMode,
+    setViewMode,
+    files,
+    filesLoading,
+    filesError,
+    fetchAccounts,
+    setRefreshTick,
+    loadMore,
+    openFiles,
+    openEmail,
+    deleteEmail,
+    bulkMarkRead,
+    bulkDelete,
   } = useEmailInbox(user?.id, normalizedSearchQuery);
 
   // The "add a mailbox" picker. Lifted here (rather than living inside the
@@ -62,11 +82,14 @@ export default function Emails() {
     const id = Number(raw);
     if (!Number.isFinite(id)) {
       // Bad value — drop the param and bail.
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete("open");
-        return next;
-      }, { replace: true });
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("open");
+          return next;
+        },
+        { replace: true }
+      );
       return;
     }
     // The param already matches what's open (typically because the sync effect
@@ -112,7 +135,15 @@ export default function Emails() {
     };
     // Re-run when the loaded list changes — if the email arrives via a later
     // page or background sync, this effect picks it up without a re-navigate.
-  }, [searchParams, emails, openEmail, setSearchParams, selectedEmail, emailViewLayout, setEmailViewLayout]);
+  }, [
+    searchParams,
+    emails,
+    openEmail,
+    setSearchParams,
+    selectedEmail,
+    emailViewLayout,
+    setEmailViewLayout,
+  ]);
 
   // Mirror the open email back into the URL (`?open=<id>`) so a refresh keeps
   // it open. Only reacts to genuine selection changes: on first mount, when
@@ -126,25 +157,33 @@ export default function Emails() {
     const had = prevSelectedIdRef.current;
     prevSelectedIdRef.current = cur;
     if (cur !== null) {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.set("open", String(cur));
-        return next;
-      }, { replace: true });
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("open", String(cur));
+          return next;
+        },
+        { replace: true }
+      );
     } else if (had !== null) {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete("open");
-        return next;
-      }, { replace: true });
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("open");
+          return next;
+        },
+        { replace: true }
+      );
     }
   }, [selectedEmail?.id, setSearchParams]);
 
   const [composeOpen, setComposeOpen] = useState(false);
-  const [accountNameOverrides, setAccountNameOverrides] = useState<Record<number, string>>(() => {
+  const [accountNameOverrides, setAccountNameOverrides] = useState<
+    Record<number, string>
+  >(() => {
     try {
       const stored = localStorage.getItem(ACCOUNT_NAME_STORAGE_KEY);
-      return stored ? JSON.parse(stored) as Record<number, string> : {};
+      return stored ? (JSON.parse(stored) as Record<number, string>) : {};
     } catch {
       return {};
     }
@@ -203,9 +242,11 @@ export default function Emails() {
       if (emailListDraggingRef.current) {
         const sidebarResizerWidth = 8;
         const minDetailWidth = 320;
-        const available = rect.width - sidebarWidth - sidebarResizerWidth - minDetailWidth;
+        const available =
+          rect.width - sidebarWidth - sidebarResizerWidth - minDetailWidth;
         const maxListWidth = Math.min(620, Math.max(220, available));
-        const nextWidth = e.clientX - rect.left - sidebarWidth - sidebarResizerWidth;
+        const nextWidth =
+          e.clientX - rect.left - sidebarWidth - sidebarResizerWidth;
         setEmailListWidth(Math.min(maxListWidth, Math.max(220, nextWidth)));
       }
     }
@@ -241,19 +282,21 @@ export default function Emails() {
   const useSingleColumn = isNarrow;
   const showList =
     viewMode === "email" &&
-    (
-      (emailViewLayout === "list" && selectedEmail === null) ||
-      (emailViewLayout === "split" && (!useSingleColumn || selectedEmail === null))
-    );
+    ((emailViewLayout === "list" && selectedEmail === null) ||
+      (emailViewLayout === "split" &&
+        (!useSingleColumn || selectedEmail === null)));
   const showDetail =
     viewMode === "files" ||
     (emailViewLayout === "list" && selectedEmail !== null) ||
-    (emailViewLayout === "split" && (!useSingleColumn || selectedEmail !== null));
+    (emailViewLayout === "split" &&
+      (!useSingleColumn || selectedEmail !== null));
   const showEmailListResizer =
     viewMode === "email" && showList && showDetail && !useSingleColumn;
 
   const composeAccountId =
-    activeAccount ?? accounts.find((account) => account?.id !== undefined)?.id ?? null;
+    activeAccount ??
+    accounts.find((account) => account?.id !== undefined)?.id ??
+    null;
 
   // ================= HANDLE OAUTH RETURN =================
   // After /oauth/callback redirects back with #connected=true, refresh the
@@ -293,7 +336,7 @@ export default function Emails() {
       setYahooError(
         err instanceof Error
           ? err.message
-          : "Could not connect Yahoo account. Try again.",
+          : "Could not connect Yahoo account. Try again."
       );
     } finally {
       setYahooBusy(false);
@@ -332,7 +375,7 @@ export default function Emails() {
       const h = window.setTimeout(() => {
         setOauthError(
           "This mailbox is already connected to another Fluxze account. " +
-            "To use it here, sign in to that account and disconnect it first.",
+            "To use it here, sign in to that account and disconnect it first."
         );
       }, 0);
       window.history.replaceState({}, "", "/emails");
@@ -427,7 +470,10 @@ export default function Emails() {
     }
   };
 
-  const renameAccount = async (accountId: number, displayName: string | null) => {
+  const renameAccount = async (
+    accountId: number,
+    displayName: string | null
+  ) => {
     const nextOverrides = { ...accountNameOverrides };
 
     if (displayName) {
@@ -437,7 +483,10 @@ export default function Emails() {
     }
 
     setAccountNameOverrides(nextOverrides);
-    localStorage.setItem(ACCOUNT_NAME_STORAGE_KEY, JSON.stringify(nextOverrides));
+    localStorage.setItem(
+      ACCOUNT_NAME_STORAGE_KEY,
+      JSON.stringify(nextOverrides)
+    );
 
     try {
       await updateAccountDisplayName(accountId, displayName);
@@ -477,7 +526,7 @@ export default function Emails() {
     }
 
     const activeAccountVisible = displayedAccounts.some(
-      (account) => account.id === activeAccount,
+      (account) => account.id === activeAccount
     );
     if (!activeAccountVisible) {
       setActiveAccount(firstAccountId);
@@ -490,231 +539,238 @@ export default function Emails() {
       <div className="emails-page-toolbar">
         <SearchBar />
       </div>
-    <div
-      ref={mainRef}
-      className={[
-        "main",
-        isNarrow ? "narrow" : "",
-        emailViewLayout === "list" ? "email-list-view" : "email-split-view",
-      ].filter(Boolean).join(" ")}
-    >
-      {oauthError && (
-        <div className="oauth-error-banner" role="alert">
-          <button
-            type="button"
-            className="oauth-error-dismiss"
-            onClick={() => setOauthError(null)}
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-          <span className="oauth-error-message">{oauthError}</span>
-          <div className="oauth-error-actions">
+      <div
+        ref={mainRef}
+        className={[
+          "main",
+          isNarrow ? "narrow" : "",
+          emailViewLayout === "list" ? "email-list-view" : "email-split-view",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {oauthError && (
+          <div className="oauth-error-banner" role="alert">
             <button
               type="button"
-              className="oauth-error-action"
-              onClick={logout}
+              className="oauth-error-dismiss"
+              onClick={() => setOauthError(null)}
+              aria-label="Dismiss"
             >
-              Sign in to the other account
+              ×
             </button>
-            <span className="oauth-error-hint">
-              You&apos;ll be signed out of this account.
-            </span>
+            <span className="oauth-error-message">{oauthError}</span>
+            <div className="oauth-error-actions">
+              <button
+                type="button"
+                className="oauth-error-action"
+                onClick={logout}
+              >
+                Sign in to the other account
+              </button>
+              <span className="oauth-error-hint">
+                You&apos;ll be signed out of this account.
+              </span>
+            </div>
           </div>
-        </div>
-      )}
-      <EmailSidebar
-        accounts={displayedAccounts}
-        activeAccount={activeAccount}
-        setActiveAccount={setActiveAccount}
-        activeFolder={activeFolder}
-        setActiveFolder={(f) => { setViewMode("email"); setActiveFolder(f); }}
-        viewMode={viewMode}
-        onOpenFiles={openFiles}
-        onRequestAddAccount={() => setAddAccountOpen(true)}
-        onCompose={() => setComposeOpen(true)}
-        composeDisabled={accounts.length === 0}
-        width={sidebarWidth}
-        onRenameAccount={renameAccount}
-        showAccountControls={showAccountControls}
-      />
-
-      <div
-        className="email-sidebar-resizer"
-        onMouseDown={startSidebarResize}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize email sidebar"
-        title="Drag to resize sidebar"
-      />
-
-      {showList && (
-        <EmailList
-          emails={emails}
-          selectedEmailId={selectedEmail?.id ?? null}
-          onOpenEmail={openEmail}
-          hasMore={hasMore}
-          loadMore={loadMore}
-          loadingMore={loadingMore}
-          onCompose={() => setComposeOpen(true)}
-          width={showEmailListResizer ? emailListWidth : undefined}
-          isListView={emailViewLayout === "list"}
-          onBulkMarkRead={bulkMarkRead}
-          onBulkDelete={bulkDelete}
+        )}
+        <EmailSidebar
+          accounts={displayedAccounts}
+          activeAccount={activeAccount}
+          setActiveAccount={setActiveAccount}
           activeFolder={activeFolder}
-          hasAccounts={accounts.length > 0}
-          accountsLoaded={accountsLoaded}
-          canAddAccount={showAccountControls}
-          onAddAccount={() => setAddAccountOpen(true)}
+          setActiveFolder={(f) => {
+            setViewMode("email");
+            setActiveFolder(f);
+          }}
+          viewMode={viewMode}
+          onOpenFiles={openFiles}
+          onRequestAddAccount={() => setAddAccountOpen(true)}
+          onCompose={() => setComposeOpen(true)}
+          composeDisabled={accounts.length === 0}
+          width={sidebarWidth}
+          onRenameAccount={renameAccount}
+          showAccountControls={showAccountControls}
         />
-      )}
 
-      {showEmailListResizer && (
         <div
-          className="email-list-resizer"
-          onMouseDown={startEmailListResize}
+          className="email-sidebar-resizer"
+          onMouseDown={startSidebarResize}
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize email list"
-          title="Drag to resize email list"
+          aria-label="Resize email sidebar"
+          title="Drag to resize sidebar"
         />
-      )}
 
-      {/* Mounted only while open — keeps the picker's state fresh each time
-          and avoids reset-on-close juggling. Opened by both the sidebar "+"
-          and the email-list empty-state CTA. */}
-      {showAccountControls && addAccountOpen && (
-        <ProviderPicker
-          onClose={() => setAddAccountOpen(false)}
-          onSelect={(provider) => {
-            setAddAccountOpen(false);
-            addProvider(provider);
-          }}
-          onConnected={() => {
-            // IMAP connect succeeded (no redirect). Close + refresh the list
-            // and nudge the email list so the new mailbox + its mail appear.
-            setAddAccountOpen(false);
-            void fetchAccounts();
-            setRefreshTick((tick) => tick + 1);
-          }}
-        />
-      )}
-
-      <Modal
-        isOpen={composeOpen && composeAccountId !== null}
-        onClose={() => setComposeOpen(false)}
-        title="New Message"
-      >
-        {composeAccountId !== null && (
-          <SendEmail
-            accountId={composeAccountId}
-            onClose={() => setComposeOpen(false)}
+        {showList && (
+          <EmailList
+            emails={emails}
+            selectedEmailId={selectedEmail?.id ?? null}
+            onOpenEmail={openEmail}
+            hasMore={hasMore}
+            loadMore={loadMore}
+            loadingMore={loadingMore}
+            onCompose={() => setComposeOpen(true)}
+            width={showEmailListResizer ? emailListWidth : undefined}
+            isListView={emailViewLayout === "list"}
+            onBulkMarkRead={bulkMarkRead}
+            onBulkDelete={bulkDelete}
+            activeFolder={activeFolder}
+            hasAccounts={accounts.length > 0}
+            accountsLoaded={accountsLoaded}
+            canAddAccount={showAccountControls}
+            onAddAccount={() => setAddAccountOpen(true)}
           />
         )}
-      </Modal>
 
-      <Modal
-        isOpen={yahooModalOpen}
-        onClose={() => {
-          if (yahooBusy) return;
-          setYahooModalOpen(false);
-          setYahooError("");
-        }}
-        title="Connect Yahoo Mail"
-      >
-        <form
-          className="yahoo-connect-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submitYahoo();
-          }}
+        {showEmailListResizer && (
+          <div
+            className="email-list-resizer"
+            onMouseDown={startEmailListResize}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize email list"
+            title="Drag to resize email list"
+          />
+        )}
+
+        {/* Mounted only while open — keeps the picker's state fresh each time
+          and avoids reset-on-close juggling. Opened by both the sidebar "+"
+          and the email-list empty-state CTA. */}
+        {showAccountControls && addAccountOpen && (
+          <ProviderPicker
+            onClose={() => setAddAccountOpen(false)}
+            onSelect={(provider) => {
+              setAddAccountOpen(false);
+              addProvider(provider);
+            }}
+            onConnected={() => {
+              // IMAP connect succeeded (no redirect). Close + refresh the list
+              // and nudge the email list so the new mailbox + its mail appear.
+              setAddAccountOpen(false);
+              void fetchAccounts();
+              setRefreshTick((tick) => tick + 1);
+            }}
+          />
+        )}
+
+        <Modal
+          isOpen={composeOpen && composeAccountId !== null}
+          onClose={() => setComposeOpen(false)}
+          title="New Message"
         >
-          <p className="yahoo-connect-hint">
-            Yahoo requires an <strong>app password</strong> — generate one at{" "}
-            <a
-              href="https://login.yahoo.com/account/security"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Yahoo Account Security
-            </a>
-            {" "}→ App Passwords. Then paste both fields below.
-          </p>
-
-          <label className="yahoo-connect-label">
-            <span>Yahoo email</span>
-            <input
-              type="email"
-              autoComplete="email"
-              required
-              value={yahooEmail}
-              onChange={(event) => setYahooEmail(event.target.value)}
-              placeholder="you@yahoo.com"
-              autoFocus
+          {composeAccountId !== null && (
+            <SendEmail
+              accountId={composeAccountId}
+              onClose={() => setComposeOpen(false)}
             />
-          </label>
-
-          <label className="yahoo-connect-label">
-            <span>App password</span>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={yahooPassword}
-              onChange={(event) => setYahooPassword(event.target.value)}
-              placeholder="16 characters from Yahoo App Passwords"
-            />
-          </label>
-
-          {yahooError && (
-            <p className="yahoo-connect-error">{yahooError}</p>
           )}
+        </Modal>
 
-          <div className="yahoo-connect-actions">
-            <button
-              type="submit"
-              disabled={
-                yahooBusy ||
-                !yahooEmail.trim() ||
-                yahooPassword.trim().length < 8
-              }
-            >
-              {yahooBusy ? "Connecting…" : "Connect"}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={yahooBusy}
-              onClick={() => {
-                setYahooModalOpen(false);
-                setYahooError("");
-                setYahooPassword("");
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </Modal>
+        <Modal
+          isOpen={yahooModalOpen}
+          onClose={() => {
+            if (yahooBusy) return;
+            setYahooModalOpen(false);
+            setYahooError("");
+          }}
+          title="Connect Yahoo Mail"
+        >
+          <form
+            className="yahoo-connect-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitYahoo();
+            }}
+          >
+            <p className="yahoo-connect-hint">
+              Yahoo requires an <strong>app password</strong> — generate one at{" "}
+              <a
+                href="https://login.yahoo.com/account/security"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Yahoo Account Security
+              </a>{" "}
+              → App Passwords. Then paste both fields below.
+            </p>
 
-      {showDetail && (
-        <EmailDetail
-          selectedEmail={selectedEmail}
-          viewMode={viewMode}
-          onBack={() => { setViewMode("email"); setSelectedEmail(null); }}
-          onDeleteEmail={deleteEmail}
-          files={files}
-          filesLoading={filesLoading}
-          filesError={filesError}
-          normalizedSearchQuery={normalizedSearchQuery}
-          inboxAccountCount={accounts.length}
-          inboxEmailCount={emails.length}
-          inboxUncheckedCount={
-            emails.filter((email) => email.attachments_checked === false).length
-          }
-        />
-      )}
-    </div>
+            <label className="yahoo-connect-label">
+              <span>Yahoo email</span>
+              <input
+                type="email"
+                autoComplete="email"
+                required
+                value={yahooEmail}
+                onChange={(event) => setYahooEmail(event.target.value)}
+                placeholder="you@yahoo.com"
+                autoFocus
+              />
+            </label>
+
+            <label className="yahoo-connect-label">
+              <span>App password</span>
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={yahooPassword}
+                onChange={(event) => setYahooPassword(event.target.value)}
+                placeholder="16 characters from Yahoo App Passwords"
+              />
+            </label>
+
+            {yahooError && <p className="yahoo-connect-error">{yahooError}</p>}
+
+            <div className="yahoo-connect-actions">
+              <button
+                type="submit"
+                disabled={
+                  yahooBusy ||
+                  !yahooEmail.trim() ||
+                  yahooPassword.trim().length < 8
+                }
+              >
+                {yahooBusy ? "Connecting…" : "Connect"}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={yahooBusy}
+                onClick={() => {
+                  setYahooModalOpen(false);
+                  setYahooError("");
+                  setYahooPassword("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Modal>
+
+        {showDetail && (
+          <EmailDetail
+            selectedEmail={selectedEmail}
+            viewMode={viewMode}
+            onBack={() => {
+              setViewMode("email");
+              setSelectedEmail(null);
+            }}
+            onDeleteEmail={deleteEmail}
+            files={files}
+            filesLoading={filesLoading}
+            filesError={filesError}
+            normalizedSearchQuery={normalizedSearchQuery}
+            inboxAccountCount={accounts.length}
+            inboxEmailCount={emails.length}
+            inboxUncheckedCount={
+              emails.filter((email) => email.attachments_checked === false)
+                .length
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }

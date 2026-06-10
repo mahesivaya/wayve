@@ -5,7 +5,12 @@ export const EVENT_CALENDAR_STORAGE_KEY = "wayve.scheduler.eventCalendars";
 
 export const DEFAULT_CALENDARS: CalendarItem[] = [
   { id: "office", name: "Office Calendar", color: "#1a73e8", visible: true },
-  { id: "personal", name: "Personal Calendar", color: "#34a853", visible: true },
+  {
+    id: "personal",
+    name: "Personal Calendar",
+    color: "#34a853",
+    visible: true,
+  },
   { id: "holiday", name: "Holiday Calendar", color: "#fbbc04", visible: true },
 ];
 

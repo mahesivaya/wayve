@@ -43,7 +43,11 @@ export default function ConversationSidebar({
     <aside className="user-list">
       <div className="conversation-section-header">
         <span className="conversation-section-title">Channels</span>
-        <button type="button" className="new-channel-btn" onClick={onToggleCreateChannel}>
+        <button
+          type="button"
+          className="new-channel-btn"
+          onClick={onToggleCreateChannel}
+        >
           + Add Channel
         </button>
       </div>

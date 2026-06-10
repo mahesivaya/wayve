@@ -34,7 +34,11 @@ function parseRecipients(raw: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps) {
+export default function SendEmail({
+  accountId,
+  onClose,
+  onSent,
+}: SendEmailProps) {
   const { user } = useAuth();
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
@@ -54,7 +58,8 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
   //                fall back to SMTP (can't E2E without their key).
   //   "pgp"      — placeholder, disabled in the UI for now.
   type EncryptionMode = "standard" | "e2e" | "pgp";
-  const [encryptionMode, setEncryptionMode] = useState<EncryptionMode>("standard");
+  const [encryptionMode, setEncryptionMode] =
+    useState<EncryptionMode>("standard");
 
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
@@ -106,13 +111,13 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
             secureErrors.push(
               err instanceof Error
                 ? `${recipient}: ${err.message}`
-                : `${recipient}: secure-send failed`,
+                : `${recipient}: secure-send failed`
             );
           }
         }
         if (secureDelivered > 0) {
           setStatus(
-            `Secure link sent to ${secureDelivered} recipient${secureDelivered === 1 ? "" : "s"} — share the passphrase out-of-band ✅`,
+            `Secure link sent to ${secureDelivered} recipient${secureDelivered === 1 ? "" : "s"} — share the passphrase out-of-band ✅`
           );
         }
         if (secureErrors.length > 0) {
@@ -145,10 +150,14 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
                 try {
                   return { email, user: await getUserByEmail(email) };
                 } catch (err) {
-                  logger.warn("Wayve recipient lookup failed; treating as external", err, email);
+                  logger.warn(
+                    "Wayve recipient lookup failed; treating as external",
+                    err,
+                    email
+                  );
                   return { email, user: null };
                 }
-              }),
+              })
             );
 
       // Partition the resolved lookups in one pass — anything that
@@ -181,12 +190,13 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
           ({ user: u }) => ({
             userId: u.id,
             publicKeyBytes: u.public_key as number[],
-          }),
+          })
         );
 
-        const senderPubKeyRaw = await loadPublicKey(senderId, user?.email).catch(
-          () => null,
-        );
+        const senderPubKeyRaw = await loadPublicKey(
+          senderId,
+          user?.email
+        ).catch(() => null);
         if (senderPubKeyRaw) {
           recipientsForEnvelope.push({
             userId: senderId,
@@ -194,12 +204,15 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
           });
         } else {
           logger.warn(
-            "no sender public key on this device; Sent copy will be unreadable",
+            "no sender public key on this device; Sent copy will be unreadable"
           );
         }
 
         try {
-          const envelope = await buildInternalEnvelope(body, recipientsForEnvelope);
+          const envelope = await buildInternalEnvelope(
+            body,
+            recipientsForEnvelope
+          );
           const res = await sendInternalEmail({
             recipient_user_ids: wayveLookups.map((l) => l.user.id),
             envelope,
@@ -211,7 +224,7 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
           errors.push(
             err instanceof Error
               ? `Wayve recipients: ${err.message}`
-              : "Wayve send failed",
+              : "Wayve send failed"
           );
         }
       } else if (wayveLookups.length > 0 && senderId === undefined) {
@@ -238,7 +251,7 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
           errors.push(
             err instanceof Error
               ? `${externalTo}: ${err.message}`
-              : `${externalTo}: send failed`,
+              : `${externalTo}: send failed`
           );
         }
       }
@@ -247,15 +260,15 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
       //    channel so they're never guessing whether a send was E2E.
       if (internalDelivered > 0 && externalDelivered > 0) {
         setStatus(
-          `Sent E2E to ${internalDelivered} Fluxze user${internalDelivered === 1 ? "" : "s"} + standard mail to ${externalDelivered} external recipient${externalDelivered === 1 ? "" : "s"} ✅`,
+          `Sent E2E to ${internalDelivered} Fluxze user${internalDelivered === 1 ? "" : "s"} + standard mail to ${externalDelivered} external recipient${externalDelivered === 1 ? "" : "s"} ✅`
         );
       } else if (internalDelivered > 0) {
         setStatus(
-          `Sent end-to-end to ${internalDelivered} Fluxze user${internalDelivered === 1 ? "" : "s"} via Fluxze ✅`,
+          `Sent end-to-end to ${internalDelivered} Fluxze user${internalDelivered === 1 ? "" : "s"} via Fluxze ✅`
         );
       } else if (externalDelivered > 0) {
         setStatus(
-          `Email sent successfully to ${externalDelivered} recipient${externalDelivered === 1 ? "" : "s"} ✅`,
+          `Email sent successfully to ${externalDelivered} recipient${externalDelivered === 1 ? "" : "s"} ✅`
         );
       }
 
@@ -282,12 +295,13 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
   };
 
   return (
-    <div style={{
-      display: "flex",
-      flexDirection: "column",
-      gap: "10px"
-    }}>
-
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+      }}
+    >
       <input
         placeholder="To — separate multiple addresses with commas"
         value={to}
@@ -295,7 +309,7 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
         style={{
           padding: "8px",
           borderRadius: 5,
-          border: "1px solid #ccc"
+          border: "1px solid #ccc",
         }}
       />
 
@@ -306,7 +320,7 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
         style={{
           padding: "8px",
           borderRadius: 5,
-          border: "1px solid #ccc"
+          border: "1px solid #ccc",
         }}
       />
 
@@ -319,7 +333,7 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
           borderRadius: 5,
           border: "1px solid #ccc",
           minHeight: 120,
-          resize: "none"
+          resize: "none",
         }}
       />
 
@@ -344,7 +358,14 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
           Advanced Encryption
         </span>
 
-        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 8,
+            cursor: "pointer",
+          }}
+        >
           <input
             type="radio"
             name="encryptionMode"
@@ -417,11 +438,11 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
               }}
             />
             <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
-              The recipient gets a plain email with a link only. They
-              click it and enter this passphrase to decrypt your message
-              in their browser. <strong>Fluxze never sees the passphrase</strong> —
-              if you share it in the same email, you defeat the
-              encryption. Use Signal, SMS, or in-person.
+              The recipient gets a plain email with a link only. They click it
+              and enter this passphrase to decrypt your message in their
+              browser. <strong>Fluxze never sees the passphrase</strong> — if
+              you share it in the same email, you defeat the encryption. Use
+              Signal, SMS, or in-person.
             </small>
           </>
         )}
@@ -436,21 +457,25 @@ export default function SendEmail({ accountId, onClose, onSent }: SendEmailProps
           padding: "10px",
           borderRadius: 5,
           border: "none",
-          cursor: "pointer"
+          cursor: "pointer",
         }}
       >
         {loading ? "Sending..." : "Send"}
       </button>
 
       {status && (
-        <div style={{
-          fontSize: 12,
-          color: status.includes("success") || status.includes("✅") ? "green" : "red"
-        }}>
+        <div
+          style={{
+            fontSize: 12,
+            color:
+              status.includes("success") || status.includes("✅")
+                ? "green"
+                : "red",
+          }}
+        >
           {status}
         </div>
       )}
-
     </div>
   );
 }

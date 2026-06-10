@@ -41,7 +41,7 @@ async function loadSpec(): Promise<OpenApiSpec> {
   // don't end up with two identical dropdown options after the
   // injection below.
   const filtered = existing.filter(
-    (s) => typeof s.url === "string" && s.url !== currentOrigin,
+    (s) => typeof s.url === "string" && s.url !== currentOrigin
   );
 
   spec.servers = [
@@ -81,8 +81,8 @@ export default function SwaggerDocs() {
           <p className="hero-kicker">For developers</p>
           <h1>{BRAND_NAME} API</h1>
           <p>
-            Interactive reference for the public, API-key-callable
-            surface of Wayve. Click any endpoint to expand, then
+            Interactive reference for the public, API-key-callable surface of
+            Wayve. Click any endpoint to expand, then
             <strong> Authorize </strong> at the top to paste an
             <code> X-API-KEY </code> and use <strong>Try it out</strong>
             to fire live requests. The spec itself is served at{" "}

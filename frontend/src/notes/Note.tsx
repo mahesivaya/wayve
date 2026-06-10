@@ -33,7 +33,6 @@ export default function Notes() {
             content: note.content ?? "",
           }))
         );
-
       } catch (err) {
         logger.error(err);
       }
@@ -54,10 +53,7 @@ export default function Notes() {
         title: saved.title ?? "",
         content: saved.content ?? "",
       };
-      setNotes((prev) => [
-        newNote,
-        ...prev,
-      ]);
+      setNotes((prev) => [newNote, ...prev]);
       setSelected(newNote);
     } catch (err) {
       logger.error(err);
@@ -66,16 +62,13 @@ export default function Notes() {
 
   // ================= UPDATE (LOCAL STATE) =================
 
-    const handleChange = (value: string) => {if (!selected) {return;}
-    const updated = {...selected, content: value};
+  const handleChange = (value: string) => {
+    if (!selected) {
+      return;
+    }
+    const updated = { ...selected, content: value };
     setSelected(updated);
-    setNotes((prev) =>
-      prev.map((n) =>
-        n.id === updated.id
-          ? updated
-          : n
-      )
-    );
+    setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
   };
 
   // ================= AUTOSAVE =================
@@ -101,22 +94,15 @@ export default function Notes() {
 
   // ================= DELETE =================
 
-  const deleteNote = async (
-    id: number
-  ) => {
+  const deleteNote = async (id: number) => {
     try {
       await deleteNoteApi(id);
 
-      setNotes((prev) =>
-        prev.filter(
-          (n) => n.id !== id
-        )
-      );
+      setNotes((prev) => prev.filter((n) => n.id !== id));
 
       if (selected?.id === id) {
         setSelected(null);
       }
-
     } catch (err) {
       logger.error(err);
     }
@@ -124,24 +110,14 @@ export default function Notes() {
 
   return (
     <div className="notes-container">
-
       {/* Sidebar */}
 
       <div className="notes-sidebar">
-        <button onClick={() => void createNote()}>
-          + New
-        </button>
+        <button onClick={() => void createNote()}>+ New</button>
 
         {notes.map((n) => (
-          <div
-            key={n.id}
-
-            onClick={() =>
-              setSelected(n)
-            }
-          >
-            {n.title ||
-              "Untitled"}
+          <div key={n.id} onClick={() => setSelected(n)}>
+            {n.title || "Untitled"}
           </div>
         ))}
       </div>
@@ -153,37 +129,24 @@ export default function Notes() {
           <>
             <input
               placeholder="Title"
-
               value={selected.title}
-
               onChange={(e) =>
                 setSelected({
                   ...selected,
-                  title:
-                    e.target.value,
+                  title: e.target.value,
                 })
               }
             />
 
             <textarea
               value={selected.content}
-
-              onChange={(e) =>
-                handleChange(
-                  e.target.value
-                )
-              }
+              onChange={(e) => handleChange(e.target.value)}
             />
 
-            <button onClick={() => void deleteNote(selected.id)}>
-              Delete
-            </button>
+            <button onClick={() => void deleteNote(selected.id)}>Delete</button>
           </>
-
         ) : (
-          <div>
-            Select a note
-          </div>
+          <div>Select a note</div>
         )}
       </div>
     </div>

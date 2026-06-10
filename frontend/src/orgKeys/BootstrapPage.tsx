@@ -47,7 +47,10 @@ export default function BootstrapPage() {
   useEffect(() => {
     if (!user) return;
     if (!Number.isFinite(orgId)) {
-      setPhase({ kind: "error", message: "Missing or invalid ?org parameter." });
+      setPhase({
+        kind: "error",
+        message: "Missing or invalid ?org parameter.",
+      });
       return;
     }
     let cancelled = false;
@@ -95,7 +98,9 @@ export default function BootstrapPage() {
         <div className="recovery-modal">
           <header>
             <h2>Sign in required</h2>
-            <p>You must be signed in to bootstrap your organization recovery key.</p>
+            <p>
+              You must be signed in to bootstrap your organization recovery key.
+            </p>
           </header>
         </div>
       </div>
@@ -110,8 +115,8 @@ export default function BootstrapPage() {
             <h2>Setting up your organization recovery key</h2>
             <p>
               Generating your encryption keypair and the 24-word recovery
-              phrase. This can take up to 20 seconds on a fresh browser —
-              please don't close this tab.
+              phrase. This can take up to 20 seconds on a fresh browser — please
+              don't close this tab.
             </p>
           </header>
         </div>
@@ -250,7 +255,11 @@ export default function BootstrapPage() {
               type="button"
               className="recovery-primary-btn"
               onClick={() =>
-                setPhase({ kind: "confirm", mnemonic: phase.mnemonic, entered: "" })
+                setPhase({
+                  kind: "confirm",
+                  mnemonic: phase.mnemonic,
+                  entered: "",
+                })
               }
             >
               I have written it down — confirm

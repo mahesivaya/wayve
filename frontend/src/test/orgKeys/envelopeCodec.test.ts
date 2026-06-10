@@ -21,10 +21,14 @@ async function generateRsaKeypair() {
       hash: "SHA-256",
     },
     true,
-    ["wrapKey", "unwrapKey", "encrypt", "decrypt"],
+    ["wrapKey", "unwrapKey", "encrypt", "decrypt"]
   );
-  const spki = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey));
-  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
+  const spki = new Uint8Array(
+    await crypto.subtle.exportKey("spki", kp.publicKey)
+  );
+  const pkcs8 = new Uint8Array(
+    await crypto.subtle.exportKey("pkcs8", kp.privateKey)
+  );
   return {
     publicKey: kp.publicKey,
     privateKey: kp.privateKey,
@@ -46,7 +50,10 @@ describe("envelopeCodec — RSA-pubkey wrap of PKCS8", () => {
 
     // Founder wraps the org PKCS8 to ANOTHER user's pubkey (e.g. a new
     // key-holder being added).
-    const { iv, ct } = await wrapPkcs8ToRsaPubkey(orgKp.pkcs8, memberKp.spkiBytes);
+    const { iv, ct } = await wrapPkcs8ToRsaPubkey(
+      orgKp.pkcs8,
+      memberKp.spkiBytes
+    );
 
     // Recipient unwraps with their RSA private key and gets back the
     // EXACT bytes of the PKCS8 they're authorized to use.
@@ -65,10 +72,10 @@ describe("envelopeCodec — RSA-pubkey wrap of PKCS8", () => {
 
     const { iv, ct } = await wrapPkcs8ToRsaPubkey(
       orgKp.pkcs8,
-      intendedRecipient.spkiBytes,
+      intendedRecipient.spkiBytes
     );
     await expect(
-      unwrapPkcs8WithRsaKey(iv, ct, interloper.privateKey),
+      unwrapPkcs8WithRsaKey(iv, ct, interloper.privateKey)
     ).rejects.toThrow();
   });
 
@@ -96,7 +103,7 @@ describe("envelopeCodec — PBKDF2 wrap of PKCS8 (mnemonic + member-login)", () 
       input,
       { name: "PBKDF2" },
       false,
-      ["deriveKey"],
+      ["deriveKey"]
     );
     const aesKey = await crypto.subtle.deriveKey(
       {
@@ -108,12 +115,12 @@ describe("envelopeCodec — PBKDF2 wrap of PKCS8 (mnemonic + member-login)", () 
       baseKey,
       { name: "AES-GCM", length: 256 },
       false,
-      ["encrypt"],
+      ["encrypt"]
     );
     const ct = await crypto.subtle.encrypt(
       { name: "AES-GCM", iv: iv.slice().buffer },
       aesKey,
-      orgKp.pkcs8,
+      orgKp.pkcs8
     );
 
     const recovered = await unwrapPkcs8WithPbkdf2(
@@ -121,7 +128,7 @@ describe("envelopeCodec — PBKDF2 wrap of PKCS8 (mnemonic + member-login)", () 
       bytesToB64(new Uint8Array(ct)),
       input,
       bytesToB64(salt),
-      600_000,
+      600_000
     );
 
     const a = new Uint8Array(orgKp.pkcs8);
@@ -139,7 +146,11 @@ describe("envelopeCodec — PBKDF2 wrap of PKCS8 (mnemonic + member-login)", () 
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const baseKey = await crypto.subtle.importKey(
-      "raw", right, { name: "PBKDF2" }, false, ["deriveKey"],
+      "raw",
+      right,
+      { name: "PBKDF2" },
+      false,
+      ["deriveKey"]
     );
     const aesKey = await crypto.subtle.deriveKey(
       {
@@ -151,12 +162,12 @@ describe("envelopeCodec — PBKDF2 wrap of PKCS8 (mnemonic + member-login)", () 
       baseKey,
       { name: "AES-GCM", length: 256 },
       false,
-      ["encrypt"],
+      ["encrypt"]
     );
     const ct = await crypto.subtle.encrypt(
       { name: "AES-GCM", iv: iv.slice().buffer },
       aesKey,
-      orgKp.pkcs8,
+      orgKp.pkcs8
     );
 
     await expect(
@@ -165,8 +176,8 @@ describe("envelopeCodec — PBKDF2 wrap of PKCS8 (mnemonic + member-login)", () 
         bytesToB64(new Uint8Array(ct)),
         wrong,
         bytesToB64(salt),
-        600_000,
-      ),
+        600_000
+      )
     ).rejects.toThrow();
   });
 });

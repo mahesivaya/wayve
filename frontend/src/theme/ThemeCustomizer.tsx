@@ -77,15 +77,60 @@ const MIN_CONTRAST = 4.5;
 
 // Macro-style quick background swatches. One click sets the page background
 // (and matching accents) to a curated color + mode — no grid, no hex typing.
-const BACKGROUNDS: { id: string; label: string; mode: ThemeMode; input: PaletteInput }[] = [
-  { id: "bg-navy", label: "Navy", mode: "dark", input: { ...DEFAULT_INPUT, hue: 230, chroma: 0.16 } },
-  { id: "bg-slate", label: "Slate", mode: "dark", input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.05 } },
-  { id: "bg-black", label: "Ink", mode: "dark", input: { ...DEFAULT_INPUT, hue: 250, chroma: 0, depth: 0.04 } },
-  { id: "bg-forest", label: "Forest", mode: "dark", input: { ...DEFAULT_INPUT, hue: 155, chroma: 0.14 } },
-  { id: "bg-plum", label: "Plum", mode: "dark", input: { ...DEFAULT_INPUT, hue: 300, chroma: 0.15 } },
-  { id: "bg-light", label: "Light", mode: "light", input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.12 } },
-  { id: "bg-cream", label: "Cream", mode: "light", input: { ...DEFAULT_INPUT, hue: 75, chroma: 0.12 } },
-  { id: "bg-rose", label: "Rose", mode: "light", input: { ...DEFAULT_INPUT, hue: 350, chroma: 0.12 } },
+const BACKGROUNDS: {
+  id: string;
+  label: string;
+  mode: ThemeMode;
+  input: PaletteInput;
+}[] = [
+  {
+    id: "bg-navy",
+    label: "Navy",
+    mode: "dark",
+    input: { ...DEFAULT_INPUT, hue: 230, chroma: 0.16 },
+  },
+  {
+    id: "bg-slate",
+    label: "Slate",
+    mode: "dark",
+    input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.05 },
+  },
+  {
+    id: "bg-black",
+    label: "Ink",
+    mode: "dark",
+    input: { ...DEFAULT_INPUT, hue: 250, chroma: 0, depth: 0.04 },
+  },
+  {
+    id: "bg-forest",
+    label: "Forest",
+    mode: "dark",
+    input: { ...DEFAULT_INPUT, hue: 155, chroma: 0.14 },
+  },
+  {
+    id: "bg-plum",
+    label: "Plum",
+    mode: "dark",
+    input: { ...DEFAULT_INPUT, hue: 300, chroma: 0.15 },
+  },
+  {
+    id: "bg-light",
+    label: "Light",
+    mode: "light",
+    input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.12 },
+  },
+  {
+    id: "bg-cream",
+    label: "Cream",
+    mode: "light",
+    input: { ...DEFAULT_INPUT, hue: 75, chroma: 0.12 },
+  },
+  {
+    id: "bg-rose",
+    label: "Rose",
+    mode: "light",
+    input: { ...DEFAULT_INPUT, hue: 350, chroma: 0.12 },
+  },
 ];
 
 // A compact 3-dot swatch for a library row — same generator as the live theme.
@@ -126,7 +171,8 @@ export default function ThemeCustomizer() {
 
   // Seed the advanced editor from the active choice when it's custom/saved.
   const initial = useMemo(() => {
-    if (choice.kind === "custom") return { input: choice.input, mode: choice.mode };
+    if (choice.kind === "custom")
+      return { input: choice.input, mode: choice.mode };
     if (choice.kind === "saved") {
       const saved = library.find((t) => t.id === choice.id);
       if (saved) return { input: saved.input, mode: saved.mode };
@@ -179,7 +225,11 @@ export default function ThemeCustomizer() {
     setEditorTab("advanced"); // reveal the grid so the result is visible
   };
 
-  const copyTheme = (payload: { name: string; mode: ThemeMode; input: PaletteInput }) => {
+  const copyTheme = (payload: {
+    name: string;
+    mode: ThemeMode;
+    input: PaletteInput;
+  }) => {
     try {
       void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
     } catch {
@@ -221,7 +271,7 @@ export default function ThemeCustomizer() {
       typeof document !== "undefined"
         ? getComputedStyle(document.documentElement)
         : null,
-    [],
+    []
   );
 
   const effectiveColor = (role: keyof typeof TOKEN_VAR): string => {
@@ -233,9 +283,10 @@ export default function ThemeCustomizer() {
   };
 
   const textVsSurface = useMemo(
-    () => contrastRatio(effectiveColor("text-primary"), effectiveColor("surface")),
+    () =>
+      contrastRatio(effectiveColor("text-primary"), effectiveColor("surface")),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ui, baseTokens, rootStyle],
+    [ui, baseTokens, rootStyle]
   );
   const lowContrast = textVsSurface !== null && textVsSurface < MIN_CONTRAST;
 
@@ -305,7 +356,11 @@ export default function ThemeCustomizer() {
       </div>
 
       {editorTab === "basic" && (
-        <div className="theme-bg-quick" role="group" aria-label="Background color">
+        <div
+          className="theme-bg-quick"
+          role="group"
+          aria-label="Background color"
+        >
           <span className="theme-bg-quick-label">Background</span>
           <div className="theme-bg-swatches">
             {BACKGROUNDS.map((bg) => {
@@ -325,7 +380,11 @@ export default function ThemeCustomizer() {
                   aria-label={`${bg.label} background`}
                   aria-pressed={active}
                   onClick={() =>
-                    setChoice({ kind: "custom", mode: bg.mode, input: bg.input })
+                    setChoice({
+                      kind: "custom",
+                      mode: bg.mode,
+                      input: bg.input,
+                    })
                   }
                 />
               );
@@ -593,8 +652,8 @@ export default function ThemeCustomizer() {
           <div className="theme-ui-knobs">
             {lowContrast && (
               <div className="theme-ui-warning" role="alert">
-                ⚠ Low contrast between Text and Surface ({textVsSurface?.toFixed(1)}:1).
-                Text may be hard to read.
+                ⚠ Low contrast between Text and Surface (
+                {textVsSurface?.toFixed(1)}:1). Text may be hard to read.
               </div>
             )}
             {UI_OVERRIDE_ROLES.map(({ role, label }) => {

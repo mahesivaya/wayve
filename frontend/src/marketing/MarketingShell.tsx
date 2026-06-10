@@ -62,7 +62,10 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
         <div className="public-home-actions">
           {user ? (
             <>
-              <button className="home-login-btn" onClick={() => navigate("/home")}>
+              <button
+                className="home-login-btn"
+                onClick={() => navigate("/home")}
+              >
                 Home
               </button>
               <button className="home-register-btn" onClick={() => logout()}>
@@ -71,10 +74,16 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
             </>
           ) : (
             <>
-              <button className="home-login-btn" onClick={() => navigate("/login")}>
+              <button
+                className="home-login-btn"
+                onClick={() => navigate("/login")}
+              >
                 Login
               </button>
-              <button className="home-register-btn" onClick={() => navigate("/register")}>
+              <button
+                className="home-register-btn"
+                onClick={() => navigate("/register")}
+              >
                 Register
               </button>
             </>
@@ -104,7 +113,9 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
                     <span className="service-title-row">
                       <span className="service-title">{service.name}</span>
                     </span>
-                    <span className="service-description">{service.summary}</span>
+                    <span className="service-description">
+                      {service.summary}
+                    </span>
                   </span>
                 </button>
               ))}
@@ -131,8 +142,12 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
             <h4>Developers</h4>
             <button onClick={() => navigate("/docs")}>All docs</button>
             <button onClick={() => navigate("/docs/api")}>API reference</button>
-            <button onClick={() => navigate("/docs/quotas")}>Quotas & tiers</button>
-            <button onClick={() => navigate("/docs/developers")}>SDK & guides</button>
+            <button onClick={() => navigate("/docs/quotas")}>
+              Quotas & tiers
+            </button>
+            <button onClick={() => navigate("/docs/developers")}>
+              SDK & guides
+            </button>
           </div>
           <div>
             <h4>Account</h4>

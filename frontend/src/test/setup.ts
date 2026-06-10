@@ -27,7 +27,10 @@ class MemoryStorage implements Storage {
   }
 }
 
-const installStorage = (target: object, prop: "localStorage" | "sessionStorage") => {
+const installStorage = (
+  target: object,
+  prop: "localStorage" | "sessionStorage"
+) => {
   Object.defineProperty(target, prop, {
     configurable: true,
     enumerable: true,

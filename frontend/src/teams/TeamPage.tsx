@@ -174,7 +174,11 @@ export default function TeamPage() {
               onChange={(e) => setDraft({ ...draft, email: e.target.value })}
             />
             <div className="team-add-form-actions">
-              <button type="submit" className="team-add-btn" disabled={!canSubmit}>
+              <button
+                type="submit"
+                className="team-add-btn"
+                disabled={!canSubmit}
+              >
                 Add
               </button>
               <button

@@ -51,7 +51,7 @@ export const listFolders = async (parentFolderId: number | null = null) => {
 
 export const createFolder = async (
   name: string,
-  parentFolderId: number | null = null,
+  parentFolderId: number | null = null
 ) =>
   apiFetchJson<Folder>("/api/folders", {
     method: "POST",
@@ -69,7 +69,7 @@ export const listSharedDriveItems = async () =>
 export const shareDriveFile = async (
   fileId: number,
   scope: "organization" | "platform",
-  permission: "view" | "edit",
+  permission: "view" | "edit"
 ) =>
   apiFetchJson<{ shared: boolean }>(`/api/files/${fileId}/share`, {
     method: "POST",
@@ -79,7 +79,7 @@ export const shareDriveFile = async (
 export const shareDriveFolder = async (
   folderId: number,
   scope: "organization" | "platform",
-  permission: "view" | "edit",
+  permission: "view" | "edit"
 ) =>
   apiFetchJson<{ shared: boolean }>(`/api/folders/${folderId}/share`, {
     method: "POST",
@@ -99,7 +99,7 @@ export const shareDriveFolder = async (
 export const uploadDriveFiles = async (
   files: File[],
   folderId: number | null = null,
-  userId: number | null = null,
+  userId: number | null = null
 ) => {
   const formData = new FormData();
 
@@ -113,7 +113,7 @@ export const uploadDriveFiles = async (
       const ciphertext = await encryptBlobForSelf(file, userId);
       formData.append(
         "files",
-        new File([ciphertext], file.name, { type: "application/octet-stream" }),
+        new File([ciphertext], file.name, { type: "application/octet-stream" })
       );
     }
   } else {
@@ -155,7 +155,7 @@ export const uploadDriveFiles = async (
 export const downloadDriveFile = async (
   fileId: number,
   fileName: string,
-  userId: number | null = null,
+  userId: number | null = null
 ) => {
   const res = await apiFetch(`/api/files/${fileId}/download`);
   const ct = res.headers.get("content-type") ?? "application/octet-stream";
@@ -163,9 +163,8 @@ export const downloadDriveFile = async (
 
   let blob: Blob;
   if (userId != null) {
-    const { looksLikeEnvelope, decryptBlobForSelf } = await import(
-      "../crypto/fileEnvelope"
-    );
+    const { looksLikeEnvelope, decryptBlobForSelf } =
+      await import("../crypto/fileEnvelope");
     blob = looksLikeEnvelope(raw)
       ? await decryptBlobForSelf(raw, userId, ct)
       : new Blob([raw], { type: ct });
@@ -184,7 +183,10 @@ export const downloadDriveFile = async (
   URL.revokeObjectURL(url);
 };
 
-export const downloadSharedDriveFile = async (fileId: number, fileName: string) => {
+export const downloadSharedDriveFile = async (
+  fileId: number,
+  fileName: string
+) => {
   const res = await apiFetch(`/api/drive/shared/files/${fileId}/download`);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

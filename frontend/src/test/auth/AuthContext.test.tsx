@@ -41,7 +41,7 @@ const renderProvider = (initialUrl: string) => {
       <AuthProvider>
         <AuthProbe />
       </AuthProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 };
 
@@ -55,7 +55,7 @@ describe("AuthContext.resolveBootToken", () => {
         ok: true,
         status: 200,
         json: async () => ({ id: 99, email: "alice@example.com" }),
-      } as unknown as Response),
+      } as unknown as Response)
     );
   });
 
@@ -82,7 +82,7 @@ describe("AuthContext.resolveBootToken", () => {
     expect(localStorage.getItem("token")).toBeNull();
     expect(getAuthToken()).toBe(VALID_JWT);
     expect(screen.getByTestId("user-email").textContent).toBe(
-      "alice@example.com",
+      "alice@example.com"
     );
     expect(screen.getByTestId("user-id").textContent).toBe("99");
 
@@ -99,7 +99,7 @@ describe("AuthContext.resolveBootToken", () => {
         status: 401,
         text: async () => "",
         json: async () => ({}),
-      } as unknown as Response),
+      } as unknown as Response)
     );
 
     renderProvider(`/emails?connected=true&token=${VALID_JWT}`);
@@ -112,7 +112,7 @@ describe("AuthContext.resolveBootToken", () => {
     setAuthToken(VALID_JWT);
     renderProvider("/home");
     expect(screen.getByTestId("user-email").textContent).toBe(
-      "alice@example.com",
+      "alice@example.com"
     );
   });
 
@@ -120,7 +120,7 @@ describe("AuthContext.resolveBootToken", () => {
     setAuthToken(BASE64URL_PAYLOAD_JWT);
     renderProvider("/home");
     expect(screen.getByTestId("user-email").textContent).toBe(
-      "alice@example.com",
+      "alice@example.com"
     );
     expect(screen.getByTestId("user-id").textContent).toBe("99");
   });
@@ -134,7 +134,7 @@ describe("AuthContext.resolveBootToken", () => {
         status: 401,
         text: async () => "",
         json: async () => ({}),
-      } as unknown as Response),
+      } as unknown as Response)
     );
 
     renderProvider("/reset-password?token=abc");

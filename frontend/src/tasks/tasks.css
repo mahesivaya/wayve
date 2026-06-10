@@ -76,7 +76,7 @@
   cursor: pointer;
 }
 
-.create-task-btn:hover{
+.create-task-btn:hover {
   background: var(--color-primary-hover);
 }
 
@@ -103,7 +103,7 @@
 }
 
 .task-filter:hover,
-.task-filter.active{
+.task-filter.active {
   background: lightslategray;
   color: var(--color-text-primary);
   font-weight: 650;
@@ -348,7 +348,7 @@
 }
 
 .task-form-grid input:focus,
-.task-form-grid textarea:focus{
+.task-form-grid textarea:focus {
   outline: 2px solid var(--color-primary-panel-border);
   border-color: var(--color-primary-action);
 }
@@ -391,7 +391,7 @@
   flex: 0 0 auto;
 }
 
-.task-priority-option:has(input:checked){
+.task-priority-option:has(input:checked) {
   border-color: var(--color-primary-action);
   background: var(--color-primary-soft);
   box-shadow: inset 0 0 0 1px var(--color-primary-action);
@@ -526,10 +526,12 @@
   box-shadow: 0 1px 2px rgb(15, 23, 42, 0.05);
 }
 
-.task-card:hover{
+.task-card:hover {
   background: var(--color-primary-soft);
   border-color: var(--color-primary-panel-border);
-  box-shadow: inset 4px 0 0 var(--color-primary), 0 3px 10px rgb(15, 23, 42, 0.08);
+  box-shadow:
+    inset 4px 0 0 var(--color-primary),
+    0 3px 10px rgb(15, 23, 42, 0.08);
 }
 
 .task-card h3 {
@@ -602,13 +604,13 @@
   cursor: pointer;
 }
 
-.task-edit-btn:hover{
+.task-edit-btn:hover {
   border-color: var(--color-primary-action);
   color: var(--color-primary-action);
   background: var(--color-primary-soft);
 }
 
-.task-delete-btn:hover{
+.task-delete-btn:hover {
   border-color: var(--color-danger);
   color: var(--color-danger);
   background: var(--color-danger-soft);
@@ -626,7 +628,7 @@
   cursor: pointer;
 }
 
-.task-status-select:focus{
+.task-status-select:focus {
   outline: 2px solid var(--color-primary-panel-border);
   border-color: var(--color-primary-action);
 }
@@ -744,7 +746,9 @@
   padding: 8px 14px;
   font-size: var(--text-sm);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 }
 
 .task-attachments-pick:hover {
@@ -843,7 +847,7 @@
   color: var(--color-danger, #c0392b);
 }
 
-@media (max-width: 760px){
+@media (max-width: 760px) {
   .tasks-app {
     flex-direction: column;
   }

@@ -10,10 +10,14 @@ export default function Header() {
       {user ? (
         <>
           <span>{user.email}</span>
-          <button onClick={() => {
-    logout();
-    void navigate("/");
-  }}>Logout</button>
+          <button
+            onClick={() => {
+              logout();
+              void navigate("/");
+            }}
+          >
+            Logout
+          </button>
         </>
       ) : (
         <button>Login</button>

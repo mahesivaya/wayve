@@ -7,7 +7,11 @@
 }
 
 .quotas-hero {
-  background: linear-gradient(135deg, var(--color-surface-deep), var(--color-accent-blue-deep));
+  background: linear-gradient(
+    135deg,
+    var(--color-surface-deep),
+    var(--color-accent-blue-deep)
+  );
   color: var(--color-surface-tint);
   padding: 56px 24px 64px;
 }
@@ -235,7 +239,7 @@
   cursor: pointer;
 }
 
-.quotas-card footer button:disabled{
+.quotas-card footer button:disabled {
   background: var(--color-surface-hover);
   color: var(--color-text-muted);
   cursor: default;
@@ -247,7 +251,7 @@
   border-color: var(--color-primary-action);
 }
 
-.quotas-cta.primary:hover{
+.quotas-cta.primary:hover {
   filter: brightness(1.05);
 }
 

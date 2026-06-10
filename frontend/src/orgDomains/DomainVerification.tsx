@@ -20,7 +20,7 @@ export default function DomainVerification() {
   const [params, setParams] = useSearchParams();
   const orgParam = params.get("org");
   const [orgId, setOrgId] = useState<number | null>(
-    orgParam && Number.isFinite(Number(orgParam)) ? Number(orgParam) : null,
+    orgParam && Number.isFinite(Number(orgParam)) ? Number(orgParam) : null
   );
   const [orgs, setOrgs] = useState<AdminOrganization[]>([]);
 
@@ -55,7 +55,9 @@ export default function DomainVerification() {
       try {
         setOrgs(await listAdminOrganizations());
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load organizations");
+        setError(
+          e instanceof Error ? e.message : "Failed to load organizations"
+        );
       }
     })();
   }, []);
@@ -100,7 +102,7 @@ export default function DomainVerification() {
       setNotice(
         res.verified
           ? `✓ ${res.domain} verified — the org can now create addresses on it.`
-          : (res.message ?? "TXT record not found yet."),
+          : (res.message ?? "TXT record not found yet.")
       );
       await load(orgId);
     } catch (e) {
@@ -142,7 +144,14 @@ export default function DomainVerification() {
         <code>x@usa.com</code> on a domain they don&apos;t control.
       </p>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "16px 0" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          margin: "16px 0",
+        }}
+      >
         <label htmlFor="orgSelect" style={{ fontWeight: 600 }}>
           Organization
         </label>
@@ -162,10 +171,14 @@ export default function DomainVerification() {
       </div>
 
       {error && (
-        <div style={{ color: "#b91c1c", fontWeight: 600, margin: "8px 0" }}>{error}</div>
+        <div style={{ color: "#b91c1c", fontWeight: 600, margin: "8px 0" }}>
+          {error}
+        </div>
       )}
       {notice && (
-        <div style={{ color: "#047857", fontWeight: 600, margin: "8px 0" }}>{notice}</div>
+        <div style={{ color: "#047857", fontWeight: 600, margin: "8px 0" }}>
+          {notice}
+        </div>
       )}
 
       {orgId != null && (
@@ -186,7 +199,9 @@ export default function DomainVerification() {
           {loading ? (
             <p style={{ color: "#6b7280" }}>Loading…</p>
           ) : domains.length === 0 ? (
-            <p style={{ color: "#6b7280" }}>No domains claimed for org {orgId} yet.</p>
+            <p style={{ color: "#6b7280" }}>
+              No domains claimed for org {orgId} yet.
+            </p>
           ) : (
             <ul style={{ listStyle: "none", padding: 0 }}>
               {domains.map((d) => (
@@ -199,7 +214,13 @@ export default function DomainVerification() {
                     marginBottom: 12,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
                     <strong style={{ fontSize: 16 }}>{d.domain}</strong>
                     <span
                       style={{
@@ -218,7 +239,8 @@ export default function DomainVerification() {
                   {!d.verified && d.txt_name && d.txt_value && (
                     <div style={{ marginTop: 12, fontSize: 14 }}>
                       <p style={{ margin: "0 0 6px", color: "#6b7280" }}>
-                        Add this TXT record to {d.domain}&apos;s DNS, then click Verify:
+                        Add this TXT record to {d.domain}&apos;s DNS, then click
+                        Verify:
                       </p>
                       <div
                         style={{
@@ -232,14 +254,20 @@ export default function DomainVerification() {
                         <div>
                           <span style={{ color: "#6b7280" }}>Name: </span>
                           {d.txt_name}{" "}
-                          <button onClick={() => copy(d.txt_name as string)} style={{ fontSize: 12 }}>
+                          <button
+                            onClick={() => copy(d.txt_name as string)}
+                            style={{ fontSize: 12 }}
+                          >
                             {copied === d.txt_name ? "✓" : "Copy"}
                           </button>
                         </div>
                         <div>
                           <span style={{ color: "#6b7280" }}>Value: </span>
                           {d.txt_value}{" "}
-                          <button onClick={() => copy(d.txt_value as string)} style={{ fontSize: 12 }}>
+                          <button
+                            onClick={() => copy(d.txt_value as string)}
+                            style={{ fontSize: 12 }}
+                          >
                             {copied === d.txt_value ? "✓" : "Copy"}
                           </button>
                         </div>
@@ -253,7 +281,10 @@ export default function DomainVerification() {
                         Verify
                       </button>
                     )}
-                    <button onClick={() => remove(d.id, d.domain)} disabled={busy}>
+                    <button
+                      onClick={() => remove(d.id, d.domain)}
+                      disabled={busy}
+                    >
                       Remove
                     </button>
                   </div>

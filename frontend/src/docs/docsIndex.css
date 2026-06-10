@@ -72,7 +72,9 @@
   background: var(--color-surface, #ffffff);
   text-decoration: none;
   color: var(--color-text, inherit);
-  transition: border-color 0.12s, transform 0.12s;
+  transition:
+    border-color 0.12s,
+    transform 0.12s;
 }
 
 .docs-index-card:hover {

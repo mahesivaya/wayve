@@ -65,7 +65,9 @@ export default function Register() {
       const fallback = homePathForAccount(data.account_type);
       const target = safeNext
         ? safeNext
-        : fallback.startsWith("/") ? fallback : `/${fallback}`;
+        : fallback.startsWith("/")
+          ? fallback
+          : `/${fallback}`;
       void navigate(target);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
@@ -76,58 +78,59 @@ export default function Register() {
     <div className="login-page login-page--framed">
       <PublicHeader showActions={false} />
       <div className="login-page-body">
-      <form className="login-card" onSubmit={handleRegister}>
-        <h2>Create account </h2>
-        <p className="subtitle">Join Fluxze to get started</p>
+        <form className="login-card" onSubmit={handleRegister}>
+          <h2>Create account </h2>
+          <p className="subtitle">Join Fluxze to get started</p>
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
 
-        <input
-          type="password"
-          placeholder="Confirm Password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          required
-        />
+          <input
+            type="password"
+            placeholder="Confirm Password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+          />
 
-        <button type="submit">Register</button>
+          <button type="submit">Register</button>
 
-        <div className="auth-divider"><span>or sign up with</span></div>
+          <div className="auth-divider">
+            <span>or sign up with</span>
+          </div>
 
-        <div className="auth-oauth-row">
-          <button
-            type="button"
-            className="google-btn"
-            aria-label="Sign up with Google"
-            onClick={handleGmailSignup}
-          >
-            Gmail
-          </button>
-        </div>
+          <div className="auth-oauth-row">
+            <button
+              type="button"
+              className="google-btn"
+              aria-label="Sign up with Google"
+              onClick={handleGmailSignup}
+            >
+              Gmail
+            </button>
+          </div>
 
-        {/* ✅ Error message */}
-        {error && <p className="error">{error}</p>}
+          {/* ✅ Error message */}
+          {error && <p className="error">{error}</p>}
 
-        {/* ✅ Switch to login */}
-        <p className="switch-auth">
-          Already have an account?{" "}
-          <Link to="/login">Login</Link>
-        </p>
-      </form>
+          {/* ✅ Switch to login */}
+          <p className="switch-auth">
+            Already have an account? <Link to="/login">Login</Link>
+          </p>
+        </form>
       </div>
     </div>
   );

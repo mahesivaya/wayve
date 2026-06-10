@@ -6,14 +6,42 @@ import { useEffect, useState } from "react";
 
 function MailScreen() {
   const mail = [
-    { from: "Emily Carter", subject: "Q3 roadmap — final review before Friday", time: "9:24" },
-    { from: "GitHub", subject: "[fluxze] PR #482 merged into main", time: "8:10" },
-    { from: "Marco Rossi", subject: "Re: Q3 invoice — approved, payment sent", time: "Yest" },
-    { from: "Camille Laurent", subject: "Re: Design sync notes + Figma link", time: "Yest" },
-    { from: "Hannah Schmidt", subject: "Re: Shared the design pages with you", time: "Tue" },
-    { from: "Yuki Tanaka", subject: "Re: Tokyo office launch plan", time: "Tue" },
+    {
+      from: "Emily Carter",
+      subject: "Q3 roadmap — final review before Friday",
+      time: "9:24",
+    },
+    {
+      from: "GitHub",
+      subject: "[fluxze] PR #482 merged into main",
+      time: "8:10",
+    },
+    {
+      from: "Marco Rossi",
+      subject: "Re: Q3 invoice — approved, payment sent",
+      time: "Yest",
+    },
+    {
+      from: "Camille Laurent",
+      subject: "Re: Design sync notes + Figma link",
+      time: "Yest",
+    },
+    {
+      from: "Hannah Schmidt",
+      subject: "Re: Shared the design pages with you",
+      time: "Tue",
+    },
+    {
+      from: "Yuki Tanaka",
+      subject: "Re: Tokyo office launch plan",
+      time: "Tue",
+    },
     { from: "Vercel", subject: "Production deployment is live", time: "Mon" },
-    { from: "Aarav Sharma", subject: "Re: Contract renewal — Q3 terms", time: "Mon" },
+    {
+      from: "Aarav Sharma",
+      subject: "Re: Contract renewal — Q3 terms",
+      time: "Mon",
+    },
   ];
   return (
     <>
@@ -86,12 +114,54 @@ function MeetScreen() {
   const ROW = 56; // px per hour row
   // col = day index, start/span in hour-rows from 9:00.
   const events = [
-    { col: 0, start: 0.5, span: 0.5, title: "Standup", time: "9:30", color: "blue" },
-    { col: 0, start: 4, span: 1, title: "Roadmap sync", time: "1:00", color: "green" },
-    { col: 1, start: 2, span: 1, title: "Design review", time: "11:00", color: "purple" },
-    { col: 2, start: 1, span: 1.5, title: "Client call", time: "10:00", color: "blue" },
-    { col: 3, start: 4, span: 1, title: "1:1 — Daniel", time: "1:00", color: "amber" },
-    { col: 4, start: 5, span: 1, title: "Sprint planning", time: "2:00", color: "green" },
+    {
+      col: 0,
+      start: 0.5,
+      span: 0.5,
+      title: "Standup",
+      time: "9:30",
+      color: "blue",
+    },
+    {
+      col: 0,
+      start: 4,
+      span: 1,
+      title: "Roadmap sync",
+      time: "1:00",
+      color: "green",
+    },
+    {
+      col: 1,
+      start: 2,
+      span: 1,
+      title: "Design review",
+      time: "11:00",
+      color: "purple",
+    },
+    {
+      col: 2,
+      start: 1,
+      span: 1.5,
+      title: "Client call",
+      time: "10:00",
+      color: "blue",
+    },
+    {
+      col: 3,
+      start: 4,
+      span: 1,
+      title: "1:1 — Daniel",
+      time: "1:00",
+      color: "amber",
+    },
+    {
+      col: 4,
+      start: 5,
+      span: 1,
+      title: "Sprint planning",
+      time: "2:00",
+      color: "green",
+    },
   ];
   return (
     <div className="hx-mock-week">
@@ -228,7 +298,8 @@ function AIScreen() {
       <div className="hx-mock-ai-q">Summarize my unread mail</div>
       <div className="hx-mock-ai-a">
         You have 3 unread: a Q3 roadmap review due Friday, GitHub PR #482 merged
-        to main, and a $4,820 Stripe payout on the way. Want me to draft replies?
+        to main, and a $4,820 Stripe payout on the way. Want me to draft
+        replies?
       </div>
       <div className="hx-mock-ai-bar">
         <span className="hx-mock-ai-input">Ask anything…</span>
@@ -258,7 +329,7 @@ export default function HeroMock() {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const id = window.setInterval(
       () => setActive((i) => (i + 1) % TABS.length),
-      2800,
+      2800
     );
     return () => window.clearInterval(id);
   }, [paused]);

@@ -40,9 +40,10 @@ function buildDots(): Dot[] {
     // Bottom half: darker band, dropping from L=0.45 to ~0.22.
     // The mid-row split makes the grid look like macro's two-zone gradient.
     const half = Math.floor(ROWS / 2);
-    const l = row < half
-      ? 0.82 - (row / half) * 0.27
-      : 0.45 - ((row - half) / half) * 0.23;
+    const l =
+      row < half
+        ? 0.82 - (row / half) * 0.27
+        : 0.45 - ((row - half) / half) * 0.23;
     for (let col = 0; col < COLS; col++) {
       const h = (col / COLS) * 360;
       dots.push({
@@ -85,7 +86,7 @@ export default function ColorGrid({ hue, chroma, onChange }: Props) {
         chroma: snapChroma(py * CHROMA_MAX),
       });
     },
-    [onChange],
+    [onChange]
   );
 
   const onPointerDown = useCallback(
@@ -93,7 +94,7 @@ export default function ColorGrid({ hue, chroma, onChange }: Props) {
       e.currentTarget.setPointerCapture(e.pointerId);
       updateFromClient(e.clientX, e.clientY);
     },
-    [updateFromClient],
+    [updateFromClient]
   );
 
   const onPointerMove = useCallback(
@@ -101,7 +102,7 @@ export default function ColorGrid({ hue, chroma, onChange }: Props) {
       if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
       updateFromClient(e.clientX, e.clientY);
     },
-    [updateFromClient],
+    [updateFromClient]
   );
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {

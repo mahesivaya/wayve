@@ -4,7 +4,8 @@ import { getSearchLabel, shouldHideSearch } from "./SearchConfig";
 
 export default function SearchBar() {
   const location = useLocation();
-  const { searchQuery, setSearchQuery, emailViewLayout, setEmailViewLayout } = useGlobalSearch();
+  const { searchQuery, setSearchQuery, emailViewLayout, setEmailViewLayout } =
+    useGlobalSearch();
 
   if (shouldHideSearch(location.pathname)) {
     return null;
@@ -15,7 +16,9 @@ export default function SearchBar() {
   return (
     <div className="global-search-row">
       <div className="global-search-box">
-        <span className="global-search-icon" aria-hidden="true">⌕</span>
+        <span className="global-search-icon" aria-hidden="true">
+          ⌕
+        </span>
         <input
           type="search"
           value={searchQuery}
@@ -36,7 +39,11 @@ export default function SearchBar() {
         )}
       </div>
       {location.pathname.startsWith("/emails") && (
-        <div className="email-layout-actions" role="group" aria-label="View layout">
+        <div
+          className="email-layout-actions"
+          role="group"
+          aria-label="View layout"
+        >
           <button
             type="button"
             className={`email-layout-btn ${emailViewLayout === "list" ? "active" : ""}`}

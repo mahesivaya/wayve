@@ -43,7 +43,7 @@ export async function listOrgDomains(orgId: number): Promise<OrgDomain[]> {
 
 export async function claimOrgDomain(
   orgId: number,
-  domain: string,
+  domain: string
 ): Promise<OrgDomain> {
   const res = await apiFetch(`/api/organizations/${orgId}/domains`, {
     method: "POST",
@@ -55,11 +55,11 @@ export async function claimOrgDomain(
 
 export async function verifyOrgDomain(
   orgId: number,
-  domainId: number,
+  domainId: number
 ): Promise<VerifyResult> {
   const res = await apiFetch(
     `/api/organizations/${orgId}/domains/${domainId}/verify`,
-    { method: "POST" },
+    { method: "POST" }
   );
   if (!res.ok) throw new Error(await readError(res, "Verification failed"));
   return (await res.json()) as VerifyResult;
@@ -67,10 +67,13 @@ export async function verifyOrgDomain(
 
 export async function deleteOrgDomain(
   orgId: number,
-  domainId: number,
+  domainId: number
 ): Promise<void> {
-  const res = await apiFetch(`/api/organizations/${orgId}/domains/${domainId}`, {
-    method: "DELETE",
-  });
+  const res = await apiFetch(
+    `/api/organizations/${orgId}/domains/${domainId}`,
+    {
+      method: "DELETE",
+    }
+  );
   if (!res.ok) throw new Error(await readError(res, "Failed to delete domain"));
 }

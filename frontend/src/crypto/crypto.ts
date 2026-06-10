@@ -1,4 +1,6 @@
-function toArrayBuffer(input: ArrayBuffer | SharedArrayBuffer | Uint8Array): ArrayBuffer {
+function toArrayBuffer(
+  input: ArrayBuffer | SharedArrayBuffer | Uint8Array
+): ArrayBuffer {
   if (input instanceof Uint8Array) {
     // copy to a new ArrayBuffer
     return input.slice().buffer;
@@ -11,14 +13,12 @@ function toArrayBuffer(input: ArrayBuffer | SharedArrayBuffer | Uint8Array): Arr
   return view.slice().buffer;
 }
 
-
 // 🔐 Generate AES key
 export async function generateKey(): Promise<CryptoKey> {
-  return crypto.subtle.generateKey(
-    { name: "AES-GCM", length: 256 },
-    true,
-    ["encrypt", "decrypt"]
-  );
+  return crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
+    "encrypt",
+    "decrypt",
+  ]);
 }
 
 // 🔐 Encrypt
@@ -43,8 +43,8 @@ export async function decrypt(
   encrypted: { iv: string; data: string },
   key: CryptoKey
 ) {
-  const iv = Uint8Array.from(atob(encrypted.iv), c => c.charCodeAt(0));
-  const data = Uint8Array.from(atob(encrypted.data), c => c.charCodeAt(0));
+  const iv = Uint8Array.from(atob(encrypted.iv), (c) => c.charCodeAt(0));
+  const data = Uint8Array.from(atob(encrypted.data), (c) => c.charCodeAt(0));
 
   const decrypted = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: toArrayBuffer(iv) },
@@ -55,13 +55,7 @@ export async function decrypt(
   return new TextDecoder().decode(decrypted);
 }
 
-
-
-
-export async function encryptMessage(
-  message: string,
-  publicKey: CryptoKey
-) {
+export async function encryptMessage(message: string, publicKey: CryptoKey) {
   // 1. Generate AES key
   const aesKey = await crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
@@ -100,12 +94,9 @@ export async function encryptMessage(
  * Encrypts a File or Blob for Drive/Attachments.
  * Returns a WAYVE_SECURE_V1 envelope containing the encrypted file data.
  */
-export async function encryptFile(
-  file: File | Blob,
-  publicKey: CryptoKey
-) {
+export async function encryptFile(file: File | Blob, publicKey: CryptoKey) {
   const arrayBuffer = await file.arrayBuffer();
-  
+
   // 1. Generate AES-256-GCM key
   const aesKey = await crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
@@ -131,14 +122,17 @@ export async function encryptFile(
   );
 
   // 4. Return the standard envelope format
-  return "WAYVE_SECURE_V1\n" + JSON.stringify({
-    type: "wayve_encrypted_file",
-    name: (file as File).name || "encrypted_file",
-    mimeType: file.type,
-    data: Array.from(new Uint8Array(encryptedData)),
-    key: Array.from(new Uint8Array(encryptedAesKey)),
-    iv: Array.from(iv),
-  });
+  return (
+    "WAYVE_SECURE_V1\n" +
+    JSON.stringify({
+      type: "wayve_encrypted_file",
+      name: (file as File).name || "encrypted_file",
+      mimeType: file.type,
+      data: Array.from(new Uint8Array(encryptedData)),
+      key: Array.from(new Uint8Array(encryptedAesKey)),
+      iv: Array.from(iv),
+    })
+  );
 }
 
 export async function decryptMessage(
@@ -147,7 +141,6 @@ export async function decryptMessage(
   iv: Uint8Array,
   privateKey: CryptoKey
 ): Promise<string> {
-
   const msg = toArrayBuffer(encryptedMessage);
   const key = toArrayBuffer(encryptedKey);
 

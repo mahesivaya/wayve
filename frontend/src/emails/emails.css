@@ -3,7 +3,7 @@
    with ?error=... (currently only `email_in_use` from the cross-user
    duplicate-account gate in `email::account::email_owned_by_other_user`).
    `position: absolute` keeps it from displacing the flex layout below. */
-.oauth-error-banner{
+.oauth-error-banner {
   position: absolute;
   top: 12px;
   left: 50%;
@@ -44,7 +44,7 @@
   border-radius: var(--radius-sm);
 }
 
-.oauth-error-dismiss:hover{
+.oauth-error-dismiss:hover {
   background: var(--color-danger-soft);
 }
 
@@ -147,7 +147,7 @@
 }
 
 .email-sidebar-resizer::after,
-.email-list-resizer::after{
+.email-list-resizer::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -158,21 +158,23 @@
   background: var(--color-text-muted);
   border-radius: 1px;
   opacity: 0.35;
-  transition: opacity 0.15s, height 0.15s;
+  transition:
+    opacity 0.15s,
+    height 0.15s;
   pointer-events: none;
 }
 
 .email-sidebar-resizer:hover,
 .email-sidebar-resizer:active,
 .email-list-resizer:hover,
-.email-list-resizer:active{
+.email-list-resizer:active {
   background: var(--color-email-resizer-hover);
 }
 
 .email-sidebar-resizer:hover::after,
 .email-sidebar-resizer:active::after,
 .email-list-resizer:hover::after,
-.email-list-resizer:active::after{
+.email-list-resizer:active::after {
   opacity: 1;
   height: 44px;
 }
@@ -189,7 +191,7 @@
   font-weight: 600;
 }
 
-.compose-btn:hover{
+.compose-btn:hover {
   background: var(--color-primary-hover);
 }
 
@@ -197,7 +199,7 @@
    button on the right. Replaces the old full-width "Add more accounts"
    button (which was disproportionately heavy for an action used 1-2
    times in a user's lifetime). */
-.mail-section-header{
+.mail-section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -219,10 +221,12 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
-.mail-section-action:hover{
+.mail-section-action:hover {
   background: var(--color-surface-hover);
   border-color: var(--color-text-muted);
 }
@@ -260,7 +264,7 @@
   box-sizing: border-box;
 }
 
-@media (max-width: 480px){
+@media (max-width: 480px) {
   .provider-picker-card {
     padding: 16px;
     border-radius: 10px;
@@ -300,7 +304,7 @@
   border-radius: 8px;
 }
 
-.provider-picker-close:hover{
+.provider-picker-close:hover {
   background: var(--color-surface-tint-cool);
   color: var(--color-surface-deep);
 }
@@ -331,15 +335,17 @@
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.12s, background 0.12s;
+  transition:
+    border-color 0.12s,
+    background 0.12s;
 }
 
-.provider-option:hover:not(:disabled){
+.provider-option:hover:not(:disabled) {
   border-color: var(--color-primary-action);
   background: var(--color-surface-soft);
 }
 
-.provider-option:disabled{
+.provider-option:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -428,12 +434,12 @@
   box-sizing: border-box;
 }
 
-.provider-other-input:focus{
+.provider-other-input:focus {
   border-color: var(--color-primary-action);
   box-shadow: 0 0 0 3px rgb(37, 99, 235, 0.15);
 }
 
-.provider-other-input:disabled{
+.provider-other-input:disabled {
   background: var(--color-surface-soft);
   color: var(--color-text-slate-soft);
 }
@@ -523,7 +529,7 @@
   color: var(--color-text-slate-medium);
 }
 
-.provider-other-back:hover:not(:disabled){
+.provider-other-back:hover:not(:disabled) {
   background: var(--color-surface-tint-cool);
 }
 
@@ -532,12 +538,12 @@
   color: var(--color-on-primary);
 }
 
-.provider-other-submit:hover:not(:disabled){
+.provider-other-submit:hover:not(:disabled) {
   background: var(--color-primary-action-hover);
 }
 
 .provider-other-submit:disabled,
-.provider-other-back:disabled{
+.provider-other-back:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -545,7 +551,7 @@
 /* ================= FILTERS =================
    Vertical navigation rail: Inbox / Sent / Attachments stacked as
    rows in a single bordered container. */
-.mail-filters{
+.mail-filters {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -646,9 +652,18 @@
   letter-spacing: 0.02em;
   margin-right: 6px;
 }
-.inbox-status-chip.open    { background: var(--color-status-open-bg); color: var(--color-status-open-text); }
-.inbox-status-chip.pending { background: var(--color-status-pending-bg); color: var(--color-status-pending-text); }
-.inbox-status-chip.closed  { background: var(--color-border); color: var(--color-text-slate-mid); }
+.inbox-status-chip.open {
+  background: var(--color-status-open-bg);
+  color: var(--color-status-open-text);
+}
+.inbox-status-chip.pending {
+  background: var(--color-status-pending-bg);
+  color: var(--color-status-pending-text);
+}
+.inbox-status-chip.closed {
+  background: var(--color-border);
+  color: var(--color-text-slate-mid);
+}
 
 /* Shared-inbox workflow controls (detail view). Single row of compact
    fields, hidden entirely on personal mail. */
@@ -716,7 +731,7 @@
   border: 1px solid var(--color-surface-tint-steel);
 }
 .inbox-workflow-assign:disabled,
-.inbox-workflow-unassign:disabled{
+.inbox-workflow-unassign:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -726,7 +741,7 @@
 }
 
 /* Hover */
-.filter-btn:hover:not(.active){
+.filter-btn:hover:not(.active) {
   background: var(--color-surface-hover);
 }
 
@@ -753,7 +768,7 @@
   overflow: hidden;
 }
 
-.account-filter:hover:not(.active){
+.account-filter:hover:not(.active) {
   background: var(--color-surface-hover);
 }
 
@@ -798,12 +813,12 @@
   line-height: 1;
 }
 
-.account-icon-btn:hover:not(:disabled){
+.account-icon-btn:hover:not(:disabled) {
   background: var(--color-overlay-strong);
   border-color: var(--color-border-muted);
 }
 
-.account-icon-btn:disabled{
+.account-icon-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -897,7 +912,9 @@
   padding: 0 7px;
   border-bottom: 1px solid var(--color-overlay-border);
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -915,7 +932,7 @@
    - Active (selected):    pale primary panel, distinct from BOTH the steel-
                            blue base AND the white unread row, with an
                            accented left bar for confirmation. */
-.email-item:hover{
+.email-item:hover {
   background: var(--color-surface-cool-blue);
 }
 
@@ -923,7 +940,7 @@
   background: var(--color-surface);
 }
 
-.email-item.unread:hover{
+.email-item.unread:hover {
   background: var(--color-surface-tint-cool);
 }
 
@@ -934,7 +951,7 @@
 }
 
 .email-item.active:hover,
-.email-item.unread.active:hover{
+.email-item.unread.active:hover {
   background: var(--color-surface-cool-blue-light);
 }
 
@@ -1057,7 +1074,7 @@
   margin-left: auto;
 }
 
-.email-bulk-clear:hover:not(:disabled){
+.email-bulk-clear:hover:not(:disabled) {
   background: var(--color-primary-panel);
 }
 
@@ -1072,13 +1089,13 @@
   border-radius: var(--radius-sm);
 }
 
-.email-bulk-action:hover:not(:disabled){
+.email-bulk-action:hover:not(:disabled) {
   border-color: var(--color-primary);
   color: var(--color-primary);
   background: var(--color-primary-panel);
 }
 
-.email-bulk-action--danger:hover:not(:disabled){
+.email-bulk-action--danger:hover:not(:disabled) {
   border-color: var(--color-danger);
   color: var(--color-danger);
   background: var(--color-danger-soft);
@@ -1090,7 +1107,7 @@
   color: var(--color-surface);
 }
 
-.email-bulk-action.is-active:hover:not(:disabled){
+.email-bulk-action.is-active:hover:not(:disabled) {
   background: var(--color-primary-hover, var(--color-primary-action-hover));
   color: var(--color-surface);
 }
@@ -1170,7 +1187,7 @@
 }
 
 .email-bulk-action:disabled,
-.email-bulk-clear:disabled{
+.email-bulk-clear:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -1191,8 +1208,14 @@
 }
 
 @keyframes email-bulk-toast-in {
-  from { opacity: 0; transform: translateY(-2px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Unread indicator pinned to the leftmost edge of each row, sized so
@@ -1392,25 +1415,25 @@
   stroke-linejoin: round;
 }
 
-.email-detail-back:hover{
+.email-detail-back:hover {
   background: var(--color-danger-soft);
   border-color: var(--color-danger-border);
   color: var(--color-danger-hover);
 }
 
-.email-detail-delete:hover:not(:disabled){
+.email-detail-delete:hover:not(:disabled) {
   background: var(--color-danger-soft);
   border-color: var(--color-danger-border);
 }
 
 .email-detail-reply:hover,
-.email-detail-forward:hover{
+.email-detail-forward:hover {
   background: var(--color-primary-panel);
   border-color: var(--color-primary-panel-border);
   color: var(--color-primary-action-hover);
 }
 
-.email-detail-delete:disabled{
+.email-detail-delete:disabled {
   cursor: not-allowed;
   opacity: 0.65;
 }
@@ -1485,7 +1508,7 @@
   color: var(--color-surface);
 }
 
-.email-reply-send:disabled{
+.email-reply-send:disabled {
   cursor: not-allowed;
   opacity: 0.65;
 }
@@ -1509,7 +1532,7 @@
 /* Sender header row: colored initial avatar, name + email, recipient
    line, and the date pushed to the right. Mirrors Gmail's open-email
    header so users get a familiar reading layout. */
-.email-meta-row{
+.email-meta-row {
   display: flex;
   align-items: flex-start;
   gap: var(--space-4);
@@ -1655,7 +1678,7 @@
   cursor: pointer;
 }
 
-.email-attachment:hover{
+.email-attachment:hover {
   background: var(--color-primary-soft);
   border-color: var(--color-primary-border);
 }
@@ -1692,31 +1715,31 @@
 /* Wider scrollbar on the inbox list so the thumb visibly shrinks as
    more emails get appended via load-more — gives users a clear cue
    that pagination did add rows even when the viewport is full. */
-.email-list::-webkit-scrollbar{
+.email-list::-webkit-scrollbar {
   width: 12px;
 }
 
-.email-detail::-webkit-scrollbar{
+.email-detail::-webkit-scrollbar {
   width: 6px;
 }
 
-.email-list::-webkit-scrollbar-track{
+.email-list::-webkit-scrollbar-track {
   background: var(--color-email-bg);
 }
 
 .email-list::-webkit-scrollbar-thumb,
-.email-detail::-webkit-scrollbar-thumb{
+.email-detail::-webkit-scrollbar-thumb {
   background: var(--color-border-muted);
   border-radius: var(--radius-sm);
 }
 
-.email-list::-webkit-scrollbar-thumb{
+.email-list::-webkit-scrollbar-thumb {
   border: 2px solid var(--color-email-bg);
   background-clip: padding-box;
   min-height: 40px;
 }
 
-.email-list::-webkit-scrollbar-thumb:hover{
+.email-list::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
   background-clip: padding-box;
   border: 2px solid var(--color-email-bg);
@@ -1729,7 +1752,7 @@
   scrollbar-color: var(--color-border-muted) var(--color-email-bg);
 }
 
-@media (max-width: 700px){
+@media (max-width: 700px) {
   .main {
     background: var(--color-surface-cool-blue-mid);
   }
@@ -1826,7 +1849,7 @@
   .email-item.active,
   .email-item.unread.active,
   .email-item.active:hover,
-  .email-item.unread.active:hover{
+  .email-item.unread.active:hover {
     background: transparent;
     box-shadow: none;
   }

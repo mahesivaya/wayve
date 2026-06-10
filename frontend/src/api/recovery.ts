@@ -13,7 +13,9 @@ type ServerWrappedKey = WrappedKeyEnvelope & { updated_at: string };
  * subsequent calls overwrite the prior wrap, which is correct after the
  * user regenerates or re-wraps their key.
  */
-export async function uploadWrappedKey(envelope: WrappedKeyEnvelope): Promise<void> {
+export async function uploadWrappedKey(
+  envelope: WrappedKeyEnvelope
+): Promise<void> {
   await apiFetch("/api/me/wrapped-key", {
     method: "PUT",
     body: JSON.stringify(envelope),

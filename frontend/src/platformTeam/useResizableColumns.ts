@@ -22,7 +22,7 @@ export type ResizableColumn = {
 
 export function useResizableColumns(
   columns: readonly ResizableColumn[],
-  storageKey: string,
+  storageKey: string
 ) {
   // Per-column widths (px). Defaults come from `columns`; a stored value
   // overrides but is floored at the column's min.
@@ -56,29 +56,28 @@ export function useResizableColumns(
 
   // Drag the grip on a header's right edge to resize that column. Listeners
   // live only for the duration of the drag.
-  const startResize =
-    (key: string, min: number) => (e: ReactMouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const startX = e.clientX;
-      const startW = colWidths[key];
-      const onMove = (ev: MouseEvent) => {
-        const next = Math.max(min, startW + (ev.clientX - startX));
-        setColWidths((prev) =>
-          prev[key] === next ? prev : { ...prev, [key]: next },
-        );
-      };
-      const onUp = () => {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      };
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
+  const startResize = (key: string, min: number) => (e: ReactMouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = colWidths[key];
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.max(min, startW + (ev.clientX - startX));
+      setColWidths((prev) =>
+        prev[key] === next ? prev : { ...prev, [key]: next }
+      );
     };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
 
   const totalWidth = columns.reduce((sum, c) => sum + colWidths[c.key], 0);
 

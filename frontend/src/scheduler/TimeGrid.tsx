@@ -36,10 +36,7 @@ export default function TimeGrid({ events, onCreateEvent }: Props) {
     setDragStart(getMinutesFromEvent(e, hour));
   };
 
-  const handleMouseUp = (
-    e: React.MouseEvent<HTMLDivElement>,
-    hour: number
-  ) => {
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>, hour: number) => {
     if (dragStart === null) return;
 
     const end = getMinutesFromEvent(e, hour);
@@ -73,7 +70,7 @@ export default function TimeGrid({ events, onCreateEvent }: Props) {
                   key={ev.id}
                   className="event-block"
                   style={{
-                    top: (ev.start % 60),
+                    top: ev.start % 60,
                     height: ev.end - ev.start,
                   }}
                 >

@@ -49,7 +49,8 @@ function parseBrowser(ua: string | null): string {
 // scope + audit:read.
 export default function PlatformVisitors() {
   const { user } = useAuth();
-  const canView = user?.scope === "platform" && user?.effective_role === "owner";
+  const canView =
+    user?.scope === "platform" && user?.effective_role === "owner";
 
   const [rows, setRows] = useState<VisitRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +59,7 @@ export default function PlatformVisitors() {
 
   const { colWidths, totalWidth, startResize } = useResizableColumns(
     VISITOR_COLUMNS,
-    VISITORS_COL_WIDTHS_KEY,
+    VISITORS_COL_WIDTHS_KEY
   );
 
   const load = useCallback(async () => {
@@ -84,7 +85,12 @@ export default function PlatformVisitors() {
   const summary = useMemo(() => {
     const uniqueIps = new Set(rows.map((r) => r.ip).filter(Boolean)).size;
     const signedIn = rows.filter((r) => r.user_id !== null).length;
-    return { total: rows.length, uniqueIps, signedIn, anon: rows.length - signedIn };
+    return {
+      total: rows.length,
+      uniqueIps,
+      signedIn,
+      anon: rows.length - signedIn,
+    };
   }, [rows]);
 
   const filtered = useMemo(() => {
@@ -99,7 +105,7 @@ export default function PlatformVisitors() {
         parseDevice(r.user_agent),
         parseBrowser(r.user_agent),
         r.user_agent,
-      ].some((v) => (v ?? "").toLowerCase().includes(q)),
+      ].some((v) => (v ?? "").toLowerCase().includes(q))
     );
   }, [rows, search]);
 
@@ -110,7 +116,8 @@ export default function PlatformVisitors() {
       <header className="pt-header">
         <h1>Visitors</h1>
         <p>
-          Everyone who opened the website — anonymous and signed-in · {user?.email}
+          Everyone who opened the website — anonymous and signed-in ·{" "}
+          {user?.email}
         </p>
       </header>
 
@@ -145,53 +152,53 @@ export default function PlatformVisitors() {
           </div>
         ) : (
           <div className="pt-table-scroll">
-          <table
-            className="pt-table"
-            style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
-          >
-            <colgroup>
-              {VISITOR_COLUMNS.map((c) => (
-                <col key={c.key} style={{ width: `${colWidths[c.key]}px` }} />
-              ))}
-            </colgroup>
-            <thead>
-              <tr>
+            <table
+              className="pt-table"
+              style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
+            >
+              <colgroup>
                 {VISITOR_COLUMNS.map((c) => (
-                  <th key={c.key} className="pt-th-resizable">
-                    {c.label}
-                    <span
-                      className="pt-col-resize-handle"
-                      onMouseDown={startResize(c.key, c.min)}
-                      role="separator"
-                      aria-orientation="vertical"
-                      aria-label={`Resize ${c.label} column`}
-                    />
-                  </th>
+                  <col key={c.key} style={{ width: `${colWidths[c.key]}px` }} />
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id}>
-                  <td>{fmtDateTime(r.created_at)}</td>
-                  <td>
-                    {r.user_email ?? (
-                      <span style={{ opacity: 0.6 }}>Anonymous</span>
-                    )}
-                  </td>
-                  <td>{r.ip ?? "-"}</td>
-                  <td>{parseDevice(r.user_agent)}</td>
-                  <td>{parseBrowser(r.user_agent)}</td>
-                  <td className="pt-details" title={r.path}>
-                    {r.path}
-                  </td>
-                  <td className="pt-details" title={r.referrer ?? ""}>
-                    {r.referrer || "—"}
-                  </td>
+              </colgroup>
+              <thead>
+                <tr>
+                  {VISITOR_COLUMNS.map((c) => (
+                    <th key={c.key} className="pt-th-resizable">
+                      {c.label}
+                      <span
+                        className="pt-col-resize-handle"
+                        onMouseDown={startResize(c.key, c.min)}
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label={`Resize ${c.label} column`}
+                      />
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.id}>
+                    <td>{fmtDateTime(r.created_at)}</td>
+                    <td>
+                      {r.user_email ?? (
+                        <span style={{ opacity: 0.6 }}>Anonymous</span>
+                      )}
+                    </td>
+                    <td>{r.ip ?? "-"}</td>
+                    <td>{parseDevice(r.user_agent)}</td>
+                    <td>{parseBrowser(r.user_agent)}</td>
+                    <td className="pt-details" title={r.path}>
+                      {r.path}
+                    </td>
+                    <td className="pt-details" title={r.referrer ?? ""}>
+                      {r.referrer || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>

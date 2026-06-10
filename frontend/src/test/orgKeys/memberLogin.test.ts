@@ -27,7 +27,7 @@ async function generateRsaKeypairPkcs8(): Promise<ArrayBuffer> {
       hash: "SHA-256",
     },
     true,
-    ["encrypt", "decrypt"],
+    ["encrypt", "decrypt"]
   );
   return crypto.subtle.exportKey("pkcs8", kp.privateKey);
 }
@@ -38,12 +38,16 @@ async function generateRsaKeypairPkcs8(): Promise<ArrayBuffer> {
 // login-wrap side.
 async function wrapPkcs8WithPassword(
   pkcs8: ArrayBuffer,
-  password: string,
+  password: string
 ): Promise<NewLoginWrap> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const baseKey = await crypto.subtle.importKey(
-    "raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveKey"],
+    "raw",
+    enc.encode(password),
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"]
   );
   const aesKey = await crypto.subtle.deriveKey(
     {
@@ -55,12 +59,12 @@ async function wrapPkcs8WithPassword(
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
-    ["encrypt"],
+    ["encrypt"]
   );
   const ct = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv.slice().buffer },
     aesKey,
-    pkcs8,
+    pkcs8
   );
   return {
     iv: bytesToB64(iv),
@@ -77,7 +81,7 @@ describe("memberLogin.rewrapOwnLoginEnvelope", () => {
     const newWrap = await rewrapOwnLoginEnvelope(
       "OldPassword123!",
       "NewPassword456!",
-      oldWrap,
+      oldWrap
     );
 
     // The rotation must preserve the underlying PKCS8 — unwrap the new
@@ -87,7 +91,7 @@ describe("memberLogin.rewrapOwnLoginEnvelope", () => {
       newWrap.ct,
       enc.encode("NewPassword456!"),
       newWrap.salt,
-      newWrap.iterations,
+      newWrap.iterations
     );
     const a = new Uint8Array(pkcs8);
     const b = new Uint8Array(recovered);
@@ -100,7 +104,7 @@ describe("memberLogin.rewrapOwnLoginEnvelope", () => {
     const oldWrap = await wrapPkcs8WithPassword(pkcs8, "CorrectOldPassword!");
 
     await expect(
-      rewrapOwnLoginEnvelope("WrongOldPassword!", "NewPassword456!", oldWrap),
+      rewrapOwnLoginEnvelope("WrongOldPassword!", "NewPassword456!", oldWrap)
     ).rejects.toThrow(/current password|wrong/i);
   });
 
@@ -121,7 +125,7 @@ describe("memberLogin.rewrapOwnLoginEnvelope", () => {
     const newWrap = await rewrapOwnLoginEnvelope(
       "OldPassword123!",
       "BrandNewPassword456!",
-      oldWrap,
+      oldWrap
     );
 
     await expect(
@@ -130,8 +134,8 @@ describe("memberLogin.rewrapOwnLoginEnvelope", () => {
         newWrap.ct,
         enc.encode("OldPassword123!"),
         newWrap.salt,
-        newWrap.iterations,
-      ),
+        newWrap.iterations
+      )
     ).rejects.toThrow();
   });
 });

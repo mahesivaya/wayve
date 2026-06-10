@@ -33,28 +33,48 @@ const Call = lazy(() => import("./call/Call"));
 const Documents = lazy(() => import("./documents/DocumentsBox"));
 const GitHubRepo = lazy(() => import("./github/GitHubRepo"));
 const TeamPage = lazy(() => import("./teams/TeamPage"));
-const DomainVerification = lazy(() => import("./orgDomains/DomainVerification"));
+const DomainVerification = lazy(
+  () => import("./orgDomains/DomainVerification")
+);
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
 const Organization = lazy(() => import("./organization/Organization"));
-const OrganizationAdminHome = lazy(() => import("./organization/OrganizationAdminHome"));
-const OrganizationMembers = lazy(() => import("./organization/OrganizationMembers"));
+const OrganizationAdminHome = lazy(
+  () => import("./organization/OrganizationAdminHome")
+);
+const OrganizationMembers = lazy(
+  () => import("./organization/OrganizationMembers")
+);
 const OrgSettings = lazy(() => import("./organization/OrgSettings"));
-const PlatformAdminHome = lazy(() => import("./organization/PlatformAdminHome"));
-const PlatformOrganizations = lazy(() => import("./organization/PlatformOrganizations"));
-const PlatformOrganizationDetail = lazy(() => import("./organization/PlatformOrganizationDetail"));
+const PlatformAdminHome = lazy(
+  () => import("./organization/PlatformAdminHome")
+);
+const PlatformOrganizations = lazy(
+  () => import("./organization/PlatformOrganizations")
+);
+const PlatformOrganizationDetail = lazy(
+  () => import("./organization/PlatformOrganizationDetail")
+);
 const PlatformUsers = lazy(() => import("./organization/PlatformUsers"));
-const PlatformEnterprises = lazy(() => import("./organization/PlatformEnterprises"));
+const PlatformEnterprises = lazy(
+  () => import("./organization/PlatformEnterprises")
+);
 const PlatformMembers = lazy(() => import("./organization/PlatformMembers"));
 const OrganizationHome = lazy(() => import("./organization/OrganizationHome"));
 const EmailFiles = lazy(() => import("./files/EmailFiles"));
 const ServicePage = lazy(() => import("./services/ServicePage"));
 const Billing = lazy(() => import("./billing/Billing"));
-const CreateOrganization = lazy(() => import("./organization/CreateOrganization"));
+const CreateOrganization = lazy(
+  () => import("./organization/CreateOrganization")
+);
 const PlatformBilling = lazy(() => import("./platformBilling/PlatformBilling"));
-const PlatformDeveloper = lazy(() => import("./platformTeam/PlatformDeveloper"));
+const PlatformDeveloper = lazy(
+  () => import("./platformTeam/PlatformDeveloper")
+);
 const PlatformSupport = lazy(() => import("./platformTeam/PlatformSupport"));
-const PlatformAnalytics = lazy(() => import("./platformTeam/PlatformAnalytics"));
+const PlatformAnalytics = lazy(
+  () => import("./platformTeam/PlatformAnalytics")
+);
 const PlatformWelcome = lazy(() => import("./platformTeam/PlatformWelcome"));
 const PlatformSecrets = lazy(() => import("./platformTeam/PlatformSecrets"));
 const PlatformLogs = lazy(() => import("./platformTeam/PlatformLogs"));
@@ -82,7 +102,7 @@ const RecoverMemberData = lazy(() => import("./orgKeys/RecoverMemberDataPage"));
 const OrgAuditLog = lazy(() => import("./orgKeys/AuditLogPage"));
 const TestAccess = lazy(() => import("./test_access/TestAccess"));
 const AccessRequestsReview = lazy(
-  () => import("./accessRequests/AccessRequestsReview"),
+  () => import("./accessRequests/AccessRequestsReview")
 );
 const TracingDashboard = lazy(() => import("./tracing/TracingDashboard"));
 
@@ -100,29 +120,29 @@ export default function App() {
 
   const isAtAccountHome = location.pathname.toLowerCase() === accountHome;
 
-  const redirectToAccountHome =
-    isAtAccountHome ? null : (
-      <Navigate to={accountHome} replace />
-    );
+  const redirectToAccountHome = isAtAccountHome ? null : (
+    <Navigate to={accountHome} replace />
+  );
 
   return (
     <Suspense fallback={null}>
       <Routes>
-
         {/* ROOT */}
         <Route
           path="/"
-          element={user ? redirectToAccountHome ?? <Home /> : <Home />}
+          element={user ? (redirectToAccountHome ?? <Home />) : <Home />}
         />
 
         {/* PUBLIC */}
         <Route
           path="/login"
-          element={user ? redirectToAccountHome ?? <Login /> : <Login />}
+          element={user ? (redirectToAccountHome ?? <Login />) : <Login />}
         />
         <Route
           path="/register"
-          element={user ? redirectToAccountHome ?? <Register /> : <Register />}
+          element={
+            user ? (redirectToAccountHome ?? <Register />) : <Register />
+          }
         />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
@@ -139,10 +159,7 @@ export default function App() {
         <Route path="/organization" element={<Organization />} />
         {/* /services/:slug is now /docs/services/:slug — redirect old
             links so any externally-shared URL still lands. */}
-        <Route
-          path="/services/:slug"
-          element={<LegacyServiceRedirect />}
-        />
+        <Route path="/services/:slug" element={<LegacyServiceRedirect />} />
         <Route path="/docs/services/:slug" element={<ServicePage />} />
         {/* Pricing is a public-facing page: anyone (logged out OR in) should
             be able to view plans. It lives here rather than under the
@@ -179,13 +196,18 @@ export default function App() {
             routes above so /docs/api etc. aren't treated as slugs. */}
         <Route path="/docs/:slug" element={<Docs />} />
         {/* Legacy paths — keep external links working forever. */}
-        <Route path="/developers" element={<Navigate to="/docs/developers" replace />} />
-        <Route path="/developers/quotas" element={<Navigate to="/docs/quotas" replace />} />
+        <Route
+          path="/developers"
+          element={<Navigate to="/docs/developers" replace />}
+        />
+        <Route
+          path="/developers/quotas"
+          element={<Navigate to="/docs/quotas" replace />}
+        />
 
         {/* PROTECTED */}
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
-
             {/* Sidebar split-pane apps — routes generated from the single
                 SPLIT_APPS registry in LayoutConfig.ts. Adding a sidebar app
                 there adds both the sidebar entry AND its route. Guarded /
@@ -195,17 +217,14 @@ export default function App() {
               <Route key={app.key} path={app.path} element={<app.Comp />} />
             ))}
 
-            <Route
-              path="/home"
-              element={redirectToAccountHome ?? <Home />}
-            />
+            <Route path="/home" element={redirectToAccountHome ?? <Home />} />
             <Route
               path="/organization/home"
               element={
                 isOrganizationUser ? (
                   <OrganizationAdminHome />
                 ) : (
-                  redirectToAccountHome ?? <OrganizationAdminHome />
+                  (redirectToAccountHome ?? <OrganizationAdminHome />)
                 )
               }
             />
@@ -225,7 +244,7 @@ export default function App() {
                 accountHome === "/platform/home" ? (
                   <PlatformAdminHome />
                 ) : (
-                  redirectToAccountHome ?? <PlatformAdminHome />
+                  (redirectToAccountHome ?? <PlatformAdminHome />)
                 )
               }
             />
@@ -234,7 +253,10 @@ export default function App() {
               path="/platform-admin-home"
               element={<Navigate to="/platform/home" replace />}
             />
-            <Route path="/organization/members" element={<OrganizationMembers />} />
+            <Route
+              path="/organization/members"
+              element={<OrganizationMembers />}
+            />
             <Route path="/organization/settings" element={<OrgSettings />} />
             <Route
               path="/organization/:slug"
@@ -265,7 +287,7 @@ export default function App() {
                 user?.scope === "platform" ||
                 (user?.scope === "organization" &&
                   ["owner", "super_admin", "admin"].includes(
-                    user?.effective_role ?? "",
+                    user?.effective_role ?? ""
                   )) ||
                 user?.effective_role === "developer" ? (
                   <GitHubRepo />
@@ -278,7 +300,8 @@ export default function App() {
             <Route
               path="/logs/tracing"
               element={
-                user?.scope === "platform" && user?.effective_role === "owner" ? (
+                user?.scope === "platform" &&
+                user?.effective_role === "owner" ? (
                   <TracingDashboard />
                 ) : (
                   <Navigate to={accountHome} replace />
@@ -293,7 +316,8 @@ export default function App() {
             <Route
               path="/platform/domains"
               element={
-                user?.scope === "platform" && user?.effective_role === "owner" ? (
+                user?.scope === "platform" &&
+                user?.effective_role === "owner" ? (
                   <DomainVerification />
                 ) : (
                   <Navigate to={accountHome} replace />
@@ -317,10 +341,19 @@ export default function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/billing" element={<Billing />} />
             <Route path="/organizations/new" element={<CreateOrganization />} />
-            <Route path="/platform/organizations" element={<PlatformOrganizations />} />
-            <Route path="/platform/organizations/:id" element={<PlatformOrganizationDetail />} />
+            <Route
+              path="/platform/organizations"
+              element={<PlatformOrganizations />}
+            />
+            <Route
+              path="/platform/organizations/:id"
+              element={<PlatformOrganizationDetail />}
+            />
             <Route path="/platform/users" element={<PlatformUsers />} />
-            <Route path="/platform/enterprise" element={<PlatformEnterprises />} />
+            <Route
+              path="/platform/enterprise"
+              element={<PlatformEnterprises />}
+            />
             <Route path="/platform/members" element={<PlatformMembers />} />
             <Route path="/platform/billing" element={<PlatformBilling />} />
             <Route path="/platform/developer" element={<PlatformDeveloper />} />
@@ -336,10 +369,22 @@ export default function App() {
             <Route path="/logs/users" element={<PlatformUserLogs />} />
             <Route path="/logs/audit" element={<AuditSecurity />} />
             <Route path="/logs/visitors" element={<PlatformVisitors />} />
-            <Route path="/platform/logs" element={<Navigate to="/logs/app" replace />} />
-            <Route path="/organization/logs" element={<Navigate to="/logs/app" replace />} />
-            <Route path="/platform/user-logs" element={<Navigate to="/logs/users" replace />} />
-            <Route path="/platform/visitors" element={<Navigate to="/logs/visitors" replace />} />
+            <Route
+              path="/platform/logs"
+              element={<Navigate to="/logs/app" replace />}
+            />
+            <Route
+              path="/organization/logs"
+              element={<Navigate to="/logs/app" replace />}
+            />
+            <Route
+              path="/platform/user-logs"
+              element={<Navigate to="/logs/users" replace />}
+            />
+            <Route
+              path="/platform/visitors"
+              element={<Navigate to="/logs/visitors" replace />}
+            />
             <Route path="/api-keys" element={<ApiKeysPage />} />
             {/* Org-master-key flows. Bootstrap shows the 24-word
                 mnemonic ONCE; recovery-key accepts the mnemonic on a
@@ -367,7 +412,7 @@ export default function App() {
                     typeof window !== "undefined"
                       ? window.location.pathname.replace(
                           /\/recover-data$/,
-                          "/impersonate",
+                          "/impersonate"
                         ) + window.location.search
                       : "/organization/members"
                   }
@@ -379,14 +424,16 @@ export default function App() {
               path="/organization/audit/key-access"
               element={<OrgAuditLog />}
             />
-            <Route path="/security/audit" element={<Navigate to="/logs/audit" replace />} />
+            <Route
+              path="/security/audit"
+              element={<Navigate to="/logs/audit" replace />}
+            />
             <Route path="/recover" element={<RecoverPage />} />
             <Route path="/settings/sso" element={<SsoSettings />} />
             <Route path="/settings/inboxes" element={<SharedInboxes />} />
             <Route path="/settings/webhooks" element={<Webhooks />} />
             <Route path="/settings/scim" element={<ScimTokens />} />
             <Route path="/settings/plans" element={<PlanAdmin />} />
-
           </Route>
         </Route>
 
@@ -401,7 +448,6 @@ export default function App() {
             )
           }
         />
-
       </Routes>
     </Suspense>
   );

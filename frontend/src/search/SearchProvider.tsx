@@ -7,12 +7,14 @@ interface SearchProviderProps {
 
 export default function SearchProvider({ children }: SearchProviderProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [emailViewLayout, setEmailViewLayout] = useState<"list" | "split">(() => {
-    const stored = localStorage.getItem("rwayve.emailViewLayout");
-    // List view is the default; only an explicitly saved "split" preference
-    // opts into the two-pane layout.
-    return stored === "split" ? "split" : "list";
-  });
+  const [emailViewLayout, setEmailViewLayout] = useState<"list" | "split">(
+    () => {
+      const stored = localStorage.getItem("rwayve.emailViewLayout");
+      // List view is the default; only an explicitly saved "split" preference
+      // opts into the two-pane layout.
+      return stored === "split" ? "split" : "list";
+    }
+  );
 
   React.useEffect(() => {
     localStorage.setItem("rwayve.emailViewLayout", emailViewLayout);
@@ -30,8 +32,6 @@ export default function SearchProvider({ children }: SearchProviderProps) {
   }, [searchQuery, emailViewLayout]);
 
   return (
-    <SearchContext.Provider value={value}>
-      {children}
-    </SearchContext.Provider>
+    <SearchContext.Provider value={value}>{children}</SearchContext.Provider>
   );
 }

@@ -38,7 +38,10 @@ type DocsShellProps = {
  * render their body content, the shell handles the rest. With `single`
  * the nav becomes a top header and the content goes full-width.
  */
-export default function DocsShell({ children, single = false }: DocsShellProps) {
+export default function DocsShell({
+  children,
+  single = false,
+}: DocsShellProps) {
   const location = useLocation();
   const { user } = useAuth();
   const [query, setQuery] = useState("");
@@ -56,11 +59,7 @@ export default function DocsShell({ children, single = false }: DocsShellProps) 
   const normalizedQuery = query.trim().toLowerCase();
   const matchesQuery = (d: DocEntry) => {
     if (!normalizedQuery) return true;
-    const haystack = [
-      d.title,
-      d.description,
-      ...(d.keywords ?? []),
-    ]
+    const haystack = [d.title, d.description, ...(d.keywords ?? [])]
       .join(" ")
       .toLowerCase();
     return haystack.includes(normalizedQuery);
@@ -84,14 +83,16 @@ export default function DocsShell({ children, single = false }: DocsShellProps) 
     single
       ? new Set<string>()
       : new Set(
-          [activeCategoryId ?? DOC_CATEGORIES[0]?.id].filter(Boolean) as string[],
-        ),
+          [activeCategoryId ?? DOC_CATEGORIES[0]?.id].filter(
+            Boolean
+          ) as string[]
+        )
   );
   // Sidebar layout: keep the active category open as the user navigates.
   useEffect(() => {
     if (single || !activeCategoryId) return;
     setOpenCats((prev) =>
-      prev.has(activeCategoryId) ? prev : new Set(prev).add(activeCategoryId),
+      prev.has(activeCategoryId) ? prev : new Set(prev).add(activeCategoryId)
     );
   }, [single, activeCategoryId]);
 
@@ -171,11 +172,7 @@ export default function DocsShell({ children, single = false }: DocsShellProps) 
     </>
   );
 
-  const mainBlock = (
-    <main className="docs-content">
-      {children}
-    </main>
-  );
+  const mainBlock = <main className="docs-content">{children}</main>;
 
   return (
     <OuterShell>
@@ -188,14 +185,20 @@ export default function DocsShell({ children, single = false }: DocsShellProps) 
       >
         {single ? (
           <>
-            <header className="docs-topnav" aria-label="Documentation navigation">
+            <header
+              className="docs-topnav"
+              aria-label="Documentation navigation"
+            >
               {navBlock}
             </header>
             {mainBlock}
           </>
         ) : (
           <div className="docs-shell-grid">
-            <aside className="docs-sidebar" aria-label="Documentation navigation">
+            <aside
+              className="docs-sidebar"
+              aria-label="Documentation navigation"
+            >
               {navBlock}
             </aside>
             {mainBlock}

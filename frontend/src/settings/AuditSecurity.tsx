@@ -76,7 +76,9 @@ export default function AuditSecurity() {
     try {
       setRows(await listAuditLogs(filters));
     } catch (err) {
-      setAuditError(err instanceof Error ? err.message : "Failed to load audit logs");
+      setAuditError(
+        err instanceof Error ? err.message : "Failed to load audit logs"
+      );
     } finally {
       setAuditLoading(false);
     }
@@ -92,7 +94,9 @@ export default function AuditSecurity() {
       setWebhookUrl(settings.webhook_url);
       setEnabled(settings.enabled);
     } catch (err) {
-      setSiemError(err instanceof Error ? err.message : "Failed to load SIEM settings");
+      setSiemError(
+        err instanceof Error ? err.message : "Failed to load SIEM settings"
+      );
     } finally {
       setSiemLoading(false);
     }
@@ -127,7 +131,9 @@ export default function AuditSecurity() {
       setWebhookToken("");
       setSiemMessage("SIEM settings saved.");
     } catch (err) {
-      setSiemError(err instanceof Error ? err.message : "Failed to save SIEM settings");
+      setSiemError(
+        err instanceof Error ? err.message : "Failed to save SIEM settings"
+      );
     } finally {
       setSiemLoading(false);
     }
@@ -141,7 +147,9 @@ export default function AuditSecurity() {
       const result = await testSiemSettings();
       setSiemMessage(`Test event delivered. Status ${result.status}.`);
     } catch (err) {
-      setSiemError(err instanceof Error ? err.message : "Failed to send test event");
+      setSiemError(
+        err instanceof Error ? err.message : "Failed to send test event"
+      );
     } finally {
       setSiemLoading(false);
     }
@@ -158,7 +166,9 @@ export default function AuditSecurity() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      setAuditError(`Exported ${count} rows. Re-run with X-Audit-Next-Cursor for the next page.`);
+      setAuditError(
+        `Exported ${count} rows. Re-run with X-Audit-Next-Cursor for the next page.`
+      );
     } catch (err) {
       setAuditError(err instanceof Error ? err.message : "Bulk export failed");
     }
@@ -210,7 +220,9 @@ export default function AuditSecurity() {
     return (
       <div className="audit-security-page">
         <h1>Audit Logs</h1>
-        <p className="audit-security-empty">You do not have permission to view security settings.</p>
+        <p className="audit-security-empty">
+          You do not have permission to view security settings.
+        </p>
       </div>
     );
   }
@@ -220,10 +232,17 @@ export default function AuditSecurity() {
       <header className="audit-security-header">
         <div>
           <h1>Audit Logs</h1>
-          <p>API-key &amp; auth audit activity and SIEM forwarding for this workspace.</p>
+          <p>
+            API-key &amp; auth audit activity and SIEM forwarding for this
+            workspace.
+          </p>
         </div>
         {canReadAudit && (
-          <button type="button" onClick={() => void loadAudit()} disabled={auditLoading}>
+          <button
+            type="button"
+            onClick={() => void loadAudit()}
+            disabled={auditLoading}
+          >
             {auditLoading ? "Refreshing..." : "Refresh"}
           </button>
         )}
@@ -234,13 +253,23 @@ export default function AuditSecurity() {
           <div className="audit-security-panel-head">
             <h2>Audit log</h2>
             <div style={{ display: "flex", gap: 6 }}>
-              <button type="button" onClick={exportCsv} disabled={rows.length === 0}>
+              <button
+                type="button"
+                onClick={exportCsv}
+                disabled={rows.length === 0}
+              >
                 Export view (CSV)
               </button>
-              <button type="button" onClick={() => void downloadServerExport("jsonl")}>
+              <button
+                type="button"
+                onClick={() => void downloadServerExport("jsonl")}
+              >
                 Bulk JSONL
               </button>
-              <button type="button" onClick={() => void downloadServerExport("csv")}>
+              <button
+                type="button"
+                onClick={() => void downloadServerExport("csv")}
+              >
                 Bulk CSV
               </button>
             </div>
@@ -258,7 +287,10 @@ export default function AuditSecurity() {
               <select
                 value={filters.outcome ?? ""}
                 onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, outcome: event.target.value || undefined }))
+                  setFilters((prev) => ({
+                    ...prev,
+                    outcome: event.target.value || undefined,
+                  }))
                 }
               >
                 {OUTCOMES.map((outcome) => (
@@ -274,7 +306,10 @@ export default function AuditSecurity() {
                 inputMode="numeric"
                 value={filters.api_key_id ?? ""}
                 onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, api_key_id: event.target.value }))
+                  setFilters((prev) => ({
+                    ...prev,
+                    api_key_id: event.target.value,
+                  }))
                 }
               />
             </label>
@@ -284,7 +319,10 @@ export default function AuditSecurity() {
                 inputMode="numeric"
                 value={filters.user_id ?? ""}
                 onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, user_id: event.target.value }))
+                  setFilters((prev) => ({
+                    ...prev,
+                    user_id: event.target.value,
+                  }))
                 }
               />
             </label>
@@ -296,11 +334,16 @@ export default function AuditSecurity() {
                 max={500}
                 value={filters.limit ?? 100}
                 onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, limit: Number(event.target.value) }))
+                  setFilters((prev) => ({
+                    ...prev,
+                    limit: Number(event.target.value),
+                  }))
                 }
               />
             </label>
-            <button type="submit" disabled={auditLoading}>Apply</button>
+            <button type="submit" disabled={auditLoading}>
+              Apply
+            </button>
           </form>
 
           <div className="audit-summary">
@@ -312,7 +355,9 @@ export default function AuditSecurity() {
             {rows.length === 0 && <span>No rows loaded</span>}
           </div>
 
-          {auditError && <div className="audit-security-error">{auditError}</div>}
+          {auditError && (
+            <div className="audit-security-error">{auditError}</div>
+          )}
           {auditLoading ? (
             <div className="audit-security-empty">Loading...</div>
           ) : rows.length === 0 ? (
@@ -340,9 +385,16 @@ export default function AuditSecurity() {
                       <td className="audit-path">{row.path}</td>
                       <td>{row.status_code}</td>
                       <td>
-                        <span className={`audit-outcome ${row.outcome}`}>{row.outcome}</span>
+                        <span className={`audit-outcome ${row.outcome}`}>
+                          {row.outcome}
+                        </span>
                       </td>
-                      <td>{row.api_key_name ?? row.key_preview ?? row.api_key_id ?? "-"}</td>
+                      <td>
+                        {row.api_key_name ??
+                          row.key_preview ??
+                          row.api_key_id ??
+                          "-"}
+                      </td>
                       <td>{row.user_id ?? "-"}</td>
                       <td>{row.ip ?? "-"}</td>
                     </tr>
@@ -357,7 +409,10 @@ export default function AuditSecurity() {
       {canManageSiem && (
         <section className="audit-security-panel">
           <h2>SIEM webhook</h2>
-          <form className="siem-form" onSubmit={(event) => void submitSiem(event)}>
+          <form
+            className="siem-form"
+            onSubmit={(event) => void submitSiem(event)}
+          >
             <label className="siem-toggle">
               <input
                 type="checkbox"
@@ -380,21 +435,36 @@ export default function AuditSecurity() {
                 type="password"
                 value={webhookToken}
                 onChange={(event) => setWebhookToken(event.target.value)}
-                placeholder={siem?.token_configured ? "Configured; leave blank to keep" : "Optional"}
+                placeholder={
+                  siem?.token_configured
+                    ? "Configured; leave blank to keep"
+                    : "Optional"
+                }
               />
             </label>
             <div className="siem-meta">
               <span>Scope: {siem?.scope ?? user?.scope ?? "-"}</span>
               <span>Source: {siem?.source ?? "-"}</span>
-              <span>Token: {siem?.token_configured ? "configured" : "not configured"}</span>
+              <span>
+                Token:{" "}
+                {siem?.token_configured ? "configured" : "not configured"}
+              </span>
             </div>
-            {siemError && <div className="audit-security-error">{siemError}</div>}
-            {siemMessage && <div className="audit-security-success">{siemMessage}</div>}
+            {siemError && (
+              <div className="audit-security-error">{siemError}</div>
+            )}
+            {siemMessage && (
+              <div className="audit-security-success">{siemMessage}</div>
+            )}
             <div className="siem-actions">
               <button type="submit" disabled={siemLoading}>
                 {siemLoading ? "Saving..." : "Save settings"}
               </button>
-              <button type="button" onClick={() => void sendTest()} disabled={siemLoading || !enabled}>
+              <button
+                type="button"
+                onClick={() => void sendTest()}
+                disabled={siemLoading || !enabled}
+              >
                 Send test event
               </button>
             </div>

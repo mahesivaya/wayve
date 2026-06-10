@@ -32,20 +32,24 @@ export type DocumentFile = {
   created_at: string;
 };
 
-export const listDocumentFolders = async (parentFolderId: number | null = null) => {
-  const qs = parentFolderId != null ? `?parent_folder_id=${parentFolderId}` : "";
+export const listDocumentFolders = async (
+  parentFolderId: number | null = null
+) => {
+  const qs =
+    parentFolderId != null ? `?parent_folder_id=${parentFolderId}` : "";
   return apiFetchJson<DocumentFolder[]>(`/api/document-folders${qs}`);
 };
 
 export const createDocumentFolder = async (
   name: string,
-  parentFolderId: number | null = null,
+  parentFolderId: number | null = null
 ) => {
   const res = await apiFetch("/api/document-folders", {
     method: "POST",
     body: JSON.stringify({ name, parent_folder_id: parentFolderId }),
   });
-  if (!res.ok) throw new Error((await errMessage(res)) ?? "Failed to create folder");
+  if (!res.ok)
+    throw new Error((await errMessage(res)) ?? "Failed to create folder");
   return res.json() as Promise<DocumentFolder>;
 };
 
@@ -54,12 +58,16 @@ export const renameDocumentFolder = async (folderId: number, name: string) => {
     method: "PATCH",
     body: JSON.stringify({ name }),
   });
-  if (!res.ok) throw new Error((await errMessage(res)) ?? "Failed to rename folder");
+  if (!res.ok)
+    throw new Error((await errMessage(res)) ?? "Failed to rename folder");
 };
 
 export const deleteDocumentFolder = async (folderId: number) => {
-  const res = await apiFetch(`/api/document-folders/${folderId}`, { method: "DELETE" });
-  if (!res.ok) throw new Error((await errMessage(res)) ?? "Failed to delete folder");
+  const res = await apiFetch(`/api/document-folders/${folderId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok)
+    throw new Error((await errMessage(res)) ?? "Failed to delete folder");
 };
 
 export const listDocuments = async (folderId: number | null = null) => {
@@ -69,7 +77,7 @@ export const listDocuments = async (folderId: number | null = null) => {
 
 export const uploadDocuments = async (
   files: File[],
-  folderId: number | null = null,
+  folderId: number | null = null
 ) => {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
@@ -90,18 +98,22 @@ export const renameDocument = async (fileId: number, name: string) => {
     method: "PATCH",
     body: JSON.stringify({ name }),
   });
-  if (!res.ok) throw new Error((await errMessage(res)) ?? "Failed to rename file");
+  if (!res.ok)
+    throw new Error((await errMessage(res)) ?? "Failed to rename file");
 };
 
 export const deleteDocument = async (fileId: number) => {
   const res = await apiFetch(`/api/documents/${fileId}`, { method: "DELETE" });
-  if (!res.ok) throw new Error((await errMessage(res)) ?? "Failed to delete file");
+  if (!res.ok)
+    throw new Error((await errMessage(res)) ?? "Failed to delete file");
 };
 
 export const downloadDocument = async (fileId: number, fileName: string) => {
   const res = await apiFetch(`/api/documents/${fileId}/download`);
   const ct = res.headers.get("content-type") ?? "application/octet-stream";
-  const blob = new Blob([new Uint8Array(await res.arrayBuffer())], { type: ct });
+  const blob = new Blob([new Uint8Array(await res.arrayBuffer())], {
+    type: ct,
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

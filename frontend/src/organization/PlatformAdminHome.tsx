@@ -23,7 +23,8 @@ export default function PlatformAdminHome() {
   const canManageApiKeys = hasPermission(user, "api_keys:manage");
   const canReadMembers = hasPermission(user, "members:read");
   const canSeePlatformBilling =
-    hasPermission(user, "billing:read") || hasPermission(user, "billing:manage");
+    hasPermission(user, "billing:read") ||
+    hasPermission(user, "billing:manage");
   const canSeeDeveloper =
     hasPermission(user, "logs:read") ||
     hasPermission(user, "logs:read_limited") ||
@@ -41,7 +42,8 @@ export default function PlatformAdminHome() {
     {
       key: "users",
       label: "Users",
-      description: "Browse the total number of users registered on the platform.",
+      description:
+        "Browse the total number of users registered on the platform.",
       path: "/platform/users",
       visible: canSeeAnalytics,
     },
@@ -100,7 +102,8 @@ export default function PlatformAdminHome() {
     {
       key: "analytics",
       label: "Analytics",
-      description: "Users, tenants, signups and connected mailboxes at a glance.",
+      description:
+        "Users, tenants, signups and connected mailboxes at a glance.",
       path: "/platform/analytics",
       visible: canSeeAnalytics,
     },
@@ -128,7 +131,7 @@ export default function PlatformAdminHome() {
   // trailing rows of up to three. Hidden (no-permission) cards drop out
   // and empty rows are skipped, so non-owner roles still get a tidy grid.
   const byKey = new Map(
-    consoles.filter((c) => c.visible).map((c) => [c.key, c]),
+    consoles.filter((c) => c.visible).map((c) => [c.key, c])
   );
   const ROW_KEYS: string[][] = [
     ["users", "business", "enterprise"],
@@ -138,7 +141,7 @@ export default function PlatformAdminHome() {
   const namedKeys = new Set(ROW_KEYS.flat());
 
   const rows: ConsoleCard[][] = ROW_KEYS.map((keys) =>
-    keys.map((k) => byKey.get(k)).filter((c): c is ConsoleCard => Boolean(c)),
+    keys.map((k) => byKey.get(k)).filter((c): c is ConsoleCard => Boolean(c))
   ).filter((row) => row.length > 0);
 
   const remaining = consoles.filter((c) => c.visible && !namedKeys.has(c.key));
@@ -153,7 +156,7 @@ export default function PlatformAdminHome() {
   // on Space stops the page from scrolling.
   const handleCardKeyDown = (
     event: KeyboardEvent<HTMLElement>,
-    path: string,
+    path: string
   ) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();

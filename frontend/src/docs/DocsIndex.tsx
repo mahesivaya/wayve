@@ -53,12 +53,12 @@ export default function DocsIndex() {
         description: d.description,
         category: "guides",
       })),
-    [backendDocs],
+    [backendDocs]
   );
 
   const allEntries: DocEntry[] = useMemo(
     () => [...DOCS, ...dynamicGuides],
-    [dynamicGuides],
+    [dynamicGuides]
   );
 
   const matchesQuery = (d: DocEntry) => {
@@ -77,8 +77,8 @@ export default function DocsIndex() {
         <p className="hero-kicker">Documentation</p>
         <h1>Fluxze docs</h1>
         <p className="docs-index-lead">
-          API reference, product concepts, and integration guides — all
-          in one place. Use the search below or browse by category.
+          API reference, product concepts, and integration guides — all in one
+          place. Use the search below or browse by category.
         </p>
 
         {/* Big search input on the hub. Mirrors the sidebar's filter
@@ -107,7 +107,9 @@ export default function DocsIndex() {
           see how many hits the query produced. */}
       {normalizedQuery && (
         <section className="docs-index-results">
-          <h2>{filtered.length} match{filtered.length === 1 ? "" : "es"}</h2>
+          <h2>
+            {filtered.length} match{filtered.length === 1 ? "" : "es"}
+          </h2>
           {filtered.length === 0 ? (
             <p>No docs found for "{query}".</p>
           ) : (
@@ -128,8 +130,7 @@ export default function DocsIndex() {
       {!normalizedQuery &&
         DOC_CATEGORIES.map((cat) => {
           const staticItems = docsInCategory(cat.id);
-          const dynamicItems =
-            cat.id === "guides" ? dynamicGuides : [];
+          const dynamicItems = cat.id === "guides" ? dynamicGuides : [];
           const items = [...staticItems, ...dynamicItems];
           if (items.length === 0) return null;
           return (

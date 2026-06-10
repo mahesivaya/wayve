@@ -43,12 +43,15 @@ export default function TickSlider({
       const el = ref.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const fraction = Math.max(
+        0,
+        Math.min(1, (clientX - rect.left) / rect.width)
+      );
       let next = min + fraction * (max - min);
       if (step) next = Math.round(next / step) * step;
       onChange(next);
     },
-    [min, max, step, onChange],
+    [min, max, step, onChange]
   );
 
   const onPointerDown = useCallback(
@@ -56,7 +59,7 @@ export default function TickSlider({
       e.currentTarget.setPointerCapture(e.pointerId);
       updateFromClientX(e.clientX);
     },
-    [updateFromClientX],
+    [updateFromClientX]
   );
 
   const onPointerMove = useCallback(
@@ -64,7 +67,7 @@ export default function TickSlider({
       if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
       updateFromClientX(e.clientX);
     },
-    [updateFromClientX],
+    [updateFromClientX]
   );
 
   const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -82,7 +85,7 @@ export default function TickSlider({
         e.preventDefault();
       }
     },
-    [value, min, max, step, onChange],
+    [value, min, max, step, onChange]
   );
 
   return (

@@ -13,10 +13,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { fetchSecureMessage } from "../api/email";
-import {
-  openSecureMessage,
-  type ServerSecureMessage,
-} from "./secureSend";
+import { openSecureMessage, type ServerSecureMessage } from "./secureSend";
 
 type LoadState =
   | { kind: "loading" }
@@ -59,7 +56,8 @@ export default function SecureMessageView() {
         if (cancelled) return;
         setState({
           kind: "error",
-          message: err instanceof Error ? err.message : "Failed to load message",
+          message:
+            err instanceof Error ? err.message : "Failed to load message",
         });
       });
     return () => {
@@ -84,7 +82,7 @@ export default function SecureMessageView() {
       setError(
         err instanceof Error
           ? err.message
-          : "Couldn't unlock this message — check the passphrase.",
+          : "Couldn't unlock this message — check the passphrase."
       );
     } finally {
       setBusy(false);
@@ -96,14 +94,12 @@ export default function SecureMessageView() {
       <div className="login-card" style={{ maxWidth: 560 }}>
         <h2>🔒 Secure message</h2>
 
-        {state.kind === "loading" && (
-          <p className="subtitle">Loading…</p>
-        )}
+        {state.kind === "loading" && <p className="subtitle">Loading…</p>}
 
         {state.kind === "missing" && (
           <p className="subtitle">
-            This link is invalid or has expired. Ask the sender to
-            re-send if you still need the message.
+            This link is invalid or has expired. Ask the sender to re-send if
+            you still need the message.
           </p>
         )}
 
@@ -116,8 +112,8 @@ export default function SecureMessageView() {
         {state.kind === "ready" && body === null && (
           <>
             <p className="subtitle">
-              <strong>{state.envelope.sender_email}</strong> sent you a
-              secure message on Fluxze.
+              <strong>{state.envelope.sender_email}</strong> sent you a secure
+              message on Fluxze.
               <br />
               Subject: <em>{state.envelope.subject}</em>
               <br />
@@ -125,8 +121,8 @@ export default function SecureMessageView() {
             </p>
             <p className="subtitle">
               Enter the passphrase the sender shared with you out-of-band
-              (Signal, SMS, in person) to decrypt the message in your
-              browser. Fluxze never sees the passphrase.
+              (Signal, SMS, in person) to decrypt the message in your browser.
+              Fluxze never sees the passphrase.
             </p>
 
             <form onSubmit={handleSubmit}>
@@ -187,8 +183,8 @@ export default function SecureMessageView() {
               className="subtitle"
               style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}
             >
-              Decrypted in your browser. This message is not stored
-              after you close this tab.
+              Decrypted in your browser. This message is not stored after you
+              close this tab.
             </p>
           </>
         )}

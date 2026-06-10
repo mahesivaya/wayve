@@ -53,7 +53,7 @@
   transition: 0.15s;
 }
 
-.ai-chat-clear:hover:not(:disabled){
+.ai-chat-clear:hover:not(:disabled) {
   background: var(--color-primary-hover-soft);
 }
 
@@ -130,7 +130,7 @@
 }
 
 /* Typing indicator: 3 dots that pulse while we wait on Gemini. */
-.ai-msg-typing{
+.ai-msg-typing {
   display: inline-flex;
   gap: 4px;
   padding: 14px 16px;
@@ -144,12 +144,24 @@
   animation: ai-typing 1.2s infinite ease-in-out;
 }
 
-.ai-msg-typing span:nth-child(2){ animation-delay: 0.15s; }
-.ai-msg-typing span:nth-child(3){ animation-delay: 0.3s; }
+.ai-msg-typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.ai-msg-typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
 
 @keyframes ai-typing {
-  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
-  30% { opacity: 1; transform: translateY(-3px); }
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 
 .ai-chat-error {
@@ -186,12 +198,12 @@
   max-height: 160px;
 }
 
-.ai-chat-input:focus{
+.ai-chat-input:focus {
   border-color: var(--color-primary-action);
   box-shadow: 0 0 0 3px rgb(37, 99, 235, 0.15);
 }
 
-.ai-chat-input:disabled{
+.ai-chat-input:disabled {
   background: var(--color-surface-tint);
   color: var(--color-input-border-strong);
 }
@@ -209,11 +221,11 @@
   min-width: 80px;
 }
 
-.ai-chat-send:hover:not(:disabled){
+.ai-chat-send:hover:not(:disabled) {
   background: var(--color-primary-action-hover);
 }
 
-.ai-chat-send:disabled{
+.ai-chat-send:disabled {
   background: var(--color-primary-border);
   cursor: default;
 }

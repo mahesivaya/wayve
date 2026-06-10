@@ -38,7 +38,11 @@ const DEFAULT_IMAP: ImapSettings = {
   security: "ssl",
 };
 
-export default function ProviderPicker({ onSelect, onConnected, onClose }: Props) {
+export default function ProviderPicker({
+  onSelect,
+  onConnected,
+  onClose,
+}: Props) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [mode, setMode] = useState<Mode>("list");
   const [otherEmail, setOtherEmail] = useState("");
@@ -60,9 +64,7 @@ export default function ProviderPicker({ onSelect, onConnected, onClose }: Props
     window.addEventListener("keydown", onKey);
     const t = window.setTimeout(() => {
       const target = cardRef.current?.querySelector<HTMLElement>(
-        mode === "list"
-          ? "button.provider-option:not([disabled])"
-          : "input",
+        mode === "list" ? "button.provider-option:not([disabled])" : "input"
       );
       target?.focus();
     }, 0);
@@ -108,14 +110,17 @@ export default function ProviderPicker({ onSelect, onConnected, onClose }: Props
       setMode("imap");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "We couldn't look up that domain.",
+        err instanceof Error ? err.message : "We couldn't look up that domain."
       );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const setField = <K extends keyof ImapSettings>(key: K, value: ImapSettings[K]) => {
+  const setField = <K extends keyof ImapSettings>(
+    key: K,
+    value: ImapSettings[K]
+  ) => {
     setCfg((prev) => ({ ...prev, [key]: value }));
     setTestState("idle");
   };
@@ -134,7 +139,7 @@ export default function ProviderPicker({ onSelect, onConnected, onClose }: Props
     } catch (err) {
       setTestState("idle");
       setImapError(
-        err instanceof Error ? err.message : "Connection test failed.",
+        err instanceof Error ? err.message : "Connection test failed."
       );
     } finally {
       setSubmitting(false);
@@ -150,14 +155,16 @@ export default function ProviderPicker({ onSelect, onConnected, onClose }: Props
       onConnected();
     } catch (err) {
       setImapError(
-        err instanceof Error ? err.message : "Could not connect the mailbox.",
+        err instanceof Error ? err.message : "Could not connect the mailbox."
       );
       setSubmitting(false);
     }
   };
 
   const canSubmitImap =
-    !submitting && password.trim().length > 0 && cfg.imap_host.trim().length > 0;
+    !submitting &&
+    password.trim().length > 0 &&
+    cfg.imap_host.trim().length > 0;
 
   return (
     <div
@@ -263,7 +270,10 @@ export default function ProviderPicker({ onSelect, onConnected, onClose }: Props
               secure sign-in; otherwise we'll set up IMAP.
             </p>
 
-            <label className="provider-other-label" htmlFor="provider-other-email">
+            <label
+              className="provider-other-label"
+              htmlFor="provider-other-email"
+            >
               Email address
             </label>
             <input
@@ -311,8 +321,8 @@ export default function ProviderPicker({ onSelect, onConnected, onClose }: Props
         {mode === "imap" && (
           <form className="provider-other-form" onSubmit={handleConnect}>
             <p className="provider-picker-sub">
-              Connecting <strong>{imapEmail}</strong> over IMAP. Use an
-              app password if your provider requires one.
+              Connecting <strong>{imapEmail}</strong> over IMAP. Use an app
+              password if your provider requires one.
             </p>
 
             <label className="provider-other-label" htmlFor="imap-password">

@@ -100,7 +100,7 @@
   font-size: var(--text-md);
 }
 
-.notes-new-btn:hover{
+.notes-new-btn:hover {
   background: var(--color-primary-action-hover);
 }
 
@@ -159,7 +159,7 @@
 }
 
 .notes-form-grid input:focus,
-.notes-form-grid textarea:focus{
+.notes-form-grid textarea:focus {
   outline: 2px solid var(--color-primary-panel-border);
   border-color: var(--color-primary-action);
 }
@@ -189,7 +189,7 @@
   color: var(--color-surface);
 }
 
-.notes-form-actions .primary:disabled{
+.notes-form-actions .primary:disabled {
   opacity: 0.6;
   cursor: default;
 }
@@ -199,7 +199,7 @@
   color: var(--color-danger-hover);
 }
 
-.notes-form-actions .danger:hover{
+.notes-form-actions .danger:hover {
   background: var(--color-danger-soft);
   border-color: var(--color-danger);
   color: var(--color-danger);
@@ -253,10 +253,12 @@
   cursor: pointer;
 }
 
-.note-card:hover{
+.note-card:hover {
   background: var(--color-primary-soft);
   border-color: var(--color-primary-panel-border);
-  box-shadow: inset 4px 0 0 var(--color-primary), 0 3px 10px rgb(15, 23, 42, 0.08);
+  box-shadow:
+    inset 4px 0 0 var(--color-primary),
+    0 3px 10px rgb(15, 23, 42, 0.08);
 }
 
 .note-card-body {
@@ -312,7 +314,7 @@
   cursor: pointer;
 }
 
-.note-edit-btn:hover{
+.note-edit-btn:hover {
   border-color: var(--color-primary-action);
   color: var(--color-primary-action);
   background: var(--color-primary-soft);

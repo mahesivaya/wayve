@@ -67,7 +67,7 @@ function readU16BE(bytes: Uint8Array, off: number): number {
 
 function readU32BE(bytes: Uint8Array, off: number): number {
   return (
-    (bytes[off] * 0x1000000) +
+    bytes[off] * 0x1000000 +
     ((bytes[off + 1] << 16) | (bytes[off + 2] << 8) | bytes[off + 3])
   );
 }
@@ -170,9 +170,8 @@ export async function decryptBlobForSelf(
   userId: number,
   outputMime?: string
 ): Promise<Blob> {
-  const bytes = encrypted instanceof Uint8Array
-    ? encrypted
-    : new Uint8Array(encrypted);
+  const bytes =
+    encrypted instanceof Uint8Array ? encrypted : new Uint8Array(encrypted);
 
   if (!looksLikeEnvelope(bytes)) {
     throw new Error("File is not an encrypted envelope");
@@ -202,7 +201,9 @@ export async function decryptBlobForSelf(
 
   const privateKey = await loadPrivateKey(userId);
   if (!privateKey) {
-    throw new Error("No private key on this device — restore from your recovery phrase first.");
+    throw new Error(
+      "No private key on this device — restore from your recovery phrase first."
+    );
   }
 
   const rawAes = await crypto.subtle.decrypt(

@@ -48,7 +48,7 @@
   text-align: left;
 }
 
-.email-files-row:hover{
+.email-files-row:hover {
   background: var(--color-primary-soft);
   border-color: var(--color-primary-border);
 }

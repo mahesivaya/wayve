@@ -122,7 +122,7 @@
   /* Dark surfaces used by elements that stay dark in both themes
      (modals overlay, hero/footer with dark fill). */
   --color-surface-deep: #0f172a;
-  --color-surface-deepest: #0B1220;
+  --color-surface-deepest: #0b1220;
   --color-surface-deep-navy: #0d1b2a;
   --color-email-bg: lightsteelblue;
   --color-email-list-bg: #d7e4f4;
@@ -166,8 +166,8 @@
   --text-2xl: 16px;
   --text-3xl: 18px;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: system-ui, "Segoe UI", Roboto, sans-serif;
+  --heading: system-ui, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
   /* ============================================================
@@ -505,7 +505,7 @@
   /* Success / warning — dark-mode equivalents (subtle, not loud). */
   --color-success: #6ee7b7;
   --color-success-soft: rgba(16, 185, 129, 0.12);
-  --color-success-border: rgba(16, 185, 129, 0.30);
+  --color-success-border: rgba(16, 185, 129, 0.3);
   --color-warning: #fcd34d;
   --color-warning-soft: rgba(234, 179, 8, 0.14);
 
@@ -533,7 +533,7 @@
   --color-success-emerald: #4ade80;
   --color-success-deep: #34d399;
   --color-success-darker: #064e3b;
-  --color-success-soft-tint: rgba(74, 222, 128, 0.10);
+  --color-success-soft-tint: rgba(74, 222, 128, 0.1);
   --color-success-soft-mint: rgba(110, 231, 183, 0.14);
   --color-success-pale: rgba(74, 222, 128, 0.06);
   --color-success-bright: #6ee7b7;
@@ -549,7 +549,7 @@
   --color-accent-indigo-mid: #3b82f6;
   --color-accent-indigo-bridge: #2563eb;
   --color-accent-indigo-pale: rgba(96, 165, 250, 0.16);
-  --color-accent-indigo-mist: rgba(96, 165, 250, 0.10);
+  --color-accent-indigo-mist: rgba(96, 165, 250, 0.1);
   --color-accent-indigo-mist-strong: rgba(96, 165, 250, 0.18);
 
   --color-text-slate-deep: #cbd5e1;
@@ -575,7 +575,7 @@
   /* Dark surfaces — same intent in both themes (modals/overlays/heros that
      stay dark regardless of theme), so keep the literal dark values. */
   --color-surface-deep: #0f172a;
-  --color-surface-deepest: #0B1220;
+  --color-surface-deepest: #0b1220;
   --color-surface-deep-navy: #0d1b2a;
   --color-email-bg: #0a1730;
   --color-email-list-bg: #0f1f3d;
@@ -584,7 +584,7 @@
   --color-overlay-soft: rgba(20, 23, 31, 0.55);
   --color-overlay-strong: rgba(20, 23, 31, 0.65);
   --color-overlay-border: rgba(255, 255, 255, 0.08);
-  --color-panel-border: rgba(241, 245, 249, 0.10);
+  --color-panel-border: rgba(241, 245, 249, 0.1);
   --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
@@ -801,26 +801,26 @@
 }
 
 :is(
-  .u-page-shell,
-  .about-page,
-  .api-keys-page,
-  .audit-security-page,
-  .billing-page,
-  .call-page,
-  .dev-portal,
-  .drive-container,
-  .email-files-page,
-  .pb-page,
-  .profile-page,
-  .pricing-page,
-  .pt-page,
-  .public-home,
-  .service-page,
-  .shared-inboxes,
-  .settings-page,
-  .sso-settings,
-  .webhooks-page
-)::-webkit-scrollbar-thumb:hover {
+    .u-page-shell,
+    .about-page,
+    .api-keys-page,
+    .audit-security-page,
+    .billing-page,
+    .call-page,
+    .dev-portal,
+    .drive-container,
+    .email-files-page,
+    .pb-page,
+    .profile-page,
+    .pricing-page,
+    .pt-page,
+    .public-home,
+    .service-page,
+    .shared-inboxes,
+    .settings-page,
+    .sso-settings,
+    .webhooks-page
+  )::-webkit-scrollbar-thumb:hover {
   background: #60758f;
 }
 
@@ -847,7 +847,11 @@
 
 .u-card-interactive {
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    box-shadow 0.12s,
+    transform 0.12s;
 }
 
 .u-form-stack {

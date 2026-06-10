@@ -25,7 +25,7 @@
 }
 
 .split-view-divider:hover,
-.split-view-divider:active{
+.split-view-divider:active {
   background: var(--color-surface-deepest);
 }
 
@@ -79,7 +79,7 @@
   color: var(--color-surface-deepest);
 }
 
-.app-pane-close:hover{
+.app-pane-close:hover {
   background: var(--color-surface-deepest);
   color: var(--color-text-primary);
 }
@@ -129,7 +129,7 @@
   color: var(--color-text-primary);
 }
 
-.app-picker-card:hover{
+.app-picker-card:hover {
   border-color: var(--color-accent-indigo-bright);
   background: var(--color-accent-indigo-mist);
   transform: translateY(-2px);

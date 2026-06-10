@@ -2,7 +2,12 @@ import { getApiBase } from "../config/env";
 import { getAuthToken } from "../auth/token";
 import { apiFetch, apiFetchJson } from "./client";
 
-export type TicketCategory = "bug" | "feature" | "billing" | "account" | "other";
+export type TicketCategory =
+  | "bug"
+  | "feature"
+  | "billing"
+  | "account"
+  | "other";
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 
 export type SupportTicket = {
@@ -53,23 +58,28 @@ export const adminListTickets = async (status?: TicketStatus) => {
   return apiFetchJson<SupportTicket[]>(`/api/support/admin/tickets${qs}`);
 };
 
-export const adminUpdateTicketStatus = async (id: number, status: TicketStatus) =>
+export const adminUpdateTicketStatus = async (
+  id: number,
+  status: TicketStatus
+) =>
   apiFetchJson<{ id: number; status: TicketStatus }>(
     `/api/support/admin/tickets/${id}`,
     {
       method: "PATCH",
       body: JSON.stringify({ status }),
-    },
+    }
   );
 
 export const listTicketAttachments = async (ticketId: number) =>
-  apiFetchJson<SupportAttachment[]>(`/api/support/tickets/${ticketId}/attachments`);
+  apiFetchJson<SupportAttachment[]>(
+    `/api/support/tickets/${ticketId}/attachments`
+  );
 
 // Raw fetch — multipart boundary needs to be set by the browser, which
 // apiFetch's pinned application/json Content-Type would override.
 export const uploadTicketAttachments = async (
   ticketId: number,
-  files: File[],
+  files: File[]
 ): Promise<SupportAttachment[]> => {
   if (files.length === 0) return [];
   const formData = new FormData();
@@ -83,7 +93,7 @@ export const uploadTicketAttachments = async (
       credentials: "include",
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       body: formData,
-    },
+    }
   );
 
   if (!res.ok) {
@@ -109,12 +119,14 @@ export const downloadTicketAttachment = async (attachmentId: number) => {
       method: "GET",
       credentials: "include",
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    },
+    }
   );
   if (!res.ok) throw new Error("Download failed");
   return res.blob();
 };
 
 export const deleteTicketAttachment = async (attachmentId: number) => {
-  await apiFetch(`/api/support-attachments/${attachmentId}`, { method: "DELETE" });
+  await apiFetch(`/api/support-attachments/${attachmentId}`, {
+    method: "DELETE",
+  });
 };

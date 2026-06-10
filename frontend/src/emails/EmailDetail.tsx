@@ -65,7 +65,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       if (selectedEmail?.is_shared && selectedEmail.id) {
         setInboxState({
           email_id: selectedEmail.id,
-          status: (selectedEmail.inbox_status ?? "open") as InboxState["status"],
+          status: (selectedEmail.inbox_status ??
+            "open") as InboxState["status"],
           assignee_id: selectedEmail.inbox_assignee_id ?? null,
           updated_at: null,
           updated_by: null,
@@ -76,7 +77,12 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [selectedEmail?.id, selectedEmail?.is_shared, selectedEmail?.inbox_status, selectedEmail?.inbox_assignee_id]);
+  }, [
+    selectedEmail?.id,
+    selectedEmail?.is_shared,
+    selectedEmail?.inbox_status,
+    selectedEmail?.inbox_assignee_id,
+  ]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -110,7 +116,13 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const visibleFiles = useMemo(() => {
     if (!normalizedSearchQuery) return files;
     return files.filter((file) =>
-      [file.filename, file.mime_type ?? "", file.subject ?? "", file.sender ?? "", file.receiver ?? ""]
+      [
+        file.filename,
+        file.mime_type ?? "",
+        file.subject ?? "",
+        file.sender ?? "",
+        file.receiver ?? "",
+      ]
         .join(" ")
         .toLowerCase()
         .includes(normalizedSearchQuery)
@@ -132,21 +144,20 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     if (normalizedSearchQuery) {
       emptyMessage = "No files match your search";
     } else if (hasNoAccounts) {
-      emptyMessage =
-        "Connect an email account to see attachments here.";
+      emptyMessage = "Connect an email account to see attachments here.";
     } else if (inboxEmailCount === 0) {
       emptyMessage = (
         <>
-          We're still importing your inbox. Attachments will appear here
-          as we find them.
+          We're still importing your inbox. Attachments will appear here as we
+          find them.
         </>
       );
     } else if (inboxUncheckedCount > 0) {
       emptyMessage = (
         <>
           Scanned {scannedSoFar} of {inboxEmailCount} email
-          {inboxEmailCount === 1 ? "" : "s"} so far. More attachments may
-          show up shortly.
+          {inboxEmailCount === 1 ? "" : "s"} so far. More attachments may show
+          up shortly.
         </>
       );
     }
@@ -154,7 +165,14 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     return (
       <div className="email-detail">
         <div className="email-detail-actions">
-          <button className="email-detail-back" onClick={onBack} title="Close" aria-label="Close">✕</button>
+          <button
+            className="email-detail-back"
+            onClick={onBack}
+            title="Close"
+            aria-label="Close"
+          >
+            ✕
+          </button>
         </div>
         <div className="email-files-inline">
           <div className="email-files-header">
@@ -171,19 +189,32 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             <>
               {inboxStillImporting && !normalizedSearchQuery && (
                 <div className="email-files-progress" role="status">
-                  Still scanning {inboxUncheckedCount > 0 ? inboxUncheckedCount : ""}{" "}
-                  email{inboxUncheckedCount === 1 ? "" : "s"} for attachments — this list will update automatically.
+                  Still scanning{" "}
+                  {inboxUncheckedCount > 0 ? inboxUncheckedCount : ""} email
+                  {inboxUncheckedCount === 1 ? "" : "s"} for attachments — this
+                  list will update automatically.
                 </div>
               )}
               <div className="email-files-list">
                 {visibleFiles.map((file) => (
-                  <button key={file.id} className="email-files-row" onClick={() => downloadEmailAttachment(file, user?.id ?? null)}>
+                  <button
+                    key={file.id}
+                    className="email-files-row"
+                    onClick={() =>
+                      downloadEmailAttachment(file, user?.id ?? null)
+                    }
+                  >
                     <span className="email-files-icon">📎</span>
                     <span className="email-files-main">
                       <span className="email-files-name">{file.filename}</span>
-                      <span className="email-files-meta">{file.subject || "No subject"} · {file.sender || "Unknown sender"}</span>
+                      <span className="email-files-meta">
+                        {file.subject || "No subject"} ·{" "}
+                        {file.sender || "Unknown sender"}
+                      </span>
                     </span>
-                    <span className="email-files-size">{formatFileSize(file.size)}</span>
+                    <span className="email-files-size">
+                      {formatFileSize(file.size)}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -195,11 +226,17 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   }
 
   if (!selectedEmail) {
-    return <div className="email-detail"><p>Select an email</p></div>;
+    return (
+      <div className="email-detail">
+        <p>Select an email</p>
+      </div>
+    );
   }
 
   const handleDelete = async () => {
-    const ok = window.confirm("Delete this email permanently from Fluxze and your mail provider?");
+    const ok = window.confirm(
+      "Delete this email permanently from Fluxze and your mail provider?"
+    );
     if (!ok) return;
 
     setDeleting(true);
@@ -207,7 +244,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     try {
       await onDeleteEmail(selectedEmail.id);
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete email");
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete email"
+      );
     } finally {
       setDeleting(false);
     }
@@ -239,7 +278,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             originalBody,
           ]
             .filter((line): line is string => line !== null)
-            .join("\n"),
+            .join("\n")
         );
       }
       return nextOpen;
@@ -272,13 +311,17 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       await sendEmail({
         account_id: selectedEmail.account_id,
         to: replyTo,
-        subject: subject.toLowerCase().startsWith("re:") ? subject : `Re: ${subject}`,
+        subject: subject.toLowerCase().startsWith("re:")
+          ? subject
+          : `Re: ${subject}`,
         body,
       });
       setReplyBody("");
       setReplyOpen(false);
     } catch (err) {
-      setReplyError(err instanceof Error ? err.message : "Failed to send reply");
+      setReplyError(
+        err instanceof Error ? err.message : "Failed to send reply"
+      );
     } finally {
       setReplySending(false);
     }
@@ -316,7 +359,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       setForwardBody("");
       setForwardOpen(false);
     } catch (err) {
-      setForwardError(err instanceof Error ? err.message : "Failed to forward email");
+      setForwardError(
+        err instanceof Error ? err.message : "Failed to forward email"
+      );
     } finally {
       setForwardSending(false);
     }
@@ -336,7 +381,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           title="Reply"
           aria-label="Reply"
         >
-          <svg className="email-detail-reply-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <svg
+            className="email-detail-reply-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
             <path d="M10 8 5 13l5 5" />
             <path d="M5 13h9a5 5 0 0 1 5 5v1" />
           </svg>
@@ -347,7 +396,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           title="Forward"
           aria-label="Forward"
         >
-          <svg className="email-detail-forward-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <svg
+            className="email-detail-forward-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
             <path d="M14 8l5 5-5 5" />
             <path d="M5 19v-1a5 5 0 0 1 5-5h9" />
           </svg>
@@ -362,7 +415,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           {deleting ? (
             "…"
           ) : (
-            <svg className="email-detail-delete-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <svg
+              className="email-detail-delete-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path d="M4 7h16" />
               <path d="M10 11v6" />
               <path d="M14 11v6" />
@@ -371,7 +428,14 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             </svg>
           )}
         </button>
-        <button className="email-detail-back" onClick={onBack} title="Close" aria-label="Close">✕</button>
+        <button
+          className="email-detail-back"
+          onClick={onBack}
+          title="Close"
+          aria-label="Close"
+        >
+          ✕
+        </button>
       </div>
       <h2 className="email-detail-subject">
         {selectedEmail.subject || "(No subject)"}
@@ -380,12 +444,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
 
       {(() => {
         const { name: senderName, email: senderEmail } = splitSender(
-          selectedEmail.sender,
+          selectedEmail.sender
         );
-        const initial = (senderName || senderEmail || "?")
-          .trim()
-          .charAt(0)
-          .toUpperCase() || "?";
+        const initial =
+          (senderName || senderEmail || "?").trim().charAt(0).toUpperCase() ||
+          "?";
         return (
           <div className="email-meta-row">
             <div
@@ -401,7 +464,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                   {senderName || senderEmail || "Unknown sender"}
                 </span>
                 {senderName && senderEmail && (
-                  <span className="email-meta-email">&lt;{senderEmail}&gt;</span>
+                  <span className="email-meta-email">
+                    &lt;{senderEmail}&gt;
+                  </span>
                 )}
               </div>
               {selectedEmail.receiver && (
@@ -419,7 +484,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           email belongs to a shared account; for personal mail it's
           invisible and the rest of the detail view is unchanged. */}
       {selectedEmail.is_shared && inboxState && (
-        <div className="inbox-workflow-bar" role="group" aria-label="Shared inbox workflow">
+        <div
+          className="inbox-workflow-bar"
+          role="group"
+          aria-label="Shared inbox workflow"
+        >
           <label className="inbox-workflow-field">
             <span>Status</span>
             <select
@@ -445,7 +514,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                   </span>
                   <button
                     type="button"
-                    onClick={() => void patchInboxState({ clear_assignee: true })}
+                    onClick={() =>
+                      void patchInboxState({ clear_assignee: true })
+                    }
                     disabled={stateSaving}
                     className="inbox-workflow-unassign"
                   >
@@ -456,7 +527,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (user?.id) void patchInboxState({ assignee_id: user.id });
+                    if (user?.id)
+                      void patchInboxState({ assignee_id: user.id });
                   }}
                   disabled={stateSaving || !user?.id}
                   className="inbox-workflow-assign"
@@ -466,7 +538,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
               )}
             </div>
           </div>
-          {stateError && <span className="inbox-workflow-error">{stateError}</span>}
+          {stateError && (
+            <span className="inbox-workflow-error">{stateError}</span>
+          )}
         </div>
       )}
 
@@ -566,11 +640,17 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             <button
               key={attachment.id}
               className="email-attachment"
-              onClick={() => downloadEmailAttachment(attachment, user?.id ?? null)}
+              onClick={() =>
+                downloadEmailAttachment(attachment, user?.id ?? null)
+              }
             >
               <span className="email-attachment-icon">📎</span>
-              <span className="email-attachment-name">{attachment.filename}</span>
-              <span className="email-attachment-size">{formatFileSize(attachment.size)}</span>
+              <span className="email-attachment-name">
+                {attachment.filename}
+              </span>
+              <span className="email-attachment-size">
+                {formatFileSize(attachment.size)}
+              </span>
             </button>
           ))}
         </div>
@@ -594,7 +674,10 @@ function bodyToPlainText(value: string): string {
     const doc = new DOMParser().parseFromString(text, "text/html");
     return (doc.body.textContent || text).trim();
   } catch {
-    return text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    return text
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 }
 
@@ -604,7 +687,10 @@ function splitSender(value?: string | null): { name: string; email: string } {
   const raw = value?.trim() || "";
   const match = raw.match(/^(.*?)<([^>]+)>\s*$/);
   if (match) {
-    return { name: match[1].trim().replace(/^"|"$/g, ""), email: match[2].trim() };
+    return {
+      name: match[1].trim().replace(/^"|"$/g, ""),
+      email: match[2].trim(),
+    };
   }
   return { name: "", email: raw };
 }
@@ -663,8 +749,14 @@ function formatEmailDateTime(iso: string | null | undefined): string {
 // Stable hash → palette for sender avatars. Same sender always gets the
 // same color so the inbox reads consistently across emails.
 const AVATAR_PALETTE = [
-  "#d7b29c", "#7c9eb2", "#a8c686", "#c89bb0",
-  "#8d8aaa", "#e0a36d", "#6d9eb8", "#b8857a",
+  "#d7b29c",
+  "#7c9eb2",
+  "#a8c686",
+  "#c89bb0",
+  "#8d8aaa",
+  "#e0a36d",
+  "#6d9eb8",
+  "#b8857a",
 ];
 function avatarColor(seed: string): string {
   let h = 0;

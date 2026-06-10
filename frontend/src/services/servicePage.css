@@ -75,40 +75,78 @@
   color: var(--color-surface);
   font-size: 17px;
   font-weight: 850;
-  background: linear-gradient(135deg, var(--color-accent-purple-vivid), var(--gradient-card-1-to));
-  box-shadow: inset 0 0 0 9px rgb(255, 255, 255, 0.18), 0 3px 12px rgb(37, 31, 77, 0.18);
+  background: linear-gradient(
+    135deg,
+    var(--color-accent-purple-vivid),
+    var(--gradient-card-1-to)
+  );
+  box-shadow:
+    inset 0 0 0 9px rgb(255, 255, 255, 0.18),
+    0 3px 12px rgb(37, 31, 77, 0.18);
 }
 
 .service-page-icon.mail {
-  background: linear-gradient(135deg, var(--gradient-card-2-from), var(--gradient-card-2-to));
+  background: linear-gradient(
+    135deg,
+    var(--gradient-card-2-from),
+    var(--gradient-card-2-to)
+  );
 }
 
 .service-page-icon.chat {
-  background: linear-gradient(135deg, var(--gradient-card-3-from), var(--gradient-card-3-to));
+  background: linear-gradient(
+    135deg,
+    var(--gradient-card-3-from),
+    var(--gradient-card-3-to)
+  );
 }
 
 .service-page-icon.meet {
-  background: linear-gradient(135deg, var(--gradient-card-4-from), var(--gradient-card-4-to));
+  background: linear-gradient(
+    135deg,
+    var(--gradient-card-4-from),
+    var(--gradient-card-4-to)
+  );
 }
 
 .service-page-icon.calendar {
-  background: linear-gradient(135deg, var(--gradient-card-5-from), var(--gradient-card-5-to));
+  background: linear-gradient(
+    135deg,
+    var(--gradient-card-5-from),
+    var(--gradient-card-5-to)
+  );
 }
 
 .service-page-icon.drive {
-  background: linear-gradient(135deg, var(--gradient-card-6-from), var(--gradient-card-6-to));
+  background: linear-gradient(
+    135deg,
+    var(--gradient-card-6-from),
+    var(--gradient-card-6-to)
+  );
 }
 
 .service-page-icon.notes {
-  background: linear-gradient(135deg, var(--gradient-card-7-from), var(--gradient-card-7-to));
+  background: linear-gradient(
+    135deg,
+    var(--gradient-card-7-from),
+    var(--gradient-card-7-to)
+  );
 }
 
 .service-page-icon.tasks {
-  background: linear-gradient(135deg, var(--color-primary), var(--gradient-card-8-to));
+  background: linear-gradient(
+    135deg,
+    var(--color-primary),
+    var(--gradient-card-8-to)
+  );
 }
 
 .service-page-icon.ai {
-  background: linear-gradient(135deg, var(--gradient-card-9-from), var(--gradient-card-9-to));
+  background: linear-gradient(
+    135deg,
+    var(--gradient-card-9-from),
+    var(--gradient-card-9-to)
+  );
 }
 
 .service-page-eyebrow,
@@ -236,7 +274,7 @@
   background: var(--color-surface-cool-light);
 }
 
-@media (max-width: 760px){
+@media (max-width: 760px) {
   .service-page-nav {
     align-items: flex-start;
     flex-direction: column;

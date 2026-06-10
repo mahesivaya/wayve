@@ -23,8 +23,14 @@ const RANK: Record<Role, number> = {
 };
 
 const PALETTE = [
-  "#d7b29c", "#7c9eb2", "#a8c686", "#c89bb0",
-  "#8d8aaa", "#e0a36d", "#6d9eb8", "#b8857a",
+  "#d7b29c",
+  "#7c9eb2",
+  "#a8c686",
+  "#c89bb0",
+  "#8d8aaa",
+  "#e0a36d",
+  "#6d9eb8",
+  "#b8857a",
 ];
 
 function avatarColor(seed: string): string {
@@ -36,14 +42,15 @@ function avatarColor(seed: string): string {
 const rankOf = (m: Member) => RANK[normalizeRole(m.role)] ?? 4;
 const displayName = (m: Member) => m.username || m.email;
 const initial = (m: Member) => (displayName(m).trim()[0] ?? "?").toUpperCase();
-const roleText = (m: Member) => m.role_label || ROLE_LABELS[normalizeRole(m.role)];
+const roleText = (m: Member) =>
+  m.role_label || ROLE_LABELS[normalizeRole(m.role)];
 
 export default function MembersTree({ members }: { members: Member[] }) {
   const [selected, setSelected] = useState<Member | null>(null);
 
   const { tiers, reportingOf } = useMemo(() => {
     const sorted = [...members].sort(
-      (a, b) => rankOf(a) - rankOf(b) || a.email.localeCompare(b.email),
+      (a, b) => rankOf(a) - rankOf(b) || a.email.localeCompare(b.email)
     );
     const ranks = [...new Set(sorted.map(rankOf))].sort((a, b) => a - b);
     const tiers = ranks.map((rank) => ({

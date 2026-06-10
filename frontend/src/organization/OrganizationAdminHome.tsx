@@ -37,26 +37,26 @@ export default function OrganizationAdminHome() {
   useEffect(() => {
     if (!canBootstrap || !orgId) return;
     let cancelled = false;
-    getOrgKeys(orgId)
-      .catch((err) => {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : String(err);
-        if (message.includes("404") || /not[_ ]found/i.test(message)) {
-          navigate(
-            `/organization/recovery-key/bootstrap?org=${orgId}`,
-            { replace: true },
-          );
-        }
-      });
+    getOrgKeys(orgId).catch((err) => {
+      if (cancelled) return;
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("404") || /not[_ ]found/i.test(message)) {
+        navigate(`/organization/recovery-key/bootstrap?org=${orgId}`, {
+          replace: true,
+        });
+      }
+    });
     return () => {
       cancelled = true;
     };
   }, [canBootstrap, orgId, navigate]);
 
   const canSeeMembers =
-    hasPermission(user, "members:read") || hasPermission(user, "members:manage");
+    hasPermission(user, "members:read") ||
+    hasPermission(user, "members:manage");
   const canSeeBilling =
-    hasPermission(user, "billing:read") || hasPermission(user, "billing:manage");
+    hasPermission(user, "billing:read") ||
+    hasPermission(user, "billing:manage");
   const canSeeDeveloper = hasPermission(user, "api_keys:manage");
   const canSeeSecurity =
     hasPermission(user, "audit:read") || hasPermission(user, "security:manage");
@@ -77,7 +77,8 @@ export default function OrganizationAdminHome() {
     {
       icon: "👥",
       label: "Members & roles",
-      description: "Provision accounts inside your organization and adjust role assignments.",
+      description:
+        "Provision accounts inside your organization and adjust role assignments.",
       path: "/organization/members",
       visible: canSeeMembers,
     },
@@ -137,7 +138,7 @@ export default function OrganizationAdminHome() {
 
   const handleCardKeyDown = (
     event: KeyboardEvent<HTMLElement>,
-    path: string,
+    path: string
   ) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -155,7 +156,9 @@ export default function OrganizationAdminHome() {
       onClick={() => navigate(t.path)}
       onKeyDown={(event) => handleCardKeyDown(event, t.path)}
     >
-      <div className="org-home-tile-icon" aria-hidden="true">{t.icon}</div>
+      <div className="org-home-tile-icon" aria-hidden="true">
+        {t.icon}
+      </div>
       <h3 className="org-home-tile-title">{t.label}</h3>
       <p className="org-home-tile-desc">{t.description}</p>
     </article>

@@ -89,11 +89,14 @@ export default function PlatformBilling() {
   // PlatformAdminHome route.
   const canView =
     user?.scope === "platform" &&
-    (hasPermission(user, "billing:read") || hasPermission(user, "billing:manage"));
+    (hasPermission(user, "billing:read") ||
+      hasPermission(user, "billing:manage"));
   const canManage = hasPermission(user, "billing:manage");
 
   const [tab, setTab] = useState<Tab>("stripe");
-  const [overview, setOverview] = useState<PlatformBillingOverview | null>(null);
+  const [overview, setOverview] = useState<PlatformBillingOverview | null>(
+    null
+  );
   const [userSubs, setUserSubs] = useState<UserSubscriptionRow[]>([]);
   const [orgSubs, setOrgSubs] = useState<OrganizationSubscriptionRow[]>([]);
   const [invoices, setInvoices] = useState<PlatformInvoiceRow[]>([]);
@@ -124,7 +127,12 @@ export default function PlatformBilling() {
   const [showPayrollForm, setShowPayrollForm] = useState(false);
   const [payrollDraft, setPayrollDraft] = useState<PayrollRunInput>(() => {
     const { start, end } = defaultPayrollPeriod();
-    return { period_start: start, period_end: end, notes: "", tax_rate_pct: 20 };
+    return {
+      period_start: start,
+      period_end: end,
+      notes: "",
+      tax_rate_pct: 20,
+    };
   });
 
   const reload = useCallback(async () => {
@@ -148,7 +156,9 @@ export default function PlatformBilling() {
       setPayrollRuns(runs);
       setHistory(hist);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load billing data");
+      setError(
+        err instanceof Error ? err.message : "Failed to load billing data"
+      );
     } finally {
       setLoading(false);
     }
@@ -231,7 +241,9 @@ export default function PlatformBilling() {
       setSuccess(`Removed ${emp.full_name}`);
       await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete employee");
+      setError(
+        err instanceof Error ? err.message : "Failed to delete employee"
+      );
     } finally {
       setBusy("");
     }
@@ -259,8 +271,8 @@ export default function PlatformBilling() {
       const run = await createPayrollRun(payrollDraft);
       setSuccess(
         `Created payroll run for ${run.item_count} employees, gross ${fmtMoney(
-          run.total_gross_cents,
-        )}`,
+          run.total_gross_cents
+        )}`
       );
       setShowPayrollForm(false);
       await reload();
@@ -271,7 +283,10 @@ export default function PlatformBilling() {
     }
   };
 
-  const setPayrollStatus = async (run: PayrollRun, status: PayrollRun["status"]) => {
+  const setPayrollStatus = async (
+    run: PayrollRun,
+    status: PayrollRun["status"]
+  ) => {
     dismissBanners();
     setBusy(`payroll-status:${run.id}`);
     try {
@@ -294,7 +309,9 @@ export default function PlatformBilling() {
       const snap = await getStripeSnapshot();
       setStripeSnap(snap);
     } catch (err) {
-      setStripeError(err instanceof Error ? err.message : "Failed to load Stripe data");
+      setStripeError(
+        err instanceof Error ? err.message : "Failed to load Stripe data"
+      );
     } finally {
       setStripeLoading(false);
     }
@@ -309,17 +326,22 @@ export default function PlatformBilling() {
   }, [tab, stripeSnap, stripeLoading, loadStripeSnapshot]);
 
   const tabs = useMemo(
-    () =>
-      [
-        { key: "stripe" as const, label: "Stripe account" },
-        { key: "history" as const, label: `History (${history.length})` },
-        { key: "users" as const, label: `Users (${userSubs.length})` },
-        { key: "organizations" as const, label: `Organizations (${orgSubs.length})` },
-        { key: "invoices" as const, label: `Invoices (${invoices.length})` },
-        { key: "employees" as const, label: `Employees (${employees.length})` },
-        { key: "payroll" as const, label: `Payroll runs (${payrollRuns.length})` },
-      ],
-    [history, userSubs, orgSubs, invoices, employees, payrollRuns],
+    () => [
+      { key: "stripe" as const, label: "Stripe account" },
+      { key: "history" as const, label: `History (${history.length})` },
+      { key: "users" as const, label: `Users (${userSubs.length})` },
+      {
+        key: "organizations" as const,
+        label: `Organizations (${orgSubs.length})`,
+      },
+      { key: "invoices" as const, label: `Invoices (${invoices.length})` },
+      { key: "employees" as const, label: `Employees (${employees.length})` },
+      {
+        key: "payroll" as const,
+        label: `Payroll runs (${payrollRuns.length})`,
+      },
+    ],
+    [history, userSubs, orgSubs, invoices, employees, payrollRuns]
   );
 
   // Client-side search over the billing history — filter by user email, org,
@@ -329,8 +351,8 @@ export default function PlatformBilling() {
     if (!q) return history;
     return history.filter((h) =>
       [h.user_email, h.organization_name, h.plan_name, h.event, h.status].some(
-        (v) => (v ?? "").toLowerCase().includes(q),
-      ),
+        (v) => (v ?? "").toLowerCase().includes(q)
+      )
     );
   }, [history, historySearch]);
 
@@ -358,7 +380,11 @@ export default function PlatformBilling() {
       {success && <div className="pb-banner success">{success}</div>}
 
       <section className="pb-overview" aria-label="Revenue overview">
-        <Stat label="MRR" value={fmtMoney(overview?.mrr_cents)} sub={`ARR ${fmtMoney(overview?.arr_cents)}`} />
+        <Stat
+          label="MRR"
+          value={fmtMoney(overview?.mrr_cents)}
+          sub={`ARR ${fmtMoney(overview?.arr_cents)}`}
+        />
         <Stat
           label="Paid invoices (30d)"
           value={fmtMoney(overview?.paid_invoices_30d_cents)}
@@ -446,7 +472,7 @@ export default function PlatformBilling() {
                       ? "—"
                       : stripeSnap.balance.available
                           .map((b) =>
-                            fmtMoney(b.amount, b.currency.toUpperCase()),
+                            fmtMoney(b.amount, b.currency.toUpperCase())
                           )
                           .join(" · ")
                   }
@@ -459,7 +485,7 @@ export default function PlatformBilling() {
                       ? "—"
                       : stripeSnap.balance.pending
                           .map((b) =>
-                            fmtMoney(b.amount, b.currency.toUpperCase()),
+                            fmtMoney(b.amount, b.currency.toUpperCase())
                           )
                           .join(" · ")
                   }
@@ -469,7 +495,7 @@ export default function PlatformBilling() {
                   label="Gross (30d)"
                   value={fmtMoney(
                     stripeSnap.last_30d.gross_cents,
-                    stripeSnap.last_30d.currency.toUpperCase(),
+                    stripeSnap.last_30d.currency.toUpperCase()
                   )}
                   sub={`${stripeSnap.last_30d.transaction_count} transactions`}
                 />
@@ -477,7 +503,7 @@ export default function PlatformBilling() {
                   label="Net (30d)"
                   value={fmtMoney(
                     stripeSnap.last_30d.net_cents,
-                    stripeSnap.last_30d.currency.toUpperCase(),
+                    stripeSnap.last_30d.currency.toUpperCase()
                   )}
                   sub={`Fees ${fmtMoney(stripeSnap.last_30d.fees_cents, stripeSnap.last_30d.currency.toUpperCase())}`}
                 />
@@ -511,7 +537,9 @@ export default function PlatformBilling() {
                           {p.description && (
                             <>
                               <br />
-                              <small style={{ color: "#6b7280" }}>{p.description}</small>
+                              <small style={{ color: "#6b7280" }}>
+                                {p.description}
+                              </small>
                             </>
                           )}
                         </td>
@@ -520,10 +548,19 @@ export default function PlatformBilling() {
                             {p.status ?? "—"}
                           </span>
                         </td>
-                        <td>{p.arrival_date ? fmtShortDate(p.arrival_date * 1000) : "—"}</td>
-                        <td>{p.created ? fmtShortDate(p.created * 1000) : "—"}</td>
+                        <td>
+                          {p.arrival_date
+                            ? fmtShortDate(p.arrival_date * 1000)
+                            : "—"}
+                        </td>
+                        <td>
+                          {p.created ? fmtShortDate(p.created * 1000) : "—"}
+                        </td>
                         <td className="right">
-                          {fmtMoney(p.amount_cents, (p.currency ?? "usd").toUpperCase())}
+                          {fmtMoney(
+                            p.amount_cents,
+                            (p.currency ?? "usd").toUpperCase()
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -557,7 +594,9 @@ export default function PlatformBilling() {
                           {c.description && (
                             <>
                               <br />
-                              <small style={{ color: "#6b7280" }}>{c.description}</small>
+                              <small style={{ color: "#6b7280" }}>
+                                {c.description}
+                              </small>
                             </>
                           )}
                         </td>
@@ -566,15 +605,17 @@ export default function PlatformBilling() {
                           {c.customer_name && (
                             <>
                               <br />
-                              <small style={{ color: "#6b7280" }}>{c.customer_name}</small>
+                              <small style={{ color: "#6b7280" }}>
+                                {c.customer_name}
+                              </small>
                             </>
                           )}
                         </td>
                         <td>
                           <span
-                            className={`pb-pill ${c.refunded ? "refunded" : c.status ?? ""}`}
+                            className={`pb-pill ${c.refunded ? "refunded" : (c.status ?? "")}`}
                           >
-                            {c.refunded ? "refunded" : c.status ?? "—"}
+                            {c.refunded ? "refunded" : (c.status ?? "—")}
                           </span>
                           {c.receipt_url && (
                             <>
@@ -590,9 +631,14 @@ export default function PlatformBilling() {
                             </>
                           )}
                         </td>
-                        <td>{c.created ? fmtShortDate(c.created * 1000) : "—"}</td>
+                        <td>
+                          {c.created ? fmtShortDate(c.created * 1000) : "—"}
+                        </td>
                         <td className="right">
-                          {fmtMoney(c.amount_cents, (c.currency ?? "usd").toUpperCase())}
+                          {fmtMoney(
+                            c.amount_cents,
+                            (c.currency ?? "usd").toUpperCase()
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -608,7 +654,9 @@ export default function PlatformBilling() {
         <section className="pb-section">
           <div className="pb-section-header">
             <h2>User payments</h2>
-            <span className="pb-stat-sub">Personal accounts and their subscriptions</span>
+            <span className="pb-stat-sub">
+              Personal accounts and their subscriptions
+            </span>
           </div>
           {userSubs.length === 0 ? (
             <div className="pb-empty">No personal users yet.</div>
@@ -632,13 +680,17 @@ export default function PlatformBilling() {
                       {row.username && (
                         <>
                           <br />
-                          <small style={{ color: "#6b7280" }}>{row.username}</small>
+                          <small style={{ color: "#6b7280" }}>
+                            {row.username}
+                          </small>
                         </>
                       )}
                     </td>
                     <td>{row.plan_name ?? row.plan_code ?? "Free"}</td>
                     <td>
-                      <span className={`pb-pill ${row.status}`}>{row.status}</span>
+                      <span className={`pb-pill ${row.status}`}>
+                        {row.status}
+                      </span>
                     </td>
                     <td className="right">
                       {row.amount_cents != null
@@ -661,7 +713,9 @@ export default function PlatformBilling() {
         <section className="pb-section">
           <div className="pb-section-header">
             <h2>Organization payments</h2>
-            <span className="pb-stat-sub">Per-org subscriptions and seat utilisation</span>
+            <span className="pb-stat-sub">
+              Per-org subscriptions and seat utilisation
+            </span>
           </div>
           {orgSubs.length === 0 ? (
             <div className="pb-empty">No organizations yet.</div>
@@ -691,7 +745,9 @@ export default function PlatformBilling() {
                     </td>
                     <td>{row.plan_name ?? row.plan_code ?? "Free"}</td>
                     <td>
-                      <span className={`pb-pill ${row.status}`}>{row.status}</span>
+                      <span className={`pb-pill ${row.status}`}>
+                        {row.status}
+                      </span>
                     </td>
                     <td className="right">
                       {row.seats_used}
@@ -750,7 +806,9 @@ export default function PlatformBilling() {
               </thead>
               <tbody>
                 {filteredHistory.map((h, i) => (
-                  <tr key={`${h.ts}-${h.user_email ?? h.organization_name}-${i}`}>
+                  <tr
+                    key={`${h.ts}-${h.user_email ?? h.organization_name}-${i}`}
+                  >
                     <td>{fmtDate(h.ts)}</td>
                     <td>{h.user_email ?? h.organization_name ?? "—"}</td>
                     <td>
@@ -777,7 +835,9 @@ export default function PlatformBilling() {
         <section className="pb-section">
           <div className="pb-section-header">
             <h2>Recent invoices</h2>
-            <span className="pb-stat-sub">Latest 100 invoice events across the platform</span>
+            <span className="pb-stat-sub">
+              Latest 100 invoice events across the platform
+            </span>
           </div>
           {invoices.length === 0 ? (
             <div className="pb-empty">No invoices yet.</div>
@@ -797,11 +857,11 @@ export default function PlatformBilling() {
                 {invoices.map((inv) => (
                   <tr key={inv.id}>
                     <td>{fmtDate(inv.created_at)}</td>
+                    <td>{inv.organization_name ?? inv.user_email ?? "—"}</td>
                     <td>
-                      {inv.organization_name ?? inv.user_email ?? "—"}
-                    </td>
-                    <td>
-                      <span className={`pb-pill ${inv.status}`}>{inv.status}</span>
+                      <span className={`pb-pill ${inv.status}`}>
+                        {inv.status}
+                      </span>
                     </td>
                     <td className="right">
                       {fmtMoney(inv.amount_paid_cents, inv.currency ?? "USD")}
@@ -811,7 +871,11 @@ export default function PlatformBilling() {
                     </td>
                     <td>
                       {inv.hosted_invoice_url && (
-                        <a href={inv.hosted_invoice_url} target="_blank" rel="noreferrer">
+                        <a
+                          href={inv.hosted_invoice_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
                           View
                         </a>
                       )}
@@ -829,7 +893,11 @@ export default function PlatformBilling() {
           <div className="pb-section-header">
             <h2>Employees & salaries</h2>
             {canManage && !showEmployeeForm && (
-              <button type="button" className="pb-btn" onClick={openEmployeeCreate}>
+              <button
+                type="button"
+                className="pb-btn"
+                onClick={openEmployeeCreate}
+              >
                 + Add employee
               </button>
             )}
@@ -919,7 +987,7 @@ export default function PlatformBilling() {
                     setEmpDraft({
                       ...empDraft,
                       base_salary_cents: Math.round(
-                        Number.parseFloat(e.target.value || "0") * 100,
+                        Number.parseFloat(e.target.value || "0") * 100
                       ),
                     })
                   }
@@ -948,7 +1016,10 @@ export default function PlatformBilling() {
                   value={empDraft.currency ?? "USD"}
                   maxLength={3}
                   onChange={(e) =>
-                    setEmpDraft({ ...empDraft, currency: e.target.value.toUpperCase() })
+                    setEmpDraft({
+                      ...empDraft,
+                      currency: e.target.value.toUpperCase(),
+                    })
                   }
                 />
               </label>
@@ -958,15 +1029,26 @@ export default function PlatformBilling() {
                   type="date"
                   value={empDraft.hire_date ?? ""}
                   onChange={(e) =>
-                    setEmpDraft({ ...empDraft, hire_date: e.target.value || null })
+                    setEmpDraft({
+                      ...empDraft,
+                      hire_date: e.target.value || null,
+                    })
                   }
                 />
               </label>
               <div className="pb-form-actions">
-                <button type="button" className="pb-btn secondary" onClick={closeEmployeeForm}>
+                <button
+                  type="button"
+                  className="pb-btn secondary"
+                  onClick={closeEmployeeForm}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="pb-btn" disabled={busy === "save-employee"}>
+                <button
+                  type="submit"
+                  className="pb-btn"
+                  disabled={busy === "save-employee"}
+                >
                   {busy === "save-employee"
                     ? "Saving…"
                     : editingId == null
@@ -1005,10 +1087,13 @@ export default function PlatformBilling() {
                     <td>{emp.department ?? "—"}</td>
                     <td>{emp.employment_type.replace("_", " ")}</td>
                     <td>
-                      <span className={`pb-pill ${emp.status}`}>{emp.status.replace("_", " ")}</span>
+                      <span className={`pb-pill ${emp.status}`}>
+                        {emp.status.replace("_", " ")}
+                      </span>
                     </td>
                     <td className="right">
-                      {fmtMoney(emp.base_salary_cents, emp.currency)} / {emp.pay_frequency}
+                      {fmtMoney(emp.base_salary_cents, emp.currency)} /{" "}
+                      {emp.pay_frequency}
                     </td>
                     <td className="right">
                       {fmtMoney(emp.monthly_cost_cents, emp.currency)}
@@ -1047,7 +1132,11 @@ export default function PlatformBilling() {
           <div className="pb-section-header">
             <h2>Payroll runs</h2>
             {canManage && !showPayrollForm && (
-              <button type="button" className="pb-btn" onClick={openPayrollForm}>
+              <button
+                type="button"
+                className="pb-btn"
+                onClick={openPayrollForm}
+              >
                 + New payroll run
               </button>
             )}
@@ -1062,7 +1151,10 @@ export default function PlatformBilling() {
                   type="date"
                   value={payrollDraft.period_start}
                   onChange={(e) =>
-                    setPayrollDraft({ ...payrollDraft, period_start: e.target.value })
+                    setPayrollDraft({
+                      ...payrollDraft,
+                      period_start: e.target.value,
+                    })
                   }
                 />
               </label>
@@ -1073,7 +1165,10 @@ export default function PlatformBilling() {
                   type="date"
                   value={payrollDraft.period_end}
                   onChange={(e) =>
-                    setPayrollDraft({ ...payrollDraft, period_end: e.target.value })
+                    setPayrollDraft({
+                      ...payrollDraft,
+                      period_end: e.target.value,
+                    })
                   }
                 />
               </label>
@@ -1123,7 +1218,8 @@ export default function PlatformBilling() {
 
           {payrollRuns.length === 0 ? (
             <div className="pb-empty">
-              No payroll runs yet. Add active employees and generate the first run.
+              No payroll runs yet. Add active employees and generate the first
+              run.
             </div>
           ) : (
             <table className="pb-table">
@@ -1146,12 +1242,20 @@ export default function PlatformBilling() {
                       {fmtDate(run.period_start)} → {fmtDate(run.period_end)}
                     </td>
                     <td>
-                      <span className={`pb-pill ${run.status}`}>{run.status}</span>
+                      <span className={`pb-pill ${run.status}`}>
+                        {run.status}
+                      </span>
                     </td>
                     <td className="right">{run.item_count}</td>
-                    <td className="right">{fmtMoney(run.total_gross_cents, run.currency)}</td>
-                    <td className="right">{fmtMoney(run.total_tax_cents, run.currency)}</td>
-                    <td className="right">{fmtMoney(run.total_net_cents, run.currency)}</td>
+                    <td className="right">
+                      {fmtMoney(run.total_gross_cents, run.currency)}
+                    </td>
+                    <td className="right">
+                      {fmtMoney(run.total_tax_cents, run.currency)}
+                    </td>
+                    <td className="right">
+                      {fmtMoney(run.total_net_cents, run.currency)}
+                    </td>
                     <td>{fmtDate(run.paid_at)}</td>
                     {canManage && (
                       <td>
@@ -1160,13 +1264,16 @@ export default function PlatformBilling() {
                             <button
                               type="button"
                               className="pb-btn secondary"
-                              onClick={() => void setPayrollStatus(run, "approved")}
+                              onClick={() =>
+                                void setPayrollStatus(run, "approved")
+                              }
                               disabled={busy === `payroll-status:${run.id}`}
                             >
                               Approve
                             </button>
                           )}
-                          {(run.status === "draft" || run.status === "approved") && (
+                          {(run.status === "draft" ||
+                            run.status === "approved") && (
                             <button
                               type="button"
                               className="pb-btn"
@@ -1176,16 +1283,19 @@ export default function PlatformBilling() {
                               Mark paid
                             </button>
                           )}
-                          {run.status !== "cancelled" && run.status !== "paid" && (
-                            <button
-                              type="button"
-                              className="pb-btn danger"
-                              onClick={() => void setPayrollStatus(run, "cancelled")}
-                              disabled={busy === `payroll-status:${run.id}`}
-                            >
-                              Cancel
-                            </button>
-                          )}
+                          {run.status !== "cancelled" &&
+                            run.status !== "paid" && (
+                              <button
+                                type="button"
+                                className="pb-btn danger"
+                                onClick={() =>
+                                  void setPayrollStatus(run, "cancelled")
+                                }
+                                disabled={busy === `payroll-status:${run.id}`}
+                              >
+                                Cancel
+                              </button>
+                            )}
                         </div>
                       </td>
                     )}

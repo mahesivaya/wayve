@@ -97,10 +97,10 @@ const PUBLIC_PERSONAL_IDS = ["basic", "advance", "more-advance"];
 export default function PublicPricingContent() {
   const navigate = useNavigate();
   const personalTiers = PUBLIC_TIERS.filter((tier) =>
-    PUBLIC_PERSONAL_IDS.includes(tier.id),
+    PUBLIC_PERSONAL_IDS.includes(tier.id)
   );
   const businessTiers = PUBLIC_TIERS.filter(
-    (tier) => !PUBLIC_PERSONAL_IDS.includes(tier.id),
+    (tier) => !PUBLIC_PERSONAL_IDS.includes(tier.id)
   );
 
   const renderTier = (tier: PublicTier) => (

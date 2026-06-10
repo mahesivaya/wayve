@@ -77,7 +77,10 @@
   background: var(--color-surface);
   text-decoration: none;
   cursor: pointer;
-  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s,
+    transform 0.12s;
 }
 
 .organization-grid-tile:hover {
@@ -333,7 +336,7 @@
   text-align: center;
 }
 
-@media (max-width: 720px){
+@media (max-width: 720px) {
   .platform-admin-header,
   .platform-admin-section-header {
     align-items: flex-start;
@@ -416,11 +419,11 @@
   cursor: pointer;
 }
 
-.platform-admin-cancel-btn:hover:not(:disabled){
+.platform-admin-cancel-btn:hover:not(:disabled) {
   background: var(--color-surface-muted, var(--color-surface-hover));
 }
 
-.platform-admin-cancel-btn:disabled{
+.platform-admin-cancel-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

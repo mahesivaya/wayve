@@ -22,7 +22,9 @@ const describe = (el: Element): string => {
   const tag = el.tagName.toLowerCase();
   const id = el.id ? `#${el.id}` : "";
   const cls =
-    el.classList.length > 0 ? `.${Array.from(el.classList).slice(0, 2).join(".")}` : "";
+    el.classList.length > 0
+      ? `.${Array.from(el.classList).slice(0, 2).join(".")}`
+      : "";
   const role = el.getAttribute("role");
   const aria = el.getAttribute("aria-label");
   const text = (el.textContent || "").trim().slice(0, 40);
@@ -128,10 +130,15 @@ export const installDevLog = (): void => {
   // avoid drowning the console for chatty sockets.
   const OrigWS = window.WebSocket;
   if (OrigWS && !(OrigWS as unknown as { __wrapped?: boolean }).__wrapped) {
-    const Wrapped = function (this: WebSocket, url: string | URL, protocols?: string | string[]) {
+    const Wrapped = function (
+      this: WebSocket,
+      url: string | URL,
+      protocols?: string | string[]
+    ) {
       const display = typeof url === "string" ? url : url.toString();
       ws.info(`open → ${display}`);
-      const sock = protocols !== undefined ? new OrigWS(url, protocols) : new OrigWS(url);
+      const sock =
+        protocols !== undefined ? new OrigWS(url, protocols) : new OrigWS(url);
 
       sock.addEventListener("open", () => ws.info(`opened ${display}`));
       sock.addEventListener("close", (ev) =>
@@ -139,8 +146,12 @@ export const installDevLog = (): void => {
       );
       sock.addEventListener("error", (ev) => ws.warn(`error ${display}`, ev));
       sock.addEventListener("message", (ev) => {
-        const data = typeof ev.data === "string" ? ev.data : `[${typeof ev.data}]`;
-        ws.debug(`msg ${display}`, data.length > 200 ? data.slice(0, 200) + "…" : data);
+        const data =
+          typeof ev.data === "string" ? ev.data : `[${typeof ev.data}]`;
+        ws.debug(
+          `msg ${display}`,
+          data.length > 200 ? data.slice(0, 200) + "…" : data
+        );
       });
 
       return sock;

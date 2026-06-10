@@ -266,6 +266,14 @@ summary.docs-nav-heading:hover {
 
 /* Wide elements opt out. The Swagger UI panel, large grids, and
    code blocks need every available pixel. */
-.docs-content :where(pre, table, .swagger-docs-ui, .docs-index-list, .service-feature-grid, .service-usecase-list) {
+.docs-content
+  :where(
+    pre,
+    table,
+    .swagger-docs-ui,
+    .docs-index-list,
+    .service-feature-grid,
+    .service-usecase-list
+  ) {
   max-width: none;
 }

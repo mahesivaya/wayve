@@ -29,10 +29,7 @@ export const createMeetingApi = async (data: MeetingPayload) => {
   return res.json();
 };
 
-export const updateMeetingApi = async (
-  id: number,
-  data: MeetingPayload
-) => {
+export const updateMeetingApi = async (id: number, data: MeetingPayload) => {
   const res = await apiFetch(`/api/meetings/${id}`, {
     method: "PUT",
     body: JSON.stringify({

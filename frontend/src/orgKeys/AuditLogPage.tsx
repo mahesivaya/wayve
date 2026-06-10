@@ -51,7 +51,8 @@ export default function AuditLogPage() {
         if (!cancelled) {
           setState({
             kind: "error",
-            message: err instanceof Error ? err.message : "Failed to load audit log.",
+            message:
+              err instanceof Error ? err.message : "Failed to load audit log.",
           });
         }
       });
@@ -64,10 +65,10 @@ export default function AuditLogPage() {
     <div style={{ padding: 40, maxWidth: 960 }}>
       <h2>🔍 Org master key — access log</h2>
       <p style={{ color: "#6b7280" }}>
-        Every use of the organization master key — bootstraps, escrow
-        fetches, password resets, and key-holder additions — is recorded
-        here. The log is append-only; rows cannot be edited or deleted
-        from the application surface.
+        Every use of the organization master key — bootstraps, escrow fetches,
+        password resets, and key-holder additions — is recorded here. The log is
+        append-only; rows cannot be edited or deleted from the application
+        surface.
       </p>
 
       {state.kind === "loading" && <p>Loading audit log…</p>}
@@ -78,8 +79,8 @@ export default function AuditLogPage() {
 
       {state.kind === "ok" && state.entries.length === 0 && (
         <p style={{ color: "#6b7280" }}>
-          No audit entries yet. Bootstrap your org master key, or recover a member's
-          data — entries will start appearing here.
+          No audit entries yet. Bootstrap your org master key, or recover a
+          member's data — entries will start appearing here.
         </p>
       )}
 

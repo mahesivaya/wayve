@@ -70,7 +70,7 @@ function getOne(db: IDBDatabase, key: string): Promise<unknown> {
 export async function savePrivateKey(
   key: CryptoKey,
   userId?: number | null,
-  email?: string | null,
+  email?: string | null
 ) {
   const db = await openDB();
   const exported = await crypto.subtle.exportKey("pkcs8", key);
@@ -86,7 +86,7 @@ export async function savePrivateKey(
 export async function savePublicKey(
   publicKey: ArrayBuffer,
   userId?: number | null,
-  email?: string | null,
+  email?: string | null
 ) {
   const db = await openDB();
   const publicKeyBytes = new Uint8Array(publicKey).slice().buffer;
@@ -106,7 +106,7 @@ async function importPrivateKey(pkcs8: ArrayBuffer): Promise<CryptoKey> {
     pkcs8,
     { name: "RSA-OAEP", hash: "SHA-256" },
     true,
-    ["decrypt"],
+    ["decrypt"]
   );
 }
 
@@ -116,7 +116,7 @@ async function importPrivateKey(pkcs8: ArrayBuffer): Promise<CryptoKey> {
 // / file decrypt paths) succeed without needing to pass email everywhere.
 export async function loadPrivateKey(
   userId?: number | null,
-  email?: string | null,
+  email?: string | null
 ): Promise<CryptoKey | null> {
   const db = await openDB();
   const primaryKey = privateKeyId(userId);
@@ -143,7 +143,7 @@ export async function loadPrivateKey(
 // loadPrivateKey.
 export async function loadPublicKey(
   userId?: number | null,
-  email?: string | null,
+  email?: string | null
 ): Promise<ArrayBuffer | null> {
   const db = await openDB();
   const primaryKey = publicKeyId(userId);

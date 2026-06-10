@@ -44,14 +44,46 @@ export type SplitApp = {
 };
 
 export const SPLIT_APPS: SplitApp[] = [
-  { key: "home", label: "Home", path: "/", icon: "🏠", Comp: HomeView, autoRoute: false },
-  { key: "emails", label: "Emails", path: "/emails", icon: "📧", Comp: EmailsView },
+  {
+    key: "home",
+    label: "Home",
+    path: "/",
+    icon: "🏠",
+    Comp: HomeView,
+    autoRoute: false,
+  },
+  {
+    key: "emails",
+    label: "Emails",
+    path: "/emails",
+    icon: "📧",
+    Comp: EmailsView,
+  },
   { key: "chat", label: "Chat", path: "/chat", icon: "💬", Comp: ChatView },
-  { key: "scheduler", label: "Scheduler", path: "/scheduler", icon: "📅", Comp: SchedulerView },
+  {
+    key: "scheduler",
+    label: "Scheduler",
+    path: "/scheduler",
+    icon: "📅",
+    Comp: SchedulerView,
+  },
   { key: "drive", label: "Drive", path: "/drive", icon: "📁", Comp: DriveView },
   { key: "notes", label: "Notes", path: "/notes", icon: "📝", Comp: NotesView },
   { key: "tasks", label: "Tasks", path: "/tasks", icon: "☑", Comp: TasksView },
-  { key: "aichat", label: "AI Chat", path: "/ai-chat", icon: "✨", Comp: AIChatView },
-  { key: "github", label: "GitHub", path: "/github", icon: "GH", Comp: GitHubRepoView, autoRoute: false },
+  {
+    key: "aichat",
+    label: "AI Chat",
+    path: "/ai-chat",
+    icon: "✨",
+    Comp: AIChatView,
+  },
+  {
+    key: "github",
+    label: "GitHub",
+    path: "/github",
+    icon: "GH",
+    Comp: GitHubRepoView,
+    autoRoute: false,
+  },
   { key: "about", label: "About", path: "/about", icon: "ⓘ", Comp: AboutView },
 ];

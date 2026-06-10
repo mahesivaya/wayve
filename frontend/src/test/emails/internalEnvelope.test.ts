@@ -25,7 +25,7 @@ async function generateRecipient(userId: number) {
       hash: "SHA-256",
     },
     true,
-    ["encrypt", "decrypt"],
+    ["encrypt", "decrypt"]
   );
   const spki = await crypto.subtle.exportKey("spki", keyPair.publicKey);
   return {
@@ -37,7 +37,11 @@ async function generateRecipient(userId: number) {
 
 // Mirror of what bodyUtils.ts does on decode, minus the IndexedDB
 // private-key lookup — we already have the CryptoKey in hand.
-async function decryptEnvelopeFor(envelope: string, userId: number, privateKey: CryptoKey) {
+async function decryptEnvelopeFor(
+  envelope: string,
+  userId: number,
+  privateKey: CryptoKey
+) {
   expect(envelope.startsWith(ENVELOPE_PREFIX)).toBe(true);
   const parsed = JSON.parse(envelope.slice(ENVELOPE_PREFIX.length));
   expect(parsed.type).toBe("wayve_encrypted_multi");
@@ -48,19 +52,19 @@ async function decryptEnvelopeFor(envelope: string, userId: number, privateKey: 
   const rawAes = await crypto.subtle.decrypt(
     { name: "RSA-OAEP" },
     privateKey,
-    new Uint8Array(wrappedKey),
+    new Uint8Array(wrappedKey)
   );
   const aesKey = await crypto.subtle.importKey(
     "raw",
     rawAes,
     { name: "AES-GCM" },
     false,
-    ["decrypt"],
+    ["decrypt"]
   );
   const plaintextBytes = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: new Uint8Array(parsed.iv) },
     aesKey,
-    new Uint8Array(parsed.data),
+    new Uint8Array(parsed.data)
   );
   return new TextDecoder().decode(plaintextBytes);
 }
@@ -84,10 +88,12 @@ describe("Plan A Phase 2 multi-recipient envelope", () => {
     expect(Object.keys(parsed.keys).sort()).toEqual(["101", "202"]);
 
     // Each recipient's slot independently decrypts to the same body.
-    expect(await decryptEnvelopeFor(envelope, alice.userId, alice.privateKey))
-      .toBe(plaintext);
-    expect(await decryptEnvelopeFor(envelope, bob.userId, bob.privateKey))
-      .toBe(plaintext);
+    expect(
+      await decryptEnvelopeFor(envelope, alice.userId, alice.privateKey)
+    ).toBe(plaintext);
+    expect(await decryptEnvelopeFor(envelope, bob.userId, bob.privateKey)).toBe(
+      plaintext
+    );
   });
 
   it("interloper not in the envelope cannot decrypt", async () => {
@@ -98,7 +104,7 @@ describe("Plan A Phase 2 multi-recipient envelope", () => {
     ]);
 
     await expect(
-      decryptEnvelopeFor(envelope, interloper.userId, interloper.privateKey),
+      decryptEnvelopeFor(envelope, interloper.userId, interloper.privateKey)
     ).rejects.toThrow(/no wrapped key/i);
   });
 
@@ -115,7 +121,7 @@ describe("Plan A Phase 2 multi-recipient envelope", () => {
 
   it("refuses to build an envelope with zero recipients", async () => {
     await expect(buildInternalEnvelope("nope", [])).rejects.toThrow(
-      /at least one recipient/i,
+      /at least one recipient/i
     );
   });
 });

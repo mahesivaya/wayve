@@ -22,7 +22,12 @@ import {
   type ReactNode,
 } from "react";
 
-import { ALL_ROLES, TOKEN_VAR, type TokenOverrides, type TokenRole } from "./customTokens";
+import {
+  ALL_ROLES,
+  TOKEN_VAR,
+  type TokenOverrides,
+  type TokenRole,
+} from "./customTokens";
 import {
   CustomThemeContext,
   type CustomThemeValue,
@@ -88,7 +93,7 @@ function genId(): string {
 // Base palette (before UI overrides) for the active choice.
 function baseTokensFor(
   active: ThemeChoice,
-  library: SavedTheme[],
+  library: SavedTheme[]
 ): TokenOverrides {
   if (active.kind === "default") return {};
   if (active.kind === "preset") {
@@ -105,7 +110,8 @@ function baseTokensFor(
 // Effective mode for the active choice (drives data-theme).
 function modeFor(active: ThemeChoice, library: SavedTheme[]): ThemeMode | null {
   if (active.kind === "default") return null;
-  if (active.kind === "preset") return findPreset(active.presetId)?.mode ?? "light";
+  if (active.kind === "preset")
+    return findPreset(active.presetId)?.mode ?? "light";
   if (active.kind === "saved") {
     return library.find((t) => t.id === active.id)?.mode ?? "light";
   }
@@ -131,7 +137,7 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
 
   const baseTokens = useMemo(
     () => baseTokensFor(active, library),
-    [active, library],
+    [active, library]
   );
 
   // Apply base palette + UI overrides whenever any of them change.
@@ -141,16 +147,13 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
     if (mode) document.documentElement.setAttribute("data-theme", mode);
   }, [baseTokens, ui, active, library]);
 
-  const setChoice = useCallback(
-    (next: ThemeChoice) => {
-      setState((prev) => {
-        const updated = { ...prev, active: next };
-        saveToStorage(updated);
-        return updated;
-      });
-    },
-    [],
-  );
+  const setChoice = useCallback((next: ThemeChoice) => {
+    setState((prev) => {
+      const updated = { ...prev, active: next };
+      saveToStorage(updated);
+      return updated;
+    });
+  }, []);
 
   const resetToDefault = useCallback(() => {
     setState((prev) => {
@@ -187,7 +190,7 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
       });
       return id;
     },
-    [],
+    []
   );
 
   const renameTheme = useCallback((id: string, name: string) => {
@@ -195,7 +198,7 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
       const updated: PersistedTheme = {
         ...prev,
         library: prev.library.map((t) =>
-          t.id === id ? { ...t, name: name.trim() || t.name } : t,
+          t.id === id ? { ...t, name: name.trim() || t.name } : t
         ),
       };
       saveToStorage(updated);
@@ -261,7 +264,7 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
       applyTokensToRoot({ ...generatePalette(input, mode), ...ui });
       document.documentElement.setAttribute("data-theme", mode);
     },
-    [ui],
+    [ui]
   );
 
   const clearPreview = useCallback(() => {
@@ -304,7 +307,7 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
       resetUi,
       baseTokens,
       hydrate,
-    ],
+    ]
   );
 
   return (

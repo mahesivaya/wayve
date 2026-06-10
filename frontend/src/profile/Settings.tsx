@@ -47,15 +47,20 @@ function formatMoney(cents: number, currency: string): string {
 export default function Settings() {
   const navigate = useNavigate();
   const { user, refresh, logout } = useAuth();
-  const [profile, setProfile] = useState<(ProfileData & {
-    total_emails?: number;
-    email_storage_bytes?: number;
-    drive_storage_bytes?: number;
-    other_storage_bytes?: number;
-    memory_used_bytes?: number;
-    memory_limit_bytes?: number;
-  }) | null>(null);
-  const [subscription, setSubscription] = useState<SubscriptionResponse | null>(null);
+  const [profile, setProfile] = useState<
+    | (ProfileData & {
+        total_emails?: number;
+        email_storage_bytes?: number;
+        drive_storage_bytes?: number;
+        other_storage_bytes?: number;
+        memory_used_bytes?: number;
+        memory_limit_bytes?: number;
+      })
+    | null
+  >(null);
+  const [subscription, setSubscription] = useState<SubscriptionResponse | null>(
+    null
+  );
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -84,10 +89,12 @@ export default function Settings() {
   const onDeleteAccount = async () => {
     // Two-step confirmation — this is irreversible. The second prompt asks
     // the user to type their email so a stray click can't wipe an account.
-    if (!window.confirm(
-      "Permanently delete your account? This removes your emails, chats, " +
-      "files, notes and all connected mailboxes. This cannot be undone."
-    )) {
+    if (
+      !window.confirm(
+        "Permanently delete your account? This removes your emails, chats, " +
+          "files, notes and all connected mailboxes. This cannot be undone."
+      )
+    ) {
       return;
     }
     const typed = window.prompt(
@@ -95,7 +102,9 @@ export default function Settings() {
     );
     if (typed === null) return;
     if (typed.trim().toLowerCase() !== (user?.email ?? "").toLowerCase()) {
-      setDeleteAccountError("That didn't match your email — account not deleted.");
+      setDeleteAccountError(
+        "That didn't match your email — account not deleted."
+      );
       return;
     }
     setDeleteAccountError("");
@@ -114,9 +123,11 @@ export default function Settings() {
 
   const onDeleteOrg = async () => {
     const orgName = user?.organization_name ?? "this organization";
-    if (!window.confirm(
-      `Delete ${orgName}? Every member account you added will be removed and your own account will revert to a personal plan.`
-    )) {
+    if (
+      !window.confirm(
+        `Delete ${orgName}? Every member account you added will be removed and your own account will revert to a personal plan.`
+      )
+    ) {
       return;
     }
     setDeleteOrgError("");
@@ -194,7 +205,6 @@ export default function Settings() {
   return (
     <div className="settings-page">
       <div className="settings-stack">
-
         <h1 className="settings-page-title">Settings &amp; Privacy</h1>
 
         <section className="settings-card">
@@ -220,25 +230,41 @@ export default function Settings() {
                 Synced Emails
               </span>
               <strong>
-                {profile?.total_emails !== undefined ? `${profile.total_emails.toLocaleString()} emails` : "Loading…"}
+                {profile?.total_emails !== undefined
+                  ? `${profile.total_emails.toLocaleString()} emails`
+                  : "Loading…"}
               </strong>
             </div>
             <div className="settings-usage-row">
               <span>Email Storage</span>
-              <strong>{profile?.email_storage_bytes !== undefined ? formatBytes(profile.email_storage_bytes) : "Loading…"}</strong>
+              <strong>
+                {profile?.email_storage_bytes !== undefined
+                  ? formatBytes(profile.email_storage_bytes)
+                  : "Loading…"}
+              </strong>
             </div>
             <div className="settings-usage-row">
               <span>Drive Storage</span>
-              <strong>{profile?.drive_storage_bytes !== undefined ? formatBytes(profile.drive_storage_bytes) : "Loading…"}</strong>
+              <strong>
+                {profile?.drive_storage_bytes !== undefined
+                  ? formatBytes(profile.drive_storage_bytes)
+                  : "Loading…"}
+              </strong>
             </div>
             <div className="settings-usage-row">
               <span>Other Apps (Chat, Notes)</span>
-              <strong>{profile?.other_storage_bytes !== undefined ? formatBytes(profile.other_storage_bytes) : "Loading…"}</strong>
+              <strong>
+                {profile?.other_storage_bytes !== undefined
+                  ? formatBytes(profile.other_storage_bytes)
+                  : "Loading…"}
+              </strong>
             </div>
             <div className="settings-usage-row">
               <span>Connected Accounts</span>
               <strong>
-                {loaded ? `${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}` : "Loading…"}
+                {loaded
+                  ? `${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`
+                  : "Loading…"}
               </strong>
             </div>
             {loaded && accounts.length > 0 && (
@@ -268,7 +294,9 @@ export default function Settings() {
             <div className="settings-rows">
               <div className="settings-usage-row">
                 <span>Current Plan</span>
-                <strong>{subscription?.subscription?.plan_name ?? "Basic User Free"}</strong>
+                <strong>
+                  {subscription?.subscription?.plan_name ?? "Basic User Free"}
+                </strong>
               </div>
               <div className="settings-usage-row">
                 <span>Status</span>
@@ -300,10 +328,13 @@ export default function Settings() {
           {!invoicesLoaded ? (
             <p className="settings-loading-text">Loading transactions…</p>
           ) : invoicesError ? (
-            <p className="settings-support-empty">Couldn't load your transactions. Try again later.</p>
+            <p className="settings-support-empty">
+              Couldn't load your transactions. Try again later.
+            </p>
           ) : invoices.length === 0 ? (
             <p className="settings-support-empty">
-              No transactions yet. Charges and invoices will appear here once you upgrade to a paid plan.
+              No transactions yet. Charges and invoices will appear here once
+              you upgrade to a paid plan.
             </p>
           ) : (
             <ul className="settings-txn-list">
@@ -332,7 +363,9 @@ export default function Settings() {
                         )}
                       </span>
                     </div>
-                    <span className={`settings-txn-status status-${inv.status}`}>
+                    <span
+                      className={`settings-txn-status status-${inv.status}`}
+                    >
                       {inv.status}
                     </span>
                   </li>
@@ -377,7 +410,8 @@ export default function Settings() {
                     </span>
                     <span className="settings-ticket-meta">
                       {t.category} · {fmtDate(t.created_at)}
-                      {t.attachment_count > 0 && ` · ${t.attachment_count} attachment${t.attachment_count === 1 ? "" : "s"}`}
+                      {t.attachment_count > 0 &&
+                        ` · ${t.attachment_count} attachment${t.attachment_count === 1 ? "" : "s"}`}
                     </span>
                   </div>
                   <span className={`settings-ticket-status status-${t.status}`}>
@@ -391,12 +425,13 @@ export default function Settings() {
 
         {isOrgOwner && (
           <section className="settings-card settings-danger">
-            <h2 className="settings-card-title settings-danger-title">Danger zone</h2>
+            <h2 className="settings-card-title settings-danger-title">
+              Danger zone
+            </h2>
             <p className="settings-danger-text">
-              Delete the organization and revert your own account to a
-              personal account. Every member account you provisioned will
-              be removed. Your own emails, chats, and files stay on your
-              account.
+              Delete the organization and revert your own account to a personal
+              account. Every member account you provisioned will be removed.
+              Your own emails, chats, and files stay on your account.
             </p>
             {deleteOrgError && (
               <p className="settings-danger-error">{deleteOrgError}</p>
@@ -407,7 +442,9 @@ export default function Settings() {
               onClick={() => void onDeleteOrg()}
               disabled={deletingOrg}
             >
-              {deletingOrg ? "Deleting…" : "Delete organization & revert to personal"}
+              {deletingOrg
+                ? "Deleting…"
+                : "Delete organization & revert to personal"}
             </button>
           </section>
         )}
@@ -435,7 +472,6 @@ export default function Settings() {
             )}
           </section>
         )}
-
       </div>
 
       {supportOpen && (

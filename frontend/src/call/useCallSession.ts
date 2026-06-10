@@ -79,7 +79,7 @@ const RING_TIMEOUT_MS = 30_000;
 
 export function useCallSession(
   myId: number | null,
-  myEmail: string | undefined,
+  myEmail: string | undefined
 ): CallSession {
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -152,7 +152,7 @@ export function useCallSession(
       pcRef.current = pc;
       return pc;
     },
-    [sendSignal],
+    [sendSignal]
   );
 
   const attachLocalMedia = useCallback(
@@ -167,7 +167,7 @@ export function useCallSession(
         localVideoRef.current.srcObject = stream;
       }
     },
-    [],
+    []
   );
 
   const startCall = useCallback(
@@ -190,7 +190,7 @@ export function useCallSession(
         setCallState({ kind: "idle" });
       }, RING_TIMEOUT_MS);
     },
-    [callState.kind, sendSignal, teardownPeer, myEmail],
+    [callState.kind, sendSignal, teardownPeer, myEmail]
   );
 
   const acceptCall = useCallback(async () => {
@@ -207,7 +207,13 @@ export function useCallSession(
       teardownPeer();
       setCallState({ kind: "idle" });
     }
-  }, [callState, buildPeerConnection, attachLocalMedia, sendSignal, teardownPeer]);
+  }, [
+    callState,
+    buildPeerConnection,
+    attachLocalMedia,
+    sendSignal,
+    teardownPeer,
+  ]);
 
   const rejectCall = useCallback(() => {
     if (callState.kind !== "incoming") return;
@@ -257,7 +263,8 @@ export function useCallSession(
         }
 
         case "call-accept": {
-          if (callState.kind !== "outgoing" || callState.peerId !== from) return;
+          if (callState.kind !== "outgoing" || callState.peerId !== from)
+            return;
           if (ringTimerRef.current !== null) {
             window.clearTimeout(ringTimerRef.current);
             ringTimerRef.current = null;
@@ -331,7 +338,7 @@ export function useCallSession(
         }
       }
     },
-    [callState, buildPeerConnection, attachLocalMedia, sendSignal, teardownPeer],
+    [callState, buildPeerConnection, attachLocalMedia, sendSignal, teardownPeer]
   );
 
   // One WS for the lifetime of the host component. Auth lives in the cookie

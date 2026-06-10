@@ -8,7 +8,12 @@ interface ModalProps {
   children: React.ReactNode;
 }
 
-export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export default function Modal({
+  isOpen,
+  onClose,
+  title,
+  children,
+}: ModalProps) {
   // Handle ESC key and scroll locking
   useEffect(() => {
     if (!isOpen) return;
@@ -31,18 +36,22 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
-      <div 
-        className="modal-content" 
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div
+      className="modal-overlay"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           {title && <h3 className="modal-title">{title}</h3>}
-          <button 
-            className="modal-close-btn" 
-            onClick={onClose} 
+          <button
+            className="modal-close-btn"
+            onClick={onClose}
             aria-label="Close modal"
-          >✕</button>
+          >
+            ✕
+          </button>
         </div>
         <div className="modal-body">{children}</div>
       </div>

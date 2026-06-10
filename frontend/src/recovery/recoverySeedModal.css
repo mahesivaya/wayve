@@ -114,7 +114,7 @@
 
 .recovery-copy-btn:disabled,
 .recovery-primary-btn:disabled,
-.recovery-secondary-btn:disabled{
+.recovery-secondary-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -161,7 +161,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.recovery-verify-grid input:focus{
+.recovery-verify-grid input:focus {
   outline: 2px solid var(--color-primary-panel-border);
   border-color: var(--color-primary-action);
 }
@@ -200,7 +200,7 @@
   border-color: var(--color-primary-action);
 }
 
-@media (max-width: 640px){
+@media (max-width: 640px) {
   .recovery-grid {
     grid-template-columns: repeat(2, 1fr);
   }

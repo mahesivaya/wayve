@@ -14,7 +14,9 @@ import { savePrivateKey, savePublicKey } from "./keyStore";
 const PBKDF2_ITERATIONS = 600_000; // OWASP 2023 recommendation for SHA-256
 const PBKDF2_SALT = new TextEncoder().encode("wayve-recovery-v1");
 
-async function deriveWrappingKey(mnemonicEntropy: Uint8Array): Promise<CryptoKey> {
+async function deriveWrappingKey(
+  mnemonicEntropy: Uint8Array
+): Promise<CryptoKey> {
   // PBKDF2 happens to be slow on purpose. Importing the entropy as raw
   // key material is the standard subtle-crypto pattern.
   const baseKey = await crypto.subtle.importKey(
@@ -138,7 +140,7 @@ export async function unwrapKeysFromRecovery(
   envelope: WrappedKeyEnvelope,
   mnemonicEntropy: Uint8Array,
   userId: number,
-  email?: string | null,
+  email?: string | null
 ): Promise<{ privateKey: CryptoKey; publicKeyBytes: ArrayBuffer }> {
   if (envelope.v !== 1) {
     throw new Error(`Unsupported wrapped-key version: ${envelope.v}`);

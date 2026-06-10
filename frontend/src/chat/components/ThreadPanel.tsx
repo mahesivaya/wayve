@@ -50,8 +50,12 @@ export default function ThreadPanel({
       </header>
 
       <div className="thread-panel-body">
-        <div className={`message ${parent.sender_id === currentUserId ? "me" : ""}`}>
-          <div className={`bubble ${parent.sender_id === currentUserId ? "me" : "other"}`}>
+        <div
+          className={`message ${parent.sender_id === currentUserId ? "me" : ""}`}
+        >
+          <div
+            className={`bubble ${parent.sender_id === currentUserId ? "me" : "other"}`}
+          >
             <div>{parent.content}</div>
             <div className="message-meta">{formatTime(parent.created_at)}</div>
           </div>
@@ -66,10 +70,15 @@ export default function ThreadPanel({
         {replies.map((reply, i) => {
           const mine = reply.sender_id === currentUserId;
           return (
-            <div key={reply.message_id ?? `r-${i}`} className={`message ${mine ? "me" : ""}`}>
+            <div
+              key={reply.message_id ?? `r-${i}`}
+              className={`message ${mine ? "me" : ""}`}
+            >
               <div className={`bubble ${mine ? "me" : "other"}`}>
                 <div>{reply.content}</div>
-                <div className="message-meta">{formatTime(reply.created_at)}</div>
+                <div className="message-meta">
+                  {formatTime(reply.created_at)}
+                </div>
               </div>
             </div>
           );
@@ -91,7 +100,11 @@ export default function ThreadPanel({
           placeholder={isConnected ? "Reply in thread…" : "Connecting…"}
           rows={2}
         />
-        <button type="button" onClick={() => void submit()} disabled={!isConnected || !draft.trim()}>
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={!isConnected || !draft.trim()}
+        >
           Reply
         </button>
       </div>

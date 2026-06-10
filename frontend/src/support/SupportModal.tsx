@@ -6,7 +6,13 @@
 // see and resolve tickets via /platform/support. Replies are sent
 // off-band by email to the ticket owner.
 
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import {
   createTicket,
   uploadTicketAttachments,
@@ -51,15 +57,19 @@ export default function SupportModal({ onClose, onSubmitted }: Props) {
   const addFiles = (e: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
     if (picked.length === 0) return;
-    const oversized = picked.filter((f) => f.size > MAX_ATTACHMENT_MB * 1024 * 1024);
+    const oversized = picked.filter(
+      (f) => f.size > MAX_ATTACHMENT_MB * 1024 * 1024
+    );
     if (oversized.length > 0) {
       setError(
         `These files exceed ${MAX_ATTACHMENT_MB} MB and were skipped: ${oversized
           .map((f) => f.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
     }
-    const accepted = picked.filter((f) => f.size <= MAX_ATTACHMENT_MB * 1024 * 1024);
+    const accepted = picked.filter(
+      (f) => f.size <= MAX_ATTACHMENT_MB * 1024 * 1024
+    );
     setFiles((prev) => [...prev, ...accepted]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -98,7 +108,12 @@ export default function SupportModal({ onClose, onSubmitted }: Props) {
 
   if (createdId !== null) {
     return (
-      <div className="support-modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+      <div
+        className="support-modal-backdrop"
+        role="dialog"
+        aria-modal="true"
+        onClick={onClose}
+      >
         <div className="support-modal" onClick={(e) => e.stopPropagation()}>
           <header className="support-modal-header">
             <h2>Ticket submitted</h2>
@@ -113,7 +128,11 @@ export default function SupportModal({ onClose, onSubmitted }: Props) {
           </header>
           <section className="support-form-section">
             <div className="support-form-actions">
-              <button type="button" className="support-primary-btn" onClick={onClose}>
+              <button
+                type="button"
+                className="support-primary-btn"
+                onClick={onClose}
+              >
                 Done
               </button>
             </div>
@@ -124,7 +143,12 @@ export default function SupportModal({ onClose, onSubmitted }: Props) {
   }
 
   return (
-    <div className="support-modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+    <div
+      className="support-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
       <div className="support-modal" onClick={(e) => e.stopPropagation()}>
         <header className="support-modal-header">
           <h2>Report an issue</h2>
@@ -188,7 +212,10 @@ export default function SupportModal({ onClose, onSubmitted }: Props) {
 
             <label className="support-attach-label">
               <span>
-                Attachments <span className="support-attach-hint">(screenshots / files, ≤ {MAX_ATTACHMENT_MB} MB each)</span>
+                Attachments{" "}
+                <span className="support-attach-hint">
+                  (screenshots / files, ≤ {MAX_ATTACHMENT_MB} MB each)
+                </span>
               </span>
               <input
                 ref={fileInputRef}

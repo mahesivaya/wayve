@@ -58,7 +58,12 @@ export function normalizeEmailBody(body: string) {
 // pick the right wrapped key without re-parsing the JSON.
 type ParsedWayveEnvelope =
   | { kind: "single"; data: number[]; key: number[]; iv: number[] }
-  | { kind: "multi"; data: number[]; iv: number[]; keys: Record<string, number[]> };
+  | {
+      kind: "multi";
+      data: number[];
+      iv: number[];
+      keys: Record<string, number[]>;
+    };
 
 function parseWayveEncryptedBody(body: string): ParsedWayveEnvelope | null {
   const trimmed = normalizeEmailBody(body).trim();
@@ -97,7 +102,8 @@ function parseWayveEncryptedBody(body: string): ParsedWayveEnvelope | null {
     parsed?.type === "wayve_encrypted_multi" &&
     Array.isArray(parsed.data) &&
     Array.isArray(parsed.iv) &&
-    parsed.keys && typeof parsed.keys === "object"
+    parsed.keys &&
+    typeof parsed.keys === "object"
   ) {
     return {
       kind: "multi",

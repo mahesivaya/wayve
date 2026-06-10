@@ -52,7 +52,7 @@ export default function Notes() {
           content: note.content
             ? await decryptForSelf(note.content, userId)
             : note.content,
-        })),
+        }))
       );
       setNotes(decrypted);
     } catch (err) {
@@ -128,7 +128,7 @@ export default function Notes() {
       setStatus(
         err instanceof Error && err.message.includes("public key")
           ? "Generate an encryption key first (see chat setup)"
-          : "Save failed",
+          : "Save failed"
       );
     } finally {
       setSaving(false);
@@ -160,7 +160,7 @@ export default function Notes() {
       [note.title ?? "", note.content ?? "", note.updated_at ?? ""]
         .join(" ")
         .toLowerCase()
-        .includes(normalizedSearchQuery),
+        .includes(normalizedSearchQuery)
     );
   }, [normalizedSearchQuery, notes]);
 
@@ -247,11 +247,7 @@ export default function Notes() {
             </div>
 
             <div className="notes-form-actions">
-              <button
-                type="button"
-                onClick={closeEditor}
-                disabled={saving}
-              >
+              <button type="button" onClick={closeEditor} disabled={saving}>
                 Cancel
               </button>
               {isEditing && (

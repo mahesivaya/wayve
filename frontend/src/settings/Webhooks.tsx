@@ -41,7 +41,8 @@ export default function Webhooks() {
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<CreateWebhookInput>(EMPTY_DRAFT);
   const [busy, setBusy] = useState("");
-  const [createdSecret, setCreatedSecret] = useState<CreatedWebhookEndpoint | null>(null);
+  const [createdSecret, setCreatedSecret] =
+    useState<CreatedWebhookEndpoint | null>(null);
 
   // Delivery viewer
   const [openId, setOpenId] = useState<number | null>(null);
@@ -95,7 +96,9 @@ export default function Webhooks() {
       setCreatedSecret(created);
       setShowForm(false);
       setDraft(EMPTY_DRAFT);
-      setSuccess("Webhook created. Copy the signing secret now — it is shown only once.");
+      setSuccess(
+        "Webhook created. Copy the signing secret now — it is shown only once."
+      );
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create webhook");
@@ -105,7 +108,9 @@ export default function Webhooks() {
   };
 
   const remove = async (endpoint: WebhookEndpoint) => {
-    if (!window.confirm(`Delete webhook ${endpoint.url}? This cannot be undone.`)) {
+    if (
+      !window.confirm(`Delete webhook ${endpoint.url}? This cannot be undone.`)
+    ) {
       return;
     }
     dismiss();
@@ -140,9 +145,13 @@ export default function Webhooks() {
     setBusy(`test:${endpoint.id}`);
     try {
       await testWebhook(endpoint.id);
-      setSuccess(`Test event queued for ${endpoint.url}. Open the Deliveries view to watch it land.`);
+      setSuccess(
+        `Test event queued for ${endpoint.url}. Open the Deliveries view to watch it land.`
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to queue test event");
+      setError(
+        err instanceof Error ? err.message : "Failed to queue test event"
+      );
     } finally {
       setBusy("");
     }
@@ -160,7 +169,9 @@ export default function Webhooks() {
     try {
       setDeliveries(await listDeliveries(endpoint.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load deliveries");
+      setError(
+        err instanceof Error ? err.message : "Failed to load deliveries"
+      );
     } finally {
       setDeliveriesLoading(false);
     }
@@ -180,7 +191,11 @@ export default function Webhooks() {
           </p>
         </div>
         {!showForm && (
-          <button type="button" className="wh-btn primary" onClick={() => setShowForm(true)}>
+          <button
+            type="button"
+            className="wh-btn primary"
+            onClick={() => setShowForm(true)}
+          >
             + Add webhook
           </button>
         )}
@@ -226,7 +241,9 @@ export default function Webhooks() {
             Description (optional)
             <input
               value={draft.description ?? ""}
-              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+              onChange={(e) =>
+                setDraft({ ...draft, description: e.target.value })
+              }
               placeholder="e.g. CRM sync"
             />
           </label>
@@ -278,7 +295,9 @@ export default function Webhooks() {
       )}
 
       {endpoints.length === 0 ? (
-        <div className="wh-empty">No webhooks yet. Add one to start receiving events.</div>
+        <div className="wh-empty">
+          No webhooks yet. Add one to start receiving events.
+        </div>
       ) : (
         endpoints.map((endpoint) => (
           <article key={endpoint.id} className="wh-row">
@@ -290,8 +309,12 @@ export default function Webhooks() {
                 )}
               </div>
               <div className="wh-row-tags">
-                {endpoint.org_wide && <span className="wh-pill info">org-wide</span>}
-                <span className={`wh-pill ${endpoint.enabled ? "ok" : "error"}`}>
+                {endpoint.org_wide && (
+                  <span className="wh-pill info">org-wide</span>
+                )}
+                <span
+                  className={`wh-pill ${endpoint.enabled ? "ok" : "error"}`}
+                >
                   {endpoint.enabled ? "enabled" : "disabled"}
                 </span>
                 {endpoint.consecutive_failures > 0 && (
@@ -304,9 +327,12 @@ export default function Webhooks() {
             <div className="wh-row-meta">
               <code>{endpoint.secret_preview}</code>
               <span>
-                {endpoint.events.length} event{endpoint.events.length === 1 ? "" : "s"} ·{" "}
+                {endpoint.events.length} event
+                {endpoint.events.length === 1 ? "" : "s"} ·{" "}
                 {endpoint.events.slice(0, 3).join(", ")}
-                {endpoint.events.length > 3 ? ` +${endpoint.events.length - 3} more` : ""}
+                {endpoint.events.length > 3
+                  ? ` +${endpoint.events.length - 3} more`
+                  : ""}
               </span>
               <span>
                 last success {fmtDate(endpoint.last_success_at)} · last failure{" "}
@@ -372,10 +398,14 @@ export default function Webhooks() {
                           <td>
                             <code>{d.event_type}</code>
                             <br />
-                            <small style={{ color: "#6b7280" }}>{d.event_id}</small>
+                            <small style={{ color: "#6b7280" }}>
+                              {d.event_id}
+                            </small>
                           </td>
                           <td>
-                            <span className={`wh-pill ${d.status === "delivered" ? "ok" : d.status === "pending" ? "info" : "error"}`}>
+                            <span
+                              className={`wh-pill ${d.status === "delivered" ? "ok" : d.status === "pending" ? "info" : "error"}`}
+                            >
                               {d.status}
                             </span>
                           </td>
@@ -383,7 +413,8 @@ export default function Webhooks() {
                           <td>{d.attempt_count}</td>
                           <td title={d.response_excerpt ?? ""}>
                             {d.response_excerpt
-                              ? d.response_excerpt.slice(0, 80) + (d.response_excerpt.length > 80 ? "…" : "")
+                              ? d.response_excerpt.slice(0, 80) +
+                                (d.response_excerpt.length > 80 ? "…" : "")
                               : "—"}
                           </td>
                         </tr>

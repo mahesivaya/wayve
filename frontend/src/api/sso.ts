@@ -75,10 +75,9 @@ export async function deleteSsoConfig(orgId: number): Promise<void> {
 
 /** Test the connection — backend fetches the IdP's discovery doc. */
 export function testSsoConfig(orgId: number): Promise<SsoTestResult> {
-  return apiFetchJson<SsoTestResult>(
-    `/organizations/${orgId}/sso/test`,
-    { method: "POST" }
-  );
+  return apiFetchJson<SsoTestResult>(`/organizations/${orgId}/sso/test`, {
+    method: "POST",
+  });
 }
 
 /**

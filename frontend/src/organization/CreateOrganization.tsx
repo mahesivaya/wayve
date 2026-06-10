@@ -21,14 +21,14 @@ function loadStripeScript(): Promise<void> {
   if (window.Stripe) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(
-      `script[src="${STRIPE_JS_URL}"]`,
+      `script[src="${STRIPE_JS_URL}"]`
     );
     if (existing) {
       existing.addEventListener("load", () => resolve(), { once: true });
       existing.addEventListener(
         "error",
         () => reject(new Error("Stripe.js failed to load")),
-        { once: true },
+        { once: true }
       );
       return;
     }
@@ -153,7 +153,7 @@ export default function CreateOrganization() {
         });
         const paymentElement = elements.create("payment", { layout: "tabs" });
         paymentElement.on("change", (event) =>
-          setCardMessage(event.error?.message ?? ""),
+          setCardMessage(event.error?.message ?? "")
         );
         paymentElement.on("ready", () => setCardFormReady(true));
         paymentElement.mount("#org-card-element");
@@ -163,7 +163,7 @@ export default function CreateOrganization() {
       } catch (err) {
         if (!cancelled) {
           setCardMessage(
-            err instanceof Error ? err.message : "Could not load the card form",
+            err instanceof Error ? err.message : "Could not load the card form"
           );
         }
       }
@@ -172,7 +172,13 @@ export default function CreateOrganization() {
       cancelled = true;
       teardownCardForm();
     };
-  }, [isPersonal, billingReady, billingConfigured, paymentChoice, teardownCardForm]);
+  }, [
+    isPersonal,
+    billingReady,
+    billingConfigured,
+    paymentChoice,
+    teardownCardForm,
+  ]);
 
   const goToBootstrap = useCallback(
     async (org: CreatedMyOrganization) => {
@@ -182,10 +188,10 @@ export default function CreateOrganization() {
         : "";
       void navigate(
         `/organization/recovery-key/bootstrap?org=${org.organization_id}${planSuffix}`,
-        { replace: true },
+        { replace: true }
       );
     },
-    [refresh, intendedPlan, navigate],
+    [refresh, intendedPlan, navigate]
   );
 
   const submitOrg = async (event: FormEvent<HTMLFormElement>) => {
@@ -245,7 +251,7 @@ export default function CreateOrganization() {
       await goToBootstrap(org);
     } catch (err) {
       setCreateError(
-        err instanceof Error ? err.message : "Failed to create organization",
+        err instanceof Error ? err.message : "Failed to create organization"
       );
       setCreating(false);
     }
@@ -348,7 +354,8 @@ export default function CreateOrganization() {
                     <span>
                       Use saved card —{" "}
                       <strong>
-                        {defaultCard.brand.toUpperCase()} •••• {defaultCard.last4}
+                        {defaultCard.brand.toUpperCase()} ••••{" "}
+                        {defaultCard.last4}
                       </strong>
                     </span>
                   </label>

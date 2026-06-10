@@ -52,7 +52,8 @@ export default function Drive() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canShareDrive = user?.scope === "organization" || user?.scope === "platform";
+  const canShareDrive =
+    user?.scope === "organization" || user?.scope === "platform";
 
   // Refetch files + folders whenever the user changes folders. The backend
   // narrows by folder_id; we mirror that on the client so search/filter only
@@ -133,7 +134,7 @@ export default function Drive() {
 
   const removeFolder = async (folder: Folder) => {
     const confirmed = window.confirm(
-      `Delete "${folder.name}" and everything inside it? This can't be undone.`,
+      `Delete "${folder.name}" and everything inside it? This can't be undone.`
     );
     if (!confirmed) return;
     try {
@@ -195,7 +196,9 @@ export default function Drive() {
       void fetchFiles();
     } catch (err) {
       logger.error("Upload error:", err);
-      setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
+      setError(
+        err instanceof Error ? err.message : "Upload failed. Please try again."
+      );
     } finally {
       setUploading(false);
       // Nudge the global storage banner to re-check usage — storage went up on
@@ -246,7 +249,7 @@ export default function Drive() {
   // === Filtering ===
   const visibleFolders = normalizedSearchQuery
     ? folders.filter((f) =>
-        f.name.toLowerCase().includes(normalizedSearchQuery),
+        f.name.toLowerCase().includes(normalizedSearchQuery)
       )
     : folders;
 
@@ -255,13 +258,12 @@ export default function Drive() {
         [file.name, file.file_type, file.size.toString(), file.created_at]
           .join(" ")
           .toLowerCase()
-          .includes(normalizedSearchQuery),
+          .includes(normalizedSearchQuery)
       )
     : uploadedFiles;
 
   return (
     <div className="drive-container">
-
       {/* 🔹 Breadcrumb + folder actions */}
       <div className="drive-breadcrumb">
         {path.map((crumb, idx) => (
@@ -436,21 +438,24 @@ export default function Drive() {
         {loading ? (
           <p>Loading...</p>
         ) : !visibleUploadedFiles || visibleUploadedFiles.length === 0 ? (
-          <p>{normalizedSearchQuery ? "No files match your search" : "No files uploaded yet"}</p>
+          <p>
+            {normalizedSearchQuery
+              ? "No files match your search"
+              : "No files uploaded yet"}
+          </p>
         ) : (
           <div className="file-list">
             {visibleUploadedFiles.map((file) => (
               <div key={file.id} className="file-row">
-
                 <div className="file-left">
                   <span className="file-icon">
                     {file.file_type === "png" || file.file_type === "jpg"
                       ? "🖼️"
                       : file.file_type === "pdf"
-                      ? "📕"
-                      : file.file_type === "zip"
-                      ? "🗜️"
-                      : "📄"}
+                        ? "📕"
+                        : file.file_type === "zip"
+                          ? "🗜️"
+                          : "📄"}
                   </span>
 
                   <div className="file-main">
@@ -485,7 +490,6 @@ export default function Drive() {
                     </>
                   )}
                 </div>
-
               </div>
             ))}
           </div>
@@ -500,14 +504,21 @@ export default function Drive() {
           ) : (
             <div className="file-list">
               {sharedItems.map((item) => (
-                <div key={`${item.resource_type}-${item.id}`} className="file-row">
+                <div
+                  key={`${item.resource_type}-${item.id}`}
+                  className="file-row"
+                >
                   <div className="file-left">
-                    <span className="file-icon">{item.resource_type === "folder" ? "📁" : "📄"}</span>
+                    <span className="file-icon">
+                      {item.resource_type === "folder" ? "📁" : "📄"}
+                    </span>
                     <div className="file-main">
                       <div className="file-name">{item.name}</div>
                       <div className="file-meta">
                         {item.resource_type} • {item.permission}
-                        {item.size != null ? ` • ${formatFileSize(item.size)}` : ""}
+                        {item.size != null
+                          ? ` • ${formatFileSize(item.size)}`
+                          : ""}
                       </div>
                     </div>
                   </div>
@@ -527,7 +538,6 @@ export default function Drive() {
           )}
         </div>
       )}
-
     </div>
   );
 }

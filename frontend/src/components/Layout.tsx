@@ -1,8 +1,19 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { BRAND_NAME } from "../config/brand";
 import { useAuth } from "../auth/useAuth";
-import { canAccessApiKeyAdmin, canViewPricing, hasPermission } from "../auth/permissions";
-import { Suspense, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
+import {
+  canAccessApiKeyAdmin,
+  canViewPricing,
+  hasPermission,
+} from "../auth/permissions";
+import {
+  Suspense,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
@@ -31,16 +42,19 @@ import "./Layout.css";
 // icon is intentionally two-tone.
 function BugReportIcon({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
       <path
         d="M11.13 3.3a1 1 0 0 1 1.74 0l9.4 16.3a1 1 0 0 1-.87 1.5H2.6a1 1 0 0 1-.87-1.5z"
         fill="#f5a623"
       />
-      <rect x="10.85" y="8.5" width="2.3" height="7.2" rx="1.05" fill="#2d2d2d" />
+      <rect
+        x="10.85"
+        y="8.5"
+        width="2.3"
+        height="7.2"
+        rx="1.05"
+        fill="#2d2d2d"
+      />
       <circle cx="12" cy="18.4" r="1.35" fill="#2d2d2d" />
     </svg>
   );
@@ -73,10 +87,7 @@ function appKeyFromPath(pathname: string): AppKey {
 const SPLIT_STORAGE_KEY = "rwayve.layout.split";
 
 function isValidAppKey(value: unknown): value is AppKey {
-  return (
-    typeof value === "string" &&
-    SPLIT_APPS.some((a) => a.key === value)
-  );
+  return typeof value === "string" && SPLIT_APPS.some((a) => a.key === value);
 }
 
 type PersistedSplit = {
@@ -116,7 +127,7 @@ const persistedSidebarSections: Record<string, boolean> = {};
 
 function usePersistentSection(key: string) {
   const [open, setOpen] = useState<boolean>(
-    () => persistedSidebarSections[key] ?? false,
+    () => persistedSidebarSections[key] ?? false
   );
   useEffect(() => {
     persistedSidebarSections[key] = open;
@@ -136,22 +147,22 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Three-pane state management. Lazy init reads any persisted split
   // from a previous visit; the effect below mirrors changes back.
   const [middleView, setMiddleView] = useState<AppKey | null>(
-    () => loadPersistedSplit().middleView,
+    () => loadPersistedSplit().middleView
   );
   const [rightView, setRightView] = useState<AppKey | null>(
-    () => loadPersistedSplit().rightView,
+    () => loadPersistedSplit().rightView
   );
 
   // Decides whether the next header-link click navigates or changes the duplicate pane.
   const [splitTarget, setSplitTarget] = useState<"left" | "right">(
-    () => loadPersistedSplit().splitTarget,
+    () => loadPersistedSplit().splitTarget
   );
 
   useEffect(() => {
     try {
       localStorage.setItem(
         SPLIT_STORAGE_KEY,
-        JSON.stringify({ middleView, rightView, splitTarget }),
+        JSON.stringify({ middleView, rightView, splitTarget })
       );
     } catch {
       // Storage quota / private mode — silently ignore, split just
@@ -168,7 +179,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const [isNarrow, setIsNarrow] = useState<boolean>(
     () =>
       typeof window !== "undefined" &&
-      window.matchMedia("(max-width: 768px)").matches,
+      window.matchMedia("(max-width: 768px)").matches
   );
 
   useEffect(() => {
@@ -187,9 +198,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Collapsible sidebar groups always start collapsed on mount/reload — they
   // no longer auto-expand from the current URL. The user opens what they want.
   const [logsExpanded, setLogsExpanded] = usePersistentSection("logs");
-  const [workspaceExpanded, setWorkspaceExpanded] = usePersistentSection("workspace");
+  const [workspaceExpanded, setWorkspaceExpanded] =
+    usePersistentSection("workspace");
   // "Projects" is a sub-group under Workspace, listing the project names.
-  const [projectsExpanded, setProjectsExpanded] = usePersistentSection("projects");
+  const [projectsExpanded, setProjectsExpanded] =
+    usePersistentSection("projects");
   // Projects + teams are org-scoped and fetched from the backend. Creation and
   // rename are org-owner-only (the controls are hidden otherwise; the backend
   // enforces it regardless).
@@ -224,11 +237,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     setEditingProject(null);
     const current = projects.find((p) => p.id === id);
     if (!next || !current || next === current.name) return;
-    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name: next } : p)));
+    setProjects((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, name: next } : p))
+    );
     updateProject(id, next).catch(() => {
       // Revert on failure so the sidebar reflects the persisted name.
       setProjects((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, name: current.name } : p)),
+        prev.map((p) => (p.id === id ? { ...p, name: current.name } : p))
       );
     });
   };
@@ -253,8 +268,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       .catch(() => {});
   };
   const [teamsExpanded, setTeamsExpanded] = usePersistentSection("teams");
-  const [platformExpanded, setPlatformExpanded] = usePersistentSection("platform");
-  const [developersExpanded, setDevelopersExpanded] = usePersistentSection("developers");
+  const [platformExpanded, setPlatformExpanded] =
+    usePersistentSection("platform");
+  const [developersExpanded, setDevelopersExpanded] =
+    usePersistentSection("developers");
 
   // Desktop sidebar can be collapsed to an icon-only rail. Persisted so the
   // user's preference survives reloads.
@@ -270,7 +287,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     try {
       localStorage.setItem(
         "rwayve.sidebar.collapsed",
-        sidebarCollapsed ? "1" : "0",
+        sidebarCollapsed ? "1" : "0"
       );
     } catch {
       // private mode / quota — preference just won't persist this session.
@@ -324,7 +341,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     try {
       localStorage.setItem(
         PANE_WEIGHTS_STORAGE_KEY,
-        JSON.stringify(paneWeights),
+        JSON.stringify(paneWeights)
       );
     } catch {
       // ignore
@@ -344,10 +361,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         const container = contentRef.current;
         if (!container) return;
         const leftEl = container.querySelector<HTMLElement>(
-          `.split-pane.${leftKey}`,
+          `.split-pane.${leftKey}`
         );
         const rightEl = container.querySelector<HTMLElement>(
-          `.split-pane.${rightKey}`,
+          `.split-pane.${rightKey}`
         );
         if (!leftEl || !rightEl) return;
 
@@ -365,7 +382,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           const maxFraction = 1 - PANE_MIN_WEIGHT;
           const fraction = Math.max(
             minFraction,
-            Math.min(maxFraction, rawFraction),
+            Math.min(maxFraction, rawFraction)
           );
           setPaneWeights((w) => ({
             ...w,
@@ -388,7 +405,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         document.body.style.userSelect = "none";
         document.body.style.cursor = "col-resize";
       },
-    [paneWeights],
+    [paneWeights]
   );
 
   const middleApp = SPLIT_APPS.find((a) => a.key === middleView) ?? null;
@@ -398,7 +415,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const rightApp = SPLIT_APPS.find((a) => a.key === rightView) ?? null;
   const RightComp = rightApp?.Comp ?? null;
   const rightLabel = rightApp?.label ?? null;
-  const leftApp = SPLIT_APPS.find((a) => a.key === appKeyFromPath(location.pathname)) ?? null;
+  const leftApp =
+    SPLIT_APPS.find((a) => a.key === appKeyFromPath(location.pathname)) ?? null;
   const leftLabel = leftApp?.label ?? "Home";
   const splitOpen = Boolean(middleView || rightView);
 
@@ -421,7 +439,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // When the split is open, sidebar clicks target the right pane instead
   // of navigating the URL. When closed, the link behaves normally.
   const renderSidebarItem = useCallback(
-    (path: string, app: AppKey, label: string, icon: ReactNode, badge?: number) => {
+    (
+      path: string,
+      app: AppKey,
+      label: string,
+      icon: ReactNode,
+      badge?: number
+    ) => {
       const isLeftActive =
         app === "home"
           ? location.pathname === "/" || location.pathname === "/home"
@@ -444,7 +468,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             }
           }}
         >
-          <span className="sidebar-icon" aria-hidden="true">{icon}</span>
+          <span className="sidebar-icon" aria-hidden="true">
+            {icon}
+          </span>
           <span className="sidebar-label">{label}</span>
           {showBadge && (
             <span className="sidebar-badge" aria-label={`${badge} unread`}>
@@ -454,14 +480,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </Link>
       );
     },
-    [location.pathname, middleView, rightView, splitTarget],
+    [location.pathname, middleView, rightView, splitTarget]
   );
 
   const renderSidebarLink = (
     path: string,
     label: string,
     icon: ReactNode,
-    isActive: boolean,
+    isActive: boolean
   ) => (
     <Link
       to={path}
@@ -469,7 +495,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       className={`sidebar-link ${isActive ? "active" : ""}`.trim()}
       onClick={() => setNavOpen(false)}
     >
-      <span className="sidebar-icon" aria-hidden="true">{icon}</span>
+      <span className="sidebar-icon" aria-hidden="true">
+        {icon}
+      </span>
       <span className="sidebar-label">{label}</span>
     </Link>
   );
@@ -482,7 +510,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     label: string,
     expanded: boolean,
     onToggle: () => void,
-    onAdd?: () => void,
+    onAdd?: () => void
   ) => (
     <div className="sidebar-section-header">
       <button
@@ -537,7 +565,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // [/billing](../billing/Billing.tsx) self-service view; staff-only.
   const canAccessPlatformBilling =
     user.scope === "platform" &&
-    (hasPermission(user, "billing:read") || hasPermission(user, "billing:manage"));
+    (hasPermission(user, "billing:read") ||
+      hasPermission(user, "billing:manage"));
   const canAccessPlatformDeveloper =
     user.scope === "platform" &&
     (hasPermission(user, "logs:read") ||
@@ -616,662 +645,691 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   return (
     <div className="app">
-    <SearchProvider>
-      {/* 🔝 HEADER — brand + inline search + global actions. App
+      <SearchProvider>
+        {/* 🔝 HEADER — brand + inline search + global actions. App
           navigation lives in the left sidebar. */}
-      <div className="header">
-        <div className="header-brand">
-          <div className="logo" onClick={() => navigate("/")}>{BRAND_NAME}</div>
-          {/* Header toggle is the mobile hamburger ONLY. On wide screens the
+        <div className="header">
+          <div className="header-brand">
+            <div className="logo" onClick={() => navigate("/")}>
+              {BRAND_NAME}
+            </div>
+            {/* Header toggle is the mobile hamburger ONLY. On wide screens the
               show/hide control lives on the sidebar divider (see
               .sidebar-divider-toggle below); there's no persistent divider in
               the ≤768px off-canvas overlay, so the header button stays for it. */}
-          {isNarrow && (
-            <button
-              type="button"
-              className="sidebar-toggle-btn"
-              onClick={() => setNavOpen((open) => !open)}
-              title={navOpen ? "Hide sidebar" : "Show sidebar"}
-              aria-label={navOpen ? "Hide sidebar" : "Show sidebar"}
-              aria-expanded={navOpen}
-            >
-              <svg
-                className="sidebar-toggle-icon"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
+            {isNarrow && (
+              <button
+                type="button"
+                className="sidebar-toggle-btn"
+                onClick={() => setNavOpen((open) => !open)}
+                title={navOpen ? "Hide sidebar" : "Show sidebar"}
+                aria-label={navOpen ? "Hide sidebar" : "Show sidebar"}
+                aria-expanded={navOpen}
               >
-                {/* Panel frame for context */}
-                <rect x="3" y="5" width="18" height="14" rx="2.2" />
-                <line x1="9" y1="5" x2="9" y2="19" />
-                {/* Arrow points the way the panel will move on click:
+                <svg
+                  className="sidebar-toggle-icon"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  {/* Panel frame for context */}
+                  <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                  <line x1="9" y1="5" x2="9" y2="19" />
+                  {/* Arrow points the way the panel will move on click:
                     open → left chevron (will hide); closed → right (show). */}
-                {navOpen ? (
-                  <polyline points="15 9 12 12 15 15" />
-                ) : (
-                  <polyline points="12 9 15 12 12 15" />
-                )}
-              </svg>
-            </button>
-          )}
-        </div>
+                  {navOpen ? (
+                    <polyline points="15 9 12 12 15 15" />
+                  ) : (
+                    <polyline points="12 9 15 12 12 15" />
+                  )}
+                </svg>
+              </button>
+            )}
+          </div>
 
-        {!location.pathname.startsWith("/emails") &&
-          !location.pathname.startsWith("/notes") && <SearchBar />}
+          {!location.pathname.startsWith("/emails") &&
+            !location.pathname.startsWith("/notes") && <SearchBar />}
 
-        <div className="actions">
-          {/* Bug-report shortcut. Always visible to signed-in users so
+          <div className="actions">
+            {/* Bug-report shortcut. Always visible to signed-in users so
               issues can be filed from anywhere without first hunting through
               Settings. Same overlay as ProfileMenu's "Help & Report issue".
               Sits before Upgrade so the monetization CTA still has primary
               emphasis on the right edge. */}
-          <button
-            type="button"
-            className="header-bug-btn"
-            onClick={() => setSupportOpen(true)}
-            title="Report an issue"
-            aria-label="Report an issue"
-          >
-            <BugReportIcon className="header-bug-icon" />
-          </button>
+            <button
+              type="button"
+              className="header-bug-btn"
+              onClick={() => setSupportOpen(true)}
+              title="Report an issue"
+              aria-label="Report an issue"
+            >
+              <BugReportIcon className="header-bug-icon" />
+            </button>
 
-          {/* Welcome / role label removed — the signed-in identity is
+            {/* Welcome / role label removed — the signed-in identity is
               already visible via the ProfileMenu avatar on the right.
               Keep the Upgrade nudge here because it's the single most
               clickable monetization surface for free personal accounts. */}
-          {isBasicPersonalUser && (
+            {isBasicPersonalUser && (
+              <button
+                type="button"
+                className="header-upgrade-btn"
+                onClick={goToUpgrade}
+              >
+                Upgrade
+              </button>
+            )}
+
             <button
               type="button"
-              className="header-upgrade-btn"
-              onClick={goToUpgrade}
+              className={`duplicate-pane-btn ${splitTarget === "right" ? "active" : ""}`}
+              onClick={duplicateCurrentApp}
+              title="Duplicate current app"
+              aria-label="Duplicate current app"
             >
-              Upgrade
+              <svg
+                className="duplicate-pane-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <rect x="4" y="5" width="16" height="14" rx="2" />
+                <line x1="12" y1="5" x2="12" y2="19" />
+              </svg>
             </button>
-          )}
 
-          <button
-            type="button"
-            className={`duplicate-pane-btn ${splitTarget === "right" ? "active" : ""}`}
-            onClick={duplicateCurrentApp}
-            title="Duplicate current app"
-            aria-label="Duplicate current app"
-          >
-            <svg
-              className="duplicate-pane-icon"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <rect x="4" y="5" width="16" height="14" rx="2" />
-              <line x1="12" y1="5" x2="12" y2="19" />
-            </svg>
-          </button>
-
-          <ProfileMenu />
+            <ProfileMenu />
+          </div>
         </div>
-      </div>
 
-      <StorageLimitBanner onUpgrade={goToUpgrade} />
+        <StorageLimitBanner onUpgrade={goToUpgrade} />
 
-      {/* 🔥 BODY */}
-      <div className="body">
-        {/* PRIMARY SIDEBAR — every app nav surface lives here. */}
-        <nav
-          ref={sidebarRef}
-          className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`.trim()}
-          style={
-            !sidebarCollapsed && !isNarrow
-              ? { width: `${sidebarWidth}px` }
-              : undefined
-          }
-          aria-label="Primary navigation"
-        >
-          {/* Wide-screen show/hide control — a small chevron pinned at the top
+        {/* 🔥 BODY */}
+        <div className="body">
+          {/* PRIMARY SIDEBAR — every app nav surface lives here. */}
+          <nav
+            ref={sidebarRef}
+            className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`.trim()}
+            style={
+              !sidebarCollapsed && !isNarrow
+                ? { width: `${sidebarWidth}px` }
+                : undefined
+            }
+            aria-label="Primary navigation"
+          >
+            {/* Wide-screen show/hide control — a small chevron pinned at the top
               of the panel, above Home. Stays put whether expanded or collapsed
               to the icon rail. The ≤768px overlay uses the header hamburger
               instead, so this is desktop-only. */}
-          {!isNarrow && (
-            <div className="sidebar-collapse-row">
-              <button
-                type="button"
-                className="sidebar-collapse-btn"
-                onClick={() => setSidebarCollapsed((c) => !c)}
-                title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-                aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-                aria-expanded={!sidebarCollapsed}
-              >
-                <svg
-                  className="sidebar-collapse-icon"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
+            {!isNarrow && (
+              <div className="sidebar-collapse-row">
+                <button
+                  type="button"
+                  className="sidebar-collapse-btn"
+                  onClick={() => setSidebarCollapsed((c) => !c)}
+                  title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+                  aria-label={
+                    sidebarCollapsed ? "Show sidebar" : "Hide sidebar"
+                  }
+                  aria-expanded={!sidebarCollapsed}
                 >
-                  {/* Same panel-frame glyph the header toggle used. The arrow
+                  <svg
+                    className="sidebar-collapse-icon"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    {/* Same panel-frame glyph the header toggle used. The arrow
                       points the way the panel will move on click:
                       expanded → left (will hide); collapsed → right (will show). */}
-                  <rect x="3" y="5" width="18" height="14" rx="2.2" />
-                  <line x1="9" y1="5" x2="9" y2="19" />
-                  {sidebarCollapsed ? (
-                    <polyline points="12 9 15 12 12 15" />
-                  ) : (
-                    <polyline points="15 9 12 12 15 15" />
-                  )}
-                </svg>
-              </button>
-            </div>
-          )}
+                    <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                    <line x1="9" y1="5" x2="9" y2="19" />
+                    {sidebarCollapsed ? (
+                      <polyline points="12 9 15 12 12 15" />
+                    ) : (
+                      <polyline points="15 9 12 12 15 15" />
+                    )}
+                  </svg>
+                </button>
+              </div>
+            )}
 
-          <div className="sidebar-section">
-            {renderSidebarItem("/", "home", "Home", "🏠")}
-            {renderSidebarItem("/emails", "emails", "Emails", "📧", emailsUnreadCount)}
-            {renderSidebarItem("/chat", "chat", "Chat", "💬")}
-            {/* /call is intentionally absent — audio/video lives inside Chat. */}
-            {renderSidebarItem("/scheduler", "scheduler", "Scheduler", "📅")}
-            {renderSidebarItem("/drive", "drive", "Drive", "📁")}
-            {renderSidebarItem("/notes", "notes", "Notes", "📝")}
-            {renderSidebarItem("/tasks", "tasks", "Tasks", "☑")}
-            {renderSidebarItem("/ai-chat", "aichat", "AI Chat", "✨")}
-            {(user.scope === "platform" || user.scope === "organization") &&
-              renderSidebarItem("/test-access", "test_access", "Test Access", "🔓")}
-            {(isOrgOwner || isPlatformOwner) &&
-              renderSidebarLink(
-                "/access-requests",
-                "Access Requests",
-                "🛂",
-                location.pathname === "/access-requests",
-              )}
-          </div>
-
-          {hasWorkspaceSection && (
             <div className="sidebar-section">
-              {renderSectionToggle("Workspace", workspaceExpanded, () =>
-                setWorkspaceExpanded((open) => !open),
+              {renderSidebarItem("/", "home", "Home", "🏠")}
+              {renderSidebarItem(
+                "/emails",
+                "emails",
+                "Emails",
+                "📧",
+                emailsUnreadCount
               )}
-              {(workspaceExpanded || sidebarCollapsed) && (
-                <div className="sidebar-subitems">
-                  {/* Compact sub-item style (matches the project rows) so it
+              {renderSidebarItem("/chat", "chat", "Chat", "💬")}
+              {/* /call is intentionally absent — audio/video lives inside Chat. */}
+              {renderSidebarItem("/scheduler", "scheduler", "Scheduler", "📅")}
+              {renderSidebarItem("/drive", "drive", "Drive", "📁")}
+              {renderSidebarItem("/notes", "notes", "Notes", "📝")}
+              {renderSidebarItem("/tasks", "tasks", "Tasks", "☑")}
+              {renderSidebarItem("/ai-chat", "aichat", "AI Chat", "✨")}
+              {(user.scope === "platform" || user.scope === "organization") &&
+                renderSidebarItem(
+                  "/test-access",
+                  "test_access",
+                  "Test Access",
+                  "🔓"
+                )}
+              {(isOrgOwner || isPlatformOwner) &&
+                renderSidebarLink(
+                  "/access-requests",
+                  "Access Requests",
+                  "🛂",
+                  location.pathname === "/access-requests"
+                )}
+            </div>
+
+            {hasWorkspaceSection && (
+              <div className="sidebar-section">
+                {renderSectionToggle("Workspace", workspaceExpanded, () =>
+                  setWorkspaceExpanded((open) => !open)
+                )}
+                {(workspaceExpanded || sidebarCollapsed) && (
+                  <div className="sidebar-subitems">
+                    {/* Compact sub-item style (matches the project rows) so it
                       doesn't tower over its Workspace neighbors. */}
-                  <Link
-                    to="/documents"
-                    title="Documents"
-                    className={`sidebar-project-label${
-                      location.pathname === "/documents" ? " active" : ""
-                    }`}
-                    onClick={() => setNavOpen(false)}
-                  >
-                    📄 Documents
-                  </Link>
-                  {renderSectionToggle(
-                    "Projects",
-                    projectsExpanded,
-                    () => setProjectsExpanded((open) => !open),
-                    isOrgOwner && !sidebarCollapsed
-                      ? () => {
-                          setProjectsExpanded(true);
-                          setProjectCreateDraft("");
-                          setCreatingProject(true);
-                        }
-                      : undefined,
-                  )}
-                  {(projectsExpanded || sidebarCollapsed) && (
-                    <div className="sidebar-subitems">
-                      {creatingProject && (
-                        <input
-                          className="sidebar-project-edit"
-                          value={projectCreateDraft}
-                          autoFocus
-                          placeholder="New project…"
-                          aria-label="New project name"
-                          onChange={(e) => setProjectCreateDraft(e.target.value)}
-                          onBlur={submitNewProject}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") submitNewProject();
-                            else if (e.key === "Escape") {
-                              setCreatingProject(false);
-                              setProjectCreateDraft("");
-                            }
-                          }}
-                        />
-                      )}
-                      {projects.map((proj) =>
-                        editingProject === proj.id ? (
+                    <Link
+                      to="/documents"
+                      title="Documents"
+                      className={`sidebar-project-label${
+                        location.pathname === "/documents" ? " active" : ""
+                      }`}
+                      onClick={() => setNavOpen(false)}
+                    >
+                      📄 Documents
+                    </Link>
+                    {renderSectionToggle(
+                      "Projects",
+                      projectsExpanded,
+                      () => setProjectsExpanded((open) => !open),
+                      isOrgOwner && !sidebarCollapsed
+                        ? () => {
+                            setProjectsExpanded(true);
+                            setProjectCreateDraft("");
+                            setCreatingProject(true);
+                          }
+                        : undefined
+                    )}
+                    {(projectsExpanded || sidebarCollapsed) && (
+                      <div className="sidebar-subitems">
+                        {creatingProject && (
                           <input
-                            key={proj.id}
                             className="sidebar-project-edit"
-                            value={projectDraft}
+                            value={projectCreateDraft}
                             autoFocus
-                            aria-label="Project name"
-                            onChange={(e) => setProjectDraft(e.target.value)}
-                            onBlur={() => commitProjectName(proj.id)}
+                            placeholder="New project…"
+                            aria-label="New project name"
+                            onChange={(e) =>
+                              setProjectCreateDraft(e.target.value)
+                            }
+                            onBlur={submitNewProject}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") commitProjectName(proj.id);
-                              else if (e.key === "Escape") setEditingProject(null);
+                              if (e.key === "Enter") submitNewProject();
+                              else if (e.key === "Escape") {
+                                setCreatingProject(false);
+                                setProjectCreateDraft("");
+                              }
                             }}
                           />
-                        ) : (
-                          <div key={proj.id} className="sidebar-project-row">
-                            <Link
-                              to="/github"
-                              title={proj.name}
-                              className="sidebar-project-label"
-                              onClick={(e) => {
-                                setNavOpen(false);
-                                if (splitTarget === "right") {
-                                  e.preventDefault();
-                                  setRightView("github");
-                                }
+                        )}
+                        {projects.map((proj) =>
+                          editingProject === proj.id ? (
+                            <input
+                              key={proj.id}
+                              className="sidebar-project-edit"
+                              value={projectDraft}
+                              autoFocus
+                              aria-label="Project name"
+                              onChange={(e) => setProjectDraft(e.target.value)}
+                              onBlur={() => commitProjectName(proj.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter")
+                                  commitProjectName(proj.id);
+                                else if (e.key === "Escape")
+                                  setEditingProject(null);
                               }}
-                            >
-                              {proj.name}
-                            </Link>
-                            {isOrgOwner && (
-                              <button
-                                type="button"
-                                className="sidebar-project-edit-btn"
-                                title="Rename project"
-                                aria-label={`Rename ${proj.name}`}
+                            />
+                          ) : (
+                            <div key={proj.id} className="sidebar-project-row">
+                              <Link
+                                to="/github"
+                                title={proj.name}
+                                className="sidebar-project-label"
                                 onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setProjectDraft(proj.name);
-                                  setEditingProject(proj.id);
+                                  setNavOpen(false);
+                                  if (splitTarget === "right") {
+                                    e.preventDefault();
+                                    setRightView("github");
+                                  }
                                 }}
                               >
-                                ✎
-                              </button>
-                            )}
+                                {proj.name}
+                              </Link>
+                              {isOrgOwner && (
+                                <button
+                                  type="button"
+                                  className="sidebar-project-edit-btn"
+                                  title="Rename project"
+                                  aria-label={`Rename ${proj.name}`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setProjectDraft(proj.name);
+                                    setEditingProject(proj.id);
+                                  }}
+                                >
+                                  ✎
+                                </button>
+                              )}
+                            </div>
+                          )
+                        )}
+                        {!creatingProject && projects.length === 0 && (
+                          <div className="sidebar-empty-hint">
+                            No projects yet
                           </div>
-                        ),
-                      )}
-                      {!creatingProject && projects.length === 0 && (
-                        <div className="sidebar-empty-hint">No projects yet</div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Teams in the user's organization. Org owners can add one via "+". */}
+            <div className="sidebar-section">
+              {renderSectionToggle(
+                "Teams",
+                teamsExpanded,
+                () => setTeamsExpanded((open) => !open),
+                isOrgOwner && !sidebarCollapsed
+                  ? () => {
+                      setTeamsExpanded(true);
+                      setTeamCreateDraft("");
+                      setCreatingTeam(true);
+                    }
+                  : undefined
+              )}
+              {(teamsExpanded || sidebarCollapsed) && (
+                <div className="sidebar-subitems">
+                  {creatingTeam && (
+                    <input
+                      className="sidebar-project-edit"
+                      value={teamCreateDraft}
+                      autoFocus
+                      placeholder="New team…"
+                      aria-label="New team name"
+                      onChange={(e) => setTeamCreateDraft(e.target.value)}
+                      onBlur={submitNewTeam}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitNewTeam();
+                        else if (e.key === "Escape") {
+                          setCreatingTeam(false);
+                          setTeamCreateDraft("");
+                        }
+                      }}
+                    />
+                  )}
+                  {teams.map((team) =>
+                    renderSidebarLink(
+                      `/teams/${team.slug}`,
+                      team.name,
+                      "👥",
+                      location.pathname === `/teams/${team.slug}`
+                    )
+                  )}
+                  {!creatingTeam && teams.length === 0 && (
+                    <div className="sidebar-empty-hint">No teams yet</div>
                   )}
                 </div>
               )}
             </div>
-          )}
 
-          {/* Teams in the user's organization. Org owners can add one via "+". */}
-          <div className="sidebar-section">
-            {renderSectionToggle(
-              "Teams",
-              teamsExpanded,
-              () => setTeamsExpanded((open) => !open),
-              isOrgOwner && !sidebarCollapsed
-                ? () => {
-                    setTeamsExpanded(true);
-                    setTeamCreateDraft("");
-                    setCreatingTeam(true);
-                  }
-                : undefined,
-            )}
-            {(teamsExpanded || sidebarCollapsed) && (
-              <div className="sidebar-subitems">
-                {creatingTeam && (
-                  <input
-                    className="sidebar-project-edit"
-                    value={teamCreateDraft}
-                    autoFocus
-                    placeholder="New team…"
-                    aria-label="New team name"
-                    onChange={(e) => setTeamCreateDraft(e.target.value)}
-                    onBlur={submitNewTeam}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") submitNewTeam();
-                      else if (e.key === "Escape") {
-                        setCreatingTeam(false);
-                        setTeamCreateDraft("");
-                      }
-                    }}
-                  />
+            {hasPlatformSection && (
+              <div className="sidebar-section">
+                {renderSectionToggle("Platform", platformExpanded, () =>
+                  setPlatformExpanded((open) => !open)
                 )}
-                {teams.map((team) =>
-                  renderSidebarLink(
-                    `/teams/${team.slug}`,
-                    team.name,
-                    "👥",
-                    location.pathname === `/teams/${team.slug}`,
-                  ),
-                )}
-                {!creatingTeam && teams.length === 0 && (
-                  <div className="sidebar-empty-hint">No teams yet</div>
+                {(platformExpanded || sidebarCollapsed) && (
+                  <div className="sidebar-subitems">
+                    {canAccessPlatformBilling &&
+                      renderSidebarLink(
+                        "/platform/billing",
+                        "Billing",
+                        "💳",
+                        location.pathname === "/platform/billing"
+                      )}
+                    {canAccessPlatformDeveloper &&
+                      renderSidebarLink(
+                        "/platform/developer",
+                        "Developer",
+                        "⚙",
+                        location.pathname === "/platform/developer"
+                      )}
+                    {canAccessPlatformSupport &&
+                      renderSidebarLink(
+                        "/platform/support",
+                        "Support",
+                        <BugReportIcon className="sidebar-bug-icon" />,
+                        location.pathname === "/platform/support"
+                      )}
+                    {canAccessPlatformAnalytics &&
+                      renderSidebarLink(
+                        "/platform/analytics",
+                        "Analytics",
+                        "📊",
+                        location.pathname === "/platform/analytics"
+                      )}
+                    {isPlatformOwner &&
+                      renderSidebarLink(
+                        "/platform/domains",
+                        "Domains",
+                        "🌐",
+                        location.pathname === "/platform/domains"
+                      )}
+                    {isPlatformOwner &&
+                      renderSidebarLink(
+                        "/platform/secrets",
+                        "Secrets",
+                        "🔑",
+                        location.pathname === "/platform/secrets"
+                      )}
+                  </div>
                 )}
               </div>
             )}
-          </div>
 
-          {hasPlatformSection && (
-            <div className="sidebar-section">
-              {renderSectionToggle("Platform", platformExpanded, () =>
-                setPlatformExpanded((open) => !open),
-              )}
-              {(platformExpanded || sidebarCollapsed) && (
-                <div className="sidebar-subitems">
-                  {canAccessPlatformBilling &&
-                    renderSidebarLink(
-                      "/platform/billing",
-                      "Billing",
-                      "💳",
-                      location.pathname === "/platform/billing",
-                    )}
-                  {canAccessPlatformDeveloper &&
-                    renderSidebarLink(
-                      "/platform/developer",
-                      "Developer",
-                      "⚙",
-                      location.pathname === "/platform/developer",
-                    )}
-                  {canAccessPlatformSupport &&
-                    renderSidebarLink(
-                      "/platform/support",
-                      "Support",
-                      <BugReportIcon className="sidebar-bug-icon" />,
-                      location.pathname === "/platform/support",
-                    )}
-                  {canAccessPlatformAnalytics &&
-                    renderSidebarLink(
-                      "/platform/analytics",
-                      "Analytics",
-                      "📊",
-                      location.pathname === "/platform/analytics",
-                    )}
-                  {isPlatformOwner &&
-                    renderSidebarLink(
-                      "/platform/domains",
-                      "Domains",
-                      "🌐",
-                      location.pathname === "/platform/domains",
-                    )}
-                  {isPlatformOwner &&
-                    renderSidebarLink(
-                      "/platform/secrets",
-                      "Secrets",
-                      "🔑",
-                      location.pathname === "/platform/secrets",
-                    )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {hasLogsSection && (
-            <div className="sidebar-section">
-              {renderSectionToggle("Logs", logsExpanded, () =>
-                setLogsExpanded((open) => !open),
-              )}
-              {/* In the icon-only rail the header (and thus the toggle) is
+            {hasLogsSection && (
+              <div className="sidebar-section">
+                {renderSectionToggle("Logs", logsExpanded, () =>
+                  setLogsExpanded((open) => !open)
+                )}
+                {/* In the icon-only rail the header (and thus the toggle) is
                   hidden, so always show the items there to keep logs reachable. */}
-              {(logsExpanded || sidebarCollapsed) && (
-                <div className="sidebar-subitems">
-                  {canAccessPlatformLogs &&
-                    renderSidebarLink(
-                      "/logs/app",
-                      "App Logs",
-                      "🪵",
-                      location.pathname === "/logs/app",
-                    )}
-                  {isPlatformOwner &&
-                    renderSidebarLink(
-                      "/logs/visitors",
-                      "Visitors",
-                      "👥",
-                      location.pathname === "/logs/visitors",
-                    )}
-                  {canAccessSecurity &&
-                    renderSidebarLink(
-                      "/logs/users",
-                      "User Logs",
-                      "👤",
-                      location.pathname === "/logs/users",
-                    )}
-                  {canAccessSecurity &&
-                    renderSidebarLink(
-                      "/logs/audit",
-                      "Audit Logs",
-                      "🔒",
-                      location.pathname === "/logs/audit",
-                    )}
-                  {isPlatformOwner &&
-                    renderSidebarLink(
-                      "/logs/tracing",
-                      "Tracing",
-                      "📈",
-                      location.pathname === "/logs/tracing",
-                    )}
-                </div>
-              )}
-            </div>
-          )}
+                {(logsExpanded || sidebarCollapsed) && (
+                  <div className="sidebar-subitems">
+                    {canAccessPlatformLogs &&
+                      renderSidebarLink(
+                        "/logs/app",
+                        "App Logs",
+                        "🪵",
+                        location.pathname === "/logs/app"
+                      )}
+                    {isPlatformOwner &&
+                      renderSidebarLink(
+                        "/logs/visitors",
+                        "Visitors",
+                        "👥",
+                        location.pathname === "/logs/visitors"
+                      )}
+                    {canAccessSecurity &&
+                      renderSidebarLink(
+                        "/logs/users",
+                        "User Logs",
+                        "👤",
+                        location.pathname === "/logs/users"
+                      )}
+                    {canAccessSecurity &&
+                      renderSidebarLink(
+                        "/logs/audit",
+                        "Audit Logs",
+                        "🔒",
+                        location.pathname === "/logs/audit"
+                      )}
+                    {isPlatformOwner &&
+                      renderSidebarLink(
+                        "/logs/tracing",
+                        "Tracing",
+                        "📈",
+                        location.pathname === "/logs/tracing"
+                      )}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {/* Developer resources. "Developers" is a collapsible section header
+            {/* Developer resources. "Developers" is a collapsible section header
               (like Workspace / Platform / Logs); the items below link into
               /docs. Libraries + SDK both land on the Developer overview. */}
-          {user.account_type !== "personal" && (
-            <div className="sidebar-section">
-              {renderSectionToggle("Developers", developersExpanded, () =>
-                setDevelopersExpanded((open) => !open),
-              )}
-              {(developersExpanded || sidebarCollapsed) && (
-                <div className="sidebar-subitems">
-                  {renderSidebarLink(
-                    "/docs",
-                    "Docs",
-                    "📚",
-                    location.pathname === "/docs",
-                  )}
-                  {renderSidebarLink(
-                    "/docs/api",
-                    "API reference",
-                    "📖",
-                    location.pathname === "/docs/api",
-                  )}
-                  {renderSidebarLink(
-                    "/docs/developers",
-                    "Libraries",
-                    "📦",
-                    false,
-                  )}
-                  {renderSidebarLink(
-                    "/docs/developers",
-                    "SDK",
-                    "🧰",
-                    location.pathname === "/docs/developers",
-                  )}
-                  {canAccessApiKeyAdmin(user) &&
-                    renderSidebarLink(
-                      "/api-keys",
-                      "API Keys",
-                      "🔑",
-                      location.pathname === "/api-keys",
+            {user.account_type !== "personal" && (
+              <div className="sidebar-section">
+                {renderSectionToggle("Developers", developersExpanded, () =>
+                  setDevelopersExpanded((open) => !open)
+                )}
+                {(developersExpanded || sidebarCollapsed) && (
+                  <div className="sidebar-subitems">
+                    {renderSidebarLink(
+                      "/docs",
+                      "Docs",
+                      "📚",
+                      location.pathname === "/docs"
                     )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {isOrgOwner && (
-            <div className="sidebar-section">
-              <div className="sidebar-section-label">Organization</div>
-              {renderSidebarLink(
-                user.organization_id != null
-                  ? `/platform/domains?org=${user.organization_id}`
-                  : "/platform/domains",
-                "Domains",
-                "🌐",
-                location.pathname === "/platform/domains",
-              )}
-              {renderSidebarLink(
-                "/logs/app",
-                "App Logs",
-                "📊",
-                location.pathname === "/logs/app",
-              )}
-              {renderSidebarLink(
-                "/logs/audit",
-                "Audit Logs",
-                "🔒",
-                location.pathname === "/logs/audit",
-              )}
-            </div>
-          )}
-
-          <div className="sidebar-spacer" />
-
-          {user.account_type !== "platform_admin" &&
-            user.account_type !== "personal" &&
-            canSeePricing && (
-              <div className="sidebar-section sidebar-section-secondary">
-                {renderSidebarLink(
-                  "/pricing",
-                  "Pricing",
-                  "💲",
-                  location.pathname === "/pricing",
+                    {renderSidebarLink(
+                      "/docs/api",
+                      "API reference",
+                      "📖",
+                      location.pathname === "/docs/api"
+                    )}
+                    {renderSidebarLink(
+                      "/docs/developers",
+                      "Libraries",
+                      "📦",
+                      false
+                    )}
+                    {renderSidebarLink(
+                      "/docs/developers",
+                      "SDK",
+                      "🧰",
+                      location.pathname === "/docs/developers"
+                    )}
+                    {canAccessApiKeyAdmin(user) &&
+                      renderSidebarLink(
+                        "/api-keys",
+                        "API Keys",
+                        "🔑",
+                        location.pathname === "/api-keys"
+                      )}
+                  </div>
                 )}
               </div>
             )}
-        </nav>
 
-        {/* Drag the nav sidebar wider/narrower (hidden when collapsed to the
+            {isOrgOwner && (
+              <div className="sidebar-section">
+                <div className="sidebar-section-label">Organization</div>
+                {renderSidebarLink(
+                  user.organization_id != null
+                    ? `/platform/domains?org=${user.organization_id}`
+                    : "/platform/domains",
+                  "Domains",
+                  "🌐",
+                  location.pathname === "/platform/domains"
+                )}
+                {renderSidebarLink(
+                  "/logs/app",
+                  "App Logs",
+                  "📊",
+                  location.pathname === "/logs/app"
+                )}
+                {renderSidebarLink(
+                  "/logs/audit",
+                  "Audit Logs",
+                  "🔒",
+                  location.pathname === "/logs/audit"
+                )}
+              </div>
+            )}
+
+            <div className="sidebar-spacer" />
+
+            {user.account_type !== "platform_admin" &&
+              user.account_type !== "personal" &&
+              canSeePricing && (
+                <div className="sidebar-section sidebar-section-secondary">
+                  {renderSidebarLink(
+                    "/pricing",
+                    "Pricing",
+                    "💲",
+                    location.pathname === "/pricing"
+                  )}
+                </div>
+              )}
+          </nav>
+
+          {/* Drag the nav sidebar wider/narrower (hidden when collapsed to the
             icon rail or in the narrow off-canvas overlay). */}
-        {!sidebarCollapsed && !isNarrow && (
-          <ResizeHandle
-            onPointerDown={startSidebarResize}
-            ariaLabel="Resize sidebar"
-          />
-        )}
+          {!sidebarCollapsed && !isNarrow && (
+            <ResizeHandle
+              onPointerDown={startSidebarResize}
+              ariaLabel="Resize sidebar"
+            />
+          )}
 
-        {/* Scrim catches taps outside the sidebar overlay on narrow screens. */}
-        {navOpen && (
-          <div
-            className="sidebar-scrim"
-            onClick={() => setNavOpen(false)}
-            aria-hidden="true"
-          />
-        )}
+          {/* Scrim catches taps outside the sidebar overlay on narrow screens. */}
+          {navOpen && (
+            <div
+              className="sidebar-scrim"
+              onClick={() => setNavOpen(false)}
+              aria-hidden="true"
+            />
+          )}
 
-        {/* MAIN CONTENT */}
-        <div className={`content`} ref={contentRef}>
-          <div
-            className={`split-pane left ${splitTarget === "left" ? "active-target" : ""}`}
-            onMouseDown={() => setSplitTarget("left")}
-            style={splitOpen ? { flexGrow: paneWeights.left } : undefined}
-          >
-            {splitOpen ? (
-              <>
+          {/* MAIN CONTENT */}
+          <div className={`content`} ref={contentRef}>
+            <div
+              className={`split-pane left ${splitTarget === "left" ? "active-target" : ""}`}
+              onMouseDown={() => setSplitTarget("left")}
+              style={splitOpen ? { flexGrow: paneWeights.left } : undefined}
+            >
+              {splitOpen ? (
+                <>
+                  <div className="split-pane-toolbar">
+                    <span className="split-pane-title">{leftLabel}</span>
+                    <button
+                      className="split-close-btn"
+                      onClick={closeLeftPane}
+                      title="Close pane"
+                      aria-label="Close left pane"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="split-pane-body">
+                    <SplitPaneContext.Provider value={true}>
+                      <Suspense
+                        fallback={<div className="split-loading">Loading…</div>}
+                      >
+                        {children ?? <Outlet />}
+                      </Suspense>
+                    </SplitPaneContext.Provider>
+                  </div>
+                </>
+              ) : (
+                <Suspense
+                  fallback={<div className="split-loading">Loading…</div>}
+                >
+                  {children ?? <Outlet />}
+                </Suspense>
+              )}
+            </div>
+
+            {/* Resize handle between left and (middle or right) — only when
+              split open. Dragging adjusts the boundary between the two
+              panes the handle sits between. */}
+            {splitOpen && (
+              <div
+                className="split-resize-handle"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize pane"
+                onPointerDown={handlePaneResize(
+                  "left",
+                  middleView ? "center" : "right"
+                )}
+              />
+            )}
+
+            {middleView && (
+              <div
+                className="split-pane center"
+                style={{ flexGrow: paneWeights.center }}
+              >
                 <div className="split-pane-toolbar">
-                  <span className="split-pane-title">{leftLabel}</span>
+                  <span className="split-pane-title">{middleLabel}</span>
                   <button
                     className="split-close-btn"
-                    onClick={closeLeftPane}
+                    onClick={() => setMiddleView(null)}
                     title="Close pane"
-                    aria-label="Close left pane"
+                    aria-label="Close center pane"
                   >
                     ✕
                   </button>
                 </div>
                 <div className="split-pane-body">
-                  <SplitPaneContext.Provider value={true}>
-                    <Suspense fallback={<div className="split-loading">Loading…</div>}>
-                      {children ?? <Outlet />}
-                    </Suspense>
-                  </SplitPaneContext.Provider>
+                  {MiddleComp && (
+                    <SplitPaneContext.Provider value={true}>
+                      <Suspense
+                        fallback={<div className="split-loading">Loading…</div>}
+                      >
+                        <MiddleComp />
+                      </Suspense>
+                    </SplitPaneContext.Provider>
+                  )}
                 </div>
-              </>
-            ) : (
-              <Suspense fallback={<div className="split-loading">Loading…</div>}>
-                {children ?? <Outlet />}
-              </Suspense>
+              </div>
+            )}
+
+            {/* Second handle only when all three panes are visible — sits
+              between center and right. */}
+            {middleView && rightView && (
+              <div
+                className="split-resize-handle"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize pane"
+                onPointerDown={handlePaneResize("center", "right")}
+              />
+            )}
+
+            {rightView && (
+              <div
+                className={`split-pane right ${splitTarget === "right" ? "active-target" : ""}`}
+                onMouseDown={() => setSplitTarget("right")}
+                style={{ flexGrow: paneWeights.right }}
+              >
+                <div className="split-pane-toolbar">
+                  <span className="split-pane-title">{rightLabel}</span>
+                  <button
+                    className="split-close-btn"
+                    onClick={() => {
+                      setRightView(null);
+                      setSplitTarget("left");
+                    }}
+                    title="Close pane"
+                    aria-label="Close right pane"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="split-pane-body">
+                  {RightComp && (
+                    <SplitPaneContext.Provider value={true}>
+                      <Suspense
+                        fallback={<div className="split-loading">Loading…</div>}
+                      >
+                        <RightComp />
+                      </Suspense>
+                    </SplitPaneContext.Provider>
+                  )}
+                </div>
+              </div>
             )}
           </div>
-
-          {/* Resize handle between left and (middle or right) — only when
-              split open. Dragging adjusts the boundary between the two
-              panes the handle sits between. */}
-          {splitOpen && (
-            <div
-              className="split-resize-handle"
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize pane"
-              onPointerDown={handlePaneResize(
-                "left",
-                middleView ? "center" : "right",
-              )}
-            />
-          )}
-
-          {middleView && (
-            <div
-              className="split-pane center"
-              style={{ flexGrow: paneWeights.center }}
-            >
-              <div className="split-pane-toolbar">
-                <span className="split-pane-title">{middleLabel}</span>
-                <button
-                  className="split-close-btn"
-                  onClick={() => setMiddleView(null)}
-                  title="Close pane"
-                  aria-label="Close center pane"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="split-pane-body">
-                {MiddleComp && (
-                  <SplitPaneContext.Provider value={true}>
-                    <Suspense fallback={<div className="split-loading">Loading…</div>}>
-                      <MiddleComp />
-                    </Suspense>
-                  </SplitPaneContext.Provider>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Second handle only when all three panes are visible — sits
-              between center and right. */}
-          {middleView && rightView && (
-            <div
-              className="split-resize-handle"
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize pane"
-              onPointerDown={handlePaneResize("center", "right")}
-            />
-          )}
-
-          {rightView && (
-            <div
-              className={`split-pane right ${splitTarget === "right" ? "active-target" : ""}`}
-              onMouseDown={() => setSplitTarget("right")}
-              style={{ flexGrow: paneWeights.right }}
-            >
-              <div className="split-pane-toolbar">
-                <span className="split-pane-title">{rightLabel}</span>
-                <button
-                  className="split-close-btn"
-                  onClick={() => {
-                    setRightView(null);
-                    setSplitTarget("left");
-                  }}
-                  title="Close pane"
-                  aria-label="Close right pane"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="split-pane-body">
-                {RightComp && (
-                  <SplitPaneContext.Provider value={true}>
-                    <Suspense fallback={<div className="split-loading">Loading…</div>}>
-                      <RightComp />
-                    </Suspense>
-                  </SplitPaneContext.Provider>
-                )}
-              </div>
-            </div>
-          )}
         </div>
-      </div>
       </SearchProvider>
 
       {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}

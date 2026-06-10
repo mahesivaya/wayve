@@ -29,7 +29,10 @@ export default function TestAccess() {
         setNote(s.request_note ?? "");
       })
       .catch((err) => {
-        if (alive) setError(err instanceof Error ? err.message : "Failed to load status");
+        if (alive)
+          setError(
+            err instanceof Error ? err.message : "Failed to load status"
+          );
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -51,7 +54,7 @@ export default function TestAccess() {
       setSuccess(
         next.status === "pending"
           ? "Request sent to the support team."
-          : "Request updated.",
+          : "Request updated."
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit request");

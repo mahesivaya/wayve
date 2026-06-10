@@ -46,7 +46,7 @@ describe("RSA-OAEP + AES hybrid envelope", () => {
         hash: "SHA-256",
       },
       true,
-      ["encrypt", "decrypt"],
+      ["encrypt", "decrypt"]
     );
   }
 
@@ -55,13 +55,13 @@ describe("RSA-OAEP + AES hybrid envelope", () => {
     const message = "hybrid envelope payload";
     const { encryptedMessage, encryptedKey, iv } = await encryptMessage(
       message,
-      pair.publicKey,
+      pair.publicKey
     );
     const out = await decryptMessage(
       encryptedMessage,
       encryptedKey,
       iv,
-      pair.privateKey,
+      pair.privateKey
     );
     expect(out).toBe(message);
   });
@@ -71,10 +71,10 @@ describe("RSA-OAEP + AES hybrid envelope", () => {
     const attacker = await rsaPair();
     const { encryptedMessage, encryptedKey, iv } = await encryptMessage(
       "for the right recipient only",
-      recipient.publicKey,
+      recipient.publicKey
     );
     await expect(
-      decryptMessage(encryptedMessage, encryptedKey, iv, attacker.privateKey),
+      decryptMessage(encryptedMessage, encryptedKey, iv, attacker.privateKey)
     ).rejects.toBeDefined();
   });
 });

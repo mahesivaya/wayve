@@ -92,16 +92,18 @@ export default function PersonalDashboard() {
   // behaviour as ActivityDashboard). Keys are namespaced "personal.*" so they
   // don't collide with ActivityDashboard's differently-shaped card snapshots.
   const [meetings, setMeetings] = useState<MeetingPreview[] | null>(() =>
-    loadCached<MeetingPreview[]>("personal.meetings"),
+    loadCached<MeetingPreview[]>("personal.meetings")
   );
   const [tasks, setTasks] = useState<TaskPreview[] | null>(() =>
-    loadCached<TaskPreview[]>("personal.tasks"),
+    loadCached<TaskPreview[]>("personal.tasks")
   );
   const [emails, setEmails] = useState<EmailItem[] | null>(() =>
-    loadCached<EmailItem[]>("personal.emails"),
+    loadCached<EmailItem[]>("personal.emails")
   );
   const [, setUnreadCount] = useState<number>(
-    () => loadCached<EmailItem[]>("personal.emails")?.filter((e) => !e.is_read).length ?? 0,
+    () =>
+      loadCached<EmailItem[]>("personal.emails")?.filter((e) => !e.is_read)
+        .length ?? 0
   );
   const [meetingsErr, setMeetingsErr] = useState<string | null>(null);
   const [tasksErr, setTasksErr] = useState<string | null>(null);
@@ -143,13 +145,14 @@ export default function PersonalDashboard() {
         // user just clicked render as read immediately — even if the
         // backend write hasn't completed yet by the time we re-fetched.
         const recent = loadRecentlyRead();
-        const merged = recent.size === 0
-          ? result.emails
-          : result.emails.map((email) =>
-              recent.has(email.id) && email.is_read === false
-                ? { ...email, is_read: true }
-                : email,
-            );
+        const merged =
+          recent.size === 0
+            ? result.emails
+            : result.emails.map((email) =>
+                recent.has(email.id) && email.is_read === false
+                  ? { ...email, is_read: true }
+                  : email
+              );
         setEmails(merged);
         saveCached("personal.emails", merged);
         // Lower-bound unread count from the loaded page.
@@ -171,9 +174,7 @@ export default function PersonalDashboard() {
   const completeTask = useCallback(
     async (task: TaskPreview) => {
       const previous = tasks;
-      setTasks((prev) =>
-        (prev ?? []).filter((t) => t.id !== task.id),
-      );
+      setTasks((prev) => (prev ?? []).filter((t) => t.id !== task.id));
       try {
         await updateTaskApi(task.id, {
           name: task.name,
@@ -184,11 +185,11 @@ export default function PersonalDashboard() {
       } catch (err) {
         setTasks(previous);
         window.alert(
-          err instanceof Error ? err.message : "Failed to complete task",
+          err instanceof Error ? err.message : "Failed to complete task"
         );
       }
     },
-    [tasks],
+    [tasks]
   );
 
   // Click handler for the Inbox card: mark the email read optimistically
@@ -203,9 +204,9 @@ export default function PersonalDashboard() {
       setEmails((prev) =>
         prev
           ? prev.map((row) =>
-              row.id === email.id ? { ...row, is_read: true } : row,
+              row.id === email.id ? { ...row, is_read: true } : row
             )
-          : prev,
+          : prev
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
       void markEmailRead(email.id).catch(() => {
@@ -224,107 +225,107 @@ export default function PersonalDashboard() {
     <div className="personal-dashboard">
       {/* ── Meetings + Tasks (two columns) ──────────────────── */}
       <div className="personal-dashboard-row">
-      <section className="personal-card">
-        <header className="personal-card-head">
-          <h2>Meetings</h2>
-          <button
-            type="button"
-            className="personal-card-action"
-            onClick={() => navigate("/scheduler")}
-          >
-            Open scheduler →
-          </button>
-        </header>
+        <section className="personal-card">
+          <header className="personal-card-head">
+            <h2>Meetings</h2>
+            <button
+              type="button"
+              className="personal-card-action"
+              onClick={() => navigate("/scheduler")}
+            >
+              Open scheduler →
+            </button>
+          </header>
 
-        {meetingsLoading ? (
-          <div className="personal-card-skeleton">
-            <span /> <span />
-          </div>
-        ) : (meetings?.length ?? 0) === 0 ? (
-          <p className="personal-card-empty">No meetings scheduled today.</p>
-        ) : (
-          <ul className="personal-today-list">
-            {(meetings ?? []).map((m) => (
-              <li
-                key={`m-${m.id}`}
-                className="personal-today-row is-meeting"
-                onClick={() => navigate("/scheduler")}
-              >
-                <span className="personal-today-marker" aria-hidden="true">
-                  ●
-                </span>
-                <span className="personal-today-time">
-                  {formatHHMM(m.start_time)}
-                </span>
-                <span className="personal-today-title">{m.title}</span>
-                <span className="personal-today-meta">
-                  {m.participants_count > 0
-                    ? `${m.participants_count} ppl`
-                    : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {meetingsErr && (
-          <div className="personal-card-error">{meetingsErr}</div>
-        )}
-      </section>
-
-      {/* ── 3. Task ────────────────────────────────────────────── */}
-      <section className="personal-card">
-        <header className="personal-card-head">
-          <h2>Task</h2>
-          <button
-            type="button"
-            className="personal-card-action"
-            onClick={() => navigate("/tasks")}
-          >
-            + Add task
-          </button>
-        </header>
-
-        {tasksLoading ? (
-          <div className="personal-card-skeleton">
-            <span /> <span /> <span />
-          </div>
-        ) : (tasks?.length ?? 0) === 0 ? (
-          <p className="personal-card-empty">
-            Nothing on your plate. Quiet day ahead.
-          </p>
-        ) : (
-          <ul className="personal-today-list">
-            {(tasks ?? []).map((t) => (
-              <li
-                key={`t-${t.id}`}
-                className="personal-today-row is-task"
-                onClick={() => navigate("/tasks")}
-              >
-                <button
-                  type="button"
-                  className="personal-today-check"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void completeTask(t);
-                  }}
-                  title="Mark done"
-                  aria-label="Mark done"
+          {meetingsLoading ? (
+            <div className="personal-card-skeleton">
+              <span /> <span />
+            </div>
+          ) : (meetings?.length ?? 0) === 0 ? (
+            <p className="personal-card-empty">No meetings scheduled today.</p>
+          ) : (
+            <ul className="personal-today-list">
+              {(meetings ?? []).map((m) => (
+                <li
+                  key={`m-${m.id}`}
+                  className="personal-today-row is-meeting"
+                  onClick={() => navigate("/scheduler")}
                 >
-                  ○
-                </button>
-                <span className="personal-today-time">Task</span>
-                <span className="personal-today-title">{t.name}</span>
-                <span className="personal-today-meta">
-                  {t.status.replace("_", " ")}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+                  <span className="personal-today-marker" aria-hidden="true">
+                    ●
+                  </span>
+                  <span className="personal-today-time">
+                    {formatHHMM(m.start_time)}
+                  </span>
+                  <span className="personal-today-title">{m.title}</span>
+                  <span className="personal-today-meta">
+                    {m.participants_count > 0
+                      ? `${m.participants_count} ppl`
+                      : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
 
-        {tasksErr && <div className="personal-card-error">{tasksErr}</div>}
-      </section>
+          {meetingsErr && (
+            <div className="personal-card-error">{meetingsErr}</div>
+          )}
+        </section>
+
+        {/* ── 3. Task ────────────────────────────────────────────── */}
+        <section className="personal-card">
+          <header className="personal-card-head">
+            <h2>Task</h2>
+            <button
+              type="button"
+              className="personal-card-action"
+              onClick={() => navigate("/tasks")}
+            >
+              + Add task
+            </button>
+          </header>
+
+          {tasksLoading ? (
+            <div className="personal-card-skeleton">
+              <span /> <span /> <span />
+            </div>
+          ) : (tasks?.length ?? 0) === 0 ? (
+            <p className="personal-card-empty">
+              Nothing on your plate. Quiet day ahead.
+            </p>
+          ) : (
+            <ul className="personal-today-list">
+              {(tasks ?? []).map((t) => (
+                <li
+                  key={`t-${t.id}`}
+                  className="personal-today-row is-task"
+                  onClick={() => navigate("/tasks")}
+                >
+                  <button
+                    type="button"
+                    className="personal-today-check"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void completeTask(t);
+                    }}
+                    title="Mark done"
+                    aria-label="Mark done"
+                  >
+                    ○
+                  </button>
+                  <span className="personal-today-time">Task</span>
+                  <span className="personal-today-title">{t.name}</span>
+                  <span className="personal-today-meta">
+                    {t.status.replace("_", " ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {tasksErr && <div className="personal-card-error">{tasksErr}</div>}
+        </section>
       </div>
 
       {/* ── 3. Emails ──────────────────────────────────────────── */}
@@ -405,9 +406,7 @@ export default function PersonalDashboard() {
           </ul>
         )}
 
-        {emailsErr && (
-          <div className="personal-card-error">{emailsErr}</div>
-        )}
+        {emailsErr && <div className="personal-card-error">{emailsErr}</div>}
       </section>
     </div>
   );
