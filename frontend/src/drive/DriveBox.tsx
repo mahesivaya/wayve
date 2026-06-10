@@ -5,6 +5,7 @@ import {
   getDriveFiles,
   uploadDriveFiles,
   downloadDriveFile,
+  fetchDriveFileBlob,
   renameDriveFile,
   deleteDriveFile,
   listFolders,
@@ -69,6 +70,18 @@ export default function Drive() {
   const [infoItem, setInfoItem] = useState<InfoItem | null>(null);
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
   const folderMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // === File preview (click a file/image to open) ===
+  // `previewFile` is the file being viewed; `previewUrl` is the decrypted
+  // object URL (images/PDFs render inline). Revoked when the preview closes.
+  const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
   // Close the open file menu on an outside click (same pattern as the Layout
   // dropdown). Rename/info stay open — they're explicit modes.
   useEffect(() => {
@@ -297,6 +310,51 @@ export default function Drive() {
           : "Download failed."
       );
     }
+  };
+
+  // File types we can render inline in the preview modal. Everything else
+  // shows a "no inline preview" message with a Download button.
+  const PREVIEW_IMAGE_TYPES = new Set([
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+    "bmp",
+    "svg",
+  ]);
+  const previewKind = (file: UploadedFile | null): "image" | "pdf" | "none" => {
+    const t = (file?.file_type || "").toLowerCase();
+    if (PREVIEW_IMAGE_TYPES.has(t)) return "image";
+    if (t === "pdf") return "pdf";
+    return "none";
+  };
+
+  const openPreview = async (file: UploadedFile) => {
+    setPreviewFile(file);
+    setPreviewError(null);
+    // Revoke any prior URL by clearing it (the effect handles revocation).
+    setPreviewUrl(null);
+    // Only fetch bytes for kinds we render inline; other types just offer
+    // a Download from the modal.
+    if (previewKind(file) === "none") return;
+    setPreviewLoading(true);
+    try {
+      const blob = await fetchDriveFileBlob(file.id, user?.id ?? null);
+      setPreviewUrl(URL.createObjectURL(blob));
+    } catch (err) {
+      logger.error("preview load failed", err);
+      setPreviewError("Could not open preview.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    setPreviewFile(null);
+    setPreviewUrl(null);
+    setPreviewError(null);
+    setPreviewLoading(false);
   };
 
   const startRename = (file: UploadedFile) => {
@@ -679,23 +737,16 @@ export default function Drive() {
           <div className={fileListClass}>
             {visibleUploadedFiles.map((file) => (
               <div key={file.id} className="file-row">
-                <div className="file-left">
-                  <DriveThumbnail
-                    file={file}
-                    userId={user?.id ?? null}
-                    fallback={
-                      file.file_type === "png" || file.file_type === "jpg"
-                        ? "🖼️"
-                        : file.file_type === "pdf"
-                          ? "📕"
-                          : file.file_type === "zip"
-                            ? "🗜️"
-                            : "📄"
-                    }
-                  />
-
-                  <div className="file-main">
-                    {renamingId === file.id ? (
+                {renamingId === file.id ? (
+                  // While renaming, the left side can't be the "open preview"
+                  // button (an <input> can't live inside a <button>).
+                  <div className="file-left">
+                    <DriveThumbnail
+                      file={file}
+                      userId={user?.id ?? null}
+                      fallback="📄"
+                    />
+                    <div className="file-main">
                       <input
                         type="text"
                         className="drive-folder-input file-rename-input"
@@ -708,14 +759,39 @@ export default function Drive() {
                         onBlur={() => void submitRename(file)}
                         autoFocus
                       />
-                    ) : (
-                      <div className="file-name">{file.name}</div>
-                    )}
-                    <div className="file-meta">
-                      {formatFileSize(file.size)}
+                      <div className="file-meta">
+                        {formatFileSize(file.size)}
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="file-left drive-folder-open"
+                    onClick={() => void openPreview(file)}
+                    title="Open preview"
+                  >
+                    <DriveThumbnail
+                      file={file}
+                      userId={user?.id ?? null}
+                      fallback={
+                        file.file_type === "png" || file.file_type === "jpg"
+                          ? "🖼️"
+                          : file.file_type === "pdf"
+                            ? "📕"
+                            : file.file_type === "zip"
+                              ? "🗜️"
+                              : "📄"
+                      }
+                    />
+                    <div className="file-main">
+                      <div className="file-name">{file.name}</div>
+                      <div className="file-meta">
+                        {formatFileSize(file.size)}
+                      </div>
+                    </div>
+                  </button>
+                )}
 
                 <div className="file-right">
                   <div
@@ -790,6 +866,69 @@ export default function Drive() {
           </div>
         )}
       </div>
+
+      {/* File preview — click a file/image to open it inline. */}
+      {previewFile && (
+        <div
+          className="drive-preview-overlay"
+          onClick={closePreview}
+          role="presentation"
+        >
+          <div
+            className="drive-preview-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={previewFile.name}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="drive-preview-header">
+              <span className="drive-preview-title" title={previewFile.name}>
+                {previewFile.name}
+              </span>
+              <div className="drive-preview-actions">
+                <button
+                  type="button"
+                  className="file-download-btn"
+                  onClick={() => void downloadFile(previewFile)}
+                >
+                  ⬇ Download
+                </button>
+                <button
+                  type="button"
+                  className="drive-info-close"
+                  onClick={closePreview}
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className="drive-preview-body">
+              {previewLoading ? (
+                <p className="drive-preview-msg">Loading…</p>
+              ) : previewError ? (
+                <p className="drive-preview-msg">{previewError}</p>
+              ) : previewKind(previewFile) === "image" && previewUrl ? (
+                <img
+                  className="drive-preview-image"
+                  src={previewUrl}
+                  alt={previewFile.name}
+                />
+              ) : previewKind(previewFile) === "pdf" && previewUrl ? (
+                <iframe
+                  className="drive-preview-frame"
+                  src={previewUrl}
+                  title={previewFile.name}
+                />
+              ) : (
+                <p className="drive-preview-msg">
+                  No inline preview for this file type. Use Download to open it.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Info popup — read-only metadata for the selected file or folder. */}
       {infoItem && (
