@@ -41,6 +41,28 @@ export const getConversationTitle = (conversation: Conversation | null) => {
     : conversation.user.email;
 };
 
+// Compact relative time for conversation rows: "just now", "5m", "3h", "2d",
+// "4w", then a short month/day for anything older. Empty string for no time.
+export const relativeTime = (iso: string | null | undefined): string => {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const seconds = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (seconds < 45) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w`;
+  return new Date(t).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+};
+
 export const isChannelAdmin = (
   channel: ChatChannel | null,
   currentUser?: { id: number; email: string } | null

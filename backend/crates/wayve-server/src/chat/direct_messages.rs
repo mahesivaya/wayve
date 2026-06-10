@@ -154,3 +154,61 @@ pub async fn get_messages(
 
     Ok(HttpResponse::Ok().json(messages))
 }
+
+/// `GET /chat/conversations` — per-DM-conversation summary for the caller:
+/// the other participant's id, the timestamp of the latest message (for
+/// recency ordering), and how many messages from them are still unread. Plus
+/// a `total_unread` across all conversations. Content stays E2E-encrypted —
+/// this returns only counts + timestamps, never message text. One grouped
+/// scan over `messages` (DM-only table), served by the conversation indexes.
+#[instrument(target = "http", skip(req, pool))]
+pub async fn get_conversation_summary(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            CASE WHEN sender_id = $1 THEN receiver_id ELSE sender_id END AS other_id,
+            MAX(created_at) AS last_message_at,
+            COUNT(*) FILTER (WHERE receiver_id = $1 AND status <> 'read') AS unread_count
+        FROM messages
+        WHERE (sender_id = $1 OR receiver_id = $1)
+          AND sender_id IS NOT NULL
+          AND receiver_id IS NOT NULL
+        GROUP BY other_id
+        ORDER BY last_message_at DESC
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    let mut total_unread: i64 = 0;
+    let conversations: Vec<_> = rows
+        .into_iter()
+        .filter_map(|row| {
+            let other_id: Option<i32> = row.try_get("other_id").ok().flatten();
+            let other_id = other_id?;
+            let last: Option<NaiveDateTime> = row.try_get("last_message_at").ok().flatten();
+            let unread: i64 = row.try_get("unread_count").unwrap_or(0);
+            total_unread += unread;
+            let last_message_at = last.map(|dt| {
+                chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
+                    .to_rfc3339()
+            });
+            Some(serde_json::json!({
+                "user_id": other_id,
+                "unread_count": unread,
+                "last_message_at": last_message_at,
+            }))
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "total_unread": total_unread,
+        "conversations": conversations,
+    })))
+}

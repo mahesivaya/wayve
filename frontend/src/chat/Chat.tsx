@@ -54,6 +54,8 @@ export default function Chat() {
     channels,
     setChannels,
     refreshChannels: fetchChannels,
+    summary,
+    refreshSummary,
   } = useChatConversations(user?.id);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [selectedConversation, setSelectedConversation] =
@@ -295,7 +297,11 @@ export default function Chat() {
     selectedRef,
     appendRealtimeMessage,
     resyncSelectedConversation,
-    handleStatusUpdate
+    handleStatusUpdate,
+    // Any inbound DM (even for a conversation we're not viewing) may change an
+    // unread count / recency, so refresh the summary that drives the
+    // Unread/Recent sections + total badge.
+    refreshSummary
   );
 
   // The 1:1 call entry point lives in [ChatHeader](./components/ChatHeader.tsx).
@@ -409,6 +415,9 @@ export default function Chat() {
       setMessages(await decryptChatMessages(rawMessages, user.id));
       setSelectedConversation({ type: "user", user: otherUser });
       setChannelSettingsOpen(false);
+      // Opening the DM marks its messages read server-side, so refresh the
+      // summary to clear this conversation's unread badge.
+      void refreshSummary();
     } catch (err) {
       logger.error("Failed to load messages", err);
     }
@@ -694,6 +703,7 @@ export default function Chat() {
         onSelectChannel={loadChannelMessages}
         onJoinChannel={joinChannel}
         onSelectUser={loadUserMessages}
+        summary={summary}
       />
 
       {/* Drag to trade width between the sidebar and the message area. */}

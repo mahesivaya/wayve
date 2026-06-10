@@ -3,5 +3,5 @@ pub use super::channels::{
     get_channel_thread, get_channels, join_channel, remove_channel_user, update_channel_subject,
     update_channel_visibility,
 };
-pub use super::direct_messages::get_messages;
+pub use super::direct_messages::{get_conversation_summary, get_messages};
 pub use super::websocket::chat_ws;

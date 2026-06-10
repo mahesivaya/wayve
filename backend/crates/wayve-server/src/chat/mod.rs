@@ -21,6 +21,10 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         web::get().to(handler::get_messages),
     )
     .route("/messages", web::get().to(handler::get_messages))
+    .route(
+        "/chat/conversations",
+        web::get().to(handler::get_conversation_summary),
+    )
     .service(handler::get_channels)
     .service(handler::create_channel)
     .service(handler::update_channel_subject)

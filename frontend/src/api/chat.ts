@@ -55,6 +55,21 @@ export type ChatChannel = {
 export const getChatUsers = async () =>
   apiFetchJson<ChatUser[]>("/api/users/all");
 
+// Per-DM-conversation summary: unread counts + last-activity time for recency
+// ordering, plus the total unread across all conversations. Counts/timestamps
+// only — message content stays E2E-encrypted, never returned here.
+export type DmConversationSummary = {
+  user_id: number;
+  unread_count: number;
+  last_message_at: string | null; // RFC3339
+};
+export type ChatConversationSummary = {
+  total_unread: number;
+  conversations: DmConversationSummary[];
+};
+export const getChatConversationSummary = async () =>
+  apiFetchJson<ChatConversationSummary>("/api/chat/conversations");
+
 export const getChatMessages = async (
   userId: number,
   otherUserId: number,

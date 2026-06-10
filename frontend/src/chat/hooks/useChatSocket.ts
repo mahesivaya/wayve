@@ -17,7 +17,11 @@ export function useChatSocket(
   onOpen?: () => void,
   // Called for a `status_update` event ({message_id, status}) so the sender's
   // bubble can advance its delivery tick (sent → delivered → read). Optional.
-  onStatusUpdate?: (messageId: number, status: ChatMessage["status"]) => void
+  onStatusUpdate?: (messageId: number, status: ChatMessage["status"]) => void,
+  // Called for any inbound real message (not status_update, not a self-echo),
+  // regardless of which conversation it belongs to — lets the caller refresh
+  // unread counts / recency for the whole list, not just the open chat.
+  onInbound?: (message: ChatMessage) => void
 ) {
   const wsRef = useRef<WebSocket | null>(null);
   const [readyState, setReadyState] = useState<number>(WebSocket.CLOSED);
@@ -33,6 +37,7 @@ export function useChatSocket(
   const onMessageRef = useRef(onMessage);
   const onOpenRef = useRef(onOpen);
   const onStatusUpdateRef = useRef(onStatusUpdate);
+  const onInboundRef = useRef(onInbound);
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
@@ -42,6 +47,9 @@ export function useChatSocket(
   useEffect(() => {
     onStatusUpdateRef.current = onStatusUpdate;
   }, [onStatusUpdate]);
+  useEffect(() => {
+    onInboundRef.current = onInbound;
+  }, [onInbound]);
 
   const userId = user?.id;
 
@@ -94,6 +102,13 @@ export function useChatSocket(
         // them through so appendRealtimeMessage can patch the optimistic copy
         // with the server-assigned message_id.
         if (msg.sender_id === userId && !msg.client_id) return;
+
+        // Inbound message from someone else (any conversation): let the caller
+        // refresh unread/recency for the whole list. Self-echoes (our own sends
+        // reconciling) are excluded so we don't bump our own unread.
+        if (msg.sender_id !== userId) {
+          onInboundRef.current?.(msg);
+        }
 
         if (messageBelongsToSelectedConversation(msg, selectedRef.current)) {
           // Inbound DM for the conversation we're viewing → send a read receipt,

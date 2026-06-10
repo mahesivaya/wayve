@@ -1,4 +1,8 @@
-import type { ChatChannel, ChatUser } from "../../api/chat";
+import type {
+  ChatChannel,
+  ChatConversationSummary,
+  ChatUser,
+} from "../../api/chat";
 import type { ChannelVisibility, Conversation } from "../types";
 import ChannelCreateForm from "./ChannelCreateForm";
 import ChannelList from "./ChannelList";
@@ -20,6 +24,7 @@ type Props = {
   onSelectChannel: (channel: ChatChannel) => void;
   onJoinChannel: (channel: ChatChannel) => void;
   onSelectUser: (user: ChatUser) => void;
+  summary: ChatConversationSummary;
 };
 
 export default function ConversationSidebar({
@@ -38,6 +43,7 @@ export default function ConversationSidebar({
   onSelectChannel,
   onJoinChannel,
   onSelectUser,
+  summary,
 }: Props) {
   return (
     <aside className="user-list">
@@ -75,6 +81,7 @@ export default function ConversationSidebar({
         users={users}
         selectedConversation={selectedConversation}
         onSelect={onSelectUser}
+        summary={summary}
       />
     </aside>
   );
