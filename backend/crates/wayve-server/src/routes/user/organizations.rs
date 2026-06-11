@@ -1168,6 +1168,26 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
     .execute(&mut *tx)
     .await?;
 
+    // Hard-code the reverted owner onto the personal "Most Advance" plan:
+    // cancel any prior active personal subscriptions, then grant a local
+    // Most Advance subscription (no Stripe id — a comped grant). Both
+    // `current_plan_for_user` and `effective_entitlements` resolve live from
+    // this active row, so the user lands on Most Advance (50 GB) immediately.
+    sqlx::query(
+        "UPDATE subscriptions SET status = 'canceled', updated_at = NOW() \
+         WHERE user_id = $1 AND status IN ('active', 'trialing')",
+    )
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO subscriptions (user_id, plan_id, status) \
+         SELECT $1, id, 'active' FROM plans WHERE code = 'most_advance_user'",
+    )
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await?;
+
     // Cascades clean up organization_members, entitlements,
     // billing_customers, subscriptions, drive_shares, siem_webhook_configs,
     // shared inboxes, etc. — every table that referenced organizations.id
