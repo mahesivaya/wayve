@@ -11,17 +11,21 @@ import {
 import "./planAdmin.css";
 
 // Bytes <-> GB helpers. The schema stores bytes (BIGINT); the admin form
-// asks for a human-friendly GB number. We never round to the byte; the
-// admin can punch in "1.5" GB and we encode that as 1610612736 bytes.
+// asks for a human-friendly GB number. The form is whole-GB only (no
+// decimals), so a GB value rounds to the nearest gibibyte.
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 const bytesToGB = (bytes: number) =>
-  bytes === 0 ? 0 : Math.round((bytes / BYTES_PER_GB) * 100) / 100;
-const gbToBytes = (gb: number) => Math.round(gb * BYTES_PER_GB);
+  bytes <= 0 ? 0 : Math.round(bytes / BYTES_PER_GB);
+const gbToBytes = (gb: number) => Math.round(gb) * BYTES_PER_GB;
 
-// Same for cents <-> dollars on the price input.
+// Same for cents <-> dollars on the price input. Whole-dollar only (no cents).
 const centsToDollars = (cents: number) =>
-  cents === 0 ? 0 : Math.round((cents / 100) * 100) / 100;
-const dollarsToCents = (dollars: number) => Math.round(dollars * 100);
+  cents <= 0 ? 0 : Math.round(cents / 100);
+const dollarsToCents = (dollars: number) => Math.round(dollars) * 100;
+
+// Strip everything but digits so the number fields never accept a decimal
+// point (or sign). Used by every numeric input's onChange.
+const digitsOnly = (value: string) => value.replace(/[^0-9]/g, "");
 
 // "Feature bullets" in the form are one-per-line free text. We persist
 // them as a JSON object `{ "bullet text": true }` so the existing
@@ -49,11 +53,16 @@ type DraftForm = {
   description: string;
   audience: "personal" | "organization";
   stripe_price_id: string;
-  amount_dollars: number;
+  // Numeric inputs are held as strings while editing so the field can be
+  // cleared (empty) and accept in-progress values like "1." — binding them
+  // to a `number` makes `Number("")` snap back to 0, which traps the cursor
+  // and blocks typing a fresh value. They're coerced to numbers in
+  // `draftToPayload`.
+  amount_dollars: string;
   currency: string;
   billing_interval: string;
-  storage_gb: number;
-  seat_limit: number;
+  storage_gb: string;
+  seat_limit: string;
   features_text: string;
   is_active: boolean;
 };
@@ -64,11 +73,11 @@ const EMPTY_DRAFT: DraftForm = {
   description: "",
   audience: "personal",
   stripe_price_id: "",
-  amount_dollars: 0,
+  amount_dollars: "",
   currency: "usd",
   billing_interval: "month",
-  storage_gb: 0,
-  seat_limit: 1,
+  storage_gb: "",
+  seat_limit: "",
   features_text: "",
   is_active: true,
 };
@@ -79,11 +88,15 @@ const planToDraft = (plan: Plan): DraftForm => ({
   description: plan.description ?? "",
   audience: plan.audience,
   stripe_price_id: plan.stripe_price_id ?? "",
-  amount_dollars: centsToDollars(plan.amount_cents),
+  // A 0/empty numeric renders as a blank field (with a placeholder) rather
+  // than a literal "0" the admin has to delete before typing. Empty coerces
+  // back to the right default in `draftToPayload`.
+  amount_dollars: plan.amount_cents === 0 ? "" : String(centsToDollars(plan.amount_cents)),
   currency: plan.currency,
   billing_interval: plan.billing_interval,
-  storage_gb: bytesToGB(plan.storage_limit_bytes),
-  seat_limit: plan.seat_limit,
+  storage_gb:
+    plan.storage_limit_bytes <= 0 ? "" : String(bytesToGB(plan.storage_limit_bytes)),
+  seat_limit: plan.seat_limit <= 0 ? "" : String(plan.seat_limit),
   features_text: featuresToText(plan.features),
   is_active: plan.is_active,
 });
@@ -94,11 +107,11 @@ const draftToPayload = (draft: DraftForm): UpsertPlanInput => ({
   description: draft.description.trim() || null,
   audience: draft.audience,
   stripe_price_id: draft.stripe_price_id.trim() || null,
-  amount_cents: dollarsToCents(draft.amount_dollars),
+  amount_cents: dollarsToCents(Number(draft.amount_dollars) || 0),
   currency: draft.currency.trim().toLowerCase() || "usd",
   billing_interval: draft.billing_interval,
-  storage_limit_bytes: gbToBytes(draft.storage_gb),
-  seat_limit: draft.seat_limit,
+  storage_limit_bytes: gbToBytes(Number(draft.storage_gb) || 0),
+  seat_limit: Math.max(1, Math.trunc(Number(draft.seat_limit) || 1)),
   features: textToFeatures(draft.features_text),
   is_active: draft.is_active,
 });
@@ -424,16 +437,18 @@ export default function PlanAdmin() {
                 <input
                   type="number"
                   min={0}
-                  step={0.01}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="0"
                   value={draft.amount_dollars}
                   onChange={(e) =>
                     setDraft({
                       ...draft,
-                      amount_dollars: Number(e.target.value),
+                      amount_dollars: digitsOnly(e.target.value),
                     })
                   }
                 />
-                <small>Dollars (or selected currency). 0 = free.</small>
+                <small>Whole dollars (or selected currency). 0 = free.</small>
               </label>
 
               <label>
@@ -453,12 +468,14 @@ export default function PlanAdmin() {
                 <input
                   type="number"
                   min={0}
-                  step={0.1}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="0"
                   value={draft.storage_gb}
                   onChange={(e) =>
                     setDraft({
                       ...draft,
-                      storage_gb: Number(e.target.value),
+                      storage_gb: digitsOnly(e.target.value),
                     })
                   }
                 />
@@ -470,11 +487,14 @@ export default function PlanAdmin() {
                 <input
                   type="number"
                   min={1}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="1"
                   value={draft.seat_limit}
                   onChange={(e) =>
                     setDraft({
                       ...draft,
-                      seat_limit: Number(e.target.value),
+                      seat_limit: digitsOnly(e.target.value),
                     })
                   }
                 />
