@@ -10,7 +10,6 @@
 //! large, so it is NOT committed; it's mounted into the container and pointed at
 //! via `GEOIP_DB_PATH`.
 
-use std::collections::BTreeMap;
 use std::net::IpAddr;
 
 use maxminddb::{Reader, geoip2};
@@ -53,22 +52,25 @@ impl GeoIp {
         let Ok(addr) = ip.parse::<IpAddr>() else {
             return GeoLocation::default();
         };
-        let Ok(record) = self.reader.lookup::<geoip2::City>(addr) else {
+        // 0.28 split lookup into two steps: `lookup` resolves the record's
+        // position, `decode` deserializes it. A miss is `Ok(None)`; a malformed
+        // database is `Err` — both degrade to the empty location.
+        let Ok(found) = self.reader.lookup(addr) else {
             return GeoLocation::default();
         };
+        let Ok(Some(record)) = found.decode::<geoip2::City>() else {
+            return GeoLocation::default();
+        };
+        // Names are now typed fields (`names.english: Option<&str>`) rather than
+        // a localized-name map, so the English name is a direct access.
         GeoLocation {
-            country: record.country.as_ref().and_then(|c| name_en(&c.names)),
+            country: record.country.names.english.map(str::to_string),
             region: record
                 .subdivisions
-                .as_ref()
-                .and_then(|subs| subs.first())
-                .and_then(|s| name_en(&s.names)),
-            city: record.city.as_ref().and_then(|c| name_en(&c.names)),
+                .first()
+                .and_then(|s| s.names.english)
+                .map(str::to_string),
+            city: record.city.names.english.map(str::to_string),
         }
     }
-}
-
-/// Pull the English ("en") display name out of a MaxMind localized-names map.
-fn name_en(names: &Option<BTreeMap<&str, &str>>) -> Option<String> {
-    names.as_ref()?.get("en").map(|s| s.to_string())
 }
