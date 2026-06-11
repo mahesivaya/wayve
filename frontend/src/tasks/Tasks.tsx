@@ -532,38 +532,45 @@ export default function Tasks() {
                 />
               </label>
 
-              <label className="task-form-field">
-                <span className="task-form-label">Assigned by</span>
-                <input
-                  value={assignedBy}
-                  onChange={(event) => setAssignedBy(event.target.value)}
-                  placeholder="Who assigned this task"
-                />
-              </label>
-
-              <label className="task-form-field">
-                <span className="task-form-label">Assignee</span>
-                <input
-                  value={assignee}
-                  onChange={(event) => setAssignee(event.target.value)}
-                  placeholder="Who is this task assigned to"
-                />
-                {user?.email && (
-                  <span className="task-form-assign-me">
+              {/* Task assignment (Assigned by / Assignee / Assign to me) is a
+                  team feature — only business (organization) accounts see it.
+                  Personal accounts are single-user, so it's hidden for them. */}
+              {!isPersonal && (
+                <>
+                  <label className="task-form-field">
+                    <span className="task-form-label">Assigned by</span>
                     <input
-                      type="checkbox"
-                      checked={
-                        assignee.trim().toLowerCase() ===
-                        user.email.toLowerCase()
-                      }
-                      onChange={(event) =>
-                        setAssignee(event.target.checked ? user.email : "")
-                      }
+                      value={assignedBy}
+                      onChange={(event) => setAssignedBy(event.target.value)}
+                      placeholder="Who assigned this task"
                     />
-                    Assign to me
-                  </span>
-                )}
-              </label>
+                  </label>
+
+                  <label className="task-form-field">
+                    <span className="task-form-label">Assignee</span>
+                    <input
+                      value={assignee}
+                      onChange={(event) => setAssignee(event.target.value)}
+                      placeholder="Who is this task assigned to"
+                    />
+                    {user?.email && (
+                      <span className="task-form-assign-me">
+                        <input
+                          type="checkbox"
+                          checked={
+                            assignee.trim().toLowerCase() ===
+                            user.email.toLowerCase()
+                          }
+                          onChange={(event) =>
+                            setAssignee(event.target.checked ? user.email : "")
+                          }
+                        />
+                        Assign to me
+                      </span>
+                    )}
+                  </label>
+                </>
+              )}
 
               <label className="task-form-field">
                 <span className="task-form-label">Priority</span>
