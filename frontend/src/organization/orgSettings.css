@@ -78,3 +78,31 @@
   background: transparent;
   color: var(--color-text-primary);
 }
+
+.org-settings-danger {
+  margin-top: 20px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.org-settings-danger-title {
+  margin: 0;
+  font-size: var(--text-lg, 1.1rem);
+  color: var(--color-danger);
+}
+
+.org-settings-danger-btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--color-danger);
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+
+.org-settings-danger-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

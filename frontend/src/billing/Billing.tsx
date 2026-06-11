@@ -1223,10 +1223,12 @@ export default function Billing() {
       {/* Personal users always see this (to create an org); an org owner only
           sees it while they have no active subscription, so they can subscribe.
           Once subscribed, the focused billing view above is all they get. */}
-      {businessPlans.length > 0 && (!isOrg || !hasPaidPlan) && (
+      {businessPlans.length > 0 && (
         <section className="billing-card">
           <div className="billing-section-head">
-            <h2>Business &amp; Enterprise</h2>
+            <h2>
+              {isOrg && hasPaidPlan ? "Change plan" : "Business & Enterprise"}
+            </h2>
           </div>
           <div className="billing-plan-grid">
             {businessPlans.map(renderPlanCard)}
