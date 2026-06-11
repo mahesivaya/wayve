@@ -7,7 +7,6 @@ import ActivityDashboard from "./dashboard/ActivityDashboard";
 import HeroMock from "./HeroMock";
 import DownloadApp from "./DownloadApp";
 import PersonalDashboard from "./dashboard/PersonalDashboard";
-import PublicPricingContent from "../pricing/PublicPricingContent";
 import { reportVisit } from "../api/visits";
 import "./home.css";
 
@@ -408,15 +407,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ===================== PRICING ===================== */}
-          <section id="pricing" className="hx-section hx-pricing">
-            <div className="hx-section-head">
-              <p className="hx-eyebrow">Pricing</p>
-              <h2>Simple plans for individuals and teams.</h2>
-            </div>
-            <PublicPricingContent />
-          </section>
-
           {/* FAQ Section */}
           <section className="faq-section">
             <div className="faq-header">
@@ -443,10 +433,6 @@ export default function Home() {
               <div className="faq-item">
                 <h3>Do you offer on-premise deployment?</h3>
                 <p>Yes — cloud or on-premise for Enterprise customers.</p>
-              </div>
-              <div className="faq-item">
-                <h3>What kind of support do you offer?</h3>
-                <p>Email, priority, or 24/7 phone support by plan.</p>
               </div>
               <div className="faq-item">
                 <h3>Can I migrate data from other platforms?</h3>
