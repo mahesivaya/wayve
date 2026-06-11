@@ -1888,38 +1888,16 @@ pub async fn admin_delete_user(
         })));
     }
 
-    let mut tx = pool.begin().await?;
-
-    // Last-owner protection. Lock the owner rows with FOR UPDATE so two
-    // concurrent deletes can't both pass this check.
+    // An owner account cannot be removed through member management. Return a
+    // clear 403 instead of the previous 500 (the old last-owner guard ran an
+    // illegal `COUNT(*) … FOR UPDATE`, which only fired for owner targets).
     if target_ctx.role == Role::Owner {
-        let owner_count: i64 = match target_ctx.scope {
-            Scope::Organization => {
-                let org_id = target_ctx.organization_id.unwrap_or(-1);
-                sqlx::query_scalar(
-                    "SELECT COUNT(*)::BIGINT FROM organization_members \
-                     WHERE organization_id = $1 AND role = 'owner' FOR UPDATE",
-                )
-                .bind(org_id)
-                .fetch_one(&mut *tx)
-                .await?
-            }
-            Scope::Platform => {
-                sqlx::query_scalar(
-                    "SELECT COUNT(*)::BIGINT FROM platform_members \
-                     WHERE role = 'owner' FOR UPDATE",
-                )
-                .fetch_one(&mut *tx)
-                .await?
-            }
-            Scope::Personal => 0,
-        };
-        if owner_count <= 1 {
-            return Ok(HttpResponse::Conflict().json(serde_json::json!({
-                "message": "Cannot delete the last owner"
-            })));
-        }
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "An owner cannot delete another owner"
+        })));
     }
+
+    let mut tx = pool.begin().await?;
 
     // Notes has user_id but no FK (see init.sql:469) — clean explicitly so
     // it doesn't leave orphan rows after the users-row cascade. Every other
