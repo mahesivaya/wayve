@@ -25,9 +25,51 @@ fn free_defaults() -> Entitlement {
     }
 }
 
-/// Resolve the owner's effective entitlements, falling back to the free
-/// baseline when no snapshot exists yet.
+/// Resolve the owner's effective entitlements.
+///
+/// We resolve **live** from the owner's active subscription plan rather than
+/// trusting the materialized `entitlements` snapshot alone: that snapshot is
+/// only refreshed by Stripe webhooks (`refresh_entitlements`), which can lag or
+/// not fire, leaving storage/seat limits stale after a plan change (e.g. the
+/// plan badge flips to "Most Advance" but storage still shows the old 10 GB).
+/// The live query is ordered the same way as `current_plan_for_user`
+/// (`ORDER BY s.id DESC`) so the granted limits always track the *displayed*
+/// plan. We fall back to the stored snapshot (legacy/manual grants), then the
+/// free baseline, when there's no active subscription.
 pub async fn effective_entitlements(pool: &PgPool, owner: BillingOwner) -> Entitlement {
+    let live = sqlx::query_as::<_, (String, i64, i32, Value)>(
+        r#"
+        SELECT p.code, p.storage_limit_bytes, p.seat_limit, p.features
+          FROM subscriptions s
+          JOIN plans p ON p.id = s.plan_id
+         WHERE s.status IN ('active', 'trialing')
+           AND ($1::int IS NULL OR s.user_id = $1)
+           AND ($2::int IS NULL OR s.organization_id = $2)
+         ORDER BY s.id DESC
+         LIMIT 1
+        "#,
+    )
+    .bind(owner.user_id())
+    .bind(owner.organization_id())
+    .fetch_optional(pool)
+    .await;
+
+    match live {
+        Ok(Some((code, storage, seats, features))) => {
+            return Entitlement {
+                plan_code: Some(code),
+                storage_limit_bytes: storage,
+                seat_limit: seats,
+                features,
+                active: true,
+            };
+        }
+        Ok(None) => {}
+        Err(e) => error!(target: "billing", error = ?e, "live entitlement lookup failed"),
+    }
+
+    // No active subscription — use the last materialized snapshot if present
+    // (preserves any legacy/manual grant), otherwise the free baseline.
     let row = sqlx::query_as::<_, Entitlement>(
         r#"
         SELECT plan_code, storage_limit_bytes, seat_limit, features, active
