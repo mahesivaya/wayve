@@ -335,23 +335,32 @@
 }
 
 .public-home-main {
+  position: relative;
   width: min(1720px, calc(100% - 48px));
   margin: 0 auto;
   padding: 0 0 48px;
 }
 
 .services-dropdown-panel {
-  margin: 0 auto;
+  /* Anchored as an overlay under the left-hand Products trigger rather than
+     centered. position:absolute keeps it from pushing page content down; the
+     mobile rule below resets it to normal flow for the hamburger menu. */
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  width: min(640px, 100%);
+  max-width: 640px;
   padding: 26px 34px 30px;
   background: rgb(255, 255, 255, 0.97);
   border: 1px solid rgb(112, 105, 150, 0.18);
-  border-radius: 0 0 24px 24px;
+  border-radius: 18px;
   box-shadow: 0 18px 44px rgb(54, 47, 103, 0.14);
 }
 
 .services-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(210px, 1fr));
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
   column-gap: 34px;
   row-gap: 18px;
 }
@@ -359,7 +368,7 @@
 .service-item,
 .services-more-grid button {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 11px;
   border: 0;
@@ -544,8 +553,9 @@
 
 .services-more-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(210px, 1fr));
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
   column-gap: 34px;
+  row-gap: 14px;
 }
 
 .services-more-grid strong,
@@ -827,6 +837,11 @@
   }
 
   .services-dropdown-panel {
+    position: static;
+    left: auto;
+    width: auto;
+    max-width: none;
+    border-radius: 0 0 24px 24px;
     padding: 34px 26px 42px;
   }
 
