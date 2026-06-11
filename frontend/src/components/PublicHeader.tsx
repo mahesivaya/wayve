@@ -148,15 +148,7 @@ export default function PublicHeader({
                 className="service-item"
                 onClick={() => navigate(`/services/${service.slug}`)}
               >
-                <span className={`service-icon ${service.accent}`}>
-                  {service.icon}
-                </span>
-                <span className="service-copy">
-                  <span className="service-title-row">
-                    <span className="service-title">{service.name}</span>
-                  </span>
-                  <span className="service-description">{service.summary}</span>
-                </span>
+                <span className="service-title">{service.name}</span>
               </button>
             ))}
           </div>

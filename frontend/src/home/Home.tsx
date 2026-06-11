@@ -160,20 +160,7 @@ export default function Home() {
                     className="service-item"
                     onClick={() => navigate(`/services/${service.slug}`)}
                   >
-                    <span className={`service-icon ${service.accent}`}>
-                      {service.icon}
-                    </span>
-                    <span className="service-copy">
-                      <span className="service-title-row">
-                        <span className="service-title">{service.name}</span>
-                        {service.slug === "meet" && (
-                          <span className="service-badge">New</span>
-                        )}
-                      </span>
-                      <span className="service-description">
-                        {service.summary}
-                      </span>
-                    </span>
+                    <span className="service-title">{service.name}</span>
                   </button>
                 ))}
               </div>
@@ -182,25 +169,13 @@ export default function Home() {
                 <h2>More from Fluxze</h2>
                 <div className="services-more-grid">
                   <button onClick={() => navigate("/organization")}>
-                    <span className="service-icon organization">O</span>
-                    <span>
-                      <strong>Fluxze Organization</strong>
-                      <small>Team tools for communication and work.</small>
-                    </span>
+                    <span className="service-title">Fluxze Organization</span>
                   </button>
                   <button onClick={() => navigate("/login")}>
-                    <span className="service-icon security">S</span>
-                    <span>
-                      <strong>Secure Login</strong>
-                      <small>Access your private workspace.</small>
-                    </span>
+                    <span className="service-title">Secure Login</span>
                   </button>
                   <button onClick={() => navigate("/register")}>
-                    <span className="service-icon account">+</span>
-                    <span>
-                      <strong>Create Account</strong>
-                      <small>Start using all services in one place.</small>
-                    </span>
+                    <span className="service-title">Create Account</span>
                   </button>
                 </div>
               </div>
@@ -348,16 +323,7 @@ export default function Home() {
                   className="hx-product"
                   onClick={() => navigate(`/services/${service.slug}`)}
                 >
-                  <span className={`hx-product-icon ${service.accent}`}>
-                    {service.icon}
-                  </span>
-                  <span className="hx-product-name">
-                    {service.name}
-                    {service.slug === "meet" && (
-                      <span className="hx-product-badge">New</span>
-                    )}
-                  </span>
-                  <span className="hx-product-summary">{service.summary}</span>
+                  <span className="hx-product-name">{service.name}</span>
                 </button>
               ))}
             </div>
