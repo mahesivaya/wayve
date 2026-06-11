@@ -152,36 +152,23 @@ pub struct CurrentPlan {
 /// Resolve the user's current tier.
 ///
 /// Strategy:
-///   1. Active personal subscription for this user → its plan.
-///   2. Active organization subscription via the user's org → its plan
-///      (org members inherit the org plan).
-///   3. Fall back: org users get a synthetic `organization_free` row so
-///      the UI doesn't mislabel them as being on the personal "Basic
-///      User" tier. Personal users fall back to the `basic_user` plan
-///      row (the canonical personal free tier).
+///   1. If the user belongs to an organization → the org's active
+///      subscription plan (org members inherit it). A leftover *personal*
+///      subscription is ignored so it can't shadow the org plan. With no org
+///      subscription, a synthetic `organization_free` row (so org headers
+///      don't mislabel as the personal "Basic User" tier).
+///   2. Otherwise (personal account) → the user's own active subscription,
+///      else the canonical `basic_user` free tier.
 pub async fn current_plan_for_user(
     pool: &PgPool,
     user_id: i32,
     organization_id: Option<i32>,
 ) -> Result<CurrentPlan, sqlx::Error> {
-    if let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
-        r#"
-        SELECT p.code, p.name, p.audience, p.amount_cents
-          FROM subscriptions s
-          JOIN plans p ON p.id = s.plan_id
-         WHERE s.status = 'active'
-           AND s.user_id = $1
-         ORDER BY s.id DESC
-         LIMIT 1
-        "#,
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?
-    {
-        return Ok(plan);
-    }
-
+    // Organization accounts resolve to the ORG's plan first. A user who later
+    // becomes an org owner/member may still carry a leftover *personal*
+    // subscription from before; that must not shadow the org plan (it would
+    // read as "Organization account · Current plan: Advance"). So when the
+    // user belongs to an org, the org subscription is authoritative.
     if let Some(org_id) = organization_id {
         if let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
             r#"
@@ -210,6 +197,25 @@ pub async fn current_plan_for_user(
             audience: "organization".to_string(),
             amount_cents: 0,
         });
+    }
+
+    // Personal accounts: their own active subscription, else the free tier.
+    if let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
+        r#"
+        SELECT p.code, p.name, p.audience, p.amount_cents
+          FROM subscriptions s
+          JOIN plans p ON p.id = s.plan_id
+         WHERE s.status = 'active'
+           AND s.user_id = $1
+         ORDER BY s.id DESC
+         LIMIT 1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?
+    {
+        return Ok(plan);
     }
 
     sqlx::query_as::<_, CurrentPlan>(
