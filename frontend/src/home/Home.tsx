@@ -408,27 +408,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ===================== CTA BAND ===================== */}
-          <section className="hx-cta-band">
-            <div className="hx-cta-glow" aria-hidden="true" />
-            <h2>Stop paying for five tools to do one job.</h2>
-            <p>Everything in one bill, one login, one private place.</p>
-            <div className="hx-cta-actions">
-              <button
-                className="hx-btn-primary"
-                onClick={() => navigate("/register")}
-              >
-                Start free
-              </button>
-              <button
-                className="hx-btn-ghost"
-                onClick={() => navigate("/enterprise")}
-              >
-                For organizations <span aria-hidden="true">→</span>
-              </button>
-            </div>
-          </section>
-
           {/* ===================== PRICING ===================== */}
           <section id="pricing" className="hx-section hx-pricing">
             <div className="hx-section-head">
