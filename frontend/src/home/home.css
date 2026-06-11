@@ -151,6 +151,9 @@
 
 /* Brand wordmark (left) */
 .public-home-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: 0;
   background: transparent;
   color: var(--hx-ink);
@@ -159,6 +162,17 @@
   line-height: 1;
   letter-spacing: -0.01em;
   cursor: pointer;
+}
+
+.brand-mark {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.marketing-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Center nav links: Products / Pricing / Support */

@@ -72,6 +72,9 @@
    🧠 LOGO
 ============================== */
 .logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 800;
   font-size: var(--text-xl);
   cursor: pointer;
@@ -82,6 +85,15 @@
      shade as the background) and "Wayve" became hard to read. */
   color: var(--color-text-primary);
   letter-spacing: -0.01em;
+}
+
+.logo-mark {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.logo-word {
+  line-height: 1;
 }
 
 /* Header nav rules removed — app navigation now lives in the left sidebar.

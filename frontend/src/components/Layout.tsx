@@ -1,5 +1,6 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { BRAND_NAME } from "../config/brand";
+import BrandLogo from "./BrandLogo";
 import { useAuth } from "../auth/useAuth";
 import {
   canAccessApiKeyAdmin,
@@ -1008,7 +1009,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         <div className="header">
           <div className="header-brand">
             <div className="logo" onClick={() => navigate("/")}>
-              {BRAND_NAME}
+              <BrandLogo className="logo-mark" size={26} />
+              <span className="logo-word">{BRAND_NAME}</span>
             </div>
             {/* Header toggle is the mobile hamburger ONLY. On wide screens the
               show/hide control lives on the sidebar divider (see

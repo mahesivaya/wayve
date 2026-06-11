@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BRAND_NAME } from "../config/brand";
+import BrandLogo from "../components/BrandLogo";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { SERVICES } from "../services/serviceData";
@@ -38,7 +39,8 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
     <div className="public-home">
       <header className="public-home-nav">
         <button className="public-home-brand" onClick={() => navigate("/")}>
-          {BRAND_NAME}
+          <BrandLogo className="brand-mark" size={26} gradientId="fluxze-nav-mark" />
+          <span>{BRAND_NAME}</span>
         </button>
 
         <nav className="public-home-links" aria-label="Main navigation">
@@ -129,7 +131,10 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
       <footer className="marketing-footer">
         <div className="marketing-footer-inner">
           <div>
-            <strong>{BRAND_NAME}</strong>
+            <strong className="marketing-footer-brand">
+              <BrandLogo className="brand-mark" size={22} gradientId="fluxze-footer-mark" />
+              {BRAND_NAME}
+            </strong>
             <p>One private workspace for mail, chat, calls, files, and AI.</p>
           </div>
           <div>
