@@ -187,26 +187,26 @@ export default function PlatformVisitors() {
                     .filter(Boolean)
                     .join(", ");
                   return (
-                  <tr key={r.id}>
-                    <td>{fmtDateTime(r.created_at)}</td>
-                    <td>
-                      {r.user_email ?? (
-                        <span style={{ opacity: 0.6 }}>Anonymous</span>
-                      )}
-                    </td>
-                    <td>{r.ip ?? "-"}</td>
-                    <td className="pt-loc" title={location}>
-                      {location || "-"}
-                    </td>
-                    <td>{parseDevice(r.user_agent)}</td>
-                    <td>{parseBrowser(r.user_agent)}</td>
-                    <td className="pt-details" title={r.path}>
-                      {r.path}
-                    </td>
-                    <td className="pt-details" title={r.referrer ?? ""}>
-                      {r.referrer || "—"}
-                    </td>
-                  </tr>
+                    <tr key={r.id}>
+                      <td>{fmtDateTime(r.created_at)}</td>
+                      <td>
+                        {r.user_email ?? (
+                          <span style={{ opacity: 0.6 }}>Anonymous</span>
+                        )}
+                      </td>
+                      <td>{r.ip ?? "-"}</td>
+                      <td className="pt-loc" title={location}>
+                        {location || "-"}
+                      </td>
+                      <td>{parseDevice(r.user_agent)}</td>
+                      <td>{parseBrowser(r.user_agent)}</td>
+                      <td className="pt-details" title={r.path}>
+                        {r.path}
+                      </td>
+                      <td className="pt-details" title={r.referrer ?? ""}>
+                        {r.referrer || "—"}
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>

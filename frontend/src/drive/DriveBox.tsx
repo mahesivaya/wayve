@@ -407,7 +407,6 @@ export default function Drive() {
     }
   };
 
-
   // === Filtering ===
   const visibleFolders = normalizedSearchQuery
     ? folders.filter((f) =>
@@ -429,7 +428,13 @@ export default function Drive() {
   const layoutIcon = (mode: ViewMode) => {
     if (mode === "list") {
       return (
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
+        <svg
+          viewBox="0 0 24 24"
+          width="16"
+          height="16"
+          aria-hidden="true"
+          fill="currentColor"
+        >
           <rect x="3" y="5" width="18" height="3" rx="1" />
           <rect x="3" y="10.5" width="18" height="3" rx="1" />
           <rect x="3" y="16" width="18" height="3" rx="1" />
@@ -438,7 +443,13 @@ export default function Drive() {
     }
     if (mode === "large") {
       return (
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
+        <svg
+          viewBox="0 0 24 24"
+          width="16"
+          height="16"
+          aria-hidden="true"
+          fill="currentColor"
+        >
           <rect x="3" y="3" width="8" height="8" rx="1.5" />
           <rect x="13" y="3" width="8" height="8" rx="1.5" />
           <rect x="3" y="13" width="8" height="8" rx="1.5" />
@@ -448,7 +459,13 @@ export default function Drive() {
     }
     // small grid — 3×3
     return (
-      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">
+      <svg
+        viewBox="0 0 24 24"
+        width="16"
+        height="16"
+        aria-hidden="true"
+        fill="currentColor"
+      >
         {[3, 9.5, 16].map((y) =>
           [3, 9.5, 16].map((x) => (
             <rect key={`${x}-${y}`} x={x} y={y} width="5" height="5" rx="1" />
@@ -620,7 +637,8 @@ export default function Drive() {
                           value={renameFolderValue}
                           onChange={(e) => setRenameFolderValue(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter") void submitRenameFolder(folder);
+                            if (e.key === "Enter")
+                              void submitRenameFolder(folder);
                             if (e.key === "Escape") setRenamingFolderId(null);
                           }}
                           onBlur={() => void submitRenameFolder(folder)}
@@ -646,7 +664,9 @@ export default function Drive() {
                     <div
                       className="drive-file-menu"
                       ref={
-                        menuOpenFolderId === folder.id ? folderMenuRef : undefined
+                        menuOpenFolderId === folder.id
+                          ? folderMenuRef
+                          : undefined
                       }
                     >
                       <button

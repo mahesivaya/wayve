@@ -162,8 +162,7 @@ function useSidebarSections() {
   }, [state]);
   const isOpen = useCallback((key: string) => state[key] ?? false, [state]);
   const setOpen = useCallback(
-    (key: string, open: boolean) =>
-      setState((s) => ({ ...s, [key]: open })),
+    (key: string, open: boolean) => setState((s) => ({ ...s, [key]: open })),
     []
   );
   const toggle = useCallback(
@@ -705,9 +704,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     const open = sections.isOpen(s.key) || sidebarCollapsed;
     return (
       <div className="sidebar-section" key={s.key}>
-        {renderSectionToggle(s.label, sections.isOpen(s.key), () =>
-          sections.toggle(s.key)
-        , s.onAdd)}
+        {renderSectionToggle(
+          s.label,
+          sections.isOpen(s.key),
+          () => sections.toggle(s.key),
+          s.onAdd
+        )}
         {open &&
           (s.body ?? (
             <div className="sidebar-subitems">{renderLinks(s.links)}</div>
@@ -962,7 +964,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         { path: "/docs/api", label: "API reference", icon: "📖" },
         // Libraries + SDK both land on the Developer overview; Libraries is
         // never shown as active (preserves prior behavior), SDK is.
-        { path: "/docs/developers", label: "Libraries", icon: "📦", active: false },
+        {
+          path: "/docs/developers",
+          label: "Libraries",
+          icon: "📦",
+          active: false,
+        },
         { path: "/docs/developers", label: "SDK", icon: "🧰" },
         {
           path: "/api-keys",

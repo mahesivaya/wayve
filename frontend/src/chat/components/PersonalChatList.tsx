@@ -34,7 +34,8 @@ export default function PersonalChatList({
   });
 
   const byRecency = (a: Row, b: Row) =>
-    (b.lastAt ? Date.parse(b.lastAt) : 0) - (a.lastAt ? Date.parse(a.lastAt) : 0);
+    (b.lastAt ? Date.parse(b.lastAt) : 0) -
+    (a.lastAt ? Date.parse(a.lastAt) : 0);
 
   // Top level: conversations with unread messages. Second level: the rest of
   // the recent chat history (messaged before, nothing unread). Everyone else
@@ -83,7 +84,10 @@ export default function PersonalChatList({
         <>
           <div className="conversation-section-title conversation-section-title--unread">
             <span>Unread</span>
-            <span className="conversation-unread-total" aria-label="total unread">
+            <span
+              className="conversation-unread-total"
+              aria-label="total unread"
+            >
               {summary.total_unread > 99 ? "99+" : summary.total_unread}
             </span>
           </div>
