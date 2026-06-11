@@ -40,6 +40,11 @@ export type VisitRow = {
   path: string;
   referrer: string | null;
   created_at: string;
+  // Coarse geolocation of `ip`, resolved offline at write time. NULL for older
+  // rows and private/unresolvable IPs.
+  country: string | null;
+  region: string | null;
+  city: string | null;
 };
 
 export async function listVisits(

@@ -30,7 +30,7 @@ use crate::geoip::{GeoIp, GeoLocation};
 /// Geolocate `ip` using the shared GeoIP reader pulled from request app state.
 /// Best-effort: returns the empty location when there's no IP, no reader
 /// configured (`GEOIP_DB_PATH` unset), or the lookup misses.
-fn resolve_geo(req: &HttpRequest, ip: Option<&str>) -> GeoLocation {
+pub(crate) fn resolve_geo(req: &HttpRequest, ip: Option<&str>) -> GeoLocation {
     let Some(ip) = ip else {
         return GeoLocation::default();
     };

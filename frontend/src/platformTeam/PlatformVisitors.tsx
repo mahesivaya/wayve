@@ -11,6 +11,7 @@ const VISITOR_COLUMNS = [
   { key: "when", label: "When", width: 150, min: 110 },
   { key: "visitor", label: "Visitor", width: 200, min: 100 },
   { key: "ip", label: "IP", width: 130, min: 90 },
+  { key: "location", label: "Location", width: 180, min: 110 },
   { key: "device", label: "Device", width: 100, min: 70 },
   { key: "browser", label: "Browser", width: 100, min: 70 },
   { key: "page", label: "Page", width: 260, min: 120 },
@@ -100,6 +101,9 @@ export default function PlatformVisitors() {
       [
         r.user_email,
         r.ip,
+        r.city,
+        r.region,
+        r.country,
         r.path,
         r.referrer,
         parseDevice(r.user_agent),
@@ -178,7 +182,11 @@ export default function PlatformVisitors() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r) => (
+                {filtered.map((r) => {
+                  const location = [r.city, r.region, r.country]
+                    .filter(Boolean)
+                    .join(", ");
+                  return (
                   <tr key={r.id}>
                     <td>{fmtDateTime(r.created_at)}</td>
                     <td>
@@ -187,6 +195,9 @@ export default function PlatformVisitors() {
                       )}
                     </td>
                     <td>{r.ip ?? "-"}</td>
+                    <td className="pt-loc" title={location}>
+                      {location || "-"}
+                    </td>
                     <td>{parseDevice(r.user_agent)}</td>
                     <td>{parseBrowser(r.user_agent)}</td>
                     <td className="pt-details" title={r.path}>
@@ -196,7 +207,8 @@ export default function PlatformVisitors() {
                       {r.referrer || "—"}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

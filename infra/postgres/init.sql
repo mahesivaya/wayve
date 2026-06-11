@@ -846,6 +846,12 @@ CREATE TABLE IF NOT EXISTS page_visits (
     referrer TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Coarse geolocation of `ip`, resolved offline (MaxMind GeoLite2) at write time
+-- for the Visitors page. Nullable + additive: existing rows and
+-- private/unresolvable IPs stay NULL.
+ALTER TABLE page_visits ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE page_visits ADD COLUMN IF NOT EXISTS region  TEXT;
+ALTER TABLE page_visits ADD COLUMN IF NOT EXISTS city    TEXT;
 CREATE INDEX IF NOT EXISTS idx_page_visits_created_at
     ON page_visits (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_page_visits_user
