@@ -1,5 +1,6 @@
 import { useAuth } from "../auth/useAuth";
 import { BRAND_NAME } from "../config/brand";
+import BrandLogo from "../components/BrandLogo";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { SERVICES } from "../services/serviceData";
@@ -73,7 +74,8 @@ export default function Home() {
       <div className="public-home">
         <header className="public-home-nav">
           <button className="public-home-brand" onClick={() => navigate("/")}>
-            {BRAND_NAME}
+            <BrandLogo className="brand-mark" size={26} gradientId="fluxze-home-mark" />
+            <span>{BRAND_NAME}</span>
           </button>
 
           <nav className="public-home-links" aria-label="Main navigation">

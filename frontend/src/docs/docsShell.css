@@ -121,6 +121,38 @@
     position: static;
     max-height: none;
   }
+
+  /* Single/header layout (Developers page): the category triggers wrap into
+     a column and each dropdown opens INLINE and full-width instead of as an
+     absolutely-positioned popover. An absolute popover anchored to a trigger
+     that has wrapped toward the right edge spills off-screen on a phone; an
+     inline, full-width panel always fits and just pushes the page down. */
+  .docs-topnav .docs-search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .docs-topnav-cats {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 0.4rem;
+  }
+  .docs-topnav-cats .docs-nav-section {
+    width: 100%;
+  }
+  .docs-topnav-cats summary.docs-nav-heading {
+    width: 100%;
+    box-sizing: border-box;
+    justify-content: space-between;
+  }
+  .docs-topnav-cats .docs-nav-list {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    max-height: none;
+    margin-top: 4px;
+    box-shadow: none;
+  }
 }
 
 .docs-sidebar {
