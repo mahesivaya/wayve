@@ -147,6 +147,17 @@
 
 .create-org-pay-option input {
   margin: 0;
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.create-org-pay-saved {
+  margin: 0;
+}
+
+.create-org-pay-option--toggle {
+  font-size: 13px;
+  color: var(--color-text-secondary);
 }
 
 .create-org-card-fields {

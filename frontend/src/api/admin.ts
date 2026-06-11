@@ -195,6 +195,7 @@ export async function orgSignupIntent(input: {
   place?: string;
   admin_email?: string;
   payment_choice: "saved" | "new";
+  plan_code?: string;
 }): Promise<OrgSignupIntentResult> {
   const res = await apiFetch("/api/organizations/signup-intent", {
     method: "POST",
@@ -207,6 +208,7 @@ export async function orgSignupIntent(input: {
           ? input.admin_email.trim()
           : null,
       payment_choice: input.payment_choice,
+      plan_code: input.plan_code ?? null,
     }),
   });
   const data = await res.json().catch(() => ({}));

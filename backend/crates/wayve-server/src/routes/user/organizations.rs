@@ -511,10 +511,6 @@ pub async fn create_my_organization(
         );
     }
 
-    if !BUSINESS_UPGRADE_ENABLED {
-        return Ok(business_upgrade_disabled());
-    }
-
     // Only personal users may self-serve.
     if let Some(resp) = reject_non_personal(pool.get_ref(), user_id).await? {
         return Ok(resp);
@@ -546,18 +542,6 @@ pub async fn create_my_organization(
         "role": "owner",
         "seat_limit": STARTER_SEAT_LIMIT
     })))
-}
-
-/// Self-serve upgrade from a personal account to a business (organization)
-/// account is disabled. Flip to `true` to re-enable the signup flow.
-const BUSINESS_UPGRADE_ENABLED: bool = false;
-
-/// 403 response used to reject every self-serve org-creation entry point while
-/// the business-upgrade feature is disabled.
-fn business_upgrade_disabled() -> HttpResponse {
-    HttpResponse::Forbidden().json(serde_json::json!({
-        "message": "Creating a business account is not available. Please contact sales to set up an organization plan."
-    }))
 }
 
 /// Return `Some(409 response)` if the user isn't a plain personal account (so
@@ -594,6 +578,11 @@ pub struct OrgSignupIntentInput {
     /// → return a client_secret the frontend confirms with a Payment Element.
     #[serde(default)]
     pub payment_choice: Option<String>,
+    /// Which org tier to start on: "business_startups" or "organization"
+    /// (default). Anything else (incl. "enterprise", which is contact-sales)
+    /// falls back to "organization".
+    #[serde(default)]
+    pub plan_code: Option<String>,
 }
 
 /// Step 1 of payment-gated org creation. Validates the form, ensures the
@@ -620,10 +609,6 @@ pub async fn org_signup_intent(
                 .json(serde_json::json!({ "message": "Authentication required" })));
         }
     };
-
-    if !BUSINESS_UPGRADE_ENABLED {
-        return Ok(business_upgrade_disabled());
-    }
 
     let name = data.name.trim();
     if name.is_empty() || name.len() > 120 {
@@ -674,11 +659,20 @@ pub async fn org_signup_intent(
             .json(serde_json::json!({ "message": "Enter a valid admin email address" })));
     }
 
-    // Resolve the organization plan + its Stripe price.
+    // Resolve the chosen organization plan + its Stripe price. Only the two
+    // self-serve paid tiers are allowed; anything else (incl. enterprise, which
+    // is contact-sales) falls back to the Business ("organization") plan.
+    let requested_code = data.plan_code.as_deref().unwrap_or("organization");
+    let plan_code_filter = if matches!(requested_code, "business_startups" | "organization") {
+        requested_code
+    } else {
+        "organization"
+    };
     let plan = sqlx::query_as::<_, (String, Option<String>)>(
         "SELECT code, stripe_price_id FROM plans \
-         WHERE code = 'organization' AND is_active = true",
+         WHERE code = $1 AND audience = 'organization' AND is_active = true",
     )
+    .bind(plan_code_filter)
     .fetch_optional(pool.get_ref())
     .await?;
     let Some((plan_code, price_id)) = plan else {
@@ -816,10 +810,6 @@ pub async fn finalize_org_signup(
                 .json(serde_json::json!({ "message": "Authentication required" })));
         }
     };
-    if !BUSINESS_UPGRADE_ENABLED {
-        return Ok(business_upgrade_disabled());
-    }
-
     let pending_id = data.pending_id;
 
     let row = sqlx::query_as::<_, (i32, Option<String>, String, Option<i32>)>(

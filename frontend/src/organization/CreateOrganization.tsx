@@ -17,10 +17,6 @@ import "./createOrganization.css";
 
 const STRIPE_JS_URL = "https://js.stripe.com/v3/";
 
-// Self-serve upgrade from a personal account to a business (organization)
-// account is disabled. Flip to true to re-enable the payment-gated flow.
-const BUSINESS_UPGRADE_ENABLED = false;
-
 function loadStripeScript(): Promise<void> {
   if (window.Stripe) return Promise.resolve();
   return new Promise((resolve, reject) => {
@@ -245,6 +241,7 @@ export default function CreateOrganization() {
         place: place.trim() || undefined,
         admin_email: adminEmail.trim() || undefined,
         payment_choice: "saved",
+        plan_code: intendedPlan || undefined,
       });
 
       const org =
@@ -260,29 +257,6 @@ export default function CreateOrganization() {
       setCreating(false);
     }
   };
-
-  // Feature disabled: individual users may no longer self-upgrade to a
-  // business (organization) account. Org plans are provisioned via sales.
-  if (!BUSINESS_UPGRADE_ENABLED) {
-    return (
-      <div className="create-org-page">
-        <div className="create-org-card">
-          <h1>Organization setup</h1>
-          <p>
-            Creating a business account is not available from here. Please
-            contact our team to set up an organization plan.
-          </p>
-          <button
-            type="button"
-            className="create-org-primary"
-            onClick={() => navigate("/support")}
-          >
-            Contact sales
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // Guard: only personal users may self-serve a new org.
   if (!isPersonal) {
@@ -371,32 +345,29 @@ export default function CreateOrganization() {
             {billingReady && billingConfigured && (
               <>
                 {defaultCard && (
-                  <label className="create-org-pay-option">
-                    <input
-                      type="radio"
-                      name="org-payment-choice"
-                      checked={paymentChoice === "saved"}
-                      onChange={() => setPaymentChoice("saved")}
-                    />
-                    <span>
+                  <>
+                    {/* Default to the card already on file; only reveal the
+                        new-card form if the user opts to use a different one. */}
+                    <p className="create-org-pay-option create-org-pay-saved">
                       Use saved card —{" "}
                       <strong>
                         {defaultCard.brand.toUpperCase()} ••••{" "}
                         {defaultCard.last4}
                       </strong>
-                    </span>
-                  </label>
-                )}
-                {defaultCard && (
-                  <label className="create-org-pay-option">
-                    <input
-                      type="radio"
-                      name="org-payment-choice"
-                      checked={paymentChoice === "new"}
-                      onChange={() => setPaymentChoice("new")}
-                    />
-                    <span>New payment method</span>
-                  </label>
+                    </p>
+                    <label className="create-org-pay-option create-org-pay-option--toggle">
+                      <input
+                        type="checkbox"
+                        checked={paymentChoice === "new"}
+                        onChange={(event) =>
+                          setPaymentChoice(
+                            event.target.checked ? "new" : "saved"
+                          )
+                        }
+                      />
+                      <span>Use a different card</span>
+                    </label>
+                  </>
                 )}
                 {paymentChoice === "new" && (
                   <div className="create-org-card-fields">

@@ -800,12 +800,20 @@ export default function Billing() {
         ) : !isForOwner &&
           ownerType === "personal" &&
           plan.audience === "organization" ? (
-          // Self-serve upgrade from a personal account to a business
-          // (organization) account is currently disabled. Org plans are
-          // provisioned through sales / support instead.
-          <button type="button" onClick={() => navigate("/support")}>
-            Contact sales
-          </button>
+          // Personal users can self-serve into the Startups tier only; the
+          // larger Business plan (and Enterprise) route to sales for now.
+          plan.code === "business_startups" ? (
+            <button
+              type="button"
+              onClick={() => navigate(`/organizations/new?plan=${plan.code}`)}
+            >
+              Upgrade
+            </button>
+          ) : (
+            <button type="button" onClick={() => navigate("/support")}>
+              Contact sales
+            </button>
+          )
         ) : (
           <button type="button" disabled>
             {isForOwner ? "Free tier" : `Requires ${plan.audience} account`}
