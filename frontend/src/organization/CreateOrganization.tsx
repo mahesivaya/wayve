@@ -17,6 +17,10 @@ import "./createOrganization.css";
 
 const STRIPE_JS_URL = "https://js.stripe.com/v3/";
 
+// Self-serve upgrade from a personal account to a business (organization)
+// account is disabled. Flip to true to re-enable the payment-gated flow.
+const BUSINESS_UPGRADE_ENABLED = false;
+
 function loadStripeScript(): Promise<void> {
   if (window.Stripe) return Promise.resolve();
   return new Promise((resolve, reject) => {
@@ -256,6 +260,29 @@ export default function CreateOrganization() {
       setCreating(false);
     }
   };
+
+  // Feature disabled: individual users may no longer self-upgrade to a
+  // business (organization) account. Org plans are provisioned via sales.
+  if (!BUSINESS_UPGRADE_ENABLED) {
+    return (
+      <div className="create-org-page">
+        <div className="create-org-card">
+          <h1>Organization setup</h1>
+          <p>
+            Creating a business account is not available from here. Please
+            contact our team to set up an organization plan.
+          </p>
+          <button
+            type="button"
+            className="create-org-primary"
+            onClick={() => navigate("/support")}
+          >
+            Contact sales
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Guard: only personal users may self-serve a new org.
   if (!isPersonal) {
