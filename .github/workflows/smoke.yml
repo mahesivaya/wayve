@@ -65,6 +65,10 @@ jobs:
         with:
           workspaces: backend
 
+      - name: cargo fmt --check
+        working-directory: backend
+        run: cargo fmt --check
+
       - name: Apply schema
         run: psql "$DATABASE_URL" -f infra/postgres/init.sql
         env:

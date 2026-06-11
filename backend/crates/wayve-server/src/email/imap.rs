@@ -205,11 +205,7 @@ pub async fn sync_imap_account(
     Ok(())
 }
 
-async fn store_message(
-    pool: &PgPool,
-    account_id: i32,
-    msg: &FetchedMessage,
-) -> anyhow::Result<()> {
+async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> anyhow::Result<()> {
     let parsed = MessageParser::default()
         .parse(&msg.raw)
         .ok_or_else(|| anyhow!("could not parse RFC822 message"))?;
@@ -281,9 +277,7 @@ pub async fn send_via_imap(
 
     let creds = Credentials::new(from_email.to_string(), password.to_string());
     let builder = match security {
-        MailSecurity::StartTls => {
-            AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(smtp_host)
-        }
+        MailSecurity::StartTls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(smtp_host),
         MailSecurity::Ssl => AsyncSmtpTransport::<Tokio1Executor>::relay(smtp_host),
     };
     let mailer = match builder {

@@ -557,7 +557,8 @@ async fn reject_non_personal(
             .await?;
     match account_type {
         None => Ok(Some(
-            HttpResponse::Unauthorized().json(serde_json::json!({ "message": "Account not found" })),
+            HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Account not found" })),
         )),
         Some(t) if t != "personal" => Ok(Some(HttpResponse::Conflict().json(serde_json::json!({
             "message": "Your account already belongs to an organization or platform scope"
@@ -671,10 +672,11 @@ pub async fn org_signup_intent(
     };
 
     // Bill the founder's personal customer (reused as the org's on finalize).
-    let customer_id = match ensure_customer(pool.get_ref(), BillingOwner::User(user_id), &founder_email).await {
-        Ok(id) => id,
-        Err(resp) => return Ok(resp),
-    };
+    let customer_id =
+        match ensure_customer(pool.get_ref(), BillingOwner::User(user_id), &founder_email).await {
+            Ok(id) => id,
+            Err(resp) => return Ok(resp),
+        };
 
     // For "saved", resolve the default card up front so we can reject early
     // when there's nothing on file.
@@ -689,8 +691,9 @@ pub async fn org_signup_intent(
             }
             Err(e) => {
                 error!(target: "billing", error = ?e, "saved card lookup failed");
-                return Ok(HttpResponse::BadGateway()
-                    .json(serde_json::json!({ "message": "Could not reach the payment provider" })));
+                return Ok(HttpResponse::BadGateway().json(
+                    serde_json::json!({ "message": "Could not reach the payment provider" }),
+                ));
             }
         }
     } else {
@@ -804,12 +807,14 @@ pub async fn finalize_org_signup(
     .await?;
 
     let Some((owner_id, sub_id, status, organization_id)) = row else {
-        return Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Signup not found" })));
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Signup not found" }))
+        );
     };
     if owner_id != user_id {
-        return Ok(HttpResponse::Forbidden()
-            .json(serde_json::json!({ "message": "Not your signup" })));
+        return Ok(
+            HttpResponse::Forbidden().json(serde_json::json!({ "message": "Not your signup" }))
+        );
     }
 
     // Already finalized — return the existing org (idempotent).
@@ -913,23 +918,28 @@ pub(crate) async fn finalize_org_signup_inner(
         return Ok(organization_id);
     }
 
-    let created =
-        match create_org_for_user(&mut tx, owner_id, &name, place.as_deref(), admin_email.as_deref())
-            .await?
-        {
-            Some(org) => org,
-            None => {
-                // Name taken between intent and finalize. Mark failed; the
-                // caller turns this into a 409 and the charge can be refunded
-                // out of band.
-                sqlx::query("UPDATE pending_org_signups SET status = 'failed' WHERE id = $1")
-                    .bind(pending_id)
-                    .execute(&mut *tx)
-                    .await?;
-                tx.commit().await?;
-                return Ok(None);
-            }
-        };
+    let created = match create_org_for_user(
+        &mut tx,
+        owner_id,
+        &name,
+        place.as_deref(),
+        admin_email.as_deref(),
+    )
+    .await?
+    {
+        Some(org) => org,
+        None => {
+            // Name taken between intent and finalize. Mark failed; the
+            // caller turns this into a 409 and the charge can be refunded
+            // out of band.
+            sqlx::query("UPDATE pending_org_signups SET status = 'failed' WHERE id = $1")
+                .bind(pending_id)
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
+            return Ok(None);
+        }
+    };
     let org_id = created.id;
 
     // Link the founder's Stripe customer to the org so org-scoped billing
@@ -970,11 +980,13 @@ pub(crate) async fn finalize_org_signup_inner(
         .await?;
     }
 
-    sqlx::query("UPDATE pending_org_signups SET status = 'finalized', organization_id = $1 WHERE id = $2")
-        .bind(org_id)
-        .bind(pending_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "UPDATE pending_org_signups SET status = 'finalized', organization_id = $1 WHERE id = $2",
+    )
+    .bind(org_id)
+    .bind(pending_id)
+    .execute(&mut *tx)
+    .await?;
 
     tx.commit().await?;
 

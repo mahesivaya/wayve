@@ -161,13 +161,14 @@ pub async fn rename_folder(
 
     // UPDATE ... RETURNING folds the ownership check and "did it exist?" check
     // into one round-trip; a 404 (not 403) avoids leaking other users' rows.
-    let updated: Option<i64> =
-        sqlx::query_scalar("UPDATE folders SET name = $1 WHERE id = $2 AND user_id = $3 RETURNING id")
-            .bind(name)
-            .bind(folder_id)
-            .bind(user_id)
-            .fetch_optional(pool.get_ref())
-            .await?;
+    let updated: Option<i64> = sqlx::query_scalar(
+        "UPDATE folders SET name = $1 WHERE id = $2 AND user_id = $3 RETURNING id",
+    )
+    .bind(name)
+    .bind(folder_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
 
     if updated.is_none() {
         return Ok(

@@ -69,17 +69,17 @@ struct DocumentFile {
 /// platform-wide shared set — platform staff have no org). Personal accounts
 /// get a 403. Callers bind `scope` (an `Option<i32>`) and match rows with
 /// `organization_id IS NOT DISTINCT FROM $n`, so `None` matches the NULL rows.
-async fn org_context(
-    req: &HttpRequest,
-    pool: &PgPool,
-) -> Result<(i32, Option<i32>), HttpResponse> {
+async fn org_context(req: &HttpRequest, pool: &PgPool) -> Result<(i32, Option<i32>), HttpResponse> {
     let user_id = get_user_id_from_request(req).ok_or_else(|| {
-        HttpResponse::Unauthorized().json(serde_json::json!({ "message": "Authentication required" }))
+        HttpResponse::Unauthorized()
+            .json(serde_json::json!({ "message": "Authentication required" }))
     })?;
-    let ctx = rbac::resolve_role_context(pool, user_id).await.map_err(|e| {
-        error!(target: "http", user_id, error = ?e, "documents role resolution failed");
-        HttpResponse::InternalServerError().finish()
-    })?;
+    let ctx = rbac::resolve_role_context(pool, user_id)
+        .await
+        .map_err(|e| {
+            error!(target: "http", user_id, error = ?e, "documents role resolution failed");
+            HttpResponse::InternalServerError().finish()
+        })?;
     match (ctx.scope, ctx.organization_id) {
         (Scope::Organization, Some(org_id)) => Ok((user_id, Some(org_id))),
         (Scope::Platform, _) => Ok((user_id, None)),
@@ -194,8 +194,9 @@ pub async fn rename_folder(
 
     match updated {
         Some(_) => Ok(HttpResponse::Ok().json(serde_json::json!({ "renamed": true }))),
-        None => Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Folder not found" }))),
+        None => {
+            Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Folder not found" })))
+        }
     }
 }
 
@@ -238,8 +239,9 @@ pub async fn delete_folder(
     .await?;
 
     if removed.is_none() {
-        return Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Folder not found" })));
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Folder not found" }))
+        );
     }
 
     for p in paths {
@@ -367,9 +369,7 @@ pub async fn upload_documents(
 
         // `storage_limit_bytes` is -1 (unlimited) for the platform-wide set, so
         // this check is naturally skipped there; it only bites org uploads.
-        if storage_limit_bytes >= 0
-            && used.saturating_add(size) > storage_limit_bytes
-        {
+        if storage_limit_bytes >= 0 && used.saturating_add(size) > storage_limit_bytes {
             return Ok(HttpResponse::PaymentRequired().json(serde_json::json!({
                 "message": "Storage limit exceeded. Remove files or upgrade your plan.",
                 "storage_limit_bytes": storage_limit_bytes,
@@ -378,8 +378,8 @@ pub async fn upload_documents(
             })));
         }
 
-        let (file_iv, encrypted_bytes) =
-            encrypt_binary(&plaintext).map_err(|_| actix_web::error::ErrorInternalServerError("Encrypt error"))?;
+        let (file_iv, encrypted_bytes) = encrypt_binary(&plaintext)
+            .map_err(|_| actix_web::error::ErrorInternalServerError("Encrypt error"))?;
         let mut f = fs::File::create(&filepath)
             .await
             .map_err(|_| actix_web::error::ErrorInternalServerError("File create error"))?;
@@ -494,8 +494,9 @@ pub async fn rename_document(
 
     match updated {
         Some(_) => Ok(HttpResponse::Ok().json(serde_json::json!({ "renamed": true }))),
-        None => Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "File not found" }))),
+        None => {
+            Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "File not found" })))
+        }
     }
 }
 
@@ -525,8 +526,9 @@ pub async fn delete_document(
             let _ = fs::remove_file(&file_path).await;
             Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
         }
-        None => Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "File not found" }))),
+        None => {
+            Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "File not found" })))
+        }
     }
 }
 

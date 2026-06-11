@@ -29,12 +29,13 @@ mod tests {
 
     async fn make_org_owner(pool: &PgPool, email: &str) -> (i32, i32) {
         let id = insert_local_user(pool, email, "password123").await;
-        let org_id =
-            sqlx::query_scalar::<_, i32>("INSERT INTO organizations (name) VALUES ($1) RETURNING id")
-                .bind(format!("Org {email}"))
-                .fetch_one(pool)
-                .await
-                .unwrap_or_else(|e| panic!("insert org: {e}"));
+        let org_id = sqlx::query_scalar::<_, i32>(
+            "INSERT INTO organizations (name) VALUES ($1) RETURNING id",
+        )
+        .bind(format!("Org {email}"))
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("insert org: {e}"));
         sqlx::query(
             "UPDATE users SET account_type = 'organization', organization_id = $1 WHERE id = $2",
         )
@@ -161,7 +162,9 @@ mod tests {
             get(format!("/platform-team/users?q={personal_email}")),
         )
         .await;
-        let rows = resp["users"].as_array().unwrap_or_else(|| panic!("users array"));
+        let rows = resp["users"]
+            .as_array()
+            .unwrap_or_else(|| panic!("users array"));
         assert_eq!(rows.len(), 1, "expected one personal user match");
         assert_eq!(rows[0]["email"].as_str(), Some(personal_email.as_str()));
         assert_eq!(

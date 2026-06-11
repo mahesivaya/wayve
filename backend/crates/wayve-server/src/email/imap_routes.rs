@@ -44,15 +44,13 @@ fn imap_guess(domain: &str) -> (String, i32, String, i32) {
             "smtp.fastmail.com".into(),
             465,
         ),
-        "icloud.com" | "me.com" | "mac.com" => {
-            ("imap.mail.me.com".into(), 993, "smtp.mail.me.com".into(), 587)
-        }
-        _ => (
-            format!("imap.{domain}"),
+        "icloud.com" | "me.com" | "mac.com" => (
+            "imap.mail.me.com".into(),
             993,
-            format!("smtp.{domain}"),
-            465,
+            "smtp.mail.me.com".into(),
+            587,
         ),
+        _ => (format!("imap.{domain}"), 993, format!("smtp.{domain}"), 465),
     }
 }
 
@@ -84,7 +82,11 @@ pub async fn imap_autodiscover(
         None => mx_provider(&domain).await,
     };
     if let Some(p) = oauth {
-        let hint = if p == "outlook" { "microsoft" } else { "google" };
+        let hint = if p == "outlook" {
+            "microsoft"
+        } else {
+            "google"
+        };
         return HttpResponse::Ok().json(serde_json::json!({ "use_oauth": hint }));
     }
 
@@ -259,9 +261,15 @@ pub async fn imap_connect(
     let email_clone = email.clone();
     let imap_port = body.imap_port;
     actix_web::rt::spawn(async move {
-        if let Err(e) =
-            sync_imap_account(&pool_clone, account_id, &host, imap_port, &email_clone, &password)
-                .await
+        if let Err(e) = sync_imap_account(
+            &pool_clone,
+            account_id,
+            &host,
+            imap_port,
+            &email_clone,
+            &password,
+        )
+        .await
         {
             warn!(target: "worker", account_id, error = ?e, "initial imap sync failed");
         }
@@ -280,7 +288,10 @@ mod tests {
 
     #[test]
     fn domain_parsing() {
-        assert_eq!(domain_of("owner@company.com").as_deref(), Some("company.com"));
+        assert_eq!(
+            domain_of("owner@company.com").as_deref(),
+            Some("company.com")
+        );
         assert_eq!(domain_of("bad-email"), None);
         assert_eq!(domain_of("@nope.com"), None);
         assert_eq!(domain_of("a@b"), None); // no dot in domain

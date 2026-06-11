@@ -34,7 +34,10 @@ pub(crate) fn resolve_geo(req: &HttpRequest, ip: Option<&str>) -> GeoLocation {
     let Some(ip) = ip else {
         return GeoLocation::default();
     };
-    match req.app_data::<web::Data<Option<GeoIp>>>().map(web::Data::get_ref) {
+    match req
+        .app_data::<web::Data<Option<GeoIp>>>()
+        .map(web::Data::get_ref)
+    {
         Some(Some(geo)) => geo.lookup(ip),
         _ => GeoLocation::default(),
     }

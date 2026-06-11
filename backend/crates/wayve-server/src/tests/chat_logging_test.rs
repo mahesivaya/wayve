@@ -18,9 +18,9 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use tracing::field::{Field, Visit};
     use tracing::{Event, Subscriber};
+    use tracing_subscriber::Layer;
     use tracing_subscriber::layer::{Context, SubscriberExt};
     use tracing_subscriber::registry::LookupSpan;
-    use tracing_subscriber::Layer;
 
     // ---- captured-log plumbing ------------------------------------------------
 
@@ -31,10 +31,7 @@ mod tests {
 
     impl CapturedLogs {
         fn snapshot(&self) -> Vec<String> {
-            self.lines
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .clone()
+            self.lines.lock().unwrap_or_else(|e| e.into_inner()).clone()
         }
     }
 

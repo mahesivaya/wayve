@@ -337,9 +337,8 @@ pub async fn rename_file(
     let name = body.name.replace(['/', '\\'], "");
     let name = name.trim();
     if name.is_empty() {
-        return Ok(
-            HttpResponse::BadRequest().json(serde_json::json!({ "error": "File name is required" }))
-        );
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "error": "File name is required" })));
     }
     if name.chars().count() > 255 {
         return Ok(HttpResponse::BadRequest()
@@ -413,13 +412,8 @@ pub async fn delete_file(
     // Decrement storage usage with a negative event, mirroring the positive
     // event recorded on upload.
     if let Ok(owner) = resolve_owner(pool.get_ref(), user_id).await {
-        let _ = usage_metering::record_event(
-            pool.get_ref(),
-            owner,
-            "drive_storage_bytes",
-            -size,
-        )
-        .await;
+        let _ =
+            usage_metering::record_event(pool.get_ref(), owner, "drive_storage_bytes", -size).await;
     }
 
     crate::audit::record_action(

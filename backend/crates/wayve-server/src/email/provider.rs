@@ -23,13 +23,13 @@
 // enum shims at the bottom of this file.
 
 use crate::email::account::invalidate_email_account_cache;
+use crate::email::imap::{
+    MailSecurity, decode_secret as decode_imap_secret, send_via_imap, sync_imap_account,
+};
 use crate::email::oauth::{HTTP_CLIENT, refresh_access_token, try_load_google_secrets};
 use crate::email::outlook::{
     OUTLOOK_MAIL_SCOPE, OutlookCredentials, outlook_credentials, refresh_outlook_token,
     sync_outlook_account, sync_outlook_account_before,
-};
-use crate::email::imap::{
-    MailSecurity, decode_secret as decode_imap_secret, send_via_imap, sync_imap_account,
 };
 use crate::email::send::{send_via_gmail, send_via_outlook};
 use crate::email::sync::{sync_account, sync_account_before};

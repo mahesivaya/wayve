@@ -7,9 +7,7 @@ use super::dto::WsAuthQuery;
 
 use crate::ws_registry::SessionRegistry;
 
-use actix::{
-    Actor, ActorFutureExt, AsyncContext, Handler, Message as ActixMessage, StreamHandler,
-};
+use actix::{Actor, ActorFutureExt, AsyncContext, Handler, Message as ActixMessage, StreamHandler};
 use actix_web_actors::ws;
 use actix_web_actors::ws::WebsocketContext;
 use sqlx::{PgPool, Row};
@@ -439,10 +437,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
 
                                     // Fan out to every other member via Redis
                                     // (or local fallback) in one background task.
-                                    let recipients: Vec<i32> = members
-                                        .into_iter()
-                                        .filter(|&m| m != sender_id)
-                                        .collect();
+                                    let recipients: Vec<i32> =
+                                        members.into_iter().filter(|&m| m != sender_id).collect();
                                     let payload = msg_json.clone();
                                     actix_web::rt::spawn(async move {
                                         for member_id in recipients {

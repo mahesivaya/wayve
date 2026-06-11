@@ -211,8 +211,9 @@ pub async fn update_project(
             "id": row.get::<i32, _>("id"),
             "name": row.get::<String, _>("name"),
         }))),
-        None => Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Project not found" }))),
+        None => Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Project not found" }))
+        ),
     }
 }
 
@@ -248,7 +249,9 @@ pub async fn get_team(
 ) -> AppResult {
     let slug = path.into_inner();
     let Some(org_id) = caller_org_id(&req, pool.get_ref()).await? else {
-        return Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Team not found" })));
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Team not found" }))
+        );
     };
 
     let row = sqlx::query(

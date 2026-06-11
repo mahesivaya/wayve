@@ -162,10 +162,7 @@ pub async fn get_messages(
 /// this returns only counts + timestamps, never message text. One grouped
 /// scan over `messages` (DM-only table), served by the conversation indexes.
 #[instrument(target = "http", skip(req, pool))]
-pub async fn get_conversation_summary(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-) -> AppResult {
+pub async fn get_conversation_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let rows = sqlx::query(
