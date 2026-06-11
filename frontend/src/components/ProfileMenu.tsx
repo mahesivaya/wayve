@@ -4,6 +4,8 @@ import { useAuth } from "../auth/useAuth";
 import ThemeCustomizer from "../theme/ThemeCustomizer";
 import { useCustomTheme } from "../theme/useCustomTheme";
 import SupportModal from "../support/SupportModal";
+import Avatar from "./Avatar";
+import { getApiBase } from "../config/env";
 
 // Three "identity" CSS variables — used as inline backgrounds on the
 // Appearance menu item's mini swatch. Browsers resolve var() in inline
@@ -80,9 +82,12 @@ export default function ProfileMenu() {
         aria-expanded={menuOpen}
         title={user.email}
       >
-        <span className="profile-avatar">
-          {(user.email?.[0] ?? "?").toUpperCase()}
-        </span>
+        <Avatar
+          className="profile-avatar"
+          name={user.email}
+          src={`${getApiBase()}/api/users/${user.id}/avatar`}
+          size={30}
+        />
       </button>
 
       {menuOpen && (

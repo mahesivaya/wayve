@@ -265,5 +265,8 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
         .service(get_user_by_email)
         .service(get_all_users)
         .service(get_profile)
-        .service(update_profile);
+        .service(update_profile)
+        .service(upload_avatar)
+        .service(get_avatar)
+        .service(delete_avatar);
 }

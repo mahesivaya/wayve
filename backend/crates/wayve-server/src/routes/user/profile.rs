@@ -10,8 +10,13 @@ use crate::email::profile::invalidate_me_cache;
 use crate::models::auth::ChangePasswordInput;
 use crate::models::email_request::UserResponse;
 use crate::prelude::*;
-use actix_web::put;
+use actix_multipart::Multipart;
+use actix_web::http::header;
+use actix_web::{delete, put};
+use futures_util::StreamExt;
+use tokio::{fs, io::AsyncWriteExt};
 use tracing::{error, info, instrument, warn};
+use uuid::Uuid;
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::password::{hash_password, verify_password};
 use wayve_security::rbac;
@@ -83,7 +88,7 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
     let result = sqlx::query(
         r#"
         SELECT
-            u.id, u.email, u.first_name, u.last_name, u.auth_provider, u.account_type, u.organization_id, u.username, u.recovery_mode,
+            u.id, u.email, u.first_name, u.last_name, u.auth_provider, u.account_type, u.organization_id, u.username, u.recovery_mode, u.avatar_path,
             o.name as organization_name,
             (SELECT COUNT(*)::BIGINT FROM emails e JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id) as total_emails,
             (SELECT COALESCE(SUM(octet_length(body_encrypted)), 0)::BIGINT FROM emails e JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id) as email_storage_bytes,
@@ -119,6 +124,8 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
             let notes_storage_bytes: i64 = row.get("notes_storage_bytes");
             let tasks_storage_bytes: i64 = row.get("tasks_storage_bytes");
             let username: Option<String> = row.try_get("username").ok();
+            let avatar_path: Option<String> = row.try_get("avatar_path").ok().flatten();
+            let avatar_url = avatar_path.map(|_| format!("/api/users/{id}/avatar"));
             let recovery_mode: String = row
                 .try_get("recovery_mode")
                 .unwrap_or_else(|_| "full".to_string());
@@ -193,6 +200,7 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 "memory_used_bytes": total_used,
                 "memory_limit_bytes": memory_limit_bytes,
                 "recovery_mode": recovery_mode,
+                "avatar_url": avatar_url,
             });
 
             PROFILE_CACHE.insert(user_id, response.clone()).await;
@@ -201,6 +209,179 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
         Ok(None) => Ok(HttpResponse::NotFound().finish()),
         Err(e) => Err(AppError::Db(e)),
     }
+}
+
+/// Max accepted avatar upload (2 MB). Avatars are small; this caps disk abuse.
+const MAX_AVATAR_BYTES: usize = 2 * 1024 * 1024;
+
+/// Detect the image type from its magic bytes (NOT the filename) and return the
+/// canonical extension. Returns None for anything that isn't PNG/JPEG/WebP — in
+/// particular SVG/HTML are rejected, so a disguised file can't become stored XSS
+/// when the image is later served inline.
+fn detect_image_ext(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.len() >= 8 && bytes[..8] == [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
+        Some("png")
+    } else if bytes.len() >= 3 && bytes[..3] == [0xFF, 0xD8, 0xFF] {
+        Some("jpg")
+    } else if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        Some("webp")
+    } else {
+        None
+    }
+}
+
+/// Upload (or replace) the caller's profile image. Multipart field name `avatar`.
+#[post("/profile/avatar")]
+#[instrument(target = "http", skip(req, pool, payload))]
+pub async fn upload_avatar(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    mut payload: Multipart,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => return Ok(HttpResponse::Unauthorized().finish()),
+    };
+
+    // Read the `avatar` part, enforcing the size cap as we stream.
+    let mut data: Option<Vec<u8>> = None;
+    while let Some(item) = payload.next().await {
+        let mut field = match item {
+            Ok(f) => f,
+            Err(_) => return Ok(HttpResponse::BadRequest().body("Invalid multipart")),
+        };
+        if field.name() != "avatar" {
+            continue;
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = field.next().await {
+            let chunk = match chunk {
+                Ok(c) => c,
+                Err(_) => return Ok(HttpResponse::BadRequest().body("Chunk error")),
+            };
+            if bytes.len() + chunk.len() > MAX_AVATAR_BYTES {
+                return Ok(HttpResponse::PayloadTooLarge()
+                    .json(serde_json::json!({ "message": "Image too large (max 2 MB)" })));
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        data = Some(bytes);
+        break;
+    }
+
+    let Some(bytes) = data.filter(|b| !b.is_empty()) else {
+        return Ok(
+            HttpResponse::BadRequest().json(serde_json::json!({ "message": "No image provided" }))
+        );
+    };
+
+    // Validate by content, not filename.
+    let Some(ext) = detect_image_ext(&bytes) else {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Unsupported image type (PNG, JPEG, or WebP only)"
+        })));
+    };
+
+    let dir = "./uploads/avatars";
+    fs::create_dir_all(dir).await.map_err(|e| {
+        error!(target: "http", error = ?e, "avatar dir create failed");
+        AppError::internal("avatar dir")
+    })?;
+    // UUID filename — never the user-supplied name (no path traversal).
+    let filepath = format!("{}/{}.{}", dir, Uuid::new_v4(), ext);
+    let mut f = fs::File::create(&filepath).await.map_err(|e| {
+        error!(target: "http", path = %filepath, error = ?e, "avatar create failed");
+        AppError::internal("avatar create")
+    })?;
+    f.write_all(&bytes).await.map_err(|e| {
+        error!(target: "http", path = %filepath, error = ?e, "avatar write failed");
+        AppError::internal("avatar write")
+    })?;
+
+    sqlx::query("UPDATE users SET avatar_path = $1 WHERE id = $2")
+        .bind(&filepath)
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
+
+    invalidate_me_cache(user_id).await;
+    invalidate_profile_cache(user_id).await;
+
+    info!(target: "http", user_id, "avatar uploaded");
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "avatar_url": format!("/api/users/{user_id}/avatar")
+    })))
+}
+
+/// Serve a user's avatar image. Any logged-in user may view any avatar (they
+/// appear in shared surfaces — chat, members, email). 404 when none is set, so
+/// the client falls back to the generated initial.
+#[get("/users/{id}/avatar")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn get_avatar(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    if get_user_id_from_request(&req).is_none() {
+        return Ok(HttpResponse::Unauthorized().finish());
+    }
+    let target_id = path.into_inner();
+    let avatar_path: Option<String> =
+        sqlx::query_scalar::<_, Option<String>>("SELECT avatar_path FROM users WHERE id = $1")
+            .bind(target_id)
+            .fetch_optional(pool.get_ref())
+            .await?
+            .flatten();
+    let Some(stored) = avatar_path else {
+        return Ok(HttpResponse::NotFound().finish());
+    };
+    let bytes = match fs::read(&stored).await {
+        Ok(b) => b,
+        Err(_) => return Ok(HttpResponse::NotFound().finish()),
+    };
+    let content_type = match stored.rsplit('.').next() {
+        Some("png") => "image/png",
+        Some("webp") => "image/webp",
+        _ => "image/jpeg",
+    };
+    Ok(HttpResponse::Ok()
+        .content_type(content_type)
+        .insert_header(("X-Content-Type-Options", "nosniff"))
+        .insert_header((header::CACHE_CONTROL, "private, max-age=300"))
+        .body(bytes))
+}
+
+/// Remove the caller's profile image — reverts to the generated initial.
+#[delete("/profile/avatar")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn delete_avatar(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => return Ok(HttpResponse::Unauthorized().finish()),
+    };
+
+    // Best-effort delete the file on disk, then clear the column.
+    let existing: Option<String> =
+        sqlx::query_scalar::<_, Option<String>>("SELECT avatar_path FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?
+            .flatten();
+    if let Some(path) = existing {
+        let _ = fs::remove_file(&path).await;
+    }
+
+    sqlx::query("UPDATE users SET avatar_path = NULL WHERE id = $1")
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
+
+    invalidate_me_cache(user_id).await;
+    invalidate_profile_cache(user_id).await;
+
+    info!(target: "http", user_id, "avatar removed");
+    Ok(HttpResponse::NoContent().finish())
 }
 
 #[post("/profile/password")]

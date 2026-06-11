@@ -1,7 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { changePassword } from "../api/Auth";
-import { getProfile, updateProfile, type ProfileData } from "../api/profile";
+import {
+  deleteAvatar,
+  getProfile,
+  updateProfile,
+  uploadAvatar,
+  type ProfileData,
+} from "../api/profile";
 import { useAuth } from "../auth/useAuth";
+import Avatar from "../components/Avatar";
+import { getApiBase } from "../config/env";
 import { logger } from "../utils/logger";
 import "./profile.css";
 
@@ -38,6 +46,44 @@ export default function Profile() {
   const [confirmPw, setConfirmPw] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
   const [pwStatus, setPwStatus] = useState<string | null>(null);
+
+  // Avatar upload. `avatarBust` cache-busts the <img> after a successful upload
+  // so the new image shows immediately despite the serve URL being unchanged.
+  const [avatarBust, setAvatarBust] = useState(0);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+
+  const onPickAvatar = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the user re-pick the same file later
+    if (!file) return;
+    setAvatarBusy(true);
+    setAvatarError(null);
+    try {
+      const { avatar_url } = await uploadAvatar(file);
+      setProfile((p) => (p ? { ...p, avatar_url } : p));
+      setAvatarBust((b) => b + 1);
+    } catch (err) {
+      setAvatarError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const onRemoveAvatar = async () => {
+    setAvatarBusy(true);
+    setAvatarError(null);
+    try {
+      await deleteAvatar();
+      setProfile((p) => (p ? { ...p, avatar_url: null } : p));
+      setAvatarBust((b) => b + 1);
+    } catch (err) {
+      setAvatarError(err instanceof Error ? err.message : "Remove failed");
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -127,6 +173,140 @@ export default function Profile() {
     <div className="settings-page">
       <div className="settings-stack">
         <h1 className="settings-page-title">My Profile</h1>
+
+        <section className="settings-card">
+          <h2 className="settings-card-title">Profile photo</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <div style={{ position: "relative", width: 72, height: 72 }}>
+              <Avatar
+                name={profile.email}
+                src={
+                  profile.avatar_url
+                    ? `${getApiBase()}${profile.avatar_url}?v=${avatarBust}`
+                    : undefined
+                }
+                size={72}
+              />
+              {/* Single small edit button overlaid on the avatar; opens a
+                  compact menu to change or remove the photo. */}
+              <button
+                type="button"
+                onClick={() => setAvatarMenuOpen((o) => !o)}
+                disabled={avatarBusy}
+                aria-label="Edit profile photo"
+                aria-haspopup="menu"
+                aria-expanded={avatarMenuOpen}
+                title="Edit profile photo"
+                style={{
+                  position: "absolute",
+                  right: -2,
+                  bottom: -2,
+                  width: 26,
+                  height: 26,
+                  borderRadius: "50%",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  border: "2px solid var(--color-surface, #fff)",
+                  background: "var(--color-primary-action, #2563eb)",
+                  color: "#fff",
+                  cursor: avatarBusy ? "default" : "pointer",
+                  fontSize: 12,
+                  lineHeight: 1,
+                  padding: 0,
+                }}
+              >
+                {avatarBusy ? "…" : "✎"}
+              </button>
+
+              {avatarMenuOpen && (
+                <>
+                  {/* Click-away backdrop. */}
+                  <div
+                    onClick={() => setAvatarMenuOpen(false)}
+                    style={{ position: "fixed", inset: 0, zIndex: 10 }}
+                  />
+                  <div
+                    role="menu"
+                    style={{
+                      position: "absolute",
+                      top: "78px",
+                      left: 0,
+                      zIndex: 11,
+                      minWidth: 150,
+                      background: "var(--color-surface, #fff)",
+                      border: "1px solid var(--color-border, #d1d5db)",
+                      borderRadius: 8,
+                      boxShadow: "0 6px 18px rgba(0,0,0,0.15)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="avatar-menu-item"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                        document.getElementById("avatar-input")?.click();
+                      }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "8px 12px",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {profile.avatar_url ? "Change photo" : "Upload photo"}
+                    </button>
+                    {profile.avatar_url && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="avatar-menu-item"
+                        onClick={() => {
+                          setAvatarMenuOpen(false);
+                          void onRemoveAvatar();
+                        }}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "8px 12px",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "#dc2626",
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div>
+              <input
+                id="avatar-input"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => void onPickAvatar(e)}
+                disabled={avatarBusy}
+                style={{ display: "none" }}
+              />
+              <p style={{ margin: 0, fontSize: "0.85em", opacity: 0.7 }}>
+                PNG, JPEG, or WebP. Max 2 MB.
+              </p>
+              {avatarError && (
+                <span className="profile-status">{avatarError}</span>
+              )}
+            </div>
+          </div>
+        </section>
 
         <section className="settings-card">
           <h2 className="settings-card-title">Account</h2>

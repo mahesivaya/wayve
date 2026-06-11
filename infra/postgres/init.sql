@@ -16,6 +16,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT '
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS account_type TEXT NOT NULL DEFAULT 'personal';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
+-- Uploaded profile image: server-relative path on disk under ./uploads/avatars/.
+-- Served (decrypted, plain) via GET /api/users/{id}/avatar so other members can
+-- see it; NULL means "no upload, fall back to the generated initial avatar".
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_path TEXT;
 
 -- Plan A: end-to-end encryption is the ONLY mode. Every user's RSA
 -- private key is wrapped by a 24-word BIP-39 mnemonic; the server
@@ -1011,7 +1015,16 @@ VALUES
      '{"bullets":["Up to 100 members","Unlimited storage & email","SSO + role-based access","Audit logs & priority support"]}'::jsonb),
     ('enterprise', 'Enterprise', '100+ members with unlimited everything. Contact sales.', 'organization', 0, 'month', -1, 100000,
      '{"bullets":["Unlimited members","Dedicated success manager","Custom onboarding & SLA","SSO, SCIM & advanced security"]}'::jsonb)
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    audience = EXCLUDED.audience,
+    amount_cents = EXCLUDED.amount_cents,
+    billing_interval = EXCLUDED.billing_interval,
+    storage_limit_bytes = EXCLUDED.storage_limit_bytes,
+    seat_limit = EXCLUDED.seat_limit,
+    features = EXCLUDED.features,
+    is_active = TRUE;
 
 -- Subscriptions: local projection of Stripe subscription state.
 CREATE TABLE IF NOT EXISTS subscriptions (

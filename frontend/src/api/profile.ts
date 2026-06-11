@@ -1,4 +1,6 @@
-import { apiFetchJson } from "./client";
+import { getApiBase } from "../config/env";
+import { getAuthToken } from "../auth/token";
+import { apiFetch, apiFetchJson } from "./client";
 
 export type ProfileData = {
   id: number;
@@ -6,6 +8,9 @@ export type ProfileData = {
   first_name: string | null;
   last_name: string | null;
   auth_provider: string;
+  // Serve URL for the uploaded profile image (/api/users/{id}/avatar), or null
+  // when the user has no upload (clients fall back to a generated initial).
+  avatar_url?: string | null;
   account_type?: string;
   effective_role?: string | null;
   role_label?: string | null;
@@ -36,6 +41,41 @@ export const updateProfile = async (data: {
     method: "PUT",
     body: JSON.stringify(data),
   });
+
+// Upload (or replace) the current user's profile image. Raw fetch (not
+// apiFetch) so the browser sets the multipart boundary — mirrors the drive
+// upload. Returns the stable serve URL for the new avatar.
+export const uploadAvatar = async (
+  file: File
+): Promise<{ avatar_url: string }> => {
+  const formData = new FormData();
+  formData.append("avatar", file);
+  const token = getAuthToken();
+  const res = await fetch(`${getApiBase()}/api/profile/avatar`, {
+    method: "POST",
+    credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
+  });
+  if (!res.ok) {
+    let message = "Avatar upload failed";
+    try {
+      const data = await res.clone().json();
+      message = data?.message || data?.error || message;
+    } catch {
+      const text = await res.text();
+      if (text.trim()) message = text.trim();
+    }
+    throw new Error(message);
+  }
+  return res.json();
+};
+
+// Remove the current user's profile image (reverts to the generated initial).
+export const deleteAvatar = async (): Promise<void> => {
+  const res = await apiFetch("/api/profile/avatar", { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to remove photo");
+};
 
 // Persist the user's serialized ThemeChoice. `theme` is the JSON string the
 // frontend customizer produces (see src/theme/CustomThemeContext.tsx) or null

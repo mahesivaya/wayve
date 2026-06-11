@@ -37,6 +37,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let row = sqlx::query(
         r#"
         SELECT u.id, u.email, u.account_type, u.organization_id, u.recovery_mode, u.theme_json,
+               u.avatar_path,
                o.slug AS organization_slug, o.name AS organization_name
         FROM users u
         LEFT JOIN organizations o ON o.id = u.organization_id
@@ -68,6 +69,10 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         .try_get::<String, _>("recovery_mode")
         .unwrap_or_else(|_| "full".to_string());
     let theme_json: Option<String> = row.try_get("theme_json").ok().flatten();
+    // Uploaded profile image. The stored value is a disk path; the client only
+    // needs the stable serve URL (it 404s/falls back to the initial when unset).
+    let avatar_path: Option<String> = row.try_get("avatar_path").ok().flatten();
+    let avatar_url = avatar_path.map(|_| format!("/api/users/{id}/avatar"));
 
     let organization_name = display_organization_name(
         &account_type,
@@ -108,6 +113,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "current_plan": current_plan,
         "recovery_mode": recovery_mode,
         "theme_json": theme_json,
+        "avatar_url": avatar_url,
     });
 
     ME_CACHE.insert(user_id, response.clone()).await;
