@@ -59,7 +59,11 @@ function PlanCard({
   isCurrent: boolean;
 }) {
   const isFree = plan.amount_cents === 0;
-  const featureEntries = Object.entries(plan.features ?? {});
+  // Plans carry a `features.bullets` array of display strings. Fall back to the
+  // storage/seats summary for any legacy row without bullets.
+  const bullets = Array.isArray(plan.features?.bullets)
+    ? (plan.features.bullets as unknown[]).map(String)
+    : null;
   return (
     <article
       className={`pricing-plan${isCurrent ? " is-current" : ""}`}
@@ -80,16 +84,17 @@ function PlanCard({
         <p className="pricing-plan-desc">{plan.description}</p>
       )}
       <ul className="pricing-plan-features">
-        <li>{formatBytes(plan.storage_limit_bytes)} storage</li>
-        <li>
-          {plan.seat_limit} {plan.seat_limit === 1 ? "seat" : "seats"}
-        </li>
-        <li>Billed {plan.billing_interval}ly</li>
-        {featureEntries.map(([key, value]) => (
-          <li key={key}>
-            {key}: {String(value)}
-          </li>
-        ))}
+        {bullets ? (
+          bullets.map((feature) => <li key={feature}>{feature}</li>)
+        ) : (
+          <>
+            <li>{formatBytes(plan.storage_limit_bytes)} storage</li>
+            <li>
+              {plan.seat_limit} {plan.seat_limit === 1 ? "seat" : "seats"}
+            </li>
+            <li>Billed {plan.billing_interval}ly</li>
+          </>
+        )}
       </ul>
       <button
         className="pricing-plan-cta"

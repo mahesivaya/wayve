@@ -562,6 +562,27 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "CREATE INDEX IF NOT EXISTS webhook_deliveries_endpoint_idx \
          ON webhook_deliveries(endpoint_id, created_at DESC)",
         // ────────────────────────────────────────────────────────────────
+        // Plan catalog. Three personal tiers (Basic / Advance / Most Advance)
+        // and three business tiers (Startups / Business / Enterprise). init.sql
+        // only seeds a fresh volume, so we re-apply the canonical catalog here
+        // on every boot via DO UPDATE — existing & prod DBs converge without a
+        // manual migration. `features.bullets` is the display list the UIs
+        // render. (This intentionally overrides any operator edits to these
+        // rows; new operator-defined plan codes are untouched.)
+        // ────────────────────────────────────────────────────────────────
+        "INSERT INTO plans (code, name, description, audience, amount_cents, billing_interval, storage_limit_bytes, seat_limit, features) VALUES \
+            ('basic_user', 'Basic', 'Free personal plan to get started.', 'personal', 0, 'month', 1073741824, 1, '{\"bullets\":[\"1 GB encrypted storage\",\"Up to 1,000 emails per day\",\"End-to-end encrypted chat\",\"1 seat\"]}'::jsonb), \
+            ('advance_user', 'Advance', 'Personal paid plan with higher limits.', 'personal', 700, 'month', 10737418240, 1, '{\"bullets\":[\"10 GB encrypted storage\",\"Unlimited daily emails\",\"1,000 encrypt/decrypt ops per day\",\"Priority email sync\"]}'::jsonb), \
+            ('most_advance_user', 'Most Advance', 'Top personal tier with full AI access.', 'personal', 1500, 'month', 53687091200, 1, '{\"bullets\":[\"50 GB encrypted storage\",\"Unlimited email & calls\",\"Full AI assistant access\",\"Priority support\"]}'::jsonb), \
+            ('business_startups', 'Startups', 'For small teams getting off the ground.', 'organization', 800, 'month', -1, 20, '{\"bullets\":[\"Up to 20 members\",\"Unlimited shared storage\",\"Shared org workspace\",\"Admin & billing controls\"]}'::jsonb), \
+            ('organization', 'Business', 'For growing organizations up to 100 members.', 'organization', 1200, 'month', -1, 100, '{\"bullets\":[\"Up to 100 members\",\"Unlimited storage & email\",\"SSO + role-based access\",\"Audit logs & priority support\"]}'::jsonb), \
+            ('enterprise', 'Enterprise', '100+ members with unlimited everything. Contact sales.', 'organization', 0, 'month', -1, 100000, '{\"bullets\":[\"Unlimited members\",\"Dedicated success manager\",\"Custom onboarding & SLA\",\"SSO, SCIM & advanced security\"]}'::jsonb) \
+         ON CONFLICT (code) DO UPDATE SET \
+            name = EXCLUDED.name, description = EXCLUDED.description, audience = EXCLUDED.audience, \
+            amount_cents = EXCLUDED.amount_cents, billing_interval = EXCLUDED.billing_interval, \
+            storage_limit_bytes = EXCLUDED.storage_limit_bytes, seat_limit = EXCLUDED.seat_limit, \
+            features = EXCLUDED.features, is_active = TRUE",
+        // ────────────────────────────────────────────────────────────────
         // Rate-limit tiers. Each plan now carries its own API rate ceiling
         // and a rolling 30-day monthly request budget. -1 = unlimited. The
         // middleware reads these per request through a short Redis cache.
@@ -577,7 +598,11 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // basic_user keeps the column DEFAULTs (60, 50000) — skipped here.
         "UPDATE plans SET rate_limit_per_min = 300,   monthly_quota = 500000    \
          WHERE code = 'advance_user'",
+        "UPDATE plans SET rate_limit_per_min = 600,   monthly_quota = 2000000   \
+         WHERE code = 'most_advance_user'",
         "UPDATE plans SET rate_limit_per_min = 600,   monthly_quota = 5000000   \
+         WHERE code = 'business_startups'",
+        "UPDATE plans SET rate_limit_per_min = 1200,  monthly_quota = 10000000  \
          WHERE code = 'organization'",
         "UPDATE plans SET rate_limit_per_min = 6000,  monthly_quota = -1        \
          WHERE code = 'enterprise'",

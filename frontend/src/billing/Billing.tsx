@@ -35,53 +35,73 @@ const PLAN_COPY: Record<
   basic_user: {
     price: "Free",
     features: [
-      "Send/receive 1,000 emails per day",
-      "Personal workspace",
-      "Standard storage",
+      "1 GB encrypted storage",
+      "Up to 1,000 emails per day",
+      "End-to-end encrypted chat",
+      "1 seat",
     ],
   },
   advance_user: {
     price: "$7 / month",
     features: [
-      "Encrypt and decrypt 1,000 items per day",
-      "Personal paid workspace",
-      "Monthly auto-renewal",
+      "10 GB encrypted storage",
+      "Unlimited daily emails",
+      "1,000 encrypt/decrypt ops per day",
+      "Priority email sync",
+    ],
+  },
+  most_advance_user: {
+    price: "$15 / month",
+    features: [
+      "50 GB encrypted storage",
+      "Unlimited email & calls",
+      "Full AI assistant access",
+      "Priority support",
+    ],
+  },
+  business_startups: {
+    price: "$8 / user / month",
+    features: [
+      "Up to 20 members",
+      "Unlimited shared storage",
+      "Shared org workspace",
+      "Admin & billing controls",
     ],
   },
   organization: {
-    price: "$10 / user / month",
+    price: "$12 / user / month",
     features: [
-      "1-100 users",
-      "Unlimited email send and receive",
-      "Unlimited memory",
-      "Organization billing",
+      "Up to 100 members",
+      "Unlimited storage & email",
+      "SSO + role-based access",
+      "Audit logs & priority support",
     ],
   },
   enterprise: {
-    price: "Discussed",
+    price: "Contact sales",
     features: [
-      "100+ users",
-      "Unlimited emails",
-      "Unlimited memory",
-      "Custom onboarding",
+      "Unlimited members",
+      "Dedicated success manager",
+      "Custom onboarding & SLA",
+      "SSO, SCIM & advanced security",
     ],
-    action: "Discuss plan",
+    action: "Contact sales",
   },
 };
 
 const PLAN_DISPLAY_ORDER = [
   "basic_user",
   "advance_user",
+  "most_advance_user",
+  "business_startups",
   "organization",
   "enterprise",
 ];
 
-// Display titles for the Business & Enterprise section: the `organization` plan
-// is shown as "Business" so the two business tiers read as Business + Enterprise.
-const PLAN_TITLE: Record<string, string> = {
-  organization: "Business",
-  enterprise: "Enterprise",
-};
+// Plan titles come straight from the DB `name` column now (Basic / Advance /
+// Most Advance / Startups / Business / Enterprise), so no per-code override is
+// needed. Kept as an empty escape hatch for future display-only renames.
+const PLAN_TITLE: Record<string, string> = {};
 
 function planDisplayRank(plan: Plan): number {
   const codeRank = PLAN_DISPLAY_ORDER.indexOf(plan.code);
@@ -780,16 +800,11 @@ export default function Billing() {
         ) : !isForOwner &&
           ownerType === "personal" &&
           plan.audience === "organization" ? (
-          // Personal users self-promote to an organization owner via
-          // the dedicated setup page (/organizations/new), which
-          // captures org name + place and lets them seed members
-          // before returning here to subscribe. We pass the plan
-          // code so the page can show "you started with X".
-          <button
-            type="button"
-            onClick={() => navigate(`/organizations/new?plan=${plan.code}`)}
-          >
-            Upgrade or Create account
+          // Self-serve upgrade from a personal account to a business
+          // (organization) account is currently disabled. Org plans are
+          // provisioned through sales / support instead.
+          <button type="button" onClick={() => navigate("/support")}>
+            Contact sales
           </button>
         ) : (
           <button type="button" disabled>

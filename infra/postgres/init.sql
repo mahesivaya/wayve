@@ -992,16 +992,25 @@ CREATE TABLE IF NOT EXISTS plans (
 
 -- Baseline catalog. stripe_price_id is filled in by a platform admin once the
 -- matching Stripe Price exists. ON CONFLICT keeps init.sql idempotent.
+-- Three personal tiers (Basic / Advance / Most Advance) and three business
+-- tiers (Startups / Business / Enterprise). `features.bullets` is an ordered
+-- list of display strings the pricing/billing UIs render verbatim. Note: the
+-- backend re-applies this exact catalog on every boot via an upsert in
+-- startup.rs, so this seed only matters for a brand-new volume.
 INSERT INTO plans (code, name, description, audience, amount_cents, billing_interval, storage_limit_bytes, seat_limit, features)
 VALUES
-    ('basic_user', 'Basic User', 'Free personal plan with daily email send/receive limits.', 'personal', 0, 'month', 1073741824, 1,
-     '{"emails_per_day":1000,"send_receive_per_day":1000,"autopay":false}'::jsonb),
-    ('advance_user', 'Advance User', 'Personal paid plan with encrypted app usage allowance.', 'personal', 700, 'month', 10737418240, 1,
-     '{"encrypt_decrypt_per_day":1000,"autopay":true}'::jsonb),
-    ('organization', 'Organization', '1-100 users with unlimited email send/receive and unlimited memory.', 'organization', 1000, 'month', -1, 100,
-     '{"per_user":true,"min_users":1,"max_users":100,"unlimited_email":true,"unlimited_memory":true,"autopay":true}'::jsonb),
-    ('enterprise', 'Enterprise', '100+ users with unlimited emails and memory. Contact sales.', 'organization', 0, 'month', -1, 100000,
-     '{"min_users":101,"unlimited_email":true,"unlimited_memory":true,"contact_sales":true,"autopay":true}'::jsonb)
+    ('basic_user', 'Basic', 'Free personal plan to get started.', 'personal', 0, 'month', 1073741824, 1,
+     '{"bullets":["1 GB encrypted storage","Up to 1,000 emails per day","End-to-end encrypted chat","1 seat"]}'::jsonb),
+    ('advance_user', 'Advance', 'Personal paid plan with higher limits.', 'personal', 700, 'month', 10737418240, 1,
+     '{"bullets":["10 GB encrypted storage","Unlimited daily emails","1,000 encrypt/decrypt ops per day","Priority email sync"]}'::jsonb),
+    ('most_advance_user', 'Most Advance', 'Top personal tier with full AI access.', 'personal', 1500, 'month', 53687091200, 1,
+     '{"bullets":["50 GB encrypted storage","Unlimited email & calls","Full AI assistant access","Priority support"]}'::jsonb),
+    ('business_startups', 'Startups', 'For small teams getting off the ground.', 'organization', 800, 'month', -1, 20,
+     '{"bullets":["Up to 20 members","Unlimited shared storage","Shared org workspace","Admin & billing controls"]}'::jsonb),
+    ('organization', 'Business', 'For growing organizations up to 100 members.', 'organization', 1200, 'month', -1, 100,
+     '{"bullets":["Up to 100 members","Unlimited storage & email","SSO + role-based access","Audit logs & priority support"]}'::jsonb),
+    ('enterprise', 'Enterprise', '100+ members with unlimited everything. Contact sales.', 'organization', 0, 'month', -1, 100000,
+     '{"bullets":["Unlimited members","Dedicated success manager","Custom onboarding & SLA","SSO, SCIM & advanced security"]}'::jsonb)
 ON CONFLICT (code) DO NOTHING;
 
 -- Subscriptions: local projection of Stripe subscription state.
