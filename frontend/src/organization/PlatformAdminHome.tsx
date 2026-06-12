@@ -44,30 +44,33 @@ export default function PlatformAdminHome() {
   // that permission rather than the looser members:read used for the card.
   const canManageTickets = hasPermission(user, "tickets:manage");
 
-  // "New issues" inbox — open tickets submitted via the Report-an-issue form,
-  // surfaced as a task list right on the owner's home so they're seen at login
-  // instead of buried behind the Support card.
-  const [openIssues, setOpenIssues] = useState<SupportTicket[]>([]);
-  const [issuesLoading, setIssuesLoading] = useState(false);
+  // Support-tickets inbox — every ticket submitted via the Report-an-issue
+  // form, surfaced right on the owner's home so they're seen at login instead
+  // of buried behind the Support card. The badge counts only the still-open
+  // ones (the ones needing attention); the list shows all statuses.
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
 
   useEffect(() => {
     if (!canManageTickets) return;
     let cancelled = false;
-    setIssuesLoading(true);
-    adminListTickets("open")
+    setTicketsLoading(true);
+    adminListTickets()
       .then((rows) => {
-        if (!cancelled) setOpenIssues(rows);
+        if (!cancelled) setTickets(rows);
       })
       .catch(() => {
-        if (!cancelled) setOpenIssues([]);
+        if (!cancelled) setTickets([]);
       })
       .finally(() => {
-        if (!cancelled) setIssuesLoading(false);
+        if (!cancelled) setTicketsLoading(false);
       });
     return () => {
       cancelled = true;
     };
   }, [canManageTickets]);
+
+  const openCount = tickets.filter((t) => t.status === "open").length;
 
   const consoles: ConsoleCard[] = [
     {
@@ -195,8 +198,8 @@ export default function PlatformAdminHome() {
     }
   };
 
-  const MAX_VISIBLE_ISSUES = 6;
-  const visibleIssues = openIssues.slice(0, MAX_VISIBLE_ISSUES);
+  const MAX_VISIBLE_TICKETS = 8;
+  const visibleTickets = tickets.slice(0, MAX_VISIBLE_TICKETS);
 
   return (
     <div className="platform-admin-home u-page-shell">
@@ -204,11 +207,9 @@ export default function PlatformAdminHome() {
         <section className="platform-admin-panel u-panel platform-issues-panel">
           <div className="platform-issues-head">
             <h2>
-              New issues
-              {openIssues.length > 0 && (
-                <span className="platform-issues-badge">
-                  {openIssues.length}
-                </span>
+              Support tickets
+              {openCount > 0 && (
+                <span className="platform-issues-badge">{openCount} open</span>
               )}
             </h2>
             <button
@@ -220,38 +221,43 @@ export default function PlatformAdminHome() {
             </button>
           </div>
 
-          {issuesLoading ? (
+          {ticketsLoading ? (
             <p className="platform-issues-empty">Loading…</p>
-          ) : openIssues.length === 0 ? (
-            <p className="platform-issues-empty">No new issues. 🎉</p>
+          ) : tickets.length === 0 ? (
+            <p className="platform-issues-empty">No support tickets yet.</p>
           ) : (
             <ul className="platform-issues-list">
-              {visibleIssues.map((issue) => (
+              {visibleTickets.map((ticket) => (
                 <li
-                  key={issue.id}
+                  key={ticket.id}
                   className="platform-issue-row"
                   role="button"
                   tabIndex={0}
-                  aria-label={`Open issue: ${issue.subject}`}
+                  aria-label={`Open ticket: ${ticket.subject}`}
                   onClick={() => navigate("/platform/support")}
                   onKeyDown={(event) =>
                     handleCardKeyDown(event, "/platform/support")
                   }
                 >
-                  <span className="platform-issue-cat">{issue.category}</span>
+                  <span className="platform-issue-cat">{ticket.category}</span>
                   <span className="platform-issue-main">
                     <strong className="platform-issue-subject">
-                      {issue.subject}
+                      {ticket.subject}
                     </strong>
                     <span className="platform-issue-meta">
-                      {issue.user_email ?? `user #${issue.user_id}`}
-                      {issue.organization_name
-                        ? ` · ${issue.organization_name}`
+                      {ticket.user_email ?? `user #${ticket.user_id}`}
+                      {ticket.organization_name
+                        ? ` · ${ticket.organization_name}`
                         : ""}
                     </span>
                   </span>
+                  <span
+                    className={`platform-issue-status platform-issue-status--${ticket.status}`}
+                  >
+                    {ticket.status.replace("_", " ")}
+                  </span>
                   <span className="platform-issue-time">
-                    {fmtListTimestamp(issue.created_at)}
+                    {fmtListTimestamp(ticket.created_at)}
                   </span>
                 </li>
               ))}

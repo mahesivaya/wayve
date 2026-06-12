@@ -610,3 +610,31 @@
   color: var(--color-text-muted);
   white-space: nowrap;
 }
+
+/* Per-ticket status pill in the home support-tickets list. */
+.platform-issue-status {
+  flex: 0 0 auto;
+  text-transform: capitalize;
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.platform-issue-status--open {
+  background: color-mix(in srgb, var(--color-danger, #dc2626) 14%, transparent);
+  color: var(--color-danger, #dc2626);
+}
+
+.platform-issue-status--in_progress {
+  background: color-mix(in srgb, #d97706 16%, transparent);
+  color: #b45309;
+}
+
+.platform-issue-status--resolved,
+.platform-issue-status--closed {
+  background: var(--color-surface-muted, var(--color-surface-hover));
+  color: var(--color-text-muted);
+}
