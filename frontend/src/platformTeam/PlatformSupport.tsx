@@ -10,6 +10,7 @@ import {
   type TicketStatus,
 } from "../api/support";
 import { fmtDate, fmtDateTime } from "../utils/datetime";
+import TicketDetailModal from "./TicketDetailModal";
 import "./platformTeam.css";
 
 const STATUS_OPTIONS: { value: TicketStatus; label: string }[] = [
@@ -34,6 +35,9 @@ export default function PlatformSupport() {
   const [ticketsError, setTicketsError] = useState("");
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("open");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(
+    null
+  );
 
   const reload = useCallback(async () => {
     if (!canView) return;
@@ -150,7 +154,12 @@ export default function PlatformSupport() {
               </thead>
               <tbody>
                 {tickets.map((t) => (
-                  <tr key={t.id}>
+                  <tr
+                    key={t.id}
+                    className="pt-row-clickable"
+                    onClick={() => setSelectedTicket(t)}
+                    title="View ticket details"
+                  >
                     <td>#{t.id}</td>
                     <td>
                       <strong>{t.subject}</strong>
@@ -178,7 +187,7 @@ export default function PlatformSupport() {
                       <span className="pt-pill info">{t.category}</span>
                     </td>
                     <td>{fmtDateTime(t.created_at)}</td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <select
                         value={t.status}
                         disabled={updatingId === t.id}
@@ -244,6 +253,13 @@ export default function PlatformSupport() {
           </div>
         )}
       </section>
+
+      {selectedTicket && (
+        <TicketDetailModal
+          ticket={selectedTicket}
+          onClose={() => setSelectedTicket(null)}
+        />
+      )}
     </div>
   );
 }

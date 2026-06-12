@@ -536,3 +536,144 @@ html[data-theme="dark"] .api-secrets-raw {
   z-index: 1;
   background: var(--panel-bg, var(--color-surface));
 }
+
+/* Clickable ticket rows + the ticket-detail modal (Support Console). */
+.pt-row-clickable {
+  cursor: pointer;
+}
+.pt-row-clickable:hover {
+  background: var(--color-surface-muted, var(--color-surface-hover));
+}
+
+.ticket-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.ticket-modal {
+  background: var(--color-surface, #fff);
+  color: var(--color-text);
+  width: min(720px, 100%);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 24px 28px 28px;
+}
+
+.ticket-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.ticket-modal-head h2 {
+  margin: 0 0 2px;
+}
+.ticket-modal-sub {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted);
+}
+.ticket-modal-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+.ticket-modal-close:hover {
+  color: var(--color-text);
+}
+
+.ticket-modal-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+.ticket-modal-meta dt {
+  font-size: var(--text-xs, 0.75rem);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+.ticket-modal-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ticket-modal-section {
+  margin-bottom: 20px;
+}
+.ticket-modal-section h3 {
+  margin: 0 0 8px;
+  font-size: var(--text-sm, 0.875rem);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.ticket-modal-desc {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+.ticket-modal-muted {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.ticket-attach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
+}
+.ticket-attach {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ticket-attach-img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  cursor: zoom-in;
+  display: block;
+}
+.ticket-attach-file {
+  display: block;
+  text-align: left;
+  padding: 14px 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-muted, var(--color-surface-hover));
+  cursor: pointer;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ticket-attach-file:hover {
+  border-style: solid;
+}
+.ticket-attach-meta {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
