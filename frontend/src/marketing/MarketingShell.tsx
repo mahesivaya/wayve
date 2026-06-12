@@ -62,7 +62,7 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
         <button className="public-home-brand" onClick={() => navigate("/")}>
           <BrandLogo
             className="brand-mark"
-            size={26}
+            size={40}
             gradientId="fluxze-nav-mark"
           />
           <span>{BRAND_NAME}</span>
@@ -202,7 +202,7 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
             <strong className="marketing-footer-brand">
               <BrandLogo
                 className="brand-mark"
-                size={22}
+                size={32}
                 gradientId="fluxze-footer-mark"
               />
               {BRAND_NAME}

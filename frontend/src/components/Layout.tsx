@@ -1009,7 +1009,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         <div className="header">
           <div className="header-brand">
             <div className="logo" onClick={() => navigate("/")}>
-              <BrandLogo className="logo-mark" size={26} />
+              <BrandLogo className="logo-mark" size={36} />
               <span className="logo-word">{BRAND_NAME}</span>
             </div>
             {/* Header toggle is the mobile hamburger ONLY. On wide screens the

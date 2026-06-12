@@ -74,7 +74,11 @@ export default function Home() {
       <div className="public-home">
         <header className="public-home-nav">
           <button className="public-home-brand" onClick={() => navigate("/")}>
-            <BrandLogo className="brand-mark" size={26} gradientId="fluxze-home-mark" />
+            <BrandLogo
+              className="brand-mark"
+              size={40}
+              gradientId="fluxze-home-mark"
+            />
             <span>{BRAND_NAME}</span>
           </button>
 
