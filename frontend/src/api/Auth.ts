@@ -54,6 +54,23 @@ export async function register(
   }
 }
 
+// Direct business signup — creates the owner account + organization in one
+// step and returns { token, account_type: "organization_admin" }.
+export async function registerBusiness(input: {
+  organization_name: string;
+  username: string;
+  email: string;
+  password: string;
+  confirm_password: string;
+}) {
+  const res = await apiFetch("/api/register-business", {
+    auth: false,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return res.json();
+}
+
 export async function login(email: string, password: string) {
   const reqId = newReqId();
   log.info(`[${reqId}] login attempt`, { email });

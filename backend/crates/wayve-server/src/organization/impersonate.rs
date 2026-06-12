@@ -33,9 +33,23 @@ use crate::prelude::*;
 use actix_web::{HttpRequest, HttpResponse, web};
 use sqlx::Row;
 use tracing::{instrument, warn};
+use wayve_security::encryption::decrypt;
 use wayve_security::rbac::{Permission, require_org_access};
 
 use crate::organization::keys::{ensure_target_member, write_impersonation_audit};
+
+/// Undo the at-rest server-AES layer on a chat row, returning the inner content:
+/// a `WAYVE_CHAT_E2E_V1` envelope (the caller decrypts it with the recovered
+/// member key) for E2E messages, or legacy plaintext for older rows. A missing
+/// IV or a decrypt failure means the stored value is already plaintext, so we
+/// return it as-is rather than hiding it.
+fn decrypt_chat_content(enc: Option<String>, iv: Option<String>) -> Option<String> {
+    match (enc, iv) {
+        (Some(e), Some(i)) => Some(decrypt(&i, &e).unwrap_or(e)),
+        (Some(e), None) => Some(e),
+        _ => None,
+    }
+}
 
 // ---------------------------------------------------------------------------
 //   GET /api/organizations/{org_id}/members/{user_id}/emails
@@ -163,12 +177,15 @@ pub async fn list_member_messages(
     let items: Vec<serde_json::Value> = rows
         .into_iter()
         .map(|row| {
+            let enc = row.try_get::<Option<String>, _>("content_encrypted").ok().flatten();
+            let iv = row.try_get::<Option<String>, _>("content_iv").ok().flatten();
             serde_json::json!({
                 "id": row.try_get::<i32, _>("id").unwrap_or_default(),
                 "sender_id": row.try_get::<Option<i32>, _>("sender_id").ok().flatten(),
                 "receiver_id": row.try_get::<Option<i32>, _>("receiver_id").ok().flatten(),
-                "content_encrypted": row.try_get::<Option<String>, _>("content_encrypted").ok().flatten(),
-                "content_iv": row.try_get::<Option<String>, _>("content_iv").ok().flatten(),
+                // Storage layer decrypted here; the value is the E2E envelope
+                // (client decrypts with the member key) or legacy plaintext.
+                "content": decrypt_chat_content(enc, iv),
                 "status": row.try_get::<Option<String>, _>("status").ok().flatten(),
                 "created_at": row.try_get::<Option<chrono::NaiveDateTime>, _>("created_at").ok().flatten(),
             })
@@ -235,13 +252,14 @@ pub async fn list_member_channel_messages(
     let items: Vec<serde_json::Value> = rows
         .into_iter()
         .map(|row| {
+            let enc = row.try_get::<Option<String>, _>("content_encrypted").ok().flatten();
+            let iv = row.try_get::<Option<String>, _>("content_iv").ok().flatten();
             serde_json::json!({
                 "id": row.try_get::<i32, _>("id").unwrap_or_default(),
                 "channel_id": row.try_get::<Option<i32>, _>("channel_id").ok().flatten(),
                 "channel_name": row.try_get::<Option<String>, _>("channel_name").ok().flatten(),
                 "sender_id": row.try_get::<Option<i32>, _>("sender_id").ok().flatten(),
-                "content_encrypted": row.try_get::<Option<String>, _>("content_encrypted").ok().flatten(),
-                "content_iv": row.try_get::<Option<String>, _>("content_iv").ok().flatten(),
+                "content": decrypt_chat_content(enc, iv),
                 "parent_message_id": row.try_get::<Option<i32>, _>("parent_message_id").ok().flatten(),
                 "created_at": row.try_get::<Option<chrono::NaiveDateTime>, _>("created_at").ok().flatten(),
             })

@@ -20,7 +20,7 @@ import {
 } from "../api/support";
 import "./supportModal.css";
 
-const SUPPORT_EMAIL = "support@fluxze.com";
+const SUPPORT_EMAIL = "mahesh@fluxze.com";
 const MAX_ATTACHMENT_MB = 10;
 
 const CATEGORY_OPTIONS: { value: TicketCategory; label: string }[] = [

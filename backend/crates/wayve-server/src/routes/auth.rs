@@ -587,8 +587,113 @@ pub async fn recover_with_mnemonic(
 }
 
 /// Register this domain's routes. Called from `routes::routes` (the aggregator).
+#[derive(serde::Deserialize)]
+pub struct RegisterBusinessInput {
+    pub organization_name: String,
+    pub username: String,
+    pub email: String,
+    pub password: String,
+    pub confirm_password: String,
+}
+
+/// Direct business signup: create the owner account AND the organization in one
+/// step — the owner is minted straight as `organization_admin`, instead of
+/// creating a personal account first and upgrading it. Public; no payment here
+/// (billing is added later from the billing page). Everything runs in one
+/// transaction, so an org-name clash rolls back the just-created user too.
+#[post("/register-business")]
+#[instrument(target = "auth", skip(req, pool, data), fields(email = %data.email))]
+pub async fn register_business(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<RegisterBusinessInput>,
+) -> AppResult {
+    if data.password != data.confirm_password {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Passwords do not match" })));
+    }
+    let name = data.organization_name.trim();
+    if name.is_empty() || name.len() > 120 {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Enter a business name (max 120 chars)" })));
+    }
+    let username = data.username.trim();
+    if username.is_empty() || username.len() > 80 {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Enter a username" })));
+    }
+    let email = data.email.trim().to_lowercase();
+    if !email.contains('@') || email.len() > 254 {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Enter a valid email address" })));
+    }
+
+    let hashed = hash_password(&data.password).await?;
+
+    let mut tx = pool.begin().await?;
+
+    let user_row = sqlx::query(
+        "INSERT INTO users (username, email, password, auth_provider, account_type, recovery_mode) \
+         VALUES ($1, $2, $3, 'local', 'personal', 'full') RETURNING id",
+    )
+    .bind(username)
+    .bind(&email)
+    .bind(&hashed)
+    .fetch_one(&mut *tx)
+    .await;
+
+    let user_id: i32 = match user_row {
+        Ok(row) => row.get("id"),
+        Err(e) => {
+            if e.to_string().contains("duplicate key") {
+                return Ok(HttpResponse::BadRequest().json(
+                    serde_json::json!({ "message": "An account with that email already exists" }),
+                ));
+            }
+            return Err(AppError::Db(e));
+        }
+    };
+
+    // Promote the just-created user into the org owner: creates the org + owner
+    // membership + starter entitlements and flips account_type to
+    // organization_admin. None => org name already taken (tx rolls back).
+    let created =
+        crate::routes::user::create_org_for_user(&mut tx, user_id, name, None, Some(&email)).await?;
+    if created.is_none() {
+        return Ok(HttpResponse::Conflict().json(
+            serde_json::json!({ "message": format!("A business named '{name}' already exists") }),
+        ));
+    }
+
+    tx.commit().await?;
+
+    let token = create_jwt(user_id, email.clone());
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "login",
+            resource_type: "session",
+            resource_id: None,
+            metadata: Some(serde_json::json!({
+                "method": "password",
+                "new_user": true,
+                "business": true,
+            })),
+        },
+    )
+    .await;
+
+    info!(target: "auth", user_id, email = %email, "business registered (direct)");
+    Ok(HttpResponse::Ok()
+        .cookie(auth_cookie(token.clone()))
+        .json(serde_json::json!({ "token": token, "account_type": "organization_admin" })))
+}
+
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(register)
+        .service(register_business)
         .service(login)
         .service(logout)
         .service(forgot_password)

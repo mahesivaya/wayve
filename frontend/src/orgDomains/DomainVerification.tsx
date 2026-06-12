@@ -12,7 +12,9 @@ import {
   type OrgDomain,
   claimOrgDomain,
   deleteOrgDomain,
+  getOrgDomainPolicy,
   listOrgDomains,
+  setOrgDomainPolicy,
   verifyOrgDomain,
 } from "./api";
 
@@ -31,18 +33,38 @@ export default function DomainVerification() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [allowUnverified, setAllowUnverified] = useState<boolean | null>(null);
+  const [policyBusy, setPolicyBusy] = useState(false);
 
   const load = useCallback(async (id: number) => {
     setLoading(true);
     setError(null);
     try {
-      setDomains(await listOrgDomains(id));
+      const [dom, policy] = await Promise.all([
+        listOrgDomains(id),
+        getOrgDomainPolicy(id),
+      ]);
+      setDomains(dom);
+      setAllowUnverified(policy);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load domains");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const togglePolicy = async () => {
+    if (orgId == null || allowUnverified == null) return;
+    setPolicyBusy(true);
+    setError(null);
+    try {
+      setAllowUnverified(await setOrgDomainPolicy(orgId, !allowUnverified));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update policy");
+    } finally {
+      setPolicyBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (orgId != null) void load(orgId);
@@ -183,6 +205,42 @@ export default function DomainVerification() {
 
       {orgId != null && (
         <>
+          <div
+            style={{
+              border: "1px solid #fde68a",
+              background: "#fffbeb",
+              borderRadius: 8,
+              padding: 14,
+              margin: "12px 0",
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                fontWeight: 600,
+                cursor: policyBusy ? "default" : "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={allowUnverified ?? false}
+                disabled={allowUnverified == null || policyBusy}
+                onChange={() => void togglePolicy()}
+              />
+              Allow creating email addresses on unverified / public domains
+            </label>
+            <p
+              style={{ margin: "6px 0 0 28px", fontSize: 13, color: "#92400e" }}
+            >
+              When on, this organization can create member addresses on{" "}
+              <strong>any</strong> domain — including public providers
+              (gmail.com…) and domains it hasn&apos;t verified. This disables
+              the domain-ownership check for this org.
+            </p>
+          </div>
+
           <div style={{ display: "flex", gap: 8, margin: "16px 0" }}>
             <input
               value={newDomain}

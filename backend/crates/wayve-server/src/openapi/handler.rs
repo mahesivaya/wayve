@@ -57,7 +57,7 @@ fn build_spec() -> serde_json::Value {
             "description": include_str!("description.md"),
             "contact": {
                 "name": "Wayve developer support",
-                "email": "support@fluxze.com",
+                "email": "mahesh@fluxze.com",
                 "url": "https://fluxze.com/support"
             },
             "license": {

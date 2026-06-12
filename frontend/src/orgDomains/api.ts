@@ -77,3 +77,29 @@ export async function deleteOrgDomain(
   );
   if (!res.ok) throw new Error(await readError(res, "Failed to delete domain"));
 }
+
+// Per-org policy: when true, the org may create member addresses on any domain
+// (public providers + unverified), bypassing the domain-ownership gate.
+export async function getOrgDomainPolicy(orgId: number): Promise<boolean> {
+  const res = await apiFetch(`/api/organizations/${orgId}/domain-policy`);
+  if (!res.ok) throw new Error(await readError(res, "Failed to load policy"));
+  const data = (await res.json()) as {
+    allow_unverified_email_domains: boolean;
+  };
+  return data.allow_unverified_email_domains;
+}
+
+export async function setOrgDomainPolicy(
+  orgId: number,
+  allow: boolean
+): Promise<boolean> {
+  const res = await apiFetch(`/api/organizations/${orgId}/domain-policy`, {
+    method: "PUT",
+    body: JSON.stringify({ allow }),
+  });
+  if (!res.ok) throw new Error(await readError(res, "Failed to update policy"));
+  const data = (await res.json()) as {
+    allow_unverified_email_domains: boolean;
+  };
+  return data.allow_unverified_email_domains;
+}

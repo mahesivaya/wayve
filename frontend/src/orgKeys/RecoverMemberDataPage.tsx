@@ -140,7 +140,9 @@ type DirectMsg = {
   id: number;
   sender_id: number | null;
   receiver_id: number | null;
-  content_encrypted: string | null;
+  // Storage-AES already removed server-side: this is the E2E envelope or
+  // legacy plaintext.
+  content: string | null;
   created_at?: string | null;
 };
 type ChannelMsg = {
@@ -148,7 +150,7 @@ type ChannelMsg = {
   channel_id: number | null;
   channel_name: string | null;
   sender_id: number | null;
-  content_encrypted: string | null;
+  content: string | null;
   created_at?: string | null;
 };
 type DriveFile = {
@@ -555,17 +557,18 @@ function ChatTab({ orgId, memberId, memberKey }: DecryptProps) {
           };
         }
       }
-      // Server-AES legacy chat — not client-decryptable.
-      return { text: "(legacy server-AES — not E2E)" };
+      // Not an E2E envelope: legacy chat stored under server-AES only. The
+      // backend already removed that layer, so `raw` is the plaintext.
+      return { text: raw };
     };
 
     (async () => {
       const m = new Map<string, { text: string; error?: string }>();
       for (const msg of direct.data ?? []) {
-        m.set(`d-${msg.id}`, await tryDecrypt(msg.content_encrypted));
+        m.set(`d-${msg.id}`, await tryDecrypt(msg.content));
       }
       for (const msg of channel.data ?? []) {
-        m.set(`c-${msg.id}`, await tryDecrypt(msg.content_encrypted));
+        m.set(`c-${msg.id}`, await tryDecrypt(msg.content));
       }
       setDecrypted(m);
     })();

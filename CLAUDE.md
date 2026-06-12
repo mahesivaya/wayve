@@ -71,6 +71,8 @@ Chat uses client-side envelope encryption for new direct and channel messages. T
 
 Realtime / chat reliability (heartbeat + client reconnect, `since_id` reconnect resync, and Redis pub/sub fan-out for multi-instance via `chat/pubsub.rs`) is documented in `docs/architecture/realtime-chat.md`. Cross-instance delivery needs Redis; with Redis down, `fan_out_user` falls back to local delivery so a single instance still works.
 
+1-on-1 WebRTC audio/video calling (the `/ws/call` signaling relay, RBAC scope gate, Cloudflare TURN, and the `useCallSession` client state machine) is documented in `docs/architecture/calling.md`. Peer-to-peer, no media server, so 1-on-1 only; Zoom remains for *scheduled* meetings.
+
 `security/jwt.rs` mints HS256 JWTs from `JWT_SECRET`. `get_user_id_from_request` is the single auth chokepoint for HTTP handlers — it also resolves API-key requests (see API keys). The WebSocket endpoints (`chat_ws`, `call_ws`) authenticate via `get_user_id_from_request` with a `?token=` query fallback, deriving `user_id` from verified credentials and **never an unverified query value** — preserve that when adding WS routes.
 
 ### Authorization (RBAC)

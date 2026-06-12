@@ -71,7 +71,7 @@ const PUBLIC_TIERS: PublicTier[] = [
       "Shared org workspace",
       "Admin & billing controls",
     ],
-    cta: "Contact sales",
+    cta: "Get started",
   },
   {
     id: "business",
@@ -85,7 +85,7 @@ const PUBLIC_TIERS: PublicTier[] = [
       "SSO + role-based access",
       "Audit logs & priority support",
     ],
-    cta: "Contact sales",
+    cta: "Get started",
   },
   {
     id: "enterprise",
@@ -117,29 +117,36 @@ export default function PublicPricingContent() {
     (tier) => !PUBLIC_PERSONAL_IDS.includes(tier.id)
   );
 
-  const renderTier = (tier: PublicTier) => (
-    <article key={tier.id} className="pricing-plan">
-      <h3>{tier.name}</h3>
-      <p className="pricing-plan-price">
-        {tier.price}
-        {tier.interval && (
-          <span className="pricing-plan-interval"> / {tier.interval}</span>
-        )}
-      </p>
-      <p className="pricing-plan-desc">{tier.tagline}</p>
-      <ul className="pricing-plan-features">
-        {tier.features.map((feature) => (
-          <li key={feature}>{feature}</li>
-        ))}
-      </ul>
-      <button
-        className="pricing-plan-cta"
-        onClick={() => navigate("/register")}
-      >
-        {tier.cta}
-      </button>
-    </article>
-  );
+  const renderTier = (tier: PublicTier) => {
+    // Personal tiers → personal signup; Startups/Business → direct business
+    // signup; Enterprise → contact sales.
+    const ctaPath =
+      tier.id === "enterprise"
+        ? "/support"
+        : PUBLIC_PERSONAL_IDS.includes(tier.id)
+          ? "/register"
+          : "/register-business";
+    return (
+      <article key={tier.id} className="pricing-plan">
+        <h3>{tier.name}</h3>
+        <p className="pricing-plan-price">
+          {tier.price}
+          {tier.interval && (
+            <span className="pricing-plan-interval"> / {tier.interval}</span>
+          )}
+        </p>
+        <p className="pricing-plan-desc">{tier.tagline}</p>
+        <ul className="pricing-plan-features">
+          {tier.features.map((feature) => (
+            <li key={feature}>{feature}</li>
+          ))}
+        </ul>
+        <button className="pricing-plan-cta" onClick={() => navigate(ctaPath)}>
+          {tier.cta}
+        </button>
+      </article>
+    );
+  };
 
   return (
     <div className="pricing-page">

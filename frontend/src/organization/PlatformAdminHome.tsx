@@ -1,7 +1,9 @@
 import { useNavigate } from "react-router-dom";
-import type { KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
+import { adminListTickets, type SupportTicket } from "../api/support";
+import { fmtListTimestamp } from "../utils/datetime";
 import "./admin-ui.css";
 import "./platformAdmin.css";
 
@@ -37,6 +39,35 @@ export default function PlatformAdminHome() {
   const canSeeMembers = canReadMembers;
   const canSeeScim = hasPermission(user, "webhooks:manage");
   const canManagePlans = hasPermission(user, "billing:manage");
+  // Reporting issues lands in support_tickets; only ticket managers (owner,
+  // support, …) can pull the platform-wide admin list, so gate the inbox on
+  // that permission rather than the looser members:read used for the card.
+  const canManageTickets = hasPermission(user, "tickets:manage");
+
+  // "New issues" inbox — open tickets submitted via the Report-an-issue form,
+  // surfaced as a task list right on the owner's home so they're seen at login
+  // instead of buried behind the Support card.
+  const [openIssues, setOpenIssues] = useState<SupportTicket[]>([]);
+  const [issuesLoading, setIssuesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!canManageTickets) return;
+    let cancelled = false;
+    setIssuesLoading(true);
+    adminListTickets("open")
+      .then((rows) => {
+        if (!cancelled) setOpenIssues(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setOpenIssues([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIssuesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageTickets]);
 
   const consoles: ConsoleCard[] = [
     {
@@ -164,8 +195,71 @@ export default function PlatformAdminHome() {
     }
   };
 
+  const MAX_VISIBLE_ISSUES = 6;
+  const visibleIssues = openIssues.slice(0, MAX_VISIBLE_ISSUES);
+
   return (
     <div className="platform-admin-home u-page-shell">
+      {canManageTickets && (
+        <section className="platform-admin-panel u-panel platform-issues-panel">
+          <div className="platform-issues-head">
+            <h2>
+              New issues
+              {openIssues.length > 0 && (
+                <span className="platform-issues-badge">
+                  {openIssues.length}
+                </span>
+              )}
+            </h2>
+            <button
+              type="button"
+              className="platform-issues-all"
+              onClick={() => navigate("/platform/support")}
+            >
+              View all
+            </button>
+          </div>
+
+          {issuesLoading ? (
+            <p className="platform-issues-empty">Loading…</p>
+          ) : openIssues.length === 0 ? (
+            <p className="platform-issues-empty">No new issues. 🎉</p>
+          ) : (
+            <ul className="platform-issues-list">
+              {visibleIssues.map((issue) => (
+                <li
+                  key={issue.id}
+                  className="platform-issue-row"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open issue: ${issue.subject}`}
+                  onClick={() => navigate("/platform/support")}
+                  onKeyDown={(event) =>
+                    handleCardKeyDown(event, "/platform/support")
+                  }
+                >
+                  <span className="platform-issue-cat">{issue.category}</span>
+                  <span className="platform-issue-main">
+                    <strong className="platform-issue-subject">
+                      {issue.subject}
+                    </strong>
+                    <span className="platform-issue-meta">
+                      {issue.user_email ?? `user #${issue.user_id}`}
+                      {issue.organization_name
+                        ? ` · ${issue.organization_name}`
+                        : ""}
+                    </span>
+                  </span>
+                  <span className="platform-issue-time">
+                    {fmtListTimestamp(issue.created_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
       {hasAnyConsole && (
         <section className="platform-admin-panel u-panel">
           <div className="platform-console-rows">

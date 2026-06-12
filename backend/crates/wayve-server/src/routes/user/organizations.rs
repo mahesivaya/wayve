@@ -1617,17 +1617,32 @@ pub async fn admin_create_user(
                     .json(serde_json::json!({ "message": "Invalid email address" })));
             }
         };
-        if organization::domains::is_public_provider_domain(&domain) {
-            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "message": format!("'{domain}' is a public email provider and can't be used for organization accounts")
-            })));
-        }
-        if !organization::domains::is_domain_verified_for_org(pool.get_ref(), org_id, &domain).await
-        {
-            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
-                "message": format!("The organization has not verified ownership of '{domain}'. Verify the domain before creating addresses on it."),
-                "domain": domain
-            })));
+        // Escape hatch: a platform owner can flip `allow_unverified_email_domains`
+        // per org (on /platform/domains), which lets that org mint addresses on
+        // ANY domain — public providers and unverified custom domains alike —
+        // bypassing both checks below. Off by default.
+        let allow_unverified: bool = sqlx::query_scalar::<_, bool>(
+            "SELECT allow_unverified_email_domains FROM organizations WHERE id = $1",
+        )
+        .bind(org_id)
+        .fetch_optional(pool.get_ref())
+        .await?
+        .unwrap_or(false);
+
+        if !allow_unverified {
+            if organization::domains::is_public_provider_domain(&domain) {
+                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                    "message": format!("'{domain}' is a public email provider and can't be used for organization accounts")
+                })));
+            }
+            if !organization::domains::is_domain_verified_for_org(pool.get_ref(), org_id, &domain)
+                .await
+            {
+                return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                    "message": format!("The organization has not verified ownership of '{domain}'. Verify the domain before creating addresses on it."),
+                    "domain": domain
+                })));
+            }
         }
     }
 

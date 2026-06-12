@@ -181,6 +181,30 @@ logs-backend:
     docker logs -f rwayve_backend_dev
 
 # =========================
+# 💳 STRIPE / BILLING (dev)
+# =========================
+
+# Forward Stripe webhooks to the local backend so subscription activation —
+# the upgrade/payment flow — actually completes in dev. Stripe can't reach
+# localhost, so without this a subscription is created in Stripe but never
+# flips to `active` locally and the upgrade silently never lands.
+#
+# One-time setup:
+#   1. brew install stripe/stripe-cli/stripe
+#   2. stripe login
+#   3. Run `just stripe-webhooks`; copy the printed `whsec_…` into
+#      backend/.env as STRIPE_WEBHOOK_SECRET, then `just restart-backend`.
+# Keep this running in a terminal while testing payments/upgrades.
+# NOTE: the webhook is root-mounted at /billing/webhook (NOT /api/billing/...).
+stripe-webhooks:
+    stripe listen --forward-to localhost:8080/billing/webhook
+
+# Fire a test event at the local webhook while `stripe-webhooks` is running,
+# e.g. `just stripe-trigger invoice.paid`.
+stripe-trigger EVENT="customer.subscription.updated":
+    stripe trigger {{EVENT}}
+
+# =========================
 # ⚡ SHORTCUTS
 # =========================
 

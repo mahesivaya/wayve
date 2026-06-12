@@ -7,8 +7,8 @@ const CHANNELS = [
     icon: "✉️",
     title: "Email support",
     body: "For account, billing, or product questions. Replies within one business day.",
-    actionLabel: "support@fluxze.com",
-    href: "mailto:support@fluxze.com",
+    actionLabel: "mahesh@fluxze.com",
+    href: "mailto:mahesh@fluxze.com",
   },
   {
     icon: "🛡️",
@@ -85,7 +85,7 @@ export default function Support() {
           <div className="marketing-hero-actions">
             <button
               onClick={() =>
-                (window.location.href = "mailto:support@fluxze.com")
+                (window.location.href = "mailto:mahesh@fluxze.com")
               }
             >
               Email support
@@ -193,7 +193,7 @@ export default function Support() {
         </p>
         <div className="marketing-cta-actions">
           <button
-            onClick={() => (window.location.href = "mailto:support@fluxze.com")}
+            onClick={() => (window.location.href = "mailto:mahesh@fluxze.com")}
           >
             Email support
           </button>

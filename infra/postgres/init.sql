@@ -95,6 +95,11 @@ ALTER TABLE organizations ADD COLUMN IF NOT EXISTS place TEXT;
 -- payment-gated self-serve create flow. Defaults to the founder's personal
 -- email in the UI but is editable. Idempotent ALTER keeps re-runs safe.
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS admin_email TEXT;
+-- When true, this org may create member email addresses on ANY domain — public
+-- providers (gmail.com…) and unverified custom domains — bypassing the domain-
+-- ownership gate in admin_create_user. Off by default; toggled by the platform
+-- owner on /platform/domains. Security-relaxing, so deliberately opt-in.
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS allow_unverified_email_domains BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS organization_members (
     organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,

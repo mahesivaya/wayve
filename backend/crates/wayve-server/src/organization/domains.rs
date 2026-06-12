@@ -17,7 +17,7 @@
 
 use crate::email::provider_lookup::RESOLVER;
 use crate::prelude::*;
-use actix_web::{HttpRequest, HttpResponse, delete, get, post, web};
+use actix_web::{HttpRequest, HttpResponse, delete, get, post, put, web};
 use chrono::{DateTime, Utc};
 use hickory_resolver::proto::rr::RData;
 use serde::{Deserialize, Serialize};
@@ -267,6 +267,62 @@ pub async fn claim_domain(
         }
         Err(e) => Err(AppError::Db(e)),
     }
+}
+
+#[derive(Deserialize)]
+pub struct DomainPolicyInput {
+    pub allow: bool,
+}
+
+/// Read the org's "allow unverified/public email domains" flag. Platform-owner only.
+#[get("/organizations/{org_id}/domain-policy")]
+#[instrument(target = "auth", skip(req, pool))]
+pub async fn get_domain_policy(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    if let Err(resp) = require_platform_owner(&req, pool.get_ref()).await {
+        return Ok(resp);
+    }
+    let org_id = path.into_inner();
+    let allow: bool = sqlx::query_scalar::<_, bool>(
+        "SELECT allow_unverified_email_domains FROM organizations WHERE id = $1",
+    )
+    .bind(org_id)
+    .fetch_optional(pool.get_ref())
+    .await?
+    .unwrap_or(false);
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "allow_unverified_email_domains": allow })))
+}
+
+/// Toggle the org's "allow unverified/public email domains" flag. When true,
+/// `admin_create_user` skips the public-provider + verified-domain checks for
+/// this org, letting it mint addresses on any domain. Platform-owner only.
+#[put("/organizations/{org_id}/domain-policy")]
+#[instrument(target = "auth", skip(req, pool, body))]
+pub async fn set_domain_policy(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    body: web::Json<DomainPolicyInput>,
+) -> AppResult {
+    if let Err(resp) = require_platform_owner(&req, pool.get_ref()).await {
+        return Ok(resp);
+    }
+    let org_id = path.into_inner();
+    let updated =
+        sqlx::query("UPDATE organizations SET allow_unverified_email_domains = $1 WHERE id = $2")
+            .bind(body.allow)
+            .bind(org_id)
+            .execute(pool.get_ref())
+            .await?;
+    if updated.rows_affected() == 0 {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Organization not found" })));
+    }
+    info!(target: "auth", org_id, allow = body.allow, "organization domain policy updated");
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "allow_unverified_email_domains": body.allow })))
 }
 
 #[post("/organizations/{org_id}/domains/{domain_id}/verify")]

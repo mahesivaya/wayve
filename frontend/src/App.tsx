@@ -14,6 +14,7 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RequirePricingAccess from "./components/RequirePricingAccess";
 import Register from "./auth/Register";
+import RegisterBusiness from "./auth/RegisterBusiness";
 import Login from "./auth/Login";
 import ForgotPassword from "./auth/ForgotPassword";
 import ResetPassword from "./auth/ResetPassword";
@@ -142,6 +143,16 @@ export default function App() {
           path="/register"
           element={
             user ? (redirectToAccountHome ?? <Register />) : <Register />
+          }
+        />
+        <Route
+          path="/register-business"
+          element={
+            user ? (
+              (redirectToAccountHome ?? <RegisterBusiness />)
+            ) : (
+              <RegisterBusiness />
+            )
           }
         />
         <Route path="/forgot-password" element={<ForgotPassword />} />
