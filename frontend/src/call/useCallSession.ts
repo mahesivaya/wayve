@@ -53,6 +53,12 @@ export type CallState =
       peerEmail: string;
       media: CallMedia;
       muted: boolean;
+      // Camera disabled mid-call (video calls only). The track stays in the
+      // PeerConnection so renegotiation isn't needed — we just flip
+      // `track.enabled`, which sends black frames until re-enabled.
+      videoOff: boolean;
+      // Epoch ms when the call went active, for the elapsed-time display.
+      startedAt: number;
     };
 
 export interface CallSession {
@@ -63,6 +69,7 @@ export interface CallSession {
   rejectCall: () => void;
   endCall: () => void;
   toggleMute: () => void;
+  toggleVideo: () => void;
   remoteAudioRef: React.RefObject<HTMLAudioElement>;
   remoteVideoRef: React.RefObject<HTMLVideoElement>;
   localVideoRef: React.RefObject<HTMLVideoElement>;
@@ -88,6 +95,10 @@ export function useCallSession(
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const ringTimerRef = useRef<number | null>(null);
+  // ICE candidates that arrived before the remote description was applied.
+  // addIceCandidate() throws if called first, so we buffer and flush once
+  // setRemoteDescription resolves (see the offer/answer handlers).
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   const [connected, setConnected] = useState(false);
   const [callState, setCallState] = useState<CallState>({ kind: "idle" });
@@ -109,9 +120,11 @@ export function useCallSession(
     if (pcRef.current) {
       pcRef.current.onicecandidate = null;
       pcRef.current.ontrack = null;
+      pcRef.current.onconnectionstatechange = null;
       pcRef.current.close();
       pcRef.current = null;
     }
+    pendingCandidatesRef.current = [];
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
@@ -149,10 +162,42 @@ export function useCallSession(
         }
       };
 
+      // A clean hang-up sends `call-end`, but an unclean peer drop (network
+      // loss, tab close, crash) sends nothing — the surviving side would sit
+      // on a frozen "active" panel forever. The PeerConnection itself notices
+      // within a few seconds, so fall back to the local UI on failure.
+      pc.onconnectionstatechange = () => {
+        if (
+          pc.connectionState === "failed" ||
+          pc.connectionState === "disconnected"
+        ) {
+          log.warn("peer connection lost", pc.connectionState);
+          teardownPeer();
+          setCallState({ kind: "idle" });
+        }
+      };
+
       pcRef.current = pc;
       return pc;
     },
-    [sendSignal]
+    [sendSignal, teardownPeer]
+  );
+
+  // Drain ICE candidates that arrived before the remote description existed.
+  // Called immediately after each setRemoteDescription.
+  const flushPendingCandidates = useCallback(
+    async (pc: RTCPeerConnection) => {
+      const queued = pendingCandidatesRef.current;
+      pendingCandidatesRef.current = [];
+      for (const candidate of queued) {
+        try {
+          await pc.addIceCandidate(candidate);
+        } catch (err) {
+          log.error("buffered ice candidate failed", err);
+        }
+      }
+    },
+    []
   );
 
   const attachLocalMedia = useCallback(
@@ -200,7 +245,15 @@ export function useCallSession(
       const pc = await buildPeerConnection(peerId, media);
       await attachLocalMedia(pc, media);
       sendSignal({ type: "call-accept", to: peerId });
-      setCallState({ kind: "active", peerId, peerEmail, media, muted: false });
+      setCallState({
+        kind: "active",
+        peerId,
+        peerEmail,
+        media,
+        muted: false,
+        videoOff: false,
+        startedAt: Date.now(),
+      });
     } catch (err) {
       log.error("acceptCall failed", err);
       sendSignal({ type: "call-reject", to: peerId });
@@ -239,6 +292,20 @@ export function useCallSession(
       track.enabled = !next;
     });
     setCallState({ ...callState, muted: next });
+  }, [callState]);
+
+  // Camera on/off during a video call. Like mute, this flips `track.enabled`
+  // rather than removing the track — no renegotiation, the peer just receives
+  // black frames until the camera is turned back on.
+  const toggleVideo = useCallback(() => {
+    if (callState.kind !== "active" || callState.media !== "video") return;
+    const stream = localStreamRef.current;
+    if (!stream) return;
+    const next = !callState.videoOff;
+    stream.getVideoTracks().forEach((track) => {
+      track.enabled = !next;
+    });
+    setCallState({ ...callState, videoOff: next });
   }, [callState]);
 
   const handleSignal = useCallback(
@@ -281,6 +348,8 @@ export function useCallSession(
               peerEmail: callState.peerEmail,
               media: callState.media,
               muted: false,
+              videoOff: false,
+              startedAt: Date.now(),
             });
           } catch (err) {
             log.error("caller side accept handling failed", err);
@@ -306,6 +375,7 @@ export function useCallSession(
           if (!pc || !signal.sdp) return;
           try {
             await pc.setRemoteDescription({ type: "offer", sdp: signal.sdp });
+            await flushPendingCandidates(pc);
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             sendSignal({ type: "answer", to: from, sdp: answer.sdp });
@@ -320,6 +390,7 @@ export function useCallSession(
           if (!pc || !signal.sdp) return;
           try {
             await pc.setRemoteDescription({ type: "answer", sdp: signal.sdp });
+            await flushPendingCandidates(pc);
           } catch (err) {
             log.error("answer handling failed", err);
           }
@@ -329,6 +400,13 @@ export function useCallSession(
         case "ice-candidate": {
           const pc = pcRef.current;
           if (!pc || !signal.candidate) return;
+          // Candidates can outrun the answer on the caller side. Until the
+          // remote description is set, addIceCandidate() throws — so buffer
+          // and flush after setRemoteDescription instead of dropping them.
+          if (!pc.remoteDescription) {
+            pendingCandidatesRef.current.push(signal.candidate);
+            return;
+          }
           try {
             await pc.addIceCandidate(signal.candidate);
           } catch (err) {
@@ -338,7 +416,14 @@ export function useCallSession(
         }
       }
     },
-    [callState, buildPeerConnection, attachLocalMedia, sendSignal, teardownPeer]
+    [
+      callState,
+      buildPeerConnection,
+      attachLocalMedia,
+      sendSignal,
+      teardownPeer,
+      flushPendingCandidates,
+    ]
   );
 
   // One WS for the lifetime of the host component. Auth lives in the cookie
@@ -411,6 +496,7 @@ export function useCallSession(
     rejectCall,
     endCall,
     toggleMute,
+    toggleVideo,
     remoteAudioRef,
     remoteVideoRef,
     localVideoRef,
