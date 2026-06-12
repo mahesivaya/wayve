@@ -53,9 +53,6 @@ const PlatformAdminHome = lazy(
 const PlatformOrganizations = lazy(
   () => import("./organization/PlatformOrganizations")
 );
-const PlatformOrganizationDetail = lazy(
-  () => import("./organization/PlatformOrganizationDetail")
-);
 const PlatformUsers = lazy(() => import("./organization/PlatformUsers"));
 const PlatformEnterprises = lazy(
   () => import("./organization/PlatformEnterprises")
@@ -355,10 +352,6 @@ export default function App() {
             <Route
               path="/platform/organizations"
               element={<PlatformOrganizations />}
-            />
-            <Route
-              path="/platform/organizations/:id"
-              element={<PlatformOrganizationDetail />}
             />
             <Route path="/platform/users" element={<PlatformUsers />} />
             <Route

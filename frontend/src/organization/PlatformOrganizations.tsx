@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   generateOrganizationApiKey,
   listAdminOrganizations,
@@ -11,6 +10,8 @@ import {
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { fmtShortDate } from "../utils/datetime";
+import { formatBytes } from "../utils/bytes";
+import OrganizationDetailDrawer from "./OrganizationDetailDrawer";
 import "./admin-ui.css";
 import "./platformAdmin.css";
 
@@ -22,6 +23,8 @@ export default function PlatformOrganizations() {
   const [organizations, setOrganizations] = useState<AdminOrganization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedOrg, setSelectedOrg] = useState<AdminOrganization | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "block">("list");
 
   const [keyOrgId, setKeyOrgId] = useState<number | null>(null);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
@@ -135,7 +138,33 @@ export default function PlatformOrganizations() {
               <h2>Business</h2>
               <p>All businesses currently available on the platform.</p>
             </div>
-            <span>{organizations.length} total</span>
+            <div className="org-header-right">
+              <span>{organizations.length} total</span>
+              <div
+                className="org-view-toggle"
+                role="group"
+                aria-label="View mode"
+              >
+                <button
+                  type="button"
+                  className={viewMode === "list" ? "active" : ""}
+                  aria-pressed={viewMode === "list"}
+                  title="List view"
+                  onClick={() => setViewMode("list")}
+                >
+                  ☰
+                </button>
+                <button
+                  type="button"
+                  className={viewMode === "block" ? "active" : ""}
+                  aria-pressed={viewMode === "block"}
+                  title="Block view"
+                  onClick={() => setViewMode("block")}
+                >
+                  ▦
+                </button>
+              </div>
+            </div>
           </div>
 
           {loading ? (
@@ -144,18 +173,52 @@ export default function PlatformOrganizations() {
             <div className="platform-admin-empty">
               No businesses created yet.
             </div>
+          ) : viewMode === "list" ? (
+            <table className="org-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th className="org-table-num">Members</th>
+                  <th className="org-table-num">Email accounts</th>
+                  <th className="org-table-num">Storage</th>
+                  <th>Admin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {organizations.map((org) => (
+                  <tr
+                    key={org.id}
+                    className="org-table-row"
+                    onClick={() => setSelectedOrg(org)}
+                    title={`View ${org.name}`}
+                  >
+                    <td>
+                      <strong>{org.name}</strong>
+                    </td>
+                    <td className="org-table-num">{org.user_count}</td>
+                    <td className="org-table-num">
+                      {org.email_account_count ?? 0}
+                    </td>
+                    <td className="org-table-num">
+                      {formatBytes(org.storage_used_bytes ?? 0)}
+                    </td>
+                    <td>{org.admin?.email ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : (
             <div className="organization-grid">
               {organizations.map((org) => (
-                <Link
+                <button
                   key={org.id}
-                  to={`/platform/organizations/${org.id}`}
-                  state={{ from: "organizations" }}
+                  type="button"
                   className="organization-grid-tile"
                   title={org.name}
+                  onClick={() => setSelectedOrg(org)}
                 >
                   <strong>{org.name}</strong>
-                </Link>
+                </button>
               ))}
             </div>
           )}
@@ -261,6 +324,17 @@ export default function PlatformOrganizations() {
             </>
           )}
         </section>
+      )}
+
+      {selectedOrg && (
+        <OrganizationDetailDrawer
+          org={selectedOrg}
+          maxStorageBytes={Math.max(
+            0,
+            ...organizations.map((o) => o.storage_used_bytes ?? 0)
+          )}
+          onClose={() => setSelectedOrg(null)}
+        />
       )}
     </div>
   );

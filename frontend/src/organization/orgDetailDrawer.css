@@ -1,0 +1,126 @@
+/* Right slide-in detail drawer for a business (platform Business page). */
+.org-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 1000;
+}
+
+.org-drawer {
+  background: var(--color-surface, #fff);
+  color: var(--color-text);
+  width: min(440px, 100%);
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px 26px 28px;
+  box-shadow: -16px 0 48px rgba(0, 0, 0, 0.22);
+  animation: org-drawer-in 160ms ease-out;
+}
+
+@keyframes org-drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.org-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.org-drawer-head h2 {
+  margin: 0 0 2px;
+}
+.org-drawer-sub {
+  font-size: var(--text-xs, 0.75rem);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+.org-drawer-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+.org-drawer-close:hover {
+  color: var(--color-text);
+}
+
+.org-drawer-section {
+  margin-bottom: 22px;
+}
+.org-drawer-section h3 {
+  margin: 0 0 10px;
+  font-size: var(--text-sm, 0.875rem);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.org-drawer-meta {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.org-drawer-meta > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+.org-drawer-meta > div:last-child {
+  border-bottom: none;
+}
+.org-drawer-meta dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm, 0.875rem);
+}
+.org-drawer-meta dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.org-drawer-usage-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.org-drawer-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-surface-muted, var(--color-surface-hover));
+  overflow: hidden;
+}
+.org-drawer-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primary, #2563eb);
+  transition: width 200ms ease;
+}
+.org-drawer-usage-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted);
+}

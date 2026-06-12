@@ -15,6 +15,7 @@ export type AdminOrganization = {
   user_count: number;
   email_account_count?: number;
   storage_used_bytes?: number;
+  created_at?: string | null;
   admin?: AdminCreatedUser | null;
 };
 

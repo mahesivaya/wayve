@@ -491,3 +491,78 @@
   justify-content: center;
   margin-top: 16px;
 }
+
+/* Business list as a table (replaces the old name-only card grid). */
+.org-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.org-table th,
+.org-table td {
+  padding: 5px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm, 0.8125rem);
+}
+.org-table td strong {
+  font-weight: 600;
+  font-size: var(--text-sm, 0.8125rem);
+}
+.org-table th {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted);
+}
+.org-table-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* The whole row opens the drawer. */
+.org-table-row {
+  cursor: pointer;
+}
+.org-table-row:hover {
+  background: var(--color-surface-muted, var(--color-surface-hover));
+}
+
+/* Business list view toggle (list / block) in the section header. */
+.org-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.org-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.org-view-toggle button {
+  background: var(--color-surface, #fff);
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--color-text-muted);
+}
+.org-view-toggle button + button {
+  border-left: 1px solid var(--color-border);
+}
+.org-view-toggle button:hover {
+  background: var(--color-surface-muted, var(--color-surface-hover));
+}
+.org-view-toggle button.active {
+  background: var(--color-primary, #2563eb);
+  color: #fff;
+}
+
+/* The block-view tiles are <button>s now (drawer trigger), not links. */
+.organization-grid-tile {
+  width: 100%;
+  font: inherit;
+}

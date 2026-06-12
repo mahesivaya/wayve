@@ -137,6 +137,8 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
             let user_count: i64 = row.get("user_count");
             let email_account_count: i64 = row.try_get("email_account_count").unwrap_or(0);
             let storage_used_bytes: i64 = row.try_get("storage_used_bytes").unwrap_or(0);
+            let created_at: Option<chrono::NaiveDateTime> =
+                row.try_get("created_at").unwrap_or(None);
             let admin: Option<serde_json::Value> = row.get("admin");
 
             serde_json::json!({
@@ -146,6 +148,7 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
                 "user_count": user_count,
                 "email_account_count": email_account_count,
                 "storage_used_bytes": storage_used_bytes,
+                "created_at": created_at,
                 "admin": admin
             })
         })
