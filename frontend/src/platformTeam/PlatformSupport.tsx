@@ -33,7 +33,7 @@ export default function PlatformSupport() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [ticketsLoading, setTicketsLoading] = useState(true);
   const [ticketsError, setTicketsError] = useState("");
-  const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("open");
+  const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(
     null

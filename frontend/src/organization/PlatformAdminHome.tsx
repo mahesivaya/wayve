@@ -1,9 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState, type KeyboardEvent } from "react";
+import type { KeyboardEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
-import { adminListTickets, type SupportTicket } from "../api/support";
-import { fmtListTimestamp } from "../utils/datetime";
 import "./admin-ui.css";
 import "./platformAdmin.css";
 
@@ -39,38 +37,6 @@ export default function PlatformAdminHome() {
   const canSeeMembers = canReadMembers;
   const canSeeScim = hasPermission(user, "webhooks:manage");
   const canManagePlans = hasPermission(user, "billing:manage");
-  // Reporting issues lands in support_tickets; only ticket managers (owner,
-  // support, …) can pull the platform-wide admin list, so gate the inbox on
-  // that permission rather than the looser members:read used for the card.
-  const canManageTickets = hasPermission(user, "tickets:manage");
-
-  // Support-tickets inbox — every ticket submitted via the Report-an-issue
-  // form, surfaced right on the owner's home so they're seen at login instead
-  // of buried behind the Support card. The badge counts only the still-open
-  // ones (the ones needing attention); the list shows all statuses.
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [ticketsLoading, setTicketsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!canManageTickets) return;
-    let cancelled = false;
-    setTicketsLoading(true);
-    adminListTickets()
-      .then((rows) => {
-        if (!cancelled) setTickets(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setTickets([]);
-      })
-      .finally(() => {
-        if (!cancelled) setTicketsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canManageTickets]);
-
-  const openCount = tickets.filter((t) => t.status === "open").length;
 
   const consoles: ConsoleCard[] = [
     {
@@ -198,74 +164,8 @@ export default function PlatformAdminHome() {
     }
   };
 
-  const MAX_VISIBLE_TICKETS = 8;
-  const visibleTickets = tickets.slice(0, MAX_VISIBLE_TICKETS);
-
   return (
     <div className="platform-admin-home u-page-shell">
-      {canManageTickets && (
-        <section className="platform-admin-panel u-panel platform-issues-panel">
-          <div className="platform-issues-head">
-            <h2>
-              Support tickets
-              {openCount > 0 && (
-                <span className="platform-issues-badge">{openCount} open</span>
-              )}
-            </h2>
-            <button
-              type="button"
-              className="platform-issues-all"
-              onClick={() => navigate("/platform/support")}
-            >
-              View all
-            </button>
-          </div>
-
-          {ticketsLoading ? (
-            <p className="platform-issues-empty">Loading…</p>
-          ) : tickets.length === 0 ? (
-            <p className="platform-issues-empty">No support tickets yet.</p>
-          ) : (
-            <ul className="platform-issues-list">
-              {visibleTickets.map((ticket) => (
-                <li
-                  key={ticket.id}
-                  className="platform-issue-row"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Open ticket: ${ticket.subject}`}
-                  onClick={() => navigate("/platform/support")}
-                  onKeyDown={(event) =>
-                    handleCardKeyDown(event, "/platform/support")
-                  }
-                >
-                  <span className="platform-issue-cat">{ticket.category}</span>
-                  <span className="platform-issue-main">
-                    <strong className="platform-issue-subject">
-                      {ticket.subject}
-                    </strong>
-                    <span className="platform-issue-meta">
-                      {ticket.user_email ?? `user #${ticket.user_id}`}
-                      {ticket.organization_name
-                        ? ` · ${ticket.organization_name}`
-                        : ""}
-                    </span>
-                  </span>
-                  <span
-                    className={`platform-issue-status platform-issue-status--${ticket.status}`}
-                  >
-                    {ticket.status.replace("_", " ")}
-                  </span>
-                  <span className="platform-issue-time">
-                    {fmtListTimestamp(ticket.created_at)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-
       {hasAnyConsole && (
         <section className="platform-admin-panel u-panel">
           <div className="platform-console-rows">
