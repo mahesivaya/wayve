@@ -37,7 +37,7 @@ export interface InboxState {
 }
 
 export function listSharedInboxes(): Promise<SharedInbox[]> {
-  return apiFetchJson<SharedInbox[]>("/shared-inboxes");
+  return apiFetchJson<SharedInbox[]>("/api/shared-inboxes");
 }
 
 export function createSharedInbox(input: {
@@ -45,7 +45,7 @@ export function createSharedInbox(input: {
   label?: string;
   organization_id?: number | null;
 }): Promise<SharedInbox> {
-  return apiFetchJson<SharedInbox>("/shared-inboxes", {
+  return apiFetchJson<SharedInbox>("/api/shared-inboxes", {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -55,25 +55,25 @@ export function updateSharedInbox(
   id: number,
   input: { label?: string; is_shared?: boolean }
 ): Promise<SharedInbox> {
-  return apiFetchJson<SharedInbox>(`/shared-inboxes/${id}`, {
+  return apiFetchJson<SharedInbox>(`/api/shared-inboxes/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input),
   });
 }
 
 export async function deleteSharedInbox(id: number): Promise<void> {
-  await apiFetch(`/shared-inboxes/${id}`, { method: "DELETE" });
+  await apiFetch(`/api/shared-inboxes/${id}`, { method: "DELETE" });
 }
 
 export function listInboxMembers(id: number): Promise<InboxMember[]> {
-  return apiFetchJson<InboxMember[]>(`/shared-inboxes/${id}/members`);
+  return apiFetchJson<InboxMember[]>(`/api/shared-inboxes/${id}/members`);
 }
 
 export async function addInboxMember(
   id: number,
   input: { user_id: number; can_reply?: boolean; can_manage?: boolean }
 ): Promise<void> {
-  await apiFetch(`/shared-inboxes/${id}/members`, {
+  await apiFetch(`/api/shared-inboxes/${id}/members`, {
     method: "POST",
     body: JSON.stringify({
       user_id: input.user_id,
@@ -87,7 +87,7 @@ export async function removeInboxMember(
   id: number,
   userId: number
 ): Promise<void> {
-  await apiFetch(`/shared-inboxes/${id}/members/${userId}`, {
+  await apiFetch(`/api/shared-inboxes/${id}/members/${userId}`, {
     method: "DELETE",
   });
 }
@@ -106,7 +106,7 @@ export function updateEmailState(
     clear_assignee?: boolean;
   }
 ): Promise<InboxState> {
-  return apiFetchJson<InboxState>(`/shared-inboxes/emails/${emailId}/state`, {
+  return apiFetchJson<InboxState>(`/api/shared-inboxes/emails/${emailId}/state`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });

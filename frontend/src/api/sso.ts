@@ -48,7 +48,7 @@ export interface SsoTestResult {
 
 /** Fetch the org's SSO config. Returns null when none is set yet (404). */
 export async function getSsoConfig(orgId: number): Promise<SsoConfig | null> {
-  const res = await apiFetch(`/organizations/${orgId}/sso/config`, {
+  const res = await apiFetch(`/api/organizations/${orgId}/sso/config`, {
     preserve401: true,
     // 404 = no SSO config set for this org yet; return null, don't throw.
     preserve404: true,
@@ -62,7 +62,7 @@ export function saveSsoConfig(
   orgId: number,
   input: SsoConfigInput
 ): Promise<SsoConfig> {
-  return apiFetchJson<SsoConfig>(`/organizations/${orgId}/sso/config`, {
+  return apiFetchJson<SsoConfig>(`/api/organizations/${orgId}/sso/config`, {
     method: "PUT",
     body: JSON.stringify(input),
   });
@@ -70,12 +70,12 @@ export function saveSsoConfig(
 
 /** Remove the org's SSO config. */
 export async function deleteSsoConfig(orgId: number): Promise<void> {
-  await apiFetch(`/organizations/${orgId}/sso/config`, { method: "DELETE" });
+  await apiFetch(`/api/organizations/${orgId}/sso/config`, { method: "DELETE" });
 }
 
 /** Test the connection — backend fetches the IdP's discovery doc. */
 export function testSsoConfig(orgId: number): Promise<SsoTestResult> {
-  return apiFetchJson<SsoTestResult>(`/organizations/${orgId}/sso/test`, {
+  return apiFetchJson<SsoTestResult>(`/api/organizations/${orgId}/sso/test`, {
     method: "POST",
   });
 }
@@ -91,5 +91,5 @@ export function ssoStartUrl(email: string, returnTo?: string): string | null {
   if (!trimmed.includes("@")) return null;
   const params = new URLSearchParams({ email: trimmed });
   if (returnTo) params.set("return_to", returnTo);
-  return `${getApiBase()}/auth/sso/start?${params.toString()}`;
+  return `${getApiBase()}/api/auth/sso/start?${params.toString()}`;
 }
