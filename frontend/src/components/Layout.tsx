@@ -950,7 +950,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     {
       key: "teams",
       label: "Teams",
-      visible: true,
+      // Teams are organization-scoped; personal accounts have no org, so the
+      // section would only ever read "No teams yet". Hide it for them.
+      visible: user.account_type !== "personal",
       onAdd:
         isOrgOwner && !sidebarCollapsed
           ? () => {

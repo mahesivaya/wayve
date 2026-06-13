@@ -902,6 +902,22 @@
   background: var(--color-surface-hover);
 }
 
+/* Highlight the "+ Add" as an accent-outlined button so it reads as a distinct
+   action rather than just another nav row. Fills on hover. */
+.sidebar-add-app-btn {
+  border: 1px solid var(--color-primary-action);
+  border-radius: 8px;
+  color: var(--color-primary-action);
+  font-weight: 600;
+  margin: 4px 0;
+}
+
+.sidebar-add-app-btn:hover {
+  background: var(--color-primary-action);
+  border-color: var(--color-primary-action);
+  color: var(--color-surface);
+}
+
 /* App picker (Modal grid): cards laid out like an app launcher. */
 .add-app-grid {
   display: grid;
