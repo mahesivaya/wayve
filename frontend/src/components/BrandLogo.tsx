@@ -1,4 +1,4 @@
-// Fluxze brand mark. Renders the raster logo at /public/fluxze.png, sized via
+// Fluxze brand mark. Renders the raster logo at /public/brand/fluxze.png, sized via
 // the `size` prop so every call site (header, footer, favicon-scale) stays in
 // sync — change the file to change the mark everywhere. No text is baked in —
 // the wordmark is rendered separately next to it.
@@ -20,7 +20,7 @@ export default function BrandLogo({
   return (
     <img
       className={className}
-      src="/fluxze.png"
+      src="/brand/fluxze.png"
       width={size}
       height={size}
       alt={title}

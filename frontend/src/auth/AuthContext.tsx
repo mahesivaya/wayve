@@ -605,8 +605,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     authVersion.current += 1;
     clearAuthToken();
-    setUser(null);
     setNeedsRecovery(false);
+    // Intentionally do NOT setUser(null) here. Nulling the user synchronously
+    // re-renders the current (protected) route, which ProtectedRoute then
+    // bounces to /login — a visible flash before the hard nav below lands on
+    // "/". The hard reload to "/" resets all in-memory state anyway, and the
+    // token is already cleared, so keeping `user` in place for the brief
+    // logout-POST wait keeps the current page on screen instead of flashing
+    // the login page. (Cookie clearing still happens via the awaited POST.)
     // Wait for the /api/logout response (which carries the cookie-clear
     // Set-Cookie) before navigating. The previous fire-and-forget shape
     // could hard-nav while the POST was still in flight; the browser

@@ -1,7 +1,18 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { useAuth } from "../auth/useAuth";
+import {
+  SettingsTileIcon,
+  MembersIcon,
+  BillingIcon,
+  DeveloperTileIcon,
+  SecurityTileIcon,
+  SupportTileIcon,
+  SsoIcon,
+  WebhooksIcon,
+  ScimIcon,
+} from "../icons";
 import { hasPermission } from "../auth/permissions";
 import { getOrgKeys } from "../orgKeys/api";
 import { listOrganizationMembers } from "../api/rbac";
@@ -38,7 +49,7 @@ const prettyPlan = (code: string | null | undefined) =>
 // see only the consoles their role can act on. App tiles are visible to
 // everyone (gated only by login).
 type Tile = {
-  icon: string;
+  icon: ReactNode;
   label: string;
   description: string;
   path: string;
@@ -121,7 +132,8 @@ export default function OrganizationAdminHome() {
         setPlanLabel([
           { value: prettyPlan(b.plan_code), label: "Current plan" },
           {
-            value: b.subscription?.status ?? (b.plan_active ? "active" : "free"),
+            value:
+              b.subscription?.status ?? (b.plan_active ? "active" : "free"),
             label: "Status",
           },
           {
@@ -175,9 +187,7 @@ export default function OrganizationAdminHome() {
     getSsoConfig(orgId)
       .then((cfg) => {
         if (cancelled) return;
-        setSsoStat([
-          { value: cfg ? "Configured" : "Not set", label: "SSO" },
-        ]);
+        setSsoStat([{ value: cfg ? "Configured" : "Not set", label: "SSO" }]);
       })
       .catch(() => !cancelled && setSsoStat(null));
     return () => {
@@ -232,14 +242,14 @@ export default function OrganizationAdminHome() {
 
   const consoles: Tile[] = [
     {
-      icon: "⚙️",
+      icon: <SettingsTileIcon size={26} />,
       label: "Settings",
       description: "Rename your organization and manage its profile.",
       path: "/settings",
       visible: canSeeOrgSettings,
     },
     {
-      icon: "👥",
+      icon: <MembersIcon size={26} />,
       label: "Members & roles",
       description:
         "Provision accounts inside your organization and adjust role assignments.",
@@ -247,49 +257,49 @@ export default function OrganizationAdminHome() {
       visible: canSeeMembers,
     },
     {
-      icon: "💳",
+      icon: <BillingIcon size={26} />,
       label: "Billing",
       description: "Subscription, plan upgrades, invoices and payment methods.",
       path: "/billing",
       visible: canSeeBilling,
     },
     {
-      icon: "🔑",
+      icon: <DeveloperTileIcon size={26} />,
       label: "Developer",
       description: "API keys, scopes and usage audit for programmatic access.",
       path: "/api-keys",
       visible: canSeeDeveloper,
     },
     {
-      icon: "🛡️",
+      icon: <SecurityTileIcon size={26} />,
       label: "Security",
       description: "Audit logs, outcome filters and SIEM webhook forwarding.",
       path: "/logs/audit",
       visible: canSeeSecurity,
     },
     {
-      icon: "🎧",
+      icon: <SupportTileIcon size={26} />,
       label: "Support",
       description: "Shared inboxes and customer-support queues.",
       path: "/settings/inboxes",
       visible: canSeeSharedInboxes,
     },
     {
-      icon: "🔐",
+      icon: <SsoIcon size={26} />,
       label: "SSO",
       description: "SAML / OIDC sign-in configuration for your team.",
       path: "/settings/sso",
       visible: canSeeSso,
     },
     {
-      icon: "📡",
+      icon: <WebhooksIcon size={26} />,
       label: "Webhooks",
       description: "Outgoing event delivery and signing-secret rotation.",
       path: "/settings/webhooks",
       visible: canSeeWebhooks,
     },
     {
-      icon: "🪪",
+      icon: <ScimIcon size={26} />,
       label: "SCIM provisioning",
       description: "Mint bearer tokens so Okta / Entra can provision users.",
       path: "/settings/scim",

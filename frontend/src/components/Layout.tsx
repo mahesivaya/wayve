@@ -37,48 +37,37 @@ import {
   type Team,
 } from "../api/workspace";
 import "./Layout.css";
-
-// Shared bug-report glyph — amber warning triangle with a dark `!`.
-// Used in both the header shortcut button (.header-bug-btn) and the
-// Platform → Support sidebar entry so the two surfaces stay visually
-// consistent. The colors are hard-coded (not currentColor) because the
-// icon is intentionally two-tone.
-function BugReportIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M11.13 3.3a1 1 0 0 1 1.74 0l9.4 16.3a1 1 0 0 1-.87 1.5H2.6a1 1 0 0 1-.87-1.5z"
-        fill="#f5a623"
-      />
-      <rect
-        x="10.85"
-        y="8.5"
-        width="2.3"
-        height="7.2"
-        rx="1.05"
-        fill="#2d2d2d"
-      />
-      <circle cx="12" cy="18.4" r="1.35" fill="#2d2d2d" />
-    </svg>
-  );
-}
-
-// Git logo mark (diamond + branch graph). Single-tone via currentColor so it
-// inherits the sidebar color. Used by the "Code Repo" app item and the
-// "Code Repo" project group header.
-function GitLogoIcon({ size = 18 }: { size?: number }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M2.6,10.59L8.38,4.8L10.07,6.5C9.83,7.35 10.22,8.28 11,8.73V14.27C10.4,14.61 10,15.26 10,16A2,2 0 0,0 12,18A2,2 0 0,0 14,16C14,15.26 13.6,14.61 13,14.27V9.41L15.07,11.5C15,11.65 15,11.82 15,12A2,2 0 0,0 17,14A2,2 0 0,0 19,12A2,2 0 0,0 17,10C16.82,10 16.65,10 16.5,10.07L13.93,7.5C14.19,6.57 13.71,5.55 12.78,5.16C12.35,5 11.9,4.96 11.5,5.07L9.8,3.38L10.59,2.6C11.37,1.81 12.63,1.81 13.41,2.6L21.4,10.59C22.19,11.37 22.19,12.63 21.4,13.41L13.41,21.4C12.63,22.19 11.37,22.19 10.59,21.4L2.6,13.41C1.81,12.63 1.81,11.37 2.6,10.59Z" />
-    </svg>
-  );
-}
+import {
+  HomeIcon,
+  EmailsIcon,
+  ChatIcon,
+  SchedulerIcon,
+  DriveIcon,
+  NotesIcon,
+  TasksIcon,
+  AIChatIcon,
+  TestAccessIcon,
+  AccessRequestsIcon,
+  BillingIcon,
+  DeveloperIcon,
+  AnalyticsIcon,
+  DomainsIcon,
+  SecretsIcon,
+  LogsIcon,
+  VisitorsIcon,
+  UserLogsIcon,
+  AuditIcon,
+  TracingIcon,
+  PricingIcon,
+  TeamsIcon,
+  DocsIcon,
+  ApiRefIcon,
+  LibrariesIcon,
+  SdkIcon,
+  ApiKeysIcon,
+  GitLogoIcon,
+  BugReportIcon,
+} from "../icons";
 
 function appKeyFromPath(pathname: string): AppKey {
   const match = SPLIT_APPS.find((app) => {
@@ -942,7 +931,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {renderSidebarLink(
                 `/teams/${team.slug}`,
                 team.name,
-                "👥",
+                <TeamsIcon size={16} />,
                 location.pathname === `/teams/${team.slug}`
               )}
             </Fragment>
@@ -961,13 +950,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         {
           path: "/platform/billing",
           label: "Billing",
-          icon: "💳",
+          icon: <BillingIcon size={16} />,
           visible: canAccessPlatformBilling,
         },
         {
           path: "/platform/developer",
           label: "Developer",
-          icon: "⚙",
+          icon: <DeveloperIcon size={16} />,
           visible: canAccessPlatformDeveloper,
         },
         {
@@ -979,19 +968,19 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         {
           path: "/platform/analytics",
           label: "Analytics",
-          icon: "📊",
+          icon: <AnalyticsIcon size={16} />,
           visible: canAccessPlatformAnalytics,
         },
         {
           path: "/platform/domains",
           label: "Domains",
-          icon: "🌐",
+          icon: <DomainsIcon size={16} />,
           visible: isPlatformOwner,
         },
         {
           path: "/platform/secrets",
           label: "Secrets",
-          icon: "🔑",
+          icon: <SecretsIcon size={16} />,
           visible: isPlatformOwner,
         },
       ],
@@ -1004,31 +993,31 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         {
           path: "/logs/app",
           label: "App Logs",
-          icon: "🪵",
+          icon: <LogsIcon size={16} />,
           visible: canAccessPlatformLogs,
         },
         {
           path: "/logs/visitors",
           label: "Visitors",
-          icon: "👥",
+          icon: <VisitorsIcon size={16} />,
           visible: isPlatformOwner,
         },
         {
           path: "/logs/users",
           label: "User Logs",
-          icon: "👤",
+          icon: <UserLogsIcon size={16} />,
           visible: canAccessSecurity,
         },
         {
           path: "/logs/audit",
           label: "Audit Logs",
-          icon: "🔒",
+          icon: <AuditIcon size={16} />,
           visible: canAccessSecurity,
         },
         {
           path: "/logs/tracing",
           label: "Tracing",
-          icon: "📈",
+          icon: <TracingIcon size={16} />,
           visible: isPlatformOwner,
         },
       ],
@@ -1038,21 +1027,25 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       label: "Developers",
       visible: user.account_type !== "personal",
       links: [
-        { path: "/docs", label: "Docs", icon: "📚" },
-        { path: "/docs/api", label: "API reference", icon: "📖" },
+        { path: "/docs", label: "Docs", icon: <DocsIcon size={16} /> },
+        {
+          path: "/docs/api",
+          label: "API reference",
+          icon: <ApiRefIcon size={16} />,
+        },
         // Libraries + SDK both land on the Developer overview; Libraries is
         // never shown as active (preserves prior behavior), SDK is.
         {
           path: "/docs/developers",
           label: "Libraries",
-          icon: "📦",
+          icon: <LibrariesIcon size={16} />,
           active: false,
         },
-        { path: "/docs/developers", label: "SDK", icon: "🧰" },
+        { path: "/docs/developers", label: "SDK", icon: <SdkIcon size={16} /> },
         {
           path: "/api-keys",
           label: "API Keys",
-          icon: "🔑",
+          icon: <ApiKeysIcon size={16} />,
           visible: canAccessApiKeyAdmin(user),
         },
       ],
@@ -1069,11 +1062,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               ? `/platform/domains?org=${user.organization_id}`
               : "/platform/domains",
           label: "Domains",
-          icon: "🌐",
+          icon: <DomainsIcon size={16} />,
           activeWhen: "/platform/domains",
         },
-        { path: "/logs/app", label: "App Logs", icon: "📊" },
-        { path: "/logs/audit", label: "Audit Logs", icon: "🔒" },
+        { path: "/logs/app", label: "App Logs", icon: <LogsIcon size={16} /> },
+        {
+          path: "/logs/audit",
+          label: "Audit Logs",
+          icon: <AuditIcon size={16} />,
+        },
       ],
     },
   ];
@@ -1228,21 +1225,51 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             )}
 
             <div className="sidebar-section">
-              {renderSidebarItem("/", "home", "Home", "🏠")}
+              {renderSidebarItem("/", "home", "Home", <HomeIcon size={18} />)}
               {renderSidebarItem(
                 "/emails",
                 "emails",
                 "Emails",
-                "📧",
+                <EmailsIcon size={18} />,
                 emailsUnreadCount
               )}
-              {renderSidebarItem("/chat", "chat", "Chat", "💬")}
+              {renderSidebarItem(
+                "/chat",
+                "chat",
+                "Chat",
+                <ChatIcon size={18} />
+              )}
               {/* /call is intentionally absent — audio/video lives inside Chat. */}
-              {renderSidebarItem("/scheduler", "scheduler", "Scheduler", "📅")}
-              {renderSidebarItem("/drive", "drive", "Drive", "📁")}
-              {renderSidebarItem("/notes", "notes", "Notes", "📝")}
-              {renderSidebarItem("/tasks", "tasks", "Tasks", "☑")}
-              {renderSidebarItem("/ai-chat", "aichat", "AI Chat", "✨")}
+              {renderSidebarItem(
+                "/scheduler",
+                "scheduler",
+                "Scheduler",
+                <SchedulerIcon size={18} />
+              )}
+              {renderSidebarItem(
+                "/drive",
+                "drive",
+                "Drive",
+                <DriveIcon size={18} />
+              )}
+              {renderSidebarItem(
+                "/notes",
+                "notes",
+                "Notes",
+                <NotesIcon size={18} />
+              )}
+              {renderSidebarItem(
+                "/tasks",
+                "tasks",
+                "Tasks",
+                <TasksIcon size={18} />
+              )}
+              {renderSidebarItem(
+                "/ai-chat",
+                "aichat",
+                "AI Chat",
+                <AIChatIcon size={18} />
+              )}
               {/* GitHub repo viewer — same access as the /github route:
                   platform staff, org owner/super_admin/admin, or developers.
                   Uses the Git logo mark (inherits the sidebar icon color). */}
@@ -1258,13 +1285,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "/test-access",
                   "test_access",
                   "Test Access",
-                  "🔓"
+                  <TestAccessIcon size={18} />
                 )}
               {(isOrgOwner || isPlatformOwner) &&
                 renderSidebarLink(
                   "/access-requests",
                   "Access Requests",
-                  "🛂",
+                  <AccessRequestsIcon size={16} />,
                   location.pathname === "/access-requests"
                 )}
             </div>
@@ -1280,7 +1307,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   {renderSidebarLink(
                     "/pricing",
                     "Pricing",
-                    "💲",
+                    <PricingIcon size={16} />,
                     location.pathname === "/pricing"
                   )}
                 </div>

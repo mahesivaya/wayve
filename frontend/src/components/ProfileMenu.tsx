@@ -154,8 +154,10 @@ export default function ProfileMenu() {
             className="profile-dropdown-item profile-dropdown-logout"
             onClick={() => {
               setMenuOpen(false);
+              // logout() owns the redirect (hard nav to "/"). A client-side
+              // navigate here would bounce to the account home while `user`
+              // is still set — an extra flash.
               logout();
-              void navigate("/");
             }}
           >
             <span className="profile-dropdown-icon">⏻</span>
