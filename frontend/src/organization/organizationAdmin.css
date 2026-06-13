@@ -289,3 +289,27 @@
   border: 1px solid var(--color-danger-border);
   border-radius: var(--radius-sm);
 }
+
+/* Live stat figures inside an org-owner console tile. */
+.org-home-tile-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin-top: 4px;
+}
+.org-home-tile-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.org-home-tile-stat-value {
+  font-size: var(--text-xl, 1.25rem);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.org-home-tile-stat-label {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted);
+}

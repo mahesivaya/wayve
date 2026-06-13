@@ -566,3 +566,29 @@
   width: 100%;
   font: inherit;
 }
+
+/* Live stat figures inside a console card (e.g. the Users card). */
+.platform-card-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+  width: 100%;
+  margin-top: 4px;
+}
+.platform-card-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+.platform-card-stat-value {
+  font-size: var(--text-xl, 1.25rem);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.platform-card-stat-label {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted);
+}

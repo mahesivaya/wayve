@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listAdminOrganizations, type AdminOrganization } from "../api/admin";
 import { formatBytes } from "../utils/bytes";
+import OrganizationDetailDrawer from "./OrganizationDetailDrawer";
 import "./admin-ui.css";
 import "./platformAdmin.css";
 
@@ -9,6 +10,7 @@ export default function PlatformEnterprises() {
   const [enterprises, setEnterprises] = useState<AdminOrganization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedOrg, setSelectedOrg] = useState<AdminOrganization | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -82,12 +84,12 @@ export default function PlatformEnterprises() {
 
             <div className="organization-grid organization-grid--stats">
               {enterprises.map((ent) => (
-                <Link
+                <button
                   key={ent.id}
-                  to={`/platform/organizations/${ent.id}`}
-                  state={{ from: "enterprise" }}
+                  type="button"
                   className="organization-grid-tile organization-grid-tile--stats"
                   title={ent.name}
+                  onClick={() => setSelectedOrg(ent)}
                 >
                   <strong>{ent.name}</strong>
                   <span className="organization-tile-stats">
@@ -97,12 +99,23 @@ export default function PlatformEnterprises() {
                       accounts
                     </span>
                   </span>
-                </Link>
+                </button>
               ))}
             </div>
           </>
         )}
       </section>
+
+      {selectedOrg && (
+        <OrganizationDetailDrawer
+          org={selectedOrg}
+          maxStorageBytes={Math.max(
+            0,
+            ...enterprises.map((e) => e.storage_used_bytes ?? 0)
+          )}
+          onClose={() => setSelectedOrg(null)}
+        />
+      )}
     </div>
   );
 }

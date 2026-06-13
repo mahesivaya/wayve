@@ -157,46 +157,19 @@ function formatMonth(value: string | null): string {
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-// Reference samples shown on an organization's billing page before any real
-// Stripe invoices exist, so the layout (monthly amount, history, downloadable
-// receipts) is demonstrable. Negative ids keep them clear of real rows; the
-// receipt links are placeholders. Replaced by live data once invoices land.
-const SAMPLE_MONTHLY_AMOUNT_CENTS = 9000; // 9 seats × $10/user/month
-const SAMPLE_INVOICES: Invoice[] = [
-  {
-    id: -1,
-    stripe_invoice_id: "sample_in_0003",
-    amount_due_cents: 9000,
-    amount_paid_cents: 9000,
-    currency: "usd",
-    status: "paid",
-    hosted_invoice_url: "#",
-    invoice_pdf: "#",
-    created_at: "2026-05-01T00:00:00Z",
-  },
-  {
-    id: -2,
-    stripe_invoice_id: "sample_in_0002",
-    amount_due_cents: 8000,
-    amount_paid_cents: 8000,
-    currency: "usd",
-    status: "paid",
-    hosted_invoice_url: "#",
-    invoice_pdf: "#",
-    created_at: "2026-04-01T00:00:00Z",
-  },
-  {
-    id: -3,
-    stripe_invoice_id: "sample_in_0001",
-    amount_due_cents: 8000,
-    amount_paid_cents: 8000,
-    currency: "usd",
-    status: "paid",
-    hosted_invoice_url: "#",
-    invoice_pdf: "#",
-    created_at: "2026-03-01T00:00:00Z",
-  },
-];
+// Friendly names for plan codes; falls back to the raw code, or "Free" when
+// the org has no plan (the free default from effective_entitlements).
+const PLAN_NAMES: Record<string, string> = {
+  basic: "Basic",
+  basic_user: "Basic",
+  advance: "Advance",
+  "most-advance": "Most Advance",
+  startups: "Startups",
+  business: "Business",
+  enterprise: "Enterprise",
+};
+const prettyPlan = (code: string | null | undefined) =>
+  code ? (PLAN_NAMES[code] ?? code) : "Free";
 
 function loadStripeScript(): Promise<void> {
   if (window.Stripe) return Promise.resolve();
@@ -912,18 +885,24 @@ export default function Billing() {
             ) : (
               <div className="billing-sub">
                 <div className="billing-sub-row">
-                  <span>Amount</span>
-                  <strong className="billing-amount-lg">
-                    {formatMoney(SAMPLE_MONTHLY_AMOUNT_CENTS, "usd")} / month
-                  </strong>
+                  <span>Plan</span>
+                  <strong>{prettyPlan(org?.plan_code)}</strong>
                 </div>
                 <div className="billing-sub-row">
-                  <span>Plan</span>
-                  <strong>Business</strong>
+                  <span>Status</span>
+                  <strong>{org?.plan_active ? "active" : "free"}</strong>
                 </div>
-                <p className="billing-note billing-sample-note">
-                  Sample figures for reference — no active subscription yet.
-                  Choose a Business or Enterprise plan to start monthly billing.
+                {org && (
+                  <div className="billing-sub-row">
+                    <span>Seats</span>
+                    <strong>
+                      {org.seats_used} / {org.seat_limit}
+                    </strong>
+                  </div>
+                )}
+                <p className="billing-note">
+                  No active paid subscription. Choose a Business or Enterprise
+                  plan below to start monthly billing.
                 </p>
               </div>
             )}
@@ -931,13 +910,7 @@ export default function Billing() {
 
           <section className="billing-card">
             <h2>Billing history</h2>
-            {invoices.length === 0 && (
-              <p className="billing-note billing-sample-note">
-                Sample bills shown for reference. Your real monthly receipts
-                will appear here after the first charge.
-              </p>
-            )}
-            {(invoices.length > 0 ? invoices : SAMPLE_INVOICES).length > 0 ? (
+            {invoices.length > 0 ? (
               <table className="billing-table">
                 <thead>
                   <tr>
@@ -948,7 +921,7 @@ export default function Billing() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(invoices.length > 0 ? invoices : SAMPLE_INVOICES).map(
+                  {invoices.map(
                     (invoice) => (
                       <tr key={invoice.id}>
                         <td>{formatMonth(invoice.created_at)}</td>
