@@ -1,5 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { changePassword } from "../api/Auth";
+import { buildLoginWrapForPassword } from "../orgKeys/memberLogin";
 import {
   deleteAvatar,
   getProfile,
@@ -124,7 +125,21 @@ export default function Profile() {
     }
     setPwSaving(true);
     try {
-      await changePassword(isCreatingPassword ? null : currentPw, newPw);
+      // If this device has the user's E2E private key cached, re-wrap it under
+      // the new password so the server-side login envelope
+      // (member_login_wrapped_keys) stays in sync — otherwise the backend
+      // rejects the change ("must include the re-wrapped login envelope") or
+      // the user gets locked out at next login.
+      const newLoginWrap = await buildLoginWrapForPassword(
+        user?.id,
+        user?.email,
+        newPw
+      );
+      await changePassword(
+        isCreatingPassword ? null : currentPw,
+        newPw,
+        newLoginWrap
+      );
       setPwStatus(
         isCreatingPassword ? "Password created ✓" : "Password updated ✓"
       );

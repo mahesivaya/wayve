@@ -216,10 +216,12 @@ export default function Login() {
             <p className="subtitle">Login to your Fluxze account</p>
 
             <input
-              type="email"
+              type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
+              placeholder="Email or username"
+              autoCapitalize="none"
+              autoCorrect="off"
               required
             />
 

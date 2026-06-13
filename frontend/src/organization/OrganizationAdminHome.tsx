@@ -235,7 +235,7 @@ export default function OrganizationAdminHome() {
       icon: "⚙️",
       label: "Settings",
       description: "Rename your organization and manage its profile.",
-      path: "/organization/settings",
+      path: "/settings",
       visible: canSeeOrgSettings,
     },
     {

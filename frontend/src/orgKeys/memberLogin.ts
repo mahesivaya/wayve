@@ -14,9 +14,75 @@
 // `users.public_key` via the same endpoint personal users use, then
 // save both.
 
-import { savePrivateKey, savePublicKey } from "../crypto/keyStore";
+import { loadPrivateKey, savePrivateKey, savePublicKey } from "../crypto/keyStore";
 import { unwrapPkcs8WithPbkdf2 } from "./envelopeCodec";
 import type { NewLoginWrap } from "./api";
+
+const PBKDF2_LOGIN_WRAP_ITERATIONS = 600_000;
+
+function bytesToB64(b: Uint8Array): string {
+  let s = "";
+  for (const x of b) s += String.fromCharCode(x);
+  return btoa(s);
+}
+
+// PBKDF2(password)-wrap a PKCS8 private key into a login envelope (the same
+// shape stored in member_login_wrapped_keys). Shared by the change-password
+// flow below.
+async function wrapPkcs8ForLogin(
+  pkcs8: ArrayBuffer,
+  password: string
+): Promise<NewLoginWrap> {
+  const enc = new TextEncoder();
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"]
+  );
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const aesKey = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: salt.slice().buffer,
+      iterations: PBKDF2_LOGIN_WRAP_ITERATIONS,
+      hash: "SHA-256",
+    },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"]
+  );
+  const ct = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv.slice().buffer },
+    aesKey,
+    pkcs8
+  );
+  return {
+    iv: bytesToB64(iv),
+    ct: bytesToB64(new Uint8Array(ct)),
+    salt: bytesToB64(salt),
+    iterations: PBKDF2_LOGIN_WRAP_ITERATIONS,
+  };
+}
+
+// Build the new login envelope for a self-service password change, re-wrapping
+// the user's already-cached private key under the new password. Returns null if
+// no key is cached on this device (a personal user who never set up E2E keys) —
+// in which case the backend has no member_login_wrapped_keys row to rotate and
+// the plain password change is enough.
+export async function buildLoginWrapForPassword(
+  userId: number | null | undefined,
+  email: string | null | undefined,
+  newPassword: string
+): Promise<NewLoginWrap | null> {
+  const key = await loadPrivateKey(userId, email);
+  if (!key) return null;
+  const pkcs8 = await crypto.subtle.exportKey("pkcs8", key);
+  return wrapPkcs8ForLogin(pkcs8, newPassword);
+}
 
 export type CachedKeys = {
   privateKey: CryptoKey;

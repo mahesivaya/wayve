@@ -113,11 +113,18 @@ pub(crate) async fn login(
 ) -> AppResult {
     info!(target: "auth", "login attempt");
 
+    // Accept either the email or the username as the identifier. Admin-created
+    // users (platform/org "create user") are shown an email + temp password,
+    // but the derived username is globally unique too — so a person entering
+    // the username should still get in. Normalize (trim + lowercase) so a
+    // stray space or different casing doesn't read as wrong credentials;
+    // emails are stored lowercased and usernames are matched case-insensitively.
+    let identifier = data.email.trim().to_lowercase();
     let user = sqlx::query_as::<_, User>(
         "SELECT id, email, password, account_type, password_valid_until \
-         FROM users WHERE email = $1",
+         FROM users WHERE email = $1 OR lower(username) = $1",
     )
-    .bind(&data.email)
+    .bind(&identifier)
     .fetch_optional(pool.get_ref())
     .await?;
 

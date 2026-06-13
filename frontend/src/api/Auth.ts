@@ -166,15 +166,26 @@ export async function recoverWithMnemonic(
 
 export async function changePassword(
   currentPassword: string | null,
-  newPassword: string
+  newPassword: string,
+  // Re-wrapped login envelope, required by the backend for any account that
+  // has a member_login_wrapped_keys row (i.e. anyone who set up E2E keys).
+  newLoginWrap?: {
+    iv: string;
+    ct: string;
+    salt: string;
+    iterations: number;
+  } | null
 ) {
-  const body =
+  const body: Record<string, unknown> =
     currentPassword === null
       ? { new_password: newPassword }
       : {
           current_password: currentPassword,
           new_password: newPassword,
         };
+  if (newLoginWrap) {
+    body.new_login_wrap = newLoginWrap;
+  }
 
   const res = await apiFetch("/api/profile/password", {
     method: "POST",

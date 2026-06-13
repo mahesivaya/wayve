@@ -12,6 +12,7 @@ function LegacyServiceRedirect() {
 
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RouteErrorBoundary from "./components/RouteErrorBoundary";
 import RequirePricingAccess from "./components/RequirePricingAccess";
 import Register from "./auth/Register";
 import RegisterBusiness from "./auth/RegisterBusiness";
@@ -46,7 +47,6 @@ const OrganizationAdminHome = lazy(
 const OrganizationMembers = lazy(
   () => import("./organization/OrganizationMembers")
 );
-const OrgSettings = lazy(() => import("./organization/OrgSettings"));
 const PlatformAdminHome = lazy(
   () => import("./organization/PlatformAdminHome")
 );
@@ -123,8 +123,15 @@ export default function App() {
   );
 
   return (
-    <Suspense fallback={null}>
-      <Routes>
+    <RouteErrorBoundary>
+      <Suspense
+        fallback={
+          <div style={{ padding: 40, textAlign: "center", color: "#6b7280" }}>
+            Loading…
+          </div>
+        }
+      >
+        <Routes>
         {/* ROOT */}
         <Route
           path="/"
@@ -265,7 +272,10 @@ export default function App() {
               path="/organization/members"
               element={<OrganizationMembers />}
             />
-            <Route path="/organization/settings" element={<OrgSettings />} />
+            <Route
+              path="/organization/settings"
+              element={<Navigate to="/settings" replace />}
+            />
             <Route
               path="/organization/:slug"
               element={redirectToAccountHome ?? <OrganizationHome />}
@@ -452,7 +462,8 @@ export default function App() {
             )
           }
         />
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+    </RouteErrorBoundary>
   );
 }

@@ -362,9 +362,26 @@ export default function MembersRolesPanel(props: Props) {
                 />
               </label>
               {resetError && (
-                <p style={{ color: "#b91c1c", margin: "8px 0" }}>
-                  {resetError}
-                </p>
+                <div style={{ margin: "8px 0" }}>
+                  <p style={{ color: "#b91c1c", margin: 0 }}>{resetError}</p>
+                  {/^.*org master key not loaded/i.test(resetError) && (
+                    <Link
+                      to="/organization/recovery-key"
+                      style={{
+                        display: "inline-block",
+                        marginTop: 10,
+                        padding: "8px 16px",
+                        background: "#2563eb",
+                        color: "white",
+                        borderRadius: 4,
+                        textDecoration: "none",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Enter recovery mnemonic →
+                    </Link>
+                  )}
+                </div>
               )}
               <div
                 style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}

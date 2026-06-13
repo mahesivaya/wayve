@@ -11,7 +11,11 @@ import {
   type Invoice,
 } from "../api/billing";
 import { getProfile, type ProfileData } from "../api/profile";
-import { deleteMyAccount, deleteMyOrganization } from "../api/admin";
+import {
+  deleteMyAccount,
+  deleteMyOrganization,
+  updateMyOrganization,
+} from "../api/admin";
 import { useAuth } from "../auth/useAuth";
 import { listMyTickets, type SupportTicket } from "../api/support";
 import SupportModal from "../support/SupportModal";
@@ -85,6 +89,33 @@ export default function Settings() {
   const [deleteOrgError, setDeleteOrgError] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState("");
+
+  // Organization rename (owner-only) — moved here from the standalone
+  // /organization/settings page so all org settings live in one place.
+  const currentOrgName = user?.organization_name ?? "";
+  const [orgName, setOrgName] = useState(currentOrgName);
+  const [orgSaving, setOrgSaving] = useState(false);
+  const [orgSaved, setOrgSaved] = useState(false);
+  const [orgError, setOrgError] = useState("");
+  const orgDirty =
+    orgName.trim().length > 0 && orgName.trim() !== currentOrgName;
+
+  const saveOrgName = async () => {
+    setOrgError("");
+    setOrgSaved(false);
+    setOrgSaving(true);
+    try {
+      await updateMyOrganization(orgName.trim());
+      await refresh();
+      setOrgSaved(true);
+    } catch (err) {
+      setOrgError(
+        err instanceof Error ? err.message : "Could not rename organization"
+      );
+    } finally {
+      setOrgSaving(false);
+    }
+  };
 
   const onDeleteAccount = async () => {
     // Two-step confirmation — this is irreversible. The second prompt asks
@@ -422,6 +453,44 @@ export default function Settings() {
             </ul>
           )}
         </section>
+
+        {isOrgOwner && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Organization</h2>
+            <div className="settings-rows">
+              <label className="settings-usage-row">
+                <span>Organization name</span>
+                <input
+                  value={orgName}
+                  maxLength={120}
+                  placeholder="Organization name"
+                  onChange={(e) => {
+                    setOrgName(e.target.value);
+                    setOrgSaved(false);
+                  }}
+                  style={{
+                    padding: "6px 10px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 6,
+                    minWidth: 220,
+                  }}
+                />
+              </label>
+            </div>
+            {orgError && <p className="settings-danger-error">{orgError}</p>}
+            {orgSaved && (
+              <p className="settings-support-empty">Organization renamed.</p>
+            )}
+            <button
+              type="button"
+              className="settings-billing-link"
+              disabled={!orgDirty || orgSaving}
+              onClick={() => void saveOrgName()}
+            >
+              {orgSaving ? "Saving…" : "Save changes"}
+            </button>
+          </section>
+        )}
 
         {isOrgOwner && (
           <section className="settings-card settings-danger">
