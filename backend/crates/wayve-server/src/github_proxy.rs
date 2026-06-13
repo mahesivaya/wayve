@@ -31,7 +31,7 @@ use sqlx::PgPool;
 use std::time::Duration;
 use tracing::{instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{Scope, resolve_role_context};
+use wayve_security::rbac::resolve_role_context;
 
 const GITHUB_API: &str = "https://api.github.com";
 const CACHE_TTL_SECS: u64 = 60;
@@ -102,25 +102,18 @@ pub async fn github_proxy(
     pool: web::Data<PgPool>,
     path: web::Path<String>,
 ) -> impl Responder {
-    // Platform-team only. The GitHub dashboard is restricted to platform
-    // staff in the UI (sidebar link + route guard); enforce the same here
-    // so a non-platform user can't reach the repo data by calling the API
-    // directly. Mirrors the frontend `user.scope === "platform"` check.
+    // Authenticated users only. The Code Repo viewer surfaces a single,
+    // read-only repository and is offered to every account type: platform
+    // staff and org managers/developers via the Workspace section, and
+    // personal accounts that opt in via the sidebar "+" add-app button. We
+    // still require a valid session so the upstream PAT is never exposed to
+    // anonymous callers.
     let Some(user_id) = get_user_id_from_request(&req) else {
         return HttpResponse::Unauthorized().finish();
     };
-    match resolve_role_context(pool.get_ref(), user_id).await {
-        Ok(ctx) if ctx.scope == Scope::Platform => {}
-        Ok(_) => {
-            warn!(target: "auth", user_id, "github proxy denied: non-platform caller");
-            return HttpResponse::Forbidden().json(serde_json::json!({
-                "message": "GitHub access is restricted to the platform team"
-            }));
-        }
-        Err(e) => {
-            warn!(target: "auth", user_id, error = ?e, "github proxy rbac resolution failed");
-            return HttpResponse::InternalServerError().finish();
-        }
+    if let Err(e) = resolve_role_context(pool.get_ref(), user_id).await {
+        warn!(target: "auth", user_id, error = ?e, "github proxy rbac resolution failed");
+        return HttpResponse::InternalServerError().finish();
     }
 
     let tail = path.into_inner();

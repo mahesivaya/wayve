@@ -881,6 +881,104 @@
   display: none;
 }
 
+/* Personal-account "+" add-app row and placeholder app rows read as quiet,
+   secondary entries vs the real nav items. They reuse .sidebar-link for the
+   row layout but render as <button>, so reset button chrome. */
+.sidebar-add-app-btn,
+.sidebar-link-placeholder {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  /* Inherit only the family — keep the size/weight from .sidebar-link so the
+     "+ Add" row matches the other nav items (buttons don't inherit
+     font-family by default, and `font: inherit` would clobber the size). */
+  font-family: inherit;
+  color: var(--color-text-primary);
+}
+
+.sidebar-add-app-btn:hover,
+.sidebar-link-placeholder:hover {
+  background: var(--color-surface-hover);
+}
+
+/* App picker (Modal grid): cards laid out like an app launcher. */
+.add-app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+}
+
+.add-app-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 10px 12px;
+  min-height: 96px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--color-text, inherit);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.add-app-card:hover {
+  background: var(--color-surface-hover);
+}
+
+.add-app-card.checked {
+  border-color: var(--color-primary-action);
+  box-shadow: inset 0 0 0 1px var(--color-primary-action);
+}
+
+/* Checkbox in the top-right corner of each card. */
+.add-app-checkbox {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border, #d1d5db);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  background: var(--color-surface, #fff);
+  color: var(--color-surface, #fff);
+}
+
+.add-app-card.checked .add-app-checkbox {
+  background: var(--color-primary-action);
+  border-color: var(--color-primary-action);
+  color: var(--color-surface, #fff);
+}
+
+.add-app-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-app-label {
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+/* Collapsed icon rail: drop the text labels on the "+"/placeholder rows like
+   the other nav rows. */
+.sidebar.collapsed .sidebar-add-app-btn .sidebar-label,
+.sidebar.collapsed .sidebar-link-placeholder .sidebar-label {
+  display: none;
+}
+
 /* =============================
    ↔ COLLAPSED SIDEBAR
    Icon-only rail; labels and section headings are visually hidden but

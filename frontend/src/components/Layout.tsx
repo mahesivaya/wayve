@@ -2,11 +2,7 @@ import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { BRAND_NAME } from "../config/brand";
 import BrandLogo from "./BrandLogo";
 import { useAuth } from "../auth/useAuth";
-import {
-  canAccessApiKeyAdmin,
-  canViewPricing,
-  hasPermission,
-} from "../auth/permissions";
+import { canAccessApiKeyAdmin, hasPermission } from "../auth/permissions";
 import {
   Suspense,
   Fragment,
@@ -58,7 +54,6 @@ import {
   UserLogsIcon,
   AuditIcon,
   TracingIcon,
-  PricingIcon,
   TeamsIcon,
   DocsIcon,
   ApiRefIcon,
@@ -67,7 +62,15 @@ import {
   ApiKeysIcon,
   GitLogoIcon,
   BugReportIcon,
+  PlusIcon,
+  CanvasIcon,
+  FormsIcon,
+  AutomationsIcon,
+  WhiteboardIcon,
+  InsightsIcon,
+  AssistantIcon,
 } from "../icons";
+import Modal from "./Modal";
 
 function appKeyFromPath(pathname: string): AppKey {
   const match = SPLIT_APPS.find((app) => {
@@ -94,6 +97,27 @@ function appKeyFromPath(pathname: string): AppKey {
 // closed. Round-tripping through localStorage keeps the split intact
 // when the user returns to a Layout-wrapped route.
 const SPLIT_STORAGE_KEY = "rwayve.layout.split";
+
+// Opt-in apps a personal account can add to its sidebar via the "+" button.
+// Each entry shows as a checkbox card in the add-app picker; checking it drops
+// the app into the sidebar. `path` is the real route (only Code Repo has one
+// today — the rest are placeholder/coming-soon cards with fake icons). Add
+// future personal integrations here and they appear in the picker automatically.
+const PERSONAL_APPS_STORAGE_KEY = "rwayve.layout.personalApps";
+const ADDABLE_PERSONAL_APPS: {
+  key: string;
+  label: string;
+  icon: ReactNode;
+  path?: string;
+}[] = [
+  { key: "github", label: "Code Repo", icon: <GitLogoIcon size={22} />, path: "/github" },
+  { key: "canvas", label: "Canvas", icon: <CanvasIcon size={22} /> },
+  { key: "forms", label: "Forms", icon: <FormsIcon size={22} /> },
+  { key: "automations", label: "Automations", icon: <AutomationsIcon size={22} /> },
+  { key: "whiteboard", label: "Whiteboard", icon: <WhiteboardIcon size={22} /> },
+  { key: "insights", label: "Insights", icon: <InsightsIcon size={22} /> },
+  { key: "assistant", label: "Assistant", icon: <AssistantIcon size={22} /> },
+];
 
 function isValidAppKey(value: unknown): value is AppKey {
   return typeof value === "string" && SPLIT_APPS.some((a) => a.key === value);
@@ -214,6 +238,36 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       // won't persist across reloads for this session.
     }
   }, [middleView, rightView, splitTarget]);
+
+  // Personal accounts have no Workspace section, so the optional apps (right
+  // now just the Code Repo viewer) are opt-in via a "+" button under the main
+  // nav. The chosen keys persist per-browser in localStorage.
+  const [personalApps, setPersonalApps] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(PERSONAL_APPS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((k) => typeof k === "string") : [];
+    } catch {
+      return [];
+    }
+  });
+  const [addAppOpen, setAddAppOpen] = useState(false);
+
+  // Check / uncheck an app in the picker — adds it to (or removes it from) the
+  // sidebar live and persists the choice.
+  const togglePersonalApp = useCallback((key: string) => {
+    setPersonalApps((prev) => {
+      const next = prev.includes(key)
+        ? prev.filter((k) => k !== key)
+        : [...prev, key];
+      try {
+        localStorage.setItem(PERSONAL_APPS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Storage quota / private mode — non-fatal, just won't persist.
+      }
+      return next;
+    });
+  }, []);
 
   // On narrow viewports the header nav collapses behind a hamburger toggle.
   const [navOpen, setNavOpen] = useState(false);
@@ -651,7 +705,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Pricing is hidden from roles that don't manage plans/billing (org +
   // platform scope) — only owner / super_admin / billing keep it. Shared with
   // the /pricing route guard so the URL can't bypass the hidden nav link.
-  const canSeePricing = canViewPricing(user);
   const canAccessPlatformLogs =
     user.scope === "platform" &&
     (hasPermission(user, "logs:read") ||
@@ -1280,6 +1333,56 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "Code Repo",
                   <GitLogoIcon />
                 )}
+              {/* Personal accounts: opt-in apps they've added (in catalog
+                  order), plus a "+" that opens a checkbox picker. Workspace
+                  users get Code Repo from the section above, so the add-app
+                  affordance is personal-only. */}
+              {user.account_type === "personal" && (
+                <>
+                  {ADDABLE_PERSONAL_APPS.filter((a) =>
+                    personalApps.includes(a.key)
+                  ).map((a) =>
+                    a.path ? (
+                      renderSidebarItem(
+                        a.path,
+                        a.key as AppKey,
+                        a.label,
+                        a.icon
+                      )
+                    ) : (
+                      // Placeholder app — present in the sidebar but not yet
+                      // wired to a route, so it's a non-navigating row.
+                      <button
+                        key={a.key}
+                        type="button"
+                        className="sidebar-link sidebar-link-placeholder"
+                        title={`${a.label} (coming soon)`}
+                      >
+                        <span className="sidebar-icon" aria-hidden="true">
+                          {a.icon}
+                        </span>
+                        <span className="sidebar-label">{a.label}</span>
+                      </button>
+                    )
+                  )}
+                  {/* Keep the "+" while at least one app isn't added yet. */}
+                  {ADDABLE_PERSONAL_APPS.some(
+                    (a) => !personalApps.includes(a.key)
+                  ) && (
+                    <button
+                      type="button"
+                      className="sidebar-link sidebar-add-app-btn"
+                      title="Add app"
+                      onClick={() => setAddAppOpen(true)}
+                    >
+                      <span className="sidebar-icon" aria-hidden="true">
+                        <PlusIcon size={18} />
+                      </span>
+                      <span className="sidebar-label">Add</span>
+                    </button>
+                  )}
+                </>
+              )}
               {(user.scope === "platform" || user.scope === "organization") &&
                 renderSidebarItem(
                   "/test-access",
@@ -1299,19 +1402,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             {sectionDefs.map(renderSection)}
 
             <div className="sidebar-spacer" />
-
-            {user.account_type !== "platform_admin" &&
-              user.account_type !== "personal" &&
-              canSeePricing && (
-                <div className="sidebar-section sidebar-section-secondary">
-                  {renderSidebarLink(
-                    "/pricing",
-                    "Pricing",
-                    <PricingIcon size={16} />,
-                    location.pathname === "/pricing"
-                  )}
-                </div>
-              )}
           </nav>
 
           {/* Drag the nav sidebar wider/narrower (hidden when collapsed to the
@@ -1467,6 +1557,40 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       </SearchProvider>
 
       {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
+
+      {/* Personal-account app picker: a grid of checkbox cards. Checking a
+          card drops the app into the sidebar live; unchecking removes it. */}
+      <Modal
+        isOpen={addAppOpen}
+        onClose={() => setAddAppOpen(false)}
+        title="Add to sidebar"
+      >
+        <div className="add-app-grid">
+          {ADDABLE_PERSONAL_APPS.map((a) => {
+            const checked = personalApps.includes(a.key);
+            return (
+              <button
+                key={a.key}
+                type="button"
+                className={`add-app-card${checked ? " checked" : ""}`}
+                aria-pressed={checked}
+                onClick={() => togglePersonalApp(a.key)}
+              >
+                <span
+                  className="add-app-checkbox"
+                  aria-hidden="true"
+                >
+                  {checked ? "✓" : ""}
+                </span>
+                <span className="add-app-icon" aria-hidden="true">
+                  {a.icon}
+                </span>
+                <span className="add-app-label">{a.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Modal>
     </div>
   );
 }

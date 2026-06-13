@@ -294,25 +294,15 @@ export default function App() {
               path="/aichat"
               element={<Navigate to="/ai-chat" replace />}
             />
-            {/* Platform team, organization owner / super_admin / admin, and
-                developers (either scope). Hiding the sidebar link isn't enough
-                — guard the route so anyone else typing /github is bounced to
-                their own home instead of seeing the page. Keep this in sync
-                with `hasWorkspaceSection` in Layout.tsx. */}
+            {/* The Code Repo viewer is available to: platform team, org
+                owner/super_admin/admin, developers (either scope) via the
+                Workspace section, and personal accounts that opt in via the
+                sidebar "+" add-app button. Any authenticated user may reach
+                it — the backend proxy serves a single read-only repo — so the
+                guard only bounces unauthenticated visitors. */}
             <Route
               path="/github"
-              element={
-                user?.scope === "platform" ||
-                (user?.scope === "organization" &&
-                  ["owner", "super_admin", "admin"].includes(
-                    user?.effective_role ?? ""
-                  )) ||
-                user?.effective_role === "developer" ? (
-                  <GitHubRepo />
-                ) : (
-                  <Navigate to={accountHome} replace />
-                )
-              }
+              element={user ? <GitHubRepo /> : <Navigate to={accountHome} replace />}
             />
             {/* Platform-owner only: graphical tracing-log dashboard. */}
             <Route
