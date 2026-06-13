@@ -31,7 +31,7 @@ use sqlx::PgPool;
 use std::time::Duration;
 use tracing::{instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::resolve_role_context;
+use wayve_security::rbac::{Scope, resolve_role_context};
 
 const GITHUB_API: &str = "https://api.github.com";
 const CACHE_TTL_SECS: u64 = 60;
@@ -95,6 +95,23 @@ fn token() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+/// Extract `(owner, repo)` from a proxy tail of the form
+/// `repos/{owner}/{repo}[/...]`. Returns `None` for any other shape so the
+/// per-caller allowlist only ever applies to the `repos/...` surface the
+/// frontend uses (and non-repo tails are rejected for restricted callers).
+fn parse_repos_tail(tail: &str) -> Option<(String, String)> {
+    let mut segs = tail.split('/');
+    if segs.next()? != "repos" {
+        return None;
+    }
+    let owner = segs.next()?;
+    let repo = segs.next()?;
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some((owner.to_string(), repo.to_string()))
+}
+
 #[get("/github/{tail:.*}")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn github_proxy(
@@ -102,21 +119,61 @@ pub async fn github_proxy(
     pool: web::Data<PgPool>,
     path: web::Path<String>,
 ) -> impl Responder {
-    // Authenticated users only. The Code Repo viewer surfaces a single,
-    // read-only repository and is offered to every account type: platform
-    // staff and org managers/developers via the Workspace section, and
-    // personal accounts that opt in via the sidebar "+" add-app button. We
-    // still require a valid session so the upstream PAT is never exposed to
-    // anonymous callers.
+    // Authenticated callers only — the shared upstream PAT is never exposed to
+    // anonymous requests. Beyond that, authorization is per-caller so the proxy
+    // can't be used as an open relay against arbitrary (incl. token-readable
+    // private) repos:
+    //   * Platform staff keep full access (the legacy single-repo dashboard).
+    //   * Personal accounts may read ONLY `repos/{owner}/{repo}/...` for a repo
+    //     they've linked to one of their own projects (the allowlist).
+    //   * Organization accounts are not enabled for the Code Repo viewer yet.
     let Some(user_id) = get_user_id_from_request(&req) else {
         return HttpResponse::Unauthorized().finish();
     };
-    if let Err(e) = resolve_role_context(pool.get_ref(), user_id).await {
-        warn!(target: "auth", user_id, error = ?e, "github proxy rbac resolution failed");
-        return HttpResponse::InternalServerError().finish();
-    }
+    let ctx = match resolve_role_context(pool.get_ref(), user_id).await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            warn!(target: "auth", user_id, error = ?e, "github proxy rbac resolution failed");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
 
     let tail = path.into_inner();
+
+    match ctx.scope {
+        Scope::Platform => {}
+        Scope::Personal => {
+            let Some((owner, repo)) = parse_repos_tail(&tail) else {
+                return HttpResponse::Forbidden().finish();
+            };
+            // Allowlist: the repo must be linked to one of THIS user's projects.
+            // GitHub owner/repo are case-insensitive, so compare with LOWER().
+            let linked = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM projects
+                  WHERE user_id = $1 AND organization_id IS NULL
+                    AND LOWER(github_owner) = LOWER($2)
+                    AND LOWER(github_repo) = LOWER($3))",
+            )
+            .bind(user_id)
+            .bind(&owner)
+            .bind(&repo)
+            .fetch_one(pool.get_ref())
+            .await;
+            if !matches!(linked, Ok(true)) {
+                warn!(target: "auth", user_id, owner = %owner, repo = %repo,
+                      "github proxy denied: repo not linked to caller");
+                return HttpResponse::Forbidden().json(serde_json::json!({
+                    "message": "You don't have access to this repository"
+                }));
+            }
+        }
+        Scope::Organization => {
+            warn!(target: "auth", user_id, "github proxy denied: organization caller");
+            return HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "GitHub access is not enabled for organization accounts"
+            }));
+        }
+    }
     let query = req.query_string();
     let media_override = parse_media_override(query);
     // `media=` is our control parameter — never forward it to GitHub.

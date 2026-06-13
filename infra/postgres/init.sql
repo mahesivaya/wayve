@@ -129,8 +129,12 @@ WHERE organization_id IS NOT NULL
 ON CONFLICT (organization_id, user_id) DO NOTHING;
 
 -- Organization-scoped projects listed in the app sidebar's Workspace group.
--- Created by an org owner (POST /api/projects) and visible to every member of
--- that org; personal/platform accounts with no home org simply see none.
+-- Projects are polymorphic-owned: exactly one of organization_id / user_id is
+-- set. Org projects (organization_id) are created by the org owner and visible
+-- to every member of that org; personal & platform accounts own their projects
+-- via user_id. A project optionally links ONE *public* GitHub repo
+-- (github_owner/github_repo), browsed in the Code Repo viewer. Public repos
+-- only — no token is ever stored here; the proxy authorizes per caller.
 CREATE TABLE IF NOT EXISTS projects (
     id SERIAL PRIMARY KEY,
     organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -139,6 +143,22 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_projects_org ON projects (organization_id);
+
+-- Polymorphic ownership + repo linkage, applied idempotently so existing DBs
+-- (where the CREATE above already ran with organization_id NOT NULL) pick up
+-- the new shape. Existing rows have organization_id set / user_id NULL, so they
+-- satisfy projects_owner_chk with no back-fill.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS user_id INTEGER
+    REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS github_owner TEXT;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS github_repo  TEXT;
+ALTER TABLE projects ALTER COLUMN organization_id DROP NOT NULL;   -- idempotent
+ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_owner_chk;
+ALTER TABLE projects ADD CONSTRAINT projects_owner_chk CHECK (
+    (organization_id IS NOT NULL AND user_id IS NULL) OR
+    (organization_id IS NULL AND user_id IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id);
 
 -- Organization-scoped teams listed in the sidebar's Teams group, each with a
 -- detail page at /teams/<slug>. slug is unique within an org and derived from

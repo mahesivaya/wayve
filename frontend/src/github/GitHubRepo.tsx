@@ -1,21 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { useParams } from "react-router-dom";
 import { fmtDateTime } from "../utils/datetime";
 import { useResizableWidth } from "../components/useResizableWidth";
+import { useAuth } from "../auth/useAuth";
+import { getAuthToken } from "../auth/token";
+import {
+  listProjects,
+  createProject,
+  linkProjectRepo,
+  type Project,
+} from "../api/workspace";
 import "./githubRepo.css";
 
-const OWNER = "mahesivaya";
-const REPO = "wayve";
+// The platform team's legacy single-repo dashboard (the bare /github route
+// with no project). Personal accounts get their own repos via /github/:id.
+const FALLBACK_OWNER = "mahesivaya";
+const FALLBACK_REPO = "wayve";
 // All GitHub calls go through our own backend proxy at /api/github/*.
 // The proxy:
-//   * gates on a logged-in Wayve session (no anon access),
+//   * gates on a logged-in Wayve session (no anon access) and authorizes the
+//     repo per caller (platform = full; personal = own linked repos only),
 //   * attaches the server-held GITHUB_TOKEN PAT, lifting the rate
 //     limit from 60/hr to 5000/hr without ever exposing the token to
 //     the browser,
 //   * caches GET responses for 60s, so the N-calls-per-mount we do
 //     here don't compound across reloads.
 // The path shape (`/repos/{owner}/{repo}/...`) matches GitHub's API
-// 1:1, so request URLs from this file read the same as before.
-const API_BASE = `/api/github/repos/${OWNER}/${REPO}`;
+// 1:1, so request URLs from this file read the same as before. The
+// `owner`/`repo` are now per-viewer props (see GitHubRepoViewer).
 
 type Repo = {
   full_name: string;
@@ -480,17 +493,20 @@ function StatusIcon({ state }: { state: string }) {
 }
 
 async function githubJson<T>(url: string): Promise<T> {
-  // The proxy attaches the Accept + X-GitHub-Api-Version headers
-  // server-side, so the browser only needs to send the auth cookie
-  // (handled automatically because the URL is same-origin /api/...).
-  const response = await fetch(url, { credentials: "include" });
+  // Authenticate the same way as the rest of the app: a Bearer token from
+  // localStorage (the cookie alone is unreliable in token-only sessions).
+  // The proxy attaches the Accept + X-GitHub-Api-Version headers server-side.
+  const token = getAuthToken();
+  const response = await fetch(url, {
+    credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
 
   if (!response.ok) {
-    // A 403 from the proxy means the server has no usable GitHub access for
-    // this repo (missing/insufficient token or org settings) — surface a
-    // plain, actionable message instead of the raw status.
+    // A 403 from the proxy means this account isn't allowed to read this repo
+    // (not linked to one of your projects) — surface a plain message.
     if (response.status === 403) {
-      throw new Error("Organization repository settings need to be set.");
+      throw new Error("You don't have access to this repository.");
     }
     throw new Error(`GitHub request failed (${response.status})`);
   }
@@ -504,7 +520,21 @@ function isContentList(
   return Array.isArray(value);
 }
 
-export default function GitHubRepo() {
+function GitHubRepoViewer({
+  owner,
+  repo: repoName,
+  repoSwitcher,
+}: {
+  owner: string;
+  repo: string;
+  // Optional repo selector rendered at the top of the left rail, above the
+  // Branch block (used by the personal in-page manager).
+  repoSwitcher?: ReactNode;
+}) {
+  // Per-viewer proxy base. Stable for the component's lifetime because the
+  // outer wrapper keys this viewer by `${owner}/${repo}` (it remounts when the
+  // linked repo changes), so callbacks can capture it safely.
+  const API_BASE = `/api/github/repos/${owner}/${repoName}`;
   const [repo, setRepo] = useState<Repo | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branch, setBranch] = useState("main");
@@ -672,7 +702,7 @@ export default function GitHubRepo() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [API_BASE]);
 
   /**
    * Fetch a page of workflow runs. We deliberately do NOT pass
@@ -726,7 +756,7 @@ export default function GitHubRepo() {
     } finally {
       setRunsLoadingMore(false);
     }
-  }, []);
+  }, [API_BASE]);
 
   const loadDirectory = useCallback(
     async (nextPath: string, nextBranch: string) => {
@@ -757,7 +787,7 @@ export default function GitHubRepo() {
         });
       }
     },
-    []
+    [API_BASE]
   );
 
   const loadWorkflows = useCallback(async (nextBranch: string) => {
@@ -771,7 +801,7 @@ export default function GitHubRepo() {
     } catch {
       setWorkflows([]);
     }
-  }, []);
+  }, [API_BASE]);
 
   // README for the Description tab. Resolve the file metadata via the
   // proxied Contents API, then fetch its raw text from download_url (same
@@ -799,7 +829,7 @@ export default function GitHubRepo() {
     } finally {
       setReadmeLoading(false);
     }
-  }, []);
+  }, [API_BASE]);
 
   const loadCommits = useCallback(async (nextBranch: string) => {
     try {
@@ -810,7 +840,7 @@ export default function GitHubRepo() {
     } catch {
       setCommits([]);
     }
-  }, []);
+  }, [API_BASE]);
 
   // Expand a commit row inline to show its file-level diff. First open
   // fetches the per-commit detail (which includes the patch for every
@@ -858,7 +888,7 @@ export default function GitHubRepo() {
         });
       }
     },
-    [commitDetailBySha]
+    [API_BASE, commitDetailBySha]
   );
 
   // Fetch the raw unified diff for a commit through the proxy's
@@ -875,9 +905,13 @@ export default function GitHubRepo() {
         return next;
       });
       try {
+        const token = getAuthToken();
         const response = await fetch(
           `${API_BASE}/commits/${encodeURIComponent(sha)}?media=diff`,
-          { credentials: "include" }
+          {
+            credentials: "include",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
         );
         if (!response.ok) {
           throw new Error(`GitHub diff failed (${response.status})`);
@@ -904,7 +938,7 @@ export default function GitHubRepo() {
         });
       }
     },
-    [fullDiffBySha]
+    [API_BASE, fullDiffBySha]
   );
 
   // Toggle the run-detail flow inline. First open also fetches the
@@ -953,7 +987,7 @@ export default function GitHubRepo() {
         });
       }
     },
-    [jobsByRunId]
+    [API_BASE, jobsByRunId]
   );
 
   useEffect(() => {
@@ -1102,6 +1136,7 @@ export default function GitHubRepo() {
             sidebar pattern (account list + folder list) so the page
             feels at home with the rest of the app's chrome. */}
         <aside className="github-sidebar" aria-label="GitHub sections">
+          {repoSwitcher}
           <div className="github-sidebar-card">
             <div className="github-sidebar-branch" ref={branchMenuRef}>
               <span className="github-sidebar-branch-label">Branch</span>
@@ -1348,7 +1383,9 @@ export default function GitHubRepo() {
                 <button
                   key={workflow.path}
                   type="button"
-                  className="github-workflow"
+                  className={`github-workflow ${
+                    selectedFile?.path === workflow.path ? "active" : ""
+                  }`}
                   onClick={() => void openFile(workflow)}
                 >
                   <span>{workflow.name}</span>
@@ -1358,6 +1395,42 @@ export default function GitHubRepo() {
               {workflows.length === 0 && (
                 <div className="github-empty">No workflows found.</div>
               )}
+
+              {/* Preview the opened workflow file inline (the Workflows panel
+                  has no split pane of its own, unlike Files). Guarded to a
+                  workflow path so a file opened in the Files tab doesn't leak
+                  in here. */}
+              {selectedFile &&
+                workflows.some((w) => w.path === selectedFile.path) && (
+                  <section
+                    className="github-preview github-workflow-preview"
+                    aria-label="Workflow preview"
+                  >
+                    <div className="github-panel-head">
+                      <h2>{selectedFile.name}</h2>
+                      <span className="github-panel-head-trail">
+                        <span>{formatSize(selectedFile.size)}</span>
+                        <button
+                          type="button"
+                          className="github-preview-close"
+                          onClick={() => {
+                            setSelectedFile(null);
+                            setFileText("");
+                          }}
+                          aria-label="Close workflow preview"
+                          title="Close preview"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    </div>
+                    {fileLoading ? (
+                      <div className="github-empty">Loading file...</div>
+                    ) : (
+                      <pre>{fileText || "No preview available."}</pre>
+                    )}
+                  </section>
+                )}
             </div>
           )}
 
@@ -1879,4 +1952,300 @@ export default function GitHubRepo() {
       </div>
     </div>
   );
+}
+
+// Paste-a-URL panel shown when a personal project has no repo linked yet.
+function AddRepoPanel({
+  project,
+  onLinked,
+}: {
+  project: Project;
+  onLinked: () => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const submit = () => {
+    const value = url.trim();
+    if (!value || busy) return;
+    setBusy(true);
+    setErr("");
+    void linkProjectRepo(project.id, value)
+      .then(() => onLinked())
+      .catch((e) =>
+        setErr(e instanceof Error ? e.message : "Failed to link repository")
+      )
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <div className="github-page github-empty-state">
+      <div className="github-add-repo">
+        <h2 className="github-add-repo-title">Add a repository</h2>
+        <p className="github-add-repo-help">
+          Paste a public GitHub repository URL to browse its code, commits and
+          Actions in “{project.name}”.
+        </p>
+        <div className="github-add-repo-row">
+          <input
+            className="github-add-repo-input"
+            type="text"
+            value={url}
+            placeholder="https://github.com/owner/repo"
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
+            disabled={busy}
+            autoFocus
+          />
+          <button
+            type="button"
+            className="github-add-repo-btn"
+            onClick={submit}
+            disabled={busy || !url.trim()}
+          >
+            {busy ? "Adding…" : "Add repository"}
+          </button>
+        </div>
+        {err && <p className="github-add-repo-error">{err}</p>}
+      </div>
+    </div>
+  );
+}
+
+// Resolves a personal account's project (by route id) to its linked repo, then
+// renders the viewer. Handles loading / not-found / no-repo-yet states.
+function GitHubRepoProject({
+  projectId,
+  repoSwitcher,
+}: {
+  projectId: number;
+  repoSwitcher?: ReactNode;
+}) {
+  const [project, setProject] = useState<Project | "missing" | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Note: no synchronous setState here (would trip react-hooks/set-state-in-
+  // effect). `loading` starts true; we only flip it false when the fetch
+  // settles. The wrapper is keyed by projectId so each project mounts fresh.
+  const reload = useCallback(() => {
+    void listProjects()
+      .then((rows) => {
+        const found = rows.find((r) => r.id === projectId);
+        setProject(found ?? "missing");
+      })
+      .catch(() => setProject("missing"))
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  if (loading && project === null) {
+    return (
+      <div className="github-page github-empty-state">
+        <p className="github-empty">Loading project…</p>
+      </div>
+    );
+  }
+  if (project === "missing" || project === null) {
+    return (
+      <div className="github-page github-empty-state">
+        <p className="github-empty">Project not found.</p>
+      </div>
+    );
+  }
+  if (!project.github_owner || !project.github_repo) {
+    return <AddRepoPanel project={project} onLinked={reload} />;
+  }
+  return (
+    <GitHubRepoViewer
+      key={`${project.github_owner}/${project.github_repo}`}
+      owner={project.github_owner}
+      repo={project.github_repo}
+      repoSwitcher={repoSwitcher}
+    />
+  );
+}
+
+// Display label for a project tab: "owner/repo" once linked, else its name.
+function repoLabel(p: Project): string {
+  return p.github_owner && p.github_repo
+    ? `${p.github_owner}/${p.github_repo}`
+    : p.name;
+}
+
+// Derive a project name from a pasted repo URL (the repo segment), so a
+// personal user only has to paste the URL — no separate "name" field.
+function repoNameFromUrl(raw: string): string {
+  const cleaned = raw.trim().replace(/\.git$/, "");
+  const match = cleaned.match(/([^/:]+)\/([^/]+)\/?$/);
+  return match ? match[2] : cleaned;
+}
+
+// In-page repo manager for personal accounts at the bare `/github` route. The
+// repo selector (dropdown + Add) renders inside the viewer's left rail, ABOVE
+// the Branch block, via the `repoSwitcher` prop. No sidebar involvement.
+function PersonalRepoManager() {
+  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  // No synchronous setState in the effect (react-hooks/set-state-in-effect):
+  // listProjects resolves asynchronously and only then sets state.
+  useEffect(() => {
+    void listProjects()
+      .then((rows) => {
+        setProjects(rows);
+        setSelectedId((cur) =>
+          cur && rows.some((r) => r.id === cur) ? cur : (rows[0]?.id ?? null)
+        );
+      })
+      .catch(() => setProjects([]));
+  }, []);
+
+  const submitAdd = () => {
+    const value = url.trim();
+    if (!value || busy) return;
+    setBusy(true);
+    setErr("");
+    void createProject(repoNameFromUrl(value), value)
+      .then((created) => {
+        setProjects((prev) => (prev ? [created, ...prev] : [created]));
+        setSelectedId(created.id);
+        setUrl("");
+        setAdding(false);
+      })
+      .catch((e) =>
+        setErr(e instanceof Error ? e.message : "Failed to add repository")
+      )
+      .finally(() => setBusy(false));
+  };
+
+  const hasRepos = (projects?.length ?? 0) > 0;
+
+  // Repo selector card injected at the top of the viewer's left rail (above
+  // Branch): the dropdown of the user's repos + an Add button below it.
+  const switcher = (
+    <div className="github-sidebar-card github-repo-switch">
+      <span className="github-sidebar-branch-label">Repository</span>
+      <select
+        className="github-repo-switch-select"
+        value={selectedId ?? ""}
+        onChange={(e) => setSelectedId(Number(e.target.value))}
+        aria-label="Select a repository"
+      >
+        {projects?.map((p) => (
+          <option key={p.id} value={p.id}>
+            {repoLabel(p)}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="github-add-repo-btn github-repo-switch-add"
+        onClick={() => {
+          setErr("");
+          setUrl("");
+          setAdding((a) => !a);
+        }}
+      >
+        {adding ? "Cancel" : "+ Add"}
+      </button>
+      {adding && (
+        <div className="github-repo-switch-form">
+          <input
+            className="github-add-repo-input"
+            type="text"
+            value={url}
+            placeholder="https://github.com/owner/repo"
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitAdd();
+            }}
+            disabled={busy}
+            autoFocus
+          />
+          <button
+            type="button"
+            className="github-add-repo-btn"
+            onClick={submitAdd}
+            disabled={busy || !url.trim()}
+          >
+            {busy ? "Adding…" : "Add repository"}
+          </button>
+          {err && <p className="github-add-repo-error">{err}</p>}
+        </div>
+      )}
+    </div>
+  );
+
+  // No repos yet → centered first-repo panel (there's no viewer rail to host
+  // the switcher in until a repo exists).
+  if (!hasRepos) {
+    return (
+      <div className="github-page github-empty-state">
+        <div className="github-add-repo">
+          <h2 className="github-add-repo-title">Add a repository</h2>
+          <p className="github-add-repo-help">
+            Paste a public GitHub repository URL to browse its code, commits and
+            Actions here.
+          </p>
+          <div className="github-add-repo-row">
+            <input
+              className="github-add-repo-input"
+              type="text"
+              value={url}
+              placeholder="https://github.com/owner/repo"
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitAdd();
+              }}
+              disabled={busy}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="github-add-repo-btn"
+              onClick={submitAdd}
+              disabled={busy || !url.trim()}
+            >
+              {busy ? "Adding…" : "Add repository"}
+            </button>
+          </div>
+          {err && <p className="github-add-repo-error">{err}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedId == null) return null;
+  return (
+    <GitHubRepoProject
+      key={selectedId}
+      projectId={selectedId}
+      repoSwitcher={switcher}
+    />
+  );
+}
+
+// Route entry. `/github/:projectId` browses one project's repo. The bare
+// `/github` gives personal accounts the in-page repo manager, and keeps the
+// platform team's legacy single-repo dashboard for everyone else.
+export default function GitHubRepo() {
+  const { user } = useAuth();
+  const { projectId } = useParams<{ projectId?: string }>();
+  if (projectId) {
+    return <GitHubRepoProject key={projectId} projectId={Number(projectId)} />;
+  }
+  if (user?.account_type === "personal") {
+    return <PersonalRepoManager />;
+  }
+  return <GitHubRepoViewer owner={FALLBACK_OWNER} repo={FALLBACK_REPO} />;
 }

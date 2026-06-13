@@ -1701,3 +1701,141 @@
 .github-actions-load-more button {
   border-radius: 0;
 }
+
+/* Empty / loading states for the per-project viewer (no repo linked yet). */
+.github-empty-state {
+  display: grid;
+  place-items: center;
+}
+
+.github-empty {
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+}
+
+.github-add-repo {
+  width: min(560px, 92%);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 10px;
+  padding: 28px;
+  text-align: center;
+}
+
+.github-add-repo-title {
+  margin: 0 0 8px;
+  font-size: var(--text-xl);
+  color: var(--color-text-primary);
+}
+
+.github-add-repo-help {
+  margin: 0 0 18px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+.github-add-repo-row {
+  display: flex;
+  gap: 8px;
+}
+
+.github-add-repo-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-soft);
+  color: var(--color-text-primary);
+  border-radius: 6px;
+  padding: 9px 11px;
+  font-size: var(--text-md);
+}
+
+.github-add-repo-btn {
+  border: 1px solid var(--color-accent, var(--color-border));
+  background: var(--color-accent, var(--color-surface));
+  color: var(--color-on-accent, var(--color-text-primary));
+  border-radius: 6px;
+  padding: 9px 14px;
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.github-add-repo-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.github-add-repo-error {
+  margin: 12px 0 0;
+  color: var(--color-danger-strong);
+  font-size: var(--text-md);
+}
+
+/* Personal repo selector: a card at the top of the viewer's left rail (above
+   the Branch block) — a dropdown of the user's repos + an Add button below it. */
+.github-repo-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.github-repo-switch-select {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.github-repo-switch-add {
+  align-self: stretch;
+  width: 100%;
+  text-align: center;
+  padding: 7px 16px;
+}
+
+.github-repo-switch-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border);
+}
+
+.github-repo-switch-form .github-add-repo-error {
+  margin: 0;
+}
+
+/* Inline preview of an opened workflow .yml inside the Workflows panel (which,
+   unlike Files, has no side-by-side split). */
+.github-workflow.active {
+  border-color: var(--color-accent, var(--color-border));
+  background: var(--color-accent-soft, var(--color-surface-soft));
+}
+
+.github-workflow-preview {
+  margin-top: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.github-workflow-preview pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  max-height: 60vh;
+  white-space: pre;
+  font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+}

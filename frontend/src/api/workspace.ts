@@ -7,6 +7,9 @@ import { apiFetch, apiFetchJson } from "./client";
 export type Project = {
   id: number;
   name: string;
+  // Optional linked public GitHub repo (personal accounts).
+  github_owner?: string | null;
+  github_repo?: string | null;
 };
 
 export type Team = {
@@ -20,14 +23,29 @@ export type Team = {
 export const listProjects = async () =>
   apiFetchJson<Project[]>("/api/projects");
 
-export const createProject = async (name: string) => {
+export const createProject = async (name: string, repoUrl?: string) => {
   const res = await apiFetch("/api/projects", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, repo_url: repoUrl }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => null);
     throw new Error(data?.message ?? "Failed to create project");
+  }
+  return res.json() as Promise<Project>;
+};
+
+// Link (or replace) the public GitHub repo on a personal project. The server
+// validates the URL points at a real, public repo and surfaces a clear 400
+// message ("Only public repositories can be added", etc.) on failure.
+export const linkProjectRepo = async (id: number, repoUrl: string) => {
+  const res = await apiFetch(`/api/projects/${id}/repo`, {
+    method: "PATCH",
+    body: JSON.stringify({ repo_url: repoUrl }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.message ?? "Failed to link repository");
   }
   return res.json() as Promise<Project>;
 };

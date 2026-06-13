@@ -304,6 +304,13 @@ export default function App() {
               path="/github"
               element={user ? <GitHubRepo /> : <Navigate to={accountHome} replace />}
             />
+            {/* Per-project repo viewer (personal accounts add their own repo to
+                a project; the bare /github above keeps the platform team's
+                single-repo dashboard). */}
+            <Route
+              path="/github/:projectId"
+              element={user ? <GitHubRepo /> : <Navigate to={accountHome} replace />}
+            />
             {/* Platform-owner only: graphical tracing-log dashboard. */}
             <Route
               path="/logs/tracing"
