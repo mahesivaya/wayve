@@ -44,6 +44,14 @@ export const updateProject = async (id: number, name: string) => {
   return res.json() as Promise<Project>;
 };
 
+export const deleteProject = async (id: number) => {
+  const res = await apiFetch(`/api/projects/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.message ?? "Failed to delete project");
+  }
+};
+
 export const listTeams = async () => apiFetchJson<Team[]>("/api/teams");
 
 export const getTeam = async (slug: string) =>

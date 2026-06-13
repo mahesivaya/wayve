@@ -30,6 +30,7 @@ import {
   listProjects,
   createProject,
   updateProject,
+  deleteProject,
   listTeams,
   createTeam,
   type Project,
@@ -58,6 +59,23 @@ function BugReportIcon({ className }: { className?: string }) {
         fill="#2d2d2d"
       />
       <circle cx="12" cy="18.4" r="1.35" fill="#2d2d2d" />
+    </svg>
+  );
+}
+
+// Git logo mark (diamond + branch graph). Single-tone via currentColor so it
+// inherits the sidebar color. Used by the "Code Repo" app item and the
+// "Code Repo" project group header.
+function GitLogoIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M2.6,10.59L8.38,4.8L10.07,6.5C9.83,7.35 10.22,8.28 11,8.73V14.27C10.4,14.61 10,15.26 10,16A2,2 0 0,0 12,18A2,2 0 0,0 14,16C14,15.26 13.6,14.61 13,14.27V9.41L15.07,11.5C15,11.65 15,11.82 15,12A2,2 0 0,0 17,14A2,2 0 0,0 19,12A2,2 0 0,0 17,10C16.82,10 16.65,10 16.5,10.07L13.93,7.5C14.19,6.57 13.71,5.55 12.78,5.16C12.35,5 11.9,4.96 11.5,5.07L9.8,3.38L10.59,2.6C11.37,1.81 12.63,1.81 13.41,2.6L21.4,10.59C22.19,11.37 22.19,12.63 21.4,13.41L13.41,21.4C12.63,22.19 11.37,22.19 10.59,21.4L2.6,13.41C1.81,12.63 1.81,11.37 2.6,10.59Z" />
     </svg>
   );
 }
@@ -247,6 +265,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // id of the project currently being renamed (null = none) + its draft text.
   const [editingProject, setEditingProject] = useState<number | null>(null);
   const [projectDraft, setProjectDraft] = useState("");
+  // id of the project whose rename/delete menu is open (null = none).
+  const [projectMenu, setProjectMenu] = useState<number | null>(null);
   // Inline "new project" / "new team" rows (opened by the section "+" button).
   const [creatingProject, setCreatingProject] = useState(false);
   const [projectCreateDraft, setProjectCreateDraft] = useState("");
@@ -282,6 +302,22 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         prev.map((p) => (p.id === id ? { ...p, name: current.name } : p))
       );
     });
+  };
+
+  const removeProject = (id: number) => {
+    const current = projects.find((p) => p.id === id);
+    if (
+      !window.confirm(
+        `Delete project "${current?.name ?? "this project"}"? This also removes its linked code repo.`
+      )
+    ) {
+      return;
+    }
+    setProjectMenu(null);
+    const prevProjects = projects;
+    // Optimistic removal; restore on failure.
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+    deleteProject(id).catch(() => setProjects(prevProjects));
   };
 
   const submitNewProject = () => {
@@ -540,7 +576,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     label: string,
     expanded: boolean,
     onToggle: () => void,
-    onAdd?: () => void
+    onAdd?: () => void,
+    icon?: ReactNode
   ) => (
     <div className="sidebar-section-header">
       <button
@@ -549,6 +586,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         aria-expanded={expanded}
         onClick={onToggle}
       >
+        {icon && (
+          <span className="sidebar-section-icon" aria-hidden="true">
+            {icon}
+          </span>
+        )}
         <span>{label}</span>
         <span
           className={`sidebar-section-chevron${expanded ? " open" : ""}`}
@@ -739,7 +781,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             📄 Documents
           </Link>
           {renderSectionToggle(
-            "Projects",
+            "Code Repo",
             sections.isOpen("projects"),
             () => sections.toggle("projects"),
             isOrgOwner && !sidebarCollapsed
@@ -748,7 +790,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   setProjectCreateDraft("");
                   setCreatingProject(true);
                 }
-              : undefined
+              : undefined,
+            <GitLogoIcon size={14} />
           )}
           {(sections.isOpen("projects") || sidebarCollapsed) && (
             <div className="sidebar-subitems">
@@ -802,20 +845,54 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                       {proj.name}
                     </Link>
                     {isOrgOwner && (
-                      <button
-                        type="button"
-                        className="sidebar-project-edit-btn"
-                        title="Rename project"
-                        aria-label={`Rename ${proj.name}`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setProjectDraft(proj.name);
-                          setEditingProject(proj.id);
-                        }}
-                      >
-                        ✎
-                      </button>
+                      <div className="sidebar-project-menu-wrap">
+                        <button
+                          type="button"
+                          className="sidebar-project-edit-btn"
+                          title="Edit project"
+                          aria-label={`Edit ${proj.name}`}
+                          aria-haspopup="menu"
+                          aria-expanded={projectMenu === proj.id}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setProjectMenu((cur) =>
+                              cur === proj.id ? null : proj.id
+                            );
+                          }}
+                        >
+                          ✎
+                        </button>
+                        {projectMenu === proj.id && (
+                          <div className="sidebar-project-menu" role="menu">
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setProjectMenu(null);
+                                setProjectDraft(proj.name);
+                                setEditingProject(proj.id);
+                              }}
+                            >
+                              Rename
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="sidebar-project-menu-danger"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                removeProject(proj.id);
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 )
@@ -1166,6 +1243,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {renderSidebarItem("/notes", "notes", "Notes", "📝")}
               {renderSidebarItem("/tasks", "tasks", "Tasks", "☑")}
               {renderSidebarItem("/ai-chat", "aichat", "AI Chat", "✨")}
+              {/* GitHub repo viewer — same access as the /github route:
+                  platform staff, org owner/super_admin/admin, or developers.
+                  Uses the Git logo mark (inherits the sidebar icon color). */}
+              {hasWorkspaceSection &&
+                renderSidebarItem(
+                  "/github",
+                  "github",
+                  "Code Repo",
+                  <GitLogoIcon />
+                )}
               {(user.scope === "platform" || user.scope === "organization") &&
                 renderSidebarItem(
                   "/test-access",

@@ -6,7 +6,7 @@
 //! product rule "only an org owner can create new projects and teams".
 
 use crate::prelude::*;
-use actix_web::patch;
+use actix_web::{delete, patch};
 use sqlx::Row;
 use tracing::instrument;
 use wayve_security::jwt::get_user_id_from_request;
@@ -211,6 +211,47 @@ pub async fn update_project(
             "id": row.get::<i32, _>("id"),
             "name": row.get::<String, _>("name"),
         }))),
+        None => Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Project not found" }))
+        ),
+    }
+}
+
+// DELETE /api/projects/{id} — delete a project (org owner only). Linked
+// GitHub repo rows cascade via project_github_links' FK ON DELETE CASCADE.
+#[delete("/projects/{id}")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn delete_project(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+    if ctx.scope != Scope::Organization {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Only an organization owner can delete projects"
+        })));
+    }
+    let Some(org_id) = ctx.organization_id else {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "No organization in context" })));
+    };
+
+    // Org-scoped DELETE — a project from another org won't match, so we 404
+    // rather than leak that the id exists.
+    let row = sqlx::query(
+        "DELETE FROM projects WHERE id = $1 AND organization_id = $2 RETURNING id",
+    )
+    .bind(path.into_inner())
+    .bind(org_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    match row {
+        Some(_) => Ok(HttpResponse::NoContent().finish()),
         None => Ok(
             HttpResponse::NotFound().json(serde_json::json!({ "message": "Project not found" }))
         ),

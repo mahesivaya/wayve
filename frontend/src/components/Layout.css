@@ -702,6 +702,56 @@
   color: var(--color-text-primary);
 }
 
+/* Keep the pen visible while its rename/delete menu is open. */
+.sidebar-project-edit-btn[aria-expanded="true"] {
+  opacity: 1;
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+/* Rename/Delete dropdown anchored to the pen button. */
+.sidebar-project-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.sidebar-project-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 50;
+  min-width: 120px;
+  margin-top: 2px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.sidebar-project-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.sidebar-project-menu button:hover {
+  background: var(--color-surface-hover);
+}
+
+.sidebar-project-menu .sidebar-project-menu-danger {
+  color: var(--color-danger, #dc2626);
+}
+
 /* Inline rename input — sized to read like the project label it replaces. */
 .sidebar-subitems .sidebar-project-edit {
   display: block;
