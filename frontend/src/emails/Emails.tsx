@@ -589,35 +589,44 @@ export default function Emails() {
             </div>
           </div>
         )}
-        <EmailSidebar
-          accounts={displayedAccounts}
-          activeAccount={activeAccount}
-          setActiveAccount={setActiveAccount}
-          activeFolder={activeFolder}
-          setActiveFolder={(f) => {
-            setViewMode("email");
-            setActiveFolder(f);
-          }}
-          viewMode={viewMode}
-          onOpenFiles={openFiles}
-          onRequestAddAccount={() => setAddAccountOpen(true)}
-          onCompose={() => setComposeOpen(true)}
-          composeDisabled={accounts.length === 0}
-          width={sidebarWidth}
-          onRenameAccount={renameAccount}
-          showAccountFilter={showAccountFilter}
-          showAccountManagement={showAccountManagement}
-          showComposeButton={isPersonalScope}
-        />
+        {/* Organization / platform pages have no use for the email sidebar
+            (no per-account filter, folders, or management) — they just read the
+            unified inbox, so hide the whole sidebar + its resizer and let the
+            list take the full width. Personal accounts keep it. */}
+        {isPersonalScope && (
+          <>
+            <EmailSidebar
+              accounts={displayedAccounts}
+              activeAccount={activeAccount}
+              setActiveAccount={setActiveAccount}
+              activeFolder={activeFolder}
+              setActiveFolder={(f) => {
+                setViewMode("email");
+                setActiveFolder(f);
+              }}
+              viewMode={viewMode}
+              onOpenFiles={openFiles}
+              onRequestAddAccount={() => setAddAccountOpen(true)}
+              onCompose={() => setComposeOpen(true)}
+              composeDisabled={accounts.length === 0}
+              width={sidebarWidth}
+              onRenameAccount={renameAccount}
+              showAccountFilter={showAccountFilter}
+              showAccountManagement={showAccountManagement}
+              showComposeButton={isPersonalScope}
+              showFolderNav={isPersonalScope}
+            />
 
-        <div
-          className="email-sidebar-resizer"
-          onMouseDown={startSidebarResize}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize email sidebar"
-          title="Drag to resize sidebar"
-        />
+            <div
+              className="email-sidebar-resizer"
+              onMouseDown={startSidebarResize}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize email sidebar"
+              title="Drag to resize sidebar"
+            />
+          </>
+        )}
 
         {showList && (
           <EmailList
@@ -637,6 +646,11 @@ export default function Emails() {
             accountsLoaded={accountsLoaded}
             canAddAccount={showAccountManagement}
             onAddAccount={() => setAddAccountOpen(true)}
+            showFolderTabs={!isPersonalScope}
+            onSelectFolder={(f) => {
+              setViewMode("email");
+              setActiveFolder(f);
+            }}
           />
         )}
 

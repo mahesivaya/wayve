@@ -94,7 +94,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 14px;
+  padding: 4px 14px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-email-bg);
 }
@@ -114,9 +114,25 @@
 }
 
 /* Keep the search box from expanding so it pins to the right rather than
-   stretching across the toolbar. */
+   stretching across the toolbar; and shrink its height with the rest. */
 .emails-page-toolbar .global-search-box {
   flex: 0 1 420px;
+  height: 28px;
+}
+
+.emails-page-toolbar .global-search-box input {
+  font-size: var(--text-md);
+}
+
+/* Shrink the view-layout toggles to match the slimmer toolbar. */
+.emails-page-toolbar .email-layout-btn {
+  width: 32px;
+  height: 28px;
+}
+
+.emails-page-toolbar .email-layout-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* Scoped under .emails-page-toolbar so these win over the base .compose-btn
@@ -125,8 +141,13 @@
 .emails-page-toolbar .compose-btn--toolbar {
   flex: 0 0 auto;
   width: auto;
-  min-width: 160px;
+  min-width: 150px;
+  /* Match the slim 28px search box / toggle height so the toolbar hugs its
+     controls instead of being stretched tall by the button's default padding. */
+  height: 28px;
+  padding: 0 18px;
   margin: 0;
+  font-size: var(--text-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1078,6 +1099,17 @@
   position: sticky;
   top: 0;
   z-index: 1;
+}
+
+/* Inbox/Sent tabs at the start of the bulk bar (org/platform inbox). A right
+   divider separates them from the bulk-select controls. */
+.email-folder-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  padding-right: 10px;
+  border-right: 1px solid var(--color-overlay-border);
 }
 
 .email-bulk-master {

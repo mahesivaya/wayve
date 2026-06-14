@@ -118,6 +118,21 @@
   border-radius: var(--radius-pill);
 }
 
+/* Error variant of the inline status pill (reuses .profile-status layout,
+   flips the success palette to danger). Used by the email-import card. */
+.profile-status-error {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+/* Muted helper text under a settings-card title (email-import description). */
+.profile-hint {
+  margin: 0 0 16px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
 .profile-loading {
   margin-top: 60px;
   color: var(--color-text-muted);

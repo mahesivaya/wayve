@@ -8,6 +8,11 @@ import {
   uploadAvatar,
   type ProfileData,
 } from "../api/profile";
+import {
+  getGmailConnectUrl,
+  getOutlookConnectUrl,
+  imapAutodiscover,
+} from "../api/email";
 import { useAuth } from "../auth/useAuth";
 import Avatar from "../components/Avatar";
 import { getApiBase } from "../config/env";
@@ -47,6 +52,47 @@ export default function Profile() {
   const [confirmPw, setConfirmPw] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
   const [pwStatus, setPwStatus] = useState<string | null>(null);
+
+  // ── Import a mailbox via OAuth ───────────────────────────────────────────
+  // Enter an address; we detect Gmail vs Outlook from its domain and hand off
+  // to the same per-user OAuth connect flow the Emails page uses. The new
+  // mailbox attaches to the logged-in user and, after the provider redirect,
+  // the callback lands on /emails where the imported mail shows up.
+  const [importEmail, setImportEmail] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const startEmailImport = async () => {
+    const email = importEmail.trim();
+    if (!email) {
+      setImportError("Enter an email address to import.");
+      return;
+    }
+    setImportBusy(true);
+    setImportError(null);
+    try {
+      // Reuse the IMAP autodiscover probe purely to classify the domain as
+      // Google / Microsoft so we route to the right OAuth flow.
+      const probe = await imapAutodiscover(email);
+      if (probe.use_oauth === "google") {
+        window.location.href = await getGmailConnectUrl();
+        return;
+      }
+      if (probe.use_oauth === "microsoft") {
+        window.location.href = await getOutlookConnectUrl();
+        return;
+      }
+      setImportError(
+        "Only Gmail and Outlook mailboxes can be imported via OAuth right now."
+      );
+    } catch (err) {
+      setImportError(
+        err instanceof Error ? err.message : "Could not start the import."
+      );
+    } finally {
+      setImportBusy(false);
+    }
+  };
 
   // Avatar upload. `avatarBust` cache-busts the <img> after a successful upload
   // so the new image shows immediately despite the serve URL being unchanged.
@@ -474,6 +520,46 @@ export default function Profile() {
               </div>
             </>
           )}
+        </section>
+
+        <section className="settings-card">
+          <h2 className="settings-card-title">Import email</h2>
+          <p className="profile-hint">
+            Connect a Gmail or Outlook mailbox to import its mail and read it in
+            Wayve. You&apos;ll sign in with the provider; the mailbox is added to
+            your account and its messages appear under Emails.
+          </p>
+
+          <div className="profile-row">
+            <label htmlFor="profile-import-email">Email address</label>
+            <input
+              id="profile-import-email"
+              type="email"
+              value={importEmail}
+              onChange={(e) => setImportEmail(e.target.value)}
+              placeholder="you@gmail.com"
+              autoComplete="email"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void startEmailImport();
+              }}
+            />
+          </div>
+
+          <div className="profile-actions">
+            <button
+              type="button"
+              className="profile-save"
+              onClick={() => void startEmailImport()}
+              disabled={importBusy}
+            >
+              {importBusy ? "Connecting…" : "Connect with OAuth"}
+            </button>
+            {importError && (
+              <span className="profile-status profile-status-error">
+                {importError}
+              </span>
+            )}
+          </div>
         </section>
       </div>
     </div>

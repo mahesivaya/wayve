@@ -29,6 +29,9 @@ interface EmailSidebarProps {
   // Organization / platform pages move it into the page toolbar instead, so
   // they hide the sidebar copy to avoid showing two.
   showComposeButton?: boolean;
+  // The Gmail-style folder nav (Inbox/Sent/Important/…/Attachments). Personal
+  // accounts show it; organization / platform pages hide the whole block.
+  showFolderNav?: boolean;
 }
 
 export const EmailSidebar: React.FC<EmailSidebarProps> = ({
@@ -47,6 +50,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
   showAccountFilter = true,
   showAccountManagement = true,
   showComposeButton = true,
+  showFolderNav = true,
 }) => {
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -239,6 +243,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
         </nav>
       )}
 
+      {showFolderNav && (
       <nav className="mail-filters" aria-label="Mail folders">
         <button
           className={`filter-btn ${activeFolder === "inbox" && viewMode === "email" ? "active" : ""}`}
@@ -315,6 +320,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           📎 Attachments
         </button>
       </nav>
+      )}
     </div>
   );
 };

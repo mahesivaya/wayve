@@ -26,6 +26,10 @@ interface EmailListProps {
   // org owners). Non-owner org members see the empty state without a CTA.
   canAddAccount?: boolean;
   onAddAccount?: () => void;
+  // Inbox/Sent folder tabs shown inline in the bulk bar. Used by org/platform
+  // pages that hide the full email sidebar but still need to reach Sent.
+  showFolderTabs?: boolean;
+  onSelectFolder?: (folder: EmailFolder) => void;
 }
 
 // Folders still without a real backing query. Important / Updates / Social are
@@ -75,6 +79,8 @@ export const EmailList: React.FC<EmailListProps> = ({
   accountsLoaded = true,
   canAddAccount = false,
   onAddAccount,
+  showFolderTabs = false,
+  onSelectFolder,
 }) => {
   const isStubFolder = activeFolder
     ? (STUB_EMAIL_FOLDERS as ReadonlyArray<string>).includes(activeFolder)
@@ -271,6 +277,32 @@ export const EmailList: React.FC<EmailListProps> = ({
           role="toolbar"
           aria-label="Bulk email selection"
         >
+          {showFolderTabs && onSelectFolder && (
+            <div
+              className="email-folder-tabs"
+              role="group"
+              aria-label="Mail folder"
+            >
+              <button
+                type="button"
+                className={`email-bulk-action${activeFolder === "sent" ? "" : " is-active"}`}
+                onClick={() => onSelectFolder("inbox")}
+                aria-pressed={activeFolder !== "sent"}
+                title="Inbox"
+              >
+                Inbox
+              </button>
+              <button
+                type="button"
+                className={`email-bulk-action${activeFolder === "sent" ? " is-active" : ""}`}
+                onClick={() => onSelectFolder("sent")}
+                aria-pressed={activeFolder === "sent"}
+                title="Sent"
+              >
+                Sent
+              </button>
+            </div>
+          )}
           <input
             type="checkbox"
             className="email-bulk-master"
