@@ -408,14 +408,6 @@ export default function Tasks() {
 
   return (
     <div className={`tasks-app${isPersonal ? " tasks-app--personal" : ""}`}>
-      {!isPersonal && !inSplitPane && (
-        <aside className="tasks-sidebar">
-          <button className="create-task-btn" onClick={openCreate}>
-            + Create task
-          </button>
-        </aside>
-      )}
-
       <main className="tasks-main">
         {inSplitPane ? (
           <button
@@ -454,14 +446,12 @@ export default function Tasks() {
                   ▦
                 </button>
               </div>
-              {isPersonal && (
-                <button
-                  className="create-task-btn create-task-btn--inline"
-                  onClick={openCreate}
-                >
-                  + Create task
-                </button>
-              )}
+              <button
+                className="create-task-btn create-task-btn--inline"
+                onClick={openCreate}
+              >
+                + Create task
+              </button>
             </div>
           </div>
         )}

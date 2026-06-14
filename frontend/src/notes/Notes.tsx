@@ -167,13 +167,6 @@ export default function Notes() {
   return (
     <div className="notes-app">
       <main className="notes-main">
-        <div className="notes-header">
-          <div>
-            <h2>Notes</h2>
-            <p>Quick personal notes, encrypted on your device.</p>
-          </div>
-        </div>
-
         <div className="notes-toolbar">
           <SearchBar />
         </div>

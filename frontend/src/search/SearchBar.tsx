@@ -15,29 +15,8 @@ export default function SearchBar() {
 
   return (
     <div className="global-search-row">
-      <div className="global-search-box">
-        <span className="global-search-icon" aria-hidden="true">
-          ⌕
-        </span>
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={`Search ${searchLabel}`}
-          aria-label={`Search ${searchLabel}`}
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            className="global-search-clear"
-            onClick={() => setSearchQuery("")}
-            title="Clear search"
-            aria-label="Clear search"
-          >
-            ×
-          </button>
-        )}
-      </div>
+      {/* On the emails page the view-layout toggles sit BEFORE the search box,
+          and the box is pushed to the far right (see .emails-page-toolbar). */}
       {location.pathname.startsWith("/emails") && (
         <div
           className="email-layout-actions"
@@ -75,6 +54,29 @@ export default function SearchBar() {
           </button>
         </div>
       )}
+      <div className="global-search-box">
+        <span className="global-search-icon" aria-hidden="true">
+          ⌕
+        </span>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder={`Search ${searchLabel}`}
+          aria-label={`Search ${searchLabel}`}
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            className="global-search-clear"
+            onClick={() => setSearchQuery("")}
+            title="Clear search"
+            aria-label="Clear search"
+          >
+            ×
+          </button>
+        )}
+      </div>
     </div>
   );
 }

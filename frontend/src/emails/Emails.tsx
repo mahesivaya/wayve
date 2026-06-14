@@ -509,34 +509,49 @@ export default function Emails() {
   const isPersonalScope = user?.scope
     ? user.scope === "personal"
     : user?.account_type === "personal";
-  // Only personal accounts manage their own connected mailboxes. Business
-  // (organization) and platform teams use their own domain email / shared
-  // addresses, so the email sidebar hides the whole Accounts section for them
-  // — the "+ Add account" button, the "All Accounts" filter, and the
-  // per-account list — leaving just the folder nav (Inbox, Drafts, …) below.
-  const showAccountControls = isPersonalScope;
+  // Only personal accounts *manage* their own connected mailboxes — the
+  // "Accounts" header + "+ Add account" button stay personal-only. Business
+  // (organization) and platform teams manage shared/domain mailboxes in
+  // /settings/inboxes instead.
+  const showAccountManagement = isPersonalScope;
+  // But every scope gets the account *filter* (the "🌐 All Accounts" pill + the
+  // per-account rows) whenever they have at least one mailbox. This gives org /
+  // platform users the unified "all emails" inbox by default (activeAccount =
+  // null → backend returns the union of owned + shared-member + wayve mail) while
+  // still letting them drill into a single shared inbox.
+  const showAccountFilter = displayedAccounts.length > 0;
 
+  // If a previously-selected account disappears (e.g. a shared inbox is revoked),
+  // fall back to the unified "all emails" view rather than jumping to some other
+  // mailbox. The default activeAccount is already null (useEmailInbox), so org /
+  // platform users start unified without any forced selection.
   useEffect(() => {
-    if (showAccountControls) return;
-
-    const firstAccountId = displayedAccounts[0]?.id ?? null;
-    if (firstAccountId === null) {
-      if (activeAccount !== null) setActiveAccount(null);
-      return;
-    }
-
-    const activeAccountVisible = displayedAccounts.some(
+    if (activeAccount === null) return;
+    const stillVisible = displayedAccounts.some(
       (account) => account.id === activeAccount
     );
-    if (!activeAccountVisible) {
-      setActiveAccount(firstAccountId);
+    if (!stillVisible) {
+      setActiveAccount(null);
     }
-  }, [activeAccount, displayedAccounts, setActiveAccount, showAccountControls]);
+  }, [activeAccount, displayedAccounts, setActiveAccount]);
 
   // ================= UI =================
   return (
     <div className="emails-root">
       <div className="emails-page-toolbar">
+        {/* Organization / platform pages put Compose at the far left of the
+            toolbar and let the search bar fill the rest to the right. Personal
+            accounts keep Compose in the email sidebar. */}
+        {!isPersonalScope && (
+          <button
+            className="compose-btn compose-btn--toolbar"
+            onClick={() => setComposeOpen(true)}
+            disabled={accounts.length === 0}
+            title={accounts.length === 0 ? "No inbox available" : "Compose"}
+          >
+            Compose
+          </button>
+        )}
         <SearchBar />
       </div>
       <div
@@ -590,7 +605,9 @@ export default function Emails() {
           composeDisabled={accounts.length === 0}
           width={sidebarWidth}
           onRenameAccount={renameAccount}
-          showAccountControls={showAccountControls}
+          showAccountFilter={showAccountFilter}
+          showAccountManagement={showAccountManagement}
+          showComposeButton={isPersonalScope}
         />
 
         <div
@@ -618,7 +635,7 @@ export default function Emails() {
             activeFolder={activeFolder}
             hasAccounts={accounts.length > 0}
             accountsLoaded={accountsLoaded}
-            canAddAccount={showAccountControls}
+            canAddAccount={showAccountManagement}
             onAddAccount={() => setAddAccountOpen(true)}
           />
         )}
@@ -637,7 +654,7 @@ export default function Emails() {
         {/* Mounted only while open — keeps the picker's state fresh each time
           and avoids reset-on-close juggling. Opened by both the sidebar "+"
           and the email-list empty-state CTA. */}
-        {showAccountControls && addAccountOpen && (
+        {showAccountManagement && addAccountOpen && (
           <ProviderPicker
             onClose={() => setAddAccountOpen(false)}
             onSelect={(provider) => {
