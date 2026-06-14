@@ -83,10 +83,24 @@ export default function Tasks() {
     const saved = window.localStorage.getItem("wayve.tasks.view");
     return saved === "grid" ? "grid" : "list";
   });
+  // "tasks" = the default list/grid layout; "jira" = a kanban board with one
+  // column per status (To Do / In Progress / In Review / Done), cards dragged
+  // between columns to change status.
+  const [mode, setMode] = useState<"tasks" | "jira">(() => {
+    const saved = window.localStorage.getItem("wayve.tasks.mode");
+    return saved === "jira" ? "jira" : "tasks";
+  });
+  // Status column currently being hovered during a drag, for the drop-target
+  // highlight.
+  const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem("wayve.tasks.view", view);
   }, [view]);
+
+  useEffect(() => {
+    window.localStorage.setItem("wayve.tasks.mode", mode);
+  }, [mode]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [taskName, setTaskName] = useState("");
   const [description, setDescription] = useState("");
@@ -427,9 +441,12 @@ export default function Tasks() {
               <div className="view-toggle" role="group" aria-label="View mode">
                 <button
                   type="button"
-                  className={`view-toggle-btn${view === "list" ? " active" : ""}`}
-                  onClick={() => setView("list")}
-                  aria-pressed={view === "list"}
+                  className={`view-toggle-btn${mode === "tasks" && view === "list" ? " active" : ""}`}
+                  onClick={() => {
+                    setMode("tasks");
+                    setView("list");
+                  }}
+                  aria-pressed={mode === "tasks" && view === "list"}
                   aria-label="List view"
                   title="List view"
                 >
@@ -437,13 +454,26 @@ export default function Tasks() {
                 </button>
                 <button
                   type="button"
-                  className={`view-toggle-btn${view === "grid" ? " active" : ""}`}
-                  onClick={() => setView("grid")}
-                  aria-pressed={view === "grid"}
+                  className={`view-toggle-btn${mode === "tasks" && view === "grid" ? " active" : ""}`}
+                  onClick={() => {
+                    setMode("tasks");
+                    setView("grid");
+                  }}
+                  aria-pressed={mode === "tasks" && view === "grid"}
                   aria-label="Grid view"
                   title="Grid view"
                 >
-                  ▦
+                  ⊞
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-btn${mode === "jira" ? " active" : ""}`}
+                  onClick={() => setMode("jira")}
+                  aria-pressed={mode === "jira"}
+                  aria-label="Columns (Jira board) view"
+                  title="Columns (Jira board) view"
+                >
+                  ◫
                 </button>
               </div>
               <button
@@ -696,12 +726,139 @@ export default function Tasks() {
           </form>
         </Modal>
 
-        <div className={`task-list task-list--${view}`}>
-          {loading ? (
+        {mode === "jira" ? (
+          loading ? (
             <div className="tasks-empty">
               <strong>Loading tasks…</strong>
             </div>
           ) : loadError ? (
+            <div className="tasks-empty">
+              <strong>Couldn&apos;t load tasks</strong>
+              <span>{loadError}</span>
+              <button
+                type="button"
+                className="task-edit-btn"
+                onClick={() => void loadTasks()}
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            <div className="task-board">
+              {STATUS_OPTIONS.map((col) => {
+                const colTasks = visibleTasks.filter(
+                  (t) => t.status === col.value
+                );
+                return (
+                  <section
+                    key={col.value}
+                    className={`task-board-col task-board-col--${col.value}${
+                      dragOverStatus === col.value
+                        ? " task-board-col--dragover"
+                        : ""
+                    }`}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      if (dragOverStatus !== col.value)
+                        setDragOverStatus(col.value);
+                    }}
+                    onDragLeave={(event) => {
+                      // Only clear when the pointer actually leaves the column,
+                      // not when it crosses onto a child card.
+                      if (
+                        !event.currentTarget.contains(
+                          event.relatedTarget as Node | null
+                        )
+                      ) {
+                        setDragOverStatus((s) =>
+                          s === col.value ? null : s
+                        );
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      setDragOverStatus(null);
+                      const id = Number(
+                        event.dataTransfer.getData("text/plain")
+                      );
+                      const dropped = tasks.find((t) => t.id === id);
+                      if (dropped) void changeStatus(dropped, col.value);
+                    }}
+                  >
+                    <header className="task-board-col-header">
+                      <span className="task-board-col-title">{col.label}</span>
+                      <span className="task-board-col-count">
+                        {colTasks.length}
+                      </span>
+                    </header>
+                    <div className="task-board-col-body">
+                      {colTasks.length === 0 ? (
+                        <div className="task-board-empty">No tasks</div>
+                      ) : (
+                        colTasks.map((task) => (
+                          <article
+                            key={task.id}
+                            className="task-board-card"
+                            draggable
+                            onDragStart={(event) => {
+                              event.dataTransfer.effectAllowed = "move";
+                              event.dataTransfer.setData(
+                                "text/plain",
+                                String(task.id)
+                              );
+                            }}
+                          >
+                            <div className="task-board-card-top">
+                              <span
+                                className={`task-priority-badge priority-${task.priority}`}
+                                title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                              >
+                                P{task.priority}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="task-card-title-link task-board-card-title"
+                              onClick={() => openEdit(task)}
+                              title="Open task details"
+                            >
+                              {task.name}
+                            </button>
+                            <div className="task-board-card-actions">
+                              <button
+                                type="button"
+                                className="task-edit-btn"
+                                onClick={() => openEdit(task)}
+                                aria-label={`Edit ${task.name}`}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="task-delete-btn"
+                                onClick={() => deleteTask(task)}
+                                aria-label={`Delete ${task.name}`}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </article>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )
+        ) : (
+          <>
+            <div className={`task-list task-list--${view}`}>
+              {loading ? (
+                <div className="tasks-empty">
+                  <strong>Loading tasks…</strong>
+                </div>
+              ) : loadError ? (
             <div className="tasks-empty">
               <strong>Couldn&apos;t load tasks</strong>
               <span>{loadError}</span>
@@ -874,6 +1031,8 @@ export default function Tasks() {
               ))}
             </div>
           </section>
+        )}
+          </>
         )}
       </main>
     </div>
