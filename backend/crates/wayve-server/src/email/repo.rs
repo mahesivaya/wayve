@@ -123,10 +123,6 @@ pub struct EmailListRow {
     pub sender: Option<String>,
     pub receiver: Option<String>,
     pub has_body: bool,
-    /// Short, plaintext body snippet for the list row (HTML stripped, truncated).
-    /// `None` when there's no stored body yet or the body is a client-encrypted
-    /// envelope the server can't read.
-    pub preview: Option<String>,
     pub has_attachments: bool,
     pub is_read: bool,
     pub created_at: Option<NaiveDateTime>,
@@ -134,56 +130,6 @@ pub struct EmailListRow {
     pub shared_label: Option<String>,
     pub inbox_status: Option<String>,
     pub inbox_assignee_id: Option<i32>,
-}
-
-/// Prefix marking a Wayve-native client-encrypted body envelope — the server
-/// stores it verbatim and can't produce a readable snippet from it.
-const WAYVE_ENVELOPE_PREFIX: &str = "WAYVE_SECURE_V1";
-const PREVIEW_MAX_CHARS: usize = 160;
-
-/// Build a short plaintext snippet from a decrypted email body: strip HTML
-/// tags, decode a few common entities, collapse whitespace, and truncate.
-fn snippet_from_body(plain: &str) -> Option<String> {
-    if plain.starts_with(WAYVE_ENVELOPE_PREFIX) {
-        return None;
-    }
-    // Drop everything between angle brackets (HTML tags / style/script open
-    // tags). Cheap and good enough for a list preview.
-    let mut out = String::with_capacity(plain.len());
-    let mut in_tag = false;
-    for ch in plain.chars() {
-        match ch {
-            '<' => in_tag = true,
-            '>' => in_tag = false,
-            _ if !in_tag => out.push(ch),
-            _ => {}
-        }
-    }
-    let decoded = out
-        .replace("&nbsp;", " ")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'");
-    let collapsed = decoded.split_whitespace().collect::<Vec<_>>().join(" ");
-    let trimmed = collapsed.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    let snippet: String = trimmed.chars().take(PREVIEW_MAX_CHARS).collect();
-    Some(snippet)
-}
-
-/// Decrypt the stored body (if any) and return a list snippet, or `None`.
-fn read_preview(row: &PgRow) -> Option<String> {
-    let iv: String = row.try_get("body_iv").ok()?;
-    let ct: String = row.try_get("body_encrypted").ok()?;
-    if iv.is_empty() || ct.is_empty() {
-        return None;
-    }
-    let plain = wayve_security::encryption::decrypt(&iv, &ct).ok()?;
-    snippet_from_body(&plain)
 }
 
 #[derive(Clone)]
@@ -215,7 +161,6 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                e.sender, e.receiver,
                e.sender_iv, e.sender_encrypted, e.receiver_iv, e.receiver_encrypted,
                (e.body_encrypted <> '') AS has_body,
-               e.body_iv, e.body_encrypted,
                EXISTS (
                    SELECT 1 FROM email_attachments ea WHERE ea.email_id = e.id
                ) AS has_attachments,
@@ -360,7 +305,6 @@ fn map_list_row(row: PgRow) -> EmailListRow {
         sender: read_sender(&row),
         receiver: read_receiver(&row),
         has_body: row.try_get::<bool, _>("has_body").unwrap_or(false),
-        preview: read_preview(&row),
         has_attachments: row.try_get::<bool, _>("has_attachments").unwrap_or(false),
         is_read: row
             .try_get::<Option<bool>, _>("is_read")

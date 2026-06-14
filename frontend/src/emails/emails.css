@@ -1044,21 +1044,8 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
   font-size: var(--text-md);
   overflow: hidden;
-}
-
-/* Muted body snippet shown after the subject. Takes the remaining row width
-   and truncates with an ellipsis. */
-.email-list-preview {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 400;
-  color: var(--color-text-muted);
 }
 
 .email-list-subject {
@@ -1382,14 +1369,7 @@
 }
 
 .main.email-list-view .email-list-subject {
-  /* Don't grow — let the preview snippet take the remaining width. The subject
-     still shows its natural width and only truncates if very long. */
-  flex: 0 1 auto;
-  max-width: 50%;
-  font-size: var(--text-sm);
-}
-
-.main.email-list-view .email-list-preview {
+  flex: 1;
   font-size: var(--text-sm);
 }
 

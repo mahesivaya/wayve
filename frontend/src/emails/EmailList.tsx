@@ -532,11 +532,6 @@ export const EmailList: React.FC<EmailListProps> = ({
                   <span className="email-list-subject">
                     {email.subject || "(No Subject)"}
                   </span>
-                  {(email.preview || email.body) && (
-                    <span className="email-list-preview">
-                      {email.preview || email.body}
-                    </span>
-                  )}
                 </span>
                 <span className="email-row-meta">
                   {email.has_attachments && (
