@@ -1329,6 +1329,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   platform staff, org owner/super_admin/admin, or developers.
                   Uses the Git logo mark (inherits the sidebar icon color). */}
               {hasWorkspaceSection &&
+                user.effective_role !== "guest" &&
                 renderSidebarItem(
                   "/github",
                   "github",

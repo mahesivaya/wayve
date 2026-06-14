@@ -31,7 +31,7 @@ use sqlx::PgPool;
 use std::time::Duration;
 use tracing::{instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{Scope, resolve_role_context};
+use wayve_security::rbac::{Role, Scope, resolve_role_context};
 
 const GITHUB_API: &str = "https://api.github.com";
 const CACHE_TTL_SECS: u64 = 60;
@@ -137,6 +137,14 @@ pub async fn github_proxy(
             return HttpResponse::InternalServerError().finish();
         }
     };
+
+    // Guests never see code, regardless of scope.
+    if ctx.role == Role::Guest {
+        warn!(target: "auth", user_id, "github proxy denied: guest role");
+        return HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "You don't have access to this repository"
+        }));
+    }
 
     let tail = path.into_inner();
 

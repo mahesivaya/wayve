@@ -2241,6 +2241,14 @@ function PersonalRepoManager() {
 export default function GitHubRepo() {
   const { user } = useAuth();
   const { projectId } = useParams<{ projectId?: string }>();
+  // Guests can't see code files — show a plain access message instead.
+  if (user?.effective_role === "guest") {
+    return (
+      <div className="github-empty-state" style={{ height: "100%", padding: 40 }}>
+        <p className="github-empty">Don&apos;t have access</p>
+      </div>
+    );
+  }
   if (projectId) {
     return <GitHubRepoProject key={projectId} projectId={Number(projectId)} />;
   }
