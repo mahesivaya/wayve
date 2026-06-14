@@ -413,11 +413,6 @@ export default function Tasks() {
           <button className="create-task-btn" onClick={openCreate}>
             + Create task
           </button>
-
-          <div className="task-filter-title">Tasks</div>
-          <button className="task-filter active">All tasks</button>
-          <button className="task-filter">Created by me</button>
-          <button className="task-filter">Recently added</button>
         </aside>
       )}
 
