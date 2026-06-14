@@ -1427,7 +1427,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           {/* MAIN CONTENT */}
           <div className={`content`} ref={contentRef}>
             <div
-              className={`split-pane left ${splitTarget === "left" ? "active-target" : ""}`}
+              className={`split-pane left ${splitOpen && splitTarget === "left" ? "active-target" : ""}`}
               onMouseDown={() => setSplitTarget("left")}
               style={splitOpen ? { flexGrow: paneWeights.left } : undefined}
             >

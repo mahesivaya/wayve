@@ -133,6 +133,7 @@ pub async fn get_emails(
                 "sender": row.sender,
                 "receiver": row.receiver,
                 "has_body": row.has_body,
+                "preview": row.preview,
                 "has_attachments": row.has_attachments,
                 "account_id": row.account_id,
                 "is_read": row.is_read,
