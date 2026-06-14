@@ -18,6 +18,7 @@ import ProfileMenu from "./ProfileMenu";
 import SupportModal from "../support/SupportModal";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
+import { useChatUnreadCount } from "../chat/useChatUnreadCount";
 import StorageLimitBanner from "./StorageLimitBanner";
 import { SplitPaneContext } from "./SplitPaneContext";
 import ResizeHandle from "./ResizeHandle";
@@ -212,6 +213,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // (idx_emails_unread partial index) — index-only scan even on huge inboxes.
   // Gated on `user` so it doesn't fire while the session is still loading.
   const emailsUnreadCount = useEmailsUnreadCount(Boolean(user));
+  const chatUnreadCount = useChatUnreadCount(Boolean(user));
 
   // Three-pane state management. Lazy init reads any persisted split
   // from a previous visit; the effect below mirrors changes back.
@@ -1292,7 +1294,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 "/chat",
                 "chat",
                 "Chat",
-                <ChatIcon size={18} />
+                <ChatIcon size={18} />,
+                chatUnreadCount
               )}
               {/* /call is intentionally absent — audio/video lives inside Chat. */}
               {renderSidebarItem(

@@ -8,6 +8,7 @@ import {
   type ChatUser,
 } from "../../api/chat";
 import { logger } from "../../utils/logger";
+import { CHAT_UNREAD_CHANGED_EVENT } from "../useChatUnreadCount";
 
 export function useChatConversations(currentUserId?: number) {
   const [users, setUsers] = useState<ChatUser[]>([]);
@@ -51,6 +52,17 @@ export function useChatConversations(currentUserId?: number) {
     const id = setInterval(() => void refreshSummary(), 60_000);
     return () => clearInterval(id);
   }, [currentUserId, refreshSummary]);
+
+  // Keep the sidebar Chat badge in lock-step: every time our summary changes
+  // (WS inbound DM, opening/reading a conversation, poll) broadcast the fresh
+  // total so the Layout badge updates instantly without its own refetch.
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent(CHAT_UNREAD_CHANGED_EVENT, {
+        detail: summary.total_unread,
+      })
+    );
+  }, [summary.total_unread]);
 
   const refreshChannels = async () => {
     const channelData = await getChatChannels();
