@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { fmtDateTime } from "../utils/datetime";
 import { useResizableWidth } from "../components/useResizableWidth";
 import { useAuth } from "../auth/useAuth";
@@ -685,19 +685,28 @@ function GitHubRepoViewer({
     setError("");
     setLoading(true);
     try {
-      const [repoData, branchData] = await Promise.all([
-        githubJson<Repo>(API_BASE),
-        githubJson<Branch[]>(`${API_BASE}/branches?per_page=50`),
-      ]);
-
+      // Fetch the repo first; only this is fatal. Branches are best-effort —
+      // an empty repo (no commits) legitimately has none, so a failure there
+      // shouldn't blank the whole view.
+      const repoData = await githubJson<Repo>(API_BASE);
       setRepo(repoData);
-      setBranches(branchData);
       setBranch(repoData.default_branch);
+      const branchData = await githubJson<Branch[]>(
+        `${API_BASE}/branches?per_page=50`
+      ).catch(() => [] as Branch[]);
+      setBranches(branchData);
       // Runs are fetched by the branch-driven effect below (so the list
       // re-filters when the user switches branches).
     } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "GitHub data failed to load";
+      // The shared token can list a repo via /user/repos but still get a 404
+      // opening it directly (private/org repo it can't read, empty repo, or
+      // one renamed since the list was fetched). Surface that plainly.
       setError(
-        err instanceof Error ? err.message : "GitHub data failed to load"
+        msg.includes("404")
+          ? "This repository couldn't be opened — it may be empty, private, or not accessible with the current GitHub access."
+          : msg
       );
     } finally {
       setLoading(false);
@@ -2235,9 +2244,82 @@ function PersonalRepoManager() {
   );
 }
 
+// One row of GitHub's `/user/repos` list.
+type RepoListItem = {
+  full_name: string;
+  name: string;
+  owner: { login: string };
+  default_branch: string;
+  private: boolean;
+};
+
+// Platform Code Repo dashboard. Lists every repository the server token can see
+// (above the Branch block, via the viewer's repoSwitcher slot) and lets the
+// user switch which one the dashboard shows. Defaults to the fluxze repo so the
+// page looks unchanged on first load; falls back to just that repo (no switcher)
+// if the list can't be fetched.
+function PlatformRepoManager() {
+  // Deep-link support: the Projects page opens a repo via ?owner=&repo=.
+  const [searchParams] = useSearchParams();
+  const [repos, setRepos] = useState<RepoListItem[] | null>(null);
+  const [selected, setSelected] = useState<{ owner: string; repo: string }>({
+    owner: searchParams.get("owner") || FALLBACK_OWNER,
+    repo: searchParams.get("repo") || FALLBACK_REPO,
+  });
+
+  useEffect(() => {
+    void githubJson<RepoListItem[]>(
+      "/api/github/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member"
+    )
+      .then((rows) => setRepos(Array.isArray(rows) ? rows : []))
+      .catch(() => setRepos([]));
+  }, []);
+
+  const selectedFullName = `${selected.owner}/${selected.repo}`;
+  const hasRepos = (repos?.length ?? 0) > 0;
+
+  // Repo selector card injected at the top of the viewer's left rail, above the
+  // Branch block. Listed by full owner/repo name; selecting one remounts the
+  // viewer (it's keyed by owner/repo below).
+  const switcher = hasRepos ? (
+    <div className="github-sidebar-card github-repo-switch">
+      <span className="github-sidebar-branch-label">Repository</span>
+      <select
+        className="github-repo-switch-select"
+        value={selectedFullName}
+        onChange={(e) => {
+          const hit = repos?.find((r) => r.full_name === e.target.value);
+          if (hit) setSelected({ owner: hit.owner.login, repo: hit.name });
+        }}
+        aria-label="Select a repository"
+      >
+        {/* Keep the current/default repo selectable even if the list doesn't
+            include it (e.g. the token can read but not enumerate it). */}
+        {repos?.some((r) => r.full_name === selectedFullName) ? null : (
+          <option value={selectedFullName}>{selectedFullName}</option>
+        )}
+        {repos?.map((r) => (
+          <option key={r.full_name} value={r.full_name}>
+            {r.full_name}
+          </option>
+        ))}
+      </select>
+    </div>
+  ) : undefined;
+
+  return (
+    <GitHubRepoViewer
+      key={selectedFullName}
+      owner={selected.owner}
+      repo={selected.repo}
+      repoSwitcher={switcher}
+    />
+  );
+}
+
 // Route entry. `/github/:projectId` browses one project's repo. The bare
-// `/github` gives personal accounts the in-page repo manager, and keeps the
-// platform team's legacy single-repo dashboard for everyone else.
+// `/github` gives personal accounts the in-page repo manager, and the platform
+// team a multi-repo dashboard (repo switcher above the Branch block).
 export default function GitHubRepo() {
   const { user } = useAuth();
   const { projectId } = useParams<{ projectId?: string }>();
@@ -2255,5 +2337,5 @@ export default function GitHubRepo() {
   if (user?.account_type === "personal") {
     return <PersonalRepoManager />;
   }
-  return <GitHubRepoViewer owner={FALLBACK_OWNER} repo={FALLBACK_REPO} />;
+  return <PlatformRepoManager />;
 }

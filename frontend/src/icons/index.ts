@@ -78,6 +78,7 @@ export {
   Webhook as WebhooksIcon,
   IdCard as ScimIcon,
   Code2 as DeveloperTileIcon,
+  FolderGit2 as ProjectsTileIcon,
 } from "lucide-react";
 
 export { default as GitLogoIcon } from "./GitLogoIcon";

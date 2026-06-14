@@ -12,6 +12,7 @@ import {
   SsoIcon,
   WebhooksIcon,
   ScimIcon,
+  ProjectsTileIcon,
 } from "../icons";
 import { hasPermission } from "../auth/permissions";
 import { getOrgKeys } from "../orgKeys/api";
@@ -23,6 +24,7 @@ import { listSharedInboxes } from "../api/sharedInboxes";
 import { getSsoConfig } from "../api/sso";
 import { listWebhooks } from "../api/webhooks";
 import { listScimTokens } from "../api/scim";
+import { listGithubRepos } from "../api/github";
 import "../home/home.css";
 import "./admin-ui.css";
 import "./organizationAdmin.css";
@@ -111,6 +113,17 @@ export default function OrganizationAdminHome() {
   const [ssoStat, setSsoStat] = useState<TileStat[] | null>(null);
   const [webhooksCount, setWebhooksCount] = useState<number | null>(null);
   const [scimCount, setScimCount] = useState<number | null>(null);
+  const [projectsCount, setProjectsCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listGithubRepos()
+      .then((rows) => !cancelled && setProjectsCount(rows.length))
+      .catch(() => !cancelled && setProjectsCount(null));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!canSeeMembers || !orgId) return;
@@ -237,6 +250,8 @@ export default function OrganizationAdminHome() {
       return [{ value: webhooksCount.toLocaleString(), label: "Endpoints" }];
     if (label === "SCIM provisioning" && scimCount != null)
       return [{ value: scimCount.toLocaleString(), label: "SCIM tokens" }];
+    if (label === "Projects" && projectsCount != null)
+      return [{ value: projectsCount.toLocaleString(), label: "Projects" }];
     return null;
   };
 
@@ -304,6 +319,13 @@ export default function OrganizationAdminHome() {
       description: "Mint bearer tokens so Okta / Entra can provision users.",
       path: "/settings/scim",
       visible: canSeeScim,
+    },
+    {
+      icon: <ProjectsTileIcon size={26} />,
+      label: "Projects",
+      description: "Browse projects and their linked code repositories.",
+      path: "/projects",
+      visible: true,
     },
   ];
 

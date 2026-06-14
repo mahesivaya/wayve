@@ -86,6 +86,7 @@ const Docs = lazy(() => import("./marketing/Docs"));
 const SwaggerDocs = lazy(() => import("./marketing/SwaggerDocs"));
 const DocsIndex = lazy(() => import("./docs/DocsIndex"));
 const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
+const ProjectsPage = lazy(() => import("./projects/ProjectsPage"));
 const SsoSettings = lazy(() => import("./settings/SsoSettings"));
 const SharedInboxes = lazy(() => import("./settings/SharedInboxes"));
 const Webhooks = lazy(() => import("./settings/Webhooks"));
@@ -397,6 +398,7 @@ export default function App() {
               element={<Navigate to="/logs/visitors" replace />}
             />
             <Route path="/api-keys" element={<ApiKeysPage />} />
+            <Route path="/projects" element={<ProjectsPage />} />
             {/* Org-master-key flows. Bootstrap shows the 24-word
                 mnemonic ONCE; recovery-key accepts the mnemonic on a
                 fresh device; recover-data is the owner / admin

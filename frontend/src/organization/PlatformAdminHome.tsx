@@ -19,6 +19,7 @@ import { adminListTickets } from "../api/support";
 import { listApiKeys } from "../api/apiKeys";
 import { listAuditLogs } from "../api/audit";
 import { listScimTokens } from "../api/scim";
+import { listGithubRepos } from "../api/github";
 import { formatBytes } from "../utils/bytes";
 import "./admin-ui.css";
 import "./platformAdmin.css";
@@ -81,6 +82,7 @@ export default function PlatformAdminHome() {
   const [summary, setSummary] = useState<SupportSummary | null>(null);
   const [auditCount, setAuditCount] = useState<number | null>(null);
   const [scimCount, setScimCount] = useState<number | null>(null);
+  const [projectsCount, setProjectsCount] = useState<number | null>(null);
 
   const canSeeOrgStats = canManageMembers || canManageApiKeys;
   const canSeeBilling =
@@ -207,6 +209,16 @@ export default function PlatformAdminHome() {
     };
   }, [canSeeScim]);
 
+  useEffect(() => {
+    let cancelled = false;
+    listGithubRepos()
+      .then((rows) => !cancelled && setProjectsCount(rows.length))
+      .catch(() => !cancelled && setProjectsCount(null));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const orgTotals = (orgs ?? []).reduce(
     (acc, o) => ({
       members: acc.members + (o.user_count ?? 0),
@@ -305,6 +317,9 @@ export default function PlatformAdminHome() {
     if (key === "scim" && scimCount != null) {
       return [{ value: scimCount.toLocaleString(), label: "SCIM tokens" }];
     }
+    if (key === "projects" && projectsCount != null) {
+      return [{ value: projectsCount.toLocaleString(), label: "Projects" }];
+    }
     return null;
   };
 
@@ -390,6 +405,13 @@ export default function PlatformAdminHome() {
       description: "Mint bearer tokens so Okta / Entra can provision users.",
       path: "/settings/scim",
       visible: canSeeScim,
+    },
+    {
+      key: "projects",
+      label: "Projects",
+      description: "Browse projects and their linked code repositories.",
+      path: "/projects",
+      visible: canReadMembers,
     },
   ];
 
