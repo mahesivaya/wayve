@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { BellIcon, EmailsIcon } from "../icons";
@@ -26,9 +26,6 @@ type NotifItem =
       ts: string | null;
     };
 
-const COLLAPSED_COUNT = 5;
-const EXPANDED_COUNT = 10;
-
 type NotificationBellProps = {
   emailUnread: number;
   chatUnread: number;
@@ -51,7 +48,6 @@ export default function NotificationBell({
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<NotifItem[]>([]);
   // Has at least one fetch finished? Drives the "all caught up" vs "loading"
@@ -70,7 +66,6 @@ export default function NotificationBell({
     // setState (React 19 "set-state-in-effect" rule) — same pattern as Tasks.
     const timer = window.setTimeout(() => {
       setLoading(true);
-      setExpanded(false);
       void (async () => {
         try {
           const [inbox, chat, chatUsers] = await Promise.all([
@@ -152,11 +147,6 @@ export default function NotificationBell({
     };
   }, [open]);
 
-  const visible = useMemo(
-    () => items.slice(0, expanded ? EXPANDED_COUNT : COLLAPSED_COUNT),
-    [items, expanded]
-  );
-
   if (!user) return null;
 
   const go = (path: string) => {
@@ -197,7 +187,7 @@ export default function NotificationBell({
           ) : (
             <>
               <ul className="notif-list">
-                {visible.map((item) => (
+                {items.map((item) => (
                   <li key={item.key}>
                     <button
                       type="button"
@@ -233,15 +223,15 @@ export default function NotificationBell({
                 ))}
               </ul>
 
-              {!expanded && items.length > COLLAPSED_COUNT && (
-                <button
-                  type="button"
-                  className="notif-viewall"
-                  onClick={() => setExpanded(true)}
-                >
-                  View all
-                </button>
-              )}
+              {/* The list scrolls within the panel; this jumps to the full
+                  inbox for the complete view. */}
+              <button
+                type="button"
+                className="notif-viewall"
+                onClick={() => go("/emails")}
+              >
+                View all
+              </button>
             </>
           )}
         </div>
