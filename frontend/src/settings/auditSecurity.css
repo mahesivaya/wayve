@@ -25,6 +25,10 @@
 .audit-security-panel button {
   border: 1px solid var(--color-border-muted);
   background: var(--color-surface);
+  /* Theme-aware ink: near-white on the dark surface, near-black on light.
+     Without it the button text fell back to the browser default (black),
+     rendering invisible on the dark panel. */
+  color: var(--color-text-primary);
   border-radius: var(--radius-sm);
   padding: 8px 12px;
   font-weight: 600;
