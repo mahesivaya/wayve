@@ -72,6 +72,7 @@ import {
   WhiteboardIcon,
   InsightsIcon,
   AssistantIcon,
+  SettingsIcon,
 } from "../icons";
 import Modal from "./Modal";
 
@@ -1469,6 +1470,18 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             {sectionDefs.map(renderSection)}
 
             <div className="sidebar-spacer" />
+
+            {/* Settings pinned to the very bottom of the sidebar, below the
+              flex spacer so it stays anchored regardless of how many nav
+              groups are present above it. */}
+            <div className="sidebar-section sidebar-section-bottom">
+              {renderSidebarLink(
+                "/settings",
+                "Settings",
+                <SettingsIcon size={18} />,
+                location.pathname === "/settings"
+              )}
+            </div>
           </nav>
 
           {/* Drag the nav sidebar wider/narrower (hidden when collapsed to the

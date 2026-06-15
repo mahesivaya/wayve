@@ -773,6 +773,13 @@
   min-height: 8px;
 }
 
+/* Settings row pinned to the bottom of the sidebar (after the flex spacer).
+   A hairline top border separates it from the scrollable nav groups above. */
+.sidebar-section-bottom {
+  border-top: 1px solid var(--color-border);
+  padding-top: 8px;
+}
+
 /* Shared base for navigable sidebar rows — both the top-level `.sidebar-link`
    and the Workspace sub-item `.sidebar-project-label` (they differ only in
    layout: flex+icon vs block+ellipsis, set below). */
