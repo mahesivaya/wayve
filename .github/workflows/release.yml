@@ -1,0 +1,28 @@
+name: release
+
+# Publish a GitHub Release whenever a SemVer tag (v*) is pushed. Tags are
+# created deliberately by a maintainer (see CONTRIBUTING.md / `git bump`);
+# nothing here creates tags. Pushing to `main` and scripts/deploy.sh never tag.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # required to create/update Releases
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so notes can diff against the previous tag
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Auto-generate grouped notes from commits/PRs since the previous tag
+          # (categories configured in .github/release.yml). Idempotent: re-running
+          # on the same tag updates the existing Release instead of failing.
+          generate_release_notes: true
+          # The highest semver tag is marked "Latest" automatically.

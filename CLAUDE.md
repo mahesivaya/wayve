@@ -4,18 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo layout
 
-- `backend/` — Rust + Actix Web 4 server (single crate, name `rwayve`). Postgres via sqlx, Redis for cache, Gmail OAuth + sync, WebSocket chat/call, AES-256-GCM at-rest encryption.
+- `backend/` — Rust + Actix Web 4 **Cargo workspace** (`backend/Cargo.toml`, resolver 2). Three crates under `backend/crates/`: `wayve-server` (the binary, package name `rwayve` — all feature modules, routes, workers), `wayve-security` (auth + crypto: jwt, rbac, api_key, encryption, oauth, password, sso), and `wayve-db` (Postgres pool + retry loop). Shared dep versions are centralized in the workspace root's `[workspace.dependencies]`. Postgres via sqlx, Redis for cache, Gmail OAuth + sync, WebSocket chat/call, AES-256-GCM at-rest encryption. See `backend/WORKSPACE.md` for the extraction history and crate boundaries.
 - `frontend/` — React 18 + TypeScript + Vite. React Compiler is enabled (via `@vitejs/plugin-react`). React Router v7.
 - `infra/` — `docker-compose.yml` (postgres, redis, backend, frontend, nginx), `docker-compose.dev.yml` (full dev stack including `mailpit`), `justfile` of common commands, `postgres/init.sql` (the canonical schema), `nginx/nginx.conf`.
 - `scripts/smoke.sh` — end-to-end docker smoke that brings up the stack and hits a handful of endpoints. Used by CI.
 - `.github/workflows/smoke.yml` — runs backend `cargo test`, frontend `tsc --noEmit` + `vitest`, then the docker smoke.
 
-Env files: root `.env` (compose / postgres creds), `backend/.env` (loaded by `dotenvy`; also loaded from the repo root when `cargo run` is invoked from there — see `load_env_files` in `backend/src/main.rs`), `frontend/.env` (`VITE_API_URL`, baked at build time).
+Env files: root `.env` (compose / postgres creds), `backend/.env` (loaded by `dotenvy`; also loaded from the repo root when `cargo run` is invoked from there — see `load_env_files` in `backend/crates/wayve-server/src/main.rs`), `frontend/.env` (`VITE_API_URL`, baked at build time).
 
 ## Common commands
 
-Backend (Rust, in `backend/`):
-- `cargo run` — start server on `:8080` (requires `DATABASE_URL` and `FRONTEND_URL`).
+Backend (Rust, run from the workspace root `backend/`; cargo commands span all crates unless you pass `-p wayve-server` / `-p wayve-security` / `-p wayve-db`):
+- `cargo run` — start server on `:8080` (requires `DATABASE_URL` and `FRONTEND_URL`). The binary is `rwayve` in `wayve-server`.
 - `cargo build` / `cargo build --release`.
 - `cargo clippy -- -D warnings` — lint (denies warnings; see `clippy.toml` below).
 - `cargo fmt`.
@@ -40,7 +40,7 @@ Docker / full stack (from `infra/` via `just`, or from repo root with `docker co
 
 ## Backend architecture
 
-Entry point `backend/src/main.rs`:
+Entry point `backend/crates/wayve-server/src/main.rs` (paths below are relative to `crates/wayve-server/src/` unless noted):
 - Declares the feature modules (`mod ai; mod chat; mod email; …`) and orchestrates startup. **Route wiring lives in one hub: `routing.rs`** (`routing::wire`), which `.configure(...)`s every feature's `routes()`/`public_routes()`/`ws_routes()`. To add a feature endpoint: give the module a `pub fn routes(cfg)`, `mod <feature>;` in `main.rs`, and one `.configure(<feature>::routes)` in `routing.rs`. See [docs/architecture/adding-a-feature.md](docs/architecture/adding-a-feature.md).
 - Routes are split between **feature modules** (each owns its `routes()`) and a **cross-cutting `routes/` module** for endpoints not owned by one feature. `routes/mod.rs` is a thin aggregator — each domain submodule (`routes/auth.rs`, `routes/user/`, `routes/account.rs`, `routes/audit.rs`, …) owns its own `pub fn routes(cfg)`, so a new core endpoint touches only that submodule.
 - Startup side-effects are centralized in `startup.rs`: one-time process state in `init_feature_state`, all background workers + the chat pub/sub subscriber in `spawn_role_workers` (no ad-hoc spawning in `main`).
@@ -49,11 +49,11 @@ Entry point `backend/src/main.rs`:
 - Two background workers spawn at startup:
   - `start_sync_worker` — `email::sync::sync_all`, every 30s with exponential backoff to 5 min on error.
   - `start_body_worker` — fetches Gmail message bodies for rows where `body_encrypted = ''` (the index `idx_emails_pending_body` exists for this).
-- Postgres connect loop retries forever (logs first failure verbosely, then dot-counter); Redis is best-effort — if it fails to connect, the app continues with `cache: None`.
+- Postgres connect loop (`wayve_db::pool::connect_with_retries`, in the `wayve-db` crate) retries forever (logs first failure verbosely, then dot-counter); Redis is best-effort — if it fails to connect, the app continues with `cache: None`.
 
-`prelude.rs` re-exports the heavy imports (Actix, sqlx, serde, chrono, reqwest, futures, etc.) plus `MAX_EMAIL_CONCURRENCY = 20` and `BATCH_SIZE = 50`. Prefer `use crate::prelude::*;` in new files.
+`prelude.rs` (in `wayve-server`) re-exports the heavy imports (Actix, sqlx, serde, chrono, reqwest, futures, etc.) plus `MAX_EMAIL_CONCURRENCY = 20` and `BATCH_SIZE = 50`. Prefer `use crate::prelude::*;` in new `wayve-server` files. The auth/crypto and DB primitives live in sibling crates — reach them as `wayve_security::{jwt, rbac, api_key, encryption, …}` and `wayve_db::{pool, config}`.
 
-`clippy.toml` bans `Option::unwrap` and `Result::expect` (test code uses `unwrap_or_else(|err| panic!(...))` as the accepted workaround) and sets `too-many-arguments-threshold = 5`. Production code must propagate errors with `?` or `match`.
+The workspace-root `clippy.toml` bans `Option::unwrap` and `Result::expect` (test code uses `unwrap_or_else(|err| panic!(...))` as the accepted workaround) and sets `too-many-arguments-threshold = 5`. Production code must propagate errors with `?` or `match`.
 
 ### Database
 
@@ -65,7 +65,7 @@ Per-recipient delivery state is intended to live in a separate `message_recipien
 
 ### Encryption
 
-`security/encryption.rs` provides `encrypt`/`decrypt` (AES-256-GCM, random 12-byte nonce). `AES_KEY` should be high-entropy Hex64: 64 hex characters decoded as input key material, then expanded with HKDF-SHA512 into the 32-byte AES-256 key. `AES_HKDF_SALT` is optional; if set, keep it stable forever because changing it prevents decrypting HKDF-encrypted rows. Decrypt keeps a legacy fallback for rows encrypted with the old direct AES key. Stored ciphertext columns come in pairs: `*_iv` (base64 nonce) + `*_encrypted` (base64 ciphertext) — used for `messages.content_*` and `emails.body_*`.
+`wayve-security`'s `encryption.rs` (`wayve_security::encryption`) provides `encrypt`/`decrypt` (AES-256-GCM, random 12-byte nonce). `AES_KEY` should be high-entropy Hex64: 64 hex characters decoded as input key material, then expanded with HKDF-SHA512 into the 32-byte AES-256 key. `AES_HKDF_SALT` is optional; if set, keep it stable forever because changing it prevents decrypting HKDF-encrypted rows. Decrypt keeps a legacy fallback for rows encrypted with the old direct AES key. Stored ciphertext columns come in pairs: `*_iv` (base64 nonce) + `*_encrypted` (base64 ciphertext) — used for `messages.content_*` and `emails.body_*`.
 
 Chat uses client-side envelope encryption for new direct and channel messages. The frontend encrypts content into a `WAYVE_CHAT_E2E_V1` RSA/AES hybrid envelope for every participant key before sending; `chat/websocket.rs` rejects plaintext normal messages and then applies the backend AES-GCM layer only as storage-at-rest protection for the envelope. `chat/direct_messages.rs` and `chat/channel_messages.rs` decrypt only the storage layer and return the client envelope, which the browser decrypts locally. Legacy rows or manually inserted plaintext are not E2E.
 
@@ -73,19 +73,19 @@ Realtime / chat reliability (heartbeat + client reconnect, `since_id` reconnect 
 
 1-on-1 WebRTC audio/video calling (the `/ws/call` signaling relay, RBAC scope gate, Cloudflare TURN, and the `useCallSession` client state machine) is documented in `docs/architecture/calling.md`. Peer-to-peer, no media server, so 1-on-1 only; Zoom remains for *scheduled* meetings.
 
-`security/jwt.rs` mints HS256 JWTs from `JWT_SECRET`. `get_user_id_from_request` is the single auth chokepoint for HTTP handlers — it also resolves API-key requests (see API keys). The WebSocket endpoints (`chat_ws`, `call_ws`) authenticate via `get_user_id_from_request` with a `?token=` query fallback, deriving `user_id` from verified credentials and **never an unverified query value** — preserve that when adding WS routes.
+`wayve-security`'s `jwt.rs` (`wayve_security::jwt`) mints HS256 JWTs from `JWT_SECRET`. `get_user_id_from_request` is the single auth chokepoint for HTTP handlers — it also resolves API-key requests (see API keys). The WebSocket endpoints (`chat_ws`, `call_ws`) authenticate via `get_user_id_from_request` with a `?token=` query fallback, deriving `user_id` from verified credentials and **never an unverified query value** — preserve that when adding WS routes.
 
 ### Authorization (RBAC)
 
 Two privileged scopes — **platform** and **organization** — plus personal accounts. `users.account_type` (`personal | organization | organization_admin | platform_admin`) discriminates the scope; the role *within* a scope is a row in `organization_members.role` / `platform_members.role`. Nine roles: `owner, super_admin, admin, security, billing, developer, support, member, guest` (CHECK-constrained in `init.sql`).
 
-`security/rbac.rs` is the authority — a fixed `Permission` catalog, the role→permission matrix (`owner` = everything; `super_admin` = everything except billing), `resolve_role_context` (resolves a user's scope + role from the DB), and the request gates `require_permission` / `require_org_access`. Authorization is computed per request from the DB and **never trusted from the JWT**, so a role change takes effect on the next request. Role-management endpoints live in `routes/user.rs` (`/api/organizations/{id}/members…`, `/api/platform/members…`); `/api/me` and `/profile` return `scope` + `permissions[]`. `frontend/src/auth/permissions.ts` mirrors the matrix for UI gating only — never for real authorization. `scripts/seed_rbac_users.sh` seeds one test user per role in both scopes.
+`wayve-security`'s `rbac.rs` (`wayve_security::rbac`) is the authority — a fixed `Permission` catalog, the role→permission matrix (`owner` = everything; `super_admin` = everything except billing), `resolve_role_context` (resolves a user's scope + role from the DB), and the request gates `require_permission` / `require_org_access`. Authorization is computed per request from the DB and **never trusted from the JWT**, so a role change takes effect on the next request. Role-management endpoints live in `routes/user.rs` (`/api/organizations/{id}/members…`, `/api/platform/members…`); `/api/me` and `/profile` return `scope` + `permissions[]`. `frontend/src/auth/permissions.ts` mirrors the matrix for UI gating only — never for real authorization. `scripts/seed_rbac_users.sh` seeds one test user per role in both scopes.
 
 ### API keys
 
-An `X-API-KEY` header lets a service call any endpoint without a login. `middleware/api_key.rs` (`ApiKeyMiddleware`, wrapped in `main.rs`) is a no-op unless the header is present; otherwise it validates the key, enforces the route's required scope and a per-key rate limit, records the outcome in `api_key_audit_log`, and injects an `ApiKeyPrincipal` into the request extensions — which `get_user_id_from_request` returns, so a key authenticates **as a designated `user_id`** across every handler with no per-handler change.
+An `X-API-KEY` header lets a service call any endpoint without a login. `middleware/api_key.rs` (`ApiKeyMiddleware`, in `wayve-server`, wrapped in `main.rs`) is a no-op unless the header is present; otherwise it validates the key, enforces the route's required scope and a per-key rate limit, records the outcome in `api_key_audit_log`, and injects an `ApiKeyPrincipal` into the request extensions — which `get_user_id_from_request` returns, so a key authenticates **as a designated `user_id`** across every handler with no per-handler change.
 
-`security/api_key.rs` owns the scope catalog, the `required_scope(method, path)` route map, `resolve_api_key`, and the audit writer. Keys are `internal` (may hold the `*` scope) or `external` (explicit scopes, mandatory expiry). Management endpoints (`/api/keys*`) are in `routes/api_keys.rs`, gated by the `api_keys:manage` permission. The raw key is shown once at creation; only its SHA-256 hash is stored.
+`wayve-security`'s `api_key.rs` (`wayve_security::api_key`) owns the scope catalog, the `required_scope(method, path)` route map, `resolve_api_key`, and the audit writer. Keys are `internal` (may hold the `*` scope) or `external` (explicit scopes, mandatory expiry). Management endpoints (`/api/keys*`) are in `routes/api_keys.rs`, gated by the `api_keys:manage` permission. The raw key is shown once at creation; only its SHA-256 hash is stored.
 
 ### Logging
 
@@ -95,9 +95,9 @@ There are two paths:
 
 ### Backend tests
 
-Test helpers in `backend/src/test_support.rs` (`test_pool`, `insert_local_user`, `insert_google_user`, `jwt_for`, `random_email`, `next_synthetic_user_id`).
+Test helpers in `backend/crates/wayve-server/src/test_support.rs` (`test_pool`, `insert_local_user`, `insert_google_user`, `jwt_for`, `random_email`, `next_synthetic_user_id`).
 
-Backend integration tests live in `backend/src/tests/*.rs` and are wired in via `backend/src/tests/mod.rs`, which is itself declared `#[cfg(test)] mod tests;` from `backend/src/main.rs`. Adding a new test file means appending a `mod foo_test;` line to `tests/mod.rs` — the file itself uses the pattern `#[cfg(test)] mod tests { ... }` with explicit `use crate::...` paths into the items it exercises. `cargo test` compiles and runs them.
+Backend integration tests live in `backend/crates/wayve-server/src/tests/*.rs` and are wired in via `tests/mod.rs`, which is itself declared `#[cfg(test)] mod tests;` from `wayve-server/src/main.rs`. Adding a new test file means appending a `mod foo_test;` line to `tests/mod.rs` — the file itself uses the pattern `#[cfg(test)] mod tests { ... }` with explicit `use crate::...` paths into the items it exercises. `cargo test` compiles and runs them.
 
 Tests that mutate env vars use `#[serial_test::serial]`; CI runs `--test-threads=1` for the same reason. OAuth flows are mocked with `wiremock` and `external::gmail_api_base()` indirection (set the env var to point at the mock server). Mailpit-dependent tests skip themselves when `MAILPIT_API` is unset.
 
@@ -120,3 +120,9 @@ Vitest + jsdom + Testing Library. Setup in `src/test/setup.ts` polyfills `localS
 ## CI
 
 `.github/workflows/smoke.yml` has three jobs: `backend-tests` (spins up Postgres + Mailpit services, applies `init.sql`, runs `cargo test --test-threads=1`), `frontend-tests` (`tsc --noEmit` + `npm test`), then `docker-smoke` (depends on both; generates throwaway `.env`s + `client_secret.json`, then runs `scripts/smoke.sh`). Match this locally before pushing breaking changes.
+
+## Commit conventions and Versioning
+
+Commits use **Conventional Commits**: `type(scope): summary` (`fix`, `feat`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`, `build`), scope being the area (`chat`, `sidebar`, `emails`, `audit`, `api`, …); a breaking change adds `!`/`BREAKING CHANGE:`. **No `Co-Authored-By: Claude` trailer.**
+
+Versions live in **annotated git tags** `vMAJOR.MINOR.PATCH` (the source of truth — `Cargo.toml`/`package.json` versions are not actively managed). Bump level from commits since the last tag: any breaking → **major**, any `feat` → **minor**, otherwise (`fix`/…) → **patch**. Cut a release by creating and pushing an annotated `v*` tag (`git bump <level>` then `git push origin <tag>`); `.github/workflows/release.yml` fires on the tag and publishes the GitHub Release with generated notes. Neither pushing to `main` nor `scripts/deploy.sh` ever tags. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.

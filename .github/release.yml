@@ -1,0 +1,16 @@
+# Categories for GitHub's auto-generated release notes (used by release.yml's
+# generate_release_notes). Grouping is driven by PR labels; PRs are sorted into
+# the first matching category. Changes merged directly to main without a PR are
+# still listed, just ungrouped.
+changelog:
+  categories:
+    - title: 🚨 Breaking Changes
+      labels: ["breaking", "breaking-change"]
+    - title: 🚀 Features
+      labels: ["feat", "feature", "enhancement"]
+    - title: 🐛 Bug Fixes
+      labels: ["fix", "bug"]
+    - title: 🧹 Maintenance
+      labels: ["chore", "refactor", "perf", "ci", "build", "docs", "test"]
+    - title: Other Changes
+      labels: ["*"]
