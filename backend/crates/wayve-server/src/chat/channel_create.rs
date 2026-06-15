@@ -120,6 +120,24 @@ pub async fn create_channel(
 
     tx.commit().await?;
 
+    // Enterprise audit trail (Security → chat activity).
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "channel_created",
+            resource_type: "channel",
+            resource_id: Some(channel_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "channel_id": channel_id,
+                "channel": name,
+                "visibility": visibility,
+            })),
+        },
+    )
+    .await;
+
     let created_naive: chrono::NaiveDateTime = row.get("created_at");
     let created_at =
         chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(created_naive, chrono::Utc);

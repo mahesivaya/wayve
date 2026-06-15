@@ -139,6 +139,27 @@ pub async fn create_task(
     .await?;
 
     let task = task_from_row(row);
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "task_created",
+            resource_type: "task",
+            resource_id: Some(task.id.to_string()),
+            metadata: Some(serde_json::json!({
+                "summary": name,
+                "status": status,
+                "priority": priority,
+                "assigned_by": assigned_by,
+                "assignee": assignee,
+                "attachments": 0,
+            })),
+        },
+    )
+    .await;
+
     let owner = owner_for_user(pool.get_ref(), user_id).await;
     emit(
         pool.get_ref(),
@@ -172,6 +193,14 @@ pub async fn update_task(
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
 
+    // Capture the prior status so we can record "every status change".
+    let old_status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM tasks WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
+
     // Owner-scoped UPDATE — returns 404 if the row belongs to another user,
     // so we never leak the existence of an id outside this user's scope.
     let row = sqlx::query(
@@ -192,6 +221,39 @@ pub async fn update_task(
     .fetch_optional(pool.get_ref())
     .await?
     .ok_or(AppError::NotFound("task"))?;
+
+    let status_changed = old_status.as_deref() != Some(status);
+    let attachments_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM task_attachments WHERE task_id = $1")
+            .bind(id)
+            .fetch_one(pool.get_ref())
+            .await
+            .unwrap_or(0);
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: if status_changed {
+                "task_status_changed"
+            } else {
+                "task_updated"
+            },
+            resource_type: "task",
+            resource_id: Some(id.to_string()),
+            metadata: Some(serde_json::json!({
+                "summary": name,
+                "old_status": old_status,
+                "new_status": status,
+                "status": status,
+                "priority": priority,
+                "assigned_by": assigned_by,
+                "assignee": assignee,
+                "attachments": attachments_count,
+            })),
+        },
+    )
+    .await;
 
     let task = task_from_row(row);
     let owner = owner_for_user(pool.get_ref(), user_id).await;
@@ -216,15 +278,29 @@ pub async fn delete_task(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let id = path.into_inner();
 
-    let result = sqlx::query("DELETE FROM tasks WHERE id = $1 AND user_id = $2")
-        .bind(id)
-        .bind(user_id)
-        .execute(pool.get_ref())
-        .await?;
+    let removed: Option<String> =
+        sqlx::query_scalar("DELETE FROM tasks WHERE id = $1 AND user_id = $2 RETURNING name")
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
 
-    if result.rows_affected() == 0 {
+    let Some(task_name) = removed else {
         return Err(AppError::NotFound("task"));
-    }
+    };
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "task_deleted",
+            resource_type: "task",
+            resource_id: Some(id.to_string()),
+            metadata: Some(serde_json::json!({ "summary": task_name })),
+        },
+    )
+    .await;
 
     let owner = owner_for_user(pool.get_ref(), user_id).await;
     emit(

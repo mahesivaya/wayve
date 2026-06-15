@@ -83,6 +83,24 @@
   align-items: end;
 }
 
+/* Date-range + email + activity filters for the user-activity table. */
+.audit-activity-filters {
+  grid-template-columns: 1fr 1fr 1.6fr 1fr auto;
+  margin-bottom: 14px;
+}
+
+/* User + activity + from + to filters for the emails-activity table. */
+.audit-email-filters {
+  grid-template-columns: 1.4fr 1fr 1.2fr 1.2fr auto;
+  margin-bottom: 14px;
+}
+
+/* User + activity + channel filters for the chat-activity table. */
+.audit-chat-filters {
+  grid-template-columns: 1.4fr 1fr 1.4fr auto;
+  margin-bottom: 14px;
+}
+
 .audit-filters label,
 .siem-form label {
   display: flex;
@@ -122,6 +140,22 @@
   overflow: auto;
 }
 
+/* Vertically scroll the user-activity table so a long sign-in history stays
+   inside the panel instead of growing the page. Sticky header stays visible. */
+.audit-table-wrap--scroll {
+  max-height: 420px;
+  overflow-y: auto;
+  /* Slide left/right to reach every column on narrow screens. */
+  overflow-x: auto;
+}
+
+.audit-table-wrap--scroll .audit-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+}
+
 .audit-table {
   width: 100%;
   min-width: 900px;
@@ -135,6 +169,9 @@
   padding: 8px 9px;
   border-bottom: 1px solid var(--color-surface-tint-cool);
   vertical-align: top;
+  /* Keep every cell on one line so the table keeps its full width and the
+     wrapper scrolls horizontally instead of squeezing columns to fit. */
+  white-space: nowrap;
 }
 
 .audit-table th {
@@ -143,8 +180,9 @@
 }
 
 .audit-path {
-  max-width: 340px;
-  word-break: break-word;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -172,6 +210,171 @@
 .audit-outcome.rate_limited {
   background: var(--color-warning-soft);
   color: var(--color-warning);
+}
+
+.audit-activity {
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  font-weight: 700;
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.audit-activity.registered {
+  background: var(--color-accent-purple-soft);
+  color: var(--color-accent-purple);
+}
+
+.audit-activity.login {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.audit-activity.logout {
+  background: var(--color-accent-indigo-mist);
+  color: var(--color-accent-indigo-deep);
+}
+
+.audit-activity.login_failed {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
+.audit-activity.password_change {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.audit-activity.email_sent {
+  background: var(--color-accent-indigo-mist);
+  color: var(--color-accent-indigo-deep);
+}
+
+.audit-activity.email_received {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.audit-activity.email_read {
+  background: var(--color-accent-purple-soft);
+  color: var(--color-accent-purple);
+}
+
+.audit-activity.email_deleted,
+.audit-activity.email_account_delete {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
+/* Chat activity badges. */
+.audit-activity.channel_created {
+  background: var(--color-accent-purple-soft);
+  color: var(--color-accent-purple);
+}
+
+.audit-activity.channel_joined {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.audit-activity.channel_left {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.audit-activity.call_audio,
+.audit-activity.call_video {
+  background: var(--color-accent-indigo-mist);
+  color: var(--color-accent-indigo-deep);
+}
+
+.audit-activity.call_failed,
+.audit-activity.call_missed {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
+/* Drive activity badges. */
+.audit-activity.file_upload,
+.audit-activity.folder_create {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.audit-activity.file_download {
+  background: var(--color-accent-indigo-mist);
+  color: var(--color-accent-indigo-deep);
+}
+
+.audit-activity.file_rename,
+.audit-activity.folder_rename {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.audit-activity.file_delete,
+.audit-activity.folder_delete {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
+/* Notes activity badges. */
+.audit-activity.note_created {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.audit-activity.note_renamed,
+.audit-activity.note_updated {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.audit-activity.note_deleted {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
+/* Tasks activity badges. */
+.audit-activity.task_created {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.audit-activity.task_status_changed {
+  background: var(--color-accent-indigo-mist);
+  color: var(--color-accent-indigo-deep);
+}
+
+.audit-activity.task_updated {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.audit-activity.task_deleted {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
+/* Calendar activity badges. */
+.audit-activity.meeting_created {
+  background: var(--color-accent-purple-soft);
+  color: var(--color-accent-purple);
+}
+
+.audit-activity.meeting_invited {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.audit-activity.meeting_updated {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.audit-activity.meeting_canceled {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
 }
 
 .audit-security-empty {

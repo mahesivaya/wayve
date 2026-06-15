@@ -183,6 +183,55 @@ pub async fn create_meeting(
         meeting_id, user_id, title
     );
 
+    // ================= AUDIT =================
+    // Calendar audit trail (Security → calendar activity).
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "meeting_created",
+            resource_type: "meeting",
+            resource_id: Some(meeting_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "title": title.clone(),
+                "date": date,
+                "start_time": start_time,
+                "end_time": end_time,
+                "participants": participants.clone(),
+            })),
+        },
+    )
+    .await;
+    // One "invitation received" row per invitee that has a Fluxze account.
+    let invited_user_ids: Vec<i32> = sqlx::query_scalar(
+        "SELECT user_id FROM meeting_participants WHERE meeting_id = $1 AND user_id IS NOT NULL",
+    )
+    .bind(meeting_id)
+    .fetch_all(pool.get_ref())
+    .await
+    .unwrap_or_default();
+    for invitee_id in invited_user_ids {
+        crate::audit::record_action_system(
+            pool.get_ref(),
+            crate::audit::AuditEvent {
+                actor_user_id: invitee_id,
+                action: "meeting_invited",
+                resource_type: "meeting",
+                resource_id: Some(meeting_id.to_string()),
+                metadata: Some(serde_json::json!({
+                    "title": title.clone(),
+                    "date": date,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "organizer_id": user_id,
+                    "status": "pending",
+                })),
+            },
+        )
+        .await;
+    }
+
     // ================= BACKGROUND EMAIL =================
     let pool_clone = pool.clone();
 
@@ -474,6 +523,26 @@ pub async fn update_meeting(
     tx.commit().await?;
     info!("Meeting updated: id={} user_id={}", id, user_id);
 
+    // ================= AUDIT =================
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "meeting_updated",
+            resource_type: "meeting",
+            resource_id: Some(id.to_string()),
+            metadata: Some(serde_json::json!({
+                "title": data.title.clone(),
+                "date": date,
+                "start_time": start_time,
+                "end_time": end_time,
+                "participants": participants.clone(),
+            })),
+        },
+    )
+    .await;
+
     // ================= NOTIFY ON CONTENT CHANGES =================
     // Email participants only when title/date/start/end actually changed —
     // a participant-list-only edit should not spam everyone.
@@ -611,6 +680,27 @@ pub async fn delete_meeting(
 
     if done.rows_affected() == 0 {
         return Ok(HttpResponse::NotFound().finish());
+    }
+
+    // ================= AUDIT =================
+    if let Some((title, date, start_time, end_time, _zoom)) = snapshot.clone() {
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "meeting_canceled",
+                resource_type: "meeting",
+                resource_id: Some(id.to_string()),
+                metadata: Some(serde_json::json!({
+                    "title": title,
+                    "date": date,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                })),
+            },
+        )
+        .await;
     }
 
     if let Some((title, date, start_time, end_time, zoom_join_url)) = snapshot

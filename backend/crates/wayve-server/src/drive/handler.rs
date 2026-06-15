@@ -207,6 +207,27 @@ pub async fn upload_file(
             "File uploaded: name=\"{}\" size={} user_id={}",
             filename, size, user_id
         );
+
+        // Drive audit trail (Security → drive activity). folder context lets the
+        // view show "files added in <folder>".
+        let folder = audit_folder_name(pool.get_ref(), folder_id).await;
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "file_upload",
+                resource_type: "drive_file",
+                resource_id: None,
+                metadata: Some(serde_json::json!({
+                    "name": filename.clone(),
+                    "size": size,
+                    "folder_id": folder_id,
+                    "folder": folder,
+                })),
+            },
+        )
+        .await;
         current_storage = current_storage.saturating_add(size);
         let _ =
             usage_metering::record_event(pool.get_ref(), owner, "drive_storage_bytes", size).await;
@@ -285,18 +306,32 @@ pub async fn download_file(
     // Ownership check: the row is only returned when it belongs to the caller,
     // so a 404 leaks nothing about other users' files.
     let row = sqlx::query(
-        "SELECT name, file_path, file_iv FROM drive_files WHERE id = $1 AND user_id = $2",
+        "SELECT name, file_path, file_iv, size, folder_id \
+           FROM drive_files WHERE id = $1 AND user_id = $2",
     )
     .bind(file_id)
     .bind(user_id)
     .fetch_optional(pool.get_ref())
     .await?;
 
-    let (file_name, file_path, file_iv): (String, String, Option<String>) = match row {
-        Some(row) => (row.get("name"), row.get("file_path"), row.get("file_iv")),
+    let (file_name, file_path, file_iv, size, folder_id): (
+        String,
+        String,
+        Option<String>,
+        i64,
+        Option<i64>,
+    ) = match row {
+        Some(row) => (
+            row.get("name"),
+            row.get("file_path"),
+            row.get("file_iv"),
+            row.get("size"),
+            row.get("folder_id"),
+        ),
         None => return Ok(HttpResponse::NotFound().finish()),
     };
 
+    let folder = audit_folder_name(pool.get_ref(), folder_id).await;
     crate::audit::record_action(
         pool.get_ref(),
         &req,
@@ -305,7 +340,12 @@ pub async fn download_file(
             action: "file_download",
             resource_type: "drive_file",
             resource_id: Some(file_id.to_string()),
-            metadata: Some(serde_json::json!({ "name": file_name.clone() })),
+            metadata: Some(serde_json::json!({
+                "name": file_name.clone(),
+                "size": size,
+                "folder_id": folder_id,
+                "folder": folder,
+            })),
         },
     )
     .await;
@@ -349,6 +389,15 @@ pub async fn rename_file(
     // stays consistent with what `get_files` recomputes on read.
     let file_type = name.rsplit('.').next().unwrap_or("").to_string();
 
+    // Capture the prior name + folder for the audit trail before the rename.
+    let prior: Option<(String, Option<i64>)> = sqlx::query_as(
+        "SELECT name, folder_id FROM drive_files WHERE id = $1 AND user_id = $2",
+    )
+    .bind(file_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
     // UPDATE ... RETURNING folds the ownership check and "did it exist?" check
     // into one round-trip; a 404 (not 403) avoids leaking other users' rows.
     let updated: Option<i64> = sqlx::query_scalar(
@@ -365,6 +414,26 @@ pub async fn rename_file(
     if updated.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({ "error": "File not found" })));
     }
+
+    let (old_name, folder_id) = prior.unwrap_or_default();
+    let folder = audit_folder_name(pool.get_ref(), folder_id).await;
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "file_rename",
+            resource_type: "drive_file",
+            resource_id: Some(file_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "name": name,
+                "old_name": old_name,
+                "folder_id": folder_id,
+                "folder": folder,
+            })),
+        },
+    )
+    .await;
 
     debug!(target: "http", user_id, file_id, "file renamed");
     Ok(HttpResponse::Ok().json(serde_json::json!({ "id": file_id, "name": name })))
@@ -387,15 +456,21 @@ pub async fn delete_file(
     // "did it exist?" check into one round-trip, and hands back the path/size
     // we need to remove the blob and decrement storage usage.
     let row = sqlx::query(
-        "DELETE FROM drive_files WHERE id = $1 AND user_id = $2 RETURNING file_path, size, name",
+        "DELETE FROM drive_files WHERE id = $1 AND user_id = $2 \
+         RETURNING file_path, size, name, folder_id",
     )
     .bind(file_id)
     .bind(user_id)
     .fetch_optional(pool.get_ref())
     .await?;
 
-    let (file_path, size, file_name): (String, i64, String) = match row {
-        Some(row) => (row.get("file_path"), row.get("size"), row.get("name")),
+    let (file_path, size, file_name, folder_id): (String, i64, String, Option<i64>) = match row {
+        Some(row) => (
+            row.get("file_path"),
+            row.get("size"),
+            row.get("name"),
+            row.get("folder_id"),
+        ),
         None => {
             return Ok(
                 HttpResponse::NotFound().json(serde_json::json!({ "error": "File not found" }))
@@ -424,13 +499,29 @@ pub async fn delete_file(
             action: "file_delete",
             resource_type: "drive_file",
             resource_id: Some(file_id.to_string()),
-            metadata: Some(serde_json::json!({ "name": file_name })),
+            metadata: Some(serde_json::json!({
+                "name": file_name,
+                "size": size,
+                "folder_id": folder_id,
+                "folder": audit_folder_name(pool.get_ref(), folder_id).await,
+            })),
         },
     )
     .await;
 
     debug!(target: "http", user_id, file_id, "file deleted");
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
+}
+
+/// Best-effort folder-name lookup for audit metadata (None for root / missing).
+async fn audit_folder_name(pool: &PgPool, folder_id: Option<i64>) -> Option<String> {
+    let id = folder_id?;
+    sqlx::query_scalar::<_, String>("SELECT name FROM folders WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
 }
 
 async fn serve_file_row(user_id: i32, file_id: i64, row: sqlx::postgres::PgRow) -> AppResult {

@@ -251,8 +251,9 @@ async fn finalize_oauth_session(
     req: &HttpRequest,
     ctx: OAuthCompletion<'_>,
 ) -> HttpResponse {
-    let (user_id, account_type): (i32, String) = match ctx.session_user_id {
-        Some(id) => (id, "personal".to_string()),
+    let (user_id, account_type, was_new_user): (i32, String, bool) = match ctx.session_user_id {
+        // Already-logged-in user adding a mailbox — never a fresh registration.
+        Some(id) => (id, "personal".to_string(), false),
         None => match resolve_user_for_oauth(pool, ctx.email, ctx.provider, ctx.frontend).await {
             Ok(result) => result,
             Err(response) => return response,
@@ -332,7 +333,10 @@ async fn finalize_oauth_session(
                 action: "login",
                 resource_type: "session",
                 resource_id: None,
-                metadata: Some(serde_json::json!({ "method": "microsoft" })),
+                metadata: Some(serde_json::json!({
+                    "method": "microsoft",
+                    "new_user": was_new_user,
+                })),
             },
         )
         .await;
@@ -352,14 +356,14 @@ async fn resolve_user_for_oauth(
     email: &str,
     provider: &str,
     frontend: &str,
-) -> std::result::Result<(i32, String), HttpResponse> {
+) -> std::result::Result<(i32, String, bool), HttpResponse> {
     let existing =
         sqlx::query("SELECT id, auth_provider, account_type FROM users WHERE email = $1")
             .bind(email)
             .fetch_optional(pool)
             .await;
 
-    let (user_id, account_type): (i32, String) = match existing {
+    let (user_id, account_type, was_new_user): (i32, String, bool) = match existing {
         Ok(Some(row)) => {
             let provider: String = row.get("auth_provider");
             if provider != "microsoft" && provider != "google" {
@@ -373,7 +377,7 @@ async fn resolve_user_for_oauth(
             }
             let existing_id: i32 = row.get("id");
             info!(target: "auth", user_id = existing_id, email, registered_as = %provider, "sign-in via Outlook/Microsoft OAuth (existing user)");
-            (existing_id, row.get("account_type"))
+            (existing_id, row.get("account_type"), false)
         }
         Ok(None) => {
             match sqlx::query(
@@ -389,7 +393,7 @@ async fn resolve_user_for_oauth(
                 Ok(row) => {
                     let new_id: i32 = row.get("id");
                     info!(target: "auth", user_id = new_id, email, provider, "user registered via Outlook/Microsoft OAuth");
-                    (new_id, row.get("account_type"))
+                    (new_id, row.get("account_type"), true)
                 }
                 Err(e) => {
                     error!(target: "auth", error = %e, provider, "OAuth signup user insert failed");
@@ -404,7 +408,7 @@ async fn resolve_user_for_oauth(
             return Err(HttpResponse::InternalServerError().body("Database error"));
         }
     };
-    Ok((user_id, account_type))
+    Ok((user_id, account_type, was_new_user))
 }
 
 /// Normalizes a Microsoft guest UPN (e.g. `user_gmail.com#ext#@tenant...`)

@@ -105,6 +105,23 @@ pub async fn create_folder(
         created_at: row.get("created_at"),
     };
 
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "folder_create",
+            resource_type: "folder",
+            resource_id: Some(folder.id.to_string()),
+            metadata: Some(serde_json::json!({
+                "name": folder.name.clone(),
+                "folder_id": folder.id,
+                "parent_folder_id": folder.parent_folder_id,
+            })),
+        },
+    )
+    .await;
+
     debug!(target: "http", user_id, folder_id = folder.id, "folder created");
     Ok(HttpResponse::Ok().json(folder))
 }
@@ -159,6 +176,14 @@ pub async fn rename_folder(
             .json(serde_json::json!({ "error": "Folder name is too long (max 255 chars)" })));
     }
 
+    // Capture the prior name for the audit trail before renaming.
+    let old_name: Option<String> =
+        sqlx::query_scalar("SELECT name FROM folders WHERE id = $1 AND user_id = $2")
+            .bind(folder_id)
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
+
     // UPDATE ... RETURNING folds the ownership check and "did it exist?" check
     // into one round-trip; a 404 (not 403) avoids leaking other users' rows.
     let updated: Option<i64> = sqlx::query_scalar(
@@ -175,6 +200,23 @@ pub async fn rename_folder(
             HttpResponse::NotFound().json(serde_json::json!({ "error": "Folder not found" }))
         );
     }
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "folder_rename",
+            resource_type: "folder",
+            resource_id: Some(folder_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "name": name,
+                "old_name": old_name,
+                "folder_id": folder_id,
+            })),
+        },
+    )
+    .await;
 
     debug!(target: "http", user_id, folder_id, "folder renamed");
     Ok(HttpResponse::Ok().json(serde_json::json!({ "id": folder_id, "name": name })))
@@ -194,18 +236,35 @@ pub async fn delete_folder(
     // anything happen?" check into one round-trip. The FK ON DELETE CASCADE
     // on both `folders.parent_folder_id` and `files.folder_id` removes any
     // descendants in the same transaction.
-    let removed: Option<i64> =
-        sqlx::query_scalar("DELETE FROM folders WHERE id = $1 AND user_id = $2 RETURNING id")
-            .bind(folder_id)
-            .bind(user_id)
-            .fetch_optional(pool.get_ref())
-            .await?;
+    let removed: Option<String> = sqlx::query_scalar(
+        "DELETE FROM folders WHERE id = $1 AND user_id = $2 RETURNING name",
+    )
+    .bind(folder_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
 
-    if removed.is_none() {
+    let Some(folder_name) = removed else {
         return Ok(
             HttpResponse::NotFound().json(serde_json::json!({ "error": "Folder not found" }))
         );
-    }
+    };
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "folder_delete",
+            resource_type: "folder",
+            resource_id: Some(folder_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "name": folder_name,
+                "folder_id": folder_id,
+            })),
+        },
+    )
+    .await;
 
     debug!(target: "http", user_id, folder_id, "folder deleted");
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))

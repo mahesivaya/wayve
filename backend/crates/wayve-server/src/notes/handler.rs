@@ -59,6 +59,23 @@ pub async fn create_note(
     .fetch_one(pool.get_ref())
     .await?;
 
+    let note_id: i32 = row.get("id");
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "note_created",
+            resource_type: "note",
+            resource_id: Some(note_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "name": title,
+                "size": content.len() as i64,
+            })),
+        },
+    )
+    .await;
+
     Ok(HttpResponse::Ok().json(note_from_row(row)))
 }
 
@@ -78,6 +95,14 @@ pub async fn update_note(
     let title = data.title.as_deref().unwrap_or("Untitled");
     let content = data.content.as_deref().unwrap_or("");
 
+    // Capture the prior title so we can tell a rename from a content edit.
+    let old_title: Option<String> =
+        sqlx::query_scalar("SELECT title FROM notes WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
+
     let row = sqlx::query(
         "UPDATE notes
          SET title = $1, content = $2, updated_at = NOW()
@@ -92,6 +117,24 @@ pub async fn update_note(
     .await?
     .ok_or(AppError::NotFound("note"))?;
 
+    let renamed = old_title.as_deref() != Some(title);
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: if renamed { "note_renamed" } else { "note_updated" },
+            resource_type: "note",
+            resource_id: Some(id.to_string()),
+            metadata: Some(serde_json::json!({
+                "name": title,
+                "old_name": old_title,
+                "size": content.len() as i64,
+            })),
+        },
+    )
+    .await;
+
     Ok(HttpResponse::Ok().json(note_from_row(row)))
 }
 
@@ -105,15 +148,32 @@ pub async fn delete_note(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let id = path.into_inner();
 
-    let result = sqlx::query("DELETE FROM notes WHERE id = $1 AND user_id = $2")
-        .bind(id)
-        .bind(user_id)
-        .execute(pool.get_ref())
-        .await?;
+    let removed = sqlx::query(
+        "DELETE FROM notes WHERE id = $1 AND user_id = $2 RETURNING title, content",
+    )
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
 
-    if result.rows_affected() == 0 {
+    let Some(row) = removed else {
         return Err(AppError::NotFound("note"));
-    }
+    };
+    let title: Option<String> = row.try_get("title").ok();
+    let content: Option<String> = row.try_get("content").ok();
+    let size = content.as_deref().map(|c| c.len() as i64).unwrap_or(0);
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "note_deleted",
+            resource_type: "note",
+            resource_id: Some(id.to_string()),
+            metadata: Some(serde_json::json!({ "name": title, "size": size })),
+        },
+    )
+    .await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }

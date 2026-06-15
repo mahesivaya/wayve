@@ -166,7 +166,8 @@ pub async fn delete_email(
     // source/recipient clause, mirroring repo::get_detail.
     let row = match sqlx::query(
         r#"
-        SELECT e.gmail_id, e.source, e.account_id, a.refresh_token, a.provider
+        SELECT e.gmail_id, e.source, e.account_id, a.refresh_token, a.provider,
+               e.subject, e.sender, e.receiver
         FROM emails e
         LEFT JOIN email_accounts a ON e.account_id = a.id
         WHERE e.id = $1
@@ -187,6 +188,20 @@ pub async fn delete_email(
         }
     };
 
+    // Enterprise audit metadata, captured before the row is gone. Recorded at
+    // each success path below (Security → emails-activity view).
+    let del_subject: Option<String> = row.try_get("subject").ok().flatten();
+    let del_sender: Option<String> = row.try_get("sender").ok().flatten();
+    let del_receiver: Option<String> = row.try_get("receiver").ok().flatten();
+    let del_provider: Option<String> = row.try_get("provider").ok().flatten();
+    let delete_metadata = serde_json::json!({
+        "direction": "deleted",
+        "from": del_sender,
+        "to": del_receiver,
+        "subject": del_subject,
+        "provider": del_provider,
+    });
+
     // Fluxze-native messages have no provider copy to delete remotely — the
     // synthetic gmail_id isn't a real Gmail/Graph id. Just drop this user's
     // local row (each recipient + the sender's Sent copy is its own row).
@@ -197,6 +212,18 @@ pub async fn delete_email(
             .bind(email_id)
             .execute(pool.get_ref())
             .await?;
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "email_deleted",
+                resource_type: "email",
+                resource_id: Some(email_id.to_string()),
+                metadata: Some(delete_metadata),
+            },
+        )
+        .await;
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })));
     }
 
@@ -276,6 +303,19 @@ pub async fn delete_email(
         .bind(email_id)
         .execute(pool.get_ref())
         .await?;
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "email_deleted",
+            resource_type: "email",
+            resource_id: Some(email_id.to_string()),
+            metadata: Some(delete_metadata),
+        },
+    )
+    .await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }
@@ -385,7 +425,8 @@ pub async fn mark_email_read(
            AND e.id = $1
            AND a.user_id = $2
            AND e.is_read = FALSE
-        RETURNING e.gmail_id, a.id AS account_id, a.refresh_token, a.provider
+        RETURNING e.gmail_id, a.id AS account_id, a.refresh_token, a.provider,
+                  e.subject, e.sender, e.receiver
         "#,
     )
     .bind(email_id)
@@ -396,6 +437,42 @@ pub async fn mark_email_read(
     if let Some(row) = updated {
         let provider_message_id: String = row.get("gmail_id");
         let account_id: i32 = row.get("account_id");
+
+        // Enterprise audit trail: record the first open of this message. We
+        // join email_attachments so the Security → emails-activity view can show
+        // any files that rode along (received attachments aren't known until the
+        // body worker fetches them, but by read time they're populated).
+        let subject: Option<String> = row.try_get("subject").ok();
+        let sender: Option<String> = row.try_get("sender").ok();
+        let receiver: Option<String> = row.try_get("receiver").ok();
+        let read_provider: Option<String> = row.try_get("provider").ok();
+        let attachment_names: Vec<String> = sqlx::query_scalar(
+            "SELECT filename FROM email_attachments WHERE email_id = $1 ORDER BY id",
+        )
+        .bind(email_id)
+        .fetch_all(pool.get_ref())
+        .await
+        .unwrap_or_default();
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "email_read",
+                resource_type: "email",
+                resource_id: Some(email_id.to_string()),
+                metadata: Some(serde_json::json!({
+                    "direction": "read",
+                    "from": sender,
+                    "to": receiver,
+                    "subject": subject,
+                    "provider": read_provider,
+                    "attachments": attachment_names,
+                    "attachment_count": attachment_names.len(),
+                })),
+            },
+        )
+        .await;
 
         // Decrement the cached provider unread count optimistically so the
         // sidebar badge matches the user's local action without waiting for

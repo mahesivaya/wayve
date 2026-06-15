@@ -945,7 +945,7 @@ where
     // Webhook fan-out. Resolve the owner once per batch (the account's
     // user_id never changes during a sync tick).
     let owner_row = sqlx::query(
-        "SELECT user_id, email, (SELECT organization_id FROM users WHERE id = ea.user_id) AS organization_id
+        "SELECT user_id, email, provider, (SELECT organization_id FROM users WHERE id = ea.user_id) AS organization_id
            FROM email_accounts ea WHERE id = $1",
     )
     .bind(account_id)
@@ -956,6 +956,7 @@ where
         use crate::webhooks::{Event, emit};
         let user_id: i32 = row.try_get("user_id").unwrap_or(0);
         let account_email: Option<String> = row.try_get("email").ok();
+        let account_provider: Option<String> = row.try_get("provider").ok();
         let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
         let owner = match organization_id {
             Some(org) => EventOwner::user_in_org(user_id, org),
@@ -999,6 +1000,7 @@ where
                         "from": r.sender,
                         "to": account_email,
                         "subject": r.subject,
+                        "provider": account_provider,
                         "account_id": account_id,
                         "message_id": r.gmail_id,
                         "received_at": r.created_at,

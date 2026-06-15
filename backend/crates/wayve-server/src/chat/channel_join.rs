@@ -21,6 +21,7 @@ pub async fn join_channel(
         r#"
         SELECT
             visibility,
+            name,
             EXISTS(
                 SELECT 1 FROM channel_members
                 WHERE channel_id = channels.id AND user_id = $2
@@ -51,6 +52,22 @@ pub async fn join_channel(
         .bind(user_id)
         .execute(pool.get_ref())
         .await?;
+        let channel_name: String = row.get("name");
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "channel_joined",
+                resource_type: "channel",
+                resource_id: Some(channel_id.to_string()),
+                metadata: Some(serde_json::json!({
+                    "channel_id": channel_id,
+                    "channel": channel_name,
+                })),
+            },
+        )
+        .await;
         Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "joined" })))
     } else {
         sqlx::query(
@@ -107,6 +124,31 @@ pub async fn approve_channel_join_request(
         .await?;
 
     tx.commit().await?;
+
+    // Audit the approved user's join. record_action_system (no HttpRequest IP)
+    // because the request actor is the approving admin, not the joining user.
+    let channel_name: Option<String> =
+        sqlx::query_scalar("SELECT name FROM channels WHERE id = $1")
+            .bind(channel_id)
+            .fetch_optional(pool.get_ref())
+            .await
+            .ok()
+            .flatten();
+    crate::audit::record_action_system(
+        pool.get_ref(),
+        crate::audit::AuditEvent {
+            actor_user_id: input.user_id,
+            action: "channel_joined",
+            resource_type: "channel",
+            resource_id: Some(channel_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "channel_id": channel_id,
+                "channel": channel_name,
+                "approved_by": admin_id,
+            })),
+        },
+    )
+    .await;
 
     Ok(HttpResponse::Ok().finish())
 }

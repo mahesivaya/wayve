@@ -145,6 +145,7 @@ pub async fn send(
                     "from": account.email,
                     "to": data.to,
                     "subject": data.subject,
+                    "provider": account.provider.as_db(),
                     "account_id": account.id,
                     "sent_at": chrono::Utc::now(),
                 })),

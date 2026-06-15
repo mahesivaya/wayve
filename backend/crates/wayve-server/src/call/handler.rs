@@ -42,6 +42,128 @@ fn drop_caller_scope(user_id: i32) {
     guard.remove(&user_id);
 }
 
+// ── Call lifecycle tracking for the audit trail ───────────────────────────
+// The relay is otherwise stateless; we keep just enough per-call state to emit
+// one audit row when a call resolves: connected → completed (with talk-time
+// duration), declined → "failed", canceled/ring-timeout → "not answered".
+#[derive(Clone)]
+struct CallInfo {
+    caller: i32,
+    callee: i32,
+    media: String,
+    connected: bool,
+    started_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+// Keyed by the unordered (min,max) user pair so either party's signal resolves
+// the same in-flight call.
+static ACTIVE_CALLS: Lazy<Mutex<HashMap<(i32, i32), CallInfo>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn call_key(a: i32, b: i32) -> (i32, i32) {
+    (a.min(b), a.max(b))
+}
+
+// Spawn the audit write off the actor thread. `outcome` is one of
+// "completed" | "rejected" | "missed".
+fn record_call_audit(pool: PgPool, info: CallInfo, outcome: &'static str) {
+    let duration = info
+        .started_at
+        .map(|started| (chrono::Utc::now() - started).num_seconds().max(0));
+    actix::spawn(async move {
+        let peer_email: Option<String> =
+            sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+                .bind(info.callee)
+                .fetch_optional(&pool)
+                .await
+                .ok()
+                .flatten();
+        let mut metadata = serde_json::json!({
+            "media": info.media,
+            "outcome": outcome,
+            "peer_id": info.callee,
+            "peer_email": peer_email,
+        });
+        if let Some(seconds) = duration {
+            metadata["duration_seconds"] = serde_json::json!(seconds);
+        }
+        crate::audit::record_action_system(
+            &pool,
+            crate::audit::AuditEvent {
+                actor_user_id: info.caller,
+                action: "call",
+                resource_type: "call",
+                resource_id: None,
+                metadata: Some(metadata),
+            },
+        )
+        .await;
+    });
+}
+
+// Advance call state on each signaling message and emit audit on resolution.
+fn track_call_lifecycle(pool: &PgPool, me: i32, signal_type: &str, peer: i32, media: Option<&str>) {
+    let key = call_key(me, peer);
+    let resolved = {
+        let mut guard = ACTIVE_CALLS.lock().unwrap_or_else(|e| e.into_inner());
+        match signal_type {
+            "call-invite" => {
+                // `me` is the caller; `peer` the callee. media rides the invite.
+                guard.insert(
+                    key,
+                    CallInfo {
+                        caller: me,
+                        callee: peer,
+                        media: media.unwrap_or("audio").to_string(),
+                        connected: false,
+                        started_at: None,
+                    },
+                );
+                None
+            }
+            "call-accept" => {
+                if let Some(info) = guard.get_mut(&key) {
+                    info.connected = true;
+                    info.started_at = Some(chrono::Utc::now());
+                }
+                None
+            }
+            // Callee declined → failed.
+            "call-reject" => guard.remove(&key).map(|info| (info, "rejected")),
+            // Caller canceled or either side ended. Connected ⇒ completed (with
+            // duration); never connected ⇒ not answered.
+            "call-cancel" | "call-end" => guard.remove(&key).map(|info| {
+                let outcome = if info.connected { "completed" } else { "missed" };
+                (info, outcome)
+            }),
+            _ => None,
+        }
+    };
+    if let Some((info, outcome)) = resolved {
+        record_call_audit(pool.clone(), info, outcome);
+    }
+}
+
+// Finalize any in-flight call this user was part of when their socket drops
+// without an explicit end signal.
+fn finalize_calls_for(pool: &PgPool, user_id: i32) {
+    let orphaned = {
+        let mut guard = ACTIVE_CALLS.lock().unwrap_or_else(|e| e.into_inner());
+        let keys: Vec<(i32, i32)> = guard
+            .iter()
+            .filter(|(_, info)| info.caller == user_id || info.callee == user_id)
+            .map(|(key, _)| *key)
+            .collect();
+        keys.into_iter()
+            .filter_map(|key| guard.remove(&key))
+            .collect::<Vec<_>>()
+    };
+    for info in orphaned {
+        let outcome = if info.connected { "completed" } else { "missed" };
+        record_call_audit(pool.clone(), info, outcome);
+    }
+}
+
 // Same-scope = OK. Organization additionally requires the same org_id so
 // users in different organizations can never call each other.
 fn can_call_between(from: CallerScope, to: CallerScope) -> bool {
@@ -60,6 +182,7 @@ pub struct CallSession {
     pub user_id: i32,
     pub scope: rbac::Scope,
     pub organization_id: Option<i32>,
+    pub pool: PgPool,
 }
 
 impl Actor for CallSession {
@@ -86,6 +209,7 @@ impl Actor for CallSession {
         info!(target: "ws", user_id = self.user_id, "Call WS disconnected");
         SESSIONS.unregister(self.user_id);
         drop_caller_scope(self.user_id);
+        finalize_calls_for(&self.pool, self.user_id);
     }
 }
 
@@ -108,6 +232,16 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for CallSession {
 
                 if let Ok(signal) = serde_json::from_str::<SignalMessage>(&text) {
                     let target = signal.to;
+
+                    // Audit the call lifecycle before the scope gate so declines
+                    // and cancels are recorded even when forwarding is refused.
+                    track_call_lifecycle(
+                        &self.pool,
+                        self.user_id,
+                        &signal.r#type,
+                        target,
+                        signal.media.as_deref(),
+                    );
 
                     // Scope gate: even if a malicious client crafts a signal
                     // for a user_id it shouldn't see in the directory, drop
@@ -211,6 +345,7 @@ pub async fn call_ws(
             user_id,
             scope: ctx.scope,
             organization_id: ctx.organization_id,
+            pool: pool.get_ref().clone(),
         },
         &req,
         stream,

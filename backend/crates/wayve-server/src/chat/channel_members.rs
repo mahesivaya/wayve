@@ -157,6 +157,32 @@ pub async fn remove_channel_user(
             .bind(target_user_id)
             .execute(pool.get_ref())
             .await?;
+
+        // Audit the exit. actor = the user who left/was removed; metadata notes
+        // who performed the removal (self-leave when they match).
+        let channel_name: Option<String> =
+            sqlx::query_scalar("SELECT name FROM channels WHERE id = $1")
+                .bind(channel_id)
+                .fetch_optional(pool.get_ref())
+                .await
+                .ok()
+                .flatten();
+        crate::audit::record_action_system(
+            pool.get_ref(),
+            crate::audit::AuditEvent {
+                actor_user_id: target_user_id,
+                action: "channel_left",
+                resource_type: "channel",
+                resource_id: Some(channel_id.to_string()),
+                metadata: Some(serde_json::json!({
+                    "channel_id": channel_id,
+                    "channel": channel_name,
+                    "removed_by": user_id,
+                    "self_left": target_user_id == user_id,
+                })),
+            },
+        )
+        .await;
     } else {
         sqlx::query("DELETE FROM channel_invites WHERE channel_id = $1 AND LOWER(email) = $2")
             .bind(channel_id)
