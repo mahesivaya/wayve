@@ -5,6 +5,7 @@ use actix_web::{delete, put};
 use sqlx::Row;
 use tracing::instrument;
 use wayve_security::jwt::get_user_id_from_request;
+use wayve_security::rbac::{Scope, resolve_role_context};
 
 fn task_from_row(row: sqlx::postgres::PgRow) -> Task {
     Task {
@@ -50,6 +51,57 @@ pub async fn list_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
     .await?;
 
     Ok(HttpResponse::Ok().json(rows.into_iter().map(task_from_row).collect::<Vec<_>>()))
+}
+
+/// Users the caller can assign tasks to: everyone in their organization (org
+/// scope) or every platform staff member (platform scope). Unlike the RBAC
+/// `/members` endpoints this is open to *any* member of the scope — assigning a
+/// task is a baseline capability, so it must not require `members:read` (which
+/// regular members/guests/developers lack). Personal accounts have no team and
+/// get an empty list. Returns `[{ user_id, email, username }]`, email-sorted.
+#[get("/tasks/assignable-users")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn assignable_users(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let ctx = resolve_role_context(pool.get_ref(), user_id).await?;
+
+    let rows = match ctx.scope {
+        Scope::Organization => {
+            let Some(org_id) = ctx.organization_id else {
+                return Ok(HttpResponse::Ok().json(Vec::<serde_json::Value>::new()));
+            };
+            sqlx::query(
+                "SELECT id AS user_id, email, username
+                 FROM users WHERE organization_id = $1 ORDER BY email",
+            )
+            .bind(org_id)
+            .fetch_all(pool.get_ref())
+            .await?
+        }
+        Scope::Platform => {
+            sqlx::query(
+                "SELECT u.id AS user_id, u.email, u.username
+                 FROM platform_members pm
+                 JOIN users u ON u.id = pm.user_id
+                 ORDER BY u.email",
+            )
+            .fetch_all(pool.get_ref())
+            .await?
+        }
+        Scope::Personal => Vec::new(),
+    };
+
+    let people = rows
+        .iter()
+        .map(|row| {
+            let user_id: i32 = row.get("user_id");
+            let email: String = row.get("email");
+            let username: Option<String> = row.try_get("username").ok().flatten();
+            serde_json::json!({ "user_id": user_id, "email": email, "username": username })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(HttpResponse::Ok().json(people))
 }
 
 #[post("/tasks")]

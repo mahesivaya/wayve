@@ -384,6 +384,82 @@
   cursor: pointer;
 }
 
+/* ── Assignee / Assigned-by user autocomplete ── */
+.task-assignee {
+  position: relative;
+}
+
+.task-assignee > input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-md);
+}
+
+.task-assignee > input:focus {
+  outline: 2px solid var(--color-primary-panel-border);
+  border-color: var(--color-primary-action);
+}
+
+.task-assignee-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px rgb(15, 23, 42, 0.16);
+}
+
+.task-assignee-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.task-assignee-option.active {
+  background: var(--color-primary-soft);
+}
+
+.task-assignee-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.task-assignee-email {
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-assignee-username {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .task-form-select {
   width: 100%;
   box-sizing: border-box;

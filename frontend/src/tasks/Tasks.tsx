@@ -11,10 +11,12 @@ import {
   deleteTaskApi,
   deleteTaskAttachment,
   downloadTaskAttachment,
+  getAssignableUsers,
   getTasks,
   listTaskAttachments,
   updateTaskApi,
   uploadTaskAttachments,
+  type AssignableUser,
   type Task,
   type TaskAttachment,
   type TaskPriority,
@@ -23,7 +25,9 @@ import {
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 import Modal from "../components/Modal";
+import Avatar from "../components/Avatar";
 import { useInSplitPane } from "../components/SplitPaneContext";
+import { getApiBase } from "../config/env";
 import "./tasks.css";
 
 const PRIORITY_OPTIONS: TaskPriority[] = [5, 4, 3, 2, 1];
@@ -66,6 +70,129 @@ const STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
   { value: "done", label: "Done" },
 ];
 
+// A free-text input backed by a live-filtered dropdown of organization /
+// platform users. Typing narrows the list by email OR username; picking a row
+// fills the email. Still accepts a hand-typed value (e.g. an external email or
+// a member the list hasn't loaded), so it degrades to a plain input when the
+// user list is empty or failed to load.
+function UserAutocomplete({
+  id,
+  value,
+  onChange,
+  users,
+  placeholder,
+}: {
+  id?: string;
+  value: string;
+  onChange: (next: string) => void;
+  users: AssignableUser[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  const query = value.trim().toLowerCase();
+  const matches = useMemo(() => {
+    const list = query
+      ? users.filter(
+          (u) =>
+            u.email.toLowerCase().includes(query) ||
+            (u.username ?? "").toLowerCase().includes(query)
+        )
+      : users;
+    return list.slice(0, 8);
+  }, [users, query]);
+
+  useEffect(() => {
+    const onDocPointer = (event: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocPointer);
+    return () => document.removeEventListener("mousedown", onDocPointer);
+  }, []);
+
+  const select = (u: AssignableUser) => {
+    onChange(u.email);
+    setOpen(false);
+    setActiveIdx(-1);
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      setOpen(true);
+      return;
+    }
+    if (matches.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIdx((i) => (i + 1) % matches.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIdx((i) => (i <= 0 ? matches.length - 1 : i - 1));
+    } else if (event.key === "Enter" && activeIdx >= 0) {
+      event.preventDefault();
+      select(matches[activeIdx]);
+    } else if (event.key === "Escape") {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="task-assignee" ref={wrapRef}>
+      <input
+        id={id}
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(true);
+          setActiveIdx(-1);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+      />
+      {open && matches.length > 0 && (
+        <ul className="task-assignee-menu" role="listbox">
+          {matches.map((u, i) => (
+            <li
+              key={u.user_id}
+              role="option"
+              aria-selected={i === activeIdx}
+              className={`task-assignee-option${i === activeIdx ? " active" : ""}`}
+              onMouseDown={(event) => {
+                // mousedown (not click) so we beat the input's blur/outside
+                // handler and the selection still registers.
+                event.preventDefault();
+                select(u);
+              }}
+              onMouseEnter={() => setActiveIdx(i)}
+            >
+              <Avatar
+                name={u.username || u.email}
+                src={`${getApiBase()}/api/users/${u.user_id}/avatar`}
+                size={28}
+              />
+              <span className="task-assignee-text">
+                <span className="task-assignee-email">{u.email}</span>
+                {u.username && (
+                  <span className="task-assignee-username">{u.username}</span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function Tasks() {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
@@ -78,6 +205,9 @@ export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  // Org/platform users available for the Assigned by / Assignee pickers.
+  // Personal accounts have no team, so we skip the fetch for them.
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const [creating, setCreating] = useState(false);
   const [view, setView] = useState<"list" | "grid">(() => {
     const saved = window.localStorage.getItem("wayve.tasks.view");
@@ -154,6 +284,23 @@ export default function Tasks() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadTasks]);
+
+  // Load the assignable-users list once for non-personal accounts. Failure is
+  // non-fatal — the assignee fields simply behave as plain text inputs.
+  useEffect(() => {
+    if (isPersonal) return;
+    let alive = true;
+    getAssignableUsers()
+      .then((list) => {
+        if (alive) setAssignableUsers(list);
+      })
+      .catch(() => {
+        // Non-fatal: leave the list empty so the pickers fall back to text.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isPersonal]);
 
   const resetForm = () => {
     setTaskName("");
@@ -552,21 +699,32 @@ export default function Tasks() {
                   Personal accounts are single-user, so it's hidden for them. */}
               {!isPersonal && (
                 <>
-                  <label className="task-form-field">
-                    <span className="task-form-label">Assigned by</span>
-                    <input
+                  <div className="task-form-field">
+                    <label
+                      className="task-form-label"
+                      htmlFor="task-assigned-by"
+                    >
+                      Assigned by
+                    </label>
+                    <UserAutocomplete
+                      id="task-assigned-by"
                       value={assignedBy}
-                      onChange={(event) => setAssignedBy(event.target.value)}
-                      placeholder="Who assigned this task"
+                      onChange={setAssignedBy}
+                      users={assignableUsers}
+                      placeholder="Search team by name or email"
                     />
-                  </label>
+                  </div>
 
-                  <label className="task-form-field">
-                    <span className="task-form-label">Assignee</span>
-                    <input
+                  <div className="task-form-field">
+                    <label className="task-form-label" htmlFor="task-assignee">
+                      Assignee
+                    </label>
+                    <UserAutocomplete
+                      id="task-assignee"
                       value={assignee}
-                      onChange={(event) => setAssignee(event.target.value)}
-                      placeholder="Who is this task assigned to"
+                      onChange={setAssignee}
+                      users={assignableUsers}
+                      placeholder="Search team by name or email"
                     />
                     {user?.email && (
                       <span className="task-form-assign-me">
@@ -583,7 +741,7 @@ export default function Tasks() {
                         Assign to me
                       </span>
                     )}
-                  </label>
+                  </div>
                 </>
               )}
 

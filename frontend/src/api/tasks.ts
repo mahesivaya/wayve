@@ -32,6 +32,19 @@ export type SaveTaskPayload = {
 
 export const getTasks = async () => apiFetchJson<Task[]>("/api/tasks");
 
+// A user the current account can assign tasks to (everyone in the caller's
+// organization, or every platform staff member). Open to any member of the
+// scope — assigning is a baseline capability, so this does NOT require the
+// `members:read` permission that the RBAC `/members` endpoints demand.
+export type AssignableUser = {
+  user_id: number;
+  email: string;
+  username: string | null;
+};
+
+export const getAssignableUsers = async () =>
+  apiFetchJson<AssignableUser[]>("/api/tasks/assignable-users");
+
 export const createTaskApi = async (payload: SaveTaskPayload) =>
   apiFetchJson<Task>("/api/tasks", {
     method: "POST",
