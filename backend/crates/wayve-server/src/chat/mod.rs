@@ -1,3 +1,4 @@
+mod attachments;
 mod channel_create;
 mod channel_join;
 mod channel_members;
@@ -34,7 +35,9 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     .service(handler::add_channel_users)
     .service(handler::remove_channel_user)
     .service(handler::get_channel_messages)
-    .service(handler::get_channel_thread);
+    .service(handler::get_channel_thread)
+    .service(attachments::upload_chat_attachment)
+    .service(attachments::download_chat_attachment);
 }
 
 pub fn ws_routes(cfg: &mut web::ServiceConfig) {

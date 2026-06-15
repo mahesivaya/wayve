@@ -46,6 +46,10 @@ export type UserType = {
   // the theme module owns the schema. NULL/undefined means no server-side
   // override, so the client uses its localStorage cache or the default.
   theme_json?: string | null;
+  // When true, chat file attachments this user sends are end-to-end encrypted
+  // (server can't read them); false = server-encrypted at rest only. Toggled in
+  // Settings by personal accounts and owners. Defaults true.
+  chat_encrypt_files?: boolean;
 };
 
 export type AuthType = {

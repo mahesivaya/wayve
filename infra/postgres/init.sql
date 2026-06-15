@@ -309,6 +309,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password_valid_until TIMESTAMPTZ;
 -- theme customizer (`{ kind: "preset"|"custom"|"default", ... }`). NULL means
 -- the user has never customized — the app falls back to the stylesheet default.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_json TEXT;
+-- When true, chat file attachments this user SENDS are end-to-end encrypted
+-- (server can't read the body); when false they're encrypted at rest with the
+-- server key only. Toggled in Settings by personal accounts and owners.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_encrypt_files BOOLEAN NOT NULL DEFAULT true;
 
 
 
@@ -558,6 +562,26 @@ CREATE TABLE IF NOT EXISTS messages (
     status message_status DEFAULT 'sent',
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- File attachments on direct messages. The blob is always encrypted at rest
+-- with the server key (file_iv + on-disk ciphertext). When `e2e` is true the
+-- stored bytes are ALSO a client-side ciphertext (decryptable only by the DM
+-- participants), so the server can't read the file; when false the at-rest
+-- layer is the only encryption. `message_id` is NULL between upload and send,
+-- then set to link the attachment to its message.
+CREATE TABLE IF NOT EXISTS chat_attachments (
+    id BIGSERIAL PRIMARY KEY,
+    message_id INT REFERENCES messages(id) ON DELETE CASCADE,
+    uploader_id INT REFERENCES users(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    mime_type TEXT,
+    size BIGINT NOT NULL DEFAULT 0,
+    file_path TEXT NOT NULL,
+    file_iv TEXT,
+    e2e BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_chat_attachments_message ON chat_attachments (message_id);
 
 CREATE TABLE IF NOT EXISTS channels (
     id SERIAL PRIMARY KEY,

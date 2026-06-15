@@ -1002,3 +1002,105 @@
 .chat-container.narrow .chat-content-row.thread-open .messages {
   display: none;
 }
+
+/* ===== Chat attachments ===== */
+/* Composer: paperclip + pending file chips */
+.chat-attach-btn {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 8px;
+  line-height: 1;
+}
+.chat-attach-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.chat-pending-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 4px 0;
+}
+.chat-pending-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--color-surface-hover, #eef2f7);
+  font-size: var(--text-sm);
+}
+.chat-pending-file-size {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+.chat-pending-file-remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--color-text-muted);
+}
+
+/* Bubble: rendered attachments */
+.message-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.message-attachment-image img {
+  max-width: 240px;
+  max-height: 240px;
+  border-radius: 10px;
+  display: block;
+}
+.message-attachment-image-placeholder {
+  width: 200px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.message-attachment-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 10px;
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.message-attachment-file:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.message-attachment-file-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.message-attachment-file-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+.message-attachment-file-size {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}

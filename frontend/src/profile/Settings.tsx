@@ -10,7 +10,11 @@ import {
   type SubscriptionResponse,
   type Invoice,
 } from "../api/billing";
-import { getProfile, type ProfileData } from "../api/profile";
+import {
+  getProfile,
+  putChatEncryptFiles,
+  type ProfileData,
+} from "../api/profile";
 import {
   deleteMyAccount,
   deleteMyOrganization,
@@ -80,6 +84,10 @@ export default function Settings() {
   const isOrgOwner =
     user?.scope === "organization" && user?.effective_role === "owner";
   const isPlatformUser = user?.scope === "platform";
+  // The "Encrypt files in chat" toggle is shown to personal accounts and to
+  // owners (org or platform).
+  const isOwner =
+    isOrgOwner || (isPlatformUser && user?.effective_role === "owner");
   const isOrgUser = user?.scope === "organization";
   const hideBilling = isPlatformUser || isOrgUser;
   // Self-service account deletion is for personal accounts only — business
@@ -99,6 +107,33 @@ export default function Settings() {
   const [orgError, setOrgError] = useState("");
   const orgDirty =
     orgName.trim().length > 0 && orgName.trim() !== currentOrgName;
+
+  // "Encrypt files in chat" toggle (personal accounts + owners).
+  const showChatEncrypt = isPersonal || isOwner;
+  const [chatEncrypt, setChatEncrypt] = useState(
+    user?.chat_encrypt_files ?? true
+  );
+  const [chatEncryptSaving, setChatEncryptSaving] = useState(false);
+  const [chatEncryptError, setChatEncryptError] = useState("");
+  useEffect(() => {
+    setChatEncrypt(user?.chat_encrypt_files ?? true);
+  }, [user?.chat_encrypt_files]);
+  const toggleChatEncrypt = async (next: boolean) => {
+    setChatEncryptError("");
+    setChatEncryptSaving(true);
+    setChatEncrypt(next); // optimistic
+    try {
+      await putChatEncryptFiles(next);
+      await refresh();
+    } catch (err) {
+      setChatEncrypt(!next);
+      setChatEncryptError(
+        err instanceof Error ? err.message : "Could not update setting"
+      );
+    } finally {
+      setChatEncryptSaving(false);
+    }
+  };
 
   const saveOrgName = async () => {
     setOrgError("");
@@ -237,6 +272,45 @@ export default function Settings() {
     <div className="settings-page">
       <div className="settings-stack">
         <h1 className="settings-page-title">Settings &amp; Privacy</h1>
+
+        {showChatEncrypt && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Privacy</h2>
+            <div className="settings-rows">
+              <label
+                className="settings-usage-row"
+                style={{ cursor: "pointer" }}
+              >
+                <span>Encrypt files in chat (end-to-end)</span>
+                <span
+                  className={`toggle-switch${chatEncrypt ? " on" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    className="toggle-switch-input"
+                    role="switch"
+                    aria-checked={chatEncrypt}
+                    checked={chatEncrypt}
+                    disabled={chatEncryptSaving}
+                    onChange={(e) => void toggleChatEncrypt(e.target.checked)}
+                  />
+                  <span className="toggle-switch-slider" aria-hidden="true" />
+                </span>
+              </label>
+            </div>
+            <p
+              className="settings-support-empty"
+              style={{ textAlign: "left" }}
+            >
+              When on, files you attach in chat are encrypted on your device so
+              the server can&apos;t read them. When off, attachments are stored
+              encrypted at rest but readable by the server.
+            </p>
+            {chatEncryptError && (
+              <p className="settings-danger-error">{chatEncryptError}</p>
+            )}
+          </section>
+        )}
 
         <section className="settings-card">
           <h2 className="settings-card-title">Storage &amp; Usage</h2>

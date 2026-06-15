@@ -278,6 +278,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                     let parent_message_id = data.parent_message_id;
                     let client_id = data.client_id.clone();
                     let content = data.content.clone();
+                    let attachment_ids = data.attachment_ids.clone();
 
                     // Threads are channel-only. A DM with parent_message_id set
                     // is malformed — drop it rather than silently storing the
@@ -519,6 +520,21 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         .await?;
 
                         let message_id: i32 = row.get("id");
+
+                        // Link any uploaded attachments to this message. Scoped
+                        // to rows this sender uploaded and not yet linked, so a
+                        // client can't attach someone else's file.
+                        if !attachment_ids.is_empty() {
+                            let _ = sqlx::query(
+                                "UPDATE chat_attachments SET message_id = $1 \
+                                 WHERE id = ANY($2) AND uploader_id = $3 AND message_id IS NULL",
+                            )
+                            .bind(message_id)
+                            .bind(&attachment_ids)
+                            .bind(sender_id)
+                            .execute(&pool)
+                            .await;
+                        }
 
                         // If the recipient is connected right now, the message
                         // is delivered the instant it's stored — persist that

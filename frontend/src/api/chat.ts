@@ -1,5 +1,62 @@
 import type { ChannelId, UserId } from "../types/brand";
 import { apiFetch, apiFetchJson } from "./client";
+import { getAuthToken } from "../auth/token";
+import { getApiBase } from "../config/env";
+
+// Upload one chat attachment. `body` is the ciphertext (e2e mode) or the raw
+// file (server mode); `e2e` tells the backend which it is. Returns the row id
+// to put in the message envelope + WS `attachment_ids`.
+export async function uploadChatAttachment(opts: {
+  body: Blob;
+  filename: string;
+  mime: string;
+  e2e: boolean;
+}): Promise<{
+  id: number;
+  filename: string;
+  mime_type: string | null;
+  size: number;
+  e2e: boolean;
+}> {
+  const form = new FormData();
+  form.append("e2e", String(opts.e2e));
+  form.append(
+    "file",
+    new File([opts.body], opts.filename, { type: opts.mime })
+  );
+  const token = getAuthToken();
+  const res = await fetch(`${getApiBase()}/api/chat/attachments`, {
+    method: "POST",
+    credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  if (!res.ok) {
+    let message = "Attachment upload failed";
+    try {
+      const data = await res.clone().json();
+      message = data?.message || data?.error || message;
+    } catch {
+      /* keep default */
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+// Download an attachment's bytes (still client-ciphertext when e2e, else the
+// plaintext file). Raw fetch so we get binary; never triggers session-expiry.
+export async function downloadChatAttachment(id: number): Promise<ArrayBuffer> {
+  const token = getAuthToken();
+  const res = await fetch(`${getApiBase()}/api/chat/attachments/${id}/download`, {
+    credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    throw new Error(`Attachment download failed (${res.status})`);
+  }
+  return res.arrayBuffer();
+}
 
 export type ChatUser = {
   id: number;
@@ -27,6 +84,24 @@ export type ChatMessage = {
   // in the broadcast so the sender's UI can match the server-assigned
   // `message_id` to its optimistic local copy without re-fetching.
   client_id?: string | null;
+  // Ids of uploaded chat_attachments to link to this message (DMs only). Sent
+  // with the WS frame; not present on history rows.
+  attachment_ids?: number[];
+  // Populated client-side after decryption: the attachment descriptors parsed
+  // from the envelope, the raw envelope (to lazily unwrap the AES key for e2e
+  // attachment download), and the local files for the optimistic bubble.
+  attachments?: ChatAttachmentMeta[];
+  _envelope?: string;
+  _localFiles?: File[];
+};
+
+// One attachment as rendered in a bubble (mirrors the envelope descriptor).
+export type ChatAttachmentMeta = {
+  id: number;
+  name: string;
+  mime: string | null;
+  size: number;
+  iv?: number[];
 };
 
 export type ChatChannel = {

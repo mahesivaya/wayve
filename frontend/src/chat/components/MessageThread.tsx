@@ -1,5 +1,6 @@
 import type { ChatChannel, ChatMessage } from "../../api/chat";
 import { formatTime, getStatusIcon } from "../utils";
+import MessageAttachments from "./MessageAttachments";
 
 type Props = {
   messages: ChatMessage[];
@@ -52,7 +53,8 @@ export default function MessageThread({
             className={`message ${mine ? "me" : ""}`}
           >
             <div className={`bubble ${mine ? "me" : "other"}`}>
-              <div>{msg.content}</div>
+              {msg.content && <div>{msg.content}</div>}
+              <MessageAttachments message={msg} currentUserId={currentUserId} />
               <div className="message-meta">
                 {formatTime(msg.created_at)}{" "}
                 {mine && msg.status && (

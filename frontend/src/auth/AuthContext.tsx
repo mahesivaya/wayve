@@ -456,6 +456,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           current_plan: data.current_plan ?? null,
           recovery_mode: normalizeRecoveryMode(data.recovery_mode),
           theme_json: data.theme_json ?? null,
+          chat_encrypt_files: data.chat_encrypt_files ?? true,
         };
         // Only patch state if the server sees a different user — avoids a
         // pointless re-render when the optimistic claims already matched.

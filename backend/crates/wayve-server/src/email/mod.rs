@@ -115,6 +115,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         )
         .service(handler::get_me)
         .service(handler::put_theme)
+        .service(handler::put_chat_encrypt_files)
         .service(handler::save_public_key)
         .service(wake::wake_user_accounts)
         .service(rehydrate::rehydrate_account);

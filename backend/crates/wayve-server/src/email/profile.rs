@@ -37,7 +37,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let row = sqlx::query(
         r#"
         SELECT u.id, u.email, u.account_type, u.organization_id, u.recovery_mode, u.theme_json,
-               u.avatar_path,
+               u.avatar_path, u.chat_encrypt_files,
                o.slug AS organization_slug, o.name AS organization_name
         FROM users u
         LEFT JOIN organizations o ON o.id = u.organization_id
@@ -73,6 +73,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     // needs the stable serve URL (it 404s/falls back to the initial when unset).
     let avatar_path: Option<String> = row.try_get("avatar_path").ok().flatten();
     let avatar_url = avatar_path.map(|_| format!("/api/users/{id}/avatar"));
+    let chat_encrypt_files: bool = row.try_get("chat_encrypt_files").unwrap_or(true);
 
     let organization_name = display_organization_name(
         &account_type,
@@ -114,6 +115,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "recovery_mode": recovery_mode,
         "theme_json": theme_json,
         "avatar_url": avatar_url,
+        "chat_encrypt_files": chat_encrypt_files,
     });
 
     ME_CACHE.insert(user_id, response.clone()).await;
@@ -182,4 +184,34 @@ pub async fn put_theme(
 
     invalidate_me_cache(user_id).await;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "theme": theme })))
+}
+
+#[put("/me/chat-encrypt-files")]
+#[instrument(target = "http", skip(req, pool, body))]
+pub async fn put_chat_encrypt_files(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<serde_json::Value>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "error": "Missing or invalid token" })));
+        }
+    };
+
+    let enabled = body
+        .get("enabled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+
+    sqlx::query("UPDATE users SET chat_encrypt_files = $1 WHERE id = $2")
+        .bind(enabled)
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
+
+    invalidate_me_cache(user_id).await;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "chat_encrypt_files": enabled })))
 }

@@ -590,3 +590,57 @@
   color: #b91c1c;
   border-color: rgb(239, 68, 68, 0.25);
 }
+
+/* Reusable toggle switch (used in Settings → Privacy). Built on a hidden
+   checkbox so it's keyboard- and screen-reader-accessible. */
+.toggle-switch {
+  position: relative;
+  display: inline-flex;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.toggle-switch-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.toggle-switch-input:disabled {
+  cursor: default;
+}
+
+.toggle-switch-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--color-input-border, #cbd5e1);
+  transition: background 0.15s ease;
+  pointer-events: none;
+}
+
+.toggle-switch-slider::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.toggle-switch.on .toggle-switch-slider {
+  background: var(--color-primary-action);
+}
+
+.toggle-switch.on .toggle-switch-slider::before {
+  transform: translateX(20px);
+}

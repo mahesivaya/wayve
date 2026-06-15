@@ -85,3 +85,10 @@ export const putTheme = async (theme: string | null) =>
     method: "PUT",
     body: JSON.stringify({ theme }),
   });
+
+// Toggle whether chat file attachments this user sends are end-to-end encrypted.
+export const putChatEncryptFiles = async (enabled: boolean) =>
+  apiFetchJson<{ chat_encrypt_files: boolean }>("/api/me/chat-encrypt-files", {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });

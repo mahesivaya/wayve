@@ -46,4 +46,8 @@ pub struct ChatMessage {
     // clients and for rows fetched from history.
     #[serde(default)]
     pub client_id: Option<String>,
+    // Ids of previously-uploaded chat_attachments to link to this message
+    // (direct messages only). Empty/absent for text-only messages.
+    #[serde(default)]
+    pub attachment_ids: Vec<i64>,
 }

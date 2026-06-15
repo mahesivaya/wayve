@@ -9,6 +9,7 @@ import {
   getChatMessages,
   joinChatChannel,
   removeChatChannelUser,
+  uploadChatAttachment,
   type ChatChannel,
   type ChatMessage,
   type ChatUser,
@@ -28,9 +29,13 @@ import { useResizableWidth } from "../components/useResizableWidth";
 import { useChatConversations } from "./hooks/useChatConversations";
 import { useChatSocket } from "./hooks/useChatSocket";
 import {
-  decryptChatContent,
+  decryptChatMessage,
   decryptChatMessages,
   encryptChatContent,
+  generateChatKey,
+  buildChatEnvelope,
+  encryptChatFile,
+  type ChatAttachmentDescriptor,
 } from "./e2ee";
 import { loadPublicKey } from "../crypto/keyStore";
 import CallOverlays from "../call/CallOverlays";
@@ -91,11 +96,15 @@ export default function Chat() {
   // invisible to a user who's just trying to send. Declared early so the
   // conversation-change block below can reset it.
   const [composeError, setComposeError] = useState("");
+  // Pending file attachments for the next DM send, + an in-flight upload flag.
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   if (lastResetFor !== selectedConversation) {
     setLastResetFor(selectedConversation);
     setActiveThread(null);
     setThreadReplies([]);
     setComposeError("");
+    setPendingFiles([]);
   }
 
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
@@ -156,10 +165,7 @@ export default function Chat() {
     async (msg: ChatMessage) => {
       if (!user) return;
 
-      const decrypted = {
-        ...msg,
-        content: await decryptChatContent(msg.content, user.id),
-      };
+      const decrypted = await decryptChatMessage(msg, user.id);
 
       // Self-echo reconciliation: the broadcast carries the same client_id we
       // generated on send, so we patch the optimistic local copy with the real
@@ -489,8 +495,12 @@ export default function Chat() {
   };
 
   const sendMessage = async () => {
-    if (!wsRef.current || !user || !selectedConversation || !input.trim())
-      return;
+    if (!wsRef.current || !user || !selectedConversation) return;
+    const plaintext = input.trim();
+    const isDm = selectedConversation.type === "user";
+    // Attachments are DM-only for now.
+    const files = isDm ? pendingFiles : [];
+    if (!plaintext && files.length === 0) return;
     if (wsRef.current.readyState !== WebSocket.OPEN) {
       logger.warn("Chat socket not ready; message send skipped", {
         readyState: wsRef.current.readyState,
@@ -498,37 +508,99 @@ export default function Chat() {
       return;
     }
 
-    const plaintext = input.trim();
     let encryptedContent: string;
+    let attachmentIds: number[] = [];
+    let descriptors: ChatAttachmentDescriptor[] = [];
 
     try {
       const recipientKeys = await recipientPublicKeysFor(selectedConversation);
       if (!recipientKeys || recipientKeys.size === 0) {
         throw new Error("No chat encryption keys are available");
       }
-      encryptedContent = await encryptChatContent(plaintext, recipientKeys);
+
+      if (files.length > 0) {
+        setUploadingFiles(true);
+        // One AES key for the message text AND every e2e attachment.
+        const aesKey = await generateChatKey();
+        const e2e = user.chat_encrypt_files !== false;
+        for (const file of files) {
+          if (e2e) {
+            const { ciphertext, iv } = await encryptChatFile(aesKey, file);
+            const up = await uploadChatAttachment({
+              body: new Blob([ciphertext]),
+              filename: file.name,
+              mime: "application/octet-stream",
+              e2e: true,
+            });
+            attachmentIds.push(up.id);
+            descriptors.push({
+              id: up.id,
+              name: file.name,
+              mime: file.type || null,
+              size: file.size,
+              iv,
+            });
+          } else {
+            const up = await uploadChatAttachment({
+              body: file,
+              filename: file.name,
+              mime: file.type || "application/octet-stream",
+              e2e: false,
+            });
+            attachmentIds.push(up.id);
+            descriptors.push({
+              id: up.id,
+              name: file.name,
+              mime: file.type || null,
+              size: file.size,
+            });
+          }
+        }
+        encryptedContent = await buildChatEnvelope(
+          plaintext,
+          aesKey,
+          recipientKeys,
+          descriptors
+        );
+      } else {
+        encryptedContent = await encryptChatContent(plaintext, recipientKeys);
+      }
     } catch (err) {
-      logger.error("Chat encryption failed", err);
+      logger.error("Chat encryption/upload failed", err);
       setComposeError(
-        err instanceof Error ? err.message : "Chat encryption failed"
+        err instanceof Error ? err.message : "Failed to send message"
       );
+      setUploadingFiles(false);
       return;
     }
+    setUploadingFiles(false);
 
-    const message: ChatMessage = {
+    // Wire payload (local-only fields like _localFiles are NOT sent).
+    const wire: ChatMessage = {
       sender_id: user.id,
       content: encryptedContent,
       status: "sent",
       created_at: new Date().toISOString(),
       client_id: crypto.randomUUID(),
-      ...(selectedConversation.type === "channel"
-        ? { channel_id: selectedConversation.channel.id }
-        : { receiver_id: selectedConversation.user.id }),
+      ...(isDm
+        ? { receiver_id: selectedConversation.user.id }
+        : { channel_id: selectedConversation.channel.id }),
+      ...(attachmentIds.length ? { attachment_ids: attachmentIds } : {}),
     };
 
-    wsRef.current.send(JSON.stringify(message));
-    setMessages((prev) => [...prev, { ...message, content: plaintext }]);
+    wsRef.current.send(JSON.stringify(wire));
+    setMessages((prev) => [
+      ...prev,
+      {
+        ...wire,
+        content: plaintext,
+        ...(descriptors.length
+          ? { attachments: descriptors, _localFiles: files }
+          : {}),
+      },
+    ]);
     setInput("");
+    setPendingFiles([]);
     setComposeError("");
   };
 
@@ -795,6 +867,15 @@ export default function Chat() {
           }}
           error={composeError}
           onDismissError={() => setComposeError("")}
+          allowAttachments={selectedConversation?.type === "user"}
+          pendingFiles={pendingFiles}
+          uploading={uploadingFiles}
+          onPickFiles={(files) =>
+            setPendingFiles((prev) => [...prev, ...files])
+          }
+          onRemoveFile={(index) =>
+            setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+          }
         />
       </section>
     </div>
