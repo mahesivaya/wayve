@@ -25,4 +25,7 @@ jobs:
           # (categories configured in .github/release.yml). Idempotent: re-running
           # on the same tag updates the existing Release instead of failing.
           generate_release_notes: true
-          # The highest semver tag is marked "Latest" automatically.
+          # Let GitHub decide "Latest" by semver/date instead of force-marking
+          # every published tag latest (the action's default make_latest:true would
+          # let a hotfix tagged on an older commit wrongly steal "Latest").
+          make_latest: legacy
