@@ -94,6 +94,7 @@ const ScimTokens = lazy(() => import("./settings/ScimTokens"));
 const PlanAdmin = lazy(() => import("./settings/PlanAdmin"));
 const SecureMessageView = lazy(() => import("./emails/SecureMessageView"));
 const AuditSecurity = lazy(() => import("./settings/AuditSecurity"));
+const UserAudit = lazy(() => import("./settings/UserAudit"));
 const RecoverPage = lazy(() => import("./recovery/RecoverPage"));
 const OrgKeyBootstrap = lazy(() => import("./orgKeys/BootstrapPage"));
 const OrgRecoveryKey = lazy(() => import("./orgKeys/RecoveryKeyPage"));
@@ -380,6 +381,7 @@ export default function App() {
             <Route path="/logs/app" element={<PlatformLogs />} />
             <Route path="/logs/users" element={<PlatformUserLogs />} />
             <Route path="/logs/audit" element={<AuditSecurity />} />
+            <Route path="/logs/user-audit" element={<UserAudit />} />
             <Route path="/logs/visitors" element={<PlatformVisitors />} />
             <Route
               path="/platform/logs"

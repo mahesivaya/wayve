@@ -824,6 +824,7 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, has_redis: boo
             tokio::spawn(async move {
                 webhooks::spawn_dispatcher(webhook_pool).await;
             });
+            spawn_activity_pruner(pool.clone());
             spawn_chat_pubsub(has_redis);
         }
         RuntimeRole::Api => {
@@ -836,9 +837,29 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, has_redis: boo
             tokio::spawn(async move {
                 webhooks::spawn_dispatcher(webhook_pool).await;
             });
+            spawn_activity_pruner(pool.clone());
             spawn_chat_pubsub(has_redis);
         }
     }
+}
+
+/// Retention for the high-volume `activity_events` stream: delete anything older
+/// than 7 days, then repeat daily. Keeps the table bounded; the data is
+/// low-value telemetry, so a hard 7-day window is acceptable.
+fn spawn_activity_pruner(pool: PgPool) {
+    tokio::spawn(async move {
+        loop {
+            if let Err(e) = sqlx::query(
+                "DELETE FROM activity_events WHERE created_at < NOW() - INTERVAL '7 days'",
+            )
+            .execute(&pool)
+            .await
+            {
+                tracing::warn!(target: "activity", error = ?e, "activity_events prune failed");
+            }
+            tokio::time::sleep(Duration::from_secs(24 * 60 * 60)).await;
+        }
+    });
 }
 
 /// Cross-instance realtime fan-out: subscribe to the `ws:user:*` pub/sub

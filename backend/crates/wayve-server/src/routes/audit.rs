@@ -114,6 +114,147 @@ pub async fn list_user_actions(
 }
 
 #[derive(Deserialize)]
+pub struct UserLookupQuery {
+    pub email: String,
+    pub limit: Option<i64>,
+}
+
+// GET /api/audit/user-lookup?email=... — the COMPLETE audit trail for one user,
+// resolved by email, across every category (login, email, chat, calendar,
+// drive, notes, tasks), newest first. Owner-gated and scope-checked: a platform
+// owner may inspect anyone; an organization owner only members of their own org.
+#[get("/audit/user-lookup")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn lookup_user_actions(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<UserLookupQuery>,
+) -> AppResult {
+    let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+
+    let email = query.email.trim().to_lowercase();
+    if email.is_empty() {
+        return Ok(
+            HttpResponse::BadRequest().json(serde_json::json!({ "message": "Email is required" }))
+        );
+    }
+    let limit = query.limit.unwrap_or(1000).clamp(1, 5000);
+
+    let target: Option<(i32, String, Option<i32>)> =
+        sqlx::query_as("SELECT id, email, organization_id FROM users WHERE LOWER(email) = $1")
+            .bind(&email)
+            .fetch_optional(pool.get_ref())
+            .await?;
+    let Some((target_id, target_email, target_org)) = target else {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "No user found with that email" })));
+    };
+
+    // An organization owner may only inspect members of their own org.
+    if ctx.scope == Scope::Organization && target_org != ctx.organization_id {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "That user is not a member of your organization"
+        })));
+    }
+
+    let rows = sqlx::query_as::<_, UserActionView>(
+        r#"
+        SELECT a.id, a.actor_user_id, u.email AS actor_email, a.organization_id,
+               a.action, a.resource_type, a.resource_id, a.metadata, a.ip,
+               a.country, a.region, a.city, a.created_at
+        FROM audit_logs a
+        LEFT JOIN users u ON u.id = a.actor_user_id
+        WHERE a.actor_user_id = $1
+        ORDER BY a.created_at DESC
+        LIMIT $2
+        "#,
+    )
+    .bind(target_id)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "user": { "id": target_id, "email": target_email },
+        "actions": rows,
+    })))
+}
+
+#[derive(Serialize, FromRow)]
+pub struct ActivityEventView {
+    pub id: i64,
+    pub kind: String,
+    pub label: Option<String>,
+    pub method: Option<String>,
+    pub path: Option<String>,
+    pub status_code: Option<i32>,
+    pub ip: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+// GET /api/audit/user-activity?email=... — the NON-consequential activity
+// stream (page views, clicks, API requests) for one user, newest first. Same
+// owner gate + org-scope check as `lookup_user_actions`; reads activity_events.
+#[get("/audit/user-activity")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn lookup_user_activity(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<UserLookupQuery>,
+) -> AppResult {
+    let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+
+    let email = query.email.trim().to_lowercase();
+    if email.is_empty() {
+        return Ok(
+            HttpResponse::BadRequest().json(serde_json::json!({ "message": "Email is required" }))
+        );
+    }
+    let limit = query.limit.unwrap_or(1000).clamp(1, 5000);
+
+    let target: Option<(i32, String, Option<i32>)> =
+        sqlx::query_as("SELECT id, email, organization_id FROM users WHERE LOWER(email) = $1")
+            .bind(&email)
+            .fetch_optional(pool.get_ref())
+            .await?;
+    let Some((target_id, target_email, target_org)) = target else {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "No user found with that email" })));
+    };
+
+    if ctx.scope == Scope::Organization && target_org != ctx.organization_id {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "That user is not a member of your organization"
+        })));
+    }
+
+    let events = sqlx::query_as::<_, ActivityEventView>(
+        r#"
+        SELECT id, kind, label, method, path, status_code, ip, created_at
+        FROM activity_events
+        WHERE actor_user_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        "#,
+    )
+    .bind(target_id)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "user": { "id": target_id, "email": target_email },
+        "events": events,
+    })))
+}
+
+#[derive(Deserialize)]
 pub struct RegistrationTypeQuery {
     pub limit: Option<i64>,
 }
@@ -780,6 +921,8 @@ fn decrypt_siem_token(row: &SiemSettingsRow) -> Result<Option<String>, AppError>
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(list_audit_logs)
         .service(list_user_actions)
+        .service(lookup_user_actions)
+        .service(lookup_user_activity)
         .service(list_registration_types)
         .service(export_audit_logs)
         .service(get_siem_settings)

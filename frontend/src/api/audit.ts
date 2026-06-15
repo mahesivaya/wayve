@@ -147,6 +147,21 @@ export async function listUserActions(
   );
 }
 
+export type UserAuditResult = {
+  user: { id: number; email: string };
+  actions: UserActionRow[];
+};
+
+// Full cross-category audit trail for a single user, resolved by email.
+// Owner-gated server-side (org owner → their members only).
+export async function lookupUserAudit(email: string): Promise<UserAuditResult> {
+  const params = new URLSearchParams({ email });
+  return apiFetchJson<UserAuditResult>(
+    `/api/audit/user-lookup?${params.toString()}`,
+    { preserve401: true }
+  );
+}
+
 // How a user registered: 'local' (email + password), 'google' (Gmail OAuth)
 // or 'microsoft' (Outlook OAuth) — from users.auth_provider.
 export type RegistrationTypeRow = {

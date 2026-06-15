@@ -1,6 +1,7 @@
 // ==============================
 // INTERNAL MODULES (declare first)
 // ==============================
+mod activity;
 mod ai;
 mod audit;
 mod auth_extractor;
@@ -57,6 +58,7 @@ use tracing::info;
 use tracing_actix_web::TracingLogger;
 
 use crate::config::{RuntimeRole, listen_port};
+use crate::middleware::activity_log::ActivityLogMiddleware;
 use crate::middleware::api_key::ApiKeyMiddleware;
 use crate::middleware::rate_limit::RateLimitMiddleware;
 
@@ -88,6 +90,9 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(TracingLogger::default())
             .wrap(ApiKeyMiddleware)
+            // After ApiKeyMiddleware so an api-key request's principal is already
+            // injected when we resolve the actor for the activity stream.
+            .wrap(ActivityLogMiddleware)
             .wrap(embed::middleware::EmbedMiddleware)
             .wrap(RateLimitMiddleware)
             .wrap(startup::build_cors(&frontend_url))

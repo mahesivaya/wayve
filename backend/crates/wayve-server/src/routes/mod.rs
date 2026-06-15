@@ -1,5 +1,6 @@
 pub mod access_requests;
 pub mod account;
+pub mod activity;
 pub mod api_keys;
 pub mod audit;
 pub mod auth;
@@ -28,6 +29,7 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     user::routes(cfg);
     api_keys::routes(cfg);
     audit::routes(cfg);
+    activity::routes(cfg);
     account::routes(cfg);
     sso::routes(cfg);
     shared_inbox::routes(cfg);

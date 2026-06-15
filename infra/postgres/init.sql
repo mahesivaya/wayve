@@ -1256,6 +1256,28 @@ CREATE TABLE IF NOT EXISTS api_key_audit_log (
 CREATE INDEX IF NOT EXISTS api_key_audit_key_idx
     ON api_key_audit_log(api_key_id, created_at DESC);
 
+-- Non-consequential activity stream: page views, UI clicks and every
+-- authenticated API request. High-volume and noisy, so it lives in its own
+-- table (never bloats audit_logs) and is pruned to the last 7 days by a
+-- background task. Surfaced per-user on the User Audit page. No organization_id
+-- column on purpose — scope is enforced at read time, keeping the write path
+-- (one fire-and-forget INSERT) cheap.
+CREATE TABLE IF NOT EXISTS activity_events (
+    id BIGSERIAL PRIMARY KEY,
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,                 -- 'page_view' | 'click' | 'api_request'
+    label TEXT,                         -- click text/href, or page route
+    method TEXT,                        -- api_request only
+    path TEXT,                          -- api_request path / page route
+    status_code INTEGER,                -- api_request only
+    ip TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_activity_events_actor
+    ON activity_events(actor_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_events_created
+    ON activity_events(created_at DESC);
+
 -- Scope-aware SIEM forwarding settings. Tokens are AES-GCM encrypted using
 -- the backend AES_KEY; NULL token fields mean the webhook does not use bearer
 -- authentication.

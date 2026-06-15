@@ -3,6 +3,7 @@ import { BRAND_NAME } from "../config/brand";
 import BrandLogo from "./BrandLogo";
 import { useAuth } from "../auth/useAuth";
 import { canAccessApiKeyAdmin, hasPermission } from "../auth/permissions";
+import { recordActivity } from "../api/activity";
 import {
   Suspense,
   Fragment,
@@ -215,6 +216,47 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Gated on `user` so it doesn't fire while the session is still loading.
   const emailsUnreadCount = useEmailsUnreadCount(Boolean(user));
   const chatUnreadCount = useChatUnreadCount(Boolean(user));
+
+  // ── Non-consequential activity telemetry ──────────────────────────────
+  // Record a page view on each route change (deduped against the last path)
+  // and a click on every button/link. Fire-and-forget; recorded only when
+  // logged in. Surfaced per-user on the User Audit page.
+  const lastPathRef = useRef<string>("");
+  useEffect(() => {
+    if (!user) return;
+    const path = location.pathname;
+    if (path === lastPathRef.current) return;
+    lastPathRef.current = path;
+    recordActivity("page_view", { path });
+  }, [user, location.pathname]);
+
+  useEffect(() => {
+    if (!user) return;
+    let lastLabel = "";
+    let lastAt = 0;
+    const handler = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const el = target?.closest?.(
+        "button, a, [role=button]"
+      ) as HTMLElement | null;
+      if (!el) return;
+      const raw =
+        el.getAttribute("aria-label") ||
+        el.textContent?.trim() ||
+        el.getAttribute("href") ||
+        el.tagName;
+      const label = (raw ?? "").toString().slice(0, 80);
+      if (!label) return;
+      const now = Date.now();
+      // Throttle identical rapid clicks (e.g. double-clicks) to one row.
+      if (label === lastLabel && now - lastAt < 500) return;
+      lastLabel = label;
+      lastAt = now;
+      recordActivity("click", { label, path: window.location.pathname });
+    };
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, [user]);
 
   // Three-pane state management. Lazy init reads any persisted split
   // from a previous visit; the effect below mirrors changes back.
@@ -1073,6 +1115,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           visible: canAccessSecurity,
         },
         {
+          path: "/logs/user-audit",
+          label: "User Audit",
+          icon: <UserLogsIcon size={16} />,
+          visible: canAccessSecurity,
+        },
+        {
           path: "/logs/tracing",
           label: "Tracing",
           icon: <TracingIcon size={16} />,
@@ -1128,6 +1176,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           path: "/logs/audit",
           label: "Audit Logs",
           icon: <AuditIcon size={16} />,
+        },
+        {
+          path: "/logs/user-audit",
+          label: "User Audit",
+          icon: <UserLogsIcon size={16} />,
         },
       ],
     },
