@@ -177,13 +177,12 @@ export default function UserAudit() {
   }
 
   return (
-    <div className="audit-security-page">
+    <div className="audit-security-page user-audit-page">
       <header className="audit-security-header">
         <div>
           <h1>User Audit</h1>
           <p>
-            Enter a user's email to see their complete activity across access,
-            email, chat, calendar, drive, notes and tasks — newest first.
+            Enter a user&rsquo;s email to see all their activity, newest first.
           </p>
         </div>
       </header>
