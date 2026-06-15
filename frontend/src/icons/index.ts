@@ -44,6 +44,7 @@ export {
   Wrench as SdkIcon,
   KeyRound as ApiKeysIcon,
   // Generic / actions
+  Bell as BellIcon,
   Reply as ReplyIcon,
   Forward as ForwardIcon,
   Trash2 as TrashIcon,

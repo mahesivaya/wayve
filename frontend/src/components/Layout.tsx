@@ -15,6 +15,7 @@ import {
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
+import NotificationBell from "./NotificationBell";
 import SupportModal from "../support/SupportModal";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
@@ -1180,6 +1181,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             !location.pathname.startsWith("/notes") && <SearchBar />}
 
           <div className="actions">
+            {/* Unread notifications (emails + chat). Sits left of the Report
+              icon; badge count mirrors the sidebar Emails/Chat badges. */}
+            <NotificationBell
+              emailUnread={emailsUnreadCount}
+              chatUnread={chatUnreadCount}
+            />
+
             {/* Bug-report shortcut. Always visible to signed-in users so
               issues can be filed from anywhere without first hunting through
               Settings. Same overlay as ProfileMenu's "Help & Report issue".
