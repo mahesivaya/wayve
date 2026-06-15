@@ -73,6 +73,10 @@ import {
   InsightsIcon,
   AssistantIcon,
   SettingsIcon,
+  WorkspaceIcon,
+  PlatformIcon,
+  DevelopersIcon,
+  OrganizationIcon,
 } from "../icons";
 import Modal from "./Modal";
 
@@ -179,6 +183,7 @@ type SidebarSectionDef = {
   key: string; // expand-state key (also the React key)
   label: string;
   visible: boolean;
+  icon?: ReactNode; // shown next to the section label (esp. useful in the icon rail)
   collapsible?: boolean; // default true; false = plain label, always shown
   onAdd?: () => void;
   links?: SidebarLinkDef[];
@@ -827,19 +832,27 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     if (s.collapsible === false) {
       return (
         <div className="sidebar-section" key={s.key}>
-          <div className="sidebar-section-label">{s.label}</div>
+          <div className="sidebar-section-label">
+            {s.icon && (
+              <span className="sidebar-section-icon" aria-hidden="true">
+                {s.icon}
+              </span>
+            )}
+            <span>{s.label}</span>
+          </div>
           {renderLinks(s.links)}
         </div>
       );
     }
-    const open = sections.isOpen(s.key) || sidebarCollapsed;
+    const open = sections.isOpen(s.key);
     return (
       <div className="sidebar-section" key={s.key}>
         {renderSectionToggle(
           s.label,
           sections.isOpen(s.key),
           () => sections.toggle(s.key),
-          s.onAdd
+          s.onAdd,
+          s.icon
         )}
         {open &&
           (s.body ?? (
@@ -854,6 +867,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       key: "workspace",
       label: "Workspace",
       visible: hasWorkspaceSection,
+      icon: <WorkspaceIcon size={16} />,
       body: (
         <div className="sidebar-subitems">
           {/* Compact sub-item style (matches the project rows) so it
@@ -881,7 +895,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               : undefined,
             <GitLogoIcon size={14} />
           )}
-          {(sections.isOpen("projects") || sidebarCollapsed) && (
+          {sections.isOpen("projects") && (
             <div className="sidebar-subitems">
               {creatingProject && (
                 <input
@@ -996,6 +1010,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     {
       key: "teams",
       label: "Teams",
+      icon: <TeamsIcon size={16} />,
       // Teams are organization-scoped; personal accounts have no org, so the
       // section would only ever read "No teams yet". Hide it for them.
       visible: user.account_type !== "personal",
@@ -1047,6 +1062,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       key: "platform",
       label: "Platform",
       visible: hasPlatformSection,
+      icon: <PlatformIcon size={16} />,
       links: [
         {
           path: "/platform/billing",
@@ -1090,6 +1106,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       key: "logs",
       label: "Logs",
       visible: hasLogsSection,
+      icon: <LogsIcon size={16} />,
       links: [
         {
           path: "/logs/app",
@@ -1133,6 +1150,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       key: "developers",
       label: "Developers",
       visible: user.account_type !== "personal",
+      icon: <DevelopersIcon size={16} />,
       links: [
         { path: "/docs", label: "Docs", icon: <DocsIcon size={16} /> },
         {
@@ -1161,6 +1179,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       key: "organization",
       label: "Organization",
       visible: isOrgOwner,
+      icon: <OrganizationIcon size={16} />,
       collapsible: false,
       links: [
         {

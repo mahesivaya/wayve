@@ -67,6 +67,11 @@ export {
   Settings as SettingsIcon,
   File as FileIcon,
   Folder as FolderIcon,
+  // Sidebar collapsible-section headers
+  Briefcase as WorkspaceIcon,
+  LayoutDashboard as PlatformIcon,
+  Code2 as DevelopersIcon,
+  Building2 as OrganizationIcon,
 } from "lucide-react";
 
 // Org/business dashboard tiles
