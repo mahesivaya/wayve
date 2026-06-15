@@ -127,6 +127,22 @@ const ADDABLE_PERSONAL_APPS: {
   { key: "assistant", label: "Assistant", icon: <AssistantIcon size={22} /> },
 ];
 
+// Sample Workspace repos + Teams shown in the sidebar for UI testing when the
+// org has none of its own yet. Negative ids so they can never collide with a
+// real backend row. Used only as a display fallback — the real fetched list
+// (when non-empty) always wins. Remove once real data exists.
+const SAMPLE_PROJECTS: Project[] = [
+  { id: -1, name: "fluxze-web" },
+  { id: -2, name: "fluxze-backend" },
+  { id: -3, name: "infra-terraform" },
+];
+
+const SAMPLE_TEAMS: Team[] = [
+  { id: -1, name: "Engineering", slug: "engineering", tagline: null, description: null },
+  { id: -2, name: "Design", slug: "design", tagline: null, description: null },
+  { id: -3, name: "Operations", slug: "operations", tagline: null, description: null },
+];
+
 function isValidAppKey(value: unknown): value is AppKey {
   return typeof value === "string" && SPLIT_APPS.some((a) => a.key === value);
 }
@@ -862,6 +878,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     );
   };
 
+  // Fall back to sample rows so the Workspace/Teams sections aren't empty
+  // during testing; real fetched data always takes precedence.
+  const displayProjects = projects.length ? projects : SAMPLE_PROJECTS;
+  const displayTeams = teams.length ? teams : SAMPLE_TEAMS;
+
   const sectionDefs: SidebarSectionDef[] = [
     {
       key: "workspace",
@@ -915,7 +936,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   }}
                 />
               )}
-              {projects.map((proj) =>
+              {displayProjects.map((proj) =>
                 editingProject === proj.id ? (
                   <input
                     key={proj.id}
@@ -999,7 +1020,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   </div>
                 )
               )}
-              {!creatingProject && projects.length === 0 && (
+              {!creatingProject && displayProjects.length === 0 && (
                 <div className="sidebar-empty-hint">No projects yet</div>
               )}
             </div>
@@ -1042,7 +1063,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               }}
             />
           )}
-          {teams.map((team) => (
+          {displayTeams.map((team) => (
             <Fragment key={team.slug}>
               {renderSidebarLink(
                 `/teams/${team.slug}`,
@@ -1052,7 +1073,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               )}
             </Fragment>
           ))}
-          {!creatingTeam && teams.length === 0 && (
+          {!creatingTeam && displayTeams.length === 0 && (
             <div className="sidebar-empty-hint">No teams yet</div>
           )}
         </div>
