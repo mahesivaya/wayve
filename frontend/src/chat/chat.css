@@ -200,7 +200,11 @@
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-surface-darken-mid);
+  /* Theme-aware primary ink: near-white on the dark sidebar, near-black on the
+     light one. The old --color-surface-darken-mid (#112847) sat almost on top
+     of the dark --color-email-bg (#0a1730), making names/emails unreadable for
+     dark-theme (incl. personal-account) users. */
+  color: var(--color-text-primary);
   text-align: left;
   cursor: pointer;
 }
