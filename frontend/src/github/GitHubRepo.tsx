@@ -2293,14 +2293,16 @@ function PlatformRepoManager() {
         }}
         aria-label="Select a repository"
       >
-        {/* Keep the current/default repo selectable even if the list doesn't
+        {/* Show just the repo name (not owner/repo); the option value keeps the
+            full name so the onChange lookup still resolves owner + repo.
+            Keep the current/default repo selectable even if the list doesn't
             include it (e.g. the token can read but not enumerate it). */}
         {repos?.some((r) => r.full_name === selectedFullName) ? null : (
-          <option value={selectedFullName}>{selectedFullName}</option>
+          <option value={selectedFullName}>{selected.repo}</option>
         )}
         {repos?.map((r) => (
           <option key={r.full_name} value={r.full_name}>
-            {r.full_name}
+            {r.name}
           </option>
         ))}
       </select>
