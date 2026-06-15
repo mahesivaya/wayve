@@ -156,7 +156,11 @@
   gap: 8px;
   border: 0;
   background: transparent;
-  color: var(--hx-ink);
+  /* Fallback to the dark ink so the wordmark stays dark on pages that render
+     PublicHeader OUTSIDE `.public-home` (e.g. /login), where --hx-ink is
+     undefined and the text would otherwise inherit a washed-out light color.
+     Inside `.public-home` the token still wins, so the home page is unchanged. */
+  color: var(--hx-ink, #141a26);
   font-size: 1.5rem;
   font-weight: 700;
   line-height: 1;
