@@ -14,7 +14,6 @@ const VISITOR_COLUMNS = [
   { key: "location", label: "Location", width: 180, min: 110 },
   { key: "device", label: "Device", width: 100, min: 70 },
   { key: "browser", label: "Browser", width: 100, min: 70 },
-  { key: "page", label: "Page", width: 260, min: 120 },
   { key: "referrer", label: "Referrer", width: 240, min: 120 },
 ] as const;
 
@@ -119,10 +118,6 @@ export default function PlatformVisitors() {
     <div className="pt-page">
       <header className="pt-header">
         <h1>Visitors</h1>
-        <p>
-          Everyone who opened the website — anonymous and signed-in ·{" "}
-          {user?.email}
-        </p>
       </header>
 
       {error && <div className="pt-banner">{error}</div>}
@@ -131,7 +126,7 @@ export default function PlatformVisitors() {
         <div className="pt-panel-head">
           <h2>
             Site visits{" "}
-            <span style={{ opacity: 0.6 }}>
+            <span style={{ opacity: 0.85 }}>
               · {summary.total} visits · {summary.uniqueIps} unique IPs ·{" "}
               {summary.signedIn} signed-in · {summary.anon} anonymous
             </span>
@@ -191,20 +186,19 @@ export default function PlatformVisitors() {
                       <td>{fmtDateTime(r.created_at)}</td>
                       <td>
                         {r.user_email ?? (
-                          <span style={{ opacity: 0.6 }}>Anonymous</span>
+                          <span className="pt-empty-cell">Anonymous</span>
                         )}
                       </td>
-                      <td>{r.ip ?? "-"}</td>
+                      <td>
+                        {r.ip ?? <span className="pt-empty-cell">-</span>}
+                      </td>
                       <td className="pt-loc" title={location}>
-                        {location || "-"}
+                        {location || <span className="pt-empty-cell">-</span>}
                       </td>
                       <td>{parseDevice(r.user_agent)}</td>
                       <td>{parseBrowser(r.user_agent)}</td>
-                      <td className="pt-details" title={r.path}>
-                        {r.path}
-                      </td>
                       <td className="pt-details" title={r.referrer ?? ""}>
-                        {r.referrer || "—"}
+                        {r.referrer || <span className="pt-empty-cell">—</span>}
                       </td>
                     </tr>
                   );

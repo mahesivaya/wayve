@@ -185,13 +185,14 @@
 }
 
 /* Details column (email from/to/subject etc.) — cap width and ellipsize so a
-   long subject doesn't blow out the row; full text is in the title tooltip. */
+   long subject doesn't blow out the row; full text is in the title tooltip.
+   Real values keep the default (primary) text color; only empty cells fade
+   back via .pt-empty-cell. */
 .pt-table td.pt-details {
   max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-muted, var(--color-text-muted));
 }
 
 /* Location column (city, state, country) — same ellipsize-with-tooltip
@@ -201,6 +202,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Placeholder for empty/unknown cell values (Anonymous, "—", "-"). The ONLY
+   thing dimmed in a data row — real values all read at primary contrast so the
+   table scans uniformly. */
+.pt-empty-cell {
   color: var(--text-muted, var(--color-text-muted));
 }
 
@@ -333,14 +340,6 @@
   border-radius: 6px;
   font-size: 13px;
   text-decoration: none;
-}
-
-html[data-theme="dark"] .pt-page {
-  --text-color: var(--color-border);
-  --text-muted: var(--color-input-border-strong);
-  --panel-bg: var(--color-text-ink);
-  --panel-border: var(--color-text-secondary);
-  --panel-subtle: var(--color-text-primary);
 }
 
 /* Secrets page */
