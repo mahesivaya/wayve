@@ -197,3 +197,23 @@
 .notif-viewall:hover {
   background: var(--color-primary-soft);
 }
+
+/* Storage/memory limit alert item. The message is longer than a message
+   preview, so let it wrap instead of truncating; critical state reads in the
+   danger color. */
+.notif-item-storage .notif-item-title {
+  white-space: normal;
+  overflow: visible;
+}
+
+.notif-item-critical .notif-item-title {
+  color: var(--color-danger);
+}
+
+.notif-item-storage .notif-item-icon {
+  color: var(--color-text-secondary);
+}
+
+.notif-item-critical .notif-item-icon {
+  color: var(--color-danger);
+}

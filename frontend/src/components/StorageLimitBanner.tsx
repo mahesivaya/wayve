@@ -1,25 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
-import { getProfile } from "../api/profile";
+import {
+  useStorageStatus,
+  formatBytes,
+  STORAGE_CHANGED_EVENT,
+} from "./useStorageStatus";
 import "./StorageLimitBanner.css";
 
-// Show the alert once usage crosses 90% of the plan's storage limit; switch to
-// the blocking "critical" treatment at 100%. Tunable here.
-const WARN_THRESHOLD = 0.9;
-const DISMISS_KEY = "rwayve:storage-alert-dismissed";
-// Fired by other surfaces (e.g. Drive upload) so the banner re-checks usage
-// immediately instead of waiting for the next focus/poll.
-export const STORAGE_CHANGED_EVENT = "rwayve:storage-changed";
+// Re-exported for back-compat with any caller that imported it from here.
+export { STORAGE_CHANGED_EVENT };
 
-function formatBytes(bytes: number): string {
-  const KB = 1024;
-  const MB = KB * 1024;
-  const GB = MB * 1024;
-  if (bytes < KB) return `${bytes} B`;
-  if (bytes < MB) return `${(bytes / KB).toFixed(1)} KB`;
-  if (bytes < GB) return `${(bytes / MB).toFixed(1)} MB`;
-  return `${(bytes / GB).toFixed(2)} GB`;
-}
+const DISMISS_KEY = "rwayve:storage-alert-dismissed";
 
 type Props = {
   // Reuses Layout's existing upgrade navigation so the button lands on the
@@ -29,44 +20,22 @@ type Props = {
 
 export default function StorageLimitBanner({ onUpgrade }: Props) {
   const location = useLocation();
-  const [used, setUsed] = useState<number | null>(null);
-  const [limit, setLimit] = useState<number | null>(null);
+  // Usage + level + audience gating all live in the shared hook so the banner
+  // and the NotificationBell stay in lock-step.
+  const { used, limit, pct, level } = useStorageStatus();
   const [dismissed, setDismissed] = useState(
     () => sessionStorage.getItem(DISMISS_KEY) === "1"
   );
 
-  const refresh = useCallback(() => {
-    getProfile()
-      .then((p) => {
-        setUsed(p.memory_used_bytes ?? null);
-        setLimit(p.memory_limit_bytes ?? null);
-      })
-      .catch(() => {
-        // Keep the previous values on a transient failure; a wrong "full"
-        // alert is worse than briefly stale data.
-      });
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    const onFocus = () => refresh();
-    window.addEventListener("focus", onFocus);
-    window.addEventListener(STORAGE_CHANGED_EVENT, refresh);
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener(STORAGE_CHANGED_EVENT, refresh);
-    };
-  }, [refresh]);
-
-  // Redundant on the billing page; hide when data is missing or the plan is
-  // unlimited (limit <= 0 for org/enterprise).
+  // Redundant on the billing page. The hook already returns "none" for
+  // unlimited plans, ineligible audiences (non-owner org members / platform),
+  // and missing data.
   if (location.pathname.startsWith("/billing")) return null;
-  if (used === null || limit === null || limit <= 0) return null;
+  if (level === "none" || used === null || limit === null || pct === null) {
+    return null;
+  }
 
-  const pct = used / limit;
-  if (pct < WARN_THRESHOLD) return null;
-
-  const critical = pct >= 1;
+  const critical = level === "critical";
   // Warning is dismissible for the session; the critical (blocked) state stays
   // until the user frees space or upgrades.
   if (!critical && dismissed) return null;

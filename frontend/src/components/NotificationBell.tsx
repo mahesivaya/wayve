@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { BellIcon, EmailsIcon } from "../icons";
+import { BellIcon, EmailsIcon, DriveIcon } from "../icons";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
 import { getHomeInbox } from "../api/home";
 import { getChatConversationSummary, getChatUsers } from "../api/chat";
 import { relativeTime } from "../chat/utils";
+import { useStorageStatus } from "./useStorageStatus";
 import "./notificationBell.css";
 
 type NotifItem =
@@ -24,6 +25,13 @@ type NotifItem =
       email: string;
       title: string;
       ts: string | null;
+    }
+  | {
+      kind: "storage";
+      key: string;
+      title: string;
+      critical: boolean;
+      ts: null;
     };
 
 type NotificationBellProps = {
@@ -54,7 +62,28 @@ export default function NotificationBell({
   // empty states.
   const [loadedOnce, setLoadedOnce] = useState(false);
 
-  const total = Math.max(0, emailUnread) + Math.max(0, chatUnread);
+  // Storage/memory limit alert — shared with the top StorageLimitBanner, and
+  // already gated to the right audience (personal accounts + org owners only).
+  const { level: storageLevel, pct: storagePct } = useStorageStatus();
+  const storageItem: NotifItem | null =
+    storageLevel === "none"
+      ? null
+      : {
+          kind: "storage",
+          key: "storage-limit",
+          critical: storageLevel === "critical",
+          ts: null,
+          title:
+            storageLevel === "critical"
+              ? "Storage full — uploads blocked. Free space or upgrade."
+              : `You're almost out of space — ${Math.min(
+                  999,
+                  Math.round((storagePct ?? 0) * 100)
+                )}% used.`,
+        };
+
+  const total =
+    Math.max(0, emailUnread) + Math.max(0, chatUnread) + (storageItem ? 1 : 0);
 
   // Lazy load: fetch the item lists whenever the panel opens. Failures are
   // non-fatal — the badge keeps working and the panel just shows its empty
@@ -154,6 +183,12 @@ export default function NotificationBell({
     void navigate(path);
   };
 
+  // Storage alert pinned to the top, ahead of message notifications. Shown even
+  // while the email/chat lists are still loading.
+  const displayItems: NotifItem[] = storageItem
+    ? [storageItem, ...items]
+    : items;
+
   return (
     <div className="notif-bell" ref={wrapRef}>
       <button
@@ -180,25 +215,36 @@ export default function NotificationBell({
             {total > 0 && <span className="notif-head-count">{total}</span>}
           </div>
 
-          {loading && !loadedOnce ? (
-            <div className="notif-empty">Loading…</div>
-          ) : items.length === 0 ? (
-            <div className="notif-empty">You&apos;re all caught up</div>
+          {displayItems.length === 0 ? (
+            loading && !loadedOnce ? (
+              <div className="notif-empty">Loading…</div>
+            ) : (
+              <div className="notif-empty">You&apos;re all caught up</div>
+            )
           ) : (
             <>
               <ul className="notif-list">
-                {items.map((item) => (
+                {displayItems.map((item) => (
                   <li key={item.key}>
                     <button
                       type="button"
-                      className="notif-item"
-                      onClick={() =>
-                        go(item.kind === "email" ? "/emails" : "/chat")
-                      }
+                      className={`notif-item${
+                        item.kind === "storage" ? " notif-item-storage" : ""
+                      }${
+                        item.kind === "storage" && item.critical
+                          ? " notif-item-critical"
+                          : ""
+                      }`}
+                      onClick={() => {
+                        if (item.kind === "storage") go("/billing");
+                        else go(item.kind === "email" ? "/emails" : "/chat");
+                      }}
                     >
                       <span className="notif-item-icon">
                         {item.kind === "email" ? (
                           <EmailsIcon size={18} />
+                        ) : item.kind === "storage" ? (
+                          <DriveIcon size={18} />
                         ) : (
                           <Avatar
                             name={item.email}
@@ -215,23 +261,28 @@ export default function NotificationBell({
                           </span>
                         )}
                       </span>
-                      <span className="notif-item-time">
-                        {relativeTime(item.ts)}
-                      </span>
+                      {item.kind !== "storage" && (
+                        <span className="notif-item-time">
+                          {relativeTime(item.ts)}
+                        </span>
+                      )}
                     </button>
                   </li>
                 ))}
               </ul>
 
               {/* The list scrolls within the panel; this jumps to the full
-                  inbox for the complete view. */}
-              <button
-                type="button"
-                className="notif-viewall"
-                onClick={() => go("/emails")}
-              >
-                View all
-              </button>
+                  inbox for the complete view. Only when there are message
+                  notifications (the storage alert links to /billing itself). */}
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  className="notif-viewall"
+                  onClick={() => go("/emails")}
+                >
+                  View all
+                </button>
+              )}
             </>
           )}
         </div>
