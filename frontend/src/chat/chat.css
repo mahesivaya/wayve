@@ -663,7 +663,10 @@
 
 .bubble.other {
   background: var(--color-surface);
-  color: var(--color-surface-darken-mid);
+  /* Theme-aware ink: near-white on the dark bubble, near-black on light. The
+     old --color-surface-darken-mid sat almost on top of the dark --color-surface
+     background, making received messages unreadable. */
+  color: var(--color-text-primary);
   border-bottom-left-radius: 4px;
 }
 
