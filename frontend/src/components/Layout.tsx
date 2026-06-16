@@ -1035,8 +1035,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       // Teams are organization-scoped; personal accounts have no org, so the
       // section would only ever read "No teams yet". Hide it for them.
       visible: user.account_type !== "personal",
+      // Org owners create teams in their org; the platform owner creates
+      // platform-level teams. Both get the "+".
       onAdd:
-        isOrgOwner && !sidebarCollapsed
+        (isOrgOwner || isPlatformOwner) && !sidebarCollapsed
           ? () => {
               sections.setOpen("teams", true);
               setTeamCreateDraft("");

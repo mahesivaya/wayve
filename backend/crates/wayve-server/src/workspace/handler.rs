@@ -84,14 +84,26 @@ fn pick_free_slug(base: &str, taken: &[String]) -> String {
 
 /// The caller's home organization id, or `None` for personal / platform
 /// accounts that don't belong to one.
-async fn caller_org_id(req: &HttpRequest, pool: &PgPool) -> Result<Option<i32>, AppError> {
+// Which teams the caller can see: an org member sees their org's teams; a
+// platform owner sees platform-level teams (organization_id IS NULL).
+enum TeamScope {
+    Org(i32),
+    Platform,
+    None,
+}
+
+async fn caller_team_scope(req: &HttpRequest, pool: &PgPool) -> Result<TeamScope, AppError> {
     let Some(user_id) = get_user_id_from_request(req) else {
         return Err(AppError::Unauthorized);
     };
     let ctx = rbac::resolve_role_context(pool, user_id)
         .await
         .map_err(AppError::Db)?;
-    Ok(ctx.organization_id)
+    Ok(match ctx.scope {
+        Scope::Organization => ctx.organization_id.map_or(TeamScope::None, TeamScope::Org),
+        Scope::Platform => TeamScope::Platform,
+        Scope::Personal => TeamScope::None,
+    })
 }
 
 /// Shared shape for a project row, including its optional linked repo.
@@ -517,19 +529,30 @@ pub async fn delete_project(
 #[get("/teams")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_teams(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
-    let Some(org_id) = caller_org_id(&req, pool.get_ref()).await? else {
-        return Ok(HttpResponse::Ok().json(serde_json::json!([])));
+    let rows = match caller_team_scope(&req, pool.get_ref()).await? {
+        TeamScope::Org(org_id) => {
+            sqlx::query(
+                "SELECT id, name, slug, tagline, description, created_at
+                 FROM teams
+                 WHERE organization_id = $1
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .bind(org_id)
+            .fetch_all(pool.get_ref())
+            .await?
+        }
+        TeamScope::Platform => {
+            sqlx::query(
+                "SELECT id, name, slug, tagline, description, created_at
+                 FROM teams
+                 WHERE organization_id IS NULL
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .fetch_all(pool.get_ref())
+            .await?
+        }
+        TeamScope::None => return Ok(HttpResponse::Ok().json(serde_json::json!([]))),
     };
-
-    let rows = sqlx::query(
-        "SELECT id, name, slug, tagline, description, created_at
-         FROM teams
-         WHERE organization_id = $1
-         ORDER BY created_at DESC, id DESC",
-    )
-    .bind(org_id)
-    .fetch_all(pool.get_ref())
-    .await?;
 
     let teams: Vec<_> = rows.into_iter().map(team_summary_json).collect();
     Ok(HttpResponse::Ok().json(teams))
@@ -544,21 +567,30 @@ pub async fn get_team(
     path: web::Path<String>,
 ) -> AppResult {
     let slug = path.into_inner();
-    let Some(org_id) = caller_org_id(&req, pool.get_ref()).await? else {
-        return Ok(
-            HttpResponse::NotFound().json(serde_json::json!({ "message": "Team not found" }))
-        );
+    let row = match caller_team_scope(&req, pool.get_ref()).await? {
+        TeamScope::Org(org_id) => {
+            sqlx::query(
+                "SELECT id, name, slug, tagline, description, created_at
+                 FROM teams
+                 WHERE organization_id = $1 AND slug = $2",
+            )
+            .bind(org_id)
+            .bind(&slug)
+            .fetch_optional(pool.get_ref())
+            .await?
+        }
+        TeamScope::Platform => {
+            sqlx::query(
+                "SELECT id, name, slug, tagline, description, created_at
+                 FROM teams
+                 WHERE organization_id IS NULL AND slug = $1",
+            )
+            .bind(&slug)
+            .fetch_optional(pool.get_ref())
+            .await?
+        }
+        TeamScope::None => None,
     };
-
-    let row = sqlx::query(
-        "SELECT id, name, slug, tagline, description, created_at
-         FROM teams
-         WHERE organization_id = $1 AND slug = $2",
-    )
-    .bind(org_id)
-    .bind(&slug)
-    .fetch_optional(pool.get_ref())
-    .await?;
 
     match row {
         Some(row) => Ok(HttpResponse::Ok().json(team_summary_json(row))),
@@ -580,14 +612,22 @@ pub async fn create_team(
         Ok(ctx) => ctx,
         Err(response) => return Ok(response),
     };
-    if ctx.scope != Scope::Organization {
-        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Only an organization owner can create teams"
-        })));
-    }
-    let Some(org_id) = ctx.organization_id else {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "No organization in context" })));
+    // An organization owner creates a team inside their org; a platform owner
+    // creates a platform-level team (organization_id = NULL).
+    let org_id: Option<i32> = match ctx.scope {
+        Scope::Organization => match ctx.organization_id {
+            Some(id) => Some(id),
+            None => {
+                return Ok(HttpResponse::BadRequest()
+                    .json(serde_json::json!({ "message": "No organization in context" })))
+            }
+        },
+        Scope::Platform => None,
+        Scope::Personal => {
+            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "Only an organization or platform owner can create teams"
+            })))
+        }
     };
 
     let name = input.name.trim();
@@ -602,10 +642,11 @@ pub async fn create_team(
     let tagline = clean_optional(input.tagline.as_deref(), TAGLINE_MAX);
     let description = clean_optional(input.description.as_deref(), DESCRIPTION_MAX);
 
-    // Choose a slug unique within the org before inserting.
+    // Choose a slug unique within the scope (org, or the platform-team set when
+    // org_id is NULL) before inserting. IS NOT DISTINCT FROM makes NULL = NULL.
     let base = slugify(name);
     let taken: Vec<String> = sqlx::query_scalar(
-        "SELECT slug FROM teams WHERE organization_id = $1 AND (slug = $2 OR slug LIKE $2 || '-%')",
+        "SELECT slug FROM teams WHERE organization_id IS NOT DISTINCT FROM $1 AND (slug = $2 OR slug LIKE $2 || '-%')",
     )
     .bind(org_id)
     .bind(&base)

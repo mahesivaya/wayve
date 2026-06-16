@@ -165,7 +165,9 @@ CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id);
 -- the name (lowercase, ASCII-alphanumeric), mirroring the org slug rule.
 CREATE TABLE IF NOT EXISTS teams (
     id SERIAL PRIMARY KEY,
-    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    -- NULL = a platform-level team (created by a platform owner). Org owners'
+    -- teams carry their organization_id.
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     slug TEXT NOT NULL,
     tagline TEXT,
@@ -175,6 +177,13 @@ CREATE TABLE IF NOT EXISTS teams (
     UNIQUE (organization_id, slug)
 );
 CREATE INDEX IF NOT EXISTS idx_teams_org ON teams (organization_id);
+-- Relax NOT NULL on long-lived DBs whose teams table predates platform teams
+-- (idempotent — a no-op if already nullable).
+ALTER TABLE teams ALTER COLUMN organization_id DROP NOT NULL;
+-- UNIQUE(organization_id, slug) does NOT constrain platform teams because NULL
+-- orgs compare distinct; enforce slug uniqueness among platform teams here.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_platform_slug
+    ON teams (slug) WHERE organization_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS platform_members (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
