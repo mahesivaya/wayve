@@ -273,15 +273,6 @@
   line-height: 1.5;
 }
 
-html[data-theme="dark"] .dev-tutorial {
-  background: var(--color-text-primary);
-  border-color: var(--color-text-ink);
-}
-html[data-theme="dark"] .dev-tutorial-goal,
-html[data-theme="dark"] .dev-tutorial-step p {
-  color: var(--color-input-border);
-}
-
 .dev-scope-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -490,13 +481,24 @@ html[data-theme="dark"] .dev-tutorial-step p {
   }
 }
 
+/* Dark theme: render every dev-portal panel on the app's dark surfaces with
+   light ink. The previous rules flipped panels to a WHITE background (via the
+   `--color-text-primary` text token) and colored page text with the DARK
+   `--color-border` (#24385f), leaving section headings, step lists and
+   paragraphs dark-on-dark = invisible. */
 html[data-theme="dark"] .dev-portal {
   background: var(--color-surface-deepest);
-  color: var(--color-border);
+  color: var(--color-text-ink);
+}
+/* The code blocks sit on an always-dark surface (--color-surface-deep), but
+   their text token (--color-surface-tint-slate) flips to dark navy in dark
+   theme → dark-on-dark. Force light ink here. */
+html[data-theme="dark"] .dev-code {
+  color: var(--color-text-ink);
 }
 html[data-theme="dark"] .dev-header {
-  background: var(--color-text-primary);
-  border-bottom-color: var(--color-text-ink);
+  background: var(--color-surface);
+  border-bottom-color: var(--color-border);
 }
 html[data-theme="dark"] .dev-header-brand,
 html[data-theme="dark"] .dev-footer-brand a,
@@ -504,7 +506,7 @@ html[data-theme="dark"] .dev-header-nav a,
 html[data-theme="dark"] .dev-header-actions a,
 html[data-theme="dark"] .dev-footer-column h2,
 html[data-theme="dark"] .dev-footer-social h2 {
-  color: var(--color-border);
+  color: var(--color-text-primary);
 }
 html[data-theme="dark"] .dev-muted {
   color: var(--color-text-slate-soft);
@@ -512,15 +514,15 @@ html[data-theme="dark"] .dev-muted {
 html[data-theme="dark"] .dev-scope,
 html[data-theme="dark"] .dev-footer,
 html[data-theme="dark"] .dev-redoc {
-  background: var(--color-text-primary);
-  border-color: var(--color-text-ink);
+  background: var(--color-surface);
+  border-color: var(--color-border);
 }
 html[data-theme="dark"] .dev-scope code {
-  color: var(--color-border);
+  color: var(--color-text-primary);
 }
 html[data-theme="dark"] .dev-steps code {
-  background: var(--color-text-ink);
-  color: var(--color-border);
+  background: var(--color-surface-deep);
+  color: var(--color-text-ink);
 }
 html[data-theme="dark"] .dev-footer-brand p,
 html[data-theme="dark"] .dev-footer-column a,
@@ -528,6 +530,6 @@ html[data-theme="dark"] .dev-footer-bottom {
   color: var(--color-text-slate-soft);
 }
 html[data-theme="dark"] .dev-social-links a {
-  background: var(--color-text-ink);
-  color: var(--color-input-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
 }
