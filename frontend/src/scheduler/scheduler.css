@@ -33,6 +33,17 @@
   --slot-h: 48px;
 }
 
+/* Dark theme: --bg (lightsteelblue) and the white hairline borders were
+   hardcoded for the light look, so the sidebar + calendar canvas stayed light
+   while the grid surfaces (theme-aware --surface) went dark navy — a split-tone
+   page. Pull the canvas to the same dark navy as the rest of the app and soften
+   the hairlines so the whole scheduler reads as one dark-blue surface. */
+:root[data-theme="dark"] .scheduler {
+  --bg: var(--color-email-bg);
+  --border: rgb(255, 255, 255, 0.12);
+  --border-soft: rgb(255, 255, 255, 0.08);
+}
+
 /* ================= LAYOUT ================= */
 .scheduler {
   display: flex;
