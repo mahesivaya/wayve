@@ -37,7 +37,7 @@ export default function BootstrapPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `wayve-org-recovery-key.txt`;
+    a.download = `fluxze-org-recovery-key.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

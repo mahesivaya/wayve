@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { MNEMONIC_WORD_COUNT } from "../crypto/mnemonic";
 import type { RecoveryMode } from "../auth/authContextValue";
+import { useAuth } from "../auth/useAuth";
 import "./recoverySeedModal.css";
 
 interface Props {
@@ -35,9 +36,18 @@ export default function RecoverySeedModal({
   busy,
   error,
 }: Props) {
+  const { user } = useAuth();
   const words = useMemo(() => mnemonic.split(" "), [mnemonic]);
   const [copied, setCopied] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
+
+  // Recovery-key filename keyed to the account scope so the three account
+  // kinds produce distinct files: personal vs platform team. (The org master
+  // key is downloaded from BootstrapPage as fluxze-org-recovery-key.txt.)
+  const recoveryFileName =
+    user?.scope === "platform"
+      ? "fluxze.platform-recovery-key.txt"
+      : "fluxze-recovery-key.txt";
 
   // Disable keyboard shortcuts that could accidentally close the modal.
   useEffect(() => {
@@ -72,7 +82,7 @@ export default function RecoverySeedModal({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "wayve-recovery-phrase.txt";
+    a.download = recoveryFileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
