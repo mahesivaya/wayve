@@ -65,6 +65,41 @@ function getOne(db: IDBDatabase, key: string): Promise<unknown> {
   });
 }
 
+// Ask the browser to mark this origin's storage as *persistent* so the cached
+// keypair in `wayve_keys` is NOT auto-evicted (Safari/iOS ~7-day cycle, Chrome
+// under storage pressure, "clear on close" modes). Without this, an evicted
+// keystore forces the 24-word recovery prompt on the next hard refresh.
+// Idempotent and failure-safe — returns false on unsupported / non-secure
+// contexts; never throws and must never block encryption setup.
+export async function requestPersistentStorage(): Promise<boolean> {
+  try {
+    if (!navigator.storage?.persist) return false;
+    if (await navigator.storage.persisted()) return true; // already granted
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
+// 🧹 Wipe every cached key (private + public, all userId/email slots) from
+// IndexedDB. Called on EXPLICIT logout — "I'm leaving this machine" — so the
+// E2E private key doesn't linger on a shared device. Deliberately NOT called
+// on session-expiry (token timeout keeps the key so re-login stays smooth).
+// Failure-safe: a wipe error must not block logout.
+export async function clearKeys(): Promise<void> {
+  try {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      tx.objectStore(STORE_NAME).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // best-effort
+  }
+}
+
 // 🔐 Save private key under both the userId-keyed slot and (if provided) an
 // email-keyed alias so we can recover from userId churn.
 export async function savePrivateKey(

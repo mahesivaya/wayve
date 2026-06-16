@@ -4,6 +4,8 @@ import {
   savePublicKey,
   loadPrivateKey,
   loadPublicKey,
+  requestPersistentStorage,
+  clearKeys,
 } from "../crypto/keyStore";
 import { generateMnemonic, mnemonicToEntropy } from "../crypto/mnemonic";
 import { wrapKeysForRecovery } from "../crypto/recovery";
@@ -235,6 +237,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     plaintextPassword?: string
   ) => {
     try {
+      // Ask the browser to keep the keystore from being evicted, so the cached
+      // keypair survives a hard refresh and we don't re-prompt for the 24-word
+      // mnemonic. Fire-and-forget — must never block encryption setup.
+      void requestPersistentStorage();
+
       // (1) Local key already on this device. A fresh registration
       // still wants brand-new keys, even if IndexedDB has stale
       // entries from a prior dev session — short-circuiting here
@@ -606,6 +613,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     authVersion.current += 1;
     clearAuthToken();
+    // Explicit logout = "I'm leaving this machine": wipe the cached E2E keys so
+    // the private key doesn't linger in IndexedDB on a shared device. NOT done
+    // on session-expiry (that keeps the key so re-login stays prompt-free).
+    void clearKeys();
     setNeedsRecovery(false);
     // Intentionally do NOT setUser(null) here. Nulling the user synchronously
     // re-renders the current (protected) route, which ProtectedRoute then
