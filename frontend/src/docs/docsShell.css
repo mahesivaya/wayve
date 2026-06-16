@@ -13,9 +13,11 @@
 .docs-shell {
   width: 100%;
   margin: 0;
-  /* Query container so the inner grid collapses to a single column based on
-     the docs pane's OWN width — this is what makes docs go single-column in a
-     narrow split pane, not just on small viewports. */
+  /* Single full-width content column (the in-shell nav menu was removed).
+     `.docs-shell--app` overrides this padding for the authenticated app shell. */
+  padding: 1.5rem 0;
+  /* Query container so content can react to the docs pane's OWN width — e.g.
+     in a narrow split pane, not just on small viewports. */
   container-type: inline-size;
 }
 
