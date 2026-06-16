@@ -30,6 +30,10 @@ interface EmailListProps {
   // pages that hide the full email sidebar but still need to reach Sent.
   showFolderTabs?: boolean;
   onSelectFolder?: (folder: EmailFolder) => void;
+  // Opens the full-panel "all attachments" view (the Files view). When
+  // provided, an Attachments button shows in the bulk bar. Omitted by the
+  // org/platform embeddings that don't host the Files panel.
+  onShowAttachments?: () => void;
 }
 
 // Folders still without a real backing query. Important / Updates / Social are
@@ -81,6 +85,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   onAddAccount,
   showFolderTabs = false,
   onSelectFolder,
+  onShowAttachments,
 }) => {
   const isStubFolder = activeFolder
     ? (STUB_EMAIL_FOLDERS as ReadonlyArray<string>).includes(activeFolder)
@@ -346,6 +351,16 @@ export const EmailList: React.FC<EmailListProps> = ({
           >
             {showUnreadOnly ? "Showing unread" : "Show unread"}
           </button>
+          {onShowAttachments && (
+            <button
+              type="button"
+              className="email-bulk-action"
+              onClick={onShowAttachments}
+              title="Show all attachments across your emails"
+            >
+              Attachments
+            </button>
+          )}
           {onBulkDelete && (
             <button
               type="button"
