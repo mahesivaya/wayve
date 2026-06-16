@@ -30,7 +30,10 @@
 }
 
 .plan-admin-sub code {
-  background: var(--color-surface-2, #f3f4f6);
+  /* Theme-aware pill: the old hardcoded light bg (#f3f4f6) with no text color
+     left the code invisible (near-white inherited text) on the dark page. */
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 12px;
@@ -133,7 +136,10 @@
 .plan-admin-table code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
-  background: var(--color-surface-2, #f3f4f6);
+  /* Theme-aware pill + explicit ink so the plan code is readable on the dark
+     table rows (was near-white text on a hardcoded light pill = invisible). */
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
   padding: 1px 5px;
   border-radius: 3px;
 }
