@@ -133,6 +133,31 @@ const BACKGROUNDS: {
   },
 ];
 
+// Pure black & white inputs for the Contrast button's monochrome toggle.
+// `chroma: 0, saturation: 0` makes generatePalette() emit a fully greyscale
+// palette (surfaces, text, borders, buttons AND status colors). `saturation: 0`
+// also distinguishes these from the colored swatches above (which keep the
+// default saturation of 1), so `isBwInput()` can tell B&W apart from, e.g.,
+// the chroma-0 "Ink" swatch.
+const BW_LIGHT_INPUT: PaletteInput = {
+  hue: 0,
+  chroma: 0,
+  saturation: 0,
+  contrast: 1,
+  depth: 0,
+};
+const BW_DARK_INPUT: PaletteInput = {
+  hue: 0,
+  chroma: 0,
+  saturation: 0,
+  contrast: 1,
+  depth: 0.05,
+};
+
+function isBwInput(input: PaletteInput): boolean {
+  return input.chroma === 0 && input.saturation === 0;
+}
+
 // A compact 3-dot swatch for a library row — same generator as the live theme.
 function RowSwatch({ input, mode }: { input: PaletteInput; mode: ThemeMode }) {
   const tokens = useMemo(() => generatePalette(input, mode), [input, mode]);
@@ -203,6 +228,25 @@ export default function ThemeCustomizer() {
 
   const activePresetId = choice.kind === "preset" ? choice.presetId : null;
   const activeSavedId = choice.kind === "saved" ? choice.id : null;
+  // Whether a black & white theme is currently applied (set by the Contrast
+  // button). Used for the button's pressed state and to decide the next toggle.
+  const bwActive = choice.kind === "custom" && isBwInput(choice.input);
+
+  // Contrast button: toggle a pure monochrome theme. From any colored theme the
+  // first click → white (B&W light); the next → black (B&W dark); then back to
+  // white. Picking a colored swatch below clears B&W, so the next click restarts
+  // at white.
+  const toggleBlackAndWhite = () => {
+    const nextMode: ThemeMode =
+      bwActive && choice.kind === "custom" && choice.mode === "light"
+        ? "dark"
+        : "light";
+    const nextInput = nextMode === "dark" ? BW_DARK_INPUT : BW_LIGHT_INPUT;
+    setEditorTab("basic"); // keep the advanced-tab preview from masking the apply
+    setChoice({ kind: "custom", mode: nextMode, input: nextInput });
+    setInput(nextInput);
+    setMode(nextMode);
+  };
 
   // --- actions ---------------------------------------------------------------
   const applyPreset = (presetId: string) => {
@@ -336,10 +380,14 @@ export default function ThemeCustomizer() {
           <button
             type="button"
             className="theme-icon-btn"
-            onClick={() => setMode(mode === "light" ? "dark" : "light")}
-            title={`Switch to ${mode === "light" ? "dark" : "light"} mode (currently ${mode})`}
-            aria-label={`Switch to ${mode === "light" ? "dark" : "light"} mode`}
-            aria-pressed={mode === "dark"}
+            onClick={toggleBlackAndWhite}
+            title={
+              bwActive
+                ? `Black & white: ${choice.kind === "custom" && choice.mode === "dark" ? "black — click for white" : "white — click for black"}`
+                : "Black & white"
+            }
+            aria-label="Toggle black and white"
+            aria-pressed={bwActive}
           >
             <ContrastIcon />
           </button>
