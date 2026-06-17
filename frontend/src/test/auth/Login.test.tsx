@@ -36,7 +36,10 @@ describe("Login page", () => {
 
     renderAt(["/login"]);
 
-    await userEvent.type(screen.getByPlaceholderText("Email"), "a@b.c");
+    await userEvent.type(
+      screen.getByPlaceholderText("Email or username"),
+      "a@b.c"
+    );
     await userEvent.type(screen.getByPlaceholderText("Password"), "pw");
     await userEvent.click(screen.getByRole("button", { name: /^login$/i }));
 
@@ -53,7 +56,10 @@ describe("Login page", () => {
     ).mockRejectedValue(new Error("bad creds"));
 
     renderAt(["/login"]);
-    await userEvent.type(screen.getByPlaceholderText("Email"), "a@b.c");
+    await userEvent.type(
+      screen.getByPlaceholderText("Email or username"),
+      "a@b.c"
+    );
     await userEvent.type(screen.getByPlaceholderText("Password"), "wrong");
     await userEvent.click(screen.getByRole("button", { name: /^login$/i }));
 
