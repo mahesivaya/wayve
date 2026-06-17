@@ -77,6 +77,7 @@ import {
   PlatformIcon,
   DevelopersIcon,
   OrganizationIcon,
+  MembersIcon,
 } from "../icons";
 import Modal from "./Modal";
 
@@ -118,11 +119,24 @@ const ADDABLE_PERSONAL_APPS: {
   icon: ReactNode;
   path?: string;
 }[] = [
-  { key: "github", label: "Code Repo", icon: <GitLogoIcon size={22} />, path: "/github" },
+  {
+    key: "github",
+    label: "Code Repo",
+    icon: <GitLogoIcon size={22} />,
+    path: "/github",
+  },
   { key: "canvas", label: "Canvas", icon: <CanvasIcon size={22} /> },
   { key: "forms", label: "Forms", icon: <FormsIcon size={22} /> },
-  { key: "automations", label: "Automations", icon: <AutomationsIcon size={22} /> },
-  { key: "whiteboard", label: "Whiteboard", icon: <WhiteboardIcon size={22} /> },
+  {
+    key: "automations",
+    label: "Automations",
+    icon: <AutomationsIcon size={22} />,
+  },
+  {
+    key: "whiteboard",
+    label: "Whiteboard",
+    icon: <WhiteboardIcon size={22} />,
+  },
   { key: "insights", label: "Insights", icon: <InsightsIcon size={22} /> },
   { key: "assistant", label: "Assistant", icon: <AssistantIcon size={22} /> },
 ];
@@ -138,9 +152,21 @@ const SAMPLE_PROJECTS: Project[] = [
 ];
 
 const SAMPLE_TEAMS: Team[] = [
-  { id: -1, name: "Engineering", slug: "engineering", tagline: null, description: null },
+  {
+    id: -1,
+    name: "Engineering",
+    slug: "engineering",
+    tagline: null,
+    description: null,
+  },
   { id: -2, name: "Design", slug: "design", tagline: null, description: null },
-  { id: -3, name: "Operations", slug: "operations", tagline: null, description: null },
+  {
+    id: -3,
+    name: "Operations",
+    slug: "operations",
+    tagline: null,
+    description: null,
+  },
 ];
 
 function isValidAppKey(value: unknown): value is AppKey {
@@ -313,7 +339,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     try {
       const raw = localStorage.getItem(PERSONAL_APPS_STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.filter((k) => typeof k === "string") : [];
+      return Array.isArray(parsed)
+        ? parsed.filter((k) => typeof k === "string")
+        : [];
     } catch {
       return [];
     }
@@ -475,7 +503,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const { width: sidebarWidth, startResize: startSidebarResize } =
     useResizableWidth({
       storageKey: "rwayve.sidebar.width",
-      defaultWidth: 156,
+      defaultWidth: 200,
       min: 132,
       max: 360,
     });
@@ -754,6 +782,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     (hasPermission(user, "logs:read") ||
       hasPermission(user, "logs:read_limited") ||
       hasPermission(user, "api_keys:manage"));
+  const canAccessPlatformMembers =
+    user.scope === "platform" && hasPermission(user, "members:read");
   const canAccessPlatformSupport =
     user.scope === "platform" && hasPermission(user, "members:read");
   const canAccessPlatformAnalytics =
@@ -1087,6 +1117,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       visible: hasPlatformSection,
       icon: <PlatformIcon size={16} />,
       links: [
+        {
+          path: "/platform/members",
+          label: "Members & roles",
+          icon: <MembersIcon size={16} />,
+          visible: canAccessPlatformMembers,
+        },
         {
           path: "/platform/billing",
           label: "Billing",
@@ -1698,10 +1734,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 aria-pressed={checked}
                 onClick={() => togglePersonalApp(a.key)}
               >
-                <span
-                  className="add-app-checkbox"
-                  aria-hidden="true"
-                >
+                <span className="add-app-checkbox" aria-hidden="true">
                   {checked ? "✓" : ""}
                 </span>
                 <span className="add-app-icon" aria-hidden="true">

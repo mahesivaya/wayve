@@ -54,16 +54,8 @@ export default function PlatformAdminHome() {
   const canSeePlatformBilling =
     hasPermission(user, "billing:read") ||
     hasPermission(user, "billing:manage");
-  const canSeeDeveloper =
-    hasPermission(user, "logs:read") ||
-    hasPermission(user, "logs:read_limited") ||
-    hasPermission(user, "api_keys:manage");
-  const canSeeSupport = hasPermission(user, "members:read");
   const canSeeAnalytics = hasPermission(user, "members:read");
-  const canSeeSecurity =
-    hasPermission(user, "audit:read") || hasPermission(user, "security:manage");
   const canSeeOrganizations = canManageMembers || canManageApiKeys;
-  const canSeeMembers = canReadMembers;
   const canSeeScim = hasPermission(user, "webhooks:manage");
   const canManagePlans = hasPermission(user, "billing:manage");
 
@@ -86,7 +78,8 @@ export default function PlatformAdminHome() {
 
   const canSeeOrgStats = canManageMembers || canManageApiKeys;
   const canSeeBilling =
-    hasPermission(user, "billing:read") || hasPermission(user, "billing:manage");
+    hasPermission(user, "billing:read") ||
+    hasPermission(user, "billing:manage");
   const canManagePlansPerm = hasPermission(user, "billing:manage");
   const canManageTickets = hasPermission(user, "tickets:manage");
   const canReadAudit = hasPermission(user, "audit:read");
@@ -233,7 +226,10 @@ export default function PlatformAdminHome() {
   const statsForCard = (key: string): CardStat[] | null => {
     if (key === "users" && usersSummary) {
       return [
-        { value: usersSummary.users_total.toLocaleString(), label: "Total users" },
+        {
+          value: usersSummary.users_total.toLocaleString(),
+          label: "Total users",
+        },
         {
           value: formatBytes(usersSummary.storage_used_bytes),
           label: "Memory used",
@@ -363,41 +359,12 @@ export default function PlatformAdminHome() {
       visible: canManagePlans,
     },
     {
-      key: "members",
-      label: "Members & roles",
-      description:
-        "Provision platform team accounts and adjust their role assignments.",
-      path: "/platform/members",
-      visible: canSeeMembers,
-    },
-    {
-      key: "support",
-      label: "Support",
-      description: "In-app tickets and shared-inbox queue.",
-      path: "/platform/support",
-      visible: canSeeSupport,
-    },
-    {
-      key: "developer",
-      label: "Developer",
-      description: "API keys, audit traffic, webhooks and integrations.",
-      path: "/platform/developer",
-      visible: canSeeDeveloper,
-    },
-    {
       key: "analytics",
       label: "Analytics",
       description:
         "Users, tenants, signups and connected mailboxes at a glance.",
       path: "/platform/analytics",
       visible: canSeeAnalytics,
-    },
-    {
-      key: "security",
-      label: "Security",
-      description: "Audit logs, outcome filters and SIEM webhook forwarding.",
-      path: "/logs/audit",
-      visible: canSeeSecurity,
     },
     {
       key: "scim",

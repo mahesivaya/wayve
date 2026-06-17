@@ -217,7 +217,8 @@
 
 .platform-console-list article {
   min-width: 0;
-  min-height: 136px;
+  min-height: 104px;
+  padding: 12px;
   flex-direction: column;
   align-items: flex-start;
 }
@@ -250,21 +251,26 @@
 .platform-console-rows {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 18px;
 }
 
+/* 18px column gap (overrides the shared .organization-name-list 10px). The
+   partial-row widths below are derived from a 3-track grid with this gap:
+   track = (100% - 2*18px)/3; so a 2-track row = 66.666% - 18/3 = -6px, and a
+   1-track row = 33.333% - 2*18/3 = -12px. Keep these in sync if the gap changes. */
 .platform-console-row {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .platform-console-row--2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  width: calc(66.666% - 8px);
+  width: calc(66.666% - 6px);
 }
 
 .platform-console-row--1 {
   grid-template-columns: minmax(0, 1fr);
-  width: calc(33.333% - 8px);
+  width: calc(33.333% - 12px);
 }
 
 /* The console cards sit directly on the page — strip the bordered .u-panel box
