@@ -1493,13 +1493,19 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                         a.icon
                       )
                     ) : (
-                      // Placeholder app — present in the sidebar but not yet
-                      // wired to a route, so it's a non-navigating row.
+                      // Placeholder app — not yet wired to a real route, so it
+                      // navigates to the shared Coming Soon page (carrying its
+                      // label so the page names the feature).
                       <button
                         key={a.key}
                         type="button"
                         className="sidebar-link sidebar-link-placeholder"
                         title={`${a.label} (coming soon)`}
+                        onClick={() =>
+                          navigate(
+                            `/coming-soon?feature=${encodeURIComponent(a.label)}`
+                          )
+                        }
                       >
                         <span className="sidebar-icon" aria-hidden="true">
                           {a.icon}
