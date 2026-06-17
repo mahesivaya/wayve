@@ -786,6 +786,19 @@
   min-width: 0;
 }
 
+/* Creation timestamp shown under the task title. Muted and small so it reads
+   as metadata, not content. */
+.task-card-created {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.task-board-card-created {
+  margin-top: 6px;
+}
+
 /* Actions cluster sits on the same row as the title, aligned to the
    right edge of the card. The card itself is `display: flex;
    justify-content: space-between`, so dropping `.task-card-meta` and

@@ -40,6 +40,22 @@ const priorityLabel = (priority: TaskPriority) => {
   return "Lowest";
 };
 
+// Render a task's creation timestamp as a localized date + time, e.g.
+// "Jun 17, 2026, 3:42 PM". Returns "" when the field is missing or unparseable
+// so the UI simply omits the line.
+const formatCreatedAt = (value: string | null | undefined): string => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 const normalizePriority = (value: unknown): TaskPriority => {
   const n = Number(value);
   if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) return n;
@@ -980,6 +996,11 @@ export default function Tasks() {
                             >
                               {task.name}
                             </button>
+                            {formatCreatedAt(task.created_at) && (
+                              <span className="task-card-created task-board-card-created">
+                                Created {formatCreatedAt(task.created_at)}
+                              </span>
+                            )}
                             <div className="task-board-card-actions">
                               <button
                                 type="button"
@@ -1078,6 +1099,11 @@ export default function Tasks() {
                             </button>
                           </h3>
                         </div>
+                        {formatCreatedAt(task.created_at) && (
+                          <span className="task-card-created">
+                            Created {formatCreatedAt(task.created_at)}
+                          </span>
+                        )}
                       </div>
                       {expanded && (
                         <div className="task-card-detail">
@@ -1164,6 +1190,11 @@ export default function Tasks() {
                             </button>
                           </h3>
                         </div>
+                        {formatCreatedAt(task.created_at) && (
+                          <span className="task-card-created">
+                            Created {formatCreatedAt(task.created_at)}
+                          </span>
+                        )}
                       </div>
                       <div className="task-card-actions">
                         <button
