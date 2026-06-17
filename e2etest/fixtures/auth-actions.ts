@@ -5,14 +5,14 @@ import type { Page } from "@playwright/test";
 // markup is restyled to use real labels, swap these helpers — every
 // spec calls through here, so no spec file needs to know.
 //
-// /login renders TWO email inputs: one for SSO ("you@your-company.com")
-// and one for password login ("Email"). The exact "Email" placeholder
-// match disambiguates.
+// /login renders TWO inputs: one for SSO ("you@your-company.com") and one
+// for password login ("Email or username"). The exact placeholder match
+// disambiguates. (Register still uses "Email" — login accepts username too.)
 
 export async function loginViaUI(page: Page, email: string, password: string) {
   await page.goto("/login");
-  // The password-login email input has placeholder="Email" (exact).
-  await page.getByPlaceholder("Email", { exact: true }).fill(email);
+  // The password-login field has placeholder="Email or username" (exact).
+  await page.getByPlaceholder("Email or username", { exact: true }).fill(email);
   await page.getByPlaceholder("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: /^login$/i }).click();
 }
