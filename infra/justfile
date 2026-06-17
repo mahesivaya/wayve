@@ -205,6 +205,32 @@ stripe-trigger EVENT="customer.subscription.updated":
     stripe trigger {{EVENT}}
 
 # =========================
+# 📝 CHANGELOG (git-cliff)
+# =========================
+
+# Regenerate the full CHANGELOG.md from Conventional Commits across all tags.
+# Run from repo root (cliff.toml + .git live there). Requires `cargo install git-cliff`.
+[working-directory: '..']
+changelog:
+    git-cliff --output CHANGELOG.md
+
+# Preview the notes for the NEXT (unreleased) release without writing the file.
+[working-directory: '..']
+changelog-unreleased:
+    git-cliff --unreleased
+
+# Print just the notes for a specific tag, e.g. `just changelog-tag v2.2.2`
+# — handy for pasting into a GitHub Release body. Renders the commit range
+# between the previous tag and TAG (or from the repo root if TAG is the first).
+[working-directory: '..']
+changelog-tag TAG:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    prev="$(git describe --tags --abbrev=0 "{{TAG}}^" 2>/dev/null || true)"
+    range="{{TAG}}"; [ -n "$prev" ] && range="$prev..{{TAG}}"
+    git-cliff "$range" --tag "{{TAG}}" --strip all
+
+# =========================
 # ⚡ SHORTCUTS
 # =========================
 

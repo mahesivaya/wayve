@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Pre-commit gate. Mirrors the Rust checks in .github/workflows/smoke.yml
+# (cargo fmt --check + cargo clippy -D warnings) so formatting/lint failures —
+# including the clippy.toml bans on Option::unwrap / Result::expect — are caught
+# locally instead of after push. Runs ONLY when backend Rust files are staged.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+# Bypass in a pinch:      git commit --no-verify
+set -euo pipefail
+
+if ! git diff --cached --name-only --diff-filter=ACM | grep -qE '^backend/.*\.rs$'; then
+  exit 0 # no backend Rust staged — nothing to check
+fi
+
+echo "pre-commit › cargo fmt --check"
+if ! (cd backend && cargo fmt --check); then
+  echo "✗ rustfmt: run 'just fmt' (or 'cargo fmt') to fix, then re-commit." >&2
+  exit 1
+fi
+
+echo "pre-commit › cargo clippy --all-targets -D warnings"
+if ! (cd backend && cargo clippy --all-targets -- -D warnings); then
+  echo "✗ clippy failed — fix the warnings above, then re-commit." >&2
+  exit 1
+fi
+
+echo "pre-commit ✓ Rust checks passed"

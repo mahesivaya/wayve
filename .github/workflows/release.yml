@@ -29,3 +29,27 @@ jobs:
           # every published tag latest (the action's default make_latest:true would
           # let a hotfix tagged on an older commit wrongly steal "Latest").
           make_latest: legacy
+
+  # Developer-facing half of the changelog story: regenerate the in-repo
+  # CHANGELOG.md from Conventional Commits (config: cliff.toml) and commit it
+  # back to main. The `publish` job above still owns the public Release Notes.
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main # commit the regenerated changelog onto the branch, not the tag
+          fetch-depth: 0 # full history + all tags so every release section renders
+
+      - name: Generate CHANGELOG.md
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --output CHANGELOG.md
+
+      - name: Commit CHANGELOG.md to main
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          branch: main
+          file_pattern: CHANGELOG.md
+          commit_message: "docs(changelog): update for ${{ github.ref_name }} [skip ci]"
