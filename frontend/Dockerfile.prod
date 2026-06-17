@@ -17,7 +17,7 @@ RUN npm run build
 # image is fronted by the outer nginx proxy in
 # `infra/nginx/nginx.prod.conf.template`, which now targets
 # `frontend:8080`.
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.29-alpine
 
 # /etc/nginx and /usr/share/nginx/html are root-owned in the base image,
 # so we briefly switch to root to apply the latest Alpine patches, drop
