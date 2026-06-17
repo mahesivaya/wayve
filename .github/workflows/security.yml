@@ -158,6 +158,11 @@ jobs:
 
       - name: Upload SARIF to GitHub code scanning
         if: always()
+        # Uploading SARIF to GitHub code scanning requires GitHub Advanced
+        # Security, which isn't available on this (now private) repo — so the
+        # upload 403s. Don't fail the security pipeline on it; the scan results
+        # are still produced and the high-severity gate below still runs.
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: semgrep.sarif
@@ -227,6 +232,11 @@ jobs:
 
       - name: Upload SARIF to GitHub code scanning
         if: always()
+        # Uploading SARIF to GitHub code scanning requires GitHub Advanced
+        # Security, which isn't available on this (now private) repo — so the
+        # upload 403s. Don't fail the security pipeline on it; the scan results
+        # are still produced and the high-severity gate below still runs.
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-fs.sarif
@@ -312,6 +322,11 @@ jobs:
 
       - name: Upload SARIF to GitHub code scanning
         if: always()
+        # Uploading SARIF to GitHub code scanning requires GitHub Advanced
+        # Security, which isn't available on this (now private) repo — so the
+        # upload 403s. Don't fail the security pipeline on it; the scan results
+        # are still produced and the high-severity gate below still runs.
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-image-${{ matrix.name }}.sarif
