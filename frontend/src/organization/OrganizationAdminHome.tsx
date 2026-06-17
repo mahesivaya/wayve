@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import type { KeyboardEvent, ReactNode } from "react";
 import { useAuth } from "../auth/useAuth";
 import {
-  SettingsTileIcon,
   MembersIcon,
   BillingIcon,
   DeveloperTileIcon,
@@ -101,7 +100,6 @@ export default function OrganizationAdminHome() {
   const canSeeWebhooks = hasPermission(user, "webhooks:manage");
   const canSeeSharedInboxes = hasPermission(user, "inbox:manage");
   const canSeeSso = hasPermission(user, "sso:manage");
-  const canSeeOrgSettings = hasPermission(user, "org:settings");
   const canReadAudit = hasPermission(user, "audit:read");
 
   // Live figures for the org-owner console tiles.
@@ -256,13 +254,6 @@ export default function OrganizationAdminHome() {
   };
 
   const consoles: Tile[] = [
-    {
-      icon: <SettingsTileIcon size={26} />,
-      label: "Settings",
-      description: "Rename your organization and manage its profile.",
-      path: "/settings",
-      visible: canSeeOrgSettings,
-    },
     {
       icon: <MembersIcon size={26} />,
       label: "Members & roles",
