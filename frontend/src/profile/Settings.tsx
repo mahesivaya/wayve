@@ -307,6 +307,24 @@ export default function Settings() {
           </section>
         )}
 
+        {(isPersonal || isPlatformUser) && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Domains</h2>
+            <div className="settings-rows">
+              <div className="settings-usage-row">
+                <span>Connect a custom domain to your account</span>
+                <button
+                  type="button"
+                  className="settings-billing-link"
+                  onClick={() => navigate("/coming-soon")}
+                >
+                  Manage domains
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
         <section className="settings-card">
           <h2 className="settings-card-title">Storage &amp; Usage</h2>
           <div className="settings-rows">

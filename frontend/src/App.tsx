@@ -38,6 +38,7 @@ const TeamPage = lazy(() => import("./teams/TeamPage"));
 const DomainVerification = lazy(
   () => import("./orgDomains/DomainVerification")
 );
+const ComingSoon = lazy(() => import("./components/ComingSoon"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
 const Organization = lazy(() => import("./organization/Organization"));
@@ -346,6 +347,10 @@ export default function App() {
                     <Navigate to={accountHome} replace />
                   )
                 }
+              />
+              <Route
+                path="/coming-soon"
+                element={<ComingSoon feature="Domains" />}
               />
               <Route path="/test-access" element={<TestAccess />} />
               <Route

@@ -1148,7 +1148,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           visible: canAccessPlatformAnalytics,
         },
         {
-          path: "/platform/domains",
+          path: "/coming-soon",
           label: "Domains",
           icon: <DomainsIcon size={16} />,
           visible: isPlatformOwner,
@@ -1242,13 +1242,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       collapsible: false,
       links: [
         {
-          path:
-            user.organization_id != null
-              ? `/platform/domains?org=${user.organization_id}`
-              : "/platform/domains",
+          path: "/coming-soon",
           label: "Domains",
           icon: <DomainsIcon size={16} />,
-          activeWhen: "/platform/domains",
+          activeWhen: "/coming-soon",
         },
         { path: "/logs/app", label: "App Logs", icon: <LogsIcon size={16} /> },
         {
