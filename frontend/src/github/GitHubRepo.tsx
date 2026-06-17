@@ -723,49 +723,52 @@ function GitHubRepoViewer({
    * `append` means we're paging through history (preserves runs
    * already loaded); otherwise the result REPLACES the list.
    */
-  const loadRuns = useCallback(async (page: number, append: boolean) => {
-    if (append) setRunsLoadingMore(true);
-    // Clear any stale banner from a previous attempt so a successful
-    // retry doesn't leave the error visible. The other loaders
-    // (loadRepo, loadDirectory) already do this; loadRuns was the
-    // outlier and caused the 404 banner to stick across page state.
-    setError("");
-    try {
-      const url =
-        `${API_BASE}/actions/runs` +
-        `?per_page=${RUNS_PER_PAGE}` +
-        `&page=${page}`;
-      const data = await githubJson<RunsResponse>(url);
-      setRunsTotal(data.total_count ?? 0);
-      setRunsPage(page);
-      setRuns((current) =>
-        append ? [...current, ...data.workflow_runs] : data.workflow_runs
-      );
-      if (!append) {
-        // Default every workflow group to expanded so the Actions
-        // panel reads as a flat run list out-of-the-box — matches
-        // GitHub's own /actions view. The user can still collapse a
-        // workflow they want to hide; that state survives "Load more"
-        // because we only seed the set on replace, not on append.
-        const names = new Set(
-          data.workflow_runs.map((run) => run.name?.trim() || "Workflow")
+  const loadRuns = useCallback(
+    async (page: number, append: boolean) => {
+      if (append) setRunsLoadingMore(true);
+      // Clear any stale banner from a previous attempt so a successful
+      // retry doesn't leave the error visible. The other loaders
+      // (loadRepo, loadDirectory) already do this; loadRuns was the
+      // outlier and caused the 404 banner to stick across page state.
+      setError("");
+      try {
+        const url =
+          `${API_BASE}/actions/runs` +
+          `?per_page=${RUNS_PER_PAGE}` +
+          `&page=${page}`;
+        const data = await githubJson<RunsResponse>(url);
+        setRunsTotal(data.total_count ?? 0);
+        setRunsPage(page);
+        setRuns((current) =>
+          append ? [...current, ...data.workflow_runs] : data.workflow_runs
         );
-        setExpandedWorkflows(names);
+        if (!append) {
+          // Default every workflow group to expanded so the Actions
+          // panel reads as a flat run list out-of-the-box — matches
+          // GitHub's own /actions view. The user can still collapse a
+          // workflow they want to hide; that state survives "Load more"
+          // because we only seed the set on replace, not on append.
+          const names = new Set(
+            data.workflow_runs.map((run) => run.name?.trim() || "Workflow")
+          );
+          setExpandedWorkflows(names);
+        }
+      } catch (err) {
+        // Surface the error but don't blow up the rest of the page —
+        // the user still has files / commits / workflows on screen.
+        setError(
+          err instanceof Error ? err.message : "Action runs failed to load"
+        );
+        if (!append) {
+          setRuns([]);
+          setRunsTotal(0);
+        }
+      } finally {
+        setRunsLoadingMore(false);
       }
-    } catch (err) {
-      // Surface the error but don't blow up the rest of the page —
-      // the user still has files / commits / workflows on screen.
-      setError(
-        err instanceof Error ? err.message : "Action runs failed to load"
-      );
-      if (!append) {
-        setRuns([]);
-        setRunsTotal(0);
-      }
-    } finally {
-      setRunsLoadingMore(false);
-    }
-  }, [API_BASE]);
+    },
+    [API_BASE]
+  );
 
   const loadDirectory = useCallback(
     async (nextPath: string, nextBranch: string) => {
@@ -799,57 +802,66 @@ function GitHubRepoViewer({
     [API_BASE]
   );
 
-  const loadWorkflows = useCallback(async (nextBranch: string) => {
-    try {
-      const data = await githubJson<ContentItem | ContentItem[]>(
-        `${API_BASE}/contents/.github/workflows?ref=${encodeURIComponent(nextBranch)}`
-      );
-      setWorkflows(
-        isContentList(data) ? data.filter((item) => item.type === "file") : []
-      );
-    } catch {
-      setWorkflows([]);
-    }
-  }, [API_BASE]);
+  const loadWorkflows = useCallback(
+    async (nextBranch: string) => {
+      try {
+        const data = await githubJson<ContentItem | ContentItem[]>(
+          `${API_BASE}/contents/.github/workflows?ref=${encodeURIComponent(nextBranch)}`
+        );
+        setWorkflows(
+          isContentList(data) ? data.filter((item) => item.type === "file") : []
+        );
+      } catch {
+        setWorkflows([]);
+      }
+    },
+    [API_BASE]
+  );
 
   // README for the Description tab. Resolve the file metadata via the
   // proxied Contents API, then fetch its raw text from download_url (same
   // two-step the file preview uses in openFile). Any failure — most
   // commonly a repo with no README — clears the text so the pane shows
   // its graceful fallback rather than an error.
-  const loadReadme = useCallback(async (nextBranch: string) => {
-    setReadmeLoading(true);
-    try {
-      const data = await githubJson<ContentItem | ContentItem[]>(
-        `${API_BASE}/contents/README.md?ref=${encodeURIComponent(nextBranch)}`
-      );
-      const item = isContentList(data) ? data[0] : data;
-      if (!item?.download_url) {
+  const loadReadme = useCallback(
+    async (nextBranch: string) => {
+      setReadmeLoading(true);
+      try {
+        const data = await githubJson<ContentItem | ContentItem[]>(
+          `${API_BASE}/contents/README.md?ref=${encodeURIComponent(nextBranch)}`
+        );
+        const item = isContentList(data) ? data[0] : data;
+        if (!item?.download_url) {
+          setReadme("");
+          return;
+        }
+        const response = await fetch(item.download_url);
+        if (!response.ok)
+          throw new Error(`README request failed (${response.status})`);
+        const text = await response.text();
+        setReadme(text.slice(0, 60000));
+      } catch {
         setReadme("");
-        return;
+      } finally {
+        setReadmeLoading(false);
       }
-      const response = await fetch(item.download_url);
-      if (!response.ok)
-        throw new Error(`README request failed (${response.status})`);
-      const text = await response.text();
-      setReadme(text.slice(0, 60000));
-    } catch {
-      setReadme("");
-    } finally {
-      setReadmeLoading(false);
-    }
-  }, [API_BASE]);
+    },
+    [API_BASE]
+  );
 
-  const loadCommits = useCallback(async (nextBranch: string) => {
-    try {
-      const data = await githubJson<CommitItem[]>(
-        `${API_BASE}/commits?sha=${encodeURIComponent(nextBranch)}&per_page=8`
-      );
-      setCommits(data);
-    } catch {
-      setCommits([]);
-    }
-  }, [API_BASE]);
+  const loadCommits = useCallback(
+    async (nextBranch: string) => {
+      try {
+        const data = await githubJson<CommitItem[]>(
+          `${API_BASE}/commits?sha=${encodeURIComponent(nextBranch)}&per_page=8`
+        );
+        setCommits(data);
+      } catch {
+        setCommits([]);
+      }
+    },
+    [API_BASE]
+  );
 
   // Expand a commit row inline to show its file-level diff. First open
   // fetches the per-commit detail (which includes the patch for every
@@ -2328,7 +2340,10 @@ export default function GitHubRepo() {
   // Guests can't see code files — show a plain access message instead.
   if (user?.effective_role === "guest") {
     return (
-      <div className="github-empty-state" style={{ height: "100%", padding: 40 }}>
+      <div
+        className="github-empty-state"
+        style={{ height: "100%", padding: 40 }}
+      >
         <p className="github-empty">Don&apos;t have access</p>
       </div>
     );

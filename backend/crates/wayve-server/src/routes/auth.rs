@@ -626,8 +626,9 @@ pub async fn register_business(
     }
     let username = data.username.trim();
     if username.is_empty() || username.len() > 80 {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Enter a username" })));
+        return Ok(
+            HttpResponse::BadRequest().json(serde_json::json!({ "message": "Enter a username" }))
+        );
     }
     let email = data.email.trim().to_lowercase();
     if !email.contains('@') || email.len() > 254 {
@@ -665,7 +666,8 @@ pub async fn register_business(
     // membership + starter entitlements and flips account_type to
     // organization_admin. None => org name already taken (tx rolls back).
     let created =
-        crate::routes::user::create_org_for_user(&mut tx, user_id, name, None, Some(&email)).await?;
+        crate::routes::user::create_org_for_user(&mut tx, user_id, name, None, Some(&email))
+            .await?;
     if created.is_none() {
         return Ok(HttpResponse::Conflict().json(
             serde_json::json!({ "message": format!("A business named '{name}' already exists") }),

@@ -70,7 +70,9 @@ export function saveSsoConfig(
 
 /** Remove the org's SSO config. */
 export async function deleteSsoConfig(orgId: number): Promise<void> {
-  await apiFetch(`/api/organizations/${orgId}/sso/config`, { method: "DELETE" });
+  await apiFetch(`/api/organizations/${orgId}/sso/config`, {
+    method: "DELETE",
+  });
 }
 
 /** Test the connection — backend fetches the IdP's discovery doc. */

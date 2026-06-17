@@ -391,160 +391,164 @@ export default function ThemeCustomizer() {
         />
       </div>
 
-      <div className="theme-bg-quick" role="group" aria-label="Background color">
-          <span className="theme-bg-quick-label">Background</span>
-          <div className="theme-bg-swatches">
-            {BACKGROUNDS.map((bg) => {
-              const surface = generatePalette(bg.input, bg.mode).surface;
-              const active =
-                choice.kind === "custom" &&
-                choice.mode === bg.mode &&
-                choice.input.hue === bg.input.hue &&
-                choice.input.chroma === bg.input.chroma;
-              return (
-                <button
-                  key={bg.id}
-                  type="button"
-                  className={`theme-bg-swatch ${active ? "active" : ""}`}
-                  style={{ background: surface }}
-                  title={bg.label}
-                  aria-label={`${bg.label} background`}
-                  aria-pressed={active}
-                  onClick={() => {
-                    setInput(bg.input);
-                    setMode(bg.mode);
-                    setChoice({
-                      kind: "custom",
-                      mode: bg.mode,
-                      input: bg.input,
-                    });
-                  }}
-                />
-              );
-            })}
+      <div
+        className="theme-bg-quick"
+        role="group"
+        aria-label="Background color"
+      >
+        <span className="theme-bg-quick-label">Background</span>
+        <div className="theme-bg-swatches">
+          {BACKGROUNDS.map((bg) => {
+            const surface = generatePalette(bg.input, bg.mode).surface;
+            const active =
+              choice.kind === "custom" &&
+              choice.mode === bg.mode &&
+              choice.input.hue === bg.input.hue &&
+              choice.input.chroma === bg.input.chroma;
+            return (
+              <button
+                key={bg.id}
+                type="button"
+                className={`theme-bg-swatch ${active ? "active" : ""}`}
+                style={{ background: surface }}
+                title={bg.label}
+                aria-label={`${bg.label} background`}
+                aria-pressed={active}
+                onClick={() => {
+                  setInput(bg.input);
+                  setMode(bg.mode);
+                  setChoice({
+                    kind: "custom",
+                    mode: bg.mode,
+                    input: bg.input,
+                  });
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="theme-custom-panel">
+        <ColorGrid
+          hue={input.hue}
+          chroma={input.chroma}
+          onChange={({ hue, chroma }) => setInput({ ...input, hue, chroma })}
+        />
+
+        <div className="theme-custom-sliders">
+          <div className="theme-custom-row">
+            <label>Chroma</label>
+            <TickSlider
+              value={input.chroma}
+              min={0}
+              max={0.3}
+              step={0.01}
+              onChange={(chroma) => setInput({ ...input, chroma })}
+              variant="gradient"
+              trackBackground={chromaTrack}
+              ariaLabel="Chroma"
+            />
+          </div>
+          <div className="theme-custom-row">
+            <label>Saturation</label>
+            <TickSlider
+              value={input.saturation}
+              min={0}
+              max={1.5}
+              step={0.05}
+              onChange={(saturation) => setInput({ ...input, saturation })}
+              variant="ticks"
+              ariaLabel="Saturation"
+            />
+          </div>
+          <div className="theme-custom-row">
+            <label>Contrast</label>
+            <TickSlider
+              value={input.contrast}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(contrast) => setInput({ ...input, contrast })}
+              variant="ticks"
+              ariaLabel="Contrast"
+            />
+          </div>
+          <div className="theme-custom-row">
+            <label>Depth</label>
+            <TickSlider
+              value={input.depth}
+              min={-0.05}
+              max={0.05}
+              step={0.005}
+              onChange={(depth) => setInput({ ...input, depth })}
+              variant="ticks"
+              ariaLabel="Depth"
+            />
           </div>
         </div>
 
-        <div className="theme-custom-panel">
-          <ColorGrid
-            hue={input.hue}
-            chroma={input.chroma}
-            onChange={({ hue, chroma }) => setInput({ ...input, hue, chroma })}
-          />
-
-          <div className="theme-custom-sliders">
-            <div className="theme-custom-row">
-              <label>Chroma</label>
-              <TickSlider
-                value={input.chroma}
-                min={0}
-                max={0.3}
-                step={0.01}
-                onChange={(chroma) => setInput({ ...input, chroma })}
-                variant="gradient"
-                trackBackground={chromaTrack}
-                ariaLabel="Chroma"
-              />
-            </div>
-            <div className="theme-custom-row">
-              <label>Saturation</label>
-              <TickSlider
-                value={input.saturation}
-                min={0}
-                max={1.5}
-                step={0.05}
-                onChange={(saturation) => setInput({ ...input, saturation })}
-                variant="ticks"
-                ariaLabel="Saturation"
-              />
-            </div>
-            <div className="theme-custom-row">
-              <label>Contrast</label>
-              <TickSlider
-                value={input.contrast}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={(contrast) => setInput({ ...input, contrast })}
-                variant="ticks"
-                ariaLabel="Contrast"
-              />
-            </div>
-            <div className="theme-custom-row">
-              <label>Depth</label>
-              <TickSlider
-                value={input.depth}
-                min={-0.05}
-                max={0.05}
-                step={0.005}
-                onChange={(depth) => setInput({ ...input, depth })}
-                variant="ticks"
-                ariaLabel="Depth"
-              />
-            </div>
-          </div>
-
-          <div className="theme-advanced-toolbar">
-            <button
-              type="button"
-              className="theme-tool-btn"
-              onClick={() => copyTheme({ name, mode, input })}
-              title="Copy this theme to clipboard"
-            >
-              📋 Copy
-            </button>
-            <button
-              type="button"
-              className="theme-tool-btn"
-              onClick={() => {
-                setImportOpen((o) => !o);
-                setImportError(null);
-              }}
-              title="Import a theme from clipboard text"
-            >
-              Import
-            </button>
-            <button
-              type="button"
-              className="theme-customizer-revert"
-              onClick={() => setInput(DEFAULT_INPUT)}
-            >
-              Revert sliders
-            </button>
-            <button
-              type="button"
-              className="theme-customizer-reset"
-              onClick={resetToDefault}
-              title="Restore stylesheet defaults"
-            >
-              Reset
-            </button>
-          </div>
-
-          {importOpen && (
-            <div className="theme-import">
-              <textarea
-                className="theme-import-text"
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                placeholder='Paste an exported theme JSON, e.g. {"name":"…","mode":"dark","input":{…}}'
-                rows={4}
-              />
-              {importError && (
-                <div className="theme-import-error">{importError}</div>
-              )}
-              <div className="theme-import-actions">
-                <button
-                  type="button"
-                  className="theme-customizer-apply"
-                  onClick={handleImport}
-                >
-                  Apply import
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="theme-advanced-toolbar">
+          <button
+            type="button"
+            className="theme-tool-btn"
+            onClick={() => copyTheme({ name, mode, input })}
+            title="Copy this theme to clipboard"
+          >
+            📋 Copy
+          </button>
+          <button
+            type="button"
+            className="theme-tool-btn"
+            onClick={() => {
+              setImportOpen((o) => !o);
+              setImportError(null);
+            }}
+            title="Import a theme from clipboard text"
+          >
+            Import
+          </button>
+          <button
+            type="button"
+            className="theme-customizer-revert"
+            onClick={() => setInput(DEFAULT_INPUT)}
+          >
+            Revert sliders
+          </button>
+          <button
+            type="button"
+            className="theme-customizer-reset"
+            onClick={resetToDefault}
+            title="Restore stylesheet defaults"
+          >
+            Reset
+          </button>
         </div>
+
+        {importOpen && (
+          <div className="theme-import">
+            <textarea
+              className="theme-import-text"
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              placeholder='Paste an exported theme JSON, e.g. {"name":"…","mode":"dark","input":{…}}'
+              rows={4}
+            />
+            {importError && (
+              <div className="theme-import-error">{importError}</div>
+            )}
+            <div className="theme-import-actions">
+              <button
+                type="button"
+                className="theme-customizer-apply"
+                onClick={handleImport}
+              >
+                Apply import
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ----- Library: Themes / UI ----- */}
       <div className="theme-lib">

@@ -191,15 +191,23 @@ async fn parse_and_validate_repo(raw: &str) -> Result<(String, String), AppError
         return Err(AppError::bad_request("Repository not found or not public"));
     }
     if !resp.status().is_success() {
-        return Err(AppError::bad_request("GitHub rejected the repository lookup"));
+        return Err(AppError::bad_request(
+            "GitHub rejected the repository lookup",
+        ));
     }
 
     let body: serde_json::Value = resp
         .json()
         .await
         .map_err(|_| AppError::bad_request("Unexpected response from GitHub"))?;
-    if body.get("private").and_then(|v| v.as_bool()).unwrap_or(true) {
-        return Err(AppError::bad_request("Only public repositories can be added"));
+    if body
+        .get("private")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
+    {
+        return Err(AppError::bad_request(
+            "Only public repositories can be added",
+        ));
     }
 
     let owner_canon = body
@@ -619,14 +627,14 @@ pub async fn create_team(
             Some(id) => Some(id),
             None => {
                 return Ok(HttpResponse::BadRequest()
-                    .json(serde_json::json!({ "message": "No organization in context" })))
+                    .json(serde_json::json!({ "message": "No organization in context" })));
             }
         },
         Scope::Platform => None,
         Scope::Personal => {
             return Ok(HttpResponse::Forbidden().json(serde_json::json!({
                 "message": "Only an organization or platform owner can create teams"
-            })))
+            })));
         }
     };
 

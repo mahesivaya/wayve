@@ -10,8 +10,7 @@ function fmtSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const isImage = (mime: string | null) =>
-  !!mime && mime.startsWith("image/");
+const isImage = (mime: string | null) => !!mime && mime.startsWith("image/");
 
 // Resolve an attachment to a Blob with its real mime: use the local file on the
 // sender's own optimistic bubble, else download (and decrypt when e2e).

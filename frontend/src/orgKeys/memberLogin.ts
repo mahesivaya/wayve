@@ -14,7 +14,11 @@
 // `users.public_key` via the same endpoint personal users use, then
 // save both.
 
-import { loadPrivateKey, savePrivateKey, savePublicKey } from "../crypto/keyStore";
+import {
+  loadPrivateKey,
+  savePrivateKey,
+  savePublicKey,
+} from "../crypto/keyStore";
 import { unwrapPkcs8WithPbkdf2 } from "./envelopeCodec";
 import type { NewLoginWrap } from "./api";
 

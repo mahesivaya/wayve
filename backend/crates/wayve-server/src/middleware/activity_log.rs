@@ -63,10 +63,7 @@ where
         let method = req.method().clone();
         let path = req.path().to_string();
         let user_id = get_user_id_from_request(req.request());
-        let ip = req
-            .connection_info()
-            .realip_remote_addr()
-            .map(String::from);
+        let ip = req.connection_info().realip_remote_addr().map(String::from);
         let pool = req
             .app_data::<web::Data<PgPool>>()
             .map(|p| p.get_ref().clone());

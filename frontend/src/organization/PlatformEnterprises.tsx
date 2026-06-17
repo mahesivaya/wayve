@@ -10,7 +10,9 @@ export default function PlatformEnterprises() {
   const [enterprises, setEnterprises] = useState<AdminOrganization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedOrg, setSelectedOrg] = useState<AdminOrganization | null>(null);
+  const [selectedOrg, setSelectedOrg] = useState<AdminOrganization | null>(
+    null
+  );
 
   useEffect(() => {
     let alive = true;

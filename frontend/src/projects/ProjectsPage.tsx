@@ -49,7 +49,9 @@ export default function ProjectsPage() {
   }, [repos]);
 
   const open = (r: GithubRepo) =>
-    navigate(`/github?owner=${encodeURIComponent(r.owner.login)}&repo=${encodeURIComponent(r.name)}`);
+    navigate(
+      `/github?owner=${encodeURIComponent(r.owner.login)}&repo=${encodeURIComponent(r.name)}`
+    );
 
   return (
     <div className="projects-page u-page-shell">
@@ -93,7 +95,8 @@ export default function ProjectsPage() {
                 <p className="project-card-desc">{r.description}</p>
               )}
               {(() => {
-                const top = langs[r.full_name] ?? (r.language ? [r.language] : []);
+                const top =
+                  langs[r.full_name] ?? (r.language ? [r.language] : []);
                 if (top.length === 0) return null;
                 return (
                   <div className="project-card-langs">

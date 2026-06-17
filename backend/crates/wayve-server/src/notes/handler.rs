@@ -123,7 +123,11 @@ pub async fn update_note(
         &req,
         crate::audit::AuditEvent {
             actor_user_id: user_id,
-            action: if renamed { "note_renamed" } else { "note_updated" },
+            action: if renamed {
+                "note_renamed"
+            } else {
+                "note_updated"
+            },
             resource_type: "note",
             resource_id: Some(id.to_string()),
             metadata: Some(serde_json::json!({
@@ -148,13 +152,12 @@ pub async fn delete_note(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let id = path.into_inner();
 
-    let removed = sqlx::query(
-        "DELETE FROM notes WHERE id = $1 AND user_id = $2 RETURNING title, content",
-    )
-    .bind(id)
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
+    let removed =
+        sqlx::query("DELETE FROM notes WHERE id = $1 AND user_id = $2 RETURNING title, content")
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
 
     let Some(row) = removed else {
         return Err(AppError::NotFound("note"));

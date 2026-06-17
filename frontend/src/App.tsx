@@ -134,69 +134,69 @@ export default function App() {
         }
       >
         <Routes>
-        {/* ROOT */}
-        <Route
-          path="/"
-          element={user ? (redirectToAccountHome ?? <Home />) : <Home />}
-        />
+          {/* ROOT */}
+          <Route
+            path="/"
+            element={user ? (redirectToAccountHome ?? <Home />) : <Home />}
+          />
 
-        {/* PUBLIC */}
-        <Route
-          path="/login"
-          element={user ? (redirectToAccountHome ?? <Login />) : <Login />}
-        />
-        <Route
-          path="/register"
-          element={
-            user ? (redirectToAccountHome ?? <Register />) : <Register />
-          }
-        />
-        <Route
-          path="/register-business"
-          element={
-            user ? (
-              (redirectToAccountHome ?? <RegisterBusiness />)
-            ) : (
-              <RegisterBusiness />
-            )
-          }
-        />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route
-          path="/recover-with-mnemonic"
-          element={<RecoverWithMnemonicPage />}
-        />
-        {/* Plan A Phase 3 — Secure-send magic link. Intentionally
+          {/* PUBLIC */}
+          <Route
+            path="/login"
+            element={user ? (redirectToAccountHome ?? <Login />) : <Login />}
+          />
+          <Route
+            path="/register"
+            element={
+              user ? (redirectToAccountHome ?? <Register />) : <Register />
+            }
+          />
+          <Route
+            path="/register-business"
+            element={
+              user ? (
+                (redirectToAccountHome ?? <RegisterBusiness />)
+              ) : (
+                <RegisterBusiness />
+              )
+            }
+          />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route
+            path="/recover-with-mnemonic"
+            element={<RecoverWithMnemonicPage />}
+          />
+          {/* Plan A Phase 3 — Secure-send magic link. Intentionally
             public: the recipient is not (necessarily) a Wayve user,
             and the passphrase is what actually unlocks the message.
             The page fetches the ciphertext from a no-auth API route
             and decrypts entirely client-side. */}
-        <Route path="/m/:token" element={<SecureMessageView />} />
-        <Route path="/organization" element={<Organization />} />
-        {/* /services/:slug is now /docs/services/:slug — redirect old
+          <Route path="/m/:token" element={<SecureMessageView />} />
+          <Route path="/organization" element={<Organization />} />
+          {/* /services/:slug is now /docs/services/:slug — redirect old
             links so any externally-shared URL still lands. */}
-        <Route path="/services/:slug" element={<LegacyServiceRedirect />} />
-        <Route path="/docs/services/:slug" element={<ServicePage />} />
-        {/* Pricing is a public-facing page: anyone (logged out OR in) should
+          <Route path="/services/:slug" element={<LegacyServiceRedirect />} />
+          <Route path="/docs/services/:slug" element={<ServicePage />} />
+          {/* Pricing is a public-facing page: anyone (logged out OR in) should
             be able to view plans. It lives here rather than under the
             ProtectedRoute branch so unauth visitors aren't bounced to
             /login. The component renders its own header chrome, so no
             Layout wrapper is needed. */}
-        {/* Personal accounts bounce off these surfaces: Pricing redirects
+          {/* Personal accounts bounce off these surfaces: Pricing redirects
             to Settings (where "Manage billing & upgrade" lives); Developers
             and Docs fall back to the account home. Public visitors and
             organization / platform users pass through unchanged. */}
-        <Route
-          path="/pricing"
-          element={
-            <RequirePricingAccess>
-              <Pricing />
-            </RequirePricingAccess>
-          }
-        />
-        <Route path="/support" element={<Support />} />
-        {/* ── Documentation surface ──────────────────────────────────
+          <Route
+            path="/pricing"
+            element={
+              <RequirePricingAccess>
+                <Pricing />
+              </RequirePricingAccess>
+            }
+          />
+          <Route path="/support" element={<Support />} />
+          {/* ── Documentation surface ──────────────────────────────────
             Every dev-readable page now lives under /docs/* with a
             shared DocsShell (search + sidebar + breadcrumbs). The
             whole tree is public — anyone, logged-in or not, can
@@ -204,265 +204,283 @@ export default function App() {
             /developers/quotas, /services/:slug) 301-style redirect
             to their /docs/* canonical URL.
             -------------------------------------------------------- */}
-        <Route path="/docs" element={<DocsIndex />} />
-        <Route path="/docs/api" element={<SwaggerDocs />} />
-        <Route path="/docs/developers" element={<Developers />} />
-        <Route path="/docs/quotas" element={<Quotas />} />
-        {/* Backend markdown catalog — matches anything else under
+          <Route path="/docs" element={<DocsIndex />} />
+          <Route path="/docs/api" element={<SwaggerDocs />} />
+          <Route path="/docs/developers" element={<Developers />} />
+          <Route path="/docs/quotas" element={<Quotas />} />
+          {/* Backend markdown catalog — matches anything else under
             /docs/*. Order matters: this must come AFTER the static
             routes above so /docs/api etc. aren't treated as slugs. */}
-        <Route path="/docs/:slug" element={<Docs />} />
-        {/* Legacy paths — keep external links working forever. */}
-        <Route
-          path="/developers"
-          element={<Navigate to="/docs/developers" replace />}
-        />
-        <Route
-          path="/developers/quotas"
-          element={<Navigate to="/docs/quotas" replace />}
-        />
+          <Route path="/docs/:slug" element={<Docs />} />
+          {/* Legacy paths — keep external links working forever. */}
+          <Route
+            path="/developers"
+            element={<Navigate to="/docs/developers" replace />}
+          />
+          <Route
+            path="/developers/quotas"
+            element={<Navigate to="/docs/quotas" replace />}
+          />
 
-        {/* PROTECTED */}
-        <Route element={<ProtectedRoute />}>
-          <Route element={<Layout />}>
-            {/* Sidebar split-pane apps — routes generated from the single
+          {/* PROTECTED */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<Layout />}>
+              {/* Sidebar split-pane apps — routes generated from the single
                 SPLIT_APPS registry in LayoutConfig.ts. Adding a sidebar app
                 there adds both the sidebar entry AND its route. Guarded /
                 redirecting ones (home, github) opt out via autoRoute:false and
                 are declared explicitly below. */}
-            {SPLIT_APPS.filter((app) => app.autoRoute !== false).map((app) => (
-              <Route key={app.key} path={app.path} element={<app.Comp />} />
-            ))}
+              {SPLIT_APPS.filter((app) => app.autoRoute !== false).map(
+                (app) => (
+                  <Route key={app.key} path={app.path} element={<app.Comp />} />
+                )
+              )}
 
-            <Route path="/home" element={redirectToAccountHome ?? <Home />} />
-            <Route
-              path="/organization/home"
-              element={
-                isOrganizationUser ? (
-                  <OrganizationAdminHome />
-                ) : (
-                  (redirectToAccountHome ?? <OrganizationAdminHome />)
-                )
-              }
-            />
-            {/* Legacy alias — bookmarks from before the rename. */}
-            <Route
-              path="/organization-home"
-              element={<Navigate to="/organization/home" replace />}
-            />
-            <Route
-              path="/platform/home"
-              element={
-                // A platform user whose role-derived home is NOT this page
-                // (currently: billing → /platform/billing) gets bounced out.
-                // Keeps /platform/home from being the landing surface
-                // for roles that have no actionable panels on it.
-                accountType === "platform_admin" &&
-                accountHome === "/platform/home" ? (
-                  <PlatformAdminHome />
-                ) : (
-                  (redirectToAccountHome ?? <PlatformAdminHome />)
-                )
-              }
-            />
-            {/* Legacy alias — bookmarks from before the rename. */}
-            <Route
-              path="/platform-admin-home"
-              element={<Navigate to="/platform/home" replace />}
-            />
-            <Route
-              path="/organization/members"
-              element={<OrganizationMembers />}
-            />
-            <Route
-              path="/organization/settings"
-              element={<Navigate to="/settings" replace />}
-            />
-            <Route
-              path="/organization/:slug"
-              element={redirectToAccountHome ?? <OrganizationHome />}
-            />
-            <Route path="/emails/attachments" element={<EmailFiles />} />
-            {/* Legacy alias. */}
-            <Route
-              path="/email-files"
-              element={<Navigate to="/emails/attachments" replace />}
-            />
-            <Route path="/call" element={<Call />} />
-            <Route path="/documents" element={<Documents />} />
-            <Route path="/teams/:slug" element={<TeamPage />} />
-            {/* Legacy alias (no hyphen — original spelling). */}
-            <Route
-              path="/aichat"
-              element={<Navigate to="/ai-chat" replace />}
-            />
-            {/* The Code Repo viewer is available to: platform team, org
+              <Route path="/home" element={redirectToAccountHome ?? <Home />} />
+              <Route
+                path="/organization/home"
+                element={
+                  isOrganizationUser ? (
+                    <OrganizationAdminHome />
+                  ) : (
+                    (redirectToAccountHome ?? <OrganizationAdminHome />)
+                  )
+                }
+              />
+              {/* Legacy alias — bookmarks from before the rename. */}
+              <Route
+                path="/organization-home"
+                element={<Navigate to="/organization/home" replace />}
+              />
+              <Route
+                path="/platform/home"
+                element={
+                  // A platform user whose role-derived home is NOT this page
+                  // (currently: billing → /platform/billing) gets bounced out.
+                  // Keeps /platform/home from being the landing surface
+                  // for roles that have no actionable panels on it.
+                  accountType === "platform_admin" &&
+                  accountHome === "/platform/home" ? (
+                    <PlatformAdminHome />
+                  ) : (
+                    (redirectToAccountHome ?? <PlatformAdminHome />)
+                  )
+                }
+              />
+              {/* Legacy alias — bookmarks from before the rename. */}
+              <Route
+                path="/platform-admin-home"
+                element={<Navigate to="/platform/home" replace />}
+              />
+              <Route
+                path="/organization/members"
+                element={<OrganizationMembers />}
+              />
+              <Route
+                path="/organization/settings"
+                element={<Navigate to="/settings" replace />}
+              />
+              <Route
+                path="/organization/:slug"
+                element={redirectToAccountHome ?? <OrganizationHome />}
+              />
+              <Route path="/emails/attachments" element={<EmailFiles />} />
+              {/* Legacy alias. */}
+              <Route
+                path="/email-files"
+                element={<Navigate to="/emails/attachments" replace />}
+              />
+              <Route path="/call" element={<Call />} />
+              <Route path="/documents" element={<Documents />} />
+              <Route path="/teams/:slug" element={<TeamPage />} />
+              {/* Legacy alias (no hyphen — original spelling). */}
+              <Route
+                path="/aichat"
+                element={<Navigate to="/ai-chat" replace />}
+              />
+              {/* The Code Repo viewer is available to: platform team, org
                 owner/super_admin/admin, developers (either scope) via the
                 Workspace section, and personal accounts that opt in via the
                 sidebar "+" add-app button. Any authenticated user may reach
                 it — the backend proxy serves a single read-only repo — so the
                 guard only bounces unauthenticated visitors. */}
-            <Route
-              path="/github"
-              element={user ? <GitHubRepo /> : <Navigate to={accountHome} replace />}
-            />
-            {/* Per-project repo viewer (personal accounts add their own repo to
+              <Route
+                path="/github"
+                element={
+                  user ? <GitHubRepo /> : <Navigate to={accountHome} replace />
+                }
+              />
+              {/* Per-project repo viewer (personal accounts add their own repo to
                 a project; the bare /github above keeps the platform team's
                 single-repo dashboard). */}
-            <Route
-              path="/github/:projectId"
-              element={user ? <GitHubRepo /> : <Navigate to={accountHome} replace />}
-            />
-            {/* Platform-owner only: graphical tracing-log dashboard. */}
-            <Route
-              path="/logs/tracing"
-              element={
-                user?.scope === "platform" &&
-                user?.effective_role === "owner" ? (
-                  <TracingDashboard />
-                ) : (
-                  <Navigate to={accountHome} replace />
-                )
-              }
-            />
-            <Route
-              path="/platform/tracing"
-              element={<Navigate to="/logs/tracing" replace />}
-            />
-            {/* Platform-owner only: domain administration for organizations. */}
-            <Route
-              path="/platform/domains"
-              element={
-                user?.scope === "platform" &&
-                user?.effective_role === "owner" ? (
-                  <DomainVerification />
-                ) : (
-                  <Navigate to={accountHome} replace />
-                )
-              }
-            />
-            <Route path="/test-access" element={<TestAccess />} />
-            <Route
-              path="/access-requests"
-              element={
-                (user?.scope === "organization" ||
-                  user?.scope === "platform") &&
-                user?.effective_role === "owner" ? (
-                  <AccessRequestsReview />
-                ) : (
-                  <Navigate to={accountHome} replace />
-                )
-              }
-            />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/billing" element={<Billing />} />
-            <Route path="/organizations/new" element={<CreateOrganization />} />
-            <Route
-              path="/platform/organizations"
-              element={<PlatformOrganizations />}
-            />
-            <Route path="/platform/users" element={<PlatformUsers />} />
-            <Route
-              path="/platform/enterprise"
-              element={<PlatformEnterprises />}
-            />
-            <Route path="/platform/members" element={<PlatformMembers />} />
-            <Route path="/platform/billing" element={<PlatformBilling />} />
-            <Route path="/platform/developer" element={<PlatformDeveloper />} />
-            <Route path="/platform/support" element={<PlatformSupport />} />
-            <Route path="/platform/analytics" element={<PlatformAnalytics />} />
-            <Route path="/platform/welcome" element={<PlatformWelcome />} />
-            <Route path="/platform/secrets" element={<PlatformSecrets />} />
-            {/* All log/audit surfaces live under one /logs/* namespace.
+              <Route
+                path="/github/:projectId"
+                element={
+                  user ? <GitHubRepo /> : <Navigate to={accountHome} replace />
+                }
+              />
+              {/* Platform-owner only: graphical tracing-log dashboard. */}
+              <Route
+                path="/logs/tracing"
+                element={
+                  user?.scope === "platform" &&
+                  user?.effective_role === "owner" ? (
+                    <TracingDashboard />
+                  ) : (
+                    <Navigate to={accountHome} replace />
+                  )
+                }
+              />
+              <Route
+                path="/platform/tracing"
+                element={<Navigate to="/logs/tracing" replace />}
+              />
+              {/* Platform-owner only: domain administration for organizations. */}
+              <Route
+                path="/platform/domains"
+                element={
+                  user?.scope === "platform" &&
+                  user?.effective_role === "owner" ? (
+                    <DomainVerification />
+                  ) : (
+                    <Navigate to={accountHome} replace />
+                  )
+                }
+              />
+              <Route path="/test-access" element={<TestAccess />} />
+              <Route
+                path="/access-requests"
+                element={
+                  (user?.scope === "organization" ||
+                    user?.scope === "platform") &&
+                  user?.effective_role === "owner" ? (
+                    <AccessRequestsReview />
+                  ) : (
+                    <Navigate to={accountHome} replace />
+                  )
+                }
+              />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/billing" element={<Billing />} />
+              <Route
+                path="/organizations/new"
+                element={<CreateOrganization />}
+              />
+              <Route
+                path="/platform/organizations"
+                element={<PlatformOrganizations />}
+              />
+              <Route path="/platform/users" element={<PlatformUsers />} />
+              <Route
+                path="/platform/enterprise"
+                element={<PlatformEnterprises />}
+              />
+              <Route path="/platform/members" element={<PlatformMembers />} />
+              <Route path="/platform/billing" element={<PlatformBilling />} />
+              <Route
+                path="/platform/developer"
+                element={<PlatformDeveloper />}
+              />
+              <Route path="/platform/support" element={<PlatformSupport />} />
+              <Route
+                path="/platform/analytics"
+                element={<PlatformAnalytics />}
+              />
+              <Route path="/platform/welcome" element={<PlatformWelcome />} />
+              <Route path="/platform/secrets" element={<PlatformSecrets />} />
+              {/* All log/audit surfaces live under one /logs/* namespace.
                 The old /platform/*, /organization/logs and /security/audit
                 paths below redirect here so bookmarks keep working. */}
-            <Route path="/logs" element={<Navigate to="/logs/app" replace />} />
-            <Route path="/logs/app" element={<PlatformLogs />} />
-            <Route path="/logs/users" element={<PlatformUserLogs />} />
-            <Route path="/logs/audit" element={<AuditSecurity />} />
-            <Route path="/logs/user-audit" element={<UserAudit />} />
-            <Route path="/logs/visitors" element={<PlatformVisitors />} />
-            <Route
-              path="/platform/logs"
-              element={<Navigate to="/logs/app" replace />}
-            />
-            <Route
-              path="/organization/logs"
-              element={<Navigate to="/logs/app" replace />}
-            />
-            <Route
-              path="/platform/user-logs"
-              element={<Navigate to="/logs/users" replace />}
-            />
-            <Route
-              path="/platform/visitors"
-              element={<Navigate to="/logs/visitors" replace />}
-            />
-            <Route path="/api-keys" element={<ApiKeysPage />} />
-            <Route path="/projects" element={<ProjectsPage />} />
-            {/* Org-master-key flows. Bootstrap shows the 24-word
+              <Route
+                path="/logs"
+                element={<Navigate to="/logs/app" replace />}
+              />
+              <Route path="/logs/app" element={<PlatformLogs />} />
+              <Route path="/logs/users" element={<PlatformUserLogs />} />
+              <Route path="/logs/audit" element={<AuditSecurity />} />
+              <Route path="/logs/user-audit" element={<UserAudit />} />
+              <Route path="/logs/visitors" element={<PlatformVisitors />} />
+              <Route
+                path="/platform/logs"
+                element={<Navigate to="/logs/app" replace />}
+              />
+              <Route
+                path="/organization/logs"
+                element={<Navigate to="/logs/app" replace />}
+              />
+              <Route
+                path="/platform/user-logs"
+                element={<Navigate to="/logs/users" replace />}
+              />
+              <Route
+                path="/platform/visitors"
+                element={<Navigate to="/logs/visitors" replace />}
+              />
+              <Route path="/api-keys" element={<ApiKeysPage />} />
+              <Route path="/projects" element={<ProjectsPage />} />
+              {/* Org-master-key flows. Bootstrap shows the 24-word
                 mnemonic ONCE; recovery-key accepts the mnemonic on a
                 fresh device; recover-data is the owner / admin
                 impersonation proof view. */}
-            <Route
-              path="/organization/recovery-key/bootstrap"
-              element={<OrgKeyBootstrap />}
-            />
-            <Route
-              path="/organization/recovery-key"
-              element={<OrgRecoveryKey />}
-            />
-            <Route
-              path="/organization/members/:uid/impersonate"
-              element={<RecoverMemberData />}
-            />
-            {/* Legacy alias — "recover-data" read like the member lost data;
+              <Route
+                path="/organization/recovery-key/bootstrap"
+                element={<OrgKeyBootstrap />}
+              />
+              <Route
+                path="/organization/recovery-key"
+                element={<OrgRecoveryKey />}
+              />
+              <Route
+                path="/organization/members/:uid/impersonate"
+                element={<RecoverMemberData />}
+              />
+              {/* Legacy alias — "recover-data" read like the member lost data;
                 "impersonate" describes what the owner is actually doing. */}
-            <Route
-              path="/organization/members/:uid/recover-data"
-              element={
-                <Navigate
-                  to={
-                    typeof window !== "undefined"
-                      ? window.location.pathname.replace(
-                          /\/recover-data$/,
-                          "/impersonate"
-                        ) + window.location.search
-                      : "/organization/members"
-                  }
-                  replace
-                />
-              }
-            />
-            <Route
-              path="/organization/audit/key-access"
-              element={<OrgAuditLog />}
-            />
-            <Route
-              path="/security/audit"
-              element={<Navigate to="/logs/audit" replace />}
-            />
-            <Route path="/recover" element={<RecoverPage />} />
-            <Route path="/settings/sso" element={<SsoSettings />} />
-            <Route path="/settings/inboxes" element={<SharedInboxes />} />
-            <Route path="/settings/webhooks" element={<Webhooks />} />
-            <Route path="/settings/scim" element={<ScimTokens />} />
-            <Route path="/settings/plans" element={<PlanAdmin />} />
+              <Route
+                path="/organization/members/:uid/recover-data"
+                element={
+                  <Navigate
+                    to={
+                      typeof window !== "undefined"
+                        ? window.location.pathname.replace(
+                            /\/recover-data$/,
+                            "/impersonate"
+                          ) + window.location.search
+                        : "/organization/members"
+                    }
+                    replace
+                  />
+                }
+              />
+              <Route
+                path="/organization/audit/key-access"
+                element={<OrgAuditLog />}
+              />
+              <Route
+                path="/security/audit"
+                element={<Navigate to="/logs/audit" replace />}
+              />
+              <Route path="/recover" element={<RecoverPage />} />
+              <Route path="/settings/sso" element={<SsoSettings />} />
+              <Route path="/settings/inboxes" element={<SharedInboxes />} />
+              <Route path="/settings/webhooks" element={<Webhooks />} />
+              <Route path="/settings/scim" element={<ScimTokens />} />
+              <Route path="/settings/plans" element={<PlanAdmin />} />
+            </Route>
           </Route>
-        </Route>
 
-        {/* FALLBACK */}
-        <Route
-          path="*"
-          element={
-            user ? (
-              <Navigate to={accountHome} replace />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
+          {/* FALLBACK */}
+          <Route
+            path="*"
+            element={
+              user ? (
+                <Navigate to={accountHome} replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
         </Routes>
       </Suspense>
     </RouteErrorBoundary>

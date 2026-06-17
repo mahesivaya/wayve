@@ -921,45 +921,43 @@ export default function Billing() {
                   </tr>
                 </thead>
                 <tbody>
-                  {invoices.map(
-                    (invoice) => (
-                      <tr key={invoice.id}>
-                        <td>{formatMonth(invoice.created_at)}</td>
-                        <td>
-                          {formatMoney(
-                            invoice.amount_paid_cents,
-                            invoice.currency
+                  {invoices.map((invoice) => (
+                    <tr key={invoice.id}>
+                      <td>{formatMonth(invoice.created_at)}</td>
+                      <td>
+                        {formatMoney(
+                          invoice.amount_paid_cents,
+                          invoice.currency
+                        )}
+                      </td>
+                      <td>{invoice.status}</td>
+                      <td className="billing-receipt-links">
+                        {invoice.invoice_pdf && (
+                          <a
+                            href={invoice.invoice_pdf}
+                            target="_blank"
+                            rel="noreferrer"
+                            download
+                          >
+                            Download
+                          </a>
+                        )}
+                        {invoice.hosted_invoice_url && (
+                          <a
+                            href={invoice.hosted_invoice_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View
+                          </a>
+                        )}
+                        {!invoice.invoice_pdf &&
+                          !invoice.hosted_invoice_url && (
+                            <span className="billing-muted">—</span>
                           )}
-                        </td>
-                        <td>{invoice.status}</td>
-                        <td className="billing-receipt-links">
-                          {invoice.invoice_pdf && (
-                            <a
-                              href={invoice.invoice_pdf}
-                              target="_blank"
-                              rel="noreferrer"
-                              download
-                            >
-                              Download
-                            </a>
-                          )}
-                          {invoice.hosted_invoice_url && (
-                            <a
-                              href={invoice.hosted_invoice_url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              View
-                            </a>
-                          )}
-                          {!invoice.invoice_pdf &&
-                            !invoice.hosted_invoice_url && (
-                              <span className="billing-muted">—</span>
-                            )}
-                        </td>
-                      </tr>
-                    )
-                  )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             ) : (

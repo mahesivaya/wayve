@@ -30,7 +30,8 @@ function categoryOf(action: string): string {
   if (action.startsWith("email_")) return "Email";
   if (action.startsWith("channel_") || action === "call") return "Chat";
   if (action.startsWith("meeting_")) return "Calendar";
-  if (action.startsWith("file_") || action.startsWith("folder_")) return "Drive";
+  if (action.startsWith("file_") || action.startsWith("folder_"))
+    return "Drive";
   if (action.startsWith("note_")) return "Notes";
   if (action.startsWith("task_")) return "Tasks";
   return "Other";
@@ -74,7 +75,8 @@ const LABELS: Record<string, string> = {
 
 function labelOf(row: UserActionRow): string {
   if (row.action === "call") {
-    const media = typeof row.metadata?.media === "string" ? row.metadata.media : "";
+    const media =
+      typeof row.metadata?.media === "string" ? row.metadata.media : "";
     const outcome =
       typeof row.metadata?.outcome === "string" ? row.metadata.outcome : "";
     if (outcome === "completed") {
@@ -108,11 +110,14 @@ function fmtDuration(seconds: number): string {
 function describe(row: UserActionRow): string {
   const m = row.metadata;
   if (!m || typeof m !== "object") return "-";
-  const str = (k: string) => (typeof m[k] === "string" && m[k] ? (m[k] as string) : null);
-  const num = (k: string) => (typeof m[k] === "number" ? (m[k] as number) : null);
+  const str = (k: string) =>
+    typeof m[k] === "string" && m[k] ? (m[k] as string) : null;
+  const num = (k: string) =>
+    typeof m[k] === "number" ? (m[k] as number) : null;
 
   const parts: string[] = [];
-  const primary = str("name") ?? str("summary") ?? str("title") ?? str("channel");
+  const primary =
+    str("name") ?? str("summary") ?? str("title") ?? str("channel");
   if (primary) parts.push(primary);
   if (str("from") && str("to")) parts.push(`${m.from} → ${m.to}`);
   if (str("subject")) parts.push(str("subject") as string);
@@ -278,10 +283,7 @@ export default function UserAudit() {
                           {ACTIVITY_KIND_LABEL[ev.kind] ?? ev.kind}
                         </span>
                       </td>
-                      <td
-                        className="audit-path"
-                        title={describeActivity(ev)}
-                      >
+                      <td className="audit-path" title={describeActivity(ev)}>
                         {describeActivity(ev)}
                       </td>
                       <td>{ev.ip ?? "-"}</td>

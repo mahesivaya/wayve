@@ -185,20 +185,17 @@ export function useCallSession(
 
   // Drain ICE candidates that arrived before the remote description existed.
   // Called immediately after each setRemoteDescription.
-  const flushPendingCandidates = useCallback(
-    async (pc: RTCPeerConnection) => {
-      const queued = pendingCandidatesRef.current;
-      pendingCandidatesRef.current = [];
-      for (const candidate of queued) {
-        try {
-          await pc.addIceCandidate(candidate);
-        } catch (err) {
-          log.error("buffered ice candidate failed", err);
-        }
+  const flushPendingCandidates = useCallback(async (pc: RTCPeerConnection) => {
+    const queued = pendingCandidatesRef.current;
+    pendingCandidatesRef.current = [];
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(candidate);
+      } catch (err) {
+        log.error("buffered ice candidate failed", err);
       }
-    },
-    []
-  );
+    }
+  }, []);
 
   const attachLocalMedia = useCallback(
     async (pc: RTCPeerConnection, media: CallMedia) => {

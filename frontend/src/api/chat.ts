@@ -48,10 +48,13 @@ export async function uploadChatAttachment(opts: {
 // plaintext file). Raw fetch so we get binary; never triggers session-expiry.
 export async function downloadChatAttachment(id: number): Promise<ArrayBuffer> {
   const token = getAuthToken();
-  const res = await fetch(`${getApiBase()}/api/chat/attachments/${id}/download`, {
-    credentials: "include",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  const res = await fetch(
+    `${getApiBase()}/api/chat/attachments/${id}/download`,
+    {
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    }
+  );
   if (!res.ok) {
     throw new Error(`Attachment download failed (${res.status})`);
   }

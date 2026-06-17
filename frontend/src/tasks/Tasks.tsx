@@ -928,9 +928,7 @@ export default function Tasks() {
                           event.relatedTarget as Node | null
                         )
                       ) {
-                        setDragOverStatus((s) =>
-                          s === col.value ? null : s
-                        );
+                        setDragOverStatus((s) => (s === col.value ? null : s));
                       }
                     }}
                     onDrop={(event) => {
@@ -1017,179 +1015,179 @@ export default function Tasks() {
                   <strong>Loading tasks…</strong>
                 </div>
               ) : loadError ? (
-            <div className="tasks-empty">
-              <strong>Couldn&apos;t load tasks</strong>
-              <span>{loadError}</span>
-              <button
-                type="button"
-                className="task-edit-btn"
-                onClick={() => void loadTasks()}
-              >
-                Try again
-              </button>
+                <div className="tasks-empty">
+                  <strong>Couldn&apos;t load tasks</strong>
+                  <span>{loadError}</span>
+                  <button
+                    type="button"
+                    className="task-edit-btn"
+                    onClick={() => void loadTasks()}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : visibleTasks.length === 0 ? (
+                <div className="tasks-empty">
+                  <strong>
+                    {tasks.length === 0 ? "No tasks yet" : "No matching tasks"}
+                  </strong>
+                  <span>
+                    {tasks.length === 0
+                      ? "Use + Create task to add your first task."
+                      : "Try a different search term."}
+                  </span>
+                </div>
+              ) : activeTasks.length === 0 ? (
+                <div className="tasks-empty">
+                  <strong>All caught up</strong>
+                  <span>
+                    Every task is done. See the Completed tasks section below.
+                  </span>
+                </div>
+              ) : (
+                activeTasks.map((task) => {
+                  const expanded = inSplitPane && expandedId === task.id;
+                  return (
+                    <article
+                      key={task.id}
+                      className={`task-card${expanded ? " task-card--expanded" : ""}`}
+                    >
+                      <div className="task-card-body">
+                        <div className="task-card-title">
+                          <span
+                            className={`task-priority-badge priority-${task.priority}`}
+                            title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                          >
+                            P{task.priority}
+                          </span>
+                          <h3>
+                            <button
+                              type="button"
+                              className="task-card-title-link"
+                              onClick={() =>
+                                inSplitPane
+                                  ? setExpandedId((id) =>
+                                      id === task.id ? null : task.id
+                                    )
+                                  : openEdit(task)
+                              }
+                              aria-expanded={inSplitPane ? expanded : undefined}
+                              title="Open task details"
+                            >
+                              {task.name}
+                            </button>
+                          </h3>
+                        </div>
+                      </div>
+                      {expanded && (
+                        <div className="task-card-detail">
+                          <p className="task-card-detail-desc">
+                            {task.description?.trim()
+                              ? task.description
+                              : "No description."}
+                          </p>
+                        </div>
+                      )}
+                      {(!inSplitPane || expanded) && (
+                        <div className="task-card-actions">
+                          <button
+                            type="button"
+                            className="task-edit-btn"
+                            onClick={() => openEdit(task)}
+                            aria-label={`Edit ${task.name}`}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="task-delete-btn"
+                            onClick={() => deleteTask(task)}
+                            aria-label={`Delete ${task.name}`}
+                          >
+                            Delete
+                          </button>
+                          <select
+                            className={`task-status-select task-status-select--${task.status}`}
+                            value={task.status}
+                            onChange={(event) =>
+                              void changeStatus(
+                                task,
+                                event.target.value as TaskStatus
+                              )
+                            }
+                            aria-label={`Status of ${task.name}`}
+                          >
+                            {STATUS_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })
+              )}
             </div>
-          ) : visibleTasks.length === 0 ? (
-            <div className="tasks-empty">
-              <strong>
-                {tasks.length === 0 ? "No tasks yet" : "No matching tasks"}
-              </strong>
-              <span>
-                {tasks.length === 0
-                  ? "Use + Create task to add your first task."
-                  : "Try a different search term."}
-              </span>
-            </div>
-          ) : activeTasks.length === 0 ? (
-            <div className="tasks-empty">
-              <strong>All caught up</strong>
-              <span>
-                Every task is done. See the Completed tasks section below.
-              </span>
-            </div>
-          ) : (
-            activeTasks.map((task) => {
-              const expanded = inSplitPane && expandedId === task.id;
-              return (
-                <article
-                  key={task.id}
-                  className={`task-card${expanded ? " task-card--expanded" : ""}`}
-                >
-                  <div className="task-card-body">
-                    <div className="task-card-title">
-                      <span
-                        className={`task-priority-badge priority-${task.priority}`}
-                        title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-                      >
-                        P{task.priority}
-                      </span>
-                      <h3>
-                        <button
-                          type="button"
-                          className="task-card-title-link"
-                          onClick={() =>
-                            inSplitPane
-                              ? setExpandedId((id) =>
-                                  id === task.id ? null : task.id
-                                )
-                              : openEdit(task)
-                          }
-                          aria-expanded={inSplitPane ? expanded : undefined}
-                          title="Open task details"
-                        >
-                          {task.name}
-                        </button>
-                      </h3>
-                    </div>
-                  </div>
-                  {expanded && (
-                    <div className="task-card-detail">
-                      <p className="task-card-detail-desc">
-                        {task.description?.trim()
-                          ? task.description
-                          : "No description."}
-                      </p>
-                    </div>
-                  )}
-                  {(!inSplitPane || expanded) && (
-                    <div className="task-card-actions">
-                      <button
-                        type="button"
-                        className="task-edit-btn"
-                        onClick={() => openEdit(task)}
-                        aria-label={`Edit ${task.name}`}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="task-delete-btn"
-                        onClick={() => deleteTask(task)}
-                        aria-label={`Delete ${task.name}`}
-                      >
-                        Delete
-                      </button>
-                      <select
-                        className={`task-status-select task-status-select--${task.status}`}
-                        value={task.status}
-                        onChange={(event) =>
-                          void changeStatus(
-                            task,
-                            event.target.value as TaskStatus
-                          )
-                        }
-                        aria-label={`Status of ${task.name}`}
-                      >
-                        {STATUS_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </article>
-              );
-            })
-          )}
-        </div>
 
-        {!loading && !loadError && completedTasks.length > 0 && (
-          <section className="task-completed-section">
-            <h3 className="task-completed-title">
-              Completed tasks
-              <span className="task-completed-count">
-                {completedTasks.length}
-              </span>
-            </h3>
-            <div className={`task-list task-list--${view}`}>
-              {completedTasks.map((task) => (
-                <article
-                  key={task.id}
-                  className="task-card task-card--completed"
-                >
-                  <div className="task-card-body">
-                    <div className="task-card-title">
-                      <span
-                        className={`task-priority-badge priority-${task.priority}`}
-                        title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-                      >
-                        P{task.priority}
-                      </span>
-                      <h3>
+            {!loading && !loadError && completedTasks.length > 0 && (
+              <section className="task-completed-section">
+                <h3 className="task-completed-title">
+                  Completed tasks
+                  <span className="task-completed-count">
+                    {completedTasks.length}
+                  </span>
+                </h3>
+                <div className={`task-list task-list--${view}`}>
+                  {completedTasks.map((task) => (
+                    <article
+                      key={task.id}
+                      className="task-card task-card--completed"
+                    >
+                      <div className="task-card-body">
+                        <div className="task-card-title">
+                          <span
+                            className={`task-priority-badge priority-${task.priority}`}
+                            title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                          >
+                            P{task.priority}
+                          </span>
+                          <h3>
+                            <button
+                              type="button"
+                              className="task-card-title-link"
+                              onClick={() => openEdit(task)}
+                              title="Open task details"
+                            >
+                              {task.name}
+                            </button>
+                          </h3>
+                        </div>
+                      </div>
+                      <div className="task-card-actions">
                         <button
                           type="button"
-                          className="task-card-title-link"
+                          className="task-edit-btn"
                           onClick={() => openEdit(task)}
-                          title="Open task details"
+                          aria-label={`Edit ${task.name}`}
                         >
-                          {task.name}
+                          Edit
                         </button>
-                      </h3>
-                    </div>
-                  </div>
-                  <div className="task-card-actions">
-                    <button
-                      type="button"
-                      className="task-edit-btn"
-                      onClick={() => openEdit(task)}
-                      aria-label={`Edit ${task.name}`}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="task-delete-btn"
-                      onClick={() => deleteTask(task)}
-                      aria-label={`Delete ${task.name}`}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
+                        <button
+                          type="button"
+                          className="task-delete-btn"
+                          onClick={() => deleteTask(task)}
+                          aria-label={`Delete ${task.name}`}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
           </>
         )}
       </main>

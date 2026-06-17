@@ -36,10 +36,7 @@ export const getRepoLanguages = (owner: string, repo: string) =>
   );
 
 // The `n` most-used languages (by bytes), highest first.
-export const topLanguages = (
-  langs: Record<string, number>,
-  n = 2
-): string[] =>
+export const topLanguages = (langs: Record<string, number>, n = 2): string[] =>
   Object.entries(langs)
     .sort((a, b) => b[1] - a[1])
     .slice(0, n)

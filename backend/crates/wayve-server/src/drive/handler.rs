@@ -390,13 +390,12 @@ pub async fn rename_file(
     let file_type = name.rsplit('.').next().unwrap_or("").to_string();
 
     // Capture the prior name + folder for the audit trail before the rename.
-    let prior: Option<(String, Option<i64>)> = sqlx::query_as(
-        "SELECT name, folder_id FROM drive_files WHERE id = $1 AND user_id = $2",
-    )
-    .bind(file_id)
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
+    let prior: Option<(String, Option<i64>)> =
+        sqlx::query_as("SELECT name, folder_id FROM drive_files WHERE id = $1 AND user_id = $2")
+            .bind(file_id)
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
 
     // UPDATE ... RETURNING folds the ownership check and "did it exist?" check
     // into one round-trip; a 404 (not 403) avoids leaking other users' rows.

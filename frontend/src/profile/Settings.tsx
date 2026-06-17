@@ -282,9 +282,7 @@ export default function Settings() {
                 style={{ cursor: "pointer" }}
               >
                 <span>Encrypt files in chat (end-to-end)</span>
-                <span
-                  className={`toggle-switch${chatEncrypt ? " on" : ""}`}
-                >
+                <span className={`toggle-switch${chatEncrypt ? " on" : ""}`}>
                   <input
                     type="checkbox"
                     className="toggle-switch-input"
@@ -298,10 +296,7 @@ export default function Settings() {
                 </span>
               </label>
             </div>
-            <p
-              className="settings-support-empty"
-              style={{ textAlign: "left" }}
-            >
+            <p className="settings-support-empty" style={{ textAlign: "left" }}>
               When on, files you attach in chat are encrypted on your device so
               the server can&apos;t read them. When off, attachments are stored
               encrypted at rest but readable by the server.

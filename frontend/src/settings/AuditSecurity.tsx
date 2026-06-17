@@ -278,7 +278,9 @@ const stLabel = (s: string) => TASK_STATUS_LABEL[s] ?? s;
 // Org/platform-only fields read "No Data available" for personal users, who
 // have no assigner/assignee concept.
 function noData(value: unknown): string {
-  return typeof value === "string" && value.trim() ? value.trim() : "No Data available";
+  return typeof value === "string" && value.trim()
+    ? value.trim()
+    : "No Data available";
 }
 
 // The task's effective status: the new status on a change row, else its status.
@@ -307,7 +309,8 @@ function formatPriority(row: UserActionRow): string {
 // "Assigned to me" from the task owner's perspective: assignee == actor email.
 function assignedToMe(row: UserActionRow): string {
   const assignee = row.metadata?.assignee;
-  if (typeof assignee !== "string" || !assignee.trim()) return "No Data available";
+  if (typeof assignee !== "string" || !assignee.trim())
+    return "No Data available";
   const me = (row.actor_email ?? "").toLowerCase();
   return assignee.trim().toLowerCase() === me ? "Yes" : "No";
 }
@@ -445,7 +448,9 @@ export default function AuditSecurity() {
   const filteredActions = useMemo(() => {
     const email = actEmail.trim().toLowerCase();
     // `actEnd` is an inclusive day, so compare against end-of-day.
-    const startMs = actStart ? new Date(`${actStart}T00:00:00`).getTime() : null;
+    const startMs = actStart
+      ? new Date(`${actStart}T00:00:00`).getTime()
+      : null;
     const endMs = actEnd ? new Date(`${actEnd}T23:59:59.999`).getTime() : null;
     return actions.filter((row) => {
       if (!SESSION_ACTIONS.has(row.action)) return false;
@@ -546,7 +551,9 @@ export default function AuditSecurity() {
   };
 
   const driveActions = useMemo(() => {
-    const startMs = drvStart ? new Date(`${drvStart}T00:00:00`).getTime() : null;
+    const startMs = drvStart
+      ? new Date(`${drvStart}T00:00:00`).getTime()
+      : null;
     const endMs = drvEnd ? new Date(`${drvEnd}T23:59:59.999`).getTime() : null;
     const minBytes = drvMinMb ? Number(drvMinMb) * 1024 * 1024 : 0;
     return actions.filter((row) => {
@@ -853,8 +860,8 @@ export default function AuditSecurity() {
             <h2>Audit Access activity</h2>
           </div>
           <p className="audit-security-sub">
-            Every sign-in event — new registrations, login, logout, failed
-            login attempts, and password changes.
+            Every sign-in event — new registrations, login, logout, failed login
+            attempts, and password changes.
           </p>
 
           <form
@@ -939,28 +946,28 @@ export default function AuditSecurity() {
                   {filteredActions.map((row) => {
                     const act = activityView(row);
                     return (
-                    <tr key={row.id}>
-                      <td>{toLocalTime(row.created_at)}</td>
-                      <td>
-                        {row.actor_email ??
-                          (row.actor_user_id != null
-                            ? `user#${row.actor_user_id}`
-                            : "-")}
-                      </td>
-                      <td>
-                        <span className={`audit-activity ${act.cls}`}>
-                          {act.label}
-                        </span>
-                      </td>
-                      <td>{row.ip ?? "-"}</td>
-                      <td>{formatLocation(row)}</td>
-                      <td
-                        className="audit-path"
-                        title={formatUserActionDetails(row) || "-"}
-                      >
-                        {formatUserActionDetails(row) || "-"}
-                      </td>
-                    </tr>
+                      <tr key={row.id}>
+                        <td>{toLocalTime(row.created_at)}</td>
+                        <td>
+                          {row.actor_email ??
+                            (row.actor_user_id != null
+                              ? `user#${row.actor_user_id}`
+                              : "-")}
+                        </td>
+                        <td>
+                          <span className={`audit-activity ${act.cls}`}>
+                            {act.label}
+                          </span>
+                        </td>
+                        <td>{row.ip ?? "-"}</td>
+                        <td>{formatLocation(row)}</td>
+                        <td
+                          className="audit-path"
+                          title={formatUserActionDetails(row) || "-"}
+                        >
+                          {formatUserActionDetails(row) || "-"}
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
@@ -1079,7 +1086,10 @@ export default function AuditSecurity() {
                       <td className="audit-path" title={metaStr(row, "to")}>
                         {metaStr(row, "to")}
                       </td>
-                      <td className="audit-path" title={metaStr(row, "subject")}>
+                      <td
+                        className="audit-path"
+                        title={metaStr(row, "subject")}
+                      >
                         {metaStr(row, "subject")}
                       </td>
                       <td className="audit-path" title={formatAttachments(row)}>
@@ -1269,7 +1279,9 @@ export default function AuditSecurity() {
           {actionsLoading ? (
             <div className="audit-security-empty">Loading...</div>
           ) : !actions.some((r) => CALENDAR_ACTIONS.has(r.action)) ? (
-            <div className="audit-security-empty">No calendar activity yet.</div>
+            <div className="audit-security-empty">
+              No calendar activity yet.
+            </div>
           ) : calendarActions.length === 0 ? (
             <div className="audit-security-empty">
               No activity matches these filters.
@@ -1635,7 +1647,10 @@ export default function AuditSecurity() {
                           {TASK_ACTION_LABEL[row.action] ?? row.action}
                         </span>
                       </td>
-                      <td className="audit-path" title={metaStr(row, "summary")}>
+                      <td
+                        className="audit-path"
+                        title={metaStr(row, "summary")}
+                      >
                         {metaStr(row, "summary")}
                       </td>
                       <td>{formatTaskStatus(row)}</td>

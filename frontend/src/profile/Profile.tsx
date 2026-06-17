@@ -526,8 +526,8 @@ export default function Profile() {
           <h2 className="settings-card-title">Import email</h2>
           <p className="profile-hint">
             Connect a Gmail or Outlook mailbox to import its mail and read it in
-            Wayve. You&apos;ll sign in with the provider; the mailbox is added to
-            your account and its messages appear under Emails.
+            Wayve. You&apos;ll sign in with the provider; the mailbox is added
+            to your account and its messages appear under Emails.
           </p>
 
           <div className="profile-row">

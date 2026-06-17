@@ -49,7 +49,8 @@ export default function MessageComposer({
   if (!conversation || !canChat) return null;
 
   const disabled = !isConnected || uploading;
-  const canSend = !disabled && (input.trim().length > 0 || pendingFiles.length > 0);
+  const canSend =
+    !disabled && (input.trim().length > 0 || pendingFiles.length > 0);
 
   const handlePick = (list: FileList | null) => {
     if (!list || !onPickFiles) return;

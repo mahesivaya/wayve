@@ -236,13 +236,12 @@ pub async fn delete_folder(
     // anything happen?" check into one round-trip. The FK ON DELETE CASCADE
     // on both `folders.parent_folder_id` and `files.folder_id` removes any
     // descendants in the same transaction.
-    let removed: Option<String> = sqlx::query_scalar(
-        "DELETE FROM folders WHERE id = $1 AND user_id = $2 RETURNING name",
-    )
-    .bind(folder_id)
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
+    let removed: Option<String> =
+        sqlx::query_scalar("DELETE FROM folders WHERE id = $1 AND user_id = $2 RETURNING name")
+            .bind(folder_id)
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
 
     let Some(folder_name) = removed else {
         return Ok(

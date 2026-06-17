@@ -91,11 +91,14 @@ const planToDraft = (plan: Plan): DraftForm => ({
   // A 0/empty numeric renders as a blank field (with a placeholder) rather
   // than a literal "0" the admin has to delete before typing. Empty coerces
   // back to the right default in `draftToPayload`.
-  amount_dollars: plan.amount_cents === 0 ? "" : String(centsToDollars(plan.amount_cents)),
+  amount_dollars:
+    plan.amount_cents === 0 ? "" : String(centsToDollars(plan.amount_cents)),
   currency: plan.currency,
   billing_interval: plan.billing_interval,
   storage_gb:
-    plan.storage_limit_bytes <= 0 ? "" : String(bytesToGB(plan.storage_limit_bytes)),
+    plan.storage_limit_bytes <= 0
+      ? ""
+      : String(bytesToGB(plan.storage_limit_bytes)),
   seat_limit: plan.seat_limit <= 0 ? "" : String(plan.seat_limit),
   features_text: featuresToText(plan.features),
   is_active: plan.is_active,

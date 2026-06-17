@@ -41,7 +41,9 @@
   border-radius: 12px;
   background: var(--color-surface);
   cursor: pointer;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .project-card:hover {

@@ -133,7 +133,11 @@ fn track_call_lifecycle(pool: &PgPool, me: i32, signal_type: &str, peer: i32, me
             // Caller canceled or either side ended. Connected ⇒ completed (with
             // duration); never connected ⇒ not answered.
             "call-cancel" | "call-end" => guard.remove(&key).map(|info| {
-                let outcome = if info.connected { "completed" } else { "missed" };
+                let outcome = if info.connected {
+                    "completed"
+                } else {
+                    "missed"
+                };
                 (info, outcome)
             }),
             _ => None,
@@ -159,7 +163,11 @@ fn finalize_calls_for(pool: &PgPool, user_id: i32) {
             .collect::<Vec<_>>()
     };
     for info in orphaned {
-        let outcome = if info.connected { "completed" } else { "missed" };
+        let outcome = if info.connected {
+            "completed"
+        } else {
+            "missed"
+        };
         record_call_audit(pool.clone(), info, outcome);
     }
 }

@@ -106,8 +106,11 @@ export function updateEmailState(
     clear_assignee?: boolean;
   }
 ): Promise<InboxState> {
-  return apiFetchJson<InboxState>(`/api/shared-inboxes/emails/${emailId}/state`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
+  return apiFetchJson<InboxState>(
+    `/api/shared-inboxes/emails/${emailId}/state`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }
+  );
 }

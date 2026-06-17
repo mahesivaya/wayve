@@ -322,7 +322,10 @@ pub async fn set_domain_policy(
             .json(serde_json::json!({ "message": "Organization not found" })));
     }
     info!(target: "auth", org_id, allow = body.allow, "organization domain policy updated");
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "allow_unverified_email_domains": body.allow })))
+    Ok(
+        HttpResponse::Ok()
+            .json(serde_json::json!({ "allow_unverified_email_domains": body.allow })),
+    )
 }
 
 #[post("/organizations/{org_id}/domains/{domain_id}/verify")]
