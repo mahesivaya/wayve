@@ -8,8 +8,12 @@ test.describe("public home", () => {
   test("renders the Fluxze wordmark", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveURL(/\/$|\/home$/);
-    // Brand button uses the wordmark "Fluxze" in the top-left nav.
-    await expect(page.getByRole("button", { name: /^fluxze$/i })).toBeVisible();
+    // The top-left brand button (logo + wordmark). Target it by class — its
+    // accessible name isn't exactly "Fluxze" because the BrandLogo svg also
+    // contributes to the name — and assert the wordmark text is present.
+    const brand = page.locator("button.public-home-brand");
+    await expect(brand).toBeVisible();
+    await expect(brand).toContainText(/fluxze/i);
   });
 
   test("nav links to login + register pages", async ({ page }) => {
