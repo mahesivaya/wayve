@@ -3,6 +3,31 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [2.2.3](https://github.com/mahesivaya/wayve/releases/tag/v2.2.3) - 2026-06-17
+
+### 🚀 Features
+
+- **platform:** Move Members & roles to the sidebar; drop Support/Developer/Security cards from owner home; wider sidebar + looser console grid
+
+### 🐛 Bug Fixes
+
+- **lint:** Clear production clippy (dead serve_file_row, complex type alias, collapsible if); clippy gate + pre-commit hook drop --all-targets
+- **docker:** Bump frontend nginx base to 1.29-alpine to clear fixable Alpine HIGH/CRITICAL CVEs
+- **deps:** Npm audit fix — clear high-severity frontend vulns (@babel/core, dompurify)
+
+### 🧹 Maintenance
+
+- **ci:** Git-cliff changelog automation (release job + justfile recipe + cliff.toml) and pre-commit hook
+- **e2e:** Target brand button by class (logo also contributes to its accessible name)
+- **e2e:** Brand wordmark assertion is Fluxze, not Wayve
+- **e2e:** Login helper targets the 'Email or username' placeholder
+- **auth:** Update Login test for the 'Email or username' placeholder
+- **security:** Mark SARIF uploads non-fatal (private repo has no GHAS code scanning)
+
+### Other Changes
+
+- Cargo fmt + prettier --write to fix CI format gates
+
 ## [2.2.2](https://github.com/mahesivaya/wayve/releases/tag/v2.2.2) - 2026-06-17
 
 ### 🐛 Bug Fixes
