@@ -59,6 +59,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -68,6 +70,13 @@ jobs:
       - name: cargo fmt --check
         working-directory: backend
         run: cargo fmt --check
+
+      - name: cargo clippy
+        working-directory: backend
+        # Mirrors `just lint`: lints production lib/bin (NOT --all-targets, which
+        # would also lint test code where direct unwrap/expect is used). Denies
+        # warnings so clippy.toml bans + other lints fail CI instead of warning.
+        run: cargo clippy -- -D warnings
 
       - name: Apply schema
         run: psql "$DATABASE_URL" -f infra/postgres/init.sql

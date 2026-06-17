@@ -77,19 +77,17 @@ where
 
         Box::pin(async move {
             let res = srv.call(req).await?;
-            if !skip {
-                if let (Some(uid), Some(pool)) = (user_id, pool) {
-                    crate::activity::spawn_record(
-                        pool,
-                        uid,
-                        "api_request",
-                        None,
-                        Some(method.to_string()),
-                        Some(path),
-                        Some(i32::from(res.status().as_u16())),
-                        ip,
-                    );
-                }
+            if !skip && let (Some(uid), Some(pool)) = (user_id, pool) {
+                crate::activity::spawn_record(
+                    pool,
+                    uid,
+                    "api_request",
+                    None,
+                    Some(method.to_string()),
+                    Some(path),
+                    Some(i32::from(res.status().as_u16())),
+                    ip,
+                );
             }
             Ok(res)
         })

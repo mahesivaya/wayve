@@ -57,8 +57,8 @@ struct CallInfo {
 
 // Keyed by the unordered (min,max) user pair so either party's signal resolves
 // the same in-flight call.
-static ACTIVE_CALLS: Lazy<Mutex<HashMap<(i32, i32), CallInfo>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+type ActiveCalls = Mutex<HashMap<(i32, i32), CallInfo>>;
+static ACTIVE_CALLS: Lazy<ActiveCalls> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn call_key(a: i32, b: i32) -> (i32, i32) {
     (a.min(b), a.max(b))

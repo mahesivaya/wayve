@@ -523,17 +523,6 @@ async fn audit_folder_name(pool: &PgPool, folder_id: Option<i64>) -> Option<Stri
         .flatten()
 }
 
-async fn serve_file_row(user_id: i32, file_id: i64, row: sqlx::postgres::PgRow) -> AppResult {
-    serve_file_parts(
-        user_id,
-        file_id,
-        row.get("name"),
-        row.get("file_path"),
-        row.get("file_iv"),
-    )
-    .await
-}
-
 async fn serve_file_parts(
     user_id: i32,
     file_id: i64,
