@@ -23,3 +23,19 @@
   font-size: 16px;
   color: #6b7280;
 }
+
+.coming-soon-link {
+  display: inline-block;
+  margin-top: 20px;
+  padding: 9px 20px;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.coming-soon-link:hover {
+  background: #1d4ed8;
+}

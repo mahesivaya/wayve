@@ -157,6 +157,16 @@ http {
             # a deploy. The /assets/ location above keeps its own long cache.
             add_header Cache-Control "no-cache, no-store, must-revalidate" always;
         }
+
+        # Branded maintenance page when an upstream (backend/frontend) is
+        # unreachable. Only nginx-generated upstream-down errors hit this;
+        # proxy_intercept_errors stays off (default), so the backend's own
+        # JSON 4xx/5xx responses on /api pass through untouched.
+        error_page 502 503 504 /50x.html;
+        location = /50x.html {
+            root /usr/share/nginx/html;
+            internal;
+        }
     }
 
     # ---- www.fluxze.com -> canonical ${NGINX_HOST} ----

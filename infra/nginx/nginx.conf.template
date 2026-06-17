@@ -58,5 +58,15 @@ http {
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
         }
+
+        # Branded maintenance page when an upstream is unreachable. Only
+        # nginx-generated upstream-down errors hit this; proxy_intercept_errors
+        # stays off (default), so the backend's own JSON 4xx/5xx responses on
+        # /api pass through untouched.
+        error_page 502 503 504 /50x.html;
+        location = /50x.html {
+            root /usr/share/nginx/html;
+            internal;
+        }
     }
 }

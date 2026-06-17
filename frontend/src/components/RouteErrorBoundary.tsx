@@ -5,6 +5,7 @@
 // blank. This catches those: chunk-load failures auto-reload once; anything
 // else shows a visible "something went wrong / reload" panel instead of blank.
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportClientError } from "../api/errorLogs";
 
 const RELOAD_FLAG = "route-chunk-reloaded";
 
@@ -61,6 +62,15 @@ export default class RouteErrorBoundary extends Component<Props, State> {
     }
     // Surface non-chunk errors for diagnosis instead of swallowing them.
     console.error("RouteErrorBoundary caught:", error, info.componentStack);
+    // React-caught render errors don't fire window.onerror, so the global
+    // reporter (installErrorReporter) never sees them. Forward them here so
+    // they still land in /api/error-logs and the platform dashboard.
+    reportClientError({
+      severity: "error",
+      message: error.message || "render error",
+      stack: error.stack,
+      extra: { componentStack: info.componentStack },
+    });
   }
 
   render() {

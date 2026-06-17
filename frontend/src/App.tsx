@@ -39,6 +39,7 @@ const DomainVerification = lazy(
   () => import("./orgDomains/DomainVerification")
 );
 const ComingSoon = lazy(() => import("./components/ComingSoon"));
+const NotFound = lazy(() => import("./components/NotFound"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
 const Organization = lazy(() => import("./organization/Organization"));
@@ -475,16 +476,12 @@ export default function App() {
             </Route>
           </Route>
 
-          {/* FALLBACK */}
+          {/* FALLBACK — explicit 404 (also reported to /api/error-logs). The
+              "home" link points at the account home for logged-in users, or
+              the login page otherwise. */}
           <Route
             path="*"
-            element={
-              user ? (
-                <Navigate to={accountHome} replace />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
+            element={<NotFound homePath={user ? accountHome : "/login"} />}
           />
         </Routes>
       </Suspense>
