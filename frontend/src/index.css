@@ -258,9 +258,12 @@
   --color-surface-cool-strong: #6f748b;
   --color-surface-cool-pale: #f4f6fb;
   --color-surface-cool-light: #f7f8fc;
-  --color-surface-cool-faint: #f5f7fb;
-  --color-surface-cool-mist: #eef4fb;
-  --color-surface-cool-haze: #eef2f7;
+  /* Aliased to theme-generated tokens (not hard-coded) so the sidebar/chrome
+     recolor with every theme and match the right-side content block. Defined
+     once here; the dark-mode hex overrides for these were removed. */
+  --color-surface-cool-faint: var(--color-email-bg);
+  --color-surface-cool-mist: var(--color-surface-soft);
+  --color-surface-cool-haze: var(--color-surface-soft);
   --color-surface-cool-blue: #c8d6e9;
   --color-surface-cool-blue-light: #c7dafd;
   --color-surface-cool-blue-mist: #c7e3ee;
@@ -272,7 +275,8 @@
 
   /* Cool dividers */
   --color-divider-cool: #d9dde8;
-  --color-divider-cool-light: #dbe3ee;
+  /* Aliased so the chrome dividers track the theme (see note above). */
+  --color-divider-cool-light: var(--color-border-soft);
   --color-divider-cool-soft: #edf1f6;
   --color-divider-cool-strong: #d8dde8;
   --color-divider-marketing: #f0f3f8;
@@ -613,9 +617,8 @@
   /* Cool navy surfaces */
   --color-surface-cool-pale: #101f3c;
   --color-surface-cool-light: #0f1d3a;
-  --color-surface-cool-faint: #101f3c;
-  --color-surface-cool-mist: #122847;
-  --color-surface-cool-haze: #112440;
+  /* surface-cool-faint / -mist / -haze are aliased to generated tokens in
+     :root (theme-driven); no dark override so the alias governs both modes. */
   --color-surface-cool-blue: #1a3056;
   --color-surface-cool-blue-light: #14264a;
   --color-surface-cool-blue-mist: #122847;
@@ -624,7 +627,7 @@
 
   /* Cool dividers */
   --color-divider-cool: #24385f;
-  --color-divider-cool-light: #24385f;
+  /* divider-cool-light is aliased to a generated token in :root (theme-driven). */
   --color-divider-cool-soft: #24385f;
   --color-divider-cool-strong: #24385f;
   --color-divider-marketing: #24385f;

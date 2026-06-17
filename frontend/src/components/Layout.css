@@ -504,7 +504,12 @@
 ============================== */
 .sidebar {
   width: 156px;
-  background: var(--color-surface-cool-faint);
+  /* Track the themeable soft surface so the sidebar matches the active theme's
+     background in every theme. The old --color-surface-cool-faint aliases the
+     non-themeable --color-email-bg (#0a1730 navy), so on a near-black custom
+     theme the sidebar stayed blue. (Default dark is unchanged: surface-soft is
+     also #0a1730 there.) */
+  background: var(--color-surface-soft);
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -1564,7 +1569,10 @@
   color: var(--color-primary-border);
 }
 :root[data-theme="dark"] .sidebar {
-  background: var(--color-surface-darken);
+  /* Themeable soft surface (was the non-themeable --color-surface-darken navy
+     #0a1730, which stayed blue on a near-black custom theme). Default dark is
+     unchanged: surface-soft is also #0a1730. */
+  background: var(--color-surface-soft);
   border-right: 1px solid var(--color-border-dark);
 }
 :root[data-theme="dark"] .sidebar-collapse-row {

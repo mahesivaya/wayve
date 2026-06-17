@@ -91,6 +91,11 @@ export function generatePalette(
     surface: oklch(surfaceL, surfaceChroma, hue),
     "surface-soft": oklch(surfaceSoftL, surfaceChroma, hue),
     "surface-hover": oklch(surfaceHoverL, surfaceChroma, hue),
+    // Content-area canvas (.split-pane) + email list pane. Tracks the soft
+    // surface so a generated theme retints/neutralizes the page background
+    // (B&W light → pure white) instead of leaving the static lightsteelblue.
+    "email-bg": oklch(surfaceSoftL, surfaceChroma, hue),
+    "email-list-bg": oklch(surfaceHoverL, surfaceChroma, hue),
     "text-primary": oklch(textPrimaryL, 0, hue),
     "text-secondary": oklch(textSecondaryL, 0, hue),
     "text-muted": oklch(textMutedL, 0, hue),

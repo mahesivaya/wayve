@@ -1850,7 +1850,9 @@
     margin: 2px 0 12px;
     padding: 0 10px;
     border-radius: 22px;
-    background: var(--color-surface-cool-faint);
+    /* Themeable soft surface so it tracks the active theme (was the
+       non-themeable cool-faint navy). Matches the .sidebar change. */
+    background: var(--color-surface-soft);
     color: var(--color-text-cool-foggy);
   }
 

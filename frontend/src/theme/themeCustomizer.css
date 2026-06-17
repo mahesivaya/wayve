@@ -28,38 +28,6 @@
   gap: 12px;
 }
 
-.theme-customizer-tabs {
-  display: inline-flex;
-  background: var(--tc-bg-soft);
-  border: 1px solid var(--tc-border);
-  border-radius: var(--radius-pill);
-  padding: 3px;
-  gap: 2px;
-}
-
-.theme-customizer-tab {
-  padding: 5px 16px;
-  border: none;
-  background: transparent;
-  color: var(--tc-text-muted);
-  font-size: var(--text-md);
-  font-weight: 600;
-  border-radius: var(--radius-pill);
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-
-.theme-customizer-tab:hover {
-  color: var(--tc-text);
-}
-
-.theme-customizer-tab.active {
-  background: var(--tc-text);
-  color: var(--tc-bg);
-}
-
 /* Header tool icons (save · dice · contrast) — thin line-art buttons, pushed
    to the right next to the name field. Replaces the old conic-gradient wheel. */
 .theme-header-tools {

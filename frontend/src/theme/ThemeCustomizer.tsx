@@ -35,7 +35,6 @@ import {
 } from "./palette";
 import "./themeCustomizer.css";
 
-type EditorTab = "basic" | "advanced";
 type LibTab = "themes" | "ui";
 
 // --- Thin line-art header icons (match the macro toolbar) ---
@@ -144,7 +143,12 @@ const BW_LIGHT_INPUT: PaletteInput = {
   chroma: 0,
   saturation: 0,
   contrast: 1,
-  depth: 0,
+  // +depth lifts the surface lightnesses (page bg + cards) to pure white in
+  // generatePalette (surfaceSoftL = 0.96 + depth, clamped at 1.0). At depth 0
+  // the B&W "white" theme rendered the background at oklch 96% — a flat gray
+  // that read as "not clean white". depth only touches surfaces, so text/border
+  // contrast is unchanged.
+  depth: 0.04,
 };
 const BW_DARK_INPUT: PaletteInput = {
   hue: 0,
@@ -191,7 +195,6 @@ export default function ThemeCustomizer() {
     baseTokens,
   } = useCustomTheme();
 
-  const [editorTab, setEditorTab] = useState<EditorTab>("basic");
   const [libTab, setLibTab] = useState<LibTab>("themes");
 
   // Seed the advanced editor from the active choice when it's custom/saved.
@@ -214,14 +217,16 @@ export default function ThemeCustomizer() {
   const [importError, setImportError] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
-  // Live-preview the advanced sliders only while the Advanced tab is active.
+  // Single-view editor: the sliders/grid live-preview the current input at all
+  // times. Discrete picks (swatch/preset/saved/B&W) sync `input`/`mode` so this
+  // preview matches the pick instead of masking it.
   useEffect(() => {
-    if (editorTab !== "advanced") {
-      clearPreview();
-      return;
-    }
     previewInput(input, mode);
-  }, [editorTab, input, mode, previewInput, clearPreview]);
+  }, [input, mode, previewInput]);
+  // Revert an unsaved preview when the panel closes (the old code did this when
+  // leaving the Advanced tab). Unmount-only so it doesn't clear+reapply — and
+  // flicker — on every slider tick.
+  useEffect(() => () => clearPreview(), [clearPreview]);
 
   // Chroma slider track: gray → fully-saturated accent at the current hue.
   const chromaTrack = `linear-gradient(to right, oklch(0.70 0 ${input.hue}), oklch(0.65 0.28 ${input.hue}))`;
@@ -242,20 +247,26 @@ export default function ThemeCustomizer() {
         ? "dark"
         : "light";
     const nextInput = nextMode === "dark" ? BW_DARK_INPUT : BW_LIGHT_INPUT;
-    setEditorTab("basic"); // keep the advanced-tab preview from masking the apply
     setChoice({ kind: "custom", mode: nextMode, input: nextInput });
     setInput(nextInput);
     setMode(nextMode);
   };
 
   // --- actions ---------------------------------------------------------------
+  // Sync the slider state to each discrete pick so the always-on preview shows
+  // the pick instead of the previous slider input.
   const applyPreset = (presetId: string) => {
-    setEditorTab("basic"); // stop the advanced preview from masking the pick
+    const preset = PRESETS.find((p) => p.id === presetId);
+    if (preset) {
+      setInput(preset.input);
+      setMode(preset.mode);
+    }
     setChoice({ kind: "preset", presetId });
   };
 
   const applySaved = (t: SavedTheme) => {
-    setEditorTab("basic");
+    setInput(t.input);
+    setMode(t.mode);
     setChoice({ kind: "saved", id: t.id });
   };
 
@@ -266,7 +277,6 @@ export default function ThemeCustomizer() {
 
   const handleRandomize = () => {
     setInput(randomInput());
-    setEditorTab("advanced"); // reveal the grid so the result is visible
   };
 
   const copyTheme = (payload: {
@@ -299,7 +309,6 @@ export default function ThemeCustomizer() {
       setInput(parsed.input);
       setMode(parsed.mode);
       if (parsed.name) setName(parsed.name);
-      setEditorTab("advanced");
       setImportOpen(false);
       setImportText("");
     } catch {
@@ -337,27 +346,6 @@ export default function ThemeCustomizer() {
   return (
     <div className="theme-customizer">
       <div className="theme-customizer-header">
-        <div className="theme-customizer-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={editorTab === "basic"}
-            className={`theme-customizer-tab ${editorTab === "basic" ? "active" : ""}`}
-            onClick={() => setEditorTab("basic")}
-          >
-            Basic
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={editorTab === "advanced"}
-            className={`theme-customizer-tab ${editorTab === "advanced" ? "active" : ""}`}
-            onClick={() => setEditorTab("advanced")}
-          >
-            Advanced
-          </button>
-        </div>
-
         <div className="theme-header-tools">
           <button
             type="button"
@@ -403,12 +391,7 @@ export default function ThemeCustomizer() {
         />
       </div>
 
-      {editorTab === "basic" && (
-        <div
-          className="theme-bg-quick"
-          role="group"
-          aria-label="Background color"
-        >
+      <div className="theme-bg-quick" role="group" aria-label="Background color">
           <span className="theme-bg-quick-label">Background</span>
           <div className="theme-bg-swatches">
             {BACKGROUNDS.map((bg) => {
@@ -427,21 +410,21 @@ export default function ThemeCustomizer() {
                   title={bg.label}
                   aria-label={`${bg.label} background`}
                   aria-pressed={active}
-                  onClick={() =>
+                  onClick={() => {
+                    setInput(bg.input);
+                    setMode(bg.mode);
                     setChoice({
                       kind: "custom",
                       mode: bg.mode,
                       input: bg.input,
-                    })
-                  }
+                    });
+                  }}
                 />
               );
             })}
           </div>
         </div>
-      )}
 
-      {editorTab === "advanced" && (
         <div className="theme-custom-panel">
           <ColorGrid
             hue={input.hue}
@@ -562,7 +545,6 @@ export default function ThemeCustomizer() {
             </div>
           )}
         </div>
-      )}
 
       {/* ----- Library: Themes / UI ----- */}
       <div className="theme-lib">
