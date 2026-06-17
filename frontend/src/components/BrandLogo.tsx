@@ -3,6 +3,12 @@
 // sync — change the file to change the mark everywhere. No text is baked in —
 // the wordmark is rendered separately next to it.
 //
+// The PNG is a transparent-background, pure-black monochrome mark, so its color
+// is driven by CSS: it shows black on light chrome and is flipped to white via
+// `filter: invert()` on dark surfaces (see the `.brand-logo` rules in
+// Layout.css / marketing.css). Every instance carries the `brand-logo` class so
+// those rules can target it regardless of the per-call-site className.
+//
 // `gradientId` is accepted but unused now (kept so existing call sites that
 // pass it keep compiling); it mattered only for the previous inline SVG.
 type BrandLogoProps = {
@@ -19,7 +25,7 @@ export default function BrandLogo({
 }: BrandLogoProps) {
   return (
     <img
-      className={className}
+      className={["brand-logo", className].filter(Boolean).join(" ")}
       src="/brand/fluxze.png"
       width={size}
       height={size}
@@ -27,9 +33,6 @@ export default function BrandLogo({
       style={{
         objectFit: "contain",
         display: "block",
-        // Raster colors are baked in; nudge saturation/contrast so the light
-        // teal reads more vividly. (Can't darken without graying the white bg.)
-        filter: "saturate(1.4) contrast(1.1)",
       }}
     />
   );

@@ -444,6 +444,12 @@
   padding: 2.5rem 2rem 1.5rem 2rem;
 }
 
+/* The footer is deep navy in BOTH themes, so the black brand mark must always be
+   flipped to white here (a theme-only rule would hide it on the light theme). */
+.marketing-footer .brand-logo {
+  filter: invert(1) brightness(2);
+}
+
 .marketing-footer-inner {
   max-width: 1200px;
   margin: 0 auto;

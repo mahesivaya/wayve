@@ -104,7 +104,9 @@
 
 .task-filter:hover,
 .task-filter.active {
-  background: lightslategray;
+  /* Themed highlight so the active/hover filter tracks the selected colors
+     instead of the fixed lightslategray (which ignored custom themes). */
+  background: var(--color-surface-hover);
   color: var(--color-text-primary);
   font-weight: 650;
 }
@@ -928,7 +930,9 @@
   gap: 8px;
   border: 1px dashed var(--color-input-border);
   border-radius: var(--radius-md);
-  background: rgb(255, 255, 255, 0.5);
+  /* Track the themed list surface so the empty state follows the selected page
+     colors instead of a fixed translucent white (which read as gray on dark). */
+  background: var(--color-email-list-bg);
   color: var(--color-text-muted);
   text-align: center;
 }

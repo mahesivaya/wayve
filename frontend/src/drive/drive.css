@@ -92,7 +92,6 @@
   font-weight: 700;
 }
 
-.drive-folder-new-btn,
 .drive-folder-create-btn,
 .upload-btn {
   border-color: var(--color-primary-action);
@@ -100,11 +99,18 @@
   color: var(--color-surface);
 }
 
-.drive-folder-new-btn:hover,
 .drive-folder-create-btn:hover,
 .upload-btn:hover {
   background: var(--color-primary-action-hover);
   border-color: var(--color-primary-action-hover);
+}
+
+/* New folder + toolbar Upload (both carry .drive-folder-new-btn) keep the
+   themed-surface ghost look from the base rule above so they follow the selected
+   page colors instead of the fixed accent. */
+.drive-folder-new-btn:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-muted);
 }
 
 .drive-folder-cancel-btn:hover,

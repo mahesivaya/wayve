@@ -337,7 +337,10 @@
   padding: 28px;
   border: 1px dashed var(--color-input-border);
   border-radius: var(--radius-md);
-  background: rgb(255, 255, 255, 0.5);
+  /* Track the themed surface (same as the admin cards) so the empty state
+     follows the selected page colors instead of a fixed translucent white
+     (which read as gray on dark themes). */
+  background: var(--color-surface);
   color: var(--color-text-muted);
   text-align: center;
 }
