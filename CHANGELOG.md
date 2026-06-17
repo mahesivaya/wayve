@@ -3,6 +3,21 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [2.2.4](https://github.com/mahesivaya/wayve/releases/tag/v2.2.4) - 2026-06-17
+
+### 🚀 Features
+
+- **theme:** Theme-aware chrome, buttons & empty states; new brand mark
+- **sidebar:** Route placeholder add-to-sidebar apps to Coming Soon
+- **errors:** Add 404 page + nginx 5xx maintenance page, log render crashes
+- **domains:** Route Domains to a Coming Soon placeholder page
+- **tasks:** Show task creation date and time on cards
+- **organization:** Remove Settings tile from org owner home
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v2.2.3 [skip ci]
+
 ## [2.2.3](https://github.com/mahesivaya/wayve/releases/tag/v2.2.3) - 2026-06-17
 
 ### 🚀 Features
