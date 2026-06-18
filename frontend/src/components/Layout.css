@@ -400,7 +400,10 @@
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  color: var(--color-surface-deep);
+  /* Themeable ink so the typed text stays visible on the surface in every
+     theme. --color-surface-deep is a fixed near-black that didn't flip, so on
+     dark themes the text was near-black on a dark box (invisible). */
+  color: var(--color-text-primary);
 }
 
 .global-search-icon {
@@ -415,7 +418,7 @@
   border: none;
   outline: none;
   font-size: var(--text-lg);
-  color: var(--color-surface-deep);
+  color: var(--color-text-primary);
   background: transparent;
 }
 

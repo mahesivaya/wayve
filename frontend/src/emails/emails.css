@@ -116,7 +116,7 @@
 /* Keep the search box from expanding so it pins to the right rather than
    stretching across the toolbar; and shrink its height with the rest. */
 .emails-page-toolbar .global-search-box {
-  flex: 0 1 420px;
+  flex: 0 1 280px;
   height: 28px;
   border: none;
 }

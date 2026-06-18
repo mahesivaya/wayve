@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import ThemeCustomizer from "../theme/ThemeCustomizer";
 import { useCustomTheme } from "../theme/useCustomTheme";
-import SupportModal from "../support/SupportModal";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
 
@@ -23,7 +22,6 @@ export default function ProfileMenu() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
-  const [supportOpen, setSupportOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const appearanceRef = useRef<HTMLDivElement>(null);
   // Re-key the swatch when the choice changes so the inline var() values
@@ -137,17 +135,6 @@ export default function ProfileMenu() {
             </span>
           </button>
 
-          <button
-            className="profile-dropdown-item"
-            onClick={() => {
-              setMenuOpen(false);
-              setSupportOpen(true);
-            }}
-          >
-            <span className="profile-dropdown-icon">🛟</span>
-            Help &amp; Report issue
-          </button>
-
           <div className="profile-dropdown-divider" />
 
           <button
@@ -165,8 +152,6 @@ export default function ProfileMenu() {
           </button>
         </div>
       )}
-
-      {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
 
       {appearanceOpen && (
         <div
