@@ -375,40 +375,6 @@ export default function Home() {
               </article>
             </div>
           </section>
-
-          {/* FAQ Section */}
-          <section className="faq-section">
-            <div className="faq-header">
-              <h2>Frequently Asked Questions</h2>
-              <p>Quick answers about Fluxze Enterprise.</p>
-            </div>
-            <div className="faq-grid">
-              <div className="faq-item">
-                <h3>What security certifications does Fluxze have?</h3>
-                <p>SOC 1 Type II, GDPR, and ISO 27001, audited annually.</p>
-              </div>
-              <div className="faq-item">
-                <h3>
-                  Can I integrate Fluxze with my existing identity provider?
-                </h3>
-                <p>
-                  Yes — SAML 2.0 SSO with Okta, Azure AD, and Google Workspace.
-                </p>
-              </div>
-              <div className="faq-item">
-                <h3>What is your data retention policy?</h3>
-                <p>Team 30 days, Business 1 year, Enterprise 7 years.</p>
-              </div>
-              <div className="faq-item">
-                <h3>Do you offer on-premise deployment?</h3>
-                <p>Yes — cloud or on-premise for Enterprise customers.</p>
-              </div>
-              <div className="faq-item">
-                <h3>Can I migrate data from other platforms?</h3>
-                <p>Yes — we help migrate from Gmail, Outlook, and Slack.</p>
-              </div>
-            </div>
-          </section>
         </main>
 
         <footer className="public-home-footer">
