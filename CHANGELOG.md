@@ -3,6 +3,26 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [2.4.0](https://github.com/mahesivaya/wayve/releases/tag/v2.4.0) - 2026-06-18
+
+### 🚀 Features
+
+- **home:** Remove the Frequently Asked Questions section
+- **billing:** Advertise 500 GB storage on the Most Advance plan
+
+### 🐛 Bug Fixes
+
+- **frontend:** Clear unused-var and floating-promise lint errors
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v2.3.0 [skip ci]
+- **gitignore:** Ignore the decentralization/ docs folder
+
+### Other Changes
+
+- **theme:** Reformat ThemeCustomizer (import order + indentation)
+
 ## [2.3.0](https://github.com/mahesivaya/wayve/releases/tag/v2.3.0) - 2026-06-18
 
 ### 🐛 Bug Fixes
