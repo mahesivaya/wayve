@@ -126,7 +126,8 @@ pub async fn github_proxy(
     //   * Platform staff keep full access (the legacy single-repo dashboard).
     //   * Personal accounts may read ONLY `repos/{owner}/{repo}/...` for a repo
     //     they've linked to one of their own projects (the allowlist).
-    //   * Organization accounts are not enabled for the Code Repo viewer yet.
+    //   * Organization members may read ONLY `repos/{owner}/{repo}/...` for a
+    //     repo their org owner linked to one of the org's projects.
     let Some(user_id) = get_user_id_from_request(&req) else {
         return HttpResponse::Unauthorized().finish();
     };
@@ -176,10 +177,32 @@ pub async fn github_proxy(
             }
         }
         Scope::Organization => {
-            warn!(target: "auth", user_id, "github proxy denied: organization caller");
-            return HttpResponse::Forbidden().json(serde_json::json!({
-                "message": "GitHub access is not enabled for organization accounts"
-            }));
+            let Some(org_id) = ctx.organization_id else {
+                return HttpResponse::Forbidden().finish();
+            };
+            let Some((owner, repo)) = parse_repos_tail(&tail) else {
+                return HttpResponse::Forbidden().finish();
+            };
+            // Allowlist: ANY member of the org may read a repo linked to one of
+            // the org's projects (owner-only linking is enforced at link time).
+            let linked = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM projects
+                  WHERE organization_id = $1 AND user_id IS NULL
+                    AND LOWER(github_owner) = LOWER($2)
+                    AND LOWER(github_repo) = LOWER($3))",
+            )
+            .bind(org_id)
+            .bind(&owner)
+            .bind(&repo)
+            .fetch_one(pool.get_ref())
+            .await;
+            if !matches!(linked, Ok(true)) {
+                warn!(target: "auth", user_id, owner = %owner, repo = %repo,
+                      "github proxy denied: repo not linked to caller's org");
+                return HttpResponse::Forbidden().json(serde_json::json!({
+                    "message": "You don't have access to this repository"
+                }));
+            }
         }
     }
     let query = req.query_string();

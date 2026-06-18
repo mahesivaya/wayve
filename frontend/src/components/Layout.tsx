@@ -30,6 +30,7 @@ import {
   createProject,
   updateProject,
   deleteProject,
+  linkProjectRepo,
   listTeams,
   createTeam,
   type Project,
@@ -456,6 +457,34 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     // Optimistic removal; restore on failure.
     setProjects((prev) => prev.filter((p) => p.id !== id));
     deleteProject(id).catch(() => setProjects(prevProjects));
+  };
+
+  // Link (or replace) the public GitHub repo on an org project. Owner-only —
+  // the menu item is hidden otherwise and the backend enforces require_owner.
+  // Once linked, every org member can browse the repo via the Code Repo viewer.
+  const linkRepo = (id: number) => {
+    const current = projects.find((p) => p.id === id);
+    setProjectMenu(null);
+    const url = window.prompt(
+      "Public GitHub repo URL (e.g. https://github.com/owner/repo):",
+      current?.github_owner && current?.github_repo
+        ? `https://github.com/${current.github_owner}/${current.github_repo}`
+        : ""
+    );
+    if (url == null) return;
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    linkProjectRepo(id, trimmed)
+      .then((updated) =>
+        setProjects((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, ...updated } : p))
+        )
+      )
+      .catch((err: unknown) =>
+        window.alert(
+          err instanceof Error ? err.message : "Failed to link repository"
+        )
+      );
   };
 
   const submitNewProject = () => {
@@ -1030,6 +1059,17 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                               }}
                             >
                               Rename
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                linkRepo(proj.id);
+                              }}
+                            >
+                              {proj.github_repo ? "Change repo" : "Link repo"}
                             </button>
                             <button
                               type="button"
