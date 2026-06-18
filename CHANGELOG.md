@@ -3,6 +3,23 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [2.5.0](https://github.com/mahesivaya/wayve/releases/tag/v2.5.0) - 2026-06-18
+
+### 🚀 Features
+
+- **feature-access:** Owner-managed per-org feature access (Code Repo)
+- **projects:** Let org owners link a public repo, visible to org members
+
+### 🐛 Bug Fixes
+
+- **github:** Let org owners import a repo with no existing project
+- **github:** Give organization accounts a project-based repo viewer
+
+### 🧹 Maintenance
+
+- **projects:** Cover org-owner repo linking + proxy allowlist
+- **changelog:** Update for v2.4.1 [skip ci]
+
 ## [2.4.1](https://github.com/mahesivaya/wayve/releases/tag/v2.4.1) - 2026-06-18
 
 ### 🐛 Bug Fixes
