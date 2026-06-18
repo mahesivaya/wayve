@@ -52,7 +52,7 @@ const PUBLIC_TIERS: PublicTier[] = [
     interval: "month",
     tagline: "Top personal tier with full AI access.",
     features: [
-      "50 GB encrypted storage",
+      "500 GB encrypted storage",
       "Unlimited email & calls",
       "Full AI assistant access",
       "Priority support",

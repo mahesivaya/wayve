@@ -1,7 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "../auth/useAuth";
-import { invalidateGetCache } from "../api/client";
 import {
   cancelSubscription,
   createPaymentMethodSetupIntent,
@@ -22,6 +20,8 @@ import {
   type SubscriptionResponse,
   type UsageResponse,
 } from "../api/billing";
+import { invalidateGetCache } from "../api/client";
+import { useAuth } from "../auth/useAuth";
 import { fmtShortDate } from "../utils/datetime";
 import "./billing.css";
 
@@ -53,7 +53,7 @@ const PLAN_COPY: Record<
   most_advance_user: {
     price: "$15 / month",
     features: [
-      "50 GB encrypted storage",
+      "500 GB encrypted storage",
       "Unlimited email & calls",
       "Full AI assistant access",
       "Priority support",

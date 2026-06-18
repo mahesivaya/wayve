@@ -1066,7 +1066,7 @@ VALUES
     ('advance_user', 'Advance', 'Personal paid plan with higher limits.', 'personal', 700, 'month', 10737418240, 1,
      '{"bullets":["10 GB encrypted storage","Unlimited daily emails","1,000 encrypt/decrypt ops per day","Priority email sync"]}'::jsonb),
     ('most_advance_user', 'Most Advance', 'Top personal tier with full AI access.', 'personal', 1500, 'month', 53687091200, 1,
-     '{"bullets":["50 GB encrypted storage","Unlimited email & calls","Full AI assistant access","Priority support"]}'::jsonb),
+     '{"bullets":["500 GB encrypted storage","Unlimited email & calls","Full AI assistant access","Priority support"]}'::jsonb),
     ('business_startups', 'Startups', 'For small teams getting off the ground.', 'organization', 800, 'month', -1, 20,
      '{"bullets":["Up to 20 members","Unlimited shared storage","Shared org workspace","Admin & billing controls"]}'::jsonb),
     ('organization', 'Business', 'For growing organizations up to 100 members.', 'organization', 1200, 'month', -1, 100,
