@@ -3,6 +3,21 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [2.3.0](https://github.com/mahesivaya/wayve/releases/tag/v2.3.0) - 2026-06-18
+
+### 🐛 Bug Fixes
+
+- **home:** Readable FAQ + capability chips on the light marketing surface
+- **home:** Align 'Who it's for' tiers with account scopes
+- **ui:** Clean up landing-page footer
+- **ui:** Theme-visible search text; profile-menu and search tweaks
+- **ui:** Inset admin dashboard grid; fix oversized Audit Logs heading
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v2.2.4 [skip ci]
+- **email:** Remove the Yahoo Mail provider
+
 ## [2.2.4](https://github.com/mahesivaya/wayve/releases/tag/v2.2.4) - 2026-06-17
 
 ### 🚀 Features
