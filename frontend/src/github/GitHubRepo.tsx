@@ -2286,6 +2286,10 @@ function PersonalRepoManager() {
 function OrgRepoManager({ canLink }: { canLink: boolean }) {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
   useEffect(() => {
     void listProjects()
@@ -2298,6 +2302,27 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
       .catch(() => setProjects([]));
   }, []);
 
+  // Owners import a repo in one step: create an org project named after the
+  // repo and link it together. Mirrors PersonalRepoManager.submitAdd — org
+  // create now honors repo_url server-side, and the endpoint stays owner-gated.
+  const submitAdd = () => {
+    const value = url.trim();
+    if (!value || busy) return;
+    setBusy(true);
+    setErr("");
+    void createProject(repoNameFromUrl(value), value)
+      .then((created) => {
+        setProjects((prev) => (prev ? [created, ...prev] : [created]));
+        setSelectedId(created.id);
+        setUrl("");
+        setAdding(false);
+      })
+      .catch((e) =>
+        setErr(e instanceof Error ? e.message : "Failed to add repository")
+      )
+      .finally(() => setBusy(false));
+  };
+
   if (projects === null) {
     return (
       <div className="github-page github-empty-state">
@@ -2306,15 +2331,51 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
     );
   }
   if (projects.length === 0) {
+    // Owners get the one-step import form; everyone else a read-only hint.
+    if (!canLink) {
+      return (
+        <div className="github-page github-empty-state">
+          <div className="github-add-repo">
+            <h2 className="github-add-repo-title">No projects yet</h2>
+            <p className="github-add-repo-help">
+              An organization owner can create a project and link a repository
+              from the sidebar.
+            </p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="github-page github-empty-state">
         <div className="github-add-repo">
-          <h2 className="github-add-repo-title">No projects yet</h2>
+          <h2 className="github-add-repo-title">Add a repository</h2>
           <p className="github-add-repo-help">
-            {canLink
-              ? "Create a project from the sidebar, then use its menu to link a public repository."
-              : "An organization owner can create a project and link a repository from the sidebar."}
+            Paste a public GitHub repository URL to create a project and browse
+            its code, commits and Actions here.
           </p>
+          <div className="github-add-repo-row">
+            <input
+              className="github-add-repo-input"
+              type="text"
+              value={url}
+              placeholder="https://github.com/owner/repo"
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitAdd();
+              }}
+              disabled={busy}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="github-add-repo-btn"
+              onClick={submitAdd}
+              disabled={busy || !url.trim()}
+            >
+              {busy ? "Adding…" : "Add repository"}
+            </button>
+          </div>
+          {err && <p className="github-add-repo-error">{err}</p>}
         </div>
       </div>
     );
@@ -2336,6 +2397,46 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
           </option>
         ))}
       </select>
+      {canLink && (
+        <>
+          <button
+            type="button"
+            className="github-add-repo-btn github-repo-switch-add"
+            onClick={() => {
+              setErr("");
+              setUrl("");
+              setAdding((a) => !a);
+            }}
+          >
+            {adding ? "Cancel" : "+ Add"}
+          </button>
+          {adding && (
+            <div className="github-repo-switch-form">
+              <input
+                className="github-add-repo-input"
+                type="text"
+                value={url}
+                placeholder="https://github.com/owner/repo"
+                onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitAdd();
+                }}
+                disabled={busy}
+                autoFocus
+              />
+              <button
+                type="button"
+                className="github-add-repo-btn"
+                onClick={submitAdd}
+                disabled={busy || !url.trim()}
+              >
+                {busy ? "Adding…" : "Add repository"}
+              </button>
+              {err && <p className="github-add-repo-error">{err}</p>}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 

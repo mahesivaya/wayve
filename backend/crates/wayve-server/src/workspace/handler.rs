@@ -333,13 +333,25 @@ pub async fn create_project(
                 return Ok(HttpResponse::BadRequest()
                     .json(serde_json::json!({ "message": "No organization in context" })));
             };
+            // An optional repo URL is validated (public-only) before storing, so
+            // an owner can create a project and import its repo in one step —
+            // mirroring the personal branch above.
+            let (gh_owner, gh_repo) = match input.repo_url.as_deref().map(str::trim) {
+                Some(raw) if !raw.is_empty() => {
+                    let (o, r) = parse_and_validate_repo(raw).await?;
+                    (Some(o), Some(r))
+                }
+                _ => (None, None),
+            };
             sqlx::query(
-                "INSERT INTO projects (organization_id, name, created_by)
-                 VALUES ($1, $2, $3)
+                "INSERT INTO projects (organization_id, name, github_owner, github_repo, created_by)
+                 VALUES ($1, $2, $3, $4, $5)
                  RETURNING id, name, github_owner, github_repo",
             )
             .bind(org_id)
             .bind(name)
+            .bind(gh_owner)
+            .bind(gh_repo)
             .bind(ctx.user_id)
             .fetch_one(pool.get_ref())
             .await?
