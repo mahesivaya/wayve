@@ -17,23 +17,23 @@ import { useEffect, useMemo, useState } from "react";
 
 import ColorGrid from "./ColorGrid";
 import TickSlider from "./TickSlider";
-import { PRESETS, type ThemePreset } from "./themePresets";
 import {
   UI_OVERRIDE_ROLES,
   type SavedTheme,
   type ThemeMode,
 } from "./customThemeShared";
 import { TOKEN_VAR } from "./customTokens";
-import { useCustomTheme } from "./useCustomTheme";
 import {
   DEFAULT_INPUT,
-  cssColorToHex,
   contrastRatio,
+  cssColorToHex,
   generatePalette,
   randomInput,
   type PaletteInput,
 } from "./palette";
 import "./themeCustomizer.css";
+import { PRESETS, type ThemePreset } from "./themePresets";
+import { useCustomTheme } from "./useCustomTheme";
 
 type LibTab = "themes" | "ui";
 
@@ -82,55 +82,55 @@ const BACKGROUNDS: {
   mode: ThemeMode;
   input: PaletteInput;
 }[] = [
-  {
-    id: "bg-navy",
-    label: "Navy",
-    mode: "dark",
-    input: { ...DEFAULT_INPUT, hue: 230, chroma: 0.16 },
-  },
-  {
-    id: "bg-slate",
-    label: "Slate",
-    mode: "dark",
-    input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.05 },
-  },
-  {
-    id: "bg-black",
-    label: "Ink",
-    mode: "dark",
-    input: { ...DEFAULT_INPUT, hue: 250, chroma: 0, depth: 0.04 },
-  },
-  {
-    id: "bg-forest",
-    label: "Forest",
-    mode: "dark",
-    input: { ...DEFAULT_INPUT, hue: 155, chroma: 0.14 },
-  },
-  {
-    id: "bg-plum",
-    label: "Plum",
-    mode: "dark",
-    input: { ...DEFAULT_INPUT, hue: 300, chroma: 0.15 },
-  },
-  {
-    id: "bg-light",
-    label: "Light",
-    mode: "light",
-    input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.12 },
-  },
-  {
-    id: "bg-cream",
-    label: "Cream",
-    mode: "light",
-    input: { ...DEFAULT_INPUT, hue: 75, chroma: 0.12 },
-  },
-  {
-    id: "bg-rose",
-    label: "Rose",
-    mode: "light",
-    input: { ...DEFAULT_INPUT, hue: 350, chroma: 0.12 },
-  },
-];
+    {
+      id: "bg-navy",
+      label: "Navy",
+      mode: "dark",
+      input: { ...DEFAULT_INPUT, hue: 230, chroma: 0.16 },
+    },
+    {
+      id: "bg-slate",
+      label: "Slate",
+      mode: "dark",
+      input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.05 },
+    },
+    {
+      id: "bg-black",
+      label: "Ink",
+      mode: "dark",
+      input: { ...DEFAULT_INPUT, hue: 250, chroma: 0, depth: 0.04 },
+    },
+    {
+      id: "bg-forest",
+      label: "Forest",
+      mode: "dark",
+      input: { ...DEFAULT_INPUT, hue: 155, chroma: 0.14 },
+    },
+    {
+      id: "bg-plum",
+      label: "Plum",
+      mode: "dark",
+      input: { ...DEFAULT_INPUT, hue: 300, chroma: 0.15 },
+    },
+    {
+      id: "bg-light",
+      label: "Light",
+      mode: "light",
+      input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.12 },
+    },
+    {
+      id: "bg-cream",
+      label: "Cream",
+      mode: "light",
+      input: { ...DEFAULT_INPUT, hue: 75, chroma: 0.12 },
+    },
+    {
+      id: "bg-rose",
+      label: "Rose",
+      mode: "light",
+      input: { ...DEFAULT_INPUT, hue: 350, chroma: 0.12 },
+    },
+  ];
 
 // Pure black & white inputs for the Contrast button's monochrome toggle.
 // `chroma: 0, saturation: 0` makes generatePalette() emit a fully greyscale
