@@ -243,11 +243,8 @@ export default function Home() {
               {[
                 "End-to-end encrypted",
                 "Real-time sync",
-                "9 RBAC roles",
+                "RBAC roles",
                 "Gmail & Outlook",
-                "Scoped API keys",
-                "Stripe billing",
-                "Audit logs",
               ].map((c) => (
                 <span key={c} className="hx-chip">
                   {c}

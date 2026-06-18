@@ -2916,11 +2916,15 @@
 }
 .hx-chip {
   font-size: 0.84rem;
-  color: #aec0e4;
+  /* Themeable muted ink (not a hardcoded light lavender, which was invisible on
+     the light-pinned marketing surface). Tracks light/dark via --hx-muted. */
+  color: var(--hx-muted);
   padding: 7px 14px;
   border-radius: 999px;
-  border: 1px solid var(--hx-border);
-  background: var(--hx-glass);
+  /* A solid light fill + a clearer hairline border so the pills read as defined
+     chips. --hx-glass (3% alpha) left them looking like faint, dim blocks. */
+  border: 1px solid rgba(20, 40, 90, 0.16);
+  background: var(--color-surface-soft);
 }
 
 /* ---------- SECTION SCAFFOLD ---------- */
@@ -3243,6 +3247,26 @@
   margin: 0;
   color: var(--hx-muted);
   line-height: 1.55;
+}
+
+/* The marketing surface is pinned LIGHT for every theme (see .public-home),
+   but the legacy `:root[data-theme="dark"] .faq-*` rules above still fire when
+   a dark app theme is active — forcing dark cards and, worse, using BORDER
+   tokens (--color-input-border / --color-surface-tint-cool) as text colors,
+   which washes the FAQ out. Re-assert the intended light, high-contrast hx
+   styling here with enough specificity to beat those overrides. */
+:root[data-theme="dark"] .public-home .faq-header h2,
+:root[data-theme="dark"] .public-home .faq-item h3 {
+  color: var(--hx-ink);
+}
+:root[data-theme="dark"] .public-home .faq-header p,
+:root[data-theme="dark"] .public-home .faq-item p {
+  color: var(--hx-muted);
+}
+:root[data-theme="dark"] .public-home .faq-item {
+  background: var(--hx-glass);
+  border-color: var(--hx-border);
+  box-shadow: none;
 }
 
 /* ---------- FOOTER (restyle existing classes) ---------- */
