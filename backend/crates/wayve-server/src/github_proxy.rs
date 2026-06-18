@@ -33,7 +33,6 @@ use tracing::{instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::rbac::{Role, Scope, resolve_role_context};
 
-const GITHUB_API: &str = "https://api.github.com";
 const CACHE_TTL_SECS: u64 = 60;
 const CACHE_MAX: u64 = 1_000;
 
@@ -231,10 +230,11 @@ pub async fn github_proxy(
         .body(cached.body);
     }
 
+    let api_base = crate::external::github_api_base();
     let url = if upstream_query.is_empty() {
-        format!("{GITHUB_API}/{tail}")
+        format!("{api_base}/{tail}")
     } else {
-        format!("{GITHUB_API}/{tail}?{upstream_query}")
+        format!("{api_base}/{tail}?{upstream_query}")
     };
 
     // GitHub requires a User-Agent on every request — they 403 calls

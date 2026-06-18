@@ -136,6 +136,140 @@ mod tests {
         cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
 
+    // Insert an org project directly and return its id.
+    async fn insert_org_project(pool: &PgPool, org_id: i32, name: &str) -> i32 {
+        sqlx::query_scalar::<_, i32>(
+            "INSERT INTO projects (organization_id, name) VALUES ($1, $2) RETURNING id",
+        )
+        .bind(org_id)
+        .bind(name)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("insert project: {e}"))
+    }
+
+    // A plain org member cannot link a repo — the require_owner gate rejects
+    // before any GitHub validation runs, so this needs no network.
+    #[actix_web::test]
+    async fn org_member_cannot_link_repo() {
+        let pool = test_pool().await;
+        let org_id = insert_org(&pool, &format!("WS Org {}", random_email())).await;
+        let project_id = insert_org_project(&pool, org_id, "Apollo").await;
+
+        let member_email = random_email();
+        let member_id = insert_local_user(&pool, &member_email, "password123").await;
+        place_in_org(&pool, member_id, org_id, "member").await;
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(workspace::handler::link_project_repo),
+        )
+        .await;
+
+        let req = actix_test::TestRequest::patch()
+            .uri(&format!("/projects/{project_id}/repo"))
+            .insert_header((
+                "Authorization",
+                format!("Bearer {}", jwt_for(member_id, &member_email)),
+            ))
+            .set_json(serde_json::json!({ "repo_url": "https://github.com/octocat/Hello-World" }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        cleanup(&pool, &[member_id], &[org_id]).await;
+    }
+
+    // An org OWNER links a public repo (GitHub validation mocked via wiremock),
+    // then a plain member of the same org can read it through the proxy
+    // allowlist while a repo that was never linked is refused.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn owner_links_repo_then_org_member_can_read_via_proxy() {
+        use crate::github_proxy;
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock = MockServer::start().await;
+        // Both the repo-validation lookup (link) and the proxy fetch hit
+        // GET /repos/octocat/Hello-World. One mock serves both: the body
+        // satisfies validation (public, canonical owner/name); the proxy just
+        // forwards it and the test only asserts the status.
+        Mock::given(method("GET"))
+            .and(path("/repos/octocat/Hello-World"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "name": "Hello-World",
+                "private": false,
+                "owner": { "login": "octocat" }
+            })))
+            .mount(&mock)
+            .await;
+        // SAFETY: serialized via #[serial] — env mutation can't race other tests.
+        // One base covers both the repo validation and the proxy upstream.
+        unsafe {
+            std::env::set_var("GITHUB_API_BASE", mock.uri());
+        }
+
+        let pool = test_pool().await;
+        let org_id = insert_org(&pool, &format!("WS Org {}", random_email())).await;
+        let project_id = insert_org_project(&pool, org_id, "Apollo").await;
+
+        let owner_email = random_email();
+        let owner_id = insert_local_user(&pool, &owner_email, "password123").await;
+        place_in_org(&pool, owner_id, org_id, "owner").await;
+        let member_email = random_email();
+        let member_id = insert_local_user(&pool, &member_email, "password123").await;
+        place_in_org(&pool, member_id, org_id, "member").await;
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(workspace::handler::link_project_repo)
+                .service(github_proxy::github_proxy),
+        )
+        .await;
+
+        // Owner links the public repo → 200.
+        let req = actix_test::TestRequest::patch()
+            .uri(&format!("/projects/{project_id}/repo"))
+            .insert_header((
+                "Authorization",
+                format!("Bearer {}", jwt_for(owner_id, &owner_email)),
+            ))
+            .set_json(serde_json::json!({ "repo_url": "https://github.com/octocat/Hello-World" }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Member reads the LINKED repo via the proxy → 200 (org-wide visibility).
+        let req = actix_test::TestRequest::get()
+            .uri("/github/repos/octocat/Hello-World")
+            .insert_header((
+                "Authorization",
+                format!("Bearer {}", jwt_for(member_id, &member_email)),
+            ))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Member reads a NON-linked repo → 403 (allowlist).
+        let req = actix_test::TestRequest::get()
+            .uri("/github/repos/torvalds/linux")
+            .insert_header((
+                "Authorization",
+                format!("Bearer {}", jwt_for(member_id, &member_email)),
+            ))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        unsafe {
+            std::env::remove_var("GITHUB_API_BASE");
+        }
+        cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
+    }
+
     #[actix_web::test]
     async fn personal_account_sees_empty_lists() {
         let pool = test_pool().await;

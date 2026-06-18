@@ -31,6 +31,13 @@ pub fn gmail_api_base() -> String {
     std::env::var("GMAIL_API_BASE").unwrap_or_else(|_| "https://gmail.googleapis.com".to_string())
 }
 
+/// Root for GitHub REST calls. `parse_and_validate_repo` builds the
+/// `/repos/{owner}/{repo}` lookup off this base; tests point it at a wiremock
+/// server so repo validation runs offline.
+pub fn github_api_base() -> String {
+    std::env::var("GITHUB_API_BASE").unwrap_or_else(|_| "https://api.github.com".to_string())
+}
+
 pub fn zoom_oauth_token_url() -> String {
     std::env::var("ZOOM_OAUTH_TOKEN_URL")
         .unwrap_or_else(|_| "https://zoom.us/oauth/token".to_string())

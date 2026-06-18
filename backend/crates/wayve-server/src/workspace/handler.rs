@@ -171,7 +171,10 @@ async fn parse_and_validate_repo(raw: &str) -> Result<(String, String), AppError
     let (owner, repo) = parse_repo_url(raw)
         .ok_or_else(|| AppError::bad_request("Not a valid GitHub repository URL"))?;
 
-    let url = format!("https://api.github.com/repos/{owner}/{repo}");
+    let url = format!(
+        "{}/repos/{owner}/{repo}",
+        crate::external::github_api_base()
+    );
     let mut builder = HTTP_CLIENT
         .get(&url)
         .timeout(Duration::from_secs(15))
