@@ -68,3 +68,6 @@ trash/*
 
 # License-restricted MaxMind GeoLite2 DB — provisioned per-host, never committed
 infra/geoip/*.mmdb
+
+# Business/strategy docs + personal notes — not part of the codebase
+/decentralization/
