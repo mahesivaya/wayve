@@ -36,6 +36,7 @@ import {
   type Project,
   type Team,
 } from "../api/workspace";
+import { getFeatureAccess } from "../api/featureAccess";
 import "./Layout.css";
 import {
   HomeIcon,
@@ -411,6 +412,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const [projectCreateDraft, setProjectCreateDraft] = useState("");
   const [creatingTeam, setCreatingTeam] = useState(false);
   const [teamCreateDraft, setTeamCreateDraft] = useState("");
+  // Whether the caller's role may use the Code Repo feature (owner-configured
+  // per org). Defaults to true so we don't flash-hide before the fetch; refined
+  // once feature access loads. Non-org accounts keep their existing gating.
+  const [codeRepoAllowed, setCodeRepoAllowed] = useState(true);
 
   const userId = user?.id;
   useEffect(() => {
@@ -426,6 +431,30 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       cancelled = true;
     };
   }, [userId]);
+
+  const userScope = user?.scope;
+  const userRole = user?.effective_role;
+  useEffect(() => {
+    // Non-org accounts keep the default (allowed) and never query — only org
+    // members have a per-org feature-access matrix to honor.
+    if (userScope !== "organization") return;
+    let cancelled = false;
+    void getFeatureAccess()
+      .then((d) => {
+        if (cancelled) return;
+        const cr = d.features.find((f) => f.key === "code_repo");
+        const role = userRole ?? "";
+        setCodeRepoAllowed(
+          role === "owner" || !cr || cr.allowed_roles.includes(role)
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setCodeRepoAllowed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userScope, userRole]);
 
   const commitProjectName = (id: number) => {
     const next = projectDraft.trim();
@@ -962,6 +991,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           >
             📄 Documents
           </Link>
+          {codeRepoAllowed && (
+            <>
           {renderSectionToggle(
             "Code Repo",
             sections.isOpen("projects"),
@@ -1094,6 +1125,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 <div className="sidebar-empty-hint">No projects yet</div>
               )}
             </div>
+          )}
+            </>
           )}
         </div>
       ),
@@ -1297,6 +1330,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           path: "/logs/user-audit",
           label: "User Audit",
           icon: <UserLogsIcon size={16} />,
+        },
+        {
+          path: "/organization/access",
+          label: "Feature Access",
+          icon: <ApiKeysIcon size={16} />,
         },
       ],
     },

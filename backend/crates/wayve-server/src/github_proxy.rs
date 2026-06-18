@@ -179,6 +179,30 @@ pub async fn github_proxy(
             let Some(org_id) = ctx.organization_id else {
                 return HttpResponse::Forbidden().finish();
             };
+            // Feature gate: the org owner can restrict which roles may use the
+            // Code Repo viewer at all (separate from the per-repo allowlist).
+            match crate::feature_access::handler::is_allowed(
+                pool.get_ref(),
+                org_id,
+                "code_repo",
+                ctx.role.as_str(),
+            )
+            .await
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    warn!(target: "auth", user_id, role = ctx.role.as_str(),
+                          "github proxy denied: code_repo disabled for role");
+                    return HttpResponse::Forbidden().json(serde_json::json!({
+                        "message": "Your role doesn't have access to Code Repo"
+                    }));
+                }
+                Err(e) => {
+                    warn!(target: "auth", user_id, error = ?e,
+                          "github proxy: feature access lookup failed");
+                    return HttpResponse::InternalServerError().finish();
+                }
+            }
             let Some((owner, repo)) = parse_repos_tail(&tail) else {
                 return HttpResponse::Forbidden().finish();
             };

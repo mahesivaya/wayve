@@ -42,6 +42,9 @@ const ComingSoon = lazy(() => import("./components/ComingSoon"));
 const NotFound = lazy(() => import("./components/NotFound"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
+const FeatureAccessPage = lazy(
+  () => import("./featureAccess/FeatureAccessPage")
+);
 const Organization = lazy(() => import("./organization/Organization"));
 const OrganizationAdminHome = lazy(
   () => import("./organization/OrganizationAdminHome")
@@ -368,6 +371,9 @@ export default function App() {
               />
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />
+              {/* Owner-only feature access matrix (the page self-guards;
+                the sidebar link is also owner-gated). */}
+              <Route path="/organization/access" element={<FeatureAccessPage />} />
               <Route path="/billing" element={<Billing />} />
               <Route
                 path="/organizations/new"
