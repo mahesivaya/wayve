@@ -13,14 +13,18 @@ function roleLabel(role: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-// Owner-only page: a matrix of gateable features (rows) × org roles (columns).
+// Owner-only page: a matrix of gateable features (rows) × roles (columns).
 // Tick the roles allowed to use each feature, then Save. The owner column is
 // always on and disabled — an owner can't lock themselves out (backend enforces
-// this too). Access changes take effect on the member's next request.
+// this too). Access changes take effect on the member's next request. Works for
+// both organization and platform owners; the backend serves/saves the matrix
+// for whichever scope the caller belongs to.
 export default function FeatureAccessPage() {
   const { user } = useAuth();
-  const isOrgOwner =
-    user?.scope === "organization" && user?.effective_role === "owner";
+  const isOwner =
+    (user?.scope === "organization" || user?.scope === "platform") &&
+    user?.effective_role === "owner";
+  const scopeLabel = user?.scope === "platform" ? "platform" : "organization";
 
   const [data, setData] = useState<FeatureAccess | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -48,8 +52,8 @@ export default function FeatureAccessPage() {
   }, []);
 
   useEffect(() => {
-    if (isOrgOwner) reload();
-  }, [isOrgOwner, reload]);
+    if (isOwner) reload();
+  }, [isOwner, reload]);
 
   // Auto-clear the success/error banner after a few seconds.
   useEffect(() => {
@@ -70,11 +74,11 @@ export default function FeatureAccessPage() {
     return out;
   }, [data, draft]);
 
-  if (!isOrgOwner) {
+  if (!isOwner) {
     return (
       <div className="feature-access u-page-shell">
         <p className="feature-access-empty">
-          Only an organization owner can manage feature access.
+          Only an organization or platform owner can manage feature access.
         </p>
       </div>
     );
@@ -132,7 +136,7 @@ export default function FeatureAccessPage() {
       <header className="feature-access-header">
         <h1 className="feature-access-title">Feature access</h1>
         <p className="feature-access-subtitle">
-          Choose which roles in your organization can use each feature. The
+          Choose which roles in your {scopeLabel} can use each feature. The
           owner always has access.
         </p>
       </header>

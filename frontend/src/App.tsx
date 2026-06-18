@@ -372,8 +372,11 @@ export default function App() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />
               {/* Owner-only feature access matrix (the page self-guards;
-                the sidebar link is also owner-gated). */}
+                the sidebar link is also owner-gated). Same component serves
+                organization and platform owners — the backend resolves the
+                matrix from the caller's scope. */}
               <Route path="/organization/access" element={<FeatureAccessPage />} />
+              <Route path="/platform/access" element={<FeatureAccessPage />} />
               <Route path="/billing" element={<Billing />} />
               <Route
                 path="/organizations/new"

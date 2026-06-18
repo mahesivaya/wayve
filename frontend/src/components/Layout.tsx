@@ -435,9 +435,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const userScope = user?.scope;
   const userRole = user?.effective_role;
   useEffect(() => {
-    // Non-org accounts keep the default (allowed) and never query — only org
-    // members have a per-org feature-access matrix to honor.
-    if (userScope !== "organization") return;
+    // Personal accounts keep the default (allowed) and never query — only org
+    // and platform members have a per-scope feature-access matrix to honor.
+    if (userScope !== "organization" && userScope !== "platform") return;
     let cancelled = false;
     void getFeatureAccess()
       .then((d) => {
@@ -1230,6 +1230,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           path: "/platform/secrets",
           label: "Secrets",
           icon: <SecretsIcon size={16} />,
+          visible: isPlatformOwner,
+        },
+        {
+          path: "/platform/access",
+          label: "Feature Access",
+          icon: <ApiKeysIcon size={16} />,
           visible: isPlatformOwner,
         },
       ],

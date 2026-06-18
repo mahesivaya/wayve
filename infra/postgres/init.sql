@@ -175,6 +175,17 @@ CREATE TABLE IF NOT EXISTS organization_feature_access (
 CREATE INDEX IF NOT EXISTS idx_org_feature_access_lookup
     ON organization_feature_access (organization_id, feature_key);
 
+-- Platform-scope counterpart of organization_feature_access. The platform is a
+-- singleton scope (no per-tenant id), so one row = "this platform role may use
+-- this feature". Same semantics: ANY row for feature_key means it is configured
+-- (only listed roles allowed); no rows = fall back to the feature default. The
+-- platform owner is always allowed (and force-included on save).
+CREATE TABLE IF NOT EXISTS platform_feature_access (
+    feature_key TEXT NOT NULL,
+    role TEXT NOT NULL,
+    PRIMARY KEY (feature_key, role)
+);
+
 -- Organization-scoped teams listed in the sidebar's Teams group, each with a
 -- detail page at /teams/<slug>. slug is unique within an org and derived from
 -- the name (lowercase, ASCII-alphanumeric), mirroring the org slug rule.

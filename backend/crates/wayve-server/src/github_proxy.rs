@@ -149,7 +149,31 @@ pub async fn github_proxy(
     let tail = path.into_inner();
 
     match ctx.scope {
-        Scope::Platform => {}
+        Scope::Platform => {
+            // Feature gate: the platform owner can restrict which platform roles
+            // may use the Code Repo viewer (mirrors the org gate below).
+            match crate::feature_access::handler::is_allowed_platform(
+                pool.get_ref(),
+                "code_repo",
+                ctx.role.as_str(),
+            )
+            .await
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    warn!(target: "auth", user_id, role = ctx.role.as_str(),
+                          "github proxy denied: code_repo disabled for platform role");
+                    return HttpResponse::Forbidden().json(serde_json::json!({
+                        "message": "Your role doesn't have access to Code Repo"
+                    }));
+                }
+                Err(e) => {
+                    warn!(target: "auth", user_id, error = ?e,
+                          "github proxy: platform feature access lookup failed");
+                    return HttpResponse::InternalServerError().finish();
+                }
+            }
+        }
         Scope::Personal => {
             let Some((owner, repo)) = parse_repos_tail(&tail) else {
                 return HttpResponse::Forbidden().finish();
