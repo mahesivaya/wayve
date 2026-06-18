@@ -23,12 +23,6 @@ import {
 } from "react";
 
 import {
-  ALL_ROLES,
-  TOKEN_VAR,
-  type TokenOverrides,
-  type TokenRole,
-} from "./customTokens";
-import {
   CustomThemeContext,
   type CustomThemeValue,
   type SavedTheme,
@@ -36,6 +30,12 @@ import {
   type ThemeMode,
   type UiOverrides,
 } from "./customThemeShared";
+import {
+  ALL_ROLES,
+  TOKEN_VAR,
+  type TokenOverrides,
+  type TokenRole,
+} from "./customTokens";
 import { generatePalette, type PaletteInput } from "./palette";
 import { findPreset, tokensForPreset } from "./themePresets";
 import {

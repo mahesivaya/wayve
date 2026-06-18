@@ -703,6 +703,9 @@
      .public-home-main) while the footer band stays full-width. */
   width: min(1720px, calc(100% - 48px));
   margin: 0 auto;
+  /* Folded from the former duplicate `.public-home-footer-grid` block lower in
+     this file (the `@media` override only touches columns/gap, not padding). */
+  padding: 24px 22px 12px;
 }
 
 .public-home-footer-brand button {
@@ -790,11 +793,14 @@
   font-size: 18px;
   font-weight: 700;
   line-height: 1;
+  /* Folded from the former duplicate block lower in this file. */
+  background: var(--hx-glass);
 }
 
 .public-home-social-links a:hover {
   background: var(--hx-glass-strong);
-  color: var(--hx-ink);
+  color: var(--hx-cyan);
+  border-color: rgba(56, 189, 248, 0.5);
 }
 
 .public-home-footer-legal {
@@ -1667,62 +1673,6 @@
 /* =============================
    ❓ FAQ SECTION
 ============================== */
-.faq-section {
-  padding: 80px 56px;
-  background: var(--color-surface);
-}
-
-.faq-header {
-  text-align: center;
-  max-width: 700px;
-  margin: 0 auto 56px;
-}
-
-.faq-header h2 {
-  margin: 0 0 12px;
-  font-size: 36px;
-  color: var(--color-accent-indigo-darker);
-}
-
-.faq-header p {
-  margin: 0;
-  font-size: 18px;
-  color: var(--color-text-slate-deep);
-}
-
-.faq-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 32px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.faq-item {
-  background: linear-gradient(
-    135deg,
-    var(--color-surface-cool-pale),
-    var(--color-surface)
-  );
-  padding: 32px;
-  border-radius: 12px;
-  border: 1px solid var(--color-surface-tint-cloud);
-}
-
-.faq-item h3 {
-  margin: 0 0 16px;
-  font-size: 20px;
-  color: var(--color-accent-indigo-darker);
-  font-weight: 700;
-}
-
-.faq-item p {
-  margin: 0;
-  font-size: 16px;
-  color: var(--color-text-slate-deep);
-  line-height: 1.6;
-}
-
 /* =============================
    🌙 DARK MODE — NEW SECTIONS
 ============================== */
@@ -3210,7 +3160,13 @@
   padding-top: 70px;
 }
 
-/* ---------- FAQ (restyle existing classes) ---------- */
+/* ---------- FAQ (single source of truth) ----------
+   Merged from the former duplicate `.faq-*` block higher up in this file. The
+   winning values stay here (this block came last in source order, so it already
+   beat the earlier one); the earlier block's non-overlapping properties
+   (the margins, font-sizes, max-width, font-weight) are folded in below. Kept at
+   this position so the relationship with the `@media` overrides above is
+   unchanged. */
 .faq-section {
   padding: 80px 0 40px;
   background: transparent;
@@ -3221,16 +3177,21 @@
   margin: 0 auto 40px;
 }
 .faq-header h2 {
+  margin: 0 0 12px;
   font-size: clamp(1.9rem, 3.4vw, 2.5rem);
   color: var(--hx-ink);
 }
 .faq-header p {
+  margin: 0;
+  font-size: 18px;
   color: var(--hx-muted);
 }
 .faq-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 .faq-item {
   border-radius: 14px;
@@ -3242,9 +3203,11 @@
   margin: 0 0 8px;
   font-size: 1.05rem;
   color: var(--hx-ink);
+  font-weight: 700;
 }
 .faq-item p {
   margin: 0;
+  font-size: 16px;
   color: var(--hx-muted);
   line-height: 1.55;
 }
@@ -3278,9 +3241,10 @@
      the only divider. */
   background: transparent;
 }
-.public-home-footer-grid {
-  padding: 24px 22px 12px;
-}
+/* `.public-home-footer-grid`, `.public-home-footer-social h2`,
+   `.public-home-social-links a` and its `:hover` were merged into their original
+   blocks higher in this file. The `.public-home …!important` overrides below and
+   the media-entangled `.public-home-footer` / `-footer-legal` rules stay here. */
 .public-home .public-home-footer-brand button,
 .public-home .public-home-footer-logo {
   color: var(--hx-ink) !important;
@@ -3291,18 +3255,6 @@
 }
 .public-home .public-home-footer-column button:hover {
   color: var(--hx-cyan) !important;
-}
-.public-home-footer-social h2 {
-  color: var(--hx-ink);
-}
-.public-home-social-links a {
-  color: var(--hx-ink);
-  border: 1px solid var(--hx-border);
-  background: var(--hx-glass);
-}
-.public-home-social-links a:hover {
-  color: var(--hx-cyan);
-  border-color: rgba(56, 189, 248, 0.5);
 }
 .public-home-footer-legal {
   color: var(--hx-muted);
