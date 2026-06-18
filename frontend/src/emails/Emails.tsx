@@ -119,7 +119,7 @@ export default function Emails() {
     // Not in the current page — fetch the row directly. The detail pane is fine
     // with a partial row (body fetches on its own); openEmail does the rest.
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const full = await getEmail<EmailItem>(id);
         if (cancelled) return;

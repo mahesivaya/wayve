@@ -77,7 +77,7 @@ export default function OrganizationAdminHome() {
       if (cancelled) return;
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("404") || /not[_ ]found/i.test(message)) {
-        navigate(`/organization/recovery-key/bootstrap?org=${orgId}`, {
+        void navigate(`/organization/recovery-key/bootstrap?org=${orgId}`, {
           replace: true,
         });
       }
@@ -329,7 +329,7 @@ export default function OrganizationAdminHome() {
   ) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      navigate(path);
+      void navigate(path);
     }
   };
 

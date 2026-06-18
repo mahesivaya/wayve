@@ -38,6 +38,17 @@ export default defineConfig([
       // Type-aware rule: catch promises that are created but never awaited
       // or chained — the single biggest async bug class in this codebase.
       "@typescript-eslint/no-floating-promises": "error",
+      // Allow an underscore prefix to mark an intentionally unused binding —
+      // e.g. a parameter kept for a back-compat signature or a positional
+      // destructure we don't read. Anything not prefixed is still an error.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
     },
   },
   // Build tooling files at the repo root — non-type-aware so we don't need

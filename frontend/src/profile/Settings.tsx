@@ -201,7 +201,7 @@ export default function Settings() {
     try {
       await deleteMyOrganization();
       await refresh();
-      navigate("/home", { replace: true });
+      void navigate("/home", { replace: true });
     } catch (err) {
       setDeleteOrgError(
         err instanceof Error ? err.message : "Failed to delete organization"

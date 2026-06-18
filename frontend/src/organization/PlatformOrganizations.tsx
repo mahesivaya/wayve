@@ -22,7 +22,7 @@ export default function PlatformOrganizations() {
 
   const [organizations, setOrganizations] = useState<AdminOrganization[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [, setError] = useState("");
   const [selectedOrg, setSelectedOrg] = useState<AdminOrganization | null>(
     null
   );

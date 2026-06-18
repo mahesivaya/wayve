@@ -73,7 +73,7 @@ export default function DomainVerification() {
   // Populate the org picker so the owner chooses by name instead of having
   // to know the numeric ID. Platform staff only (same gate as this page).
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
         setOrgs(await listAdminOrganizations());
       } catch (e) {

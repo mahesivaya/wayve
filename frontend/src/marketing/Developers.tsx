@@ -4,12 +4,6 @@ import { BRAND_NAME } from "../config/brand";
 import DocsShell from "../docs/DocsShell";
 import "./developers.css";
 
-// Self-hosted Redoc — frontend/public/redoc.standalone.js. Loaded lazily on
-// mount so the marketing pages don't pay the ~890KB cost. Lives in public/
-// (not the bundle) to keep it out of the source map round-trip and to dodge
-// the CSP script-src 'self' constraint without adding a CDN allowance.
-const REDOC_SCRIPT = "/redoc.standalone.js";
-
 declare global {
   interface Window {
     Redoc?: {

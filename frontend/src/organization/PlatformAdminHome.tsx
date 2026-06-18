@@ -419,7 +419,7 @@ export default function PlatformAdminHome() {
   ) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      navigate(path);
+      void navigate(path);
     }
   };
 

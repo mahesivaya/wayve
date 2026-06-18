@@ -59,7 +59,7 @@ export default function BootstrapPage() {
     // surface here as a confusing "Bootstrap failed" — even though the
     // org is in fact set up. Probe GET /keys first; if it returns the
     // pubkey, route the user to the dashboard with a clear message.
-    (async () => {
+    void (async () => {
       try {
         await getOrgKeys(orgId);
         if (!cancelled) setPhase({ kind: "already_done" });

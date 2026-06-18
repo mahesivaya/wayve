@@ -51,7 +51,7 @@ export default function PublicHeader({
 
   const goMobile = (path: string) => {
     setMobileMenuOpen(false);
-    navigate(path);
+    void navigate(path);
   };
 
   return (

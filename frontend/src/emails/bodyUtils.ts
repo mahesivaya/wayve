@@ -1,6 +1,5 @@
 import { decryptMessage } from "../crypto/crypto";
 import { loadPrivateKey } from "../crypto/keyStore";
-import type { WayveEncryptedBody } from "./types";
 
 const WAYVE_SECURE_PREFIX = "WAYVE_SECURE_V1";
 

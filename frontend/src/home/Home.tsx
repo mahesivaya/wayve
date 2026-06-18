@@ -24,7 +24,7 @@ export default function Home() {
   // Navigate from the mobile hamburger menu, closing it on the way out.
   const goMobile = (path: string) => {
     setMobileMenuOpen(false);
-    navigate(path);
+    void navigate(path);
   };
 
   // Record this visit once per session — covers anonymous visitors opening

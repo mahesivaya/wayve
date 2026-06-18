@@ -45,7 +45,7 @@ export default function RecoveryKeyPage() {
         mnemonic,
         keys.wrapped_mnemonic
       );
-      navigate("/organization/home", { replace: true });
+      void navigate("/organization/home", { replace: true });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to unwrap recovery key."

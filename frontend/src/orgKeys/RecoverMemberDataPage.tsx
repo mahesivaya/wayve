@@ -419,7 +419,7 @@ function NotesTab({ orgId, memberId, memberKey }: DecryptProps) {
 
   useEffect(() => {
     if (!data) return;
-    (async () => {
+    void (async () => {
       const m = new Map<
         number,
         { title: string; content: string; error?: string }
@@ -478,7 +478,7 @@ function EmailsTab({ orgId, memberId, memberKey }: DecryptProps) {
 
   useEffect(() => {
     if (!data) return;
-    (async () => {
+    void (async () => {
       const m = new Map<number, { body: string; error?: string }>();
       for (const email of data) {
         const raw = email.body_encrypted ?? "";
@@ -562,7 +562,7 @@ function ChatTab({ orgId, memberId, memberKey }: DecryptProps) {
       return { text: raw };
     };
 
-    (async () => {
+    void (async () => {
       const m = new Map<string, { text: string; error?: string }>();
       for (const msg of direct.data ?? []) {
         m.set(`d-${msg.id}`, await tryDecrypt(msg.content));

@@ -53,7 +53,7 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
 
   const goMobile = (path: string) => {
     setMobileMenuOpen(false);
-    navigate(path);
+    void navigate(path);
   };
 
   return (
