@@ -769,9 +769,12 @@
 }
 
 .public-home-social-links {
-  display: grid;
-  grid-template-columns: repeat(4, 28px);
-  gap: 14px 16px;
+  /* Flex-wrap (not a fixed 4-col grid) so the six icons sit in an even row
+     and wrap cleanly instead of leaving a lopsided 4 + 2 layout. */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: 196px;
 }
 
 .public-home-social-links a {
@@ -3246,7 +3249,10 @@
 .public-home-footer {
   margin-top: 44px;
   border-top: 1px solid var(--hx-border);
-  background: rgba(6, 12, 28, 0.6);
+  /* Transparent over the page surface so the footer blends into the section
+     above instead of showing a hard gray band/seam. The hairline top border is
+     the only divider. */
+  background: transparent;
 }
 .public-home-footer-grid {
   padding: 24px 22px 12px;
@@ -3275,8 +3281,12 @@
   border-color: rgba(56, 189, 248, 0.5);
 }
 .public-home-footer-legal {
-  color: var(--hx-ink);
-  border-top: 1px solid var(--hx-line);
+  color: var(--hx-muted);
+  /* Separated by space, not a short floating rule. The previous border-top only
+     spanned the centered inner width, reading as a stray line. */
+  margin-top: 36px;
+  padding-top: 20px;
+  font-size: 15px;
 }
 
 /* ---------- RESPONSIVE ---------- */
