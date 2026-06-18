@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [2.4.1](https://github.com/mahesivaya/wayve/releases/tag/v2.4.1) - 2026-06-18
+
+### 🐛 Bug Fixes
+
+- **sidebar:** Keep full labels when expanded at tablet widths
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v2.4.0 [skip ci]
+
 ## [2.4.0](https://github.com/mahesivaya/wayve/releases/tag/v2.4.0) - 2026-06-18
 
 ### 🚀 Features
