@@ -1013,7 +1013,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 ) : (
                   <div key={proj.id} className="sidebar-project-row">
                     <Link
-                      to="/github"
+                      to={`/github/${proj.id}`}
                       title={proj.name}
                       className="sidebar-project-label"
                       onClick={(e) => {

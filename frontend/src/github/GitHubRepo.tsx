@@ -1975,17 +1975,35 @@ function GitHubRepoViewer({
   );
 }
 
-// Paste-a-URL panel shown when a personal project has no repo linked yet.
+// Paste-a-URL panel shown when a project has no repo linked yet. `canLink`
+// gates the input: a personal owner or an org owner sees it; a plain org member
+// gets a read-only "ask your owner" message (the backend would 403 them anyway).
 function AddRepoPanel({
   project,
   onLinked,
+  canLink = true,
 }: {
   project: Project;
   onLinked: () => void;
+  canLink?: boolean;
 }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+
+  if (!canLink) {
+    return (
+      <div className="github-page github-empty-state">
+        <div className="github-add-repo">
+          <h2 className="github-add-repo-title">No repository linked</h2>
+          <p className="github-add-repo-help">
+            “{project.name}” doesn’t have a repository yet. Ask an organization
+            owner to link one from the sidebar.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const submit = () => {
     const value = url.trim();
@@ -2041,9 +2059,11 @@ function AddRepoPanel({
 function GitHubRepoProject({
   projectId,
   repoSwitcher,
+  canLink = true,
 }: {
   projectId: number;
   repoSwitcher?: ReactNode;
+  canLink?: boolean;
 }) {
   const [project, setProject] = useState<Project | "missing" | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2080,7 +2100,9 @@ function GitHubRepoProject({
     );
   }
   if (!project.github_owner || !project.github_repo) {
-    return <AddRepoPanel project={project} onLinked={reload} />;
+    return (
+      <AddRepoPanel project={project} onLinked={reload} canLink={canLink} />
+    );
   }
   return (
     <GitHubRepoViewer
@@ -2256,6 +2278,77 @@ function PersonalRepoManager() {
   );
 }
 
+// In-page repo manager for organization accounts at the bare `/github` route.
+// Lists the org's projects in a switcher (above the Branch block) and renders
+// the selected project's linked repo. Linking itself is owner-only and lives in
+// the sidebar project menu; here `canLink` only decides whether an unlinked
+// project shows the link form or a read-only hint.
+function OrgRepoManager({ canLink }: { canLink: boolean }) {
+  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    void listProjects()
+      .then((rows) => {
+        setProjects(rows);
+        setSelectedId((cur) =>
+          cur && rows.some((r) => r.id === cur) ? cur : (rows[0]?.id ?? null)
+        );
+      })
+      .catch(() => setProjects([]));
+  }, []);
+
+  if (projects === null) {
+    return (
+      <div className="github-page github-empty-state">
+        <p className="github-empty">Loading projects…</p>
+      </div>
+    );
+  }
+  if (projects.length === 0) {
+    return (
+      <div className="github-page github-empty-state">
+        <div className="github-add-repo">
+          <h2 className="github-add-repo-title">No projects yet</h2>
+          <p className="github-add-repo-help">
+            {canLink
+              ? "Create a project from the sidebar, then use its menu to link a public repository."
+              : "An organization owner can create a project and link a repository from the sidebar."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (selectedId == null) return null;
+
+  const switcher = (
+    <div className="github-sidebar-card github-repo-switch">
+      <span className="github-sidebar-branch-label">Repository</span>
+      <select
+        className="github-repo-switch-select"
+        value={selectedId}
+        onChange={(e) => setSelectedId(Number(e.target.value))}
+        aria-label="Select a repository"
+      >
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>
+            {repoLabel(p)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  return (
+    <GitHubRepoProject
+      key={selectedId}
+      projectId={selectedId}
+      repoSwitcher={switcher}
+      canLink={canLink}
+    />
+  );
+}
+
 // One row of GitHub's `/user/repos` list.
 type RepoListItem = {
   full_name: string;
@@ -2348,11 +2441,25 @@ export default function GitHubRepo() {
       </div>
     );
   }
+  const isOrg = user?.scope === "organization";
+  const isPersonal = user?.account_type === "personal";
+  // Who may LINK a repo: a personal account (own projects) or an org owner.
+  // Everyone else who can reach this page is read-only.
+  const canLink = isPersonal || (isOrg && user?.effective_role === "owner");
   if (projectId) {
-    return <GitHubRepoProject key={projectId} projectId={Number(projectId)} />;
+    return (
+      <GitHubRepoProject
+        key={projectId}
+        projectId={Number(projectId)}
+        canLink={canLink}
+      />
+    );
   }
-  if (user?.account_type === "personal") {
+  if (isPersonal) {
     return <PersonalRepoManager />;
+  }
+  if (isOrg) {
+    return <OrgRepoManager canLink={canLink} />;
   }
   return <PlatformRepoManager />;
 }
