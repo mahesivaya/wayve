@@ -357,24 +357,24 @@ export default function Home() {
             </div>
             <div className="hx-roles">
               <article className="hx-role">
-                <span className="hx-role-emoji">🚀</span>
-                <h3>Founders &amp; freelancers</h3>
-                <p>Run your whole business from one tab.</p>
+                <span className="hx-role-emoji">👤</span>
+                <h3>Personal</h3>
+                <p>Email, chat, drive, tasks and notes — your whole day in one tab.</p>
               </article>
               <article className="hx-role">
-                <span className="hx-role-emoji">👥</span>
-                <h3>Small teams (2–20)</h3>
-                <p>One login instead of five separate tools.</p>
+                <span className="hx-role-emoji">🚀</span>
+                <h3>Startups</h3>
+                <p>One login instead of five tools. Get your team running in minutes.</p>
               </article>
               <article className="hx-role">
                 <span className="hx-role-emoji">🏢</span>
-                <h3>Growing orgs (20–100)</h3>
-                <p>Admin controls, roles, and one invoice.</p>
+                <h3>Business</h3>
+                <p>Roles and admin controls, shared inboxes, and a single invoice.</p>
               </article>
               <article className="hx-role">
                 <span className="hx-role-emoji">🏛️</span>
-                <h3>Enterprise (100+)</h3>
-                <p>Dedicated support, SLAs, and deep audit access.</p>
+                <h3>Enterprise</h3>
+                <p>SSO &amp; SCIM, dedicated support, SLAs, and deep audit access.</p>
               </article>
             </div>
           </section>
