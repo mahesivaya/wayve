@@ -18,6 +18,7 @@ mod email;
 mod embed;
 mod error;
 mod external;
+mod feature_access;
 mod geoip;
 mod github_proxy;
 mod home;

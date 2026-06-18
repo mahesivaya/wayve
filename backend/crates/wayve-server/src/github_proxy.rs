@@ -33,7 +33,6 @@ use tracing::{instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::rbac::{Role, Scope, resolve_role_context};
 
-const GITHUB_API: &str = "https://api.github.com";
 const CACHE_TTL_SECS: u64 = 60;
 const CACHE_MAX: u64 = 1_000;
 
@@ -126,7 +125,8 @@ pub async fn github_proxy(
     //   * Platform staff keep full access (the legacy single-repo dashboard).
     //   * Personal accounts may read ONLY `repos/{owner}/{repo}/...` for a repo
     //     they've linked to one of their own projects (the allowlist).
-    //   * Organization accounts are not enabled for the Code Repo viewer yet.
+    //   * Organization members may read ONLY `repos/{owner}/{repo}/...` for a
+    //     repo their org owner linked to one of the org's projects.
     let Some(user_id) = get_user_id_from_request(&req) else {
         return HttpResponse::Unauthorized().finish();
     };
@@ -176,10 +176,56 @@ pub async fn github_proxy(
             }
         }
         Scope::Organization => {
-            warn!(target: "auth", user_id, "github proxy denied: organization caller");
-            return HttpResponse::Forbidden().json(serde_json::json!({
-                "message": "GitHub access is not enabled for organization accounts"
-            }));
+            let Some(org_id) = ctx.organization_id else {
+                return HttpResponse::Forbidden().finish();
+            };
+            // Feature gate: the org owner can restrict which roles may use the
+            // Code Repo viewer at all (separate from the per-repo allowlist).
+            match crate::feature_access::handler::is_allowed(
+                pool.get_ref(),
+                org_id,
+                "code_repo",
+                ctx.role.as_str(),
+            )
+            .await
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    warn!(target: "auth", user_id, role = ctx.role.as_str(),
+                          "github proxy denied: code_repo disabled for role");
+                    return HttpResponse::Forbidden().json(serde_json::json!({
+                        "message": "Your role doesn't have access to Code Repo"
+                    }));
+                }
+                Err(e) => {
+                    warn!(target: "auth", user_id, error = ?e,
+                          "github proxy: feature access lookup failed");
+                    return HttpResponse::InternalServerError().finish();
+                }
+            }
+            let Some((owner, repo)) = parse_repos_tail(&tail) else {
+                return HttpResponse::Forbidden().finish();
+            };
+            // Allowlist: ANY member of the org may read a repo linked to one of
+            // the org's projects (owner-only linking is enforced at link time).
+            let linked = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM projects
+                  WHERE organization_id = $1 AND user_id IS NULL
+                    AND LOWER(github_owner) = LOWER($2)
+                    AND LOWER(github_repo) = LOWER($3))",
+            )
+            .bind(org_id)
+            .bind(&owner)
+            .bind(&repo)
+            .fetch_one(pool.get_ref())
+            .await;
+            if !matches!(linked, Ok(true)) {
+                warn!(target: "auth", user_id, owner = %owner, repo = %repo,
+                      "github proxy denied: repo not linked to caller's org");
+                return HttpResponse::Forbidden().json(serde_json::json!({
+                    "message": "You don't have access to this repository"
+                }));
+            }
         }
     }
     let query = req.query_string();
@@ -208,10 +254,11 @@ pub async fn github_proxy(
         .body(cached.body);
     }
 
+    let api_base = crate::external::github_api_base();
     let url = if upstream_query.is_empty() {
-        format!("{GITHUB_API}/{tail}")
+        format!("{api_base}/{tail}")
     } else {
-        format!("{GITHUB_API}/{tail}?{upstream_query}")
+        format!("{api_base}/{tail}?{upstream_query}")
     };
 
     // GitHub requires a User-Agent on every request — they 403 calls

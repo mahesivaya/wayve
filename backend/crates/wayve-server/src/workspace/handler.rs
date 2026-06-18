@@ -171,7 +171,10 @@ async fn parse_and_validate_repo(raw: &str) -> Result<(String, String), AppError
     let (owner, repo) = parse_repo_url(raw)
         .ok_or_else(|| AppError::bad_request("Not a valid GitHub repository URL"))?;
 
-    let url = format!("https://api.github.com/repos/{owner}/{repo}");
+    let url = format!(
+        "{}/repos/{owner}/{repo}",
+        crate::external::github_api_base()
+    );
     let mut builder = HTTP_CLIENT
         .get(&url)
         .timeout(Duration::from_secs(15))
@@ -330,13 +333,25 @@ pub async fn create_project(
                 return Ok(HttpResponse::BadRequest()
                     .json(serde_json::json!({ "message": "No organization in context" })));
             };
+            // An optional repo URL is validated (public-only) before storing, so
+            // an owner can create a project and import its repo in one step —
+            // mirroring the personal branch above.
+            let (gh_owner, gh_repo) = match input.repo_url.as_deref().map(str::trim) {
+                Some(raw) if !raw.is_empty() => {
+                    let (o, r) = parse_and_validate_repo(raw).await?;
+                    (Some(o), Some(r))
+                }
+                _ => (None, None),
+            };
             sqlx::query(
-                "INSERT INTO projects (organization_id, name, created_by)
-                 VALUES ($1, $2, $3)
+                "INSERT INTO projects (organization_id, name, github_owner, github_repo, created_by)
+                 VALUES ($1, $2, $3, $4, $5)
                  RETURNING id, name, github_owner, github_repo",
             )
             .bind(org_id)
             .bind(name)
+            .bind(gh_owner)
+            .bind(gh_repo)
             .bind(ctx.user_id)
             .fetch_one(pool.get_ref())
             .await?
@@ -429,7 +444,9 @@ pub async fn update_project(
 }
 
 // PATCH /api/projects/{id}/repo — link (or replace) the public GitHub repo on a
-// personal account's project. Personal accounts only.
+// project. Personal accounts link their own projects; org owners link their
+// organization's projects (the linked repo then becomes visible to every member
+// of that org via list_projects + the github proxy's org allowlist).
 #[patch("/projects/{id}/repo")]
 #[instrument(target = "http", skip(req, pool, path, input))]
 pub async fn link_project_repo(
@@ -444,25 +461,55 @@ pub async fn link_project_repo(
     let ctx = rbac::resolve_role_context(pool.get_ref(), user_id)
         .await
         .map_err(AppError::Db)?;
-    if ctx.scope != Scope::Personal {
-        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Linking a repository is available to personal accounts"
-        })));
-    }
+    let id = path.into_inner();
 
-    let (owner, repo) = parse_and_validate_repo(input.repo_url.trim()).await?;
-
-    let row = sqlx::query(
-        "UPDATE projects SET github_owner = $1, github_repo = $2
-         WHERE id = $3 AND user_id = $4 AND organization_id IS NULL
-         RETURNING id, name, github_owner, github_repo",
-    )
-    .bind(&owner)
-    .bind(&repo)
-    .bind(path.into_inner())
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
+    // Scoped UPDATE — a project the caller doesn't own won't match, so we 404
+    // rather than leak that the id exists. Repo validation (public-only) runs
+    // only after authorization so a non-owner can't probe GitHub through us.
+    let row = match ctx.scope {
+        Scope::Personal => {
+            let (owner, repo) = parse_and_validate_repo(input.repo_url.trim()).await?;
+            sqlx::query(
+                "UPDATE projects SET github_owner = $1, github_repo = $2
+                 WHERE id = $3 AND user_id = $4 AND organization_id IS NULL
+                 RETURNING id, name, github_owner, github_repo",
+            )
+            .bind(&owner)
+            .bind(&repo)
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?
+        }
+        Scope::Organization => {
+            // Linking is owner-only, mirroring org project create/rename/delete.
+            let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
+                Ok(ctx) => ctx,
+                Err(response) => return Ok(response),
+            };
+            let Some(org_id) = ctx.organization_id else {
+                return Ok(HttpResponse::BadRequest()
+                    .json(serde_json::json!({ "message": "No organization in context" })));
+            };
+            let (owner, repo) = parse_and_validate_repo(input.repo_url.trim()).await?;
+            sqlx::query(
+                "UPDATE projects SET github_owner = $1, github_repo = $2
+                 WHERE id = $3 AND organization_id = $4
+                 RETURNING id, name, github_owner, github_repo",
+            )
+            .bind(&owner)
+            .bind(&repo)
+            .bind(id)
+            .bind(org_id)
+            .fetch_optional(pool.get_ref())
+            .await?
+        }
+        Scope::Platform => {
+            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "Platform accounts cannot link repositories"
+            })));
+        }
+    };
 
     match row {
         Some(row) => Ok(HttpResponse::Ok().json(project_json(&row))),

@@ -7,7 +7,8 @@ import { apiFetch, apiFetchJson } from "./client";
 export type Project = {
   id: number;
   name: string;
-  // Optional linked public GitHub repo (personal accounts).
+  // Optional linked public GitHub repo. Set by personal accounts on their own
+  // projects, or by an org owner on the organization's projects.
   github_owner?: string | null;
   github_repo?: string | null;
 };
@@ -35,9 +36,10 @@ export const createProject = async (name: string, repoUrl?: string) => {
   return res.json() as Promise<Project>;
 };
 
-// Link (or replace) the public GitHub repo on a personal project. The server
-// validates the URL points at a real, public repo and surfaces a clear 400
-// message ("Only public repositories can be added", etc.) on failure.
+// Link (or replace) the public GitHub repo on a project — a personal account's
+// own project, or (owner-only) an organization's project. The server validates
+// the URL points at a real, public repo and surfaces a clear 400 message
+// ("Only public repositories can be added", etc.) on failure.
 export const linkProjectRepo = async (id: number, repoUrl: string) => {
   const res = await apiFetch(`/api/projects/${id}/repo`, {
     method: "PATCH",

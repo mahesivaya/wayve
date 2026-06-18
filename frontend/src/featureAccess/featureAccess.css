@@ -1,0 +1,118 @@
+.feature-access {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.feature-access-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.feature-access-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.feature-access-subtitle {
+  margin: 0;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.9rem;
+}
+
+.feature-access-banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+.feature-access-banner.is-ok {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+.feature-access-banner.is-err {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
+.feature-access-empty {
+  color: var(--text-muted, #6b7280);
+}
+
+.feature-access-tablewrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 10px;
+}
+
+.feature-access-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 720px;
+}
+
+.feature-access-table th,
+.feature-access-table td {
+  padding: 10px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.feature-access-table thead th {
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  background: var(--surface-2, #f9fafb);
+}
+
+.feature-access-feature-col {
+  text-align: left !important;
+  font-weight: 600;
+}
+
+.feature-access-table tbody tr:last-child th,
+.feature-access-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.feature-access-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.feature-access-table input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.feature-access-actions-col {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.feature-access-save,
+.feature-access-reset {
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  border: 1px solid var(--border-color, #d1d5db);
+  background: var(--surface, #fff);
+}
+.feature-access-save {
+  background: var(--accent, #4f46e5);
+  color: #fff;
+  border-color: transparent;
+}
+.feature-access-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.feature-access-reset:hover,
+.feature-access-save:not(:disabled):hover {
+  filter: brightness(0.96);
+}

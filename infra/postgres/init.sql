@@ -160,6 +160,21 @@ ALTER TABLE projects ADD CONSTRAINT projects_owner_chk CHECK (
 );
 CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id);
 
+-- Per-organization feature-access overrides. One row = "this role may use this
+-- feature in this org". The presence of ANY row for (organization_id,
+-- feature_key) means the owner has configured that feature: only the listed
+-- roles are allowed. No rows at all = unconfigured = fall back to the feature's
+-- code-defined default role set (see feature_access::FEATURES). The org owner is
+-- always allowed regardless of rows, so an owner can't lock themselves out.
+CREATE TABLE IF NOT EXISTS organization_feature_access (
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    feature_key TEXT NOT NULL,
+    role TEXT NOT NULL,
+    PRIMARY KEY (organization_id, feature_key, role)
+);
+CREATE INDEX IF NOT EXISTS idx_org_feature_access_lookup
+    ON organization_feature_access (organization_id, feature_key);
+
 -- Organization-scoped teams listed in the sidebar's Teams group, each with a
 -- detail page at /teams/<slug>. slug is unique within an org and derived from
 -- the name (lowercase, ASCII-alphanumeric), mirroring the org slug rule.
