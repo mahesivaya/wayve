@@ -13,6 +13,12 @@ pub async fn list_invoices(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         Ok(id) => id,
         Err(resp) => return Ok(resp),
     };
+    // Billing feature gate: an org owner can restrict which roles see billing.
+    if let Err(resp) =
+        crate::feature_access::handler::require_feature(&req, pool.get_ref(), "billing").await
+    {
+        return Ok(resp);
+    }
     let owner = match resolve_owner(pool.get_ref(), user_id).await {
         Ok(owner) => owner,
         Err(resp) => return Ok(resp),

@@ -1,17 +1,18 @@
-//! Per-organization feature access control.
+//! Per-scope feature access control (organization + platform).
 //!
 //! The RBAC role→permission matrix in `wayve-security` is fixed at compile
-//! time. This module layers a per-org override on top of it for a small,
-//! explicit catalog of user-facing features (currently just the Code Repo
-//! viewer): an organization OWNER decides which roles in their org may use each
-//! feature.
+//! time. This module layers a per-scope override on top of it for a small,
+//! explicit catalog of user-facing features (currently the Code Repo viewer and
+//! Billing): the OWNER of a scope decides which roles in that scope may use each
+//! feature. Organizations are keyed by `organization_id`; the platform is a
+//! singleton scope with no id.
 //!
-//! Storage model (`organization_feature_access`): one row = "this role may use
-//! this feature in this org". If a feature has ANY rows for the org it is
-//! considered *configured* and only the listed roles are allowed; with no rows
-//! it falls back to the feature's [`Feature::default_roles`]. The owner is
-//! always allowed (and force-included on save) so an owner can never lock
-//! themselves out.
+//! Storage model (`organization_feature_access` / `platform_feature_access`):
+//! one row = "this role may use this feature in this scope". If a feature has
+//! ANY rows for the scope it is considered *configured* and only the listed
+//! roles are allowed; with no rows it falls back to the feature's
+//! [`Feature::default_roles`]. The owner is always allowed (and force-included
+//! on save) so an owner can never lock themselves out.
 
 use crate::prelude::*;
 use actix_web::put;
@@ -40,14 +41,23 @@ pub const ALL_ROLES: &[&str] = &[
     "guest",
 ];
 
-/// The catalog of controllable features. Code Repo is the first; add entries
-/// here (plus an enforcement check at the feature's API) to gate more.
-pub const FEATURES: &[Feature] = &[Feature {
-    key: "code_repo",
-    // Inherits the Code Repo sidebar default: org managers + developers.
-    label: "Code Repo",
-    default_roles: &["owner", "super_admin", "admin", "developer"],
-}];
+/// The catalog of controllable features. Add entries here (plus an enforcement
+/// check at the feature's API) to gate more.
+pub const FEATURES: &[Feature] = &[
+    Feature {
+        key: "code_repo",
+        // Inherits the Code Repo sidebar default: org managers + developers.
+        label: "Code Repo",
+        default_roles: &["owner", "super_admin", "admin", "developer"],
+    },
+    Feature {
+        key: "billing",
+        // Billing has always been owner + billing-role only (super_admin is
+        // explicitly excluded). Keeps developers and other roles out by default.
+        label: "Billing",
+        default_roles: &["owner", "billing"],
+    },
+];
 
 fn feature(key: &str) -> Option<&'static Feature> {
     FEATURES.iter().find(|f| f.key == key)
@@ -93,9 +103,81 @@ pub async fn is_allowed(
     Ok(allowed.iter().any(|r| r == role))
 }
 
-/// GET /api/feature-access — the full matrix for the caller's organization.
-/// Any org member may read it (the client uses it to gate nav); only the owner
-/// may change it (see `update_feature_access`).
+/// Platform counterpart of [`allowed_roles`]: the configured set if the platform
+/// owner has saved one, otherwise the feature's default.
+pub async fn allowed_roles_platform(
+    pool: &PgPool,
+    feature_key: &str,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows: Vec<String> =
+        sqlx::query_scalar("SELECT role FROM platform_feature_access WHERE feature_key = $1")
+            .bind(feature_key)
+            .fetch_all(pool)
+            .await?;
+
+    if rows.is_empty() {
+        let def = feature(feature_key).map(|f| f.default_roles).unwrap_or(&[]);
+        Ok(def.iter().map(|s| s.to_string()).collect())
+    } else {
+        Ok(rows)
+    }
+}
+
+/// Platform counterpart of [`is_allowed`]. The platform owner is always allowed.
+pub async fn is_allowed_platform(
+    pool: &PgPool,
+    feature_key: &str,
+    role: &str,
+) -> Result<bool, sqlx::Error> {
+    if role == "owner" {
+        return Ok(true);
+    }
+    let allowed = allowed_roles_platform(pool, feature_key).await?;
+    Ok(allowed.iter().any(|r| r == role))
+}
+
+/// Guard for the top of a feature's handlers: ensure the caller's role may use
+/// `feature_key`. Organization callers are checked against the per-org matrix
+/// and platform callers against the platform matrix; personal callers pass
+/// through unaffected (their access is governed by RBAC alone). Returns a
+/// ready-to-send 401/403/500 on failure.
+pub async fn require_feature(
+    req: &HttpRequest,
+    pool: &PgPool,
+    feature_key: &str,
+) -> Result<(), HttpResponse> {
+    let Some(user_id) = get_user_id_from_request(req) else {
+        return Err(HttpResponse::Unauthorized().finish());
+    };
+    let ctx = rbac::resolve_role_context(pool, user_id)
+        .await
+        .map_err(|_| HttpResponse::InternalServerError().finish())?;
+    let allowed = match ctx.scope {
+        Scope::Personal => return Ok(()),
+        Scope::Organization => {
+            let Some(org_id) = ctx.organization_id else {
+                return Ok(());
+            };
+            is_allowed(pool, org_id, feature_key, ctx.role.as_str()).await
+        }
+        Scope::Platform => is_allowed_platform(pool, feature_key, ctx.role.as_str()).await,
+    };
+    match allowed {
+        Ok(true) => Ok(()),
+        Ok(false) => {
+            let label = feature(feature_key).map(|f| f.label).unwrap_or(feature_key);
+            Err(HttpResponse::Forbidden().json(serde_json::json!({
+                "message": format!("Your role doesn't have access to {label}")
+            })))
+        }
+        Err(_) => Err(HttpResponse::InternalServerError().finish()),
+    }
+}
+
+/// GET /api/feature-access — the full matrix for the caller's scope
+/// (organization or platform). Any member of that scope may read it (the client
+/// uses it to gate nav); only the owner may change it (see
+/// `update_feature_access`).
 #[get("/feature-access")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_feature_access(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -105,25 +187,40 @@ pub async fn get_feature_access(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
     let ctx = rbac::resolve_role_context(pool.get_ref(), user_id)
         .await
         .map_err(AppError::Db)?;
-    if ctx.scope != Scope::Organization {
-        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Feature access is managed per organization"
-        })));
-    }
-    let Some(org_id) = ctx.organization_id else {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "No organization in context" })));
-    };
 
     let mut features = Vec::with_capacity(FEATURES.len());
-    for f in FEATURES {
-        let allowed = allowed_roles(pool.get_ref(), org_id, f.key).await?;
-        features.push(serde_json::json!({
-            "key": f.key,
-            "label": f.label,
-            "allowed_roles": allowed,
-            "default_roles": f.default_roles,
-        }));
+    match ctx.scope {
+        Scope::Organization => {
+            let Some(org_id) = ctx.organization_id else {
+                return Ok(HttpResponse::BadRequest()
+                    .json(serde_json::json!({ "message": "No organization in context" })));
+            };
+            for f in FEATURES {
+                let allowed = allowed_roles(pool.get_ref(), org_id, f.key).await?;
+                features.push(serde_json::json!({
+                    "key": f.key,
+                    "label": f.label,
+                    "allowed_roles": allowed,
+                    "default_roles": f.default_roles,
+                }));
+            }
+        }
+        Scope::Platform => {
+            for f in FEATURES {
+                let allowed = allowed_roles_platform(pool.get_ref(), f.key).await?;
+                features.push(serde_json::json!({
+                    "key": f.key,
+                    "label": f.label,
+                    "allowed_roles": allowed,
+                    "default_roles": f.default_roles,
+                }));
+            }
+        }
+        Scope::Personal => {
+            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "Feature access is managed per organization or platform"
+            })));
+        }
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -138,8 +235,9 @@ pub struct UpdateFeatureAccessInput {
 }
 
 /// PUT /api/feature-access/{key} — replace the allowed-role set for one
-/// feature. Owner-only. `owner` is always force-included so the owner can't be
-/// locked out; unknown role names are ignored.
+/// feature in the caller's scope (organization or platform). Owner-only.
+/// `owner` is always force-included so the owner can't be locked out; unknown
+/// role names are ignored.
 #[put("/feature-access/{key}")]
 #[instrument(target = "http", skip(req, pool, path, input))]
 pub async fn update_feature_access(
@@ -148,13 +246,10 @@ pub async fn update_feature_access(
     path: web::Path<String>,
     input: web::Json<UpdateFeatureAccessInput>,
 ) -> AppResult {
+    // Accepts both organization and platform owners (personal is rejected).
     let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
         Ok(ctx) => ctx,
         Err(response) => return Ok(response),
-    };
-    let Some(org_id) = ctx.organization_id else {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "No organization in context" })));
     };
 
     let key = path.into_inner();
@@ -175,27 +270,59 @@ pub async fn update_feature_access(
         roles.push("owner".to_string());
     }
 
-    let mut tx = pool.begin().await?;
-    sqlx::query(
-        "DELETE FROM organization_feature_access \
-         WHERE organization_id = $1 AND feature_key = $2",
-    )
-    .bind(org_id)
-    .bind(&key)
-    .execute(&mut *tx)
-    .await?;
-    for role in &roles {
-        sqlx::query(
-            "INSERT INTO organization_feature_access (organization_id, feature_key, role) \
-             VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-        )
-        .bind(org_id)
-        .bind(&key)
-        .bind(role)
-        .execute(&mut *tx)
-        .await?;
+    match ctx.scope {
+        Scope::Organization => {
+            let Some(org_id) = ctx.organization_id else {
+                return Ok(HttpResponse::BadRequest()
+                    .json(serde_json::json!({ "message": "No organization in context" })));
+            };
+            let mut tx = pool.begin().await?;
+            sqlx::query(
+                "DELETE FROM organization_feature_access \
+                 WHERE organization_id = $1 AND feature_key = $2",
+            )
+            .bind(org_id)
+            .bind(&key)
+            .execute(&mut *tx)
+            .await?;
+            for role in &roles {
+                sqlx::query(
+                    "INSERT INTO organization_feature_access (organization_id, feature_key, role) \
+                     VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                )
+                .bind(org_id)
+                .bind(&key)
+                .bind(role)
+                .execute(&mut *tx)
+                .await?;
+            }
+            tx.commit().await?;
+        }
+        Scope::Platform => {
+            let mut tx = pool.begin().await?;
+            sqlx::query("DELETE FROM platform_feature_access WHERE feature_key = $1")
+                .bind(&key)
+                .execute(&mut *tx)
+                .await?;
+            for role in &roles {
+                sqlx::query(
+                    "INSERT INTO platform_feature_access (feature_key, role) \
+                     VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                )
+                .bind(&key)
+                .bind(role)
+                .execute(&mut *tx)
+                .await?;
+            }
+            tx.commit().await?;
+        }
+        Scope::Personal => {
+            // require_owner already rejects personal scope; keep exhaustive.
+            return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "Feature access is managed per organization or platform"
+            })));
+        }
     }
-    tx.commit().await?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "key": f.key,

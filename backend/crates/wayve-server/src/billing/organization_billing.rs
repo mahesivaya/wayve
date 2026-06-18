@@ -18,6 +18,12 @@ pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>)
         Ok(id) => id,
         Err(resp) => return Ok(resp),
     };
+    // Billing feature gate: an org owner can restrict which roles see billing.
+    if let Err(resp) =
+        crate::feature_access::handler::require_feature(&req, pool.get_ref(), "billing").await
+    {
+        return Ok(resp);
+    }
     let (account_type, organization_id) = match super::account_row(pool.get_ref(), user_id).await {
         Ok(row) => row,
         Err(resp) => return Ok(resp),

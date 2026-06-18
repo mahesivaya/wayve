@@ -21,6 +21,7 @@ import {
   type UsageResponse,
 } from "../api/billing";
 import { invalidateGetCache } from "../api/client";
+import { getFeatureAccess } from "../api/featureAccess";
 import { useAuth } from "../auth/useAuth";
 import { fmtShortDate } from "../utils/datetime";
 import "./billing.css";
@@ -199,7 +200,7 @@ function loadStripeScript(): Promise<void> {
   });
 }
 
-export default function Billing() {
+function BillingInner() {
   const { user, refresh } = useAuth();
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -1289,4 +1290,57 @@ export default function Billing() {
       )}
     </div>
   );
+}
+
+// Access wrapper: for an organization member whose role the owner hasn't
+// granted the Billing feature, render a plain "no access" screen instead of the
+// page (whose org-billing/invoices calls the backend would 403 anyway). Keeping
+// the heavy BillingInner unmounted avoids its many fetches firing for a role
+// that can't see billing. Personal/platform accounts always pass through.
+export default function Billing() {
+  const { user } = useAuth();
+  const isOrg = user?.scope === "organization";
+  const [denied, setDenied] = useState(false);
+  const [checked, setChecked] = useState(!isOrg);
+
+  const role = user?.effective_role;
+  useEffect(() => {
+    if (!isOrg) return;
+    let cancelled = false;
+    void getFeatureAccess()
+      .then((d) => {
+        if (cancelled) return;
+        const b = d.features.find((f) => f.key === "billing");
+        const r = role ?? "";
+        const allowed = r === "owner" || !b || b.allowed_roles.includes(r);
+        setDenied(!allowed);
+      })
+      .catch(() => {
+        /* on error, fail open — the backend still enforces */
+      })
+      .finally(() => {
+        if (!cancelled) setChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOrg, role]);
+
+  if (isOrg && !checked) {
+    return <div className="billing-page billing-loading">Loading…</div>;
+  }
+  if (denied) {
+    return (
+      <div className="billing-page">
+        <div className="billing-card">
+          <h2>Billing</h2>
+          <p className="billing-empty">
+            Your role doesn’t have access to Billing. Ask an organization owner
+            if you need it.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return <BillingInner />;
 }
