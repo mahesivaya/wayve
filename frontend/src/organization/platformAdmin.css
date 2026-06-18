@@ -274,13 +274,14 @@
 }
 
 /* The console cards sit directly on the page — strip the bordered .u-panel box
-   (border + background) and its padding/margin so there's no framing line and
-   no empty second block below the cards. Scoped to the admin home so the other
-   platform-admin pages keep their normal panel styling. */
+   (border + background) so there's no framing line, but keep an even padding
+   band around the card grid so the blocks don't run to the page edges. Scoped
+   to the admin home so the other platform-admin pages keep their normal panel
+   styling. */
 .platform-admin-home .platform-admin-panel {
   border: none;
   background: transparent;
-  padding: 0;
+  padding: var(--space-9);
   margin-bottom: 0;
 }
 

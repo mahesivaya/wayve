@@ -12,8 +12,15 @@
   margin-bottom: 18px;
 }
 
-.audit-security-header h1 {
+/* Override the global marketing-size h1 (56px / -1.68px tracking) that these
+   in-app titles inherit — that oversized heading overlapped the subtitle.
+   Scoped to the whole page so the permission-denied title (rendered outside
+   .audit-security-header) is sized too. */
+.audit-security-page h1 {
   margin: 0 0 4px;
+  font-size: 1.7rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .audit-security-header p {
