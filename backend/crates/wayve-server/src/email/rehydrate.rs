@@ -1,6 +1,6 @@
 //! `POST /api/email/accounts/{id}/rehydrate` — for every row this
 //! account owns in `emails`, re-fetch the message metadata from the
-//! provider (Gmail today; Outlook/Yahoo are stubbed) and overwrite the
+//! provider (Gmail today; Outlook is stubbed) and overwrite the
 //! stored subject/sender/receiver/labels with the fresh values.
 //!
 //! Why this exists: the initial IMAP-style sync for some accounts wrote
@@ -51,12 +51,12 @@ pub async fn rehydrate_account(
             None => return Err(AppError::NotFound("email account")),
         };
 
-    // Gmail-only for v1. Outlook + Yahoo have their own metadata fetch
+    // Gmail-only for v1. Outlook + IMAP have their own metadata fetch
     // shapes; add similar paths there when those accounts also need
     // repair.
     if !matches!(account.provider, MailProvider::Google) {
         return Ok(HttpResponse::NotImplemented().json(serde_json::json!({
-            "message": "Rehydrate is currently Gmail-only. Open a ticket if you need this for Outlook or Yahoo accounts.",
+            "message": "Rehydrate is currently Gmail-only. Open a ticket if you need this for Outlook or IMAP accounts.",
             "provider": account.provider.as_db()
         })));
     }

@@ -135,8 +135,8 @@ pub(crate) fn provider_for_known_domain(domain: &str) -> Option<&'static str> {
         // the rest are legacy Hotmail / Windows Live aliases still in use).
         "outlook.com" | "hotmail.com" | "live.com" | "msn.com" | "outlook.co.uk"
         | "hotmail.co.uk" | "live.co.uk" | "passport.com" => Some("outlook"),
-        // Yahoo is on the roadmap but the OAuth flow isn't wired up yet —
-        // ProviderPicker also renders it as "Coming soon".
+        // Any other domain isn't statically mapped — callers fall back to an
+        // MX lookup / generic IMAP.
         _ => None,
     }
 }

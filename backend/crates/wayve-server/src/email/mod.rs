@@ -22,8 +22,6 @@ pub mod sync;
 pub mod sync_older;
 pub mod utils;
 mod wake;
-pub mod yahoo;
-mod yahoo_routes;
 
 use actix_web::web;
 
@@ -80,14 +78,6 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .route(
             "/outlook/connect-url",
             web::post().to(outlook_oauth::outlook_connect_url),
-        )
-        .route(
-            "/email-providers/yahoo/connect",
-            web::post().to(yahoo_routes::yahoo_connect),
-        )
-        .route(
-            "/yahoo/connect",
-            web::post().to(yahoo_routes::yahoo_connect),
         )
         // Generic IMAP/SMTP (any custom-domain mailbox): autodiscover settings,
         // verify credentials without persisting, then connect.

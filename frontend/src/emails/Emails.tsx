@@ -11,7 +11,6 @@ import { EmailDetail } from "./EmailDetail";
 import ProviderPicker from "./ProviderPicker";
 import { useEmailInbox } from "./useEmailInbox";
 import {
-  connectYahoo,
   getEmail,
   getGmailConnectUrl,
   getOutlookConnectUrl,
@@ -310,38 +309,6 @@ export default function Emails() {
   // We surface it as a dismissible banner above the layout.
   const [oauthError, setOauthError] = useState<string | null>(null);
 
-  // Yahoo connect modal — Yahoo doesn't expose an OAuth flow for third
-  // parties, so we collect email + app password locally and POST to
-  // /api/yahoo/connect, which verifies via IMAP LOGIN before storing.
-  const [yahooModalOpen, setYahooModalOpen] = useState(false);
-  const [yahooEmail, setYahooEmail] = useState("");
-  const [yahooPassword, setYahooPassword] = useState("");
-  const [yahooBusy, setYahooBusy] = useState(false);
-  const [yahooError, setYahooError] = useState("");
-
-  const submitYahoo = async () => {
-    setYahooError("");
-    setYahooBusy(true);
-    try {
-      await connectYahoo(yahooEmail.trim(), yahooPassword.trim());
-      setYahooModalOpen(false);
-      setYahooEmail("");
-      setYahooPassword("");
-      // Refresh the account list + nudge the email-list refresh tick so the
-      // newly-imported messages from the initial sync show up without a
-      // manual reload.
-      void fetchAccounts();
-      setRefreshTick((tick) => tick + 1);
-    } catch (err) {
-      setYahooError(
-        err instanceof Error
-          ? err.message
-          : "Could not connect Yahoo account. Try again."
-      );
-    } finally {
-      setYahooBusy(false);
-    }
-  };
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.slice(1));
@@ -453,9 +420,7 @@ export default function Emails() {
   };
 
   // Single dispatcher from [ProviderPicker](./ProviderPicker.tsx). Each arm
-  // is an existing helper — Gmail and Outlook use OAuth redirects; Yahoo
-  // uses an app-password form (no OAuth) so we open a local modal instead
-  // of redirecting away.
+  // is an existing helper — Gmail and Outlook use OAuth redirects.
   const addProvider = (provider: import("./providers").ProviderId) => {
     switch (provider) {
       case "gmail":
@@ -463,9 +428,6 @@ export default function Emails() {
         return;
       case "outlook":
         void addOutlookAccount();
-        return;
-      case "yahoo":
-        setYahooModalOpen(true);
         return;
     }
   };
@@ -697,88 +659,6 @@ export default function Emails() {
               onClose={() => setComposeOpen(false)}
             />
           )}
-        </Modal>
-
-        <Modal
-          isOpen={yahooModalOpen}
-          onClose={() => {
-            if (yahooBusy) return;
-            setYahooModalOpen(false);
-            setYahooError("");
-          }}
-          title="Connect Yahoo Mail"
-        >
-          <form
-            className="yahoo-connect-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitYahoo();
-            }}
-          >
-            <p className="yahoo-connect-hint">
-              Yahoo requires an <strong>app password</strong> — generate one at{" "}
-              <a
-                href="https://login.yahoo.com/account/security"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Yahoo Account Security
-              </a>{" "}
-              → App Passwords. Then paste both fields below.
-            </p>
-
-            <label className="yahoo-connect-label">
-              <span>Yahoo email</span>
-              <input
-                type="email"
-                autoComplete="email"
-                required
-                value={yahooEmail}
-                onChange={(event) => setYahooEmail(event.target.value)}
-                placeholder="you@yahoo.com"
-                autoFocus
-              />
-            </label>
-
-            <label className="yahoo-connect-label">
-              <span>App password</span>
-              <input
-                type="password"
-                required
-                minLength={8}
-                value={yahooPassword}
-                onChange={(event) => setYahooPassword(event.target.value)}
-                placeholder="16 characters from Yahoo App Passwords"
-              />
-            </label>
-
-            {yahooError && <p className="yahoo-connect-error">{yahooError}</p>}
-
-            <div className="yahoo-connect-actions">
-              <button
-                type="submit"
-                disabled={
-                  yahooBusy ||
-                  !yahooEmail.trim() ||
-                  yahooPassword.trim().length < 8
-                }
-              >
-                {yahooBusy ? "Connecting…" : "Connect"}
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                disabled={yahooBusy}
-                onClick={() => {
-                  setYahooModalOpen(false);
-                  setYahooError("");
-                  setYahooPassword("");
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
         </Modal>
 
         {showDetail && (

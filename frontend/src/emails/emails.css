@@ -293,7 +293,7 @@
 /* ================= PROVIDER PICKER MODAL =================
    Triggered by the single "Add more emails" button in [EmailSidebar](./EmailSidebar.tsx)
    and rendered by [ProviderPicker](./ProviderPicker.tsx). Brand-colored badges
-   make Gmail/Outlook/Yahoo scannable without shipping bundled SVG logos. */
+   make Gmail/Outlook scannable without shipping bundled SVG logos. */
 
 .provider-picker-backdrop {
   position: fixed;
@@ -458,10 +458,6 @@
 
 .provider-badge-outlook {
   background: var(--color-provider-outlook);
-}
-
-.provider-badge-yahoo {
-  background: var(--color-provider-imap);
 }
 
 .provider-badge-other {
@@ -2096,75 +2092,5 @@
   }
 }
 
-/* Yahoo connect modal form — Yahoo uses an app password rather than OAuth,
-   so we collect creds locally and POST to /api/yahoo/connect. */
-.yahoo-connect-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 320px;
-}
-
-.yahoo-connect-hint {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--color-text-muted);
-}
-
-.yahoo-connect-hint a {
-  color: var(--color-primary-action);
-}
-
-.yahoo-connect-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.yahoo-connect-label > span {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.yahoo-connect-label input {
-  padding: 8px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-size: 14px;
-}
-
-.yahoo-connect-error {
-  margin: 0;
-  font-size: 13px;
-  color: var(--color-danger-strong);
-}
-
-.yahoo-connect-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.yahoo-connect-actions button {
-  padding: 8px 16px;
-  background: var(--color-primary-action);
-  color: var(--color-on-primary, #fff);
-  border: 1px solid var(--color-primary-action);
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.yahoo-connect-actions button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.yahoo-connect-actions button.secondary {
-  background: transparent;
-  color: var(--color-text-primary);
-  border-color: var(--color-border);
-}
+/* Provider connect modals (Outlook / IMAP) live in their own component
+   stylesheets. */

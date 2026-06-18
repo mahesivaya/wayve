@@ -61,7 +61,6 @@ const PROVIDER_LABEL: Record<string, string> = {
   gmail: "Gmail",
   microsoft: "Outlook",
   outlook: "Outlook",
-  yahoo: "Yahoo",
   imap: "IMAP",
   wayve: "Fluxze",
 };

@@ -398,7 +398,7 @@ export const EmailList: React.FC<EmailListProps> = ({
           <strong>No email accounts connected yet</strong>
           <span>
             {canAddAccount
-              ? "Connect a mailbox to start importing and sending email. We support Gmail, Outlook, Yahoo and more."
+              ? "Connect a mailbox to start importing and sending email. We support Gmail, Outlook, IMAP and more."
               : "No mailboxes have been shared with you yet. Ask an organization owner to grant you access."}
           </span>
           {canAddAccount && onAddAccount && (

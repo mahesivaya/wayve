@@ -1,10 +1,10 @@
 // Single source of truth for the mailbox-provider picker. Adding a new
-// provider (Yahoo when it ships, Exchange, IMAP, iCloud, …) is a one-line
-// change here plus a dispatch arm in [Emails.tsx](./Emails.tsx) —
+// provider (Exchange, IMAP, iCloud, …) is a one-line change here plus a
+// dispatch arm in [Emails.tsx](./Emails.tsx) —
 // [EmailSidebar](./EmailSidebar.tsx) and [ProviderPicker](./ProviderPicker.tsx)
 // read from this list and need no edits.
 
-export type ProviderId = "gmail" | "outlook" | "yahoo";
+export type ProviderId = "gmail" | "outlook";
 
 export type ProviderStatus = "available" | "coming_soon";
 
@@ -34,13 +34,6 @@ export const EMAIL_PROVIDERS: readonly ProviderConfig[] = [
     name: "Outlook",
     description: "Microsoft 365 or Outlook.com",
     badge: "O",
-    status: "available",
-  },
-  {
-    id: "yahoo",
-    name: "Yahoo Mail",
-    description: "Yahoo.com mailbox via app password",
-    badge: "Y",
     status: "available",
   },
 ];
