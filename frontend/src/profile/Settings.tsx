@@ -441,57 +441,59 @@ export default function Settings() {
           </section>
         )}
 
-        <section className="settings-card">
-          <h2 className="settings-card-title">Transaction history</h2>
-          {!invoicesLoaded ? (
-            <p className="settings-loading-text">Loading transactions…</p>
-          ) : invoicesError ? (
-            <p className="settings-support-empty">
-              Couldn't load your transactions. Try again later.
-            </p>
-          ) : invoices.length === 0 ? (
-            <p className="settings-support-empty">
-              No transactions yet. Charges and invoices will appear here once
-              you upgrade to a paid plan.
-            </p>
-          ) : (
-            <ul className="settings-txn-list">
-              {invoices.map((inv) => {
-                const link = inv.hosted_invoice_url ?? inv.invoice_pdf;
-                return (
-                  <li key={inv.id} className="settings-txn-row">
-                    <div className="settings-txn-main">
-                      <span className="settings-txn-amount">
-                        {formatMoney(inv.amount_due_cents, inv.currency)}
+        {!isPlatformUser && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Transaction history</h2>
+            {!invoicesLoaded ? (
+              <p className="settings-loading-text">Loading transactions…</p>
+            ) : invoicesError ? (
+              <p className="settings-support-empty">
+                Couldn't load your transactions. Try again later.
+              </p>
+            ) : invoices.length === 0 ? (
+              <p className="settings-support-empty">
+                No transactions yet. Charges and invoices will appear here once
+                you upgrade to a paid plan.
+              </p>
+            ) : (
+              <ul className="settings-txn-list">
+                {invoices.map((inv) => {
+                  const link = inv.hosted_invoice_url ?? inv.invoice_pdf;
+                  return (
+                    <li key={inv.id} className="settings-txn-row">
+                      <div className="settings-txn-main">
+                        <span className="settings-txn-amount">
+                          {formatMoney(inv.amount_due_cents, inv.currency)}
+                        </span>
+                        <span className="settings-txn-meta">
+                          {fmtDate(inv.created_at)}
+                          {link && (
+                            <>
+                              {" · "}
+                              <a
+                                href={link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="settings-link-button"
+                              >
+                                View invoice
+                              </a>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <span
+                        className={`settings-txn-status status-${inv.status}`}
+                      >
+                        {inv.status}
                       </span>
-                      <span className="settings-txn-meta">
-                        {fmtDate(inv.created_at)}
-                        {link && (
-                          <>
-                            {" · "}
-                            <a
-                              href={link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="settings-link-button"
-                            >
-                              View invoice
-                            </a>
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    <span
-                      className={`settings-txn-status status-${inv.status}`}
-                    >
-                      {inv.status}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
 
         <section className="settings-card">
           <div className="settings-support-head">
