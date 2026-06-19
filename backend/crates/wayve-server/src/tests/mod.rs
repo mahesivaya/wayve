@@ -15,6 +15,7 @@ mod billing_audit_test;
 mod chat_logging_test;
 mod email_provider_isp_test;
 mod org_keys_test;
+mod platform_billing_feature_access_test;
 mod platform_users_test;
 mod rbac_authorization_test;
 mod rbac_permissions_golden_test;

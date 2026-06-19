@@ -416,6 +416,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // per org). Defaults to true so we don't flash-hide before the fetch; refined
   // once feature access loads. Non-org accounts keep their existing gating.
   const [codeRepoAllowed, setCodeRepoAllowed] = useState(true);
+  const [billingAllowed, setBillingAllowed] = useState(true);
 
   const userId = user?.id;
   useEffect(() => {
@@ -442,14 +443,21 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     void getFeatureAccess()
       .then((d) => {
         if (cancelled) return;
-        const cr = d.features.find((f) => f.key === "code_repo");
         const role = userRole ?? "";
+        const cr = d.features.find((f) => f.key === "code_repo");
         setCodeRepoAllowed(
           role === "owner" || !cr || cr.allowed_roles.includes(role)
         );
+        const bill = d.features.find((f) => f.key === "billing");
+        setBillingAllowed(
+          role === "owner" || !bill || bill.allowed_roles.includes(role)
+        );
       })
       .catch(() => {
-        if (!cancelled) setCodeRepoAllowed(true);
+        if (!cancelled) {
+          setCodeRepoAllowed(true);
+          setBillingAllowed(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -833,6 +841,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // [/billing](../billing/Billing.tsx) self-service view; staff-only.
   const canAccessPlatformBilling =
     user.scope === "platform" &&
+    billingAllowed &&
     (hasPermission(user, "billing:read") ||
       hasPermission(user, "billing:manage"));
   const canAccessPlatformDeveloper =

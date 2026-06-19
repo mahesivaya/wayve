@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
+import { getFeatureAccess } from "../api/featureAccess";
 import {
   createEmployee,
   createPayrollRun,
@@ -87,8 +88,34 @@ export default function PlatformBilling() {
   // purely a UI redirect to keep non-platform-billing users from ever
   // hitting the page and getting a useless 403. Same shape as the existing
   // PlatformAdminHome route.
+  // The platform owner can further restrict the Billing console to specific
+  // roles via the feature-access matrix (backend enforces it on every request;
+  // this mirror is defense-in-depth + avoids a useless 403 page). Defaults to
+  // allowed and narrows once the matrix loads, matching the sidebar gate.
+  const [billingFeatureAllowed, setBillingFeatureAllowed] = useState(true);
+  const role = user?.effective_role ?? "";
+  useEffect(() => {
+    if (user?.scope !== "platform") return;
+    let cancelled = false;
+    void getFeatureAccess()
+      .then((d) => {
+        if (cancelled) return;
+        const bill = d.features.find((f) => f.key === "billing");
+        setBillingFeatureAllowed(
+          role === "owner" || !bill || bill.allowed_roles.includes(role)
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setBillingFeatureAllowed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.scope, role]);
+
   const canView =
     user?.scope === "platform" &&
+    billingFeatureAllowed &&
     (hasPermission(user, "billing:read") ||
       hasPermission(user, "billing:manage"));
   const canManage = hasPermission(user, "billing:manage");

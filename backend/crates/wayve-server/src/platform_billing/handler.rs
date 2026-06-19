@@ -48,6 +48,11 @@ async fn gate(
             "message": "Platform scope required"
         })));
     }
+    // Feature gate: the platform owner can restrict which platform roles may use
+    // the Billing console via the feature-access matrix (RBAC is the ceiling;
+    // this can only narrow it further). Runs after the scope check so only
+    // platform callers are evaluated against the platform matrix.
+    crate::feature_access::handler::require_feature(req, pool, "billing").await?;
     Ok(ctx)
 }
 
