@@ -1554,7 +1554,7 @@ function GitHubRepoViewer({
                                 void loadCommitDetail(commit.sha, true)
                               }
                             >
-                              Retry
+                              Refresh
                             </button>
                           </div>
                         )}
