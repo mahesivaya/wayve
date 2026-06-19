@@ -3,6 +3,22 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [2.5.2](https://github.com/mahesivaya/wayve/releases/tag/v2.5.2) - 2026-06-19
+
+### 🚀 Features
+
+- **platform-billing:** Gate Billing console on the platform feature-access matrix
+- **tasks:** Drop the Assigned by picker; attribute new tasks to their creator
+- **settings:** Hide Transaction history for platform users
+
+### 🐛 Bug Fixes
+
+- **github:** Label the commit-diff reload action "Refresh"
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v2.5.1 [skip ci]
+
 ## [2.5.1](https://github.com/mahesivaya/wayve/releases/tag/v2.5.1) - 2026-06-19
 
 ### 🚀 Features
