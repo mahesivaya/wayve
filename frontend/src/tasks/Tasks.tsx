@@ -323,7 +323,9 @@ export default function Tasks() {
     setDescription("");
     setPriority(3);
     setStatus("to_do");
-    setAssignedBy("");
+    // New tasks are attributed to their creator: default "assigned by" to the
+    // current user (personal accounts leave it unset — implicitly self-owned).
+    setAssignedBy(isPersonal ? "" : (user?.email ?? ""));
     setAssignee("");
     setEditingId(null);
     setError("");
@@ -710,27 +712,12 @@ export default function Tasks() {
                 />
               </label>
 
-              {/* Task assignment (Assigned by / Assignee / Assign to me) is a
-                  team feature — only business (organization) accounts see it.
-                  Personal accounts are single-user, so it's hidden for them. */}
+              {/* Task assignment (Assignee / Assign to me) is a team feature —
+                  only business (organization) accounts see it. Personal accounts
+                  are single-user, so it's hidden for them. "Assigned by" is not
+                  shown: a task is always attributed to its creator. */}
               {!isPersonal && (
                 <>
-                  <div className="task-form-field">
-                    <label
-                      className="task-form-label"
-                      htmlFor="task-assigned-by"
-                    >
-                      Assigned by
-                    </label>
-                    <UserAutocomplete
-                      id="task-assigned-by"
-                      value={assignedBy}
-                      onChange={setAssignedBy}
-                      users={assignableUsers}
-                      placeholder="Search team by name or email"
-                    />
-                  </div>
-
                   <div className="task-form-field">
                     <label className="task-form-label" htmlFor="task-assignee">
                       Assignee
