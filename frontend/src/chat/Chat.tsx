@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/useAuth";
+import { normalizeAccountType } from "../auth/accountHome";
 import {
   addChatChannelUsers,
   approveChatChannelJoinRequest,
@@ -735,6 +736,29 @@ export default function Chat() {
     ? users.filter((u) => u.email.toLowerCase().includes(normalizedSearchQuery))
     : users;
 
+  // Personal accounts get a compact sidebar: only the 5 most recently created
+  // channels and the 5 most recently registered users. While a search is active
+  // the lists stay unbounded so older conversations remain findable. ChatUser
+  // carries no created_at, so a higher id (serial PK) is the registration-order
+  // proxy for "latest registered".
+  const RECENT_SIDEBAR_LIMIT = 5;
+  const isPersonalAccount =
+    normalizeAccountType(user?.account_type) === "personal";
+
+  const visibleChannels =
+    isPersonalAccount && !normalizedSearchQuery
+      ? [...filteredChannels]
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))
+          .slice(0, RECENT_SIDEBAR_LIMIT)
+      : filteredChannels;
+
+  const visibleUsers =
+    isPersonalAccount && !normalizedSearchQuery
+      ? [...filteredUsers]
+          .sort((a, b) => b.id - a.id)
+          .slice(0, RECENT_SIDEBAR_LIMIT)
+      : filteredUsers;
+
   const filteredMessages = normalizedSearchQuery
     ? messages.filter((msg) =>
         [
@@ -760,8 +784,8 @@ export default function Chat() {
       style={{ "--chat-sidebar-w": `${sidebarWidth}px` } as React.CSSProperties}
     >
       <ConversationSidebar
-        users={filteredUsers}
-        channels={filteredChannels}
+        users={visibleUsers}
+        channels={visibleChannels}
         selectedConversation={selectedConversation}
         creatingChannel={creatingChannel}
         channelName={channelName}
