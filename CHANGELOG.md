@@ -3,6 +3,27 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [2.5.1](https://github.com/mahesivaya/wayve/releases/tag/v2.5.1) - 2026-06-19
+
+### 🚀 Features
+
+- **chat:** Limit personal-account sidebar to 5 recent channels and latest users
+- **sidebar:** Rename Emails to Inbox and Chat to Messages
+- **feature-access:** Extend feature access to the platform scope
+- **feature-access:** Add Billing to the access matrix
+
+### 🐛 Bug Fixes
+
+- **github:** Surface failed or empty commit-diff loads instead of a blank row
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v2.5.0 [skip ci]
+
+### Other Changes
+
+- **theme:** Tidy theme imports and marketing/email CSS
+
 ## [2.5.0](https://github.com/mahesivaya/wayve/releases/tag/v2.5.0) - 2026-06-18
 
 ### 🚀 Features
