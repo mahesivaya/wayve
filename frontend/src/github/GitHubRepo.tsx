@@ -511,7 +511,15 @@ async function githubJson<T>(url: string): Promise<T> {
     throw new Error(`GitHub request failed (${response.status})`);
   }
 
-  return response.json() as Promise<T>;
+  // A 200 that doesn't parse to an object/array means something upstream
+  // returned an unexpected body (e.g. an HTML page from a misrouted request
+  // or a literal `null`). Treat it as an error so callers surface a banner
+  // instead of silently resolving to a falsy value that renders as a blank.
+  const data = (await response.json()) as unknown;
+  if (data === null || typeof data !== "object") {
+    throw new Error("GitHub returned an unexpected response.");
+  }
+  return data as T;
 }
 
 function isContentList(
@@ -863,26 +871,13 @@ function GitHubRepoViewer({
     [API_BASE]
   );
 
-  // Expand a commit row inline to show its file-level diff. First open
-  // fetches the per-commit detail (which includes the patch for every
-  // changed file) via the same /api/github proxy that the rest of this
-  // page uses; subsequent toggles read from the in-component cache so
-  // re-opening is instant.
-  const toggleCommitDetail = useCallback(
-    async (sha: string) => {
-      let opened = false;
-      setExpandedCommitShas((current) => {
-        const next = new Set(current);
-        if (next.has(sha)) {
-          next.delete(sha);
-        } else {
-          next.add(sha);
-          opened = true;
-        }
-        return next;
-      });
-      if (!opened) return;
-      if (commitDetailBySha[sha]) return;
+  // Fetch the per-commit detail (which includes the patch for every changed
+  // file) via the same /api/github proxy the rest of this page uses, and cache
+  // it by SHA. Skips the network when already cached unless `force` is set
+  // (used by the Retry affordance after a failed/empty load).
+  const loadCommitDetail = useCallback(
+    async (sha: string, force = false) => {
+      if (!force && commitDetailBySha[sha]) return;
 
       setLoadingCommitShas((current) => new Set(current).add(sha));
       setErrorByCommitSha((current) => {
@@ -910,6 +905,27 @@ function GitHubRepoViewer({
       }
     },
     [API_BASE, commitDetailBySha]
+  );
+
+  // Expand a commit row inline to show its file-level diff. First open kicks
+  // off the per-commit detail fetch; subsequent toggles read from the
+  // in-component cache so re-opening is instant.
+  const toggleCommitDetail = useCallback(
+    (sha: string) => {
+      let opened = false;
+      setExpandedCommitShas((current) => {
+        const next = new Set(current);
+        if (next.has(sha)) {
+          next.delete(sha);
+        } else {
+          next.add(sha);
+          opened = true;
+        }
+        return next;
+      });
+      if (opened) void loadCommitDetail(sha);
+    },
+    [loadCommitDetail]
   );
 
   // Fetch the raw unified diff for a commit through the proxy's
@@ -1527,6 +1543,20 @@ function GitHubRepoViewer({
                         )}
                         {errorText && (
                           <div className="github-banner">{errorText}</div>
+                        )}
+                        {!isLoading && !errorText && !detail && (
+                          <div className="github-empty">
+                            Couldn't load this commit's changes.{" "}
+                            <button
+                              type="button"
+                              className="github-link-btn"
+                              onClick={() =>
+                                void loadCommitDetail(commit.sha, true)
+                              }
+                            >
+                              Retry
+                            </button>
+                          </div>
                         )}
                         {!isLoading && !errorText && detail && (
                           <>

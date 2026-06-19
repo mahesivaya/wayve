@@ -685,6 +685,17 @@
   text-align: center;
 }
 
+/* Inline text button (e.g. the "Retry" affordance in an empty state). */
+.github-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-accent, #2563eb);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 /* =============================
    📖 DESCRIPTION TAB — project overview (description + metadata + README).
    Unlike the Files grid, this is a single card that sizes to its content
