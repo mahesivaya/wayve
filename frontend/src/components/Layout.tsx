@@ -1507,14 +1507,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {renderSidebarItem(
                 "/emails",
                 "emails",
-                "Emails",
+                "Inbox",
                 <EmailsIcon size={18} />,
                 emailsUnreadCount
               )}
               {renderSidebarItem(
                 "/chat",
                 "chat",
-                "Chat",
+                "Messages",
                 <ChatIcon size={18} />,
                 chatUnreadCount
               )}
