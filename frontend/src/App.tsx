@@ -67,9 +67,6 @@ const OrganizationHome = lazy(() => import("./organization/OrganizationHome"));
 const EmailFiles = lazy(() => import("./files/EmailFiles"));
 const ServicePage = lazy(() => import("./services/ServicePage"));
 const Billing = lazy(() => import("./billing/Billing"));
-const CreateOrganization = lazy(
-  () => import("./organization/CreateOrganization")
-);
 const PlatformBilling = lazy(() => import("./platformBilling/PlatformBilling"));
 const PlatformDeveloper = lazy(
   () => import("./platformTeam/PlatformDeveloper")
@@ -378,10 +375,6 @@ export default function App() {
               <Route path="/organization/access" element={<FeatureAccessPage />} />
               <Route path="/platform/access" element={<FeatureAccessPage />} />
               <Route path="/billing" element={<Billing />} />
-              <Route
-                path="/organizations/new"
-                element={<CreateOrganization />}
-              />
               <Route
                 path="/platform/organizations"
                 element={<PlatformOrganizations />}

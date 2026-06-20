@@ -5,7 +5,6 @@
 use super::shared::{
     default_role_for_account_type, invalidate_profile_cache, normalized_account_type,
 };
-use crate::billing::checkout::ensure_customer;
 use crate::billing::entitlements::{effective_entitlements, refresh_entitlements};
 use crate::billing::models::BillingOwner;
 use crate::billing::provider;
@@ -13,7 +12,7 @@ use crate::email::profile::invalidate_me_cache;
 use crate::organization;
 use crate::prelude::*;
 use actix_web::{delete, patch};
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, instrument};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::password::hash_password;
 use wayve_security::rbac::{self, Permission, Role, Scope};
@@ -50,16 +49,6 @@ pub struct CreateOrganizationInput {
     pub admin_username: Option<String>,
     pub admin_email: Option<String>,
     pub admin_password: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct CreateMyOrganizationInput {
-    pub name: String,
-    /// Free-form locale (city, country, address) shown in the org setup page
-    /// and on the organization home. Optional — empty/missing is stored as
-    /// NULL.
-    #[serde(default)]
-    pub place: Option<String>,
 }
 
 /// Require the caller to be platform-scope staff holding `members:manage` — the
@@ -370,26 +359,18 @@ pub async fn admin_create_organization(
 const STARTER_SEAT_LIMIT: i32 = 100;
 const STARTER_STORAGE_BYTES: i64 = 1_073_741_824; // 1 GiB
 
-pub(crate) struct CreatedOrg {
-    pub id: i32,
-    pub name: String,
-    pub slug: Option<String>,
-    pub place: Option<String>,
-}
-
 /// The core org-creation side effects, in the caller's transaction: insert the
 /// `organizations` row, promote the user to `organization_admin` + owner
-/// member, and seed the starter entitlement. Shared by the free path
-/// (`create_my_organization`) and the payment-gated finalize path
-/// (`finalize_org_signup_inner`). Returns `Ok(None)` on a name conflict so the
-/// caller can surface a 409 and roll back.
+/// member, and seed the starter entitlement. Used by the business-registration
+/// path (`register_business`). Returns the new org id, or `Ok(None)` on a name
+/// conflict so the caller can surface a 409 and roll back.
 pub(crate) async fn create_org_for_user(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     user_id: i32,
     name: &str,
     place: Option<&str>,
     admin_email: Option<&str>,
-) -> std::result::Result<Option<CreatedOrg>, AppError> {
+) -> std::result::Result<Option<i32>, AppError> {
     let org_row = match sqlx::query(
         r#"
         INSERT INTO organizations (name, slug, place, admin_email)
@@ -460,425 +441,7 @@ pub(crate) async fn create_org_for_user(
     .execute(&mut **tx)
     .await?;
 
-    Ok(Some(CreatedOrg {
-        id: organization_id,
-        name: org_row.get("name"),
-        slug: org_row.get("slug"),
-        place: org_row.get("place"),
-    }))
-}
-
-/// Self-serve org creation (free / no-payment path, kept for internal use):
-/// a personal user creates an organization and is promoted to its owner.
-/// `account_type` flips from 'personal' to 'organization_admin', they become an
-/// 'owner' member, and subsequent /api/me reflects the new scope. The JWT is
-/// untouched because RBAC is computed per request from the DB.
-///
-/// NOTE: the self-serve UI now drives the payment-gated flow
-/// (`/organizations/signup-intent` → `/organizations/finalize`); this endpoint
-/// remains for compatibility and internal callers.
-#[post("/organizations")]
-#[instrument(target = "auth", skip(req, pool, data), fields(name = %data.name))]
-pub async fn create_my_organization(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    data: web::Json<CreateMyOrganizationInput>,
-) -> AppResult {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => {
-            return Ok(HttpResponse::Unauthorized()
-                .json(serde_json::json!({ "message": "Authentication required" })));
-        }
-    };
-
-    let name = data.name.trim();
-    if name.is_empty() {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Organization name is required" })));
-    }
-    if name.len() > 120 {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Organization name is too long" })));
-    }
-
-    let place = data
-        .place
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
-    if place.as_deref().is_some_and(|p| p.len() > 200) {
-        return Ok(
-            HttpResponse::BadRequest().json(serde_json::json!({ "message": "Place is too long" }))
-        );
-    }
-
-    // Only personal users may self-serve.
-    if let Some(resp) = reject_non_personal(pool.get_ref(), user_id).await? {
-        return Ok(resp);
-    }
-
-    let mut tx = pool.begin().await?;
-    let created = match create_org_for_user(&mut tx, user_id, name, place.as_deref(), None).await? {
-        Some(org) => org,
-        None => {
-            return Ok(HttpResponse::Conflict().json(serde_json::json!({
-                "message": "An organization with that name already exists"
-            })));
-        }
-    };
-    tx.commit().await?;
-
-    invalidate_profile_cache(user_id).await;
-    invalidate_me_cache(user_id).await;
-    rbac::invalidate_role_context(user_id).await;
-
-    info!(target: "auth", user_id, organization_id = created.id, "personal user created organization");
-    Ok(HttpResponse::Created().json(serde_json::json!({
-        "id": created.id,
-        "name": created.name,
-        "slug": created.slug,
-        "place": created.place,
-        "account_type": "organization_admin",
-        "organization_id": created.id,
-        "role": "owner",
-        "seat_limit": STARTER_SEAT_LIMIT
-    })))
-}
-
-/// Return `Some(409 response)` if the user isn't a plain personal account (so
-/// they can't escalate their own scope or orphan themselves), `None` if OK.
-async fn reject_non_personal(
-    pool: &PgPool,
-    user_id: i32,
-) -> std::result::Result<Option<HttpResponse>, AppError> {
-    let account_type: Option<String> =
-        sqlx::query_scalar("SELECT account_type FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_optional(pool)
-            .await?;
-    match account_type {
-        None => Ok(Some(
-            HttpResponse::Unauthorized()
-                .json(serde_json::json!({ "message": "Account not found" })),
-        )),
-        Some(t) if t != "personal" => Ok(Some(HttpResponse::Conflict().json(serde_json::json!({
-            "message": "Your account already belongs to an organization or platform scope"
-        })))),
-        Some(_) => Ok(None),
-    }
-}
-
-#[derive(Deserialize)]
-pub struct OrgSignupIntentInput {
-    pub name: String,
-    #[serde(default)]
-    pub place: Option<String>,
-    #[serde(default)]
-    pub admin_email: Option<String>,
-    /// "saved" → charge the founder's saved default card now; "new" (default)
-    /// → return a client_secret the frontend confirms with a Payment Element.
-    #[serde(default)]
-    pub payment_choice: Option<String>,
-    /// Which org tier to start on: "business_startups" or "organization"
-    /// (default). Anything else (incl. "enterprise", which is contact-sales)
-    /// falls back to "organization".
-    #[serde(default)]
-    pub plan_code: Option<String>,
-}
-
-/// Step 1 of payment-gated org creation. Validates the form, ensures the
-/// founder's *personal* Stripe customer, and starts the organization-plan
-/// subscription on it. **No organization is created here** — the org details
-/// are parked in `pending_org_signups` keyed by the subscription that must be
-/// paid first.
-///
-///   * `payment_choice = "saved"` → charges the saved card off-session; if it
-///     clears we finalize immediately and return the created org.
-///   * otherwise → returns `{ pending_id, client_secret, publishable_key }` for
-///     the frontend to confirm, then call `/organizations/finalize`.
-#[post("/organizations/signup-intent")]
-#[instrument(target = "auth", skip(req, pool, data), fields(name = %data.name))]
-pub async fn org_signup_intent(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    data: web::Json<OrgSignupIntentInput>,
-) -> AppResult {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => {
-            return Ok(HttpResponse::Unauthorized()
-                .json(serde_json::json!({ "message": "Authentication required" })));
-        }
-    };
-
-    let name = data.name.trim();
-    if name.is_empty() || name.len() > 120 {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Enter an organization name (max 120 chars)" })));
-    }
-    let place = data
-        .place
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_string);
-    if place.as_deref().is_some_and(|p| p.len() > 200) {
-        return Ok(
-            HttpResponse::BadRequest().json(serde_json::json!({ "message": "Place is too long" }))
-        );
-    }
-
-    if let Some(resp) = reject_non_personal(pool.get_ref(), user_id).await? {
-        return Ok(resp);
-    }
-    if !provider::is_configured() {
-        return Ok(HttpResponse::ServiceUnavailable()
-            .json(serde_json::json!({ "message": "Billing is not configured" })));
-    }
-
-    // Founder's email is the Stripe contact + the admin_email default.
-    let founder_email: String = match sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
-        .bind(user_id)
-        .fetch_optional(pool.get_ref())
-        .await?
-    {
-        Some(email) => email,
-        None => {
-            return Ok(HttpResponse::Unauthorized()
-                .json(serde_json::json!({ "message": "Account not found" })));
-        }
-    };
-    let admin_email = data
-        .admin_email
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_lowercase)
-        .unwrap_or_else(|| founder_email.to_lowercase());
-    if !admin_email.contains('@') || admin_email.len() > 254 {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Enter a valid admin email address" })));
-    }
-
-    // Resolve the chosen organization plan + its Stripe price. Only the two
-    // self-serve paid tiers are allowed; anything else (incl. enterprise, which
-    // is contact-sales) falls back to the Business ("organization") plan.
-    let requested_code = data.plan_code.as_deref().unwrap_or("organization");
-    let plan_code_filter = if matches!(requested_code, "business_startups" | "organization") {
-        requested_code
-    } else {
-        "organization"
-    };
-    let plan = sqlx::query_as::<_, (String, Option<String>)>(
-        "SELECT code, stripe_price_id FROM plans \
-         WHERE code = $1 AND audience = 'organization' AND is_active = true",
-    )
-    .bind(plan_code_filter)
-    .fetch_optional(pool.get_ref())
-    .await?;
-    let Some((plan_code, price_id)) = plan else {
-        return Ok(HttpResponse::ServiceUnavailable()
-            .json(serde_json::json!({ "message": "The organization plan is not available" })));
-    };
-    let Some(price_id) = price_id.filter(|p| !p.is_empty()) else {
-        return Ok(HttpResponse::ServiceUnavailable().json(
-            serde_json::json!({ "message": "The organization plan is not linked to a price yet" }),
-        ));
-    };
-
-    // Bill the founder's personal customer (reused as the org's on finalize).
-    let customer_id =
-        match ensure_customer(pool.get_ref(), BillingOwner::User(user_id), &founder_email).await {
-            Ok(id) => id,
-            Err(resp) => return Ok(resp),
-        };
-
-    // For "saved", resolve the default card up front so we can reject early
-    // when there's nothing on file.
-    let use_saved = data.payment_choice.as_deref() == Some("saved");
-    let saved_pm = if use_saved {
-        match provider::get_default_payment_method(&customer_id).await {
-            Ok(Some(card)) => Some(card.payment_method_id),
-            Ok(None) => {
-                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                    "message": "No saved card on file. Add a new payment method instead."
-                })));
-            }
-            Err(e) => {
-                error!(target: "billing", error = ?e, "saved card lookup failed");
-                return Ok(HttpResponse::BadGateway().json(
-                    serde_json::json!({ "message": "Could not reach the payment provider" }),
-                ));
-            }
-        }
-    } else {
-        None
-    };
-
-    // Park the org details, then create the subscription tagged with this row
-    // id so the webhook can finalize too. The subscription id is filled in
-    // immediately after creation.
-    let pending_id: i32 = sqlx::query_scalar(
-        r#"
-        INSERT INTO pending_org_signups
-            (user_id, name, place, admin_email, plan_code, stripe_customer_id, status)
-        VALUES ($1, $2, $3, $4, $5, $6, 'pending')
-        RETURNING id
-        "#,
-    )
-    .bind(user_id)
-    .bind(name)
-    .bind(place.as_deref())
-    .bind(&admin_email)
-    .bind(&plan_code)
-    .bind(&customer_id)
-    .fetch_one(pool.get_ref())
-    .await?;
-
-    let sub = match provider::create_org_signup_subscription(
-        &customer_id,
-        &price_id,
-        pending_id,
-        saved_pm.as_deref(),
-    )
-    .await
-    {
-        Ok(sub) => sub,
-        Err(e) => {
-            warn!(target: "billing", user_id, pending_id, error = ?e, "org signup subscription create failed");
-            let _ = sqlx::query("UPDATE pending_org_signups SET status = 'failed' WHERE id = $1")
-                .bind(pending_id)
-                .execute(pool.get_ref())
-                .await;
-            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
-                "message": "Could not start the subscription. Check the card and try again."
-            })));
-        }
-    };
-
-    sqlx::query("UPDATE pending_org_signups SET stripe_subscription_id = $1 WHERE id = $2")
-        .bind(&sub.subscription_id)
-        .bind(pending_id)
-        .execute(pool.get_ref())
-        .await?;
-
-    let paid = sub.status == "active" || sub.status == "trialing";
-
-    // Saved-card path that cleared synchronously: finalize now and return the
-    // org so the client skips the confirm round-trip.
-    if use_saved {
-        if paid {
-            return finalize_and_respond(pool.get_ref(), pending_id, user_id).await;
-        }
-        return Ok(HttpResponse::PaymentRequired().json(serde_json::json!({
-            "message": "Couldn't charge your saved card. Choose \"New payment method\" instead."
-        })));
-    }
-
-    // New-card path: hand back the client_secret to confirm.
-    let Some(client_secret) = sub.client_secret else {
-        return Ok(HttpResponse::BadGateway().json(serde_json::json!({
-            "message": "Payment could not be initialized. Please try again."
-        })));
-    };
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "pending_id": pending_id,
-        "client_secret": client_secret,
-        "publishable_key": provider::publishable_key(),
-    })))
-}
-
-#[derive(Deserialize)]
-pub struct FinalizeOrgInput {
-    pub pending_id: i32,
-}
-
-/// Step 2 of payment-gated org creation. Called by the frontend after it
-/// confirms the PaymentIntent. Verifies the subscription is paid **server-side**
-/// (never trusting the client), then creates the organization. Idempotent — a
-/// second call (or the Stripe webhook) returns the same org.
-#[post("/organizations/finalize")]
-#[instrument(target = "auth", skip(req, pool, data))]
-pub async fn finalize_org_signup(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    data: web::Json<FinalizeOrgInput>,
-) -> AppResult {
-    let user_id = match get_user_id_from_request(&req) {
-        Some(id) => id,
-        None => {
-            return Ok(HttpResponse::Unauthorized()
-                .json(serde_json::json!({ "message": "Authentication required" })));
-        }
-    };
-    let pending_id = data.pending_id;
-
-    let row = sqlx::query_as::<_, (i32, Option<String>, String, Option<i32>)>(
-        "SELECT user_id, stripe_subscription_id, status, organization_id \
-         FROM pending_org_signups WHERE id = $1",
-    )
-    .bind(pending_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
-
-    let Some((owner_id, sub_id, status, organization_id)) = row else {
-        return Ok(
-            HttpResponse::NotFound().json(serde_json::json!({ "message": "Signup not found" }))
-        );
-    };
-    if owner_id != user_id {
-        return Ok(
-            HttpResponse::Forbidden().json(serde_json::json!({ "message": "Not your signup" }))
-        );
-    }
-
-    // Already finalized — return the existing org (idempotent).
-    if status == "finalized"
-        && let Some(org_id) = organization_id
-    {
-        return org_response(pool.get_ref(), org_id).await;
-    }
-
-    let Some(sub_id) = sub_id.filter(|s| !s.is_empty()) else {
-        return Ok(HttpResponse::Conflict()
-            .json(serde_json::json!({ "message": "No subscription on this signup" })));
-    };
-
-    // Verify the charge succeeded with Stripe before creating anything.
-    let sub_status = match provider::get_subscription_status(&sub_id).await {
-        Ok(status) => status,
-        Err(e) => {
-            error!(target: "billing", pending_id, error = ?e, "subscription status lookup failed");
-            return Ok(HttpResponse::BadGateway()
-                .json(serde_json::json!({ "message": "Could not verify payment" })));
-        }
-    };
-    if sub_status != "active" && sub_status != "trialing" {
-        return Ok(HttpResponse::PaymentRequired()
-            .json(serde_json::json!({ "message": "Payment is not complete yet" })));
-    }
-
-    finalize_and_respond(pool.get_ref(), pending_id, user_id).await
-}
-
-/// Run `finalize_org_signup_inner` and shape an HTTP response.
-async fn finalize_and_respond(pool: &PgPool, pending_id: i32, user_id: i32) -> AppResult {
-    match finalize_org_signup_inner(pool, pending_id).await {
-        Ok(Some(org_id)) => {
-            info!(target: "auth", user_id, organization_id = org_id, "org signup finalized (paid)");
-            org_response(pool, org_id).await
-        }
-        Ok(None) => Ok(HttpResponse::Conflict().json(serde_json::json!({
-            "message": "An organization with that name already exists. Pick a different name."
-        }))),
-        Err(e) => {
-            error!(target: "auth", pending_id, error = ?e, "org finalize failed");
-            Ok(HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "message": "Could not create the organization" })))
-        }
-    }
+    Ok(Some(organization_id))
 }
 
 /// Create the organization for a *paid* pending signup. Idempotent and
@@ -944,7 +507,7 @@ pub(crate) async fn finalize_org_signup_inner(
     )
     .await?
     {
-        Some(org) => org,
+        Some(id) => id,
         None => {
             // Name taken between intent and finalize. Mark failed; the
             // caller turns this into a 409 and the charge can be refunded
@@ -957,7 +520,7 @@ pub(crate) async fn finalize_org_signup_inner(
             return Ok(None);
         }
     };
-    let org_id = created.id;
+    let org_id = created;
 
     // Link the founder's Stripe customer to the org so org-scoped billing
     // (portal, plan changes) resolves the same customer.
@@ -1016,30 +579,6 @@ pub(crate) async fn finalize_org_signup_inner(
     rbac::invalidate_role_context(owner_id).await;
 
     Ok(Some(org_id))
-}
-
-/// Build the standard created-org response payload from a finalized org id.
-async fn org_response(pool: &PgPool, org_id: i32) -> AppResult {
-    let row = sqlx::query_as::<_, (i32, String, Option<String>, Option<String>)>(
-        "SELECT id, name, slug, place FROM organizations WHERE id = $1",
-    )
-    .bind(org_id)
-    .fetch_optional(pool)
-    .await?;
-    let Some((id, name, slug, place)) = row else {
-        return Ok(HttpResponse::NotFound()
-            .json(serde_json::json!({ "message": "Organization not found" })));
-    };
-    Ok(HttpResponse::Created().json(serde_json::json!({
-        "id": id,
-        "name": name,
-        "slug": slug,
-        "place": place,
-        "account_type": "organization_admin",
-        "organization_id": id,
-        "role": "owner",
-        "seat_limit": STARTER_SEAT_LIMIT
-    })))
 }
 
 /// Self-serve org teardown. The org owner deletes the organization, all of
