@@ -206,9 +206,13 @@ export default function Home() {
               </button>
 
               <h1 className="hx-hero-title">
-                Your entire workspace,
+                <span className="hx-grad">
+                  The operating system for your workspace.
+                </span>
                 <br />
-                <span className="hx-grad">in one secure tab.</span>
+                <span className="hx-hero-title-2">
+                  Everything in one secure place.
+                </span>
               </h1>
 
               <p className="hx-hero-sub">
