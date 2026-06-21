@@ -120,6 +120,17 @@ export default function ProfileMenu() {
             className="profile-dropdown-item"
             onClick={() => {
               setMenuOpen(false);
+              void navigate("/integrations");
+            }}
+          >
+            <span className="profile-dropdown-icon">🔌</span>
+            Integrations
+          </button>
+
+          <button
+            className="profile-dropdown-item"
+            onClick={() => {
+              setMenuOpen(false);
               setAppearanceOpen(true);
             }}
           >

@@ -1,0 +1,232 @@
+// Slack integration end-to-end: the enterprise gate (non-enterprise → 403),
+// connect (bot token validated via auth.test, encrypted at rest), link a Slack
+// channel to a fresh Wayve channel, and import history into that channel's
+// `channel_messages` as server-readable rows. Slack is mocked via wiremock and
+// `SLACK_API_BASE`.
+#[cfg(test)]
+mod tests {
+    use crate::integrations;
+    use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
+    use actix_web::{App, http::StatusCode, test as actix_test, web};
+    use sqlx::{PgPool, Row};
+    use wayve_security::encryption::decrypt;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    const HEX64_TEST_KEY: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
+    /// Turn a plain local user into the owner of an enterprise-tier org so they
+    /// pass the Slack enterprise gate. Returns the org id.
+    async fn make_enterprise(pool: &PgPool, user_id: i32) -> i32 {
+        let org_id: i32 = sqlx::query_scalar(
+            "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
+        )
+        .bind(format!("Ent Org {user_id}"))
+        .bind(format!("ent-org-{user_id}"))
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("create org: {e}"));
+
+        sqlx::query(
+            "UPDATE users SET organization_id = $1, account_type = 'organization_admin' WHERE id = $2",
+        )
+        .bind(org_id)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("attach org: {e}"));
+
+        let plan_id: i32 = sqlx::query_scalar("SELECT id FROM plans WHERE code = 'enterprise'")
+            .fetch_one(pool)
+            .await
+            .unwrap_or_else(|e| panic!("enterprise plan id: {e}"));
+
+        sqlx::query(
+            "INSERT INTO subscriptions (organization_id, plan_id, status) VALUES ($1, $2, 'active')",
+        )
+        .bind(org_id)
+        .bind(plan_id)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("subscription: {e}"));
+
+        org_id
+    }
+
+    async fn cleanup(pool: &PgPool, user_id: i32, org_id: i32) {
+        let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(pool)
+            .await;
+        // channels/links/subscriptions cascade from the org.
+        let _ = sqlx::query("DELETE FROM organizations WHERE id = $1")
+            .bind(org_id)
+            .execute(pool)
+            .await;
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn enterprise_gate_blocks_non_enterprise() {
+        unsafe {
+            std::env::set_var("AES_KEY", HEX64_TEST_KEY);
+        }
+        let pool = test_pool().await;
+        let email = random_email();
+        let user_id = insert_local_user(&pool, &email, "password123").await;
+        let bearer = format!("Bearer {}", jwt_for(user_id, &email));
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(integrations::slack::handler::get_connection)
+                .service(integrations::slack::handler::connect)
+                .service(integrations::slack::handler::disconnect)
+                .service(integrations::slack::handler::link_channel)
+                .service(integrations::slack::handler::import),
+        )
+        .await;
+
+        // A personal (non-enterprise) user cannot reach the Slack feature.
+        let req = actix_test::TestRequest::get()
+            .uri("/integrations/slack/connection")
+            .insert_header(("Authorization", bearer))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await;
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn connect_link_and_import() {
+        let mock = MockServer::start().await;
+
+        // Token validation at connect time.
+        Mock::given(method("GET"))
+            .and(path("/auth.test"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "ok": true, "team": "Acme", "team_id": "T1"
+            })))
+            .mount(&mock)
+            .await;
+        // Channel history (newest-first, as Slack returns it).
+        Mock::given(method("GET"))
+            .and(path("/conversations.history"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "ok": true,
+                "messages": [
+                    { "type": "message", "user": "U2", "text": "second", "ts": "200.0" },
+                    { "type": "message", "user": "U1", "text": "first", "ts": "100.0" }
+                ]
+            })))
+            .mount(&mock)
+            .await;
+        // Author name lookups.
+        Mock::given(method("GET"))
+            .and(path("/users.info"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "ok": true, "user": { "real_name": "Alice" }
+            })))
+            .mount(&mock)
+            .await;
+
+        // SAFETY: serialized via #[serial] — env mutation can't race other tests.
+        unsafe {
+            std::env::set_var("AES_KEY", HEX64_TEST_KEY);
+            std::env::set_var("SLACK_API_BASE", mock.uri());
+        }
+
+        let pool = test_pool().await;
+        let email = random_email();
+        let user_id = insert_local_user(&pool, &email, "password123").await;
+        let org_id = make_enterprise(&pool, user_id).await;
+        let bearer = format!("Bearer {}", jwt_for(user_id, &email));
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(integrations::slack::handler::get_connection)
+                .service(integrations::slack::handler::connect)
+                .service(integrations::slack::handler::disconnect)
+                .service(integrations::slack::handler::link_channel)
+                .service(integrations::slack::handler::import),
+        )
+        .await;
+
+        // --- Connect: token validated via auth.test, stored encrypted. ---
+        let req = actix_test::TestRequest::put()
+            .uri("/integrations/slack/connection")
+            .insert_header(("Authorization", bearer.clone()))
+            .set_json(serde_json::json!({ "bot_token": "xoxb-test-token" }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let row = sqlx::query(
+            "SELECT bot_token_iv, bot_token_encrypted FROM slack_connections WHERE organization_id = $1",
+        )
+        .bind(org_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("connection row: {e}"));
+        let iv: String = row.get("bot_token_iv");
+        let enc: String = row.get("bot_token_encrypted");
+        assert_eq!(decrypt(&iv, &enc).unwrap_or_default(), "xoxb-test-token");
+
+        // --- Link a Slack channel → a fresh Wayve channel. ---
+        let req = actix_test::TestRequest::post()
+            .uri("/integrations/slack/links")
+            .insert_header(("Authorization", bearer.clone()))
+            .set_json(serde_json::json!({
+                "slack_channel_id": "C123",
+                "slack_channel_name": "general"
+            }))
+            .to_request();
+        let link: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        let wayve_channel_id = link["wayve_channel_id"].as_i64().expect("wayve_channel_id") as i32;
+
+        // --- Import: both Slack messages land in the Wayve channel. ---
+        let req = actix_test::TestRequest::post()
+            .uri("/integrations/slack/import")
+            .insert_header(("Authorization", bearer.clone()))
+            .set_json(serde_json::json!({}))
+            .to_request();
+        let body: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        assert_eq!(body["imported"], 2);
+
+        // Stored server-readable (decryptable by the server) + oldest-first.
+        let rows = sqlx::query(
+            "SELECT content_encrypted, content_iv FROM channel_messages
+             WHERE channel_id = $1 ORDER BY id ASC",
+        )
+        .bind(wayve_channel_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("messages: {e}"));
+        assert_eq!(rows.len(), 2);
+        let first_iv: String = rows[0].get("content_iv");
+        let first_enc: String = rows[0].get("content_encrypted");
+        let first = decrypt(&first_iv, &first_enc).unwrap_or_default();
+        assert_eq!(first, "[Slack · Alice] first");
+
+        // Re-import is incremental: nothing new past the cursor.
+        let req = actix_test::TestRequest::post()
+            .uri("/integrations/slack/import")
+            .insert_header(("Authorization", bearer.clone()))
+            .set_json(serde_json::json!({}))
+            .to_request();
+        let body: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        assert_eq!(body["imported"], 0);
+
+        drop(app);
+        unsafe {
+            std::env::remove_var("SLACK_API_BASE");
+        }
+        cleanup(&pool, user_id, org_id).await;
+    }
+}

@@ -277,8 +277,19 @@ async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Res
     // `frontend/src/emails/bodyUtils.ts` checks for the
     // `WAYVE_SECURE_V1` prefix first and falls through to the API's
     // server-decrypted shape otherwise.
-    let public_key_json: Option<String> = sqlx::query_scalar(
-        "SELECT u.public_key
+    // Also resolve whether the owning user's org is on the enterprise tier.
+    // Enterprise orgs use standard (server-readable) encryption, so inbound
+    // bodies are stored under the server-AES at-rest layer rather than wrapped
+    // to the owner's public key.
+    let (public_key_json, owner_is_enterprise): (Option<String>, bool) = sqlx::query_as(
+        "SELECT
+             u.public_key,
+             EXISTS(
+                 SELECT 1 FROM subscriptions s
+                 JOIN plans p ON p.id = s.plan_id
+                 WHERE s.organization_id = u.organization_id
+                   AND s.status = 'active' AND p.tier = 'enterprise'
+             ) AS is_enterprise
            FROM email_accounts a
            JOIN users u ON u.id = a.user_id
           WHERE a.id = $1",
@@ -286,12 +297,19 @@ async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Res
     .bind(account_id)
     .fetch_optional(pool)
     .await?
-    .flatten();
+    .unwrap_or((None, false));
 
-    let (iv, encrypted) = match public_key_json
-        .as_deref()
-        .and_then(parse_spki_from_json_bytes)
-    {
+    let spki = if owner_is_enterprise {
+        // Enterprise owner: force server-AES even when a public key exists, so
+        // the row stays server-readable.
+        None
+    } else {
+        public_key_json
+            .as_deref()
+            .and_then(parse_spki_from_json_bytes)
+    };
+
+    let (iv, encrypted) = match spki {
         Some(spki) => {
             // Envelope is self-contained (it carries its own AES nonce
             // inside the JSON). The legacy `body_iv` column stays empty
@@ -299,6 +317,10 @@ async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Res
             // confused by a stray IV that doesn't apply.
             let envelope = encrypt_to_pubkey(body.as_bytes(), &spki)?;
             (String::new(), envelope)
+        }
+        None if owner_is_enterprise => {
+            // Standard encryption for the enterprise owner — server-readable.
+            encrypt(body)?
         }
         None => {
             // Fallback: AES_KEY at-rest. The user has no public key on

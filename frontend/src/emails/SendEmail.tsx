@@ -186,33 +186,42 @@ export default function SendEmail({
       //    Wayve recipients at once (multi-recipient wrap), plus the
       //    sender's own slot so their Sent copy decrypts later.
       if (wayveLookups.length > 0 && senderId !== undefined) {
-        const recipientsForEnvelope: InternalRecipientKey[] = wayveLookups.map(
-          ({ user: u }) => ({
-            userId: u.id,
-            publicKeyBytes: u.public_key as number[],
-          })
-        );
-
-        const senderPubKeyRaw = await loadPublicKey(
-          senderId,
-          user?.email
-        ).catch(() => null);
-        if (senderPubKeyRaw) {
-          recipientsForEnvelope.push({
-            userId: senderId,
-            publicKeyBytes: Array.from(new Uint8Array(senderPubKeyRaw)),
-          });
-        } else {
-          logger.warn(
-            "no sender public key on this device; Sent copy will be unreadable"
-          );
-        }
+        // Enterprise-tier senders use standard (server-readable) encryption: the
+        // backend accepts the plaintext body in place of a WAYVE_SECURE_V1 E2E
+        // envelope and stores it server-readable. Everyone else builds the
+        // multi-recipient E2E envelope (one wrap covering all recipients + the
+        // sender's own Sent copy).
+        const standardEncryption = user?.current_plan?.tier === "enterprise";
 
         try {
-          const envelope = await buildInternalEnvelope(
-            body,
-            recipientsForEnvelope
-          );
+          let envelope: string;
+          if (standardEncryption) {
+            envelope = body;
+          } else {
+            const recipientsForEnvelope: InternalRecipientKey[] =
+              wayveLookups.map(({ user: u }) => ({
+                userId: u.id,
+                publicKeyBytes: u.public_key as number[],
+              }));
+
+            const senderPubKeyRaw = await loadPublicKey(
+              senderId,
+              user?.email
+            ).catch(() => null);
+            if (senderPubKeyRaw) {
+              recipientsForEnvelope.push({
+                userId: senderId,
+                publicKeyBytes: Array.from(new Uint8Array(senderPubKeyRaw)),
+              });
+            } else {
+              logger.warn(
+                "no sender public key on this device; Sent copy will be unreadable"
+              );
+            }
+
+            envelope = await buildInternalEnvelope(body, recipientsForEnvelope);
+          }
+
           const res = await sendInternalEmail({
             recipient_user_ids: wayveLookups.map((l) => l.user.id),
             envelope,

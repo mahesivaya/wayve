@@ -262,6 +262,16 @@ pub fn gemini_model() -> String {
     var_or("GEMINI_MODEL", "gemini-2.0-flash")
 }
 
+// ---- Jira ---------------------------------------------------
+
+/// Shared secret for the inbound Jira webhook, supplied to Jira as the
+/// `?token=` query value and verified server-side. Jira Cloud does not sign
+/// webhook payloads, so this token is the only authenticator — when unset the
+/// receiver refuses all deliveries.
+pub fn jira_webhook_secret() -> Option<String> {
+    var_opt("JIRA_WEBHOOK_SECRET")
+}
+
 // ---- Zoom ---------------------------------------------------
 
 pub struct ZoomConfig {

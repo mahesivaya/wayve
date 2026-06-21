@@ -16,6 +16,10 @@ export type Task = {
   assignee: string;
   created_at?: string | null;
   updated_at?: string | null;
+  // Set only on tasks imported from Jira; the UI shows a deep-link badge to
+  // `${jira_base}/browse/${jira_issue_key}`. Null for non-Jira tasks.
+  jira_issue_key?: string | null;
+  jira_base?: string | null;
 };
 
 export type SaveTaskPayload = {

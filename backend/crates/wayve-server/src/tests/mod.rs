@@ -14,6 +14,8 @@
 mod billing_audit_test;
 mod chat_logging_test;
 mod email_provider_isp_test;
+mod jira_test;
+mod jira_webhook_test;
 mod org_keys_test;
 mod platform_billing_feature_access_test;
 mod platform_users_test;
@@ -26,6 +28,7 @@ mod scheduler_jwt_test;
 mod scheduler_mail_delivery_test;
 mod scheduler_zoom_test;
 mod security_encryption_test;
+mod slack_test;
 
 // Long-term API contracts — adding/changing these has customer-visible
 // blast radius, so the tests stay.

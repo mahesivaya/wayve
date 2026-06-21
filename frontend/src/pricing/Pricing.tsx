@@ -77,8 +77,8 @@ function PlanCard({
       {isCurrent && <span className="pricing-plan-badge">Current plan</span>}
       <h3>{plan.name}</h3>
       <p className="pricing-plan-price">
-        {isEnterprise ? "Contact sales" : priceLabel(plan)}
-        {!isFree && !isEnterprise && (
+        {priceLabel(plan)}
+        {!isFree && (
           <span className="pricing-plan-interval">
             {" "}
             / {plan.billing_interval}
@@ -190,8 +190,17 @@ function AuthenticatedPricing() {
     () => plans.filter((plan) => plan.audience === "personal"),
     [plans]
   );
-  const organizationPlans = useMemo(
-    () => plans.filter((plan) => plan.audience === "organization"),
+  // Split organization plans so Business (Startups + Business) and Enterprise
+  // get their own sections rather than one "Organization" bucket.
+  const businessPlans = useMemo(
+    () =>
+      plans.filter(
+        (plan) => plan.audience === "organization" && plan.tier !== "enterprise"
+      ),
+    [plans]
+  );
+  const enterprisePlans = useMemo(
+    () => plans.filter((plan) => plan.tier === "enterprise"),
     [plans]
   );
 
@@ -239,12 +248,12 @@ function AuthenticatedPricing() {
 
           {!isPersonal && (
             <section className="pricing-section">
-              <h2>Organization</h2>
+              <h2>Business</h2>
               <p className="pricing-section-sub">
                 One subscription that covers every member of the organization.
               </p>
               <div className="pricing-grid">
-                {organizationPlans.map((plan) => (
+                {businessPlans.map((plan) => (
                   <PlanCard
                     key={plan.id}
                     plan={plan}
@@ -252,10 +261,31 @@ function AuthenticatedPricing() {
                     onChoose={() => navigate("/billing")}
                   />
                 ))}
-                {organizationPlans.length === 0 && (
-                  <p className="pricing-empty">
-                    No organization plans available.
-                  </p>
+                {businessPlans.length === 0 && (
+                  <p className="pricing-empty">No business plans available.</p>
+                )}
+              </div>
+            </section>
+          )}
+
+          {!isPersonal && (
+            <section className="pricing-section">
+              <h2>Enterprise</h2>
+              <p className="pricing-section-sub">
+                For 100+ members — unlimited scale, SSO &amp; SCIM, and a
+                dedicated success manager.
+              </p>
+              <div className="pricing-grid">
+                {enterprisePlans.map((plan) => (
+                  <PlanCard
+                    key={plan.id}
+                    plan={plan}
+                    isCurrent={plan.code === currentPlanCode}
+                    onChoose={() => navigate("/billing")}
+                  />
+                ))}
+                {enterprisePlans.length === 0 && (
+                  <p className="pricing-empty">No enterprise plan available.</p>
                 )}
               </div>
             </section>

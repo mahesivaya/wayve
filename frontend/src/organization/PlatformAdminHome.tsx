@@ -212,14 +212,22 @@ export default function PlatformAdminHome() {
     };
   }, []);
 
-  const orgTotals = (orgs ?? []).reduce(
-    (acc, o) => ({
-      members: acc.members + (o.user_count ?? 0),
-      storage: acc.storage + (o.storage_used_bytes ?? 0),
-      emailAccounts: acc.emailAccounts + (o.email_account_count ?? 0),
-    }),
-    { members: 0, storage: 0, emailAccounts: 0 }
-  );
+  const tierTotals = (list: AdminOrganization[]) =>
+    list.reduce(
+      (acc, o) => ({
+        members: acc.members + (o.user_count ?? 0),
+        storage: acc.storage + (o.storage_used_bytes ?? 0),
+        emailAccounts: acc.emailAccounts + (o.email_account_count ?? 0),
+      }),
+      { members: 0, storage: 0, emailAccounts: 0 }
+    );
+
+  // The Business card counts every non-enterprise org; the Enterprise card only
+  // the enterprise tier — matching the split on the two dedicated pages.
+  const businessOrgs = (orgs ?? []).filter((o) => o.tier !== "enterprise");
+  const enterpriseOrgs = (orgs ?? []).filter((o) => o.tier === "enterprise");
+  const businessTotals = tierTotals(businessOrgs);
+  const enterpriseTotals = tierTotals(enterpriseOrgs);
 
   // Per-card live stats, keyed by card. Returns null when the data for that
   // card hasn't loaded (the card falls back to its description).
@@ -243,21 +251,21 @@ export default function PlatformAdminHome() {
     }
     if (key === "business" && orgs) {
       return [
-        { value: orgs.length.toLocaleString(), label: "Businesses" },
-        { value: orgTotals.members.toLocaleString(), label: "Members" },
-        { value: formatBytes(orgTotals.storage), label: "Memory used" },
+        { value: businessOrgs.length.toLocaleString(), label: "Businesses" },
+        { value: businessTotals.members.toLocaleString(), label: "Members" },
+        { value: formatBytes(businessTotals.storage), label: "Memory used" },
         {
-          value: orgTotals.emailAccounts.toLocaleString(),
+          value: businessTotals.emailAccounts.toLocaleString(),
           label: "Email accounts",
         },
       ];
     }
     if (key === "enterprise" && orgs) {
       return [
-        { value: orgs.length.toLocaleString(), label: "Enterprises" },
-        { value: formatBytes(orgTotals.storage), label: "Memory used" },
+        { value: enterpriseOrgs.length.toLocaleString(), label: "Enterprises" },
+        { value: formatBytes(enterpriseTotals.storage), label: "Memory used" },
         {
-          value: orgTotals.emailAccounts.toLocaleString(),
+          value: enterpriseTotals.emailAccounts.toLocaleString(),
           label: "Email accounts",
         },
       ];

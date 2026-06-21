@@ -43,7 +43,11 @@ export default function PlatformOrganizations() {
 
     listAdminOrganizations()
       .then((items) => {
-        if (alive) setOrganizations(items);
+        // Business page: every org that is NOT on the enterprise tier
+        // (Startups / Business / not-yet-subscribed). Enterprise orgs live on
+        // the dedicated /platform/enterprise page.
+        if (alive)
+          setOrganizations(items.filter((org) => org.tier !== "enterprise"));
       })
       .catch((err) => {
         if (alive) {

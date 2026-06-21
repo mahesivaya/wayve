@@ -107,6 +107,11 @@ pub struct ChatSession {
     pub pool: PgPool,
     pub user_id: i32,
     pub cache: Option<Cache>,
+    // Resolved once at connect: true when this sender's org is on the enterprise
+    // tier and therefore uses standard (server-readable) encryption, so the
+    // backend accepts plaintext from them instead of requiring an E2E envelope.
+    // A tier change takes effect on the next reconnect.
+    pub uses_standard_encryption: bool,
     // Last time we received any frame from the client (including the automatic
     // pong to our heartbeat ping). Drives dead-client detection.
     pub last_seen: Instant,
@@ -138,11 +143,18 @@ pub async fn chat_ws(
         }
     };
 
+    // Resolve the sender's encryption mode once, here, where we can still await.
+    // Enterprise-tier orgs use standard server-readable encryption, so we accept
+    // plaintext from them; everyone else must send an E2E envelope.
+    let uses_standard_encryption =
+        crate::encryption_policy::uses_standard_encryption(pool.get_ref(), user_id).await;
+
     ws::start(
         ChatSession {
             pool: pool.get_ref().clone(),
             user_id,
             cache: cache.get_ref().clone(),
+            uses_standard_encryption,
             last_seen: Instant::now(),
         },
         &req,
@@ -273,6 +285,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                     let pool = self.pool.clone();
                     let cache = self.cache.clone();
                     let sender_id = self.user_id;
+                    let uses_standard = self.uses_standard_encryption;
                     let receiver_id = data.receiver_id;
                     let channel_id = data.channel_id;
                     let parent_message_id = data.parent_message_id;
@@ -293,13 +306,18 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         return;
                     }
 
-                    if !content.starts_with(CHAT_E2E_PREFIX) {
+                    // Non-enterprise senders MUST send an E2E envelope — plaintext
+                    // is rejected, preserving end-to-end. Enterprise-tier senders
+                    // use standard encryption, so their plaintext is accepted and
+                    // protected only by the server-AES at-rest layer below (which
+                    // the server can read).
+                    if !uses_standard && !content.starts_with(CHAT_E2E_PREFIX) {
                         error!(
                             target: "ws",
                             sender_id,
                             receiver_id = ?receiver_id,
                             channel_id = ?channel_id,
-                            "rejected plaintext chat message"
+                            "rejected plaintext chat message from non-enterprise sender"
                         );
                         return;
                     }
@@ -412,6 +430,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         };
 
                         let cache_for_fanout = cache.clone();
+                        // For the best-effort outbound Slack bridge below.
+                        let pool_for_slack = pool.clone();
+                        let content_for_slack = content.clone();
                         ctx.spawn(actix::fut::wrap_future(fut).map(
                             move |res, _act, ctx: &mut WebsocketContext<Self>| {
                                 if let Ok((row, members)) = res {
@@ -451,6 +472,25 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                             .await;
                                         }
                                     });
+
+                                    // Outbound Slack bridge: if this channel is
+                                    // linked to a Slack channel, post the message
+                                    // there. Gated on `uses_standard` so only
+                                    // plaintext (enterprise, server-readable)
+                                    // content is forwarded — never an E2E
+                                    // envelope. Best-effort: never blocks chat.
+                                    if uses_standard {
+                                        let pool_slack = pool_for_slack.clone();
+                                        let text = content_for_slack.clone();
+                                        actix_web::rt::spawn(async move {
+                                            crate::integrations::slack::sync::push_to_slack_if_linked(
+                                                &pool_slack,
+                                                channel_id,
+                                                &text,
+                                            )
+                                            .await;
+                                        });
+                                    }
 
                                     ctx.text(msg_json);
                                 }

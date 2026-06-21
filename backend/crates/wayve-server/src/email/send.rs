@@ -202,6 +202,12 @@ pub async fn send_internal(
         None => return Ok(HttpResponse::Unauthorized().body("Invalid token")),
     };
 
+    // Enterprise-tier senders use standard (server-readable) encryption: the
+    // `envelope` field then carries plaintext rather than a WAYVE_SECURE_V1
+    // E2E envelope, and we protect it with the server-AES at-rest layer below.
+    let uses_standard =
+        crate::encryption_policy::uses_standard_encryption(pool.get_ref(), user_id).await;
+
     // ─── Validate the payload ──────────────────────────────────────
     if data.recipient_user_ids.is_empty() {
         return Ok(HttpResponse::BadRequest().body("recipient_user_ids must not be empty"));
@@ -212,7 +218,9 @@ pub async fn send_internal(
             SEND_INTERNAL_MAX_RECIPIENTS
         )));
     }
-    if !data.envelope.starts_with(WAYVE_ENVELOPE_PREFIX) {
+    // E2E senders MUST supply a WAYVE_SECURE_V1 envelope; enterprise (standard
+    // encryption) senders instead pass the plaintext body in this field.
+    if !uses_standard && !data.envelope.starts_with(WAYVE_ENVELOPE_PREFIX) {
         return Ok(HttpResponse::BadRequest().body("envelope must be a WAYVE_SECURE_V1 payload"));
     }
     if data.envelope.len() > SEND_INTERNAL_MAX_ENVELOPE_BYTES {
@@ -256,6 +264,24 @@ pub async fn send_internal(
     let envelope = data.envelope.as_str();
     let subject = data.subject.as_str();
 
+    // What actually lands in (body_encrypted, body_iv):
+    //   • E2E sender      → the opaque WAYVE_SECURE_V1 envelope verbatim, no iv.
+    //   • enterprise      → server-AES ciphertext of the plaintext + its iv, so
+    //                        the row is server-readable (same shape inbound
+    //                        server-AES rows use, which the frontend already
+    //                        renders via the API's decrypted body).
+    let (body_stored, iv_stored) = if uses_standard {
+        match wayve_security::encryption::encrypt(envelope) {
+            Ok((iv, ciphertext)) => (ciphertext, iv),
+            Err(e) => {
+                error!(target: "gmail", user_id, error = ?e, "internal email encrypt failed");
+                return Ok(HttpResponse::InternalServerError().body("Failed to store message"));
+            }
+        }
+    } else {
+        (envelope.to_string(), String::new())
+    };
+
     // Use a single transaction so a partial failure rolls back the whole
     // delivery — either every recipient gets the message or nobody does.
     let mut tx = pool.begin().await?;
@@ -267,7 +293,7 @@ pub async fn send_internal(
             INSERT INTO emails
                 (gmail_id, account_id, subject, sender, receiver, body_encrypted,
                  body_iv, is_read, labels, source, recipient_user_id)
-            VALUES ($1, NULL, $2, $3, $4, $5, '', FALSE,
+            VALUES ($1, NULL, $2, $3, $4, $5, $7, FALSE,
                     ARRAY['INBOX']::text[], 'wayve', $6)
             "#,
         )
@@ -275,8 +301,9 @@ pub async fn send_internal(
         .bind(subject)
         .bind(&sender_email)
         .bind(recipient_email)
-        .bind(envelope)
+        .bind(&body_stored)
         .bind(recipient_user_id)
+        .bind(&iv_stored)
         .execute(&mut *tx)
         .await?;
     }
@@ -295,7 +322,7 @@ pub async fn send_internal(
         INSERT INTO emails
             (gmail_id, account_id, subject, sender, receiver, body_encrypted,
              body_iv, is_read, labels, source, recipient_user_id)
-        VALUES ($1, NULL, $2, $3, $4, $5, '', TRUE,
+        VALUES ($1, NULL, $2, $3, $4, $5, $7, TRUE,
                 ARRAY['SENT']::text[], 'wayve', $6)
         "#,
     )
@@ -303,8 +330,9 @@ pub async fn send_internal(
     .bind(subject)
     .bind(&sender_email)
     .bind(&recipient_list_for_to)
-    .bind(envelope)
+    .bind(&body_stored)
     .bind(user_id)
+    .bind(&iv_stored)
     .execute(&mut *tx)
     .await?;
 

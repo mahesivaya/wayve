@@ -79,7 +79,7 @@ const PLAN_COPY: Record<
     ],
   },
   enterprise: {
-    price: "Contact sales",
+    price: "$49 / user / month",
     features: [
       "Unlimited members",
       "Dedicated success manager",
@@ -718,8 +718,13 @@ function BillingInner() {
   const personalPlans = visiblePlans.filter(
     (plan) => plan.audience === "personal"
   );
+  // Organization plans, split so Business (Startups + Business tiers) and
+  // Enterprise render as distinct sections instead of one bucket.
   const businessPlans = visiblePlans.filter(
-    (plan) => plan.audience === "organization"
+    (plan) => plan.audience === "organization" && plan.tier !== "enterprise"
+  );
+  const enterprisePlans = visiblePlans.filter(
+    (plan) => plan.tier === "enterprise"
   );
 
   const renderPlanCard = (plan: Plan) => {
@@ -1182,19 +1187,29 @@ function BillingInner() {
         </section>
       )}
 
-      {/* ---- Business & Enterprise ---- */}
+      {/* ---- Business ---- */}
       {/* Personal users always see this (to create an org); an org owner only
           sees it while they have no active subscription, so they can subscribe.
           Once subscribed, the focused billing view above is all they get. */}
       {businessPlans.length > 0 && (
         <section className="billing-card">
           <div className="billing-section-head">
-            <h2>
-              {isOrg && hasPaidPlan ? "Change plan" : "Business & Enterprise"}
-            </h2>
+            <h2>{isOrg && hasPaidPlan ? "Change plan" : "Business"}</h2>
           </div>
           <div className="billing-plan-grid">
             {businessPlans.map(renderPlanCard)}
+          </div>
+        </section>
+      )}
+
+      {/* ---- Enterprise ---- */}
+      {enterprisePlans.length > 0 && (
+        <section className="billing-card">
+          <div className="billing-section-head">
+            <h2>Enterprise</h2>
+          </div>
+          <div className="billing-plan-grid">
+            {enterprisePlans.map(renderPlanCard)}
           </div>
         </section>
       )}

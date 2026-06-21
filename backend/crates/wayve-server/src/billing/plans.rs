@@ -9,7 +9,7 @@ use crate::prelude::*;
 use actix_web::delete;
 use tracing::instrument;
 
-const PLAN_COLUMNS: &str = "id, code, name, description, audience, stripe_price_id, \
+const PLAN_COLUMNS: &str = "id, code, name, description, audience, tier, stripe_price_id, \
     amount_cents, currency, billing_interval, storage_limit_bytes, seat_limit, \
     features, is_active";
 
@@ -79,6 +79,13 @@ pub async fn admin_create_plan(
             .json(serde_json::json!({ "message": "audience must be personal or organization" })));
     }
 
+    let tier = data.tier.as_deref().unwrap_or("personal");
+    if !matches!(tier, "personal" | "startups" | "business" | "enterprise") {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "tier must be personal, startups, business, or enterprise"
+        })));
+    }
+
     // Features default to the empty JSON object so the column's NOT NULL
     // constraint stays happy on first insert. Admins pass a JSONB blob —
     // the simplest shape is `{ "End-to-end encrypted": true, "Custom domain": true }`
@@ -99,14 +106,15 @@ pub async fn admin_create_plan(
     let query = format!(
         r#"
         INSERT INTO plans
-            (code, name, description, audience, stripe_price_id, amount_cents,
+            (code, name, description, audience, tier, stripe_price_id, amount_cents,
              currency, billing_interval, storage_limit_bytes, seat_limit,
              features, is_active)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT (code) DO UPDATE SET
             name = EXCLUDED.name,
             description = EXCLUDED.description,
             audience = EXCLUDED.audience,
+            tier = EXCLUDED.tier,
             stripe_price_id = EXCLUDED.stripe_price_id,
             amount_cents = EXCLUDED.amount_cents,
             currency = EXCLUDED.currency,
@@ -124,6 +132,7 @@ pub async fn admin_create_plan(
         .bind(name)
         .bind(data.description.as_deref())
         .bind(audience)
+        .bind(tier)
         .bind(data.stripe_price_id.as_deref())
         .bind(data.amount_cents.unwrap_or(0))
         .bind(data.currency.as_deref().unwrap_or("usd"))

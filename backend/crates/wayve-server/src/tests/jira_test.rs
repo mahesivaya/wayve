@@ -1,0 +1,195 @@
+// Jira integration end-to-end: connect (with credential encryption at rest),
+// import issues → tasks (idempotent re-import), and push a linked task's status
+// change back to Jira. Jira is mocked via wiremock and `JIRA_API_BASE`; the only
+// crypto involved is the symmetric at-rest token wrap (no chat/email E2E).
+#[cfg(test)]
+mod tests {
+    use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
+    use crate::{integrations, tasks};
+    use actix_web::{App, http::StatusCode, test as actix_test, web};
+    use sqlx::{PgPool, Row};
+    use wayve_security::encryption::decrypt;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    const HEX64_TEST_KEY: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
+    fn search_body() -> serde_json::Value {
+        serde_json::json!({
+            "issues": [
+                {
+                    "key": "WAY-1",
+                    "fields": {
+                        "summary": "First issue",
+                        "description": null,
+                        "status": { "name": "To Do", "statusCategory": { "key": "new" } },
+                        "priority": { "name": "High" }
+                    }
+                },
+                {
+                    "key": "WAY-2",
+                    "fields": {
+                        "summary": "Second issue",
+                        "description": "plain text body",
+                        "status": { "name": "In Progress", "statusCategory": { "key": "indeterminate" } },
+                        "priority": { "name": "Lowest" }
+                    }
+                }
+            ]
+        })
+    }
+
+    async fn cleanup(pool: &PgPool, user_id: i32) {
+        // tasks + user_jira_connections cascade from users on delete.
+        let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(pool)
+            .await;
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn connect_import_and_push() {
+        let mock = MockServer::start().await;
+
+        // Credential probe at connect time.
+        Mock::given(method("GET"))
+            .and(path("/rest/api/3/myself"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "accountId": "abc", "emailAddress": "dev@example.com"
+            })))
+            .mount(&mock)
+            .await;
+        // Issue search for import (enhanced JQL search endpoint).
+        Mock::given(method("GET"))
+            .and(path("/rest/api/3/search/jql"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(search_body()))
+            .mount(&mock)
+            .await;
+        // Push: summary update + transitions list + transition POST (expected).
+        Mock::given(method("PUT"))
+            .and(path("/rest/api/3/issue/WAY-1"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/rest/api/3/issue/WAY-1/transitions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "transitions": [ { "id": "31", "to": { "statusCategory": { "key": "done" } } } ]
+            })))
+            .mount(&mock)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/rest/api/3/issue/WAY-1/transitions"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        // SAFETY: serialized via #[serial] — env mutation can't race other tests.
+        unsafe {
+            std::env::set_var("AES_KEY", HEX64_TEST_KEY);
+            std::env::set_var("JIRA_API_BASE", mock.uri());
+        }
+
+        let pool = test_pool().await;
+        let email = random_email();
+        let user_id = insert_local_user(&pool, &email, "password123").await;
+        let bearer = format!("Bearer {}", jwt_for(user_id, &email));
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(integrations::jira::handler::get_connection)
+                .service(integrations::jira::handler::connect)
+                .service(integrations::jira::handler::disconnect)
+                .service(integrations::jira::handler::import_issues)
+                .service(tasks::handler::list_tasks)
+                .service(tasks::handler::update_task),
+        )
+        .await;
+
+        // --- Connect: token is validated then stored encrypted at rest. ---
+        let req = actix_test::TestRequest::put()
+            .uri("/integrations/jira/connection")
+            .insert_header(("Authorization", bearer.clone()))
+            .set_json(serde_json::json!({
+                "base_url": "https://acme.atlassian.net/",
+                "email": "dev@example.com",
+                "api_token": "s3cr3t-token"
+            }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // The stored token round-trips through decrypt (and base_url is normalized).
+        let row = sqlx::query(
+            "SELECT base_url, api_token_iv, api_token_encrypted
+             FROM user_jira_connections WHERE user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("connection row: {e}"));
+        let base_url: String = row.get("base_url");
+        assert_eq!(base_url, "https://acme.atlassian.net");
+        let iv: String = row.get("api_token_iv");
+        let enc: String = row.get("api_token_encrypted");
+        assert_eq!(decrypt(&iv, &enc).unwrap_or_default(), "s3cr3t-token");
+
+        // --- Import: two issues become two tasks, mapped. ---
+        let req = actix_test::TestRequest::post()
+            .uri("/integrations/jira/import")
+            .insert_header(("Authorization", bearer.clone()))
+            .set_json(serde_json::json!({}))
+            .to_request();
+        let body: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        assert_eq!(body["imported"], 2);
+        assert_eq!(body["updated"], 0);
+
+        // Re-import the same issues → updated in place, not duplicated.
+        let req = actix_test::TestRequest::post()
+            .uri("/integrations/jira/import")
+            .insert_header(("Authorization", bearer.clone()))
+            .set_json(serde_json::json!({}))
+            .to_request();
+        let body: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        assert_eq!(body["imported"], 0);
+        assert_eq!(body["updated"], 2);
+
+        // List tasks: exactly two, with the mapped status/priority + Jira link.
+        let req = actix_test::TestRequest::get()
+            .uri("/tasks")
+            .insert_header(("Authorization", bearer.clone()))
+            .to_request();
+        let tasks_json: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        let arr = tasks_json.as_array().expect("tasks array");
+        assert_eq!(arr.len(), 2);
+        let way1 = arr
+            .iter()
+            .find(|t| t["jira_issue_key"] == "WAY-1")
+            .expect("WAY-1 task");
+        assert_eq!(way1["status"], "to_do");
+        assert_eq!(way1["priority"], 4);
+        assert_eq!(way1["jira_base"], "https://acme.atlassian.net");
+        let task_id = way1["id"].as_i64().expect("task id") as i32;
+
+        // --- Push: editing the linked task to "done" transitions the Jira issue. ---
+        let req = actix_test::TestRequest::put()
+            .uri(&format!("/tasks/{task_id}"))
+            .insert_header(("Authorization", bearer.clone()))
+            .set_json(serde_json::json!({ "name": "First issue", "status": "done" }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // The expected transition POST is verified when `mock` drops below.
+        drop(app);
+        mock.verify().await;
+
+        unsafe {
+            std::env::remove_var("JIRA_API_BASE");
+        }
+        cleanup(&pool, user_id).await;
+    }
+}

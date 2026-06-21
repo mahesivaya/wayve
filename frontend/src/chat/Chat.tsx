@@ -513,58 +513,70 @@ export default function Chat() {
     let attachmentIds: number[] = [];
     let descriptors: ChatAttachmentDescriptor[] = [];
 
-    try {
-      const recipientKeys = await recipientPublicKeysFor(selectedConversation);
-      if (!recipientKeys || recipientKeys.size === 0) {
-        throw new Error("No chat encryption keys are available");
-      }
+    // Enterprise-tier orgs use standard (server-readable) encryption instead of
+    // E2E. For a plain text message we send the plaintext directly; the backend
+    // stores it under its server-AES at-rest layer and recipients render it as
+    // is. Messages that carry file attachments stay E2E (the attachment
+    // descriptors travel inside the envelope), so the standard-encryption path
+    // is the text-only case.
+    const standardEncryption = user.current_plan?.tier === "enterprise";
 
-      if (files.length > 0) {
-        setUploadingFiles(true);
-        // One AES key for the message text AND every e2e attachment.
-        const aesKey = await generateChatKey();
-        const e2e = user.chat_encrypt_files !== false;
-        for (const file of files) {
-          if (e2e) {
-            const { ciphertext, iv } = await encryptChatFile(aesKey, file);
-            const up = await uploadChatAttachment({
-              body: new Blob([ciphertext]),
-              filename: file.name,
-              mime: "application/octet-stream",
-              e2e: true,
-            });
-            attachmentIds.push(up.id);
-            descriptors.push({
-              id: up.id,
-              name: file.name,
-              mime: file.type || null,
-              size: file.size,
-              iv,
-            });
-          } else {
-            const up = await uploadChatAttachment({
-              body: file,
-              filename: file.name,
-              mime: file.type || "application/octet-stream",
-              e2e: false,
-            });
-            attachmentIds.push(up.id);
-            descriptors.push({
-              id: up.id,
-              name: file.name,
-              mime: file.type || null,
-              size: file.size,
-            });
-          }
-        }
-        encryptedContent = await buildChatEnvelope(
-          plaintext,
-          aesKey,
-          recipientKeys,
-          descriptors
-        );
+    try {
+      if (files.length === 0 && standardEncryption) {
+        encryptedContent = plaintext;
       } else {
-        encryptedContent = await encryptChatContent(plaintext, recipientKeys);
+        const recipientKeys = await recipientPublicKeysFor(selectedConversation);
+        if (!recipientKeys || recipientKeys.size === 0) {
+          throw new Error("No chat encryption keys are available");
+        }
+
+        if (files.length > 0) {
+          setUploadingFiles(true);
+          // One AES key for the message text AND every e2e attachment.
+          const aesKey = await generateChatKey();
+          const e2e = user.chat_encrypt_files !== false;
+          for (const file of files) {
+            if (e2e) {
+              const { ciphertext, iv } = await encryptChatFile(aesKey, file);
+              const up = await uploadChatAttachment({
+                body: new Blob([ciphertext]),
+                filename: file.name,
+                mime: "application/octet-stream",
+                e2e: true,
+              });
+              attachmentIds.push(up.id);
+              descriptors.push({
+                id: up.id,
+                name: file.name,
+                mime: file.type || null,
+                size: file.size,
+                iv,
+              });
+            } else {
+              const up = await uploadChatAttachment({
+                body: file,
+                filename: file.name,
+                mime: file.type || "application/octet-stream",
+                e2e: false,
+              });
+              attachmentIds.push(up.id);
+              descriptors.push({
+                id: up.id,
+                name: file.name,
+                mime: file.type || null,
+                size: file.size,
+              });
+            }
+          }
+          encryptedContent = await buildChatEnvelope(
+            plaintext,
+            aesKey,
+            recipientKeys,
+            descriptors
+          );
+        } else {
+          encryptedContent = await encryptChatContent(plaintext, recipientKeys);
+        }
       }
     } catch (err) {
       logger.error("Chat encryption/upload failed", err);

@@ -817,7 +817,65 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('to_do', '
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by TEXT NOT NULL DEFAULT '';
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee TEXT NOT NULL DEFAULT '';
 
+-- Optional link to an external Jira issue (see user_jira_connections below).
+-- `jira_issue_key` is the issue key (e.g. "WAY-12"); `jira_base` is the site
+-- root (e.g. "https://acme.atlassian.net") so the UI can deep-link to
+-- `${jira_base}/browse/${jira_issue_key}`. NULL for tasks with no Jira link.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS jira_issue_key TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS jira_base TEXT;
+-- One Wayve task per (user, Jira issue) so re-imports UPDATE in place instead
+-- of duplicating. Partial: unlinked tasks (NULL key) are exempt.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_jira_issue
+    ON tasks(user_id, jira_issue_key) WHERE jira_issue_key IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_tasks_user_priority ON tasks(user_id, priority DESC, created_at DESC);
+
+-- Per-user Jira Cloud connection (Basic auth: email + API token). The token is
+-- stored encrypted at rest via wayve_security::encryption (the same symmetric
+-- AES-256-GCM scheme as org_sso_configs.client_secret_*); this is unrelated to
+-- chat/email end-to-end encryption. One connection per user.
+CREATE TABLE IF NOT EXISTS user_jira_connections (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    base_url TEXT NOT NULL,
+    email TEXT NOT NULL,
+    api_token_iv TEXT NOT NULL,
+    api_token_encrypted TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Slack integration (ENTERPRISE tier only — enforced in the handler). One Slack
+-- workspace per organization; the bot token is encrypted at rest like every
+-- other third-party credential. slack_channel_links maps a Slack channel to a
+-- Wayve channel so imported messages land in the right place (and outbound
+-- posts target the right Slack channel).
+CREATE TABLE IF NOT EXISTS slack_connections (
+    organization_id INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+    bot_token_iv TEXT NOT NULL,
+    bot_token_encrypted TEXT NOT NULL,
+    team_id TEXT,
+    team_name TEXT,
+    connected_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS slack_channel_links (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    wayve_channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    slack_channel_id TEXT NOT NULL,
+    slack_channel_name TEXT,
+    -- Slack message ts of the newest imported message, so re-import only pulls
+    -- what is new (Slack pagination is keyed on the `ts` cursor).
+    last_imported_ts TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_slack_link_org_channel
+    ON slack_channel_links(organization_id, slack_channel_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_slack_link_wayve_channel
+    ON slack_channel_links(wayve_channel_id);
 
 -- Files attached to a task. Stored under ./uploads encrypted at rest just
 -- like drive_files; the on-disk blob is unreferenced (and garbage-collected
@@ -1067,6 +1125,11 @@ CREATE TABLE IF NOT EXISTS plans (
     name TEXT NOT NULL,
     description TEXT,
     audience TEXT NOT NULL DEFAULT 'personal',
+    -- Sub-discriminator within an audience: 'personal' for personal plans,
+    -- and 'startups' | 'business' | 'enterprise' for the organization plans.
+    -- Lets Business and Enterprise be told apart (audience alone cannot).
+    -- App-validated in admin_create_plan, like `audience`.
+    tier TEXT NOT NULL DEFAULT 'personal',
     stripe_price_id TEXT,
     amount_cents BIGINT NOT NULL DEFAULT 0,
     currency TEXT NOT NULL DEFAULT 'usd',
@@ -1085,24 +1148,25 @@ CREATE TABLE IF NOT EXISTS plans (
 -- list of display strings the pricing/billing UIs render verbatim. Note: the
 -- backend re-applies this exact catalog on every boot via an upsert in
 -- startup.rs, so this seed only matters for a brand-new volume.
-INSERT INTO plans (code, name, description, audience, amount_cents, billing_interval, storage_limit_bytes, seat_limit, features)
+INSERT INTO plans (code, name, description, audience, tier, amount_cents, billing_interval, storage_limit_bytes, seat_limit, features)
 VALUES
-    ('basic_user', 'Basic', 'Free personal plan to get started.', 'personal', 0, 'month', 1073741824, 1,
+    ('basic_user', 'Basic', 'Free personal plan to get started.', 'personal', 'personal', 0, 'month', 1073741824, 1,
      '{"bullets":["1 GB encrypted storage","Up to 1,000 emails per day","End-to-end encrypted chat","1 seat"]}'::jsonb),
-    ('advance_user', 'Advance', 'Personal paid plan with higher limits.', 'personal', 700, 'month', 10737418240, 1,
+    ('advance_user', 'Advance', 'Personal paid plan with higher limits.', 'personal', 'personal', 700, 'month', 10737418240, 1,
      '{"bullets":["10 GB encrypted storage","Unlimited daily emails","1,000 encrypt/decrypt ops per day","Priority email sync"]}'::jsonb),
-    ('most_advance_user', 'Most Advance', 'Top personal tier with full AI access.', 'personal', 1500, 'month', 53687091200, 1,
+    ('most_advance_user', 'Most Advance', 'Top personal tier with full AI access.', 'personal', 'personal', 1500, 'month', 53687091200, 1,
      '{"bullets":["500 GB encrypted storage","Unlimited email & calls","Full AI assistant access","Priority support"]}'::jsonb),
-    ('business_startups', 'Startups', 'For small teams getting off the ground.', 'organization', 800, 'month', -1, 20,
+    ('business_startups', 'Startups', 'For small teams getting off the ground.', 'organization', 'startups', 800, 'month', -1, 20,
      '{"bullets":["Up to 20 members","Unlimited shared storage","Shared org workspace","Admin & billing controls"]}'::jsonb),
-    ('organization', 'Business', 'For growing organizations up to 100 members.', 'organization', 1200, 'month', -1, 100,
+    ('organization', 'Business', 'For growing organizations up to 100 members.', 'organization', 'business', 1200, 'month', -1, 100,
      '{"bullets":["Up to 100 members","Unlimited storage & email","SSO + role-based access","Audit logs & priority support"]}'::jsonb),
-    ('enterprise', 'Enterprise', '100+ members with unlimited everything. Contact sales.', 'organization', 0, 'month', -1, 100000,
+    ('enterprise', 'Enterprise', '100+ members with unlimited everything.', 'organization', 'enterprise', 4900, 'month', -1, 100000,
      '{"bullets":["Unlimited members","Dedicated success manager","Custom onboarding & SLA","SSO, SCIM & advanced security"]}'::jsonb)
 ON CONFLICT (code) DO UPDATE SET
     name = EXCLUDED.name,
     description = EXCLUDED.description,
     audience = EXCLUDED.audience,
+    tier = EXCLUDED.tier,
     amount_cents = EXCLUDED.amount_cents,
     billing_interval = EXCLUDED.billing_interval,
     storage_limit_bytes = EXCLUDED.storage_limit_bytes,

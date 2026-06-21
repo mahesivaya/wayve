@@ -1,0 +1,91 @@
+.integrations-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.integration-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 12px);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.integration-tile:hover:not(:disabled) {
+  border-color: var(--color-primary-action);
+  transform: translateY(-1px);
+}
+
+.integration-tile:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.integration-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.integration-tile-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.integration-tile-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.integration-tile-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.integration-tile-status {
+  font-size: 12px;
+}
+
+.integration-tile-status--enabled {
+  color: var(--color-success, #16a34a);
+}
+
+.integration-tile-status--available {
+  color: var(--color-primary-action, #2563eb);
+}
+
+.integration-tile-status--soon {
+  color: var(--color-text-muted);
+}
+
+.integration-tile-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.integrations-error {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--color-danger-strong, #b91c1c);
+}

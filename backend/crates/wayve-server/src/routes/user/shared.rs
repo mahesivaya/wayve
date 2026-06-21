@@ -146,6 +146,10 @@ pub struct CurrentPlan {
     pub code: String,
     pub name: String,
     pub audience: String,
+    /// Sub-tier within the audience: `personal`, `startups`, `business`, or
+    /// `enterprise` (mirrors `plans.tier`). The synthetic "not subscribed" org
+    /// row carries `none`. Lets the UI distinguish Business from Enterprise.
+    pub tier: String,
     pub amount_cents: i64,
 }
 
@@ -172,7 +176,7 @@ pub async fn current_plan_for_user(
     if let Some(org_id) = organization_id {
         if let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
             r#"
-            SELECT p.code, p.name, p.audience, p.amount_cents
+            SELECT p.code, p.name, p.audience, p.tier, p.amount_cents
               FROM subscriptions s
               JOIN plans p ON p.id = s.plan_id
              WHERE s.status = 'active'
@@ -195,6 +199,7 @@ pub async fn current_plan_for_user(
             code: "organization_free".to_string(),
             name: "Not subscribed".to_string(),
             audience: "organization".to_string(),
+            tier: "none".to_string(),
             amount_cents: 0,
         });
     }
@@ -202,7 +207,7 @@ pub async fn current_plan_for_user(
     // Personal accounts: their own active subscription, else the free tier.
     if let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
         r#"
-        SELECT p.code, p.name, p.audience, p.amount_cents
+        SELECT p.code, p.name, p.audience, p.tier, p.amount_cents
           FROM subscriptions s
           JOIN plans p ON p.id = s.plan_id
          WHERE s.status = 'active'
@@ -219,7 +224,7 @@ pub async fn current_plan_for_user(
     }
 
     sqlx::query_as::<_, CurrentPlan>(
-        "SELECT code, name, audience, amount_cents FROM plans WHERE code = 'basic_user'",
+        "SELECT code, name, audience, tier, amount_cents FROM plans WHERE code = 'basic_user'",
     )
     .fetch_one(pool)
     .await

@@ -50,6 +50,8 @@ pub fn wire(cfg: &mut web::ServiceConfig) {
         .configure(email::public_routes)
         // STRIPE WEBHOOK (unauthenticated, signature-verified)
         .configure(billing::public_routes)
+        // JIRA WEBHOOK (unauthenticated, URL-token-verified) at /webhooks/*
+        .configure(integrations::public_routes)
         // SCIM 2.0 — mounted at /scim/v2 per RFC 7644 (NOT under /api).
         // Authenticates with its own bearer token, not the session JWT.
         .configure(scim::routes)

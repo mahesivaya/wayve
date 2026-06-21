@@ -42,6 +42,7 @@ const ComingSoon = lazy(() => import("./components/ComingSoon"));
 const NotFound = lazy(() => import("./components/NotFound"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
+const Integrations = lazy(() => import("./integrations/Integrations"));
 const FeatureAccessPage = lazy(
   () => import("./featureAccess/FeatureAccessPage")
 );
@@ -368,6 +369,7 @@ export default function App() {
               />
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/integrations" element={<Integrations />} />
               {/* Owner-only feature access matrix (the page self-guards;
                 the sidebar link is also owner-gated). Same component serves
                 organization and platform owners — the backend resolves the

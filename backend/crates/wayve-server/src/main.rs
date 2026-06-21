@@ -16,6 +16,7 @@ mod documents;
 mod drive;
 mod email;
 mod embed;
+mod encryption_policy;
 mod error;
 mod external;
 mod feature_access;

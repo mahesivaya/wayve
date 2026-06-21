@@ -44,6 +44,9 @@ pub struct Plan {
     pub name: String,
     pub description: Option<String>,
     pub audience: String,
+    /// Sub-tier within the audience (`personal` | `startups` | `business` |
+    /// `enterprise`). Distinguishes Business from Enterprise org plans.
+    pub tier: String,
     pub stripe_price_id: Option<String>,
     pub amount_cents: i64,
     pub currency: String,
@@ -99,6 +102,9 @@ pub struct CreatePlanInput {
     pub name: String,
     pub description: Option<String>,
     pub audience: Option<String>,
+    /// Optional tier; defaults to `personal` when omitted. Validated against
+    /// `personal | startups | business | enterprise` in `admin_create_plan`.
+    pub tier: Option<String>,
     pub stripe_price_id: Option<String>,
     pub amount_cents: Option<i64>,
     pub currency: Option<String>,

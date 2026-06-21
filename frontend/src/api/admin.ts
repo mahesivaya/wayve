@@ -17,6 +17,10 @@ export type AdminOrganization = {
   storage_used_bytes?: number;
   created_at?: string | null;
   admin?: AdminCreatedUser | null;
+  // The org's active-subscription plan code + tier. "none" / null when the org
+  // has no active subscription. Drives the Business vs Enterprise page split.
+  plan_code?: string | null;
+  tier?: string | null;
 };
 
 // The organization admin to provision alongside the new organization. The

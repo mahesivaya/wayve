@@ -107,10 +107,22 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
             (SELECT json_build_object('id', u2.id, 'email', u2.email)
              FROM users u2
              WHERE u2.organization_id = o.id AND u2.account_type = 'organization_admin'
-             LIMIT 1) as admin
+             LIMIT 1) as admin,
+            sub.plan_code AS plan_code,
+            sub.tier AS tier
         FROM organizations o
         LEFT JOIN users u ON u.organization_id = o.id
-        GROUP BY o.id, o.name, o.slug, o.created_at
+        -- The org's active subscription plan, if any, so the platform UI can
+        -- split Business from Enterprise. No active sub → plan_code/tier NULL.
+        LEFT JOIN LATERAL (
+            SELECT p.code AS plan_code, p.tier AS tier
+            FROM subscriptions s
+            JOIN plans p ON p.id = s.plan_id
+            WHERE s.organization_id = o.id AND s.status = 'active'
+            ORDER BY s.id DESC
+            LIMIT 1
+        ) sub ON true
+        GROUP BY o.id, o.name, o.slug, o.created_at, sub.plan_code, sub.tier
         ORDER BY o.name
         "#,
     )
@@ -129,6 +141,13 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
             let created_at: Option<chrono::NaiveDateTime> =
                 row.try_get("created_at").unwrap_or(None);
             let admin: Option<serde_json::Value> = row.get("admin");
+            let plan_code: Option<String> = row.try_get("plan_code").unwrap_or(None);
+            // Orgs without an active subscription have no tier → "none", so the
+            // Business page (tier != enterprise) still shows them.
+            let tier: String = row
+                .try_get::<Option<String>, _>("tier")
+                .unwrap_or(None)
+                .unwrap_or_else(|| "none".to_string());
 
             serde_json::json!({
                 "id": id,
@@ -138,7 +157,9 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
                 "email_account_count": email_account_count,
                 "storage_used_bytes": storage_used_bytes,
                 "created_at": created_at,
-                "admin": admin
+                "admin": admin,
+                "plan_code": plan_code,
+                "tier": tier
             })
         })
         .collect();

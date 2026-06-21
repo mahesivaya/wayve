@@ -28,6 +28,7 @@ import Modal from "../components/Modal";
 import Avatar from "../components/Avatar";
 import { useInSplitPane } from "../components/SplitPaneContext";
 import { getApiBase } from "../config/env";
+import JiraPanel, { JiraBadge } from "./JiraPanel";
 import "./tasks.css";
 
 const PRIORITY_OPTIONS: TaskPriority[] = [5, 4, 3, 2, 1];
@@ -651,6 +652,8 @@ export default function Tasks() {
           </div>
         )}
 
+        {!inSplitPane && <JiraPanel onImported={() => void loadTasks()} />}
+
         <Modal
           isOpen={creating}
           onClose={closeForm}
@@ -983,6 +986,7 @@ export default function Tasks() {
                             >
                               {task.name}
                             </button>
+                            <JiraBadge task={task} />
                             {formatCreatedAt(task.created_at) && (
                               <span className="task-card-created task-board-card-created">
                                 Created {formatCreatedAt(task.created_at)}
@@ -1084,6 +1088,7 @@ export default function Tasks() {
                             >
                               {task.name}
                             </button>
+                            <JiraBadge task={task} />
                           </h3>
                         </div>
                         {formatCreatedAt(task.created_at) && (
@@ -1175,6 +1180,7 @@ export default function Tasks() {
                             >
                               {task.name}
                             </button>
+                            <JiraBadge task={task} />
                           </h3>
                         </div>
                         {formatCreatedAt(task.created_at) && (

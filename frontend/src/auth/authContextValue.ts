@@ -9,6 +9,9 @@ export type CurrentPlan = {
   code: string;
   name: string;
   audience: string;
+  // Sub-tier: "personal" | "startups" | "business" | "enterprise", or "none"
+  // for an organization with no active subscription.
+  tier: string;
   amount_cents: number;
 };
 

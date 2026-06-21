@@ -18,6 +18,8 @@ fn task_from_row(row: sqlx::postgres::PgRow) -> Task {
         assignee: row.try_get("assignee").unwrap_or_default(),
         created_at: row.try_get("created_at").ok(),
         updated_at: row.try_get("updated_at").ok(),
+        jira_issue_key: row.try_get("jira_issue_key").ok().flatten(),
+        jira_base: row.try_get("jira_base").ok().flatten(),
     }
 }
 
@@ -41,7 +43,8 @@ pub async fn list_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let rows = sqlx::query(
-        "SELECT id, name, description, priority, status, assigned_by, assignee, created_at, updated_at
+        "SELECT id, name, description, priority, status, assigned_by, assignee,
+                created_at, updated_at, jira_issue_key, jira_base
          FROM tasks
          WHERE user_id = $1
          ORDER BY priority DESC, created_at ASC, id ASC",
@@ -126,7 +129,8 @@ pub async fn create_task(
     let row = sqlx::query(
         "INSERT INTO tasks (user_id, name, description, priority, status, assigned_by, assignee)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, name, description, priority, status, assigned_by, assignee, created_at, updated_at",
+         RETURNING id, name, description, priority, status, assigned_by, assignee,
+                   created_at, updated_at, jira_issue_key, jira_base",
     )
     .bind(user_id)
     .bind(name)
@@ -208,7 +212,8 @@ pub async fn update_task(
          SET name = $1, description = $2, priority = $3, status = $4,
              assigned_by = $5, assignee = $6, updated_at = NOW()
          WHERE id = $7 AND user_id = $8
-         RETURNING id, name, description, priority, status, assigned_by, assignee, created_at, updated_at",
+         RETURNING id, name, description, priority, status, assigned_by, assignee,
+                   created_at, updated_at, jira_issue_key, jira_base",
     )
     .bind(name)
     .bind(description)
@@ -264,6 +269,11 @@ pub async fn update_task(
         serde_json::to_value(&task).unwrap_or_default(),
     )
     .await;
+
+    // Best-effort: mirror the change to a linked Jira issue. No-op unless the
+    // task carries a `jira_issue_key` and the user has an enabled connection;
+    // any failure is logged and swallowed so a Jira outage never fails the edit.
+    crate::integrations::jira::sync::push_task_if_linked(pool.get_ref(), user_id, &task).await;
 
     Ok(HttpResponse::Ok().json(task))
 }

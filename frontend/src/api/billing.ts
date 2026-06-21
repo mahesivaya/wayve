@@ -2,12 +2,16 @@ import { apiFetchJson } from "./client";
 
 // ---- Types -----------------------------------------------------------------
 
+export type PlanTier = "personal" | "startups" | "business" | "enterprise";
+
 export type Plan = {
   id: number;
   code: string;
   name: string;
   description: string | null;
   audience: "personal" | "organization";
+  // Sub-tier within the audience; distinguishes Business from Enterprise.
+  tier: PlanTier;
   stripe_price_id: string | null;
   amount_cents: number;
   currency: string;
@@ -107,6 +111,7 @@ export type UpsertPlanInput = {
   name: string;
   description?: string | null;
   audience: "personal" | "organization";
+  tier?: PlanTier;
   stripe_price_id?: string | null;
   amount_cents: number;
   currency: string;

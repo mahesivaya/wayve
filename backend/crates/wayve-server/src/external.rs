@@ -38,6 +38,22 @@ pub fn github_api_base() -> String {
     std::env::var("GITHUB_API_BASE").unwrap_or_else(|_| "https://api.github.com".to_string())
 }
 
+/// Root for Jira Cloud REST calls. Each connection carries its own site base
+/// (e.g. `https://acme.atlassian.net`), which is passed in; the `JIRA_API_BASE`
+/// env var overrides it wholesale so tests can point every Jira call at a
+/// wiremock server without per-connection plumbing.
+pub fn jira_api_base(connection_base: &str) -> String {
+    std::env::var("JIRA_API_BASE")
+        .unwrap_or_else(|_| connection_base.trim_end_matches('/').to_string())
+}
+
+/// Root for Slack Web API calls (`https://slack.com/api`). `SLACK_API_BASE`
+/// overrides it wholesale so tests can point every Slack call at a wiremock
+/// server without per-connection plumbing.
+pub fn slack_api_base() -> String {
+    std::env::var("SLACK_API_BASE").unwrap_or_else(|_| "https://slack.com/api".to_string())
+}
+
 pub fn zoom_oauth_token_url() -> String {
     std::env::var("ZOOM_OAUTH_TOKEN_URL")
         .unwrap_or_else(|_| "https://zoom.us/oauth/token".to_string())

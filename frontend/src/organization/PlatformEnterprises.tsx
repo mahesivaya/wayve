@@ -19,7 +19,9 @@ export default function PlatformEnterprises() {
 
     listAdminOrganizations()
       .then((items) => {
-        if (alive) setEnterprises(items);
+        // Enterprise page: only orgs on the enterprise tier.
+        if (alive)
+          setEnterprises(items.filter((org) => org.tier === "enterprise"));
       })
       .catch((err) => {
         if (alive)

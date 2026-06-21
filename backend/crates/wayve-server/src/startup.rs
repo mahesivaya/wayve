@@ -562,6 +562,35 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "CREATE INDEX IF NOT EXISTS webhook_deliveries_endpoint_idx \
          ON webhook_deliveries(endpoint_id, created_at DESC)",
         // ────────────────────────────────────────────────────────────────
+        // Slack integration (enterprise only). One workspace per org; bot
+        // token encrypted at rest. slack_channel_links maps a Slack channel
+        // to a Wayve channel for inbound import + outbound posting.
+        // ────────────────────────────────────────────────────────────────
+        "CREATE TABLE IF NOT EXISTS slack_connections (
+            organization_id INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+            bot_token_iv TEXT NOT NULL,
+            bot_token_encrypted TEXT NOT NULL,
+            team_id TEXT,
+            team_name TEXT,
+            connected_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )",
+        "CREATE TABLE IF NOT EXISTS slack_channel_links (
+            id SERIAL PRIMARY KEY,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            wayve_channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+            slack_channel_id TEXT NOT NULL,
+            slack_channel_name TEXT,
+            last_imported_ts TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_slack_link_org_channel \
+         ON slack_channel_links(organization_id, slack_channel_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_slack_link_wayve_channel \
+         ON slack_channel_links(wayve_channel_id)",
+        // ────────────────────────────────────────────────────────────────
         // Plan catalog. Three personal tiers (Basic / Advance / Most Advance)
         // and three business tiers (Startups / Business / Enterprise). init.sql
         // only seeds a fresh volume, so we re-apply the canonical catalog here
@@ -570,15 +599,20 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // render. (This intentionally overrides any operator edits to these
         // rows; new operator-defined plan codes are untouched.)
         // ────────────────────────────────────────────────────────────────
-        "INSERT INTO plans (code, name, description, audience, amount_cents, billing_interval, storage_limit_bytes, seat_limit, features) VALUES \
-            ('basic_user', 'Basic', 'Free personal plan to get started.', 'personal', 0, 'month', 1073741824, 1, '{\"bullets\":[\"1 GB encrypted storage\",\"Up to 1,000 emails per day\",\"End-to-end encrypted chat\",\"1 seat\"]}'::jsonb), \
-            ('advance_user', 'Advance', 'Personal paid plan with higher limits.', 'personal', 700, 'month', 10737418240, 1, '{\"bullets\":[\"10 GB encrypted storage\",\"Unlimited daily emails\",\"1,000 encrypt/decrypt ops per day\",\"Priority email sync\"]}'::jsonb), \
-            ('most_advance_user', 'Most Advance', 'Top personal tier with full AI access.', 'personal', 1500, 'month', 53687091200, 1, '{\"bullets\":[\"50 GB encrypted storage\",\"Unlimited email & calls\",\"Full AI assistant access\",\"Priority support\"]}'::jsonb), \
-            ('business_startups', 'Startups', 'For small teams getting off the ground.', 'organization', 800, 'month', -1, 20, '{\"bullets\":[\"Up to 20 members\",\"Unlimited shared storage\",\"Shared org workspace\",\"Admin & billing controls\"]}'::jsonb), \
-            ('organization', 'Business', 'For growing organizations up to 100 members.', 'organization', 1200, 'month', -1, 100, '{\"bullets\":[\"Up to 100 members\",\"Unlimited storage & email\",\"SSO + role-based access\",\"Audit logs & priority support\"]}'::jsonb), \
-            ('enterprise', 'Enterprise', '100+ members with unlimited everything. Contact sales.', 'organization', 0, 'month', -1, 100000, '{\"bullets\":[\"Unlimited members\",\"Dedicated success manager\",\"Custom onboarding & SLA\",\"SSO, SCIM & advanced security\"]}'::jsonb) \
+        // `tier` sub-discriminates org plans (Startups / Business / Enterprise)
+        // so the two can be told apart. Added before the catalog upsert so the
+        // INSERT below can populate it; idempotent on existing DBs.
+        "ALTER TABLE plans ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'personal'",
+        "INSERT INTO plans (code, name, description, audience, tier, amount_cents, billing_interval, storage_limit_bytes, seat_limit, features) VALUES \
+            ('basic_user', 'Basic', 'Free personal plan to get started.', 'personal', 'personal', 0, 'month', 1073741824, 1, '{\"bullets\":[\"1 GB encrypted storage\",\"Up to 1,000 emails per day\",\"End-to-end encrypted chat\",\"1 seat\"]}'::jsonb), \
+            ('advance_user', 'Advance', 'Personal paid plan with higher limits.', 'personal', 'personal', 700, 'month', 10737418240, 1, '{\"bullets\":[\"10 GB encrypted storage\",\"Unlimited daily emails\",\"1,000 encrypt/decrypt ops per day\",\"Priority email sync\"]}'::jsonb), \
+            ('most_advance_user', 'Most Advance', 'Top personal tier with full AI access.', 'personal', 'personal', 1500, 'month', 53687091200, 1, '{\"bullets\":[\"50 GB encrypted storage\",\"Unlimited email & calls\",\"Full AI assistant access\",\"Priority support\"]}'::jsonb), \
+            ('business_startups', 'Startups', 'For small teams getting off the ground.', 'organization', 'startups', 800, 'month', -1, 20, '{\"bullets\":[\"Up to 20 members\",\"Unlimited shared storage\",\"Shared org workspace\",\"Admin & billing controls\"]}'::jsonb), \
+            ('organization', 'Business', 'For growing organizations up to 100 members.', 'organization', 'business', 1200, 'month', -1, 100, '{\"bullets\":[\"Up to 100 members\",\"Unlimited storage & email\",\"SSO + role-based access\",\"Audit logs & priority support\"]}'::jsonb), \
+            ('enterprise', 'Enterprise', '100+ members with unlimited everything.', 'organization', 'enterprise', 4900, 'month', -1, 100000, '{\"bullets\":[\"Unlimited members\",\"Dedicated success manager\",\"Custom onboarding & SLA\",\"SSO, SCIM & advanced security\"]}'::jsonb) \
          ON CONFLICT (code) DO UPDATE SET \
             name = EXCLUDED.name, description = EXCLUDED.description, audience = EXCLUDED.audience, \
+            tier = EXCLUDED.tier, \
             amount_cents = EXCLUDED.amount_cents, billing_interval = EXCLUDED.billing_interval, \
             storage_limit_bytes = EXCLUDED.storage_limit_bytes, seat_limit = EXCLUDED.seat_limit, \
             features = EXCLUDED.features, is_active = TRUE",

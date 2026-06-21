@@ -90,8 +90,8 @@ const PUBLIC_TIERS: PublicTier[] = [
   {
     id: "enterprise",
     name: "Enterprise",
-    price: "Contact sales",
-    interval: null,
+    price: "49.00 USD",
+    interval: "user / month",
     tagline: "100+ members with unlimited everything.",
     features: [
       "Unlimited members",
@@ -103,9 +103,9 @@ const PUBLIC_TIERS: PublicTier[] = [
   },
 ];
 
-// Which public tiers belong to the "Personal" section; the rest fall under
-// "Business & Enterprise". Mirrors the grouped layout of the logged-in
-// (personal-account) pricing page.
+// Which public tiers belong to the "Personal" section; the rest are org tiers,
+// further split into "Business" and "Enterprise" sections below. Mirrors the
+// grouped layout of the logged-in pricing page.
 const PUBLIC_PERSONAL_IDS = ["basic", "advance", "most-advance"];
 
 export default function PublicPricingContent() {
@@ -113,8 +113,13 @@ export default function PublicPricingContent() {
   const personalTiers = PUBLIC_TIERS.filter((tier) =>
     PUBLIC_PERSONAL_IDS.includes(tier.id)
   );
+  // Org tiers split into Business (Startups + Business) vs Enterprise so each
+  // gets its own section rather than one "Business & Enterprise" bucket.
   const businessTiers = PUBLIC_TIERS.filter(
-    (tier) => !PUBLIC_PERSONAL_IDS.includes(tier.id)
+    (tier) => !PUBLIC_PERSONAL_IDS.includes(tier.id) && tier.id !== "enterprise"
+  );
+  const enterpriseTiers = PUBLIC_TIERS.filter(
+    (tier) => tier.id === "enterprise"
   );
 
   const renderTier = (tier: PublicTier) => {
@@ -165,11 +170,20 @@ export default function PublicPricingContent() {
       </section>
 
       <section className="pricing-section">
-        <h2>Business &amp; Enterprise</h2>
+        <h2>Business</h2>
         <p className="pricing-section-sub">
-          For teams and organizations of any size.
+          For teams and growing organizations.
         </p>
         <div className="pricing-grid">{businessTiers.map(renderTier)}</div>
+      </section>
+
+      <section className="pricing-section">
+        <h2>Enterprise</h2>
+        <p className="pricing-section-sub">
+          For 100+ members — unlimited scale, SSO &amp; SCIM, and dedicated
+          support.
+        </p>
+        <div className="pricing-grid">{enterpriseTiers.map(renderTier)}</div>
       </section>
     </div>
   );

@@ -11,6 +11,11 @@ pub struct Task {
     pub assignee: String,
     pub created_at: Option<NaiveDateTime>,
     pub updated_at: Option<NaiveDateTime>,
+    /// Linked Jira issue key (e.g. "WAY-12"), set only by the Jira importer;
+    /// None for tasks with no Jira link. `jira_base` is the site root so the UI
+    /// can deep-link to the issue.
+    pub jira_issue_key: Option<String>,
+    pub jira_base: Option<String>,
 }
 
 #[derive(Deserialize)]
