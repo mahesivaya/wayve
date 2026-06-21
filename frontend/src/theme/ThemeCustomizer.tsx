@@ -255,6 +255,19 @@ export default function ThemeCustomizer() {
   // --- actions ---------------------------------------------------------------
   // Sync the slider state to each discrete pick so the always-on preview shows
   // the pick instead of the previous slider input.
+
+  // Commit a free-form editor change (grid / sliders / randomize / import).
+  // These used to only live-preview via previewInput, so clearPreview() on
+  // panel close reverted them — the user would pick a colour from the grid,
+  // click away, and watch it snap back to the last committed theme. Persisting
+  // the edit as the active custom choice (the same thing the background
+  // swatches already do) makes it stick.
+  const commitInput = (next: PaletteInput, nextMode: ThemeMode = mode) => {
+    setInput(next);
+    setMode(nextMode);
+    setChoice({ kind: "custom", mode: nextMode, input: next });
+  };
+
   const applyPreset = (presetId: string) => {
     const preset = PRESETS.find((p) => p.id === presetId);
     if (preset) {
@@ -276,7 +289,7 @@ export default function ThemeCustomizer() {
   };
 
   const handleRandomize = () => {
-    setInput(randomInput());
+    commitInput(randomInput());
   };
 
   const copyTheme = (payload: {
@@ -306,8 +319,7 @@ export default function ThemeCustomizer() {
       ) {
         throw new Error("missing input/mode");
       }
-      setInput(parsed.input);
-      setMode(parsed.mode);
+      commitInput(parsed.input, parsed.mode);
       if (parsed.name) setName(parsed.name);
       setImportOpen(false);
       setImportText("");
@@ -433,7 +445,7 @@ export default function ThemeCustomizer() {
         <ColorGrid
           hue={input.hue}
           chroma={input.chroma}
-          onChange={({ hue, chroma }) => setInput({ ...input, hue, chroma })}
+          onChange={({ hue, chroma }) => commitInput({ ...input, hue, chroma })}
         />
 
         <div className="theme-custom-sliders">
@@ -444,7 +456,7 @@ export default function ThemeCustomizer() {
               min={0}
               max={0.3}
               step={0.01}
-              onChange={(chroma) => setInput({ ...input, chroma })}
+              onChange={(chroma) => commitInput({ ...input, chroma })}
               variant="gradient"
               trackBackground={chromaTrack}
               ariaLabel="Chroma"
@@ -457,7 +469,7 @@ export default function ThemeCustomizer() {
               min={0}
               max={1.5}
               step={0.05}
-              onChange={(saturation) => setInput({ ...input, saturation })}
+              onChange={(saturation) => commitInput({ ...input, saturation })}
               variant="ticks"
               ariaLabel="Saturation"
             />
@@ -469,7 +481,7 @@ export default function ThemeCustomizer() {
               min={0}
               max={1}
               step={0.05}
-              onChange={(contrast) => setInput({ ...input, contrast })}
+              onChange={(contrast) => commitInput({ ...input, contrast })}
               variant="ticks"
               ariaLabel="Contrast"
             />
@@ -481,7 +493,7 @@ export default function ThemeCustomizer() {
               min={-0.05}
               max={0.05}
               step={0.005}
-              onChange={(depth) => setInput({ ...input, depth })}
+              onChange={(depth) => commitInput({ ...input, depth })}
               variant="ticks"
               ariaLabel="Depth"
             />
@@ -511,7 +523,7 @@ export default function ThemeCustomizer() {
           <button
             type="button"
             className="theme-customizer-revert"
-            onClick={() => setInput(DEFAULT_INPUT)}
+            onClick={() => commitInput(DEFAULT_INPUT)}
           >
             Revert sliders
           </button>
