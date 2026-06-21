@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [3.1.0](https://github.com/mahesivaya/wayve/releases/tag/v3.1.0) - 2026-06-21
+
+### 🚀 Features
+
+- **integrations:** Add per-user GitLab connection and issue import
+- **integrations:** Hide Slack tile from personal and business accounts
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v3.0.0 [skip ci]
+
 ## [3.0.0](https://github.com/mahesivaya/wayve/releases/tag/v3.0.0) - 2026-06-21
 
 ### 🚀 Features
