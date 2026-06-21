@@ -2,9 +2,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { getGmailConnectUrl, getOutlookConnectUrl } from "../api/email";
 import { getJiraConnection } from "../api/jira";
+import { getGitlabConnection } from "../api/gitlab";
 import { getSlackConnection } from "../api/slack";
 import { useAuth } from "../auth/useAuth";
 import SlackPanel from "./SlackPanel";
+import GitLabPanel from "./GitLabPanel";
 import "./integrations.css";
 
 // Brand marks as inline SVG (no logo assets ship in the repo). Approximate but
@@ -133,6 +135,21 @@ export default function Integrations() {
     };
   }, [isEnterprise]);
 
+  // GitLab connection badge (per-user, any account).
+  const [gitlabConnected, setGitlabConnected] = useState(false);
+  const [showGitlab, setShowGitlab] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void getGitlabConnection()
+      .then((s) => {
+        if (!cancelled) setGitlabConnected(s.connected);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Mailbox connect: hand off to the per-user OAuth flow (Gmail / Outlook).
   // `busyKey` marks which card is mid-redirect; errors surface below the grid.
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -212,11 +229,19 @@ export default function Integrations() {
     {
       key: "gitlab",
       name: "GitLab",
-      description: "Automate your merge request workflow.",
+      description:
+        "Connect GitLab (cloud or self-hosted) and import your assigned issues into Tasks.",
       icon: <BrandIcon name="gitlab" />,
-      status: "soon",
+      status: gitlabConnected ? "enabled" : "available",
+      onClick: () => setShowGitlab((v) => !v),
     },
   ];
+
+  // Slack is enterprise-only — hide the tile entirely from personal and
+  // business accounts rather than showing a disabled "Enterprise" badge.
+  const visibleServices = services.filter(
+    (s) => s.key !== "slack" || isEnterprise
+  );
 
   return (
     <div className="settings-page">
@@ -226,7 +251,7 @@ export default function Integrations() {
         <section className="settings-card">
           <h2 className="settings-card-title">Connect a service</h2>
           <div className="integrations-cards">
-            {services.map((s) => {
+            {visibleServices.map((s) => {
               const connecting = busyKey === s.key;
               return (
                 <button
@@ -263,6 +288,13 @@ export default function Integrations() {
           <section className="settings-card">
             <h2 className="settings-card-title">Slack</h2>
             <SlackPanel />
+          </section>
+        )}
+
+        {showGitlab && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">GitLab</h2>
+            <GitLabPanel />
           </section>
         )}
       </div>
