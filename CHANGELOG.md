@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [3.1.1](https://github.com/mahesivaya/wayve/releases/tag/v3.1.1) - 2026-06-21
+
+### 🚀 Features
+
+- **integrations:** GitLab issue badge on Tasks + import wiremock test
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v3.1.0 [skip ci]
+
 ## [3.1.0](https://github.com/mahesivaya/wayve/releases/tag/v3.1.0) - 2026-06-21
 
 ### 🚀 Features
