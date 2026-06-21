@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [3.0.0](https://github.com/mahesivaya/wayve/releases/tag/v3.0.0) - 2026-06-21
+
+### 🚀 Features
+
+- **enterprise:** Tier separation, standard encryption, and Slack integration
+- **org:** Drop self-serve payment-gated organization signup
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v2.5.2 [skip ci]
+
 ## [2.5.2](https://github.com/mahesivaya/wayve/releases/tag/v2.5.2) - 2026-06-19
 
 ### 🚀 Features
