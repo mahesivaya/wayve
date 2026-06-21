@@ -59,9 +59,21 @@ export function generatePalette(
   // Dark mode: low-L surfaces, high-L text. Depth shifts the surface
   // darkness up or down; contrast pulls the text further from the surface.
   const isDark = mode === "dark";
-  const surfaceL = isDark ? 0.18 - depth : 0.99 + depth;
-  const surfaceSoftL = isDark ? 0.14 - depth : 0.96 + depth;
-  const surfaceHoverL = isDark ? 0.24 - depth : 0.94 + depth;
+
+  // How strongly the chosen colour paints the page background. It scales with
+  // the input chroma so a neutral theme (chroma 0, including B&W) keeps clean
+  // white / near-black surfaces, while a saturated one colours the whole
+  // background on every page. In light mode we also drop the surface lightness
+  // as the tint grows — a near-white surface (L≈0.96) physically can't hold
+  // much chroma, so without the drop a strong colour just clamps back to pale
+  // (this is why the background used to barely change).
+  const tint = chroma * saturation; // 0 (neutral) .. ~0.45 (vivid)
+  const surfaceChroma = Math.min(tint * 0.7, 0.16);
+  const tintDrop = isDark ? 0 : tint * 0.3;
+
+  const surfaceL = isDark ? 0.18 - depth : 0.99 + depth - tintDrop;
+  const surfaceSoftL = isDark ? 0.14 - depth : 0.96 + depth - tintDrop;
+  const surfaceHoverL = isDark ? 0.24 - depth : 0.94 + depth - tintDrop;
   const textPrimaryL = isDark ? 0.92 + 0.05 * contrast : 0.18 - 0.1 * contrast;
   const textSecondaryL = isDark ? 0.8 + 0.05 * contrast : 0.32 - 0.1 * contrast;
   const textMutedL = isDark ? 0.62 : 0.5;
@@ -81,11 +93,6 @@ export function generatePalette(
   // Soft variants use a reduced chroma so the page doesn't feel painted.
   const softChroma = chroma * 0.35 * saturation;
   const accentChroma = chroma * 0.85 * saturation;
-
-  // Subtle background tint toward the chosen hue so picking a color visibly
-  // changes the page background — capped low so surfaces stay readable and
-  // never look "painted". chroma 0 (neutral swatch) keeps surfaces gray.
-  const surfaceChroma = Math.min(chroma * 0.4 * saturation, 0.05);
 
   return {
     surface: oklch(surfaceL, surfaceChroma, hue),
