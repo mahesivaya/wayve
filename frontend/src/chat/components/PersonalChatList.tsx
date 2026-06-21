@@ -7,6 +7,13 @@ type Props = {
   selectedConversation: Conversation | null;
   onSelect: (user: ChatUser) => void;
   summary: ChatConversationSummary;
+  /**
+   * Which half of the DM list to render. `"recent"` is the active
+   * conversations (Unread + Recent) shown above the channels; `"people"` is
+   * the directory of everyone else, shown below. Splitting lets the sidebar
+   * surface recent chats at the top while keeping the People directory last.
+   */
+  section: "recent" | "people";
 };
 
 type Row = {
@@ -20,6 +27,7 @@ export default function PersonalChatList({
   selectedConversation,
   onSelect,
   summary,
+  section,
 }: Props) {
   // Index the DM summary by the other participant's id.
   const byUser = new Map(summary.conversations.map((c) => [c.user_id, c]));
@@ -78,6 +86,17 @@ export default function PersonalChatList({
     );
   };
 
+  // Directory of everyone with no chat history — rendered below the channels.
+  if (section === "people") {
+    return (
+      <>
+        <div className="conversation-section-title">People</div>
+        {people.map(renderRow)}
+      </>
+    );
+  }
+
+  // Active conversations (Unread + Recent) — rendered above the channels.
   return (
     <>
       {unread.length > 0 && (
@@ -101,9 +120,6 @@ export default function PersonalChatList({
           {recent.map(renderRow)}
         </>
       )}
-
-      <div className="conversation-section-title">People</div>
-      {people.map(renderRow)}
     </>
   );
 }

@@ -47,6 +47,16 @@ export default function ConversationSidebar({
 }: Props) {
   return (
     <aside className="user-list">
+      {/* Active conversations (Unread + Recent) sit above the channels so the
+          chats you're in the middle of are the first thing you see. */}
+      <PersonalChatList
+        users={users}
+        selectedConversation={selectedConversation}
+        onSelect={onSelectUser}
+        summary={summary}
+        section="recent"
+      />
+
       <div className="conversation-section-header">
         <span className="conversation-section-title">Channels</span>
         <button
@@ -82,6 +92,7 @@ export default function ConversationSidebar({
         selectedConversation={selectedConversation}
         onSelect={onSelectUser}
         summary={summary}
+        section="people"
       />
     </aside>
   );
