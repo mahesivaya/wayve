@@ -20,6 +20,10 @@ export type Task = {
   // `${jira_base}/browse/${jira_issue_key}`. Null for non-Jira tasks.
   jira_issue_key?: string | null;
   jira_base?: string | null;
+  // Set only on tasks imported from GitLab; the UI shows a deep-link badge to
+  // `gitlab_web_url`. Null for non-GitLab tasks.
+  gitlab_issue_iid?: number | null;
+  gitlab_web_url?: string | null;
 };
 
 export type SaveTaskPayload = {
