@@ -14,6 +14,16 @@
   padding: 16px 10px;
   color: var(--color-text-primary);
   background: var(--color-surface-soft);
+
+  /* Diff add/remove palette. Defined once here so every diff surface (the
+     split commit view, the per-file articles, and the full-diff fallback)
+     stays consistent — each of those rules reads these vars with a paler
+     hardcoded fallback. Darker, more saturated green/red than GitHub's
+     default tint so adds vs removes read at a glance. */
+  --diff-add-soft: #b7e9c4;
+  --diff-add-strong: #08531f;
+  --diff-del-soft: #f2bdb8;
+  --diff-del-strong: #8a0f08;
 }
 
 .github-page *,
@@ -1040,6 +1050,62 @@
   padding: 12px;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+/* Side-by-side (split) diff: old on the left, new on the right. One CSS grid
+   for the whole patch so the line-number gutters and the two code columns
+   align across every row. Each pair row emits four cells
+   [old-no | old-code | new-no | new-code]; a hunk header spans all four. */
+.github-split {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  margin: 0;
+  padding: 8px 0;
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  overflow-x: auto;
+}
+
+.github-split-hunk {
+  grid-column: 1 / -1;
+  padding: 2px 12px;
+  background: var(--color-surface-tint);
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.github-split-no {
+  padding: 0 8px;
+  text-align: right;
+  color: var(--color-text-muted);
+  background: var(--color-surface-tint-cool, transparent);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.github-split-code {
+  padding: 0 12px 0 8px;
+  border-left: 1px solid var(--color-border);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.github-split-code.is-add {
+  background: var(--diff-add-soft, #e6ffec);
+  color: var(--diff-add-strong, #1a7f37);
+}
+
+.github-split-code.is-del {
+  background: var(--diff-del-soft, #ffebe9);
+  color: var(--diff-del-strong, #82071e);
+}
+
+/* The blank counterpart of an unpaired add/remove — faintly tinted so the
+   eye reads it as "nothing here on this side". */
+.github-split-code.is-empty {
+  background: var(--color-surface-tint, #f6f8fa);
 }
 
 /* Full-diff fallback — opt-in fetch via the proxy's `?media=diff`

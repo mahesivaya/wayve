@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { fmtDateTime } from "../utils/datetime";
@@ -115,6 +115,108 @@ type CommitDetail = {
   };
   parents?: Array<{ sha: string; html_url: string }>;
 };
+
+// ── Split (side-by-side) diff rendering ─────────────────────────────
+//
+// Parse a GitHub per-file unified `patch` into paired left/right rows so the
+// commit view renders old vs new in two columns (GitHub's "Split" view).
+// Within a change block consecutive removals are paired row-for-row with the
+// additions that follow; any overhang gets an empty cell on the opposite side.
+// Context lines appear on both sides; `@@` hunk headers span the full width.
+//
+// GitHub's `files[].patch` is pure hunk content (no `diff --git`/`---`/`+++`
+// file headers — those only appear in raw diffs), so a leading `-`/`+` is
+// always real content. The only non-content line we drop is the
+// `\ No newline at end of file` marker.
+type SplitCell = {
+  no: number | null;
+  text: string;
+  kind: "add" | "del" | "ctx" | "empty";
+};
+type SplitRow =
+  | { type: "hunk"; text: string }
+  | { type: "pair"; left: SplitCell; right: SplitCell };
+
+const EMPTY_CELL: SplitCell = { no: null, text: "", kind: "empty" };
+
+function toSplitRows(patch: string): SplitRow[] {
+  const rows: SplitRow[] = [];
+  let oldLn = 0;
+  let newLn = 0;
+  let dels: SplitCell[] = [];
+  let adds: SplitCell[] = [];
+
+  // Pair the buffered removals/additions of one change block, then reset.
+  const flush = () => {
+    const n = Math.max(dels.length, adds.length);
+    for (let i = 0; i < n; i++) {
+      rows.push({
+        type: "pair",
+        left: dels[i] ?? EMPTY_CELL,
+        right: adds[i] ?? EMPTY_CELL,
+      });
+    }
+    dels = [];
+    adds = [];
+  };
+
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("@@")) {
+      flush();
+      const m = /@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+      if (m) {
+        oldLn = Number(m[1]);
+        newLn = Number(m[2]);
+      }
+      rows.push({ type: "hunk", text: line });
+    } else if (line.startsWith("\\")) {
+      // "\ No newline at end of file" — annotation, not a content line.
+      continue;
+    } else if (line.startsWith("+")) {
+      adds.push({ no: newLn++, text: line.slice(1), kind: "add" });
+    } else if (line.startsWith("-")) {
+      dels.push({ no: oldLn++, text: line.slice(1), kind: "del" });
+    } else {
+      // Context line (leading space, or a blank line in the patch): flush the
+      // pending change block first so removals/additions stay grouped.
+      flush();
+      const text = line.startsWith(" ") ? line.slice(1) : line;
+      rows.push({
+        type: "pair",
+        left: { no: oldLn++, text, kind: "ctx" },
+        right: { no: newLn++, text, kind: "ctx" },
+      });
+    }
+  }
+  flush();
+  return rows;
+}
+
+function CommitSplitPatch({ patch }: { patch: string }) {
+  const rows = toSplitRows(patch);
+  return (
+    <div className="github-split">
+      {rows.map((row, idx) =>
+        row.type === "hunk" ? (
+          <div key={idx} className="github-split-hunk">
+            {row.text}
+          </div>
+        ) : (
+          <Fragment key={idx}>
+            <span className="github-split-no">{row.left.no ?? ""}</span>
+            <span className={`github-split-code is-${row.left.kind}`}>
+              {row.left.text || " "}
+            </span>
+            <span className="github-split-no">{row.right.no ?? ""}</span>
+            <span className={`github-split-code is-${row.right.kind}`}>
+              {row.right.text || " "}
+            </span>
+          </Fragment>
+        )
+      )}
+    </div>
+  );
+}
 
 type RunsResponse = {
   workflow_runs: WorkflowRun[];
@@ -1586,31 +1688,7 @@ function GitHubRepoViewer({
                                   </span>
                                 </header>
                                 {file.patch ? (
-                                  <pre className="github-commit-patch">
-                                    {file.patch.split("\n").map((line, idx) => {
-                                      let cls = "diff-ctx";
-                                      if (line.startsWith("@@"))
-                                        cls = "diff-hunk";
-                                      else if (
-                                        line.startsWith("+") &&
-                                        !line.startsWith("+++")
-                                      )
-                                        cls = "diff-add";
-                                      else if (
-                                        line.startsWith("-") &&
-                                        !line.startsWith("---")
-                                      )
-                                        cls = "diff-del";
-                                      return (
-                                        <span
-                                          key={idx}
-                                          className={`github-commit-patch-line ${cls}`}
-                                        >
-                                          {line || " "}
-                                        </span>
-                                      );
-                                    })}
-                                  </pre>
+                                  <CommitSplitPatch patch={file.patch} />
                                 ) : (
                                   <div className="github-commit-nopatch">
                                     Binary file or diff not available — open on
