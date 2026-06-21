@@ -1,0 +1,86 @@
+.gl-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.gl-connect {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 460px;
+}
+
+.gl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.gl-field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gl-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.gl-input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 8px;
+  background: var(--input-bg, #fff);
+  color: inherit;
+}
+
+.gl-btn {
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 8px;
+  background: var(--surface-2, #f3f4f6);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.gl-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.gl-btn--primary {
+  background: #fc6d26;
+  border-color: #e24329;
+  color: #fff;
+}
+
+.gl-btn--danger {
+  color: #b91c1c;
+  border-color: #fca5a5;
+  background: transparent;
+}
+
+.gl-muted {
+  color: var(--text-muted, #6b7280);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.gl-ok {
+  color: #15803d;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.gl-error {
+  color: #b91c1c;
+  font-size: 0.85rem;
+  margin: 0;
+}

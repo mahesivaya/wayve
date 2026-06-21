@@ -591,6 +591,26 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_slack_link_wayve_channel \
          ON slack_channel_links(wayve_channel_id)",
         // ────────────────────────────────────────────────────────────────
+        // GitLab integration (per-user, mirrors Jira). Connect a GitLab
+        // instance (self-hosted supported) with a PAT; import assigned issues
+        // into Tasks. tasks gets gitlab_* link columns.
+        // ────────────────────────────────────────────────────────────────
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS gitlab_issue_iid INTEGER",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS gitlab_project_id INTEGER",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS gitlab_web_url TEXT",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_gitlab_issue \
+         ON tasks(user_id, gitlab_project_id, gitlab_issue_iid) \
+         WHERE gitlab_issue_iid IS NOT NULL",
+        "CREATE TABLE IF NOT EXISTS user_gitlab_connections (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            base_url TEXT NOT NULL,
+            access_token_iv TEXT NOT NULL,
+            access_token_encrypted TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )",
+        // ────────────────────────────────────────────────────────────────
         // Plan catalog. Three personal tiers (Basic / Advance / Most Advance)
         // and three business tiers (Startups / Business / Enterprise). init.sql
         // only seeds a fresh volume, so we re-apply the canonical catalog here

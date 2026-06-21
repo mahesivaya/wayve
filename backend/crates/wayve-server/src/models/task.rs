@@ -16,6 +16,10 @@ pub struct Task {
     /// can deep-link to the issue.
     pub jira_issue_key: Option<String>,
     pub jira_base: Option<String>,
+    /// Linked GitLab issue iid + direct web URL, set only by the GitLab
+    /// importer; None for tasks with no GitLab link.
+    pub gitlab_issue_iid: Option<i32>,
+    pub gitlab_web_url: Option<String>,
 }
 
 #[derive(Deserialize)]

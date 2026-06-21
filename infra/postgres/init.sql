@@ -828,6 +828,17 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS jira_base TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_jira_issue
     ON tasks(user_id, jira_issue_key) WHERE jira_issue_key IS NOT NULL;
 
+-- Optional link to a GitLab issue (mirrors the Jira columns; see
+-- user_gitlab_connections below). A task links a GitLab issue via
+-- (gitlab_project_id, gitlab_issue_iid); `gitlab_web_url` is the direct issue
+-- link for the UI badge. NULL for tasks with no GitLab link.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS gitlab_issue_iid INTEGER;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS gitlab_project_id INTEGER;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS gitlab_web_url TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_gitlab_issue
+    ON tasks(user_id, gitlab_project_id, gitlab_issue_iid)
+    WHERE gitlab_issue_iid IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_tasks_user_priority ON tasks(user_id, priority DESC, created_at DESC);
 
 -- Per-user Jira Cloud connection (Basic auth: email + API token). The token is
@@ -876,6 +887,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_slack_link_org_channel
     ON slack_channel_links(organization_id, slack_channel_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_slack_link_wayve_channel
     ON slack_channel_links(wayve_channel_id);
+
+-- Per-user GitLab connection (mirrors user_jira_connections). `base_url`
+-- supports self-hosted GitLab; the personal access token is encrypted at rest.
+CREATE TABLE IF NOT EXISTS user_gitlab_connections (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    base_url TEXT NOT NULL,
+    access_token_iv TEXT NOT NULL,
+    access_token_encrypted TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
 
 -- Files attached to a task. Stored under ./uploads encrypted at rest just
 -- like drive_files; the on-disk blob is unreferenced (and garbage-collected

@@ -1,10 +1,12 @@
 pub mod github;
+pub mod gitlab;
 pub mod jira;
 pub mod slack;
 
 /// Authenticated, `/api`-scoped integration endpoints.
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     github::routes(cfg);
+    gitlab::routes(cfg);
     jira::routes(cfg);
     slack::routes(cfg);
 }

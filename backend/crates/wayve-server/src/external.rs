@@ -54,6 +54,15 @@ pub fn slack_api_base() -> String {
     std::env::var("SLACK_API_BASE").unwrap_or_else(|_| "https://slack.com/api".to_string())
 }
 
+/// Root for GitLab REST calls. Each connection carries its own instance base
+/// (e.g. `https://gitlab.com` or a self-hosted host); `GITLAB_API_BASE`
+/// overrides it wholesale so tests can point every GitLab call at a wiremock
+/// server.
+pub fn gitlab_api_base(connection_base: &str) -> String {
+    std::env::var("GITLAB_API_BASE")
+        .unwrap_or_else(|_| connection_base.trim_end_matches('/').to_string())
+}
+
 pub fn zoom_oauth_token_url() -> String {
     std::env::var("ZOOM_OAUTH_TOKEN_URL")
         .unwrap_or_else(|_| "https://zoom.us/oauth/token".to_string())

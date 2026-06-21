@@ -20,6 +20,8 @@ fn task_from_row(row: sqlx::postgres::PgRow) -> Task {
         updated_at: row.try_get("updated_at").ok(),
         jira_issue_key: row.try_get("jira_issue_key").ok().flatten(),
         jira_base: row.try_get("jira_base").ok().flatten(),
+        gitlab_issue_iid: row.try_get("gitlab_issue_iid").ok().flatten(),
+        gitlab_web_url: row.try_get("gitlab_web_url").ok().flatten(),
     }
 }
 
@@ -44,7 +46,7 @@ pub async fn list_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
 
     let rows = sqlx::query(
         "SELECT id, name, description, priority, status, assigned_by, assignee,
-                created_at, updated_at, jira_issue_key, jira_base
+                created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url
          FROM tasks
          WHERE user_id = $1
          ORDER BY priority DESC, created_at ASC, id ASC",
@@ -130,7 +132,7 @@ pub async fn create_task(
         "INSERT INTO tasks (user_id, name, description, priority, status, assigned_by, assignee)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, name, description, priority, status, assigned_by, assignee,
-                   created_at, updated_at, jira_issue_key, jira_base",
+                   created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url",
     )
     .bind(user_id)
     .bind(name)
@@ -213,7 +215,7 @@ pub async fn update_task(
              assigned_by = $5, assignee = $6, updated_at = NOW()
          WHERE id = $7 AND user_id = $8
          RETURNING id, name, description, priority, status, assigned_by, assignee,
-                   created_at, updated_at, jira_issue_key, jira_base",
+                   created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url",
     )
     .bind(name)
     .bind(description)
