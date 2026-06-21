@@ -3,6 +3,22 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [3.2.1](https://github.com/mahesivaya/wayve/releases/tag/v3.2.1) - 2026-06-21
+
+### 🚀 Features
+
+- **theme:** Paint the page background with the chosen theme colour
+- **chat:** Surface recent conversations above the channels list
+- **home:** Rework hero headline
+
+### 🐛 Bug Fixes
+
+- **theme:** Persist grid and slider edits so they survive closing the panel
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v3.2.0 [skip ci]
+
 ## [3.2.0](https://github.com/mahesivaya/wayve/releases/tag/v3.2.0) - 2026-06-21
 
 ### 🚀 Features
