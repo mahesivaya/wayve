@@ -90,24 +90,37 @@ impl SlackClient {
         Ok((r.team, r.team_id))
     }
 
-    /// `conversations.list` — the workspace's channels (public + private the bot
-    /// is in).
+    /// `conversations.list` — the workspace's channels the bot can see. Listing
+    /// **private** channels needs the `groups:read` scope on top of
+    /// `channels:read`; if the bot only has `channels:read`, Slack rejects the
+    /// combined call with `missing_scope`, so we fall back to public channels.
     pub async fn list_channels(&self) -> Result<Vec<SlackChannel>, AppError> {
+        match self
+            .list_channels_of("public_channel,private_channel")
+            .await
+        {
+            Ok(channels) => Ok(channels),
+            Err(_) => self.list_channels_of("public_channel").await,
+        }
+    }
+
+    async fn list_channels_of(&self, types: &str) -> Result<Vec<SlackChannel>, AppError> {
         let r: SlackConversationsList = self
             .get_json(
                 "conversations.list",
                 &[
-                    ("types", "public_channel,private_channel".to_string()),
+                    ("types", types.to_string()),
                     ("exclude_archived", "true".to_string()),
                     ("limit", "200".to_string()),
                 ],
             )
             .await?;
         if !r.ok {
-            return Err(AppError::Internal(format!(
-                "Slack conversations.list failed: {}",
-                r.error.unwrap_or_default()
-            )));
+            let err = r.error.unwrap_or_default();
+            warn!(target: "worker", error = %err, types, "slack conversations.list failed");
+            // Surface the Slack error to the caller (e.g. `missing_scope`,
+            // `invalid_auth`) instead of a generic 500, so it's actionable.
+            return Err(AppError::bad_request(format!("Slack error: {err}")));
         }
         Ok(r.channels)
     }
