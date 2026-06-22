@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { normalizeAccountType } from "../auth/accountHome";
 import {
@@ -54,6 +55,10 @@ import "./chat.css";
 export default function Chat() {
   const { user } = useAuth();
   const { normalizedSearchQuery } = useGlobalSearch();
+  // The open conversation is mirrored into the URL (`?c=<channelId>` or
+  // `?dm=<userId>`) so a browser refresh restores it instead of dumping the
+  // user back on the empty chat home. See the restore + sync effects below.
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const {
     users,
@@ -449,6 +454,81 @@ export default function Chat() {
       logger.error("Failed to load channel messages", err);
     }
   };
+
+  // Stable key for the open conversation, used by the URL restore/sync effects.
+  const conversationKey =
+    selectedConversation?.type === "channel"
+      ? `c:${selectedConversation.channel.id}`
+      : selectedConversation?.type === "user"
+        ? `dm:${selectedConversation.user.id}`
+        : null;
+
+  // Restore the conversation named in the URL on first load (e.g. after a
+  // browser refresh, or a shared `/chat?c=12` deep link). Waits for the
+  // channels/users lists to load before resolving the target, and only applies
+  // a given param once so the sync effect below can freely rewrite the URL.
+  const deepLinkAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const cParam = searchParams.get("c");
+    const dmParam = searchParams.get("dm");
+    const key = cParam ? `c:${cParam}` : dmParam ? `dm:${dmParam}` : null;
+    if (!key) {
+      // No param — reset the guard so re-opening the same conversation works.
+      deepLinkAppliedRef.current = null;
+      return;
+    }
+    // Already showing it (typically the sync effect just wrote the param).
+    if (conversationKey === key) {
+      deepLinkAppliedRef.current = key;
+      return;
+    }
+    if (deepLinkAppliedRef.current === key) return;
+
+    const channel = cParam
+      ? channels.find((c) => String(c.id) === cParam)
+      : undefined;
+    const otherUser = dmParam
+      ? users.find((u) => String(u.id) === dmParam)
+      : undefined;
+    // Target not in the loaded lists yet (still loading, or no access) — wait
+    // for the next render. Don't set the guard, so a later load can retry.
+    if (!channel && !otherUser) return;
+
+    deepLinkAppliedRef.current = key;
+    // Defer the load (it sets state) out of the effect body so React's
+    // set-state-in-effect lint stays quiet — same pattern as Emails/Tasks.
+    const handle = window.setTimeout(() => {
+      if (channel) void loadChannelMessages(channel);
+      else if (otherUser) void loadUserMessages(otherUser);
+    }, 0);
+    return () => window.clearTimeout(handle);
+    // loadChannelMessages/loadUserMessages are recreated each render; depending
+    // on them would loop. The closures captured here are always the latest.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, channels, users, conversationKey]);
+
+  // Mirror the open conversation back into the URL (replace, not push, so it
+  // doesn't spam history). Guarded by a ref so the initial null→null render
+  // doesn't clear a `?c=…` param before the restore effect can read it.
+  const prevConversationKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (conversationKey === prevConversationKeyRef.current) return;
+    prevConversationKeyRef.current = conversationKey;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("c");
+        next.delete("dm");
+        if (selectedConversation?.type === "channel") {
+          next.set("c", String(selectedConversation.channel.id));
+        } else if (selectedConversation?.type === "user") {
+          next.set("dm", String(selectedConversation.user.id));
+        }
+        return next;
+      },
+      { replace: true }
+    );
+  }, [conversationKey, selectedConversation, setSearchParams]);
 
   const recipientPublicKeysFor = async (conversation: Conversation) => {
     if (!user) return null;
