@@ -23,6 +23,22 @@ function parseSlackMessage(
   return { author: m[1], text };
 }
 
+// Up-to-two-letter initials for an avatar. Strips an email domain so
+// "you@example.com" → "Y" and "Ada Lovelace" → "AL".
+function initials(name: string): string {
+  const base = name.replace(/@.*/, "").trim();
+  const parts = base.split(/[\s._-]+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
+}
+
+// Deterministic, readable avatar colour from the name.
+function avatarColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return `hsl(${h} 52% 45%)`;
+}
+
 type Props = {
   messages: ChatMessage[];
   selectedChannel: ChatChannel | null;
@@ -67,6 +83,10 @@ export default function MessageThread({
         // as received (left), regardless of the stored sender id.
         const mine = !slack && msg.sender_id === currentUserId;
         const displayContent = slack ? slack.text : msg.content;
+        // Who-sent-it label: the Slack author for bridged messages, else the
+        // Wayve sender's name. Own messages need no label (they're right-aligned).
+        const senderName = slack ? slack.author : (msg.sender_name ?? null);
+        const showSender = !mine && !!senderName;
         const replyCount = msg.reply_count ?? 0;
         // Only top-level channel messages with an id can host a thread.
         const canOpenThread =
@@ -82,10 +102,20 @@ export default function MessageThread({
                 slack ? " bubble--slack" : ""
               }`}
             >
-              {slack && (
+              {showSender && senderName && (
                 <div className="bubble-sender">
-                  <span className="bubble-sender-badge">Slack</span>
-                  {slack.author}
+                  {slack ? (
+                    <span className="bubble-sender-badge">Slack</span>
+                  ) : (
+                    <span
+                      className="bubble-avatar"
+                      style={{ background: avatarColor(senderName) }}
+                      aria-hidden="true"
+                    >
+                      {initials(senderName)}
+                    </span>
+                  )}
+                  {senderName}
                 </div>
               )}
               {displayContent && <div>{displayContent}</div>}

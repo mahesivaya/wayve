@@ -34,6 +34,7 @@ pub async fn get_channel_messages(
             SELECT m.id,
                    m.channel_id,
                    m.sender_id,
+                   COALESCE(NULLIF(u.username, ''), u.email) AS sender_name,
                    m.content_encrypted,
                    m.content_iv,
                    m.created_at,
@@ -43,6 +44,7 @@ pub async fn get_channel_messages(
                        WHERE r.parent_message_id = m.id
                    ), 0) AS reply_count
             FROM channel_messages m
+            LEFT JOIN users u ON u.id = m.sender_id
             WHERE m.channel_id = $1 AND m.parent_message_id IS NULL
               AND m.id > $2
             ORDER BY m.created_at ASC
@@ -59,6 +61,7 @@ pub async fn get_channel_messages(
             SELECT m.id,
                    m.channel_id,
                    m.sender_id,
+                   COALESCE(NULLIF(u.username, ''), u.email) AS sender_name,
                    m.content_encrypted,
                    m.content_iv,
                    m.created_at,
@@ -68,6 +71,7 @@ pub async fn get_channel_messages(
                        WHERE r.parent_message_id = m.id
                    ), 0) AS reply_count
             FROM channel_messages m
+            LEFT JOIN users u ON u.id = m.sender_id
             WHERE m.channel_id = $1 AND m.parent_message_id IS NULL
             ORDER BY m.created_at DESC
             LIMIT 50
@@ -116,17 +120,19 @@ pub async fn get_channel_thread(
 
     let rows = sqlx::query(
         r#"
-        SELECT id,
-               channel_id,
-               sender_id,
-               content_encrypted,
-               content_iv,
-               created_at,
-               parent_message_id,
+        SELECT m.id,
+               m.channel_id,
+               m.sender_id,
+               COALESCE(NULLIF(u.username, ''), u.email) AS sender_name,
+               m.content_encrypted,
+               m.content_iv,
+               m.created_at,
+               m.parent_message_id,
                0::bigint AS reply_count
-        FROM channel_messages
-        WHERE parent_message_id = $1
-        ORDER BY created_at ASC
+        FROM channel_messages m
+        LEFT JOIN users u ON u.id = m.sender_id
+        WHERE m.parent_message_id = $1
+        ORDER BY m.created_at ASC
         "#,
     )
     .bind(parent_id)
@@ -172,6 +178,7 @@ fn row_to_message_json(row: sqlx::postgres::PgRow) -> serde_json::Value {
         "message_id": row.get::<i32, _>("id"),
         "channel_id": row.get::<i32, _>("channel_id"),
         "sender_id": row.get::<i32, _>("sender_id"),
+        "sender_name": row.try_get::<Option<String>, _>("sender_name").ok().flatten(),
         "content": content,
         "status": "sent",
         "created_at": created_at.to_rfc3339(),

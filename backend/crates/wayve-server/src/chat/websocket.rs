@@ -112,6 +112,10 @@ pub struct ChatSession {
     // backend accepts plaintext from them instead of requiring an E2E envelope.
     // A tier change takes effect on the next reconnect.
     pub uses_standard_encryption: bool,
+    // Resolved once at connect: this sender's display name (username, else email)
+    // so channel broadcasts carry a human "who sent it" label without a per-row
+    // user lookup. (Historical reads resolve it in the SELECT.)
+    pub sender_name: String,
     // Last time we received any frame from the client (including the automatic
     // pong to our heartbeat ping). Drives dead-client detection.
     pub last_seen: Instant,
@@ -149,12 +153,23 @@ pub async fn chat_ws(
     let uses_standard_encryption =
         crate::encryption_policy::uses_standard_encryption(pool.get_ref(), user_id).await;
 
+    // Resolve the sender's display name once, for channel broadcasts.
+    let sender_name: String =
+        sqlx::query_scalar("SELECT COALESCE(NULLIF(username, ''), email) FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+
     ws::start(
         ChatSession {
             pool: pool.get_ref().clone(),
             user_id,
             cache: cache.get_ref().clone(),
             uses_standard_encryption,
+            sender_name,
             last_seen: Instant::now(),
         },
         &req,
@@ -433,6 +448,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         // For the best-effort outbound Slack bridge below.
                         let pool_for_slack = pool.clone();
                         let content_for_slack = content.clone();
+                        // "Who sent it" label for the broadcast (resolved at connect).
+                        let sender_name = self.sender_name.clone();
                         ctx.spawn(actix::fut::wrap_future(fut).map(
                             move |res, _act, ctx: &mut WebsocketContext<Self>| {
                                 if let Ok((row, members)) = res {
@@ -449,6 +466,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                         "message_id": message_id,
                                         "channel_id": channel_id,
                                         "sender_id": sender_id,
+                                        "sender_name": sender_name,
                                         "content": content,
                                         "status": "sent",
                                         "created_at": created_at.to_rfc3339(),

@@ -696,6 +696,20 @@
   border-radius: 6px;
 }
 
+/* Initials avatar for a Wayve sender in a channel. */
+.bubble-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
 /* Slack-purple accent so received Slack messages are visually distinct. */
 .bubble--slack {
   border-left: 3px solid #4a154b;

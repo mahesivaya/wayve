@@ -70,6 +70,10 @@ export type ChatUser = {
 export type ChatMessage = {
   message_id?: number;
   sender_id: number;
+  // Display name of the sender (username, else email), returned on channel
+  // messages so the UI can show who sent each one. Absent on DMs (1-on-1, the
+  // peer is known) and on legacy rows.
+  sender_name?: string | null;
   receiver_id?: number;
   channel_id?: number;
   content: string;
