@@ -8,8 +8,15 @@ pub mod client;
 pub mod handler;
 pub mod models;
 pub mod sync;
+pub mod webhook;
 
 /// Authenticated, `/api`-scoped endpoints (all enterprise-gated in the handler).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     handler::routes(cfg);
+}
+
+/// Root-mounted, unauthenticated receiver: the inbound Slack Events webhook
+/// (`/webhooks/slack_events`), secured by Slack's request signature.
+pub fn public_routes(cfg: &mut actix_web::web::ServiceConfig) {
+    webhook::routes(cfg);
 }

@@ -123,3 +123,41 @@ pub struct SlackPostMessage {
     #[serde(default)]
     pub error: Option<String>,
 }
+
+// ---- Slack Events API (inbound webhook) ----
+
+/// The outer envelope Slack POSTs to the Events API request URL. `type` is
+/// `url_verification` (carrying `challenge`) or `event_callback` (carrying
+/// `event` + `team_id`).
+#[derive(Deserialize)]
+pub struct SlackEventEnvelope {
+    #[serde(rename = "type", default)]
+    pub envelope_type: String,
+    #[serde(default)]
+    pub challenge: Option<String>,
+    #[serde(default)]
+    pub team_id: Option<String>,
+    #[serde(default)]
+    pub event: Option<SlackEvent>,
+}
+
+/// The inner `event` object. We act only on `type == "message"`. `bot_id` /
+/// `app_id` mark messages our own bot posted — skip them to avoid an
+/// outbound→inbound echo loop; `subtype` marks joins/edits/etc.
+#[derive(Deserialize)]
+pub struct SlackEvent {
+    #[serde(rename = "type", default)]
+    pub event_type: String,
+    #[serde(default)]
+    pub channel: Option<String>,
+    #[serde(default)]
+    pub user: Option<String>,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub subtype: Option<String>,
+    #[serde(default)]
+    pub bot_id: Option<String>,
+    #[serde(default)]
+    pub app_id: Option<String>,
+}

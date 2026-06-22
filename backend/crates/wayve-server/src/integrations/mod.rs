@@ -15,4 +15,5 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
 /// secured by their own per-integration scheme rather than the session JWT.
 pub fn public_routes(cfg: &mut actix_web::web::ServiceConfig) {
     jira::public_routes(cfg);
+    slack::public_routes(cfg);
 }

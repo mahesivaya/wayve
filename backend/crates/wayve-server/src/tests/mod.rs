@@ -30,6 +30,7 @@ mod scheduler_mail_delivery_test;
 mod scheduler_zoom_test;
 mod security_encryption_test;
 mod slack_test;
+mod slack_webhook_test;
 
 // Long-term API contracts — adding/changing these has customer-visible
 // blast radius, so the tests stay.

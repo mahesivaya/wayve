@@ -272,6 +272,16 @@ pub fn jira_webhook_secret() -> Option<String> {
     var_opt("JIRA_WEBHOOK_SECRET")
 }
 
+// ---- Slack --------------------------------------------------
+
+/// Slack app **signing secret** (Basic Information → App Credentials), used to
+/// verify the HMAC-SHA256 signature on inbound Slack Events API requests
+/// (`X-Slack-Signature: v0=…` over `v0:{timestamp}:{body}`). When unset the
+/// Slack Events receiver refuses all deliveries.
+pub fn slack_signing_secret() -> Option<String> {
+    var_opt("SLACK_SIGNING_SECRET")
+}
+
 // ---- Zoom ---------------------------------------------------
 
 pub struct ZoomConfig {
