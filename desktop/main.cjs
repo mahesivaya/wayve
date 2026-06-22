@@ -41,6 +41,11 @@ function isInWindowUrl(urlString) {
   } catch {
     return false;
   }
+  // Local dev: when FLUXZE_URL points at a local server, keep localhost
+  // navigations in-window (otherwise hard navs like the post-logout redirect
+  // escape to the system browser). Harmless in production — nothing there ever
+  // navigates to localhost.
+  if (host === "localhost" || host === "127.0.0.1") return true;
   return IN_WINDOW_HOSTS.some(
     (allowed) => host === allowed || host.endsWith(`.${allowed}`),
   );

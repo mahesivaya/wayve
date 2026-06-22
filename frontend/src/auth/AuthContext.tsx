@@ -21,6 +21,7 @@ import { getMe, logout as logoutRequest, saveUserPublicKey } from "../api/Auth";
 import { apiFetch } from "../api/client";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./token";
 import { logger } from "../utils/logger";
+import { isDesktopApp } from "../utils/desktop";
 import { normalizeAccountType } from "./accountHome";
 import { parseJwt, resolveBootToken } from "./bootToken";
 import { defaultAccessForAccount } from "./defaultAccess";
@@ -640,10 +641,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.setTimeout(resolve, 2000)
     );
     void Promise.race([logoutDone, timeout]).finally(() => {
-      // Hard-nav to the home page so the user lands on the public landing
-      // and all in-memory state is reset. This runs only after the logout
-      // POST has either completed or hit the 2s safety cap.
-      window.location.href = "/";
+      // Hard-nav so the user lands on a public page and all in-memory state is
+      // reset. This runs only after the logout POST has either completed or hit
+      // the 2s safety cap. In the desktop shell there is no marketing landing
+      // page (the window opens straight to /login), so send the user back to
+      // /login there; the browser keeps landing on the public "/" home.
+      window.location.href = isDesktopApp() ? "/login" : "/";
     });
   };
 
