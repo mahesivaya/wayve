@@ -214,7 +214,9 @@ impl SlackClient {
     ///
     /// When `username` is set, the message is posted under that display name (the
     /// Wayve sender) instead of the bot's own name, via Slack's per-message
-    /// `username`/`icon_emoji` override. That override needs the
+    /// `username` override. We deliberately omit any `icon_*` override so Slack
+    /// uses its default avatar (the neutral grey silhouette), matching how other
+    /// users appear — not a custom emoji icon. That override needs the
     /// `chat:write.customize` bot scope; if the workspace hasn't reinstalled with
     /// it, Slack rejects the call — we detect that and retry once as a plain bot
     /// post so outbound bridging never silently breaks.
@@ -229,7 +231,6 @@ impl SlackClient {
         let mut form = vec![("channel", channel.to_string()), ("text", text.to_string())];
         if let Some(name) = name {
             form.push(("username", name.to_string()));
-            form.push(("icon_emoji", ":speech_balloon:".to_string()));
         }
 
         let r: SlackPostMessage = self.post_form("chat.postMessage", &form).await?;
