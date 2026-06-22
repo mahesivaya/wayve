@@ -118,18 +118,23 @@ async fn apply_event(
     let org_id: i32 = row.get("organization_id");
     let connected_by: Option<i32> = row.try_get("connected_by").unwrap_or(None);
 
-    // Best-effort author display name (users.info via the bot token).
-    let author = match super::handler::load_connection(pool, org_id).await? {
-        Some(conn) => match &event.user {
-            Some(u) => SlackClient::new(&conn)
-                .user_name(u)
-                .await
-                .unwrap_or_else(|| u.clone()),
-            None => "slack".to_string(),
-        },
-        None => event.user.clone().unwrap_or_else(|| "slack".to_string()),
+    // Resolve the author display name + any @mentions in the text via the bot
+    // token (users.info). Best-effort — falls back to raw ids.
+    let (author, text) = match super::handler::load_connection(pool, org_id).await? {
+        Some(conn) => {
+            let client = SlackClient::new(&conn);
+            let author = match &event.user {
+                Some(u) => client.user_name(u).await.unwrap_or_else(|| u.clone()),
+                None => "slack".to_string(),
+            };
+            (author, client.resolve_mentions(&event.text).await)
+        }
+        None => (
+            event.user.clone().unwrap_or_else(|| "slack".to_string()),
+            event.text.clone(),
+        ),
     };
-    let body = format!("[Slack · {author}] {}", event.text);
+    let body = format!("[Slack · {author}] {text}");
 
     // Server-readable storage (enterprise chat is not E2E).
     let (iv, enc) = encrypt(&body).map_err(|e| {

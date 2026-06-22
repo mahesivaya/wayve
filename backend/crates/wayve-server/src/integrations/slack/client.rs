@@ -164,6 +164,52 @@ impl SlackClient {
             .filter(|s| !s.is_empty())
     }
 
+    /// Resolve Slack markup in a message to readable text: user mentions
+    /// `<@U…>` / `<@U…|name>` → `@name` (bare ids are looked up via `users.info`),
+    /// channel refs `<#C…|name>` → `#name`, and links `<url|label>` → `label`.
+    /// UTF-8-safe manual scan (no regex dep); leaves plain text untouched.
+    pub async fn resolve_mentions(&self, text: &str) -> String {
+        let mut out = String::with_capacity(text.len());
+        let mut rest = text;
+        while let Some(start) = rest.find('<') {
+            out.push_str(&rest[..start]);
+            let after = &rest[start..];
+            if let Some(end) = after.find('>') {
+                out.push_str(&self.format_token(&after[1..end]).await);
+                rest = &after[end + 1..];
+            } else {
+                out.push('<');
+                rest = &after[1..];
+            }
+        }
+        out.push_str(rest);
+        out
+    }
+
+    async fn format_token(&self, inner: &str) -> String {
+        if let Some(user) = inner.strip_prefix('@') {
+            // `<@U…|name>` carries the name; `<@U…>` needs a users.info lookup.
+            if let Some((_, name)) = user.split_once('|') {
+                return format!("@{name}");
+            }
+            let name = self
+                .user_name(user)
+                .await
+                .unwrap_or_else(|| user.to_string());
+            return format!("@{name}");
+        }
+        if let Some(channel) = inner.strip_prefix('#') {
+            let name = channel.split_once('|').map(|(_, n)| n).unwrap_or(channel);
+            return format!("#{name}");
+        }
+        // Link form `<url|label>` / `<url>`.
+        match inner.split_once('|') {
+            Some((url, "")) => url.to_string(),
+            Some((_, label)) => label.to_string(),
+            None => inner.to_string(),
+        }
+    }
+
     /// `chat.postMessage` — post `text` to a Slack channel (outbound bridge).
     pub async fn post_message(&self, channel: &str, text: &str) -> Result<(), AppError> {
         let r: SlackPostMessage = self

@@ -94,7 +94,8 @@ pub async fn import_all(
                 Some(u) => client.user_name(u).await.unwrap_or_else(|| u.clone()),
                 None => "slack".to_string(),
             };
-            let body = format!("[Slack · {author}] {}", m.text);
+            let text = client.resolve_mentions(&m.text).await;
+            let body = format!("[Slack · {author}] {text}");
 
             let (iv, enc) = encrypt(&body).map_err(|e| {
                 warn!(target: "worker", error = %e, "slack import encrypt failed");
