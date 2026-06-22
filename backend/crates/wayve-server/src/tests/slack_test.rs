@@ -6,11 +6,12 @@
 #[cfg(test)]
 mod tests {
     use crate::integrations;
+    use crate::integrations::slack::client::SlackClient;
     use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
     use actix_web::{App, http::StatusCode, test as actix_test, web};
     use sqlx::{PgPool, Row};
     use wayve_security::encryption::decrypt;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_string, body_string_contains, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     const HEX64_TEST_KEY: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
@@ -228,5 +229,78 @@ mod tests {
             std::env::remove_var("SLACK_API_BASE");
         }
         cleanup(&pool, user_id, org_id).await;
+    }
+
+    // Outbound bridge posts under the Wayve sender's name: the `username` (and
+    // icon) override must be on the chat.postMessage form so Slack shows who
+    // wrote it instead of the bot. The mock only matches when `username=Alice`
+    // is present, so a missing override would 404 → post_message errors.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn outbound_post_includes_sender_name() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat.postMessage"))
+            .and(body_string_contains("username=Alice"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        unsafe {
+            std::env::set_var("SLACK_API_BASE", mock.uri());
+        }
+        let res = SlackClient::from_token("xoxb-test")
+            .post_message("C1", "hello", Some("Alice"))
+            .await;
+        assert!(res.is_ok(), "outbound post should succeed: {res:?}");
+
+        unsafe {
+            std::env::remove_var("SLACK_API_BASE");
+        }
+        // `.expect(1)` is verified on drop.
+        drop(mock);
+    }
+
+    // Graceful fallback: if the workspace lacks `chat:write.customize`, Slack
+    // rejects the customized post with `missing_scope`; we must retry once as a
+    // plain bot post (no username) so bridging never silently breaks. Two
+    // non-overlapping mocks: the customized body (contains `username=`) →
+    // missing_scope; the exact plain retry body → ok.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn outbound_post_falls_back_without_customize_scope() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat.postMessage"))
+            .and(body_string_contains("username="))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"ok": false, "error": "missing_scope"})),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/chat.postMessage"))
+            .and(body_string("channel=C1&text=hello"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        unsafe {
+            std::env::set_var("SLACK_API_BASE", mock.uri());
+        }
+        let res = SlackClient::from_token("xoxb-test")
+            .post_message("C1", "hello", Some("Alice"))
+            .await;
+        assert!(res.is_ok(), "should fall back to a plain post: {res:?}");
+
+        unsafe {
+            std::env::remove_var("SLACK_API_BASE");
+        }
+        // Both `.expect(1)`s verified on drop: customized attempt + plain retry.
+        drop(mock);
     }
 }

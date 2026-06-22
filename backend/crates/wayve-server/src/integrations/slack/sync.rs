@@ -138,14 +138,25 @@ pub async fn import_all(
 }
 
 /// Best-effort outbound bridge: if `wayve_channel_id` is linked to Slack, post
-/// `text` there. Never fails its caller — logs and swallows.
-pub async fn push_to_slack_if_linked(pool: &PgPool, wayve_channel_id: i32, text: &str) {
-    if let Err(e) = push_inner(pool, wayve_channel_id, text).await {
+/// `text` there under `sender_name` (the Wayve author, so Slack shows who wrote
+/// it rather than the bot). Never fails its caller — logs and swallows.
+pub async fn push_to_slack_if_linked(
+    pool: &PgPool,
+    wayve_channel_id: i32,
+    text: &str,
+    sender_name: &str,
+) {
+    if let Err(e) = push_inner(pool, wayve_channel_id, text, sender_name).await {
         warn!(target: "worker", wayve_channel_id, error = %e, "slack outbound push failed");
     }
 }
 
-async fn push_inner(pool: &PgPool, wayve_channel_id: i32, text: &str) -> Result<(), AppError> {
+async fn push_inner(
+    pool: &PgPool,
+    wayve_channel_id: i32,
+    text: &str,
+    sender_name: &str,
+) -> Result<(), AppError> {
     let Some(row) = sqlx::query(
         "SELECT slack_channel_id, organization_id
            FROM slack_channel_links WHERE wayve_channel_id = $1",
@@ -166,6 +177,6 @@ async fn push_inner(pool: &PgPool, wayve_channel_id: i32, text: &str) -> Result<
         return Ok(());
     }
     SlackClient::new(&conn)
-        .post_message(&slack_channel_id, text)
+        .post_message(&slack_channel_id, text, Some(sender_name))
         .await
 }

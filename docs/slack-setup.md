@@ -36,13 +36,14 @@ Personal/Business (end-to-end encrypted) orgs cannot use it.
 1. **https://api.slack.com/apps → Create New App → From scratch** → name it
    (e.g. `Fluxze`) → pick your workspace.
 2. **OAuth & Permissions → Scopes → Bot Token Scopes → Add an OAuth Scope** and add
-   **all four** (search each by its exact name):
+   **all five** (search each by its exact name):
 
    | Scope | Why it's needed |
    |---|---|
    | `channels:read` | List channels ("Load channels") |
    | `channels:history` | Read/import messages |
    | `chat:write` | Post Wayve → Slack (outbound) |
+   | `chat:write.customize` | Post each outbound message under the Wayve sender's name |
    | `users:read` | Show the Slack author's name |
 
    > These are *bot* scopes (left column). Don't confuse `chat:write` (under

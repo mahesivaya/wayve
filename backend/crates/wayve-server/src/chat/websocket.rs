@@ -466,7 +466,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                         "message_id": message_id,
                                         "channel_id": channel_id,
                                         "sender_id": sender_id,
-                                        "sender_name": sender_name,
+                                        "sender_name": sender_name.clone(),
                                         "content": content,
                                         "status": "sent",
                                         "created_at": created_at.to_rfc3339(),
@@ -500,11 +500,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     if uses_standard {
                                         let pool_slack = pool_for_slack.clone();
                                         let text = content_for_slack.clone();
+                                        // Post under the Wayve author so Slack
+                                        // shows who wrote it, not the bot name.
+                                        let author = sender_name.clone();
                                         actix_web::rt::spawn(async move {
                                             crate::integrations::slack::sync::push_to_slack_if_linked(
                                                 &pool_slack,
                                                 channel_id,
                                                 &text,
+                                                &author,
                                             )
                                             .await;
                                         });

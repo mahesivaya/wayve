@@ -147,7 +147,7 @@ export default function SlackPanel() {
             </a>{" "}
             and add the bot scopes <code>channels:read</code>,{" "}
             <code>channels:history</code>, <code>chat:write</code>,{" "}
-            <code>users:read</code>.
+            <code>chat:write.customize</code>, <code>users:read</code>.
           </li>
           <li>
             <strong>Reinstall to Workspace</strong> after adding scopes — they do
@@ -193,7 +193,8 @@ export default function SlackPanel() {
           <p className="slack-muted">
             Paste a Slack <strong>bot token</strong> (<code>xoxb-…</code>) with
             the <code>channels:history</code>, <code>channels:read</code>,{" "}
-            <code>chat:write</code>, and <code>users:read</code> scopes.
+            <code>chat:write</code>, <code>chat:write.customize</code>, and{" "}
+            <code>users:read</code> scopes.
           </p>
           <div className="slack-row">
             <input
