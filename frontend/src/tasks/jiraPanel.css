@@ -1,9 +1,14 @@
+/* This panel was originally authored against a foreign variable namespace
+   (--card-bg / --text-color / --border-color / --accent-color …) that the app
+   theme never defines, so every rule fell back to its light-mode literal (e.g.
+   #fff) and the block stayed white in dark mode. Use the same --color-* tokens
+   as the surrounding Tasks blocks so it tracks the theme. */
 .jira-panel {
-  border: 1px solid var(--border-color, #e2e2e7);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 16px;
-  background: var(--card-bg, #fff);
+  background: var(--color-email-list-bg);
 }
 
 .jira-panel-head {
@@ -15,12 +20,12 @@
 
 .jira-panel-title {
   font-weight: 600;
-  color: var(--text-color, #1d1d1f);
+  color: var(--color-text-primary);
 }
 
 .jira-panel-account {
   font-size: 0.85rem;
-  color: var(--text-muted, #6b6b70);
+  color: var(--color-text-muted);
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -39,9 +44,9 @@
 }
 
 .jira-btn {
-  border: 1px solid var(--border-color, #d0d0d5);
-  background: var(--button-bg, #f5f5f7);
-  color: var(--text-color, #1d1d1f);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
   border-radius: 7px;
   padding: 6px 12px;
   font-size: 0.85rem;
@@ -54,9 +59,9 @@
 }
 
 .jira-btn--primary {
-  background: var(--accent-color, #0a66ff);
-  border-color: var(--accent-color, #0a66ff);
-  color: #fff;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-surface);
 }
 
 .jira-panel-form {
@@ -71,16 +76,16 @@
   flex-direction: column;
   gap: 4px;
   font-size: 0.8rem;
-  color: var(--text-muted, #6b6b70);
+  color: var(--color-text-muted);
 }
 
 .jira-field input {
-  border: 1px solid var(--border-color, #d0d0d5);
+  border: 1px solid var(--color-input-border);
   border-radius: 7px;
   padding: 7px 9px;
   font-size: 0.9rem;
-  background: var(--input-bg, #fff);
-  color: var(--text-color, #1d1d1f);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
 }
 
 .jira-panel-form > .jira-btn--primary {
@@ -96,23 +101,23 @@
 }
 
 .jira-jql-input {
-  border: 1px solid var(--border-color, #d0d0d5);
+  border: 1px solid var(--color-input-border);
   border-radius: 7px;
   padding: 7px 9px;
   font-size: 0.85rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: var(--input-bg, #fff);
-  color: var(--text-color, #1d1d1f);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
 }
 
 .jira-jql-hint {
   font-size: 0.78rem;
-  color: var(--text-muted, #6b6b70);
+  color: var(--color-text-muted);
 }
 
 .jira-jql-hint code {
   font-size: 0.78rem;
-  background: var(--code-bg, #f0f0f3);
+  background: var(--color-surface-hover);
   padding: 0 4px;
   border-radius: 4px;
 }
@@ -120,13 +125,13 @@
 .jira-panel-notice {
   margin: 10px 0 0;
   font-size: 0.82rem;
-  color: var(--success-color, #1a7f37);
+  color: var(--color-success);
 }
 
 .jira-panel-error {
   margin: 10px 0 0;
   font-size: 0.82rem;
-  color: var(--error-color, #d23b3b);
+  color: var(--color-danger);
 }
 
 .jira-badge {
@@ -134,8 +139,8 @@
   margin-left: 8px;
   padding: 1px 7px;
   border-radius: 999px;
-  border: 1px solid var(--accent-color, #0a66ff);
-  color: var(--accent-color, #0a66ff);
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
   font-size: 0.72rem;
   font-weight: 600;
   text-decoration: none;
@@ -144,8 +149,8 @@
 }
 
 .jira-badge--link:hover {
-  background: var(--accent-color, #0a66ff);
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-surface);
 }
 
 @media (max-width: 560px) {
