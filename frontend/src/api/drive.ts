@@ -126,13 +126,23 @@ export const uploadDriveFiles = async (
   });
 
   if (!res.ok) {
+    // 413 comes from nginx (request body over client_max_body_size), not the
+    // backend — its response is an HTML error page, so don't surface the raw
+    // markup. Show a clear, actionable message instead.
+    if (res.status === 413) {
+      throw new Error("File is too large to upload (max 50 MB).");
+    }
     let message = "Upload failed";
     try {
       const data = await res.clone().json();
       message = data?.message || data?.error || message;
     } catch {
-      const text = await res.text();
-      if (text.trim()) message = text.trim();
+      // Fall back to the response text, but only when it's a short plain
+      // message — never a full HTML error page (e.g. from a proxy).
+      const text = (await res.text()).trim();
+      if (text && text.length < 200 && !/<\s*html/i.test(text)) {
+        message = text;
+      }
     }
     throw new Error(message);
   }

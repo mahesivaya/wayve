@@ -7,6 +7,11 @@ http {
     error_log /var/log/nginx/error.log warn;
     resolver 127.0.0.11 valid=10s ipv6=off;
 
+    # Max request body. nginx defaults to 1m, which rejects Drive/email file
+    # uploads with "413 Request Entity Too Large" before they reach the backend.
+    # The upload handler buffers the whole file in memory, so keep this bounded.
+    client_max_body_size 50m;
+
     server {
         listen 80;
         server_name ${NGINX_HOST};

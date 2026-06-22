@@ -6,6 +6,11 @@ http {
     access_log /var/log/nginx/access.log;
     error_log /var/log/nginx/error.log warn;
 
+    # Max request body. nginx defaults to 1m, which rejects Drive/email file
+    # uploads with "413 Request Entity Too Large" before they reach the backend.
+    # The upload handler buffers the whole file in memory, so keep this bounded.
+    client_max_body_size 50m;
+
     # ---- HTTP (port 80) ----
     # Serves the ACME HTTP-01 challenge for Let's Encrypt and redirects every
     # other request to HTTPS.
