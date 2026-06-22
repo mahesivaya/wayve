@@ -133,6 +133,59 @@ export default function SlackPanel() {
 
   return (
     <div className="slack-panel">
+      <details className="slack-guide">
+        <summary>📖 How to connect Slack — setup guide</summary>
+        <ol className="slack-guide-list">
+          <li>
+            Create a Slack app at{" "}
+            <a
+              href="https://api.slack.com/apps"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              api.slack.com/apps
+            </a>{" "}
+            and add the bot scopes <code>channels:read</code>,{" "}
+            <code>channels:history</code>, <code>chat:write</code>,{" "}
+            <code>users:read</code>.
+          </li>
+          <li>
+            <strong>Reinstall to Workspace</strong> after adding scopes — they do
+            not apply until you do.
+          </li>
+          <li>
+            Copy the <strong>Bot User OAuth Token</strong> (<code>xoxb-…</code>),
+            paste it below, and <strong>Connect</strong>.
+          </li>
+          <li>
+            <strong>Load channels</strong> → <strong>Link</strong> a channel
+            (this creates a Wayve channel under Messages).
+          </li>
+          <li>
+            In Slack, run <code>/invite @YourApp</code> in each linked channel —{" "}
+            <strong>required</strong> for messages to flow either way (otherwise
+            posts fail with <code>not_in_channel</code>).
+          </li>
+          <li>
+            For real-time Slack → Wayve: turn on <strong>Event Subscriptions</strong>{" "}
+            with URL <code>https://fluxze.com/webhooks/slack_events</code> and
+            subscribe to <code>message.channels</code> (your admin sets the
+            signing secret).
+          </li>
+        </ol>
+        <p className="slack-muted">
+          The two silent gotchas: <strong>reinstall after changing scopes</strong>{" "}
+          and <strong>invite the bot to the channel</strong>.{" "}
+          <a
+            href="https://github.com/mahesivaya/wayve/blob/main/docs/slack-setup.md"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Full guide ↗
+          </a>
+        </p>
+      </details>
+
       {!status ? (
         <p className="slack-muted">Loading…</p>
       ) : !connected ? (

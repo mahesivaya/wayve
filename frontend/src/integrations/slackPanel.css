@@ -92,3 +92,43 @@
   font-size: 0.85rem;
   margin: 0;
 }
+
+.slack-guide {
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-2, #f9fafb);
+}
+
+.slack-guide > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  list-style: none;
+}
+
+.slack-guide > summary::-webkit-details-marker {
+  display: none;
+}
+
+.slack-guide-list {
+  margin: 0.6rem 0 0.4rem;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.slack-guide code {
+  background: var(--surface-3, #eef2f7);
+  border-radius: 4px;
+  padding: 0 0.25rem;
+  font-size: 0.8em;
+}
+
+.slack-guide a {
+  color: #4a154b;
+  font-weight: 600;
+}
