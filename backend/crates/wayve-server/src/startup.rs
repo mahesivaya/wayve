@@ -611,6 +611,25 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             updated_at TIMESTAMP DEFAULT NOW()
         )",
         // ────────────────────────────────────────────────────────────────
+        // Jira integration (per-user). Originally only in init.sql, so existing
+        // DBs that pre-date the Jira feature never got these — backfill on every
+        // boot so the connection/import endpoints don't 500 on a missing table.
+        // ────────────────────────────────────────────────────────────────
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS jira_issue_key TEXT",
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS jira_base TEXT",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_jira_issue \
+         ON tasks(user_id, jira_issue_key) WHERE jira_issue_key IS NOT NULL",
+        "CREATE TABLE IF NOT EXISTS user_jira_connections (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            base_url TEXT NOT NULL,
+            email TEXT NOT NULL,
+            api_token_iv TEXT NOT NULL,
+            api_token_encrypted TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )",
+        // ────────────────────────────────────────────────────────────────
         // Plan catalog. Three personal tiers (Basic / Advance / Most Advance)
         // and three business tiers (Startups / Business / Enterprise). init.sql
         // only seeds a fresh volume, so we re-apply the canonical catalog here
