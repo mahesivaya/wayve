@@ -2,6 +2,27 @@ import type { ChatChannel, ChatMessage } from "../../api/chat";
 import { formatTime, getStatusIcon } from "../utils";
 import MessageAttachments from "./MessageAttachments";
 
+// Inbound Slack messages are stored as `[Slack · <author>] <text>` under the
+// connecting Wayve user's id, so without special handling they'd render as the
+// viewer's own message (right-aligned, no author). Parse out the Slack author
+// and clean Slack's `<@U…>` / `<#C…>` / `<url|label>` markup so they render as
+// received, with the real author shown.
+const SLACK_RE = /^\[Slack · (.+?)\]\s?([\s\S]*)$/;
+
+function parseSlackMessage(
+  content: string
+): { author: string; text: string } | null {
+  const m = content.match(SLACK_RE);
+  if (!m) return null;
+  const text = m[2]
+    .replace(/<@[A-Z0-9]+\|([^>]+)>/g, "@$1")
+    .replace(/<@[A-Z0-9]+>/g, "@someone")
+    .replace(/<#[A-Z0-9]+\|([^>]+)>/g, "#$1")
+    .replace(/<(?:https?:)?[^|>]*\|([^>]+)>/g, "$1")
+    .replace(/<(https?:[^>]+)>/g, "$1");
+  return { author: m[1], text };
+}
+
 type Props = {
   messages: ChatMessage[];
   selectedChannel: ChatChannel | null;
@@ -41,7 +62,11 @@ export default function MessageThread({
   return (
     <div className="messages">
       {topLevel.map((msg, i) => {
-        const mine = msg.sender_id === currentUserId;
+        const slack = msg.content ? parseSlackMessage(msg.content) : null;
+        // Slack-origin messages are never the viewer's own — always render them
+        // as received (left), regardless of the stored sender id.
+        const mine = !slack && msg.sender_id === currentUserId;
+        const displayContent = slack ? slack.text : msg.content;
         const replyCount = msg.reply_count ?? 0;
         // Only top-level channel messages with an id can host a thread.
         const canOpenThread =
@@ -52,8 +77,18 @@ export default function MessageThread({
             key={msg.message_id ?? i}
             className={`message ${mine ? "me" : ""}`}
           >
-            <div className={`bubble ${mine ? "me" : "other"}`}>
-              {msg.content && <div>{msg.content}</div>}
+            <div
+              className={`bubble ${mine ? "me" : "other"}${
+                slack ? " bubble--slack" : ""
+              }`}
+            >
+              {slack && (
+                <div className="bubble-sender">
+                  <span className="bubble-sender-badge">Slack</span>
+                  {slack.author}
+                </div>
+              )}
+              {displayContent && <div>{displayContent}</div>}
               <MessageAttachments message={msg} currentUserId={currentUserId} />
               <div className="message-meta">
                 {formatTime(msg.created_at)}{" "}

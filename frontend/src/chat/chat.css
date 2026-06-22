@@ -673,6 +673,34 @@
   border-bottom-left-radius: 4px;
 }
 
+/* Sender label above a bubble (currently shown for bridged Slack messages, so
+   you can see who sent them and that they came from Slack). */
+.bubble-sender {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.bubble-sender-badge {
+  background: #4a154b;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+/* Slack-purple accent so received Slack messages are visually distinct. */
+.bubble--slack {
+  border-left: 3px solid #4a154b;
+}
+
 .message-meta {
   margin-top: 5px;
   font-size: var(--text-xs);
