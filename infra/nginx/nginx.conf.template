@@ -37,6 +37,14 @@ http {
             proxy_redirect off;
         }
 
+        # ✅ Inbound integration webhooks (Jira: /webhooks/fluxze_webhook)
+        location /webhooks/ {
+            proxy_pass http://backend:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_redirect off;
+        }
+
         # ✅ WebSocket
         location /ws/ {
             proxy_pass http://backend:8080/ws/;
