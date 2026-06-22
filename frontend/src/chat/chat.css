@@ -79,7 +79,11 @@
 .chat-header h3 {
   margin: 0;
   font-size: var(--text-2xl);
-  color: var(--color-surface-darken-mid);
+  /* Use the primary text color, not --color-surface-darken-mid (#112847 in
+     dark mode): that near-black navy sat on top of the dark --color-email-list-bg
+     (#0f1f3d) header, making channel/conversation titles unreadable — the same
+     trap already fixed for .conversation-item below. */
+  color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
