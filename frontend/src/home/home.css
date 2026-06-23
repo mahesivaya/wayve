@@ -2458,6 +2458,114 @@
   );
 }
 
+/* ---------- HOME / OVERVIEW SCREEN ---------- */
+/* Mirrors the real PersonalDashboard: a Meetings + Task row, then a
+   full-width Emails block. Cards read off the dark --hx-* tokens so they
+   match the rest of the mock automatically. */
+.hx-mock-home {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.hx-mock-home-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.hx-mock-block {
+  border: 1px solid var(--hx-border);
+  border-radius: 12px;
+  background: var(--hx-glass);
+  padding: 12px 14px;
+}
+.hx-mock-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 9px;
+  margin-bottom: 9px;
+  border-bottom: 1px solid var(--hx-line);
+}
+.hx-mock-block-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hx-muted);
+}
+.hx-mock-block-action {
+  font-size: 11.5px;
+  color: var(--hx-muted);
+}
+.hx-mock-block-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.hx-mock-block-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+}
+.hx-mock-row-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38bdf8;
+  flex: 0 0 auto;
+}
+.hx-mock-row-dot.is-unread {
+  background: #60a5fa;
+}
+.hx-mock-row-check {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--hx-muted);
+  flex: 0 0 auto;
+}
+.hx-mock-row-time {
+  flex: 0 0 auto;
+  width: 38px;
+  color: var(--hx-muted);
+  font-size: 11.5px;
+}
+.hx-mock-row-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--hx-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hx-mock-row-from {
+  flex: 0 0 auto;
+  max-width: 38%;
+  color: var(--hx-ink);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hx-mock-row-subject {
+  flex: 1;
+  min-width: 0;
+  color: var(--hx-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hx-mock-row-meta {
+  flex: 0 0 auto;
+  color: var(--hx-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* ---------- ANIMATED TAB SCREENS ---------- */
 /* Fixed height keeps the window from resizing as screens swap and as the mail
    list gains rows — extra rows pack into the same block (clipped like a real
@@ -2483,12 +2591,96 @@
   }
 }
 
-/* Chat */
+/* Chat — two-pane: conversation list + active thread, like the real page. */
 .hx-mock-chat {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+}
+.hx-mock-chat-list {
   display: flex;
   flex-direction: column;
+  gap: 3px;
+  padding-right: 14px;
+  border-right: 1px solid var(--hx-border);
+  overflow: hidden;
+}
+.hx-mock-chat-section {
+  margin: 10px 6px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hx-muted);
+}
+.hx-mock-chat-section:first-child {
+  margin-top: 0;
+}
+.hx-mock-conv {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--hx-muted);
+}
+.hx-mock-conv.is-active {
+  background: rgba(56, 189, 248, 0.14);
+}
+.hx-mock-conv.is-active .hx-mock-conv-name {
+  color: #dbeafe;
+}
+.hx-mock-conv-hash {
+  width: 22px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--hx-muted);
+  flex: 0 0 auto;
+}
+.hx-mock-conv-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(96, 165, 250, 0.25);
+  color: #bcd0f5;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.hx-mock-conv-name {
+  flex: 1;
+  min-width: 0;
+  color: #c9d6ef;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hx-mock-conv-badge {
+  flex: 0 0 auto;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hx-mock-chat-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   gap: 12px;
-  padding: 4px;
 }
 .hx-mock-chat-head {
   display: flex;
@@ -2542,6 +2734,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 .hx-mock-bubble {
   max-width: 72%;
@@ -2561,6 +2756,225 @@
   background: linear-gradient(135deg, #2563eb, #38bdf8);
   color: #fff;
   border-bottom-right-radius: 4px;
+}
+.hx-mock-chat-compose {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--hx-border);
+  background: rgba(255, 255, 255, 0.05);
+}
+.hx-mock-chat-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: #6f82a8;
+}
+.hx-mock-chat-send {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* More — code repository page: three panes (rail / files / code), like the
+   real GitHub repo viewer. Reads off the dark --hx-* tokens. */
+.hx-mock-repo {
+  display: grid;
+  grid-template-columns: 152px 214px 1fr;
+  height: 100%;
+  min-height: 0;
+  font-size: 12px;
+}
+.hx-mock-repo-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-right: 12px;
+  border-right: 1px solid var(--hx-border);
+  overflow: hidden;
+}
+.hx-mock-repo-label {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hx-muted);
+}
+.hx-mock-repo-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--hx-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--hx-ink);
+  font-weight: 600;
+}
+.hx-mock-repo-select > span:first-child {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hx-mock-repo-caret {
+  flex: 0 0 auto;
+  color: var(--hx-muted);
+}
+.hx-mock-repo-add {
+  text-align: center;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--hx-border);
+  color: var(--hx-muted);
+}
+.hx-mock-repo-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+}
+.hx-mock-repo-navitem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  color: var(--hx-muted);
+}
+.hx-mock-repo-navitem.is-active {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--hx-ink);
+}
+.hx-mock-repo-navico {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hx-mock-repo-navlabel {
+  flex: 1;
+  min-width: 0;
+}
+.hx-mock-repo-navbadge {
+  flex: 0 0 auto;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--hx-muted);
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hx-mock-repo-files {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--hx-border);
+}
+.hx-mock-repo-files-head {
+  padding: 10px 12px;
+  font-weight: 700;
+  color: var(--hx-ink);
+  border-bottom: 1px solid var(--hx-line);
+}
+.hx-mock-repo-files-list {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.hx-mock-repo-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: var(--hx-muted);
+}
+.hx-mock-repo-file.is-active {
+  background: rgba(255, 255, 255, 0.06);
+}
+.hx-mock-repo-chev {
+  flex: 0 0 auto;
+  width: 10px;
+  text-align: center;
+  color: var(--hx-muted);
+}
+.hx-mock-repo-fico {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hx-mock-repo-file.is-dir .hx-mock-repo-fico {
+  color: #d9b34a;
+}
+.hx-mock-repo-file.is-file .hx-mock-repo-fico {
+  color: var(--hx-muted);
+}
+.hx-mock-repo-fn {
+  flex: 1;
+  min-width: 0;
+  color: var(--hx-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hx-mock-repo-file.is-dir .hx-mock-repo-fn {
+  font-weight: 600;
+}
+.hx-mock-repo-fsz {
+  flex: 0 0 auto;
+  color: var(--hx-muted);
+  font-size: 10.5px;
+}
+.hx-mock-repo-code {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.hx-mock-repo-code-head {
+  padding: 10px 14px;
+  font-weight: 700;
+  color: var(--hx-ink);
+  border-bottom: 1px solid var(--hx-line);
+}
+.hx-mock-repo-code-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 12px 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #c9d6ef;
+  white-space: pre;
 }
 
 /* Meet — calendar view */
@@ -2978,99 +3392,61 @@
   font-weight: 700;
 }
 
-/* ---------- PRODUCTS ---------- */
-.hx-products {
+/* ---------- INTEGRATIONS ---------- */
+.hx-integrations {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
   gap: 16px;
 }
-.hx-product {
+.hx-integration {
   text-align: left;
   border-radius: 14px;
   border: 1px solid var(--hx-border);
   background: var(--hx-glass);
-  padding: 20px;
-  cursor: pointer;
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  transition:
-    transform 0.16s ease,
-    border-color 0.16s ease,
-    background 0.16s ease;
+  gap: 12px;
 }
-.hx-product:hover {
-  transform: translateY(-3px);
-  border-color: rgba(56, 189, 248, 0.45);
-  background: var(--hx-glass-strong);
-}
-.hx-product-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 11px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-  color: #fff;
-  background: linear-gradient(135deg, #2563eb, #38bdf8);
-}
-.hx-product-name {
-  font-weight: 700;
-  color: var(--hx-ink);
+.hx-integration-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
-.hx-product-badge {
-  font-size: 0.66rem;
+.hx-integration-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--hx-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.hx-integration-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hx-integration-name {
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #075985;
-  background: rgba(56, 189, 248, 0.22);
-  border: 1px solid rgba(56, 189, 248, 0.5);
-  border-radius: 999px;
-  padding: 1px 7px;
+  color: var(--hx-ink);
 }
-.hx-product-summary {
+.hx-integration-status {
+  font-size: 0.8rem;
+  color: var(--hx-muted);
+}
+.hx-integration-status.is-enabled {
+  color: #16a34a;
+  font-weight: 600;
+}
+.hx-integration-desc {
+  margin: 0;
   color: var(--hx-muted);
   font-size: 0.9rem;
   line-height: 1.5;
-}
-
-/* ---------- STATS ---------- */
-.hx-stats {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
-  margin: 72px 0 10px;
-  padding: 32px 24px;
-  border-radius: 18px;
-  border: 1px solid var(--hx-border);
-  background: linear-gradient(
-    135deg,
-    rgba(56, 189, 248, 0.06),
-    rgba(37, 99, 235, 0.04)
-  );
-}
-.hx-stat {
-  text-align: center;
-}
-.hx-stat-value {
-  margin: 0;
-  font-size: 2.3rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  background: linear-gradient(120deg, #93c5fd, #38bdf8);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.hx-stat-label {
-  margin: 6px 0 0;
-  color: var(--hx-muted);
-  font-size: 0.9rem;
 }
 
 /* ---------- ROLES ---------- */
@@ -3263,17 +3639,12 @@
 /* ---------- RESPONSIVE ---------- */
 @media (max-width: 900px) {
   .hx-bento,
-  .hx-products,
   .hx-roles,
-  .hx-stats,
   .faq-grid {
     grid-template-columns: repeat(2, 1fr);
   }
   .hx-bento-lead {
     grid-row: auto;
-  }
-  .hx-stats {
-    grid-template-columns: repeat(2, 1fr);
   }
   .hx-mock-side {
     display: none;
@@ -3284,9 +3655,7 @@
 }
 @media (max-width: 560px) {
   .hx-bento,
-  .hx-products,
   .hx-roles,
-  .hx-stats,
   .faq-grid {
     grid-template-columns: 1fr;
   }

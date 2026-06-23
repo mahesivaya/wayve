@@ -1,6 +1,7 @@
 import { useAuth } from "../auth/useAuth";
 import { BRAND_NAME } from "../config/brand";
 import BrandLogo from "../components/BrandLogo";
+import { BrandIcon } from "../integrations/BrandIcon";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { SERVICES } from "../services/serviceData";
@@ -304,38 +305,90 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ===================== PRODUCTS ===================== */}
+          {/* ===================== INTEGRATIONS ===================== */}
           <section className="hx-section">
             <div className="hx-section-head">
-              <p className="hx-eyebrow">Products</p>
-              <h2>Eight apps, one login.</h2>
+              <p className="hx-eyebrow">Integrations</p>
+              <h2>Connect a service</h2>
+              <p className="hx-section-sub">
+                Bring the tools you already use. Connect your mail, code, and
+                issues — then work with them right inside Fluxze.
+              </p>
             </div>
-            <div className="hx-products">
-              {SERVICES.map((service) => (
-                <button
-                  key={service.slug}
-                  type="button"
-                  className="hx-product"
-                  onClick={() => navigate(`/services/${service.slug}`)}
-                >
-                  <span className="hx-product-name">{service.name}</span>
-                </button>
+            <div className="hx-integrations">
+              {[
+                {
+                  name: "Jira",
+                  icon: "jira",
+                  status: "Connect",
+                  desc: "Sync Jira issues into Tasks and get real-time updates from Jira via webhook.",
+                },
+                {
+                  name: "GitHub",
+                  icon: "github",
+                  status: "Enabled",
+                  enabled: true,
+                  desc: "Browse repositories, commits, diffs, and CI runs from your linked projects.",
+                },
+                {
+                  name: "Gmail",
+                  icon: "gmail",
+                  status: "Connect",
+                  desc: "Connect a Gmail mailbox to import its mail and read it under Emails.",
+                },
+                {
+                  name: "Outlook",
+                  icon: "outlook",
+                  status: "Connect",
+                  desc: "Connect an Outlook mailbox to import its mail and read it under Emails.",
+                },
+                {
+                  name: "GitLab",
+                  icon: "gitlab",
+                  status: "Connect",
+                  desc: "Connect GitLab (cloud or self-hosted) and import your assigned issues into Tasks.",
+                },
+                {
+                  name: "More",
+                  icon: "more",
+                  status: "Explore",
+                  desc: "Slack, scoped service API keys, webhooks, and more — connect the rest of your stack.",
+                },
+              ].map((it) => (
+                <article key={it.name} className="hx-integration">
+                  <div className="hx-integration-head">
+                    <span className="hx-integration-icon">
+                      {it.icon === "more" ? (
+                        <svg
+                          viewBox="0 0 24 24"
+                          width="22"
+                          height="22"
+                          fill="#475569"
+                          aria-hidden="true"
+                        >
+                          <circle cx="5" cy="12" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="19" cy="12" r="2" />
+                        </svg>
+                      ) : (
+                        <BrandIcon name={it.icon} />
+                      )}
+                    </span>
+                    <span className="hx-integration-titles">
+                      <span className="hx-integration-name">{it.name}</span>
+                      <span
+                        className={`hx-integration-status ${
+                          it.enabled ? "is-enabled" : ""
+                        }`}
+                      >
+                        {it.status}
+                      </span>
+                    </span>
+                  </div>
+                  <p className="hx-integration-desc">{it.desc}</p>
+                </article>
               ))}
             </div>
-          </section>
-
-          {/* ===================== STATS ===================== */}
-          <section className="hx-stats">
-            {[
-              { v: "8+", l: "Tools replaced in one app" },
-              { v: "256-bit", l: "Encryption at rest" },
-              { v: "0", l: "Extensions or installs" },
-            ].map((s) => (
-              <div key={s.l} className="hx-stat">
-                <p className="hx-stat-value">{s.v}</p>
-                <p className="hx-stat-label">{s.l}</p>
-              </div>
-            ))}
           </section>
 
           {/* ===================== WHO IT'S FOR ===================== */}

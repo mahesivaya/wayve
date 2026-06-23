@@ -60,6 +60,12 @@ function MailScreen() {
 }
 
 function ChatScreen() {
+  const channels = ["general", "engineering", "design"];
+  const dms = [
+    { name: "Daniel Reed", initial: "D", active: true, unread: 0 },
+    { name: "Emily Carter", initial: "E", active: false, unread: 2 },
+    { name: "Marco Rossi", initial: "M", active: false, unread: 0 },
+  ];
   const msgs: Array<{ side: "them" | "me"; text: string }> = [
     { side: "them", text: "Did the prod deploy go out?" },
     { side: "me", text: "Yep — green across the board ✅" },
@@ -68,35 +74,76 @@ function ChatScreen() {
     { side: "them", text: "🔥 ship it" },
     { side: "me", text: "Posting the release notes now." },
     { side: "them", text: "Perfect — I'll loop in the team." },
-    { side: "them", text: "Did you see the new signups?" },
-    { side: "me", text: "Yeah — up 30% this week 📈" },
   ];
   return (
     <div className="hx-mock-chat">
-      <div className="hx-mock-chat-head">
-        <span className="hx-mock-chat-peer">
-          <span className="hx-mock-chat-pavatar">D</span>
-          Daniel Reed
-        </span>
-        <span className="hx-mock-chat-actions">
-          <span className="hx-mock-chat-call" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
-              <path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.3 1.1.4 2.4.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.3 1l-2.2 2.2z" />
-            </svg>
-          </span>
-          <span className="hx-mock-chat-call" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
-              <path d="M4 7a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v2.2l4.4-2.9a.6.6 0 0 1 .9.5v10.4a.6.6 0 0 1-.9.5L15 14.8V17a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7z" />
-            </svg>
-          </span>
-        </span>
-      </div>
-      <div className="hx-mock-chat-stream">
-        {msgs.map((m, i) => (
-          <div key={i} className={`hx-mock-bubble ${m.side}`}>
-            {m.text}
+      <aside className="hx-mock-chat-list">
+        <div className="hx-mock-chat-section">Channels</div>
+        {channels.map((c) => (
+          <div key={c} className="hx-mock-conv">
+            <span className="hx-mock-conv-hash">#</span>
+            <span className="hx-mock-conv-name">{c}</span>
           </div>
         ))}
+        <div className="hx-mock-chat-section">Direct messages</div>
+        {dms.map((d) => (
+          <div
+            key={d.name}
+            className={`hx-mock-conv ${d.active ? "is-active" : ""}`}
+          >
+            <span className="hx-mock-conv-avatar">{d.initial}</span>
+            <span className="hx-mock-conv-name">{d.name}</span>
+            {d.unread > 0 && (
+              <span className="hx-mock-conv-badge">{d.unread}</span>
+            )}
+          </div>
+        ))}
+      </aside>
+
+      <div className="hx-mock-chat-main">
+        <div className="hx-mock-chat-head">
+          <span className="hx-mock-chat-peer">
+            <span className="hx-mock-chat-pavatar">D</span>
+            Daniel Reed
+          </span>
+          <span className="hx-mock-chat-actions">
+            <span className="hx-mock-chat-call" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                width="15"
+                height="15"
+              >
+                <path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.3 1.1.4 2.4.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.3 1l-2.2 2.2z" />
+              </svg>
+            </span>
+            <span className="hx-mock-chat-call" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                width="15"
+                height="15"
+              >
+                <path d="M4 7a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v2.2l4.4-2.9a.6.6 0 0 1 .9.5v10.4a.6.6 0 0 1-.9.5L15 14.8V17a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7z" />
+              </svg>
+            </span>
+          </span>
+        </div>
+        <div className="hx-mock-chat-stream">
+          {msgs.map((m, i) => (
+            <div key={i} className={`hx-mock-bubble ${m.side}`}>
+              {m.text}
+            </div>
+          ))}
+        </div>
+        <div className="hx-mock-chat-compose">
+          <span className="hx-mock-chat-input">Message Daniel Reed…</span>
+          <span className="hx-mock-chat-send" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+              <path d="M3 11l18-8-8 18-2-7-8-3z" />
+            </svg>
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -309,7 +356,280 @@ function AIScreen() {
   );
 }
 
+function HomeScreen() {
+  const meetings = [
+    { time: "10:00", title: "Daily standup", meta: "5 ppl" },
+    { time: "2:00", title: "Sprint planning", meta: "8 ppl" },
+  ];
+  const tasks = [
+    { title: "Draft Q3 roadmap", meta: "In progress" },
+    { title: "Review PR #482", meta: "Today" },
+    { title: "Rotate API keys", meta: "To do" },
+  ];
+  const emails = [
+    {
+      from: "Emily Carter",
+      subject: "Q3 roadmap — final review before Friday",
+      time: "9:24",
+    },
+    { from: "GitHub", subject: "[fluxze] PR #482 merged into main", time: "8:10" },
+    {
+      from: "Marco Rossi",
+      subject: "Re: Q3 invoice — approved, payment sent",
+      time: "Yest",
+    },
+  ];
+  return (
+    <div className="hx-mock-home">
+      <div className="hx-mock-home-row">
+        <section className="hx-mock-block">
+          <header className="hx-mock-block-head">
+            <span className="hx-mock-block-title">Meetings</span>
+            <span className="hx-mock-block-action">Open scheduler →</span>
+          </header>
+          <ul className="hx-mock-block-list">
+            {meetings.map((m) => (
+              <li key={m.title} className="hx-mock-block-row">
+                <span className="hx-mock-row-dot" />
+                <span className="hx-mock-row-time">{m.time}</span>
+                <span className="hx-mock-row-title">{m.title}</span>
+                <span className="hx-mock-row-meta">{m.meta}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="hx-mock-block">
+          <header className="hx-mock-block-head">
+            <span className="hx-mock-block-title">Task</span>
+            <span className="hx-mock-block-action">+ Add task</span>
+          </header>
+          <ul className="hx-mock-block-list">
+            {tasks.map((t) => (
+              <li key={t.title} className="hx-mock-block-row">
+                <span className="hx-mock-row-check" />
+                <span className="hx-mock-row-title">{t.title}</span>
+                <span className="hx-mock-row-meta">{t.meta}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+
+      <section className="hx-mock-block">
+        <header className="hx-mock-block-head">
+          <span className="hx-mock-block-title">Emails</span>
+          <span className="hx-mock-block-action">Open inbox →</span>
+        </header>
+        <ul className="hx-mock-block-list">
+          {emails.map((e) => (
+            <li key={e.subject} className="hx-mock-block-row">
+              <span className="hx-mock-row-dot is-unread" />
+              <span className="hx-mock-row-from">{e.from}</span>
+              <span className="hx-mock-row-subject">{e.subject}</span>
+              <span className="hx-mock-row-meta">{e.time}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+const RepoFolderIcon = (
+  <svg viewBox="0 0 16 16" fill="currentColor" width="15" height="15">
+    <path d="M1.75 4c0-.69.56-1.25 1.25-1.25h3.4c.4 0 .77.18 1 .5l.7.93h4.9c.69 0 1.25.56 1.25 1.25v6.07c0 .69-.56 1.25-1.25 1.25H3c-.69 0-1.25-.56-1.25-1.25V4z" />
+  </svg>
+);
+const RepoFileIcon = (
+  <svg
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.3"
+    width="14"
+    height="14"
+  >
+    <path d="M9 1.75H4.5c-.69 0-1.25.56-1.25 1.25v10c0 .69.56 1.25 1.25 1.25h7c.69 0 1.25-.56 1.25-1.25V5L9 1.75z" />
+    <path d="M9 1.75V5h3.75" />
+  </svg>
+);
+
+function MoreScreen() {
+  const folders = [
+    ".github",
+    ".idea",
+    ".vscode",
+    "apprunner",
+    "colossal_django",
+    "colossal_flask",
+    "colossal_main",
+    "myproject",
+    "postgres",
+  ];
+  const files = [
+    { n: ".gitignore", s: "82 B" },
+    { n: "apprunner.yaml", s: "282 B" },
+    { n: "Makefile", s: "386 B", active: true },
+    { n: "manage.py", s: "665 B" },
+    { n: "README.md", s: "6.0 KB" },
+    { n: "requirements.txt", s: "99 B" },
+    { n: "resume.html", s: "6.5 KB" },
+    { n: "server.py", s: "638 B" },
+    { n: "startup.sh", s: "86 B" },
+  ];
+  const makefile = `# hello:
+#   echo "Hello, World"
+
+files := file1 file2
+some_file: $(files)
+    echo "Look at this variable: " $(files)
+    touch some_file
+
+file1:
+    touch file1
+file2:
+    touch file2
+
+clean:
+    rm -f file1 file2 some_file
+
+migrate:
+    python3 ./colossal_main/manage.py migrate
+
+makemigrations:
+    python3 ./colossal_main/manage.py makemigrations
+
+runserver:
+    python3 ./colossal_main/manage.py runserver`;
+  const nav = [
+    {
+      label: "Description",
+      icon: (
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          width="15"
+          height="15"
+        >
+          <path d="M8 4.4C7 3.2 5.5 3 3.5 3.2v8.3C5.5 11.3 7 11.5 8 12.7" />
+          <path d="M8 4.4C9 3.2 10.5 3 12.5 3.2v8.3C10.5 11.3 9 11.5 8 12.7" />
+        </svg>
+      ),
+    },
+    { label: "Files", icon: RepoFolderIcon, active: true },
+    {
+      label: "Workflows",
+      badge: 3,
+      icon: (
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          width="15"
+          height="15"
+        >
+          <circle cx="8" cy="8" r="2.2" />
+          <path d="M8 1.6v2M8 12.4v2M1.6 8h2M12.4 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4" />
+        </svg>
+      ),
+    },
+    {
+      label: "Commits",
+      badge: 8,
+      icon: (
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          width="15"
+          height="15"
+        >
+          <circle cx="8" cy="8" r="2.6" />
+          <path d="M8 1.6v3.8M8 10.6v3.8" />
+        </svg>
+      ),
+    },
+    {
+      label: "Actions",
+      badge: 0,
+      icon: (
+        <svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13">
+          <path d="M5 3.5l7 4.5-7 4.5z" />
+        </svg>
+      ),
+    },
+  ];
+  return (
+    <div className="hx-mock-repo">
+      <aside className="hx-mock-repo-rail">
+        <div className="hx-mock-repo-label">Repository</div>
+        <div className="hx-mock-repo-select">
+          <span>mahesivaya/colossaltech</span>
+          <span className="hx-mock-repo-caret">▾</span>
+        </div>
+        <div className="hx-mock-repo-add">+ Add</div>
+        <div className="hx-mock-repo-label">Branch</div>
+        <div className="hx-mock-repo-select">
+          <span>main</span>
+          <span className="hx-mock-repo-caret">▾</span>
+        </div>
+        <nav className="hx-mock-repo-nav">
+          {nav.map((it) => (
+            <div
+              key={it.label}
+              className={`hx-mock-repo-navitem ${it.active ? "is-active" : ""}`}
+            >
+              <span className="hx-mock-repo-navico">{it.icon}</span>
+              <span className="hx-mock-repo-navlabel">{it.label}</span>
+              {it.badge !== undefined && (
+                <span className="hx-mock-repo-navbadge">{it.badge}</span>
+              )}
+            </div>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="hx-mock-repo-files">
+        <div className="hx-mock-repo-files-head">Files</div>
+        <div className="hx-mock-repo-files-list">
+          {folders.map((f) => (
+            <div key={f} className="hx-mock-repo-file is-dir">
+              <span className="hx-mock-repo-chev">›</span>
+              <span className="hx-mock-repo-fico">{RepoFolderIcon}</span>
+              <span className="hx-mock-repo-fn">{f}</span>
+            </div>
+          ))}
+          {files.map((f) => (
+            <div
+              key={f.n}
+              className={`hx-mock-repo-file is-file ${
+                f.active ? "is-active" : ""
+              }`}
+            >
+              <span className="hx-mock-repo-chev" />
+              <span className="hx-mock-repo-fico">{RepoFileIcon}</span>
+              <span className="hx-mock-repo-fn">{f.n}</span>
+              <span className="hx-mock-repo-fsz">{f.s}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="hx-mock-repo-code">
+        <div className="hx-mock-repo-code-head">Makefile</div>
+        <pre className="hx-mock-repo-code-body">{makefile}</pre>
+      </div>
+    </div>
+  );
+}
+
 const TABS = [
+  { key: "Home", search: "Search Fluxze…", Screen: HomeScreen },
   { key: "Mail", search: "Search mail…", Screen: MailScreen },
   { key: "Chat", search: "Search chat…", Screen: ChatScreen },
   { key: "Meet", search: "Search meetings…", Screen: MeetScreen },
@@ -317,6 +637,7 @@ const TABS = [
   { key: "Notes", search: "Search notes…", Screen: NotesScreen },
   { key: "Tasks", search: "Search tasks…", Screen: TasksScreen },
   { key: "AI", search: "Ask Fluxze AI…", Screen: AIScreen },
+  { key: "More", search: "Go to file…", Screen: MoreScreen },
 ] as const;
 
 export default function HeroMock() {
