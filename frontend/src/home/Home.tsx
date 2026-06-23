@@ -193,32 +193,20 @@ export default function Home() {
             <div className="hx-hero-glow" aria-hidden="true" />
             <div className="hx-hero-grid" aria-hidden="true" />
             <div className="hx-hero-inner">
-              <button
-                type="button"
-                className="hx-announce"
-                onClick={() => navigate("/services/meet")}
-              >
-                <span className="hx-announce-tag">New</span>
-                End-to-end encrypted calls &amp; meetings
-                <span className="hx-announce-arrow" aria-hidden="true">
-                  →
-                </span>
-              </button>
+              <div className="hx-announce">
+                Private. Secure. Built for modern teams.
+              </div>
 
               <h1 className="hx-hero-title">
-                <span className="hx-grad">
-                  The operating system for your workspace.
-                </span>
+                <span>The operating system</span>
                 <br />
-                <span className="hx-hero-title-2">
-                  Everything in one secure place.
-                </span>
+                <span className="hx-grad">for your workspace.</span>
               </h1>
 
               <p className="hx-hero-sub">
-                The operating system for modern work—bringing communication,
-                collaboration, and knowledge into one secure, end-to-end
-                encrypted workspace.
+                Unify communication, collaboration, and knowledge in one place.
+                <br />
+                End-to-end encrypted. Fast by design. Built for focus.
               </p>
 
               <div className="hx-hero-cta">
@@ -226,13 +214,13 @@ export default function Home() {
                   className="hx-btn-primary"
                   onClick={() => navigate("/register")}
                 >
-                  Start free
+                  Get Started <span aria-hidden="true">→</span>
                 </button>
                 <button
                   className="hx-btn-ghost"
                   onClick={() => navigate("/pricing")}
                 >
-                  See pricing <span aria-hidden="true">→</span>
+                  Book a Demo
                 </button>
                 {/* Auto-detects Apple Silicon vs Intel and lets the user
                     override. Files hosted at /download/Fluxze-<arch>.dmg. */}
@@ -246,9 +234,9 @@ export default function Home() {
             <div className="hx-chips" aria-label="Capabilities">
               {[
                 "End-to-end encrypted",
-                "Real-time sync",
-                "RBAC roles",
-                "Gmail & Outlook",
+                "Blazing fast",
+                "Private by design",
+                "Built for teams",
               ].map((c) => (
                 <span key={c} className="hx-chip">
                   {c}
