@@ -19,7 +19,7 @@ http {
         # Stripe Elements requires js.stripe.com (script + frame) and
         # hooks.stripe.com (frame, for 3D Secure). connect-src already
         # permits api.stripe.com via the blanket `https:` fallback.
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ${CSP_CONNECT_SRC} https: ws: wss:; frame-src https://js.stripe.com https://hooks.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ${CSP_CONNECT_SRC} https: ws: wss:; frame-src 'self' blob: https://js.stripe.com https://hooks.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
 
         # OWASP-recommended hardening headers. Tested by the DAST stage
         # of .github/workflows/security.yml. `frame-ancestors 'none'` in

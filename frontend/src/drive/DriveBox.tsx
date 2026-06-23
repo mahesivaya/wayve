@@ -330,6 +330,22 @@ export default function Drive() {
     return "none";
   };
 
+  // The download endpoint always serves application/octet-stream (files are
+  // E2E-encrypted, so the server can't know the real type), which means the
+  // decrypted preview blob is octet-stream too. An <iframe> *downloads* an
+  // octet-stream blob instead of rendering it, so derive the correct MIME from
+  // the extension before building the preview object URL.
+  const PREVIEW_MIME: Record<string, string> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    svg: "image/svg+xml",
+    pdf: "application/pdf",
+  };
+
   const openPreview = async (file: UploadedFile) => {
     setPreviewFile(file);
     setPreviewError(null);
@@ -341,7 +357,12 @@ export default function Drive() {
     setPreviewLoading(true);
     try {
       const blob = await fetchDriveFileBlob(file.id, user?.id ?? null);
-      setPreviewUrl(URL.createObjectURL(blob));
+      // Retag the blob with the right MIME (cheap, no copy via slice) so the
+      // browser renders the PDF/image inline instead of downloading it.
+      const mime = PREVIEW_MIME[(file.file_type || "").toLowerCase()];
+      setPreviewUrl(
+        URL.createObjectURL(mime ? blob.slice(0, blob.size, mime) : blob)
+      );
     } catch (err) {
       logger.error("preview load failed", err);
       setPreviewError("Could not open preview.");

@@ -70,6 +70,10 @@ function createWindow() {
       nodeIntegration: false,
       preload: path.join(__dirname, "preload.cjs"),
       spellcheck: true,
+      // Enable Chromium's built-in PDF viewer so in-app PDF previews (Drive's
+      // blob: <iframe>) render inline. With plugins disabled (Electron's
+      // default), the shell downloads PDFs instead of displaying them.
+      plugins: true,
     },
   });
 
