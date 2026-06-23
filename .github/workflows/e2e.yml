@@ -2,11 +2,12 @@ name: e2e
 
 # Real browser drives the full docker-compose stack — the only test layer
 # that exercises the auth → JWT → ProtectedRoute → backend boundary
-# end-to-end. Runs on PR and push; not on cron (the docker stack-up cost is
-# real, and PR coverage is the high-value place for E2E).
+# end-to-end. Runs on PRs and version tags; not on every push to main or on
+# cron (the docker stack-up cost is real, and PR coverage is the high-value
+# place for E2E).
 on:
   push:
-    branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
