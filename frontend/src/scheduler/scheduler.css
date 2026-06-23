@@ -9,7 +9,10 @@
  * `:root` — same values; lifted up so other features can use them too.
  */
 .scheduler {
-  --bg: lightsteelblue;
+  /* Themeable canvas background — NOT a hardcoded `lightsteelblue` — so the
+     sidebar and calendar canvas follow the Theme Customizer's selected color,
+     exactly like `--surface` (the grid) already does. */
+  --bg: var(--color-email-bg);
   --surface: var(--color-email-list-bg);
   --surface-alt: var(--color-surface-cool-mist);
   --border: rgb(255, 255, 255, 0.7);
@@ -33,13 +36,11 @@
   --slot-h: 48px;
 }
 
-/* Dark theme: --bg (lightsteelblue) and the white hairline borders were
-   hardcoded for the light look, so the sidebar + calendar canvas stayed light
-   while the grid surfaces (theme-aware --surface) went dark navy — a split-tone
-   page. Pull the canvas to the same dark navy as the rest of the app and soften
-   the hairlines so the whole scheduler reads as one dark-blue surface. */
+/* Dark theme: only the white hairlines need softening here — the canvas
+   (`--bg`) is now themeable (var(--color-email-bg)) and already flips to dark
+   navy via the global dark tokens, so the whole scheduler reads as one
+   dark-blue surface without a per-scheduler `--bg` override. */
 :root[data-theme="dark"] .scheduler {
-  --bg: var(--color-email-bg);
   --border: rgb(255, 255, 255, 0.12);
   --border-soft: rgb(255, 255, 255, 0.08);
 }
@@ -61,7 +62,10 @@
 .scheduler-sidebar {
   width: 252px;
   flex: 0 0 252px;
-  background: var(--bg);
+  /* Match the calendar grid (which paints `--surface`) instead of the
+     `--bg` periwinkle, so the sidebar and the week/day grid read as one
+     continuous surface rather than two mismatched blues. */
+  background: var(--surface);
   color: var(--text);
   padding: 18px 16px;
   border-right: 1px solid var(--border);
