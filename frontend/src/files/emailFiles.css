@@ -3,7 +3,7 @@
   min-height: 100%;
   padding: 22px;
   box-sizing: border-box;
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
 }
 
 .email-files-header {

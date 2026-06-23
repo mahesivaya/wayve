@@ -11,7 +11,7 @@
   scrollbar-gutter: stable;
   /* Match the signed-in app/dashboard surface (same token, so it tracks the
      active theme in both light and dark) instead of the marketing gradient. */
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   color: var(--color-accent-indigo-darkest);
 
   /* Editorial typography for the public marketing surface — applies
@@ -1959,8 +1959,8 @@
   --color-surface: #ffffff;
   --color-surface-soft: #f3f4f8;
   --color-surface-hover: #eef1f7;
-  --color-email-bg: transparent;
-  --color-email-list-bg: transparent;
+  --color-canvas: transparent;
+  --color-pane: transparent;
   --color-surface-cool-pale: #ffffff;
   --color-surface-tint-cloud: rgba(20, 40, 90, 0.08);
   --color-text-primary: #141a26;

@@ -15,8 +15,8 @@ export type TokenRole =
   | "surface"
   | "surface-soft"
   | "surface-hover"
-  | "email-bg"
-  | "email-list-bg"
+  | "canvas"
+  | "pane"
   | "text-primary"
   | "text-secondary"
   | "text-muted"
@@ -45,11 +45,11 @@ export const TOKEN_VAR: Record<TokenRole, string> = {
   surface: "--color-surface",
   "surface-soft": "--color-surface-soft",
   "surface-hover": "--color-surface-hover",
-  // Full-page content-area backgrounds (the split-pane canvas + email list
+  // Full-page content-area backgrounds (the split-pane canvas + the inset list
   // pane). Themeable so a generated theme — especially B&W — neutralizes them
-  // instead of leaving the static `lightsteelblue` showing through.
-  "email-bg": "--color-email-bg",
-  "email-list-bg": "--color-email-list-bg",
+  // instead of leaving a static color showing through.
+  canvas: "--color-canvas",
+  pane: "--color-pane",
   "text-primary": "--color-text-primary",
   "text-secondary": "--color-text-secondary",
   "text-muted": "--color-text-muted",

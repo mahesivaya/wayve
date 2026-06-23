@@ -96,7 +96,7 @@
   gap: 12px;
   padding: 4px 14px;
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
 }
 
 /* Compose sits at the far left; the search row flexes to fill the rest and
@@ -178,7 +178,7 @@
    Before the rename, the rules below leaked onto the app's left rail
    whenever the Emails route mounted, breaking its width/padding. */
 .email-sidebar {
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   padding: var(--space-7);
   display: flex;
   flex-direction: column;
@@ -224,7 +224,7 @@
 .email-sidebar-resizer:active,
 .email-list-resizer:hover,
 .email-list-resizer:active {
-  background: var(--color-email-resizer-hover);
+  background: var(--color-resizer-hover);
 }
 
 .email-sidebar-resizer:hover::after,
@@ -612,11 +612,10 @@
   gap: 2px;
   padding: 3px;
   margin-top: var(--space-4);
-  /* Track the themeable mail background (the sidebar it sits in) instead of the
-     fixed, non-customizable --color-email-control-bg navy, which stayed blue on
-     custom themes. The border + the lighter active row keep the folder group
-     legible against it. */
-  background: var(--color-email-bg);
+  /* Track the themeable canvas background (the sidebar it sits in) so this group
+     retints with custom themes instead of staying a fixed navy. The border + the
+     lighter active row keep the folder group legible against it. */
+  background: var(--color-canvas);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
@@ -917,7 +916,7 @@
   width: 360px;
   /* Match [.email-detail](./emails.css) so list + open-email read as one
      surface; the divider between them is the border-right only. */
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   border-right: 1px solid var(--color-border);
   /* `scroll` (not `auto`) so the scrollbar gutter is always reserved
      and the thumb stays visible whether or not the user is actively
@@ -1075,7 +1074,7 @@
   gap: 10px;
   padding: 6px 10px;
   border-bottom: 1px solid var(--color-overlay-border);
-  background: var(--color-email-list-bg);
+  background: var(--color-pane);
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
   position: sticky;
@@ -1198,7 +1197,7 @@
   /* Track the themeable mail surface so the empty-state panel follows the
      selected/custom theme instead of a fixed translucent white (which read as a
      flat gray box on dark themes). */
-  background: var(--color-email-list-bg);
+  background: var(--color-pane);
   color: var(--color-text-muted);
   text-align: center;
 }
@@ -1393,7 +1392,7 @@
   flex: 1;
   padding: var(--space-10) var(--space-9) var(--space-9);
   overflow-y: auto;
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   position: relative;
   /* Override #root's inherited `text-align: center` so subject, sender
      meta, and body all flow left like a normal email reader. */
@@ -1678,7 +1677,7 @@
   display: block;
   width: 100%;
   border: none;
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
 }
 
 .email-body a {
@@ -1777,7 +1776,7 @@
 }
 
 .email-list::-webkit-scrollbar-track {
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
 }
 
 .email-list::-webkit-scrollbar-thumb,
@@ -1787,7 +1786,7 @@
 }
 
 .email-list::-webkit-scrollbar-thumb {
-  border: 2px solid var(--color-email-bg);
+  border: 2px solid var(--color-canvas);
   background-clip: padding-box;
   min-height: 40px;
 }
@@ -1795,14 +1794,14 @@
 .email-list::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
   background-clip: padding-box;
-  border: 2px solid var(--color-email-bg);
+  border: 2px solid var(--color-canvas);
 }
 
 /* Firefox + modern browsers. `thin` is the smallest non-auto value
    that's still wider than the previous 6px webkit thumb. */
 .email-list {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border-muted) var(--color-email-bg);
+  scrollbar-color: var(--color-border-muted) var(--color-canvas);
 }
 
 @media (max-width: 700px) {

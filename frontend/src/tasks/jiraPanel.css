@@ -8,7 +8,7 @@
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 16px;
-  background: var(--color-email-list-bg);
+  background: var(--color-pane);
 }
 
 .jira-panel-head {

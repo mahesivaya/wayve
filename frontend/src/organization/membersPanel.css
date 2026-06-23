@@ -134,7 +134,7 @@
   align-items: end;
   padding: 14px;
   margin: 12px 0 16px;
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
@@ -196,7 +196,7 @@
 }
 
 .rbac-create-actions .secondary:hover {
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
 }
 
 /* Temp-password banner — shown once after a successful creation. */

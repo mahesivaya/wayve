@@ -12,8 +12,8 @@
   /* Themeable canvas background — NOT a hardcoded `lightsteelblue` — so the
      sidebar and calendar canvas follow the Theme Customizer's selected color,
      exactly like `--surface` (the grid) already does. */
-  --bg: var(--color-email-bg);
-  --surface: var(--color-email-list-bg);
+  --bg: var(--color-canvas);
+  --surface: var(--color-pane);
   --surface-alt: var(--color-surface-cool-mist);
   --border: rgb(255, 255, 255, 0.7);
   --border-soft: rgb(255, 255, 255, 0.55);
@@ -37,7 +37,7 @@
 }
 
 /* Dark theme: only the white hairlines need softening here — the canvas
-   (`--bg`) is now themeable (var(--color-email-bg)) and already flips to dark
+   (`--bg`) is now themeable (var(--color-canvas)) and already flips to dark
    navy via the global dark tokens, so the whole scheduler reads as one
    dark-blue surface without a per-scheduler `--bg` override. */
 :root[data-theme="dark"] .scheduler {

@@ -3,7 +3,7 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   /* Query container so the layout responds to the Tasks pane's OWN width —
      needed because in a split pane the viewport is wide but the pane is not. */
   container-type: inline-size;
@@ -59,7 +59,7 @@
   min-width: 220px;
   padding: 16px;
   border-right: 1px solid var(--color-border);
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   box-sizing: border-box;
 }
 
@@ -116,7 +116,7 @@
   min-width: 0;
   overflow-y: auto;
   padding: 12px;
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   box-sizing: border-box;
   text-align: left;
   font-size: var(--text-md);
@@ -131,7 +131,7 @@
   padding: 6px 14px;
   border: 1px solid rgb(255, 255, 255, 0.7);
   border-radius: var(--radius-md);
-  background: var(--color-email-list-bg);
+  background: var(--color-pane);
 }
 
 .tasks-header h2 {
@@ -200,7 +200,7 @@
   min-width: 220px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-email-list-bg);
+  background: var(--color-pane);
 }
 
 .task-board-col--dragover {
@@ -305,7 +305,7 @@
   padding: 16px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-email-list-bg);
+  background: var(--color-pane);
   text-align: left;
   font-size: var(--text-md);
 }
@@ -932,7 +932,7 @@
   border-radius: var(--radius-md);
   /* Track the themed list surface so the empty state follows the selected page
      colors instead of a fixed translucent white (which read as gray on dark). */
-  background: var(--color-email-list-bg);
+  background: var(--color-pane);
   color: var(--color-text-muted);
   text-align: center;
 }
@@ -975,7 +975,7 @@
 }
 
 .task-attachments-pick:hover {
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   border-color: var(--color-primary);
 }
 
@@ -1051,7 +1051,7 @@
   letter-spacing: 0.04em;
   padding: 2px 6px;
   border-radius: 4px;
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   color: var(--color-text-secondary);
 }
 

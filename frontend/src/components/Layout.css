@@ -520,7 +520,7 @@
   width: 200px;
   /* Track the themeable soft surface so the sidebar matches the active theme's
      background in every theme. The old --color-surface-cool-faint aliases the
-     non-themeable --color-email-bg (#0a1730 navy), so on a near-black custom
+     non-themeable --color-canvas (#0a1730 navy), so on a near-black custom
      theme the sidebar stayed blue. (Default dark is unchanged: surface-soft is
      also #0a1730 there.) */
   background: var(--color-surface-soft);
@@ -1110,7 +1110,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--color-email-bg);
+  background: var(--color-canvas);
   position: relative;
 }
 
