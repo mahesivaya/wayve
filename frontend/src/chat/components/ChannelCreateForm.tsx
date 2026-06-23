@@ -39,8 +39,8 @@ export default function ChannelCreateForm({
           }
           aria-label="Channel visibility"
         >
-          <option value="public">Public</option>
-          <option value="private">Private</option>
+          <option value="public">Public group</option>
+          <option value="private">Private group</option>
         </select>
       </label>
 

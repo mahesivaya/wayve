@@ -86,14 +86,11 @@ export default function PersonalChatList({
     );
   };
 
-  // Directory of everyone with no chat history — rendered below the channels.
+  // Directory of everyone with no chat history. Rendered directly under the
+  // channel list with no "People" header, so channels and people read as one
+  // combined list.
   if (section === "people") {
-    return (
-      <>
-        <div className="conversation-section-title">People</div>
-        {people.map(renderRow)}
-      </>
-    );
+    return <>{people.map(renderRow)}</>;
   }
 
   // Active conversations (Unread + Recent) — rendered above the channels.

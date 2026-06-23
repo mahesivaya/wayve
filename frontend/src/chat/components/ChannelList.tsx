@@ -32,7 +32,8 @@ export default function ChannelList({
           <span className="conversation-main">
             <span className="conversation-name">{channel.name}</span>
             <span className="conversation-meta">
-              {channel.visibility} · {channel.member_emails.length} members
+              {channel.visibility} group · {channel.member_emails.length}{" "}
+              members
               {channel.invite_emails?.length
                 ? `, ${channel.invite_emails.length} invited`
                 : ""}

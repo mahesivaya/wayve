@@ -78,8 +78,8 @@ export default function ChannelSettingsPanel({
               }
               aria-label="Channel visibility"
             >
-              <option value="private">Private</option>
-              <option value="public">Public</option>
+              <option value="private">Private group</option>
+              <option value="public">Public group</option>
             </select>
             <button type="button" onClick={onSaveVisibility}>
               Save

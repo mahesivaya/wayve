@@ -43,7 +43,7 @@ export default function ChatHeader({
           <h3>{title}</h3>
           {selectedChannel && (
             <span>
-              {selectedChannel.visibility} channel
+              {selectedChannel.visibility} group
               {selectedChannel.is_member
                 ? ` · ${[
                     ...selectedChannel.member_emails,
