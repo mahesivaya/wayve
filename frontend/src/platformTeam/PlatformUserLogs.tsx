@@ -5,8 +5,10 @@ import {
   formatUserActionDetails,
   listRegistrationTypes,
   listUserActions,
+  listUserTimeSpent,
   type RegistrationTypeRow,
   type UserActionRow,
+  type UserTimeSpentRow,
 } from "../api/audit";
 import { fmtDateTime } from "../utils/datetime";
 
@@ -58,6 +60,8 @@ export default function PlatformUserLogs() {
   const [search, setSearch] = useState("");
   const [registrations, setRegistrations] = useState<RegistrationTypeRow[]>([]);
   const [registrationsLoaded, setRegistrationsLoaded] = useState(false);
+  const [timeSpent, setTimeSpent] = useState<UserTimeSpentRow[]>([]);
+  const [timeSpentLoaded, setTimeSpentLoaded] = useState(false);
 
   const { colWidths, totalWidth, startResize } = useResizableColumns(
     USER_LOG_COLUMNS,
@@ -94,10 +98,25 @@ export default function PlatformUserLogs() {
     }
   }, [canView]);
 
+  const loadTimeSpent = useCallback(async () => {
+    if (!canView) {
+      setTimeSpentLoaded(true);
+      return;
+    }
+    try {
+      setTimeSpent(await listUserTimeSpent({ limit: 500 }));
+    } catch {
+      // Best effort — the table just shows its empty state.
+    } finally {
+      setTimeSpentLoaded(true);
+    }
+  }, [canView]);
+
   useEffect(() => {
     void load();
     void loadRegistrations();
-  }, [load, loadRegistrations]);
+    void loadTimeSpent();
+  }, [load, loadRegistrations, loadTimeSpent]);
 
   const registrationCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -184,6 +203,48 @@ export default function PlatformUserLogs() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="pt-panel pt-userlogs-timespent">
+        <div className="pt-panel-head">
+          <h2>Time on site</h2>
+          <span className="pt-reg-summary">
+            Estimated active minutes per user (recent activity)
+          </span>
+        </div>
+
+        {!timeSpentLoaded ? (
+          <div className="pt-empty">Loading…</div>
+        ) : timeSpent.length === 0 ? (
+          <div className="pt-empty">No user activity recorded yet.</div>
+        ) : (
+          <div className="pt-table-scroll">
+            <table className="pt-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Email</th>
+                  <th>Time spent</th>
+                  <th>Sessions</th>
+                  <th>Last active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {timeSpent.map((t) => (
+                  <tr key={t.user_id}>
+                    <td>{t.username || "—"}</td>
+                    <td>{t.email}</td>
+                    <td>{t.total_minutes} min</td>
+                    <td>{t.session_count}</td>
+                    <td>
+                      {t.last_active ? fmtDateTime(t.last_active) : "-"}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

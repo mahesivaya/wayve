@@ -114,6 +114,103 @@ pub async fn list_user_actions(
 }
 
 #[derive(Deserialize)]
+pub struct UserTimeSpentQuery {
+    pub limit: Option<i64>,
+}
+
+#[derive(Serialize, FromRow)]
+pub struct UserTimeSpentView {
+    pub user_id: i32,
+    pub username: Option<String>,
+    pub email: String,
+    // Estimated total minutes on the site, summed across sessions.
+    pub total_minutes: i64,
+    pub session_count: i64,
+    pub last_active: Option<DateTime<Utc>>,
+}
+
+// GET /api/audit/user-time-spent — per-user time on site, estimated by
+// sessionizing each user's `activity_events` (a gap > 30 min starts a new
+// session) and summing the first→last span of each session. Platform-owner
+// only. Caveats: `activity_events` is pruned to ~7 days, so this reflects
+// recent engagement; a session with a single event counts as 0 minutes.
+#[get("/audit/user-time-spent")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn list_user_time_spent(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<UserTimeSpentQuery>,
+) -> AppResult {
+    let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+
+    let limit = query
+        .limit
+        .unwrap_or(AUDIT_LOG_DEFAULT_LIMIT)
+        .clamp(1, AUDIT_LOG_MAX_LIMIT);
+
+    let rows = sqlx::query_as::<_, UserTimeSpentView>(
+        r#"
+        WITH gaps AS (
+            SELECT
+                actor_user_id,
+                created_at,
+                EXTRACT(EPOCH FROM (
+                    created_at - LAG(created_at) OVER (
+                        PARTITION BY actor_user_id ORDER BY created_at
+                    )
+                )) / 60.0 AS mins_since_prev
+            FROM activity_events
+            WHERE actor_user_id IS NOT NULL
+        ),
+        marked AS (
+            SELECT
+                actor_user_id,
+                created_at,
+                SUM(
+                    CASE WHEN mins_since_prev IS NULL OR mins_since_prev > 30
+                         THEN 1 ELSE 0 END
+                ) OVER (
+                    PARTITION BY actor_user_id ORDER BY created_at
+                ) AS session_no
+            FROM gaps
+        ),
+        sessions AS (
+            SELECT
+                actor_user_id,
+                session_no,
+                MAX(created_at) AS session_end,
+                EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at))) / 60.0
+                    AS session_minutes
+            FROM marked
+            GROUP BY actor_user_id, session_no
+        )
+        SELECT
+            u.id AS user_id,
+            u.username,
+            u.email,
+            ROUND(COALESCE(SUM(s.session_minutes), 0))::BIGINT AS total_minutes,
+            COUNT(*)::BIGINT AS session_count,
+            MAX(s.session_end) AS last_active
+        FROM sessions s
+        JOIN users u ON u.id = s.actor_user_id
+        WHERE $1 = 'platform'
+        GROUP BY u.id, u.username, u.email
+        ORDER BY total_minutes DESC, last_active DESC
+        LIMIT $2
+        "#,
+    )
+    .bind(ctx.scope.as_str())
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(rows))
+}
+
+#[derive(Deserialize)]
 pub struct UserLookupQuery {
     pub email: String,
     pub limit: Option<i64>,
@@ -921,6 +1018,7 @@ fn decrypt_siem_token(row: &SiemSettingsRow) -> Result<Option<String>, AppError>
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(list_audit_logs)
         .service(list_user_actions)
+        .service(list_user_time_spent)
         .service(lookup_user_actions)
         .service(lookup_user_activity)
         .service(list_registration_types)

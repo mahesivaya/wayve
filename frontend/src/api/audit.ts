@@ -183,6 +183,31 @@ export async function listRegistrationTypes(
   );
 }
 
+// Estimated time-on-site per logged-in user, computed server-side by
+// sessionizing activity_events (a >30-min gap starts a new session) and
+// summing each session's span. Reflects roughly the last 7 days (activity
+// retention). total_minutes is whole minutes; single-event sessions = 0.
+export type UserTimeSpentRow = {
+  user_id: number;
+  username: string | null;
+  email: string;
+  total_minutes: number;
+  session_count: number;
+  last_active: string | null;
+};
+
+export async function listUserTimeSpent(
+  filters: { limit?: number } = {}
+): Promise<UserTimeSpentRow[]> {
+  const params = new URLSearchParams();
+  if (filters.limit) params.set("limit", String(filters.limit));
+  const query = params.toString();
+  return apiFetchJson<UserTimeSpentRow[]>(
+    `/api/audit/user-time-spent${query ? `?${query}` : ""}`,
+    { preserve401: true }
+  );
+}
+
 export type SiemSettings = {
   scope: string;
   organization_id: number | null;
