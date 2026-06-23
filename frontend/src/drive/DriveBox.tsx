@@ -346,6 +346,15 @@ export default function Drive() {
     pdf: "application/pdf",
   };
 
+  // Some browsers are configured to download PDFs rather than display them
+  // (e.g. Chrome's "Download PDFs" setting). In that mode an <iframe> can't
+  // render the document and shows a "content is blocked" error, so detect it up
+  // front and offer a download instead. `navigator.pdfViewerEnabled` is false
+  // precisely when inline PDF viewing is unavailable. (Undefined on older
+  // browsers — treat that as "try inline" so we don't regress them.)
+  const canViewPdfInline =
+    (navigator as { pdfViewerEnabled?: boolean }).pdfViewerEnabled !== false;
+
   const openPreview = async (file: UploadedFile) => {
     setPreviewFile(file);
     setPreviewError(null);
@@ -955,12 +964,18 @@ export default function Drive() {
                   src={previewUrl}
                   alt={previewFile.name}
                 />
-              ) : previewKind(previewFile) === "pdf" && previewUrl ? (
+              ) : previewKind(previewFile) === "pdf" &&
+                previewUrl &&
+                canViewPdfInline ? (
                 <iframe
                   className="drive-preview-frame"
                   src={previewUrl}
                   title={previewFile.name}
                 />
+              ) : previewKind(previewFile) === "pdf" ? (
+                <p className="drive-preview-msg">
+                  Not able to open. Please download.
+                </p>
               ) : (
                 <p className="drive-preview-msg">
                   No inline preview for this file type. Use Download to open it.
