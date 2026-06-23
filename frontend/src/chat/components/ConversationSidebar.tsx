@@ -3,6 +3,7 @@ import type {
   ChatConversationSummary,
   ChatUser,
 } from "../../api/chat";
+import { useGlobalSearch } from "../../search/SearchContext";
 import type { ChannelVisibility, Conversation } from "../types";
 import ChannelCreateForm from "./ChannelCreateForm";
 import ChannelList from "./ChannelList";
@@ -45,8 +46,37 @@ export default function ConversationSidebar({
   onSelectUser,
   summary,
 }: Props) {
+  const { searchQuery, setSearchQuery } = useGlobalSearch();
+
   return (
     <aside className="user-list">
+      {/* Chat search lives at the top of the sidebar (above Recent) rather than
+          in the global header. Drives the same global query that filters the
+          channels / users / messages below. */}
+      <div className="global-search-box chat-sidebar-search">
+        <span className="global-search-icon" aria-hidden="true">
+          ⌕
+        </span>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search"
+          aria-label="Search"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            className="global-search-clear"
+            onClick={() => setSearchQuery("")}
+            title="Clear search"
+            aria-label="Clear search"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
       {/* Active conversations (Unread + Recent) sit above the channels so the
           chats you're in the middle of are the first thing you see. */}
       <PersonalChatList
@@ -63,8 +93,10 @@ export default function ConversationSidebar({
           type="button"
           className="new-channel-btn"
           onClick={onToggleCreateChannel}
+          aria-label="Add channel"
+          title="Add channel"
         >
-          + Add Channel
+          +
         </button>
       </div>
 

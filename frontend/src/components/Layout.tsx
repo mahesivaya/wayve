@@ -1400,7 +1400,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           </div>
 
           {!location.pathname.startsWith("/emails") &&
-            !location.pathname.startsWith("/notes") && <SearchBar />}
+            !location.pathname.startsWith("/notes") &&
+            !location.pathname.startsWith("/chat") && <SearchBar />}
 
           <div className="actions">
             {/* Unread notifications (emails + chat). Sits left of the Report

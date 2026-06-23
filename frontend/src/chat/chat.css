@@ -90,15 +90,16 @@
 }
 
 .new-channel-btn {
-  /* Centered on its own line under the "Channels" title. Themed-surface ghost
-     style (matches the email Compose / header Upgrade buttons) so it follows the
-     selected page colors instead of the fixed accent. */
-  align-self: center;
+  /* Compact "+" add control sitting just after the "Channels" title. Themed-
+     surface ghost style (matches the email Compose / header Upgrade buttons) so
+     it follows the selected page colors instead of the fixed accent. */
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text-primary);
-  padding: 7px 10px;
+  padding: 0 5px;
+  font-size: 12px;
+  line-height: 16px;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
@@ -183,18 +184,45 @@
   text-transform: uppercase;
 }
 
-/* Section header row: section title on the left, an action (e.g. + Channel)
-   pinned to the right. */
+/* Section header row: section title with a compact "+" add control right after
+   the name. */
 .conversation-section-header {
-  /* Stack vertically: "Channels" title on line 1, the Add Channel button on
-     line 2, then the channel list below. */
+  /* "Channels" title and the "+" add control on one row, then the channel list
+     below. */
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+  /* Title on the left, the "+" add control pinned to the far right. */
+  justify-content: space-between;
+  gap: 6px;
   padding-right: 14px;
-  /* Breathing room between the Add Channel button and the channel list. */
+  /* Breathing room between the header row and the channel list. */
   margin-bottom: 10px;
+}
+
+/* The "Channels", "Users" and "Recent" headers keep normal title case and a
+   larger size — the shared section-title style otherwise uppercases them. */
+.conversation-section-header .conversation-section-title,
+.conversation-section-title--users,
+.conversation-section-title--recent {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: var(--text-lg);
+}
+
+/* Tighter gap below the Recent and Users headers before their rows. */
+.conversation-section-title--recent,
+.conversation-section-title--users {
+  padding-bottom: 0;
+}
+
+/* Search box pinned to the top of the chat sidebar, above the Recent list.
+   Override the header's fixed width so it fits inside the sidebar margins
+   instead of overflowing. */
+.chat-sidebar-search {
+  width: auto;
+  box-sizing: border-box;
+  margin: 6px 14px 2px;
 }
 
 .conversation-item {
@@ -203,7 +231,7 @@
   gap: 10px;
   width: calc(100% - 16px);
   margin: 0 8px 4px;
-  padding: 10px;
+  padding: 6px 10px;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
