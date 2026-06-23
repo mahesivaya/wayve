@@ -722,19 +722,6 @@
   cursor: pointer;
 }
 
-.public-home-footer-logo {
-  width: 28px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: var(--color-brand-purple-light);
-  color: var(--color-on-primary);
-  font-size: 16px;
-  line-height: 1;
-}
-
 .public-home-footer-column {
   display: flex;
   flex-direction: column;
@@ -3254,8 +3241,7 @@
    `.public-home-social-links a` and its `:hover` were merged into their original
    blocks higher in this file. The `.public-home …!important` overrides below and
    the media-entangled `.public-home-footer` / `-footer-legal` rules stay here. */
-.public-home .public-home-footer-brand button,
-.public-home .public-home-footer-logo {
+.public-home .public-home-footer-brand button {
   color: var(--hx-ink) !important;
 }
 .public-home .public-home-footer-column button {

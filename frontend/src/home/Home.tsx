@@ -216,9 +216,9 @@ export default function Home() {
               </h1>
 
               <p className="hx-hero-sub">
-                Email, chat, calls, files, notes, tasks, and AI — unified,
-                end-to-end encrypted, and fast. Replace five disconnected tools
-                with one private home for your team.
+                The operating system for modern work—bringing communication,
+                collaboration, and knowledge into one secure, end-to-end
+                encrypted workspace.
               </p>
 
               <div className="hx-hero-cta">
@@ -385,8 +385,8 @@ export default function Home() {
           <div className="public-home-footer-grid">
             <div className="public-home-footer-brand">
               <button type="button" onClick={() => navigate("/")}>
-                <span className="public-home-footer-logo">✉</span>
-                <span>Fluxze</span>
+                <BrandLogo className="brand-mark" size={28} />
+                <span>{BRAND_NAME}</span>
               </button>
             </div>
 
