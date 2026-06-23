@@ -686,6 +686,12 @@ function GitHubRepoViewer({
   const [readmeLoading, setReadmeLoading] = useState(false);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [commits, setCommits] = useState<CommitItem[]>([]);
+  // Open pull requests (read-only). Merging happens on github.com via each
+  // PR's html_url — the proxy is GET-only and the shared token has no write
+  // access to linked public repos.
+  const [pulls, setPulls] = useState<GitHubPull[]>([]);
+  const [pullsLoading, setPullsLoading] = useState(false);
+  const [pullsError, setPullsError] = useState("");
   // Per-commit detail (file diffs) loaded on demand when a commit row
   // is expanded. Cached by SHA so toggling open → closed → open doesn't
   // re-hit GitHub. Aux maps track which commits are expanded, currently
@@ -751,7 +757,24 @@ function GitHubRepoViewer({
 
   // Section nav for the left rail. Persist the user's last view so
   // re-opening /github lands them on the same panel.
-  type Section = "description" | "files" | "workflows" | "commits" | "actions";
+  type GitHubPull = {
+    number: number;
+    title: string;
+    html_url: string;
+    state: string;
+    draft?: boolean;
+    user: { login: string } | null;
+    head: { ref: string };
+    base: { ref: string };
+    created_at: string;
+  };
+  type Section =
+    | "description"
+    | "files"
+    | "workflows"
+    | "commits"
+    | "pulls"
+    | "actions";
   const [activeSection, setActiveSection] = useState<Section>(() => {
     try {
       const raw = localStorage.getItem("rwayve.github.section");
@@ -759,6 +782,7 @@ function GitHubRepoViewer({
         raw === "files" ||
         raw === "workflows" ||
         raw === "commits" ||
+        raw === "pulls" ||
         raw === "actions"
       ) {
         return raw;
@@ -973,6 +997,25 @@ function GitHubRepoViewer({
     [API_BASE]
   );
 
+  // Open pull requests. PRs aren't branch-filtered, so this takes no branch.
+  const loadPulls = useCallback(async () => {
+    setPullsError("");
+    setPullsLoading(true);
+    try {
+      const data = await githubJson<GitHubPull[]>(
+        `${API_BASE}/pulls?state=open&per_page=50`
+      );
+      setPulls(data);
+    } catch (err) {
+      setPulls([]);
+      setPullsError(
+        err instanceof Error ? err.message : "Pull requests failed to load"
+      );
+    } finally {
+      setPullsLoading(false);
+    }
+  }, [API_BASE]);
+
   // Fetch the per-commit detail (which includes the patch for every changed
   // file) via the same /api/github proxy the rest of this page uses, and cache
   // it by SHA. Skips the network when already cached unless `force` is set
@@ -1147,6 +1190,7 @@ function GitHubRepoViewer({
     void loadReadme(branch);
     void loadWorkflows(branch);
     void loadCommits(branch);
+    void loadPulls();
     // Actions list is now branch-agnostic (a push to any branch should
     // surface), so we only refresh it on the initial repo load and
     // reset per-run UI state at the same time. Run-detail caches stay
@@ -1156,7 +1200,7 @@ function GitHubRepoViewer({
     setExpandedRunIds(new Set());
     setExpandedJobIds(new Set());
     void loadRuns(1, false);
-  }, [branch, loadCommits, loadReadme, loadRuns, loadWorkflows, repo]);
+  }, [branch, loadCommits, loadPulls, loadReadme, loadRuns, loadWorkflows, repo]);
 
   async function openFile(item: ContentItem) {
     setSelectedFile(item);
@@ -1365,6 +1409,17 @@ function GitHubRepoViewer({
               </span>
               <span className="github-sidebar-label">Commits</span>
               <span className="github-sidebar-count">{commits.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`github-sidebar-link ${activeSection === "pulls" ? "active" : ""}`}
+              onClick={() => setActiveSection("pulls")}
+            >
+              <span className="github-sidebar-icon" aria-hidden="true">
+                🔀
+              </span>
+              <span className="github-sidebar-label">Pull Requests</span>
+              <span className="github-sidebar-count">{pulls.length}</span>
             </button>
             <button
               type="button"
@@ -1789,6 +1844,48 @@ function GitHubRepoViewer({
               })}
               {commits.length === 0 && (
                 <div className="github-empty">No commits found.</div>
+              )}
+            </div>
+          )}
+
+          {activeSection === "pulls" && (
+            <div className="github-panel">
+              <div className="github-panel-head">
+                <h2>Pull Requests</h2>
+                <span>{pulls.length}</span>
+              </div>
+              {pullsLoading ? (
+                <div className="github-empty">Loading pull requests…</div>
+              ) : pullsError ? (
+                <div className="github-empty">{pullsError}</div>
+              ) : pulls.length === 0 ? (
+                <div className="github-empty">No open pull requests.</div>
+              ) : (
+                pulls.map((pr) => (
+                  <div key={pr.number} className="github-pr-node">
+                    <div className="github-pr-main">
+                      <strong className="github-pr-title">{pr.title}</strong>
+                      <small className="github-pr-meta">
+                        #{pr.number} · {pr.user?.login ?? "unknown"} ·{" "}
+                        {pr.head.ref} → {pr.base.ref} ·{" "}
+                        {formatDate(pr.created_at)}
+                      </small>
+                    </div>
+                    <span
+                      className={`github-pr-status ${pr.draft ? "is-draft" : "is-open"}`}
+                    >
+                      {pr.draft ? "Draft" : "Open"}
+                    </span>
+                    <a
+                      className="github-pr-link"
+                      href={pr.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open on GitHub →
+                    </a>
+                  </div>
+                ))
               )}
             </div>
           )}
