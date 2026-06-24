@@ -102,3 +102,17 @@ pub fn google_calendar_url() -> String {
         "https://www.googleapis.com/calendar/v3/calendars/primary/events".to_string()
     })
 }
+
+/// TEST-ONLY escape hatch for the MCP client's SSRF guard. A connected MCP
+/// server URL is admin-supplied and fetched server-side, so production rejects
+/// non-https URLs and any host that resolves to a private/link-local/loopback
+/// address (see `integrations::mcp::client`). Tests run a `wiremock` server on
+/// `127.0.0.1`, which that guard would (correctly) block — setting
+/// `MCP_ALLOW_PRIVATE_HOSTS=1` relaxes it so the handshake can be exercised
+/// offline. NEVER set this in any deployed environment.
+pub fn mcp_allow_private_hosts() -> bool {
+    matches!(
+        std::env::var("MCP_ALLOW_PRIVATE_HOSTS").as_deref(),
+        Ok("1") | Ok("true")
+    )
+}

@@ -4,8 +4,11 @@ import { getGmailConnectUrl, getOutlookConnectUrl } from "../api/email";
 import { getJiraConnection } from "../api/jira";
 import { getGitlabConnection } from "../api/gitlab";
 import { getSlackConnection } from "../api/slack";
+import { getMcpConnections } from "../api/mcp";
 import { useAuth } from "../auth/useAuth";
+import { hasPermission } from "../auth/permissions";
 import SlackPanel from "./SlackPanel";
+import McpPanel from "./McpPanel";
 import GitLabPanel from "./GitLabPanel";
 import { BrandIcon } from "./BrandIcon";
 import "./integrations.css";
@@ -24,6 +27,11 @@ export default function Integrations() {
   const { user } = useAuth();
   // Slack is an enterprise-only feature (it needs server-readable chat).
   const isEnterprise = user?.current_plan?.tier === "enterprise";
+  // Connect MCP is for enterprise org owners/admins and platform owners/admins
+  // (the backend enforces the tier/scope gate; this just decides UI visibility).
+  const canManageMcp =
+    hasPermission(user, "mcp:manage") &&
+    (isEnterprise || user?.scope === "platform");
 
   // Live Jira connection state drives the Jira card's badge (Enabled vs
   // Connect). Best-effort: any error just leaves it unconnected.
@@ -56,6 +64,23 @@ export default function Integrations() {
       cancelled = true;
     };
   }, [isEnterprise]);
+
+  // MCP connection badge — only enterprise/platform owners can reach the
+  // endpoint, so we only probe it for them (others would 403).
+  const [mcpConnected, setMcpConnected] = useState(false);
+  const [showMcp, setShowMcp] = useState(false);
+  useEffect(() => {
+    if (!canManageMcp) return;
+    let cancelled = false;
+    void getMcpConnections()
+      .then((list) => {
+        if (!cancelled) setMcpConnected(list.some((c) => c.enabled));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageMcp]);
 
   // GitLab connection badge (per-user, any account).
   const [gitlabConnected, setGitlabConnected] = useState(false);
@@ -157,12 +182,23 @@ export default function Integrations() {
       status: gitlabConnected ? "enabled" : "available",
       onClick: () => setShowGitlab((v) => !v),
     },
+    {
+      key: "mcp",
+      name: "Connect MCP",
+      description:
+        "Connect your own MCP server so the AI can read your systems (e.g. your database) through tools you control.",
+      icon: <span aria-hidden="true">🔌</span>,
+      status: mcpConnected ? "enabled" : "available",
+      onClick: () => setShowMcp((v) => !v),
+    },
   ];
 
-  // Slack is enterprise-only — hide the tile entirely from personal and
-  // business accounts rather than showing a disabled "Enterprise" badge.
+  // Slack is enterprise-only and MCP is enterprise/platform-only — hide those
+  // tiles entirely from accounts that can't use them rather than showing a
+  // disabled badge.
   const visibleServices = services.filter(
-    (s) => s.key !== "slack" || isEnterprise
+    (s) =>
+      (s.key !== "slack" || isEnterprise) && (s.key !== "mcp" || canManageMcp)
   );
 
   return (
@@ -206,10 +242,54 @@ export default function Integrations() {
           {connectError && <p className="integrations-error">{connectError}</p>}
         </section>
 
+        <section className="settings-card integrations-info">
+          <h2 className="settings-card-title">
+            AI assistant · Model Context Protocol (MCP)
+          </h2>
+          <p className="integrations-info-text">
+            Fluxze's AI assistant supports the{" "}
+            <strong>Model Context Protocol (MCP)</strong> — an open standard for
+            securely connecting AI to external tools and data. Enterprise
+            organizations and platform administrators may register their own
+            remote MCP servers, enabling the assistant to read live information
+            from systems you operate — for example, your own database — through
+            interfaces you fully control.
+          </p>
+          <p className="integrations-info-text">
+            Fluxze never connects to your data store directly. It communicates
+            only with the MCP server you designate, which governs precisely what
+            the assistant may access. Connection credentials are encrypted at
+            rest, and every server is validated before it is used.
+          </p>
+          <div className="integrations-info-foot">
+            {canManageMcp ? (
+              <button
+                type="button"
+                className="integrations-info-btn"
+                onClick={() => setShowMcp(true)}
+              >
+                Connect an MCP server
+              </button>
+            ) : (
+              <span className="integrations-info-badge">
+                Available to Enterprise organizations and platform
+                administrators
+              </span>
+            )}
+          </div>
+        </section>
+
         {isEnterprise && showSlack && (
           <section className="settings-card">
             <h2 className="settings-card-title">Slack</h2>
             <SlackPanel />
+          </section>
+        )}
+
+        {canManageMcp && showMcp && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Connect MCP</h2>
+            <McpPanel />
           </section>
         )}
 

@@ -89,3 +89,44 @@
   font-size: 13px;
   color: var(--color-danger-strong, #b91c1c);
 }
+
+/* Formal explainer: the AI assistant supports MCP. Shown to everyone; the
+   footer adapts to whether the viewer may actually connect a server. */
+.integrations-info-text {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--color-text-secondary, var(--color-text-muted));
+  max-width: 70ch;
+}
+
+.integrations-info-foot {
+  margin-top: 14px;
+}
+
+.integrations-info-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--color-primary-action);
+  border-radius: var(--radius-md, 10px);
+  background: var(--color-primary-action);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.integrations-info-btn:hover {
+  opacity: 0.9;
+}
+
+.integrations-info-badge {
+  display: inline-block;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-hover, var(--color-surface));
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}

@@ -28,6 +28,9 @@ export const PERMISSIONS = [
   "tickets:manage",
   "sso:manage",
   "inbox:manage",
+  // Connect/manage remote MCP servers (enterprise org + platform; gated to the
+  // tier/scope on the backend). owner / super_admin / admin.
+  "mcp:manage",
   // Org master key permissions (mirror backend wayve-security/rbac.rs).
   // org_keys:bootstrap is owner-only; org_keys:use_master is granted to
   // owner / super_admin / admin (NOT security — separation of duties).
@@ -78,6 +81,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "usage:read",
     "sso:manage",
     "inbox:manage",
+    "mcp:manage",
     "org_keys:use_master",
   ],
   security: [

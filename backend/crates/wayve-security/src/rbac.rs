@@ -156,6 +156,12 @@ pub enum Permission {
     TicketsManage,
     SsoManage,
     InboxManage,
+    /// Connect and manage the org's (or the platform's) remote MCP servers,
+    /// which let the AI assistant read the customer's own systems. Granted to
+    /// owner / super_admin / admin; gated further to the enterprise tier and the
+    /// platform scope at the handler. Personal/business accounts never hold the
+    /// effective capability (the tier/scope gate rejects them even as owners).
+    McpManage,
     /// Bootstrap the org master keypair AND promote a member to a key-holder
     /// role (admin / owner). Granted to owner only — the canonical recovery
     /// root must stay single-owner because the mnemonic is a one-time secret.
@@ -169,7 +175,7 @@ pub enum Permission {
 }
 
 impl Permission {
-    pub const ALL: [Permission; 24] = [
+    pub const ALL: [Permission; 25] = [
         AppsUse,
         AppsManage,
         ProfileManageSelf,
@@ -192,6 +198,7 @@ impl Permission {
         TicketsManage,
         SsoManage,
         InboxManage,
+        McpManage,
         OrgKeysBootstrap,
         OrgKeysUseMaster,
     ];
@@ -220,6 +227,7 @@ impl Permission {
             TicketsManage => "tickets:manage",
             SsoManage => "sso:manage",
             InboxManage => "inbox:manage",
+            McpManage => "mcp:manage",
             OrgKeysBootstrap => "org_keys:bootstrap",
             OrgKeysUseMaster => "org_keys:use_master",
         }
@@ -266,6 +274,7 @@ static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Ve
                     TicketsManage,
                     SsoManage,
                     InboxManage,
+                    McpManage,
                     // super_admin is everything-except-billing, so the master
                     // key permission is in. Bootstrap is owner-only.
                     OrgKeysUseMaster,
@@ -284,6 +293,7 @@ static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Ve
                     UsageRead,
                     SsoManage,
                     InboxManage,
+                    McpManage,
                     // Admin holds the org master key (re-wrapped under their
                     // personal pubkey at promotion time) so they can reset
                     // member passwords and recover member data without
@@ -685,6 +695,26 @@ mod tests {
             assert!(
                 !role_has(role, OrgKeysUseMaster),
                 "{role:?} must NOT have OrgKeysUseMaster"
+            );
+        }
+    }
+
+    #[test]
+    fn mcp_manage_is_owner_super_admin_admin() {
+        for role in [Role::Owner, Role::SuperAdmin, Role::Admin] {
+            assert!(role_has(role, McpManage), "{role:?} must have McpManage");
+        }
+        for role in [
+            Role::Security,
+            Role::Billing,
+            Role::Developer,
+            Role::Support,
+            Role::Member,
+            Role::Guest,
+        ] {
+            assert!(
+                !role_has(role, McpManage),
+                "{role:?} must NOT have McpManage"
             );
         }
     }

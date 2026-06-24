@@ -1,6 +1,5 @@
-use crate::email::oauth::HTTP_CLIENT;
 use crate::prelude::*;
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, instrument};
 use wayve_security::jwt::get_user_id_from_request;
 
 #[derive(Deserialize)]
@@ -17,12 +16,22 @@ pub struct ChatRequest {
     pub messages: Vec<ChatTurn>,
 }
 
-/// POST /api/ai/chat — proxies to Google's Generative Language API
-/// (Gemini). The API key lives in GEMINI_API_KEY on the server and is
-/// never exposed to the browser. Auth is JWT-gated like the rest of /api.
+/// POST /api/ai/chat — Gemini-backed assistant. The API key lives in
+/// GEMINI_API_KEY on the server and is never exposed to the browser; auth is
+/// JWT-gated like the rest of /api.
+///
+/// For an MCP owner (enterprise org / platform) with connected servers, the
+/// request runs through `agent::run`, which declares those servers' tools to
+/// Gemini and runs a bounded tool-call loop so the model can read the customer's
+/// own systems. Everyone else gets the plain passthrough. The `pool` is needed
+/// to resolve the caller's scope + connections.
 #[post("/ai/chat")]
-#[instrument(target = "ai", skip(req, data), fields(turns = data.messages.len()))]
-pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> AppResult {
+#[instrument(target = "ai", skip(req, pool, data), fields(turns = data.messages.len()))]
+pub async fn ai_chat(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<ChatRequest>,
+) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let api_key = match crate::config::gemini_api_key() {
@@ -62,56 +71,10 @@ pub async fn ai_chat(req: HttpRequest, data: web::Json<ChatRequest>) -> AppResul
         return Ok(HttpResponse::BadRequest().body("Empty conversation"));
     }
 
-    let url = format!(
-        "{}/v1beta/models/{}:generateContent?key={}",
-        crate::external::gemini_base(),
-        model,
-        api_key
-    );
+    let result = crate::ai::agent::run(pool.get_ref(), user_id, contents, &api_key, &model).await?;
 
-    let body = serde_json::json!({ "contents": contents });
-
-    let res = HTTP_CLIENT.post(&url).json(&body).send().await;
-
-    let res = match res {
-        Ok(r) => r,
-        Err(e) => {
-            error!("Gemini upstream transport error: {}", e);
-            return Ok(HttpResponse::BadGateway().body("Upstream error"));
-        }
-    };
-
-    let status = res.status();
-    let payload: Value = match res.json().await {
-        Ok(v) => v,
-        Err(e) => {
-            error!("Gemini json parse failed: {}", e);
-            return Ok(HttpResponse::BadGateway().body("Bad upstream response"));
-        }
-    };
-
-    if !status.is_success() {
-        let msg = payload["error"]["message"]
-            .as_str()
-            .unwrap_or("Upstream error")
-            .to_string();
-        warn!("Gemini non-2xx: {} - {}", status, msg);
-        return Ok(HttpResponse::BadGateway().body(msg));
-    }
-
-    // Stitch together every text part of the first candidate. Gemini may
-    // split a single response across multiple parts (e.g. when grounding
-    // metadata is mixed in).
-    let reply = payload["candidates"][0]["content"]["parts"]
-        .as_array()
-        .map(|parts| {
-            parts
-                .iter()
-                .filter_map(|p| p["text"].as_str())
-                .collect::<Vec<_>>()
-                .join("")
-        })
-        .unwrap_or_default();
-
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "reply": reply })))
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "reply": result.reply,
+        "tools_used": result.tools_used,
+    })))
 }
