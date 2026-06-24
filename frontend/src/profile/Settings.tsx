@@ -191,7 +191,7 @@ export default function Settings() {
     const orgName = user?.organization_name ?? "this organization";
     if (
       !window.confirm(
-        `Delete ${orgName}? Every member account you added will be removed and your own account will revert to a personal plan.`
+        `Delete ${orgName}? This permanently removes the organization and every member account provisioned under it. This cannot be undone.`
       )
     ) {
       return;
@@ -587,9 +587,8 @@ export default function Settings() {
               Danger zone
             </h2>
             <p className="settings-danger-text">
-              Delete the organization and revert your own account to a personal
-              account. Every member account you provisioned will be removed.
-              Your own emails, chats, and files stay on your account.
+              Permanently delete this organization and every member account
+              provisioned under it. This cannot be undone.
             </p>
             {deleteOrgError && (
               <p className="settings-danger-error">{deleteOrgError}</p>
@@ -600,9 +599,7 @@ export default function Settings() {
               onClick={() => void onDeleteOrg()}
               disabled={deletingOrg}
             >
-              {deletingOrg
-                ? "Deleting…"
-                : "Delete organization & revert to personal"}
+              {deletingOrg ? "Deleting…" : "Delete organization"}
             </button>
           </section>
         )}
