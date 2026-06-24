@@ -23,6 +23,8 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
             c.visibility,
             c.created_by,
             c.created_at,
+            (SELECT MAX(cm_last.created_at) FROM channel_messages cm_last
+                WHERE cm_last.channel_id = c.id) AS last_message_at,
             mine.role AS current_user_role,
             mine.user_id IS NOT NULL AS is_member,
             jr.status AS join_status,
@@ -101,12 +103,23 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
                 chrono::Utc,
             );
 
+            // Timestamp of the channel's most recent message (any thread level),
+            // so the sidebar can surface active channels in "Recent". NULL for a
+            // channel with no messages yet.
+            let last_message_at = row
+                .get::<Option<chrono::NaiveDateTime>, _>("last_message_at")
+                .map(|t| {
+                    chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(t, chrono::Utc)
+                        .to_rfc3339()
+                });
+
             serde_json::json!({
                 "id": row.get::<i32, _>("id"),
                 "name": row.get::<String, _>("name"),
                 "visibility": row.get::<String, _>("visibility"),
                 "created_by": row.get::<i32, _>("created_by"),
                 "created_at": created_at.to_rfc3339(),
+                "last_message_at": last_message_at,
                 "current_user_role": row.get::<Option<String>, _>("current_user_role"),
                 "is_member": row.get::<bool, _>("is_member"),
                 "join_status": row.get::<Option<String>, _>("join_status"),

@@ -8,6 +8,7 @@ import type { ChannelVisibility, Conversation } from "../types";
 import ChannelCreateForm from "./ChannelCreateForm";
 import ChannelList from "./ChannelList";
 import PersonalChatList from "./PersonalChatList";
+import RecentConversations from "./RecentConversations";
 
 type Props = {
   users: ChatUser[];
@@ -78,13 +79,15 @@ export default function ConversationSidebar({
       </div>
 
       {/* Active conversations (Unread + Recent) sit above the channels so the
-          chats you're in the middle of are the first thing you see. */}
-      <PersonalChatList
+          chats you're in the middle of are the first thing you see. Recent now
+          interleaves DMs and the channels you're active in, by last activity. */}
+      <RecentConversations
         users={users}
+        channels={channels}
         selectedConversation={selectedConversation}
-        onSelect={onSelectUser}
         summary={summary}
-        section="recent"
+        onSelectUser={onSelectUser}
+        onSelectChannel={onSelectChannel}
       />
 
       <div className="conversation-section-header">

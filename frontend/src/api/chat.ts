@@ -117,6 +117,10 @@ export type ChatChannel = {
   visibility: "public" | "private";
   created_by: number;
   created_at: string;
+  // Timestamp of the channel's most recent message, used to surface active
+  // channels in the sidebar "Recent" group. Null when the channel has no
+  // messages yet.
+  last_message_at?: string | null;
   current_user_role?: "admin" | "user";
   is_member: boolean;
   join_status?: "pending";
