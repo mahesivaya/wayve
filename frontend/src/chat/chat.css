@@ -518,6 +518,18 @@
   display: flex;
 }
 
+/* Left column: the message list + the main composer stacked. Keeping the
+   composer inside this column (instead of below the whole row) means it spans
+   only the messages width — so an open thread/settings panel sits beside it as
+   a full-height column, and the composer no longer runs under that panel. */
+.chat-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .messages {
   flex: 1;
   min-height: 0;
@@ -924,7 +936,7 @@
   flex: 1;
 }
 
-.chat-container.narrow .chat-content-row.settings-open .messages {
+.chat-container.narrow .chat-content-row.settings-open .chat-main {
   display: none;
 }
 
@@ -1005,32 +1017,39 @@
   right: 0;
 }
 
+/* Mirror the main composer (.chat-input + .chat-input-row) so the two inputs at
+   the bottom of the messages column and the thread column line up in height. */
 .thread-panel-composer {
   display: flex;
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  padding: 12px;
+  /* Lift the input a little off the bottom edge; the gap shows the panel bg. */
+  margin-bottom: 72px;
   border-top: 1px solid var(--color-border);
   background: var(--color-pane);
 }
 
 .thread-panel-composer textarea {
   flex: 1;
-  resize: none;
-  padding: 8px 10px;
-  border: 1px solid var(--color-border-muted);
-  border-radius: 8px;
+  min-height: 40px;
+  max-height: 120px;
+  height: 40px;
+  resize: vertical;
+  padding: 9px 12px;
+  line-height: 1.4;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
   font: inherit;
-  font-size: var(--text-md);
 }
 
 .thread-panel-composer button {
-  align-self: flex-end;
-  padding: 8px 14px;
-  border: 1px solid var(--color-primary-action);
+  align-self: stretch;
+  padding: 0 18px;
+  border: none;
   background: var(--color-primary-action);
   color: var(--color-surface);
-  border-radius: 8px;
-  font-weight: 700;
+  border-radius: var(--radius-md);
+  font-weight: 800;
   cursor: pointer;
 }
 
@@ -1091,7 +1110,7 @@
   border-left: none;
 }
 
-.chat-container.narrow .chat-content-row.thread-open .messages {
+.chat-container.narrow .chat-content-row.thread-open .chat-main {
   display: none;
 }
 

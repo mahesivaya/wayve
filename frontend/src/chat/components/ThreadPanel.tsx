@@ -109,7 +109,7 @@ export default function ThreadPanel({
             }
           }}
           placeholder={isConnected ? "Reply in thread…" : "Connecting…"}
-          rows={2}
+          rows={1}
         />
         <button
           type="button"

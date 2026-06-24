@@ -935,14 +935,43 @@ export default function Chat() {
             channelSettingsOpen ? " settings-open" : ""
           }${activeThread ? " thread-open" : ""}`}
         >
-          <MessageThread
-            messages={filteredMessages}
-            selectedChannel={selectedChannel}
-            currentUserId={user?.id}
-            onOpenThread={
-              selectedChannel ? (msg) => void openThread(msg) : null
-            }
-          />
+          <div className="chat-main">
+            <MessageThread
+              messages={filteredMessages}
+              selectedChannel={selectedChannel}
+              currentUserId={user?.id}
+              onOpenThread={
+                selectedChannel ? (msg) => void openThread(msg) : null
+              }
+            />
+
+            <MessageComposer
+              conversation={selectedConversation}
+              canChat={canChatInSelectedChannel}
+              isConnected={isChatSocketConnected}
+              isReconnecting={isChatSocketReconnecting}
+              title={selectedTitle}
+              input={input}
+              onInputChange={(value) => {
+                setInput(value);
+                if (composeError) setComposeError("");
+              }}
+              onSend={() => {
+                void sendMessage();
+              }}
+              error={composeError}
+              onDismissError={() => setComposeError("")}
+              allowAttachments={selectedConversation?.type === "user"}
+              pendingFiles={pendingFiles}
+              uploading={uploadingFiles}
+              onPickFiles={(files) =>
+                setPendingFiles((prev) => [...prev, ...files])
+              }
+              onRemoveFile={(index) =>
+                setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+              }
+            />
+          </div>
 
           {selectedChannel && activeThread && (
             <>
@@ -986,33 +1015,6 @@ export default function Chat() {
             />
           )}
         </div>
-
-        <MessageComposer
-          conversation={selectedConversation}
-          canChat={canChatInSelectedChannel}
-          isConnected={isChatSocketConnected}
-          isReconnecting={isChatSocketReconnecting}
-          title={selectedTitle}
-          input={input}
-          onInputChange={(value) => {
-            setInput(value);
-            if (composeError) setComposeError("");
-          }}
-          onSend={() => {
-            void sendMessage();
-          }}
-          error={composeError}
-          onDismissError={() => setComposeError("")}
-          allowAttachments={selectedConversation?.type === "user"}
-          pendingFiles={pendingFiles}
-          uploading={uploadingFiles}
-          onPickFiles={(files) =>
-            setPendingFiles((prev) => [...prev, ...files])
-          }
-          onRemoveFile={(index) =>
-            setPendingFiles((prev) => prev.filter((_, i) => i !== index))
-          }
-        />
       </section>
     </div>
   );
