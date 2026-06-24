@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod handler;
 
 use actix_web::web;

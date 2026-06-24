@@ -900,6 +900,51 @@ CREATE TABLE IF NOT EXISTS user_gitlab_connections (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Connected MCP (Model Context Protocol) servers. ENTERPRISE orgs and the
+-- PLATFORM scope only: an owner/admin registers a remote MCP server (its single
+-- Streamable-HTTP endpoint + optional bearer token) so the AI assistant can call
+-- that server's tools — e.g. to read the customer's own database. Fluxze never
+-- touches their DB directly; it speaks MCP to a server they run and control.
+--
+-- Owner is polymorphic: `owner_scope='organization'` rows carry an
+-- `organization_id`; `owner_scope='platform'` rows have it NULL (a single global
+-- platform tenant). Multiple servers per owner, so an auto-increment id. The
+-- auth token is encrypted at rest via wayve_security::encryption (iv+ciphertext),
+-- and is NULL when `auth_type='none'`.
+CREATE TABLE IF NOT EXISTS mcp_connections (
+    id                   SERIAL PRIMARY KEY,
+    owner_scope          TEXT NOT NULL DEFAULT 'organization'
+                         CHECK (owner_scope IN ('organization', 'platform')),
+    organization_id      INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    label                TEXT NOT NULL,
+    server_url           TEXT NOT NULL,
+    auth_type            TEXT NOT NULL DEFAULT 'bearer'
+                         CHECK (auth_type IN ('bearer', 'none')),
+    auth_token_iv        TEXT,
+    auth_token_encrypted TEXT,
+    enabled              BOOLEAN NOT NULL DEFAULT TRUE,
+    server_name          TEXT,
+    last_tool_count      INTEGER,
+    last_validated_at    TIMESTAMP,
+    connected_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at           TIMESTAMP DEFAULT NOW(),
+    updated_at           TIMESTAMP DEFAULT NOW(),
+    -- An org row must name its org; a platform row must not.
+    CONSTRAINT mcp_owner_org_shape CHECK (
+        (owner_scope = 'organization' AND organization_id IS NOT NULL)
+        OR (owner_scope = 'platform' AND organization_id IS NULL)
+    )
+);
+
+-- One row per (owner, server_url). Partial indexes because platform rows share a
+-- NULL organization_id (NULLs don't collide in a plain UNIQUE).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mcp_connections_org
+    ON mcp_connections(organization_id, server_url) WHERE owner_scope = 'organization';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mcp_connections_platform
+    ON mcp_connections(server_url) WHERE owner_scope = 'platform';
+CREATE INDEX IF NOT EXISTS idx_mcp_connections_owner
+    ON mcp_connections(owner_scope, organization_id) WHERE enabled;
+
 -- Files attached to a task. Stored under ./uploads encrypted at rest just
 -- like drive_files; the on-disk blob is unreferenced (and garbage-collected
 -- on next sweep) when the row is deleted by the task cascade.

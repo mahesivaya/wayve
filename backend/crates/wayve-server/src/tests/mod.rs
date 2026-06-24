@@ -17,6 +17,7 @@ mod email_provider_isp_test;
 mod gitlab_test;
 mod jira_test;
 mod jira_webhook_test;
+mod mcp_test;
 mod org_keys_test;
 mod platform_billing_feature_access_test;
 mod platform_users_test;

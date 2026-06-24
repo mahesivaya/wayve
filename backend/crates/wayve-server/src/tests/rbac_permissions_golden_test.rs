@@ -33,6 +33,7 @@ mod tests {
                 "tickets:manage",
                 "sso:manage",
                 "inbox:manage",
+                "mcp:manage",
                 "org_keys:bootstrap",
                 "org_keys:use_master",
             ],
@@ -57,6 +58,7 @@ mod tests {
                 "tickets:manage",
                 "sso:manage",
                 "inbox:manage",
+                "mcp:manage",
                 // super_admin gets the master-key USE permission but NOT
                 // bootstrap — only the original owner can mint the
                 // mnemonic recovery root or promote a new key-holder.
@@ -73,6 +75,7 @@ mod tests {
                 "usage:read",
                 "sso:manage",
                 "inbox:manage",
+                "mcp:manage",
                 // Admin holds the org master key wrap so they can reset
                 // member passwords and recover departing-member data
                 // without involving the owner.
