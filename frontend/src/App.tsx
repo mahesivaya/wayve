@@ -53,6 +53,9 @@ const OrganizationAdminHome = lazy(
 const OrganizationMembers = lazy(
   () => import("./organization/OrganizationMembers")
 );
+const OrganizationDomains = lazy(
+  () => import("./organization/OrganizationDomains")
+);
 const PlatformAdminHome = lazy(
   () => import("./organization/PlatformAdminHome")
 );
@@ -278,6 +281,10 @@ export default function App() {
               <Route
                 path="/organization/members"
                 element={<OrganizationMembers />}
+              />
+              <Route
+                path="/organization/domains"
+                element={<OrganizationDomains />}
               />
               <Route
                 path="/organization/settings"

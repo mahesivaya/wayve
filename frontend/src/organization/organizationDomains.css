@@ -1,0 +1,118 @@
+.org-domains-page {
+  padding: 28px;
+}
+
+.org-domains-card {
+  max-width: 640px;
+  padding: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--u-card-shadow);
+}
+
+.org-domains-card h1 {
+  margin: 0 0 6px;
+  font-size: var(--text-3xl);
+  color: var(--color-text-primary);
+}
+
+.org-domains-sub {
+  margin: 0 0 20px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+.org-domains-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 700;
+  font-size: var(--text-sm);
+  color: var(--color-text-slate);
+}
+
+.org-domains-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.org-domains-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.org-domains-input:focus {
+  outline: 2px solid var(--color-primary-panel-border);
+  border-color: var(--color-primary-action);
+}
+
+.org-domains-status {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.org-domains-status.is-verified {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.org-domains-status.is-pending {
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+}
+
+.org-domains-verify-btn {
+  padding: 10px 18px;
+  border: 1px solid var(--color-primary-action);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-action);
+  color: var(--color-on-primary);
+  font-size: var(--text-md);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.org-domains-verify-btn:hover:not(:disabled) {
+  background: var(--color-primary-action-hover);
+}
+
+.org-domains-verify-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.org-domains-verified {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-success-border);
+  border-radius: var(--radius-md);
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.org-domains-undo {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  cursor: pointer;
+}

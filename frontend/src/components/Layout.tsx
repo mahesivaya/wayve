@@ -1330,10 +1330,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       collapsible: false,
       links: [
         {
-          path: "/coming-soon",
+          path: "/organization/domains",
           label: "Domains",
           icon: <DomainsIcon size={16} />,
-          activeWhen: "/coming-soon",
+          activeWhen: "/organization/domains",
         },
         { path: "/logs/app", label: "App Logs", icon: <LogsIcon size={16} /> },
         {
