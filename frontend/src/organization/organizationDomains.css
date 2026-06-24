@@ -69,8 +69,90 @@
 }
 
 .org-domains-status.is-pending {
+  background: var(--color-warning-soft, #fef3c7);
+  color: var(--color-warning, #92400e);
+}
+
+.org-domains-status.is-none {
   background: var(--color-surface-hover);
   color: var(--color-text-muted);
+}
+
+.org-domains-txt {
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft, var(--color-surface-hover));
+}
+
+.org-domains-txt-help {
+  margin: 0 0 10px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.org-domains-txt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.org-domains-txt-key {
+  flex: 0 0 52px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-slate);
+}
+
+.org-domains-txt-val {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.org-domains-copy {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-slate);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.org-domains-copy:hover {
+  background: var(--color-surface-hover);
+}
+
+.org-domains-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.org-domains-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-danger-border, #fecaca);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft, #fef2f2);
+  color: var(--color-danger-strong, #b91c1c);
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 .org-domains-verify-btn {

@@ -864,6 +864,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // gated for now, so the link targets their org via ?org=<id>.)
   const isOrgOwner =
     user.scope === "organization" && user.effective_role === "owner";
+  // Custom-domain verification is a business / enterprise capability — hide the
+  // Domains shortcut for lower org tiers (startups / none).
+  const orgTier = user.current_plan?.tier;
+  const canManageDomains =
+    isOrgOwner && (orgTier === "business" || orgTier === "enterprise");
   // Developers (org or platform scope) get the Code shortcut alongside owners.
   const isDeveloper = user.effective_role === "developer";
   // Pricing is hidden from roles that don't manage plans/billing (org +
@@ -1334,6 +1339,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           label: "Domains",
           icon: <DomainsIcon size={16} />,
           activeWhen: "/organization/domains",
+          visible: canManageDomains,
         },
         { path: "/logs/app", label: "App Logs", icon: <LogsIcon size={16} /> },
         {

@@ -15,6 +15,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(domains::list_domains)
         .service(domains::claim_domain)
         .service(domains::verify_domain)
+        .service(domains::verify_domain_ownership)
         .service(domains::delete_domain)
         .service(domains::get_domain_policy)
         .service(domains::set_domain_policy)

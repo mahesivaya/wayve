@@ -386,6 +386,66 @@ pub async fn verify_domain(
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct VerifyOwnershipRequest {
+    pub domain: String,
+    pub token: String,
+}
+
+/// Lightweight, organization-owner-facing domain check used by the in-app
+/// Domain page (`/organization/domains`). Stateless — no `organization_domains`
+/// row: the caller supplies the challenge token they published, and we run the
+/// SAME live DNS TXT lookup as [`verify_domain`]. A domain the caller doesn't
+/// control has no such record, so it never verifies. Any organization-scoped
+/// user may call it; it grants nothing server-side (the member-creation gate
+/// still requires a verified `organization_domains` row).
+#[post("/org-domains/verify")]
+#[instrument(target = "auth", skip(req, pool, body))]
+pub async fn verify_domain_ownership(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<VerifyOwnershipRequest>,
+) -> AppResult {
+    let Some(user_id) = get_user_id_from_request(&req) else {
+        return Ok(HttpResponse::Unauthorized()
+            .json(serde_json::json!({ "message": "Authentication required" })));
+    };
+    let ctx = resolve_role_context(pool.get_ref(), user_id).await?;
+    if ctx.scope != Scope::Organization {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Domain verification is for organization accounts"
+        })));
+    }
+
+    let Some(domain) = normalize_domain(&body.domain) else {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "verified": false,
+            "message": "Enter a valid custom domain (not a public email provider)."
+        })));
+    };
+    let token = body.token.trim();
+    if token.is_empty() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "verified": false,
+            "message": "Missing verification token."
+        })));
+    }
+
+    let ok = dns_txt_contains(&domain, &format!("wayve-verify={token}")).await;
+    let (name, value) = challenge_record(&domain, token);
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "verified": ok,
+        "domain": domain,
+        "message": if ok {
+            "Domain verified."
+        } else {
+            "TXT record not found — add it to your DNS and allow a few minutes to propagate."
+        },
+        "txt_name": name,
+        "txt_value": value
+    })))
+}
+
 #[delete("/organizations/{org_id}/domains/{domain_id}")]
 #[instrument(target = "auth", skip(req, pool))]
 pub async fn delete_domain(
