@@ -292,6 +292,18 @@
     grid-template-columns: 1fr;
     width: 100%;
   }
+
+  /* Stacked single-column cards size to their content: drop the desktop fixed
+     height and the top/bottom (space-between) split that stranded a big gap
+     above sparse cards like "Plans & pricing", and left-align the title so it
+     lines up with the stat columns below it (#root defaults text to centered,
+     while the stats force left). */
+  .platform-console-list article {
+    min-height: 0;
+    justify-content: flex-start;
+    gap: 8px;
+    text-align: left;
+  }
 }
 
 .platform-admin-logs {
