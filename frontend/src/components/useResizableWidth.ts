@@ -12,6 +12,11 @@ export interface ResizableWidthOptions {
   defaultWidth: number;
   min: number;
   max: number;
+  // Invert the drag direction. Default (false) grows the panel as the pointer
+  // moves right — correct for a left-anchored panel (e.g. the sidebar). Set
+  // true for a right-anchored panel whose handle sits on its LEFT edge (e.g.
+  // the chat thread panel), where dragging left should make it wider.
+  invert?: boolean;
 }
 
 export function useResizableWidth({
@@ -19,6 +24,7 @@ export function useResizableWidth({
   defaultWidth,
   min,
   max,
+  invert = false,
 }: ResizableWidthOptions) {
   const [width, setWidth] = useState<number>(() => {
     try {
@@ -47,9 +53,8 @@ export function useResizableWidth({
     const startX = e.clientX;
     const startWidth = width;
     const onMove = (ev: PointerEvent) => {
-      setWidth(
-        Math.min(max, Math.max(min, startWidth + (ev.clientX - startX)))
-      );
+      const delta = invert ? startX - ev.clientX : ev.clientX - startX;
+      setWidth(Math.min(max, Math.max(min, startWidth + delta)));
     };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);

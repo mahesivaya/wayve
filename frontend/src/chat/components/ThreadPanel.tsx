@@ -5,6 +5,7 @@
 // is purely presentational and doesn't open its own socket.
 
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import type { ChatMessage } from "../../api/chat";
 import { formatTime } from "../utils";
 
@@ -15,6 +16,10 @@ type Props = {
   isConnected: boolean;
   onClose: () => void;
   onSendReply: (text: string) => void | Promise<void>;
+  // Draggable width (px). Applied as a CSS variable rather than an inline
+  // `width` so the narrow-mode takeover rule (which sets width:auto) still
+  // wins. Falls back to the stylesheet default when undefined.
+  width?: number;
 };
 
 export default function ThreadPanel({
@@ -24,6 +29,7 @@ export default function ThreadPanel({
   isConnected,
   onClose,
   onSendReply,
+  width,
 }: Props) {
   const [draft, setDraft] = useState("");
   const tailRef = useRef<HTMLDivElement | null>(null);
@@ -40,8 +46,13 @@ export default function ThreadPanel({
     await onSendReply(text);
   };
 
+  const widthVar =
+    width != null
+      ? ({ "--thread-width": `${width}px` } as CSSProperties)
+      : undefined;
+
   return (
-    <aside className="thread-panel">
+    <aside className="thread-panel" style={widthVar}>
       <header className="thread-panel-header">
         <h3>Thread</h3>
         <button type="button" onClick={onClose} aria-label="Close thread">

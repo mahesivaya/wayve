@@ -931,13 +931,21 @@
 /* ---- Thread side panel ---- */
 
 .thread-panel {
-  width: 340px;
-  flex: 0 0 340px;
+  /* Width is driven by the draggable divider via --thread-width (set inline by
+     ThreadPanel); falls back to 340px. The divider line replaces the old
+     border-left so there's no double rule next to the handle. */
+  width: var(--thread-width, 340px);
+  flex: 0 0 var(--thread-width, 340px);
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--color-border);
   background: var(--color-pane);
   min-height: 0;
+}
+
+/* Hide the thread resize handle in narrow mode, where the panel takes over the
+   whole conversation pane instead of sitting alongside the messages. */
+.chat-container.narrow .thread-resize-handle {
+  display: none;
 }
 
 .thread-panel-header {

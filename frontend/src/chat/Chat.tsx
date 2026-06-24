@@ -27,6 +27,7 @@ import ConversationSidebar from "./components/ConversationSidebar";
 import MessageComposer from "./components/MessageComposer";
 import MessageThread from "./components/MessageThread";
 import ThreadPanel from "./components/ThreadPanel";
+import ResizeHandle from "../components/ResizeHandle";
 import { useResizableWidth } from "../components/useResizableWidth";
 import { useChatConversations } from "./hooks/useChatConversations";
 import { useChatSocket } from "./hooks/useChatSocket";
@@ -133,6 +134,17 @@ export default function Chat() {
       defaultWidth: 320,
       min: 200,
       max: 640,
+    });
+
+  // Drag the divider on the thread panel's LEFT edge to resize it. The panel is
+  // right-anchored, so dragging left widens it (invert). Persisted; 260–680px.
+  const { width: threadWidth, startResize: startThreadDrag } =
+    useResizableWidth({
+      storageKey: "rwayve.chatThread.width",
+      defaultWidth: 340,
+      min: 260,
+      max: 680,
+      invert: true,
     });
 
   const selectedChannel =
@@ -933,14 +945,22 @@ export default function Chat() {
           />
 
           {selectedChannel && activeThread && (
-            <ThreadPanel
-              parent={activeThread}
-              replies={threadReplies}
-              currentUserId={user?.id}
-              isConnected={isChatSocketConnected}
-              onClose={closeThread}
-              onSendReply={sendThreadReply}
-            />
+            <>
+              <ResizeHandle
+                onPointerDown={startThreadDrag}
+                className="thread-resize-handle"
+                ariaLabel="Resize thread panel"
+              />
+              <ThreadPanel
+                parent={activeThread}
+                replies={threadReplies}
+                currentUserId={user?.id}
+                isConnected={isChatSocketConnected}
+                onClose={closeThread}
+                onSendReply={sendThreadReply}
+                width={threadWidth}
+              />
+            </>
           )}
 
           {selectedChannel && channelSettingsOpen && (
