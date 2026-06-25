@@ -1678,3 +1678,115 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_action
     ON audit_logs(action, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created
     ON audit_logs(created_at DESC);
+
+
+-- ============================================================================
+-- TENANT TAGGING (RLS phase 1) — tag tenant-owned rows with organization_id.
+--
+-- Foundation for Postgres Row-Level Security. RLS is NOT enabled here; this only
+-- guarantees every tenant-owned row carries a correct organization_id and stays
+-- that way via BEFORE INSERT triggers. The one-time backfill for pre-existing
+-- rows lives in infra/postgres/migrations/2026-06-org-tagging.sql (applied by
+-- hand to running DBs, since init.sql only runs on a fresh volume).
+--
+-- NOT org-tagged on purpose:
+--   * Chat is PARTICIPANT-SCOPED — messages, chat_attachments, channels,
+--     channel_members, channel_messages, channel_invites, channel_join_requests
+--     are visible by membership, not by org. Do NOT add org RLS to them; phase 2
+--     gives them participant policies.
+--   * GLOBAL / cross-tenant tables are never org-scoped — users, organizations,
+--     organization_members, platform_members, plans, subscriptions, invoices,
+--     billing_customers, entitlements, usage_events, api_keys, api_key_audit_log,
+--     password_reset_tokens, demo_requests, support_tickets, etc.
+-- Many tables already carry organization_id (email_accounts, projects, teams,
+-- slack_*, mcp_connections, org_documents, the org-key tables, …) — unchanged.
+-- ============================================================================
+
+-- columns (nullable: personal-account rows stay NULL = "no tenant")
+ALTER TABLE emails                  ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE email_attachments       ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE notes                   ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE tasks                   ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE task_attachments        ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE meetings                ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE meeting_participants    ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE drive_files             ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE folders                 ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE secure_messages         ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE user_jira_connections   ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE user_gitlab_connections ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_emails_org                  ON emails(organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_attachments_org       ON email_attachments(organization_id);
+CREATE INDEX IF NOT EXISTS idx_notes_org                   ON notes(organization_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_org                   ON tasks(organization_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_task_attachments_org        ON task_attachments(organization_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_org                ON meetings(organization_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_participants_org    ON meeting_participants(organization_id);
+CREATE INDEX IF NOT EXISTS idx_drive_files_org             ON drive_files(organization_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_folders_org                 ON folders(organization_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_secure_messages_org         ON secure_messages(organization_id);
+CREATE INDEX IF NOT EXISTS idx_user_jira_connections_org   ON user_jira_connections(organization_id);
+CREATE INDEX IF NOT EXISTS idx_user_gitlab_connections_org ON user_gitlab_connections(organization_id);
+
+-- triggers fill organization_id only when the app left it NULL (app-set wins)
+CREATE OR REPLACE FUNCTION set_org_from_user_id() RETURNS trigger AS $$
+BEGIN
+    IF NEW.organization_id IS NULL AND NEW.user_id IS NOT NULL THEN
+        SELECT u.organization_id INTO NEW.organization_id FROM users u WHERE u.id = NEW.user_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_org_from_sender_user_id() RETURNS trigger AS $$
+BEGIN
+    IF NEW.organization_id IS NULL AND NEW.sender_user_id IS NOT NULL THEN
+        SELECT u.organization_id INTO NEW.organization_id FROM users u WHERE u.id = NEW.sender_user_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_org_emails() RETURNS trigger AS $$
+BEGIN
+    IF NEW.organization_id IS NULL AND NEW.account_id IS NOT NULL THEN
+        SELECT ea.organization_id INTO NEW.organization_id FROM email_accounts ea WHERE ea.id = NEW.account_id;
+    END IF;
+    IF NEW.organization_id IS NULL AND NEW.recipient_user_id IS NOT NULL THEN
+        SELECT u.organization_id INTO NEW.organization_id FROM users u WHERE u.id = NEW.recipient_user_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_org_from_email_id() RETURNS trigger AS $$
+BEGIN
+    IF NEW.organization_id IS NULL AND NEW.email_id IS NOT NULL THEN
+        SELECT e.organization_id INTO NEW.organization_id FROM emails e WHERE e.id = NEW.email_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_org_from_meeting_id() RETURNS trigger AS $$
+BEGIN
+    IF NEW.organization_id IS NULL AND NEW.meeting_id IS NOT NULL THEN
+        SELECT m.organization_id INTO NEW.organization_id FROM meetings m WHERE m.id = NEW.meeting_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trg_set_org_notes                BEFORE INSERT ON notes                   FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_tasks                BEFORE INSERT ON tasks                   FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_task_attachments     BEFORE INSERT ON task_attachments        FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_meetings             BEFORE INSERT ON meetings                FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_drive_files          BEFORE INSERT ON drive_files             FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_folders              BEFORE INSERT ON folders                 FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_user_jira            BEFORE INSERT ON user_jira_connections   FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_user_gitlab          BEFORE INSERT ON user_gitlab_connections FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_secure_messages      BEFORE INSERT ON secure_messages         FOR EACH ROW EXECUTE FUNCTION set_org_from_sender_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_emails               BEFORE INSERT ON emails                  FOR EACH ROW EXECUTE FUNCTION set_org_emails();
+CREATE OR REPLACE TRIGGER trg_set_org_email_attachments    BEFORE INSERT ON email_attachments       FOR EACH ROW EXECUTE FUNCTION set_org_from_email_id();
+CREATE OR REPLACE TRIGGER trg_set_org_meeting_participants BEFORE INSERT ON meeting_participants    FOR EACH ROW EXECUTE FUNCTION set_org_from_meeting_id();
