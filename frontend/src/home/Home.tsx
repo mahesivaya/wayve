@@ -213,13 +213,13 @@ export default function Home() {
               <div className="hx-hero-cta">
                 <button
                   className="hx-btn-primary"
-                  onClick={() => navigate("/register")}
+                  onClick={() => navigate("/pricing")}
                 >
                   Get Started <span aria-hidden="true">→</span>
                 </button>
                 <button
                   className="hx-btn-ghost"
-                  onClick={() => navigate("/pricing")}
+                  onClick={() => navigate("/book-demo")}
                 >
                   Book a Demo
                 </button>

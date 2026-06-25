@@ -98,6 +98,12 @@ fn var_or(key: &str, default: &str) -> String {
     var_opt(key).unwrap_or_else(|| default.to_string())
 }
 
+/// Recipient (and calendar organizer) for "Book a demo" notifications.
+/// Override with `DEMO_NOTIFY_EMAIL`; defaults to the founder's inbox.
+pub fn demo_notify_email() -> String {
+    var_or("DEMO_NOTIFY_EMAIL", "maheshiv199@gmail.com")
+}
+
 /// The active environment name (`development` / `production` / ...).
 pub fn app_environment() -> String {
     var_opt("RWAYVE_ENV")

@@ -581,6 +581,21 @@ ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS email_encrypted TEXT;
 ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS email_iv TEXT;
 
 
+-- Public "Book a demo" lead form (fluxze.com home → /book-demo). No auth: any
+-- visitor may submit. Each row is emailed to sales and turned into an .ics
+-- calendar invite. `scheduled_at` is the visitor's chosen slot, stored in UTC.
+CREATE TABLE IF NOT EXISTS demo_requests (
+    id           SERIAL PRIMARY KEY,
+    first_name   TEXT NOT NULL,
+    last_name    TEXT NOT NULL,
+    email        TEXT NOT NULL,
+    work_email   TEXT NOT NULL,
+    scheduled_at TIMESTAMPTZ NOT NULL,
+    emailed      BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
 DO $$ BEGIN
     CREATE TYPE message_status AS ENUM ('sent', 'delivered', 'read');
 EXCEPTION

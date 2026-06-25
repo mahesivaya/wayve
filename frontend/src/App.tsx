@@ -86,6 +86,7 @@ const PlatformUserLogs = lazy(() => import("./platformTeam/PlatformUserLogs"));
 const PlatformVisitors = lazy(() => import("./platformTeam/PlatformVisitors"));
 const Pricing = lazy(() => import("./pricing/Pricing"));
 const Support = lazy(() => import("./marketing/Support"));
+const BookDemo = lazy(() => import("./marketing/BookDemo"));
 const Developers = lazy(() => import("./marketing/Developers"));
 const Quotas = lazy(() => import("./marketing/Quotas"));
 const Docs = lazy(() => import("./marketing/Docs"));
@@ -202,6 +203,8 @@ export default function App() {
             }
           />
           <Route path="/support" element={<Support />} />
+          {/* Public lead form reached from the home "Book a Demo" CTA. */}
+          <Route path="/book-demo" element={<BookDemo />} />
           {/* ── Documentation surface ──────────────────────────────────
             Every dev-readable page now lives under /docs/* with a
             shared DocsShell (search + sidebar + breadcrumbs). The
