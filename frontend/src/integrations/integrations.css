@@ -92,6 +92,10 @@
 
 /* Formal explainer: the AI assistant supports MCP. Shown to everyone; the
    footer adapts to whether the viewer may actually connect a server. */
+.integrations-info {
+  text-align: left;
+}
+
 .integrations-info-text {
   margin: 10px 0 0;
   font-size: 13.5px;
