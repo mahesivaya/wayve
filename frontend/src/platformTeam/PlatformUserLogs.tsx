@@ -45,6 +45,16 @@ const USER_LOG_COLUMNS = [
 
 const USER_LOGS_COL_WIDTHS_KEY = "rwayve.platformUserLogs.colWidths";
 
+// The three views, surfaced as top-level tabs. Only the active tab's table is
+// rendered, and it fills the page height with its own internal scroll.
+const LOG_TABS = [
+  { key: "registrations", label: "Registration types" },
+  { key: "timespent", label: "Time on site" },
+  { key: "activity", label: "Activity" },
+] as const;
+
+type LogTab = (typeof LOG_TABS)[number]["key"];
+
 // Security-relevant user actions (sign-in/out, password changes, deletions,
 // file downloads/exports, billing changes) from the audit_logs table. Mirrors
 // logs/user_actions.log. Scoped by the backend: platform staff see everyone.
@@ -62,6 +72,7 @@ export default function PlatformUserLogs() {
   const [registrationsLoaded, setRegistrationsLoaded] = useState(false);
   const [timeSpent, setTimeSpent] = useState<UserTimeSpentRow[]>([]);
   const [timeSpentLoaded, setTimeSpentLoaded] = useState(false);
+  const [tab, setTab] = useState<LogTab>("registrations");
 
   const { colWidths, totalWidth, startResize } = useResizableColumns(
     USER_LOG_COLUMNS,
@@ -157,6 +168,22 @@ export default function PlatformUserLogs() {
 
       {error && <div className="pt-banner">{error}</div>}
 
+      <nav className="pt-tabs" role="tablist" aria-label="User log views">
+        {LOG_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            className={`pt-tab ${tab === t.key ? "active" : ""}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "registrations" && (
       <section className="pt-panel pt-userlogs-reg">
         <div className="pt-panel-head">
           <h2>Registration types</h2>
@@ -208,7 +235,9 @@ export default function PlatformUserLogs() {
           </div>
         )}
       </section>
+      )}
 
+      {tab === "timespent" && (
       <section className="pt-panel pt-userlogs-timespent">
         <div className="pt-panel-head">
           <h2>Time on site</h2>
@@ -250,7 +279,9 @@ export default function PlatformUserLogs() {
           </div>
         )}
       </section>
+      )}
 
+      {tab === "activity" && (
       <section className="pt-panel pt-userlogs-activity">
         <div className="pt-panel-head">
           <h2>Activity</h2>
@@ -332,6 +363,7 @@ export default function PlatformUserLogs() {
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

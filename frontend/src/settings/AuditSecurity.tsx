@@ -371,10 +371,32 @@ function csvEscape(value: string | number | null) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+// The audit page is split into one tab per table; only the active tab's section
+// renders, filling the page with its own scroll. `perm` gates which tabs a user
+// sees — the activity/audit tables need audit:read, the SIEM panel needs
+// webhooks:manage.
+const AUDIT_TABS = [
+  { key: "access", label: "Access", perm: "read" },
+  { key: "emails", label: "Emails", perm: "read" },
+  { key: "chat", label: "Chat", perm: "read" },
+  { key: "calendar", label: "Calendar", perm: "read" },
+  { key: "drive", label: "Drive", perm: "read" },
+  { key: "notes", label: "Notes", perm: "read" },
+  { key: "tasks", label: "Tasks", perm: "read" },
+  { key: "auditlog", label: "Audit log", perm: "read" },
+  { key: "siem", label: "SIEM webhook", perm: "siem" },
+] as const;
+
+type AuditTab = (typeof AUDIT_TABS)[number]["key"];
+
 export default function AuditSecurity() {
   const { user } = useAuth();
   const canReadAudit = hasPermission(user, "audit:read");
   const canManageSiem = hasPermission(user, "webhooks:manage");
+
+  // Default to the first table the user can see; a SIEM-only manager (no
+  // audit:read) lands on the SIEM tab instead of an empty page.
+  const [tab, setTab] = useState<AuditTab>(canReadAudit ? "access" : "siem");
 
   // Owners only — the platform owner, or an organization owner (who sees only
   // their own org's audit rows, scoped by the backend). Even platform
@@ -830,7 +852,7 @@ export default function AuditSecurity() {
   }
 
   return (
-    <div className="audit-security-page">
+    <div className="audit-security-page audit-security-tabbed">
       <header className="audit-security-header">
         <div>
           <h1>Audit Logs</h1>
@@ -853,7 +875,24 @@ export default function AuditSecurity() {
         )}
       </header>
 
-      {canReadAudit && (
+      <nav className="audit-tabs" role="tablist" aria-label="Audit views">
+        {AUDIT_TABS.filter((t) =>
+          t.perm === "siem" ? canManageSiem : canReadAudit
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            className={`audit-tab ${tab === t.key ? "active" : ""}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {canReadAudit && tab === "access" && (
         <section className="audit-security-panel">
           <div className="audit-security-panel-head">
             <h2>Audit Access activity</h2>
@@ -976,7 +1015,7 @@ export default function AuditSecurity() {
         </section>
       )}
 
-      {canReadAudit && (
+      {canReadAudit && tab === "emails" && (
         <section className="audit-security-panel">
           <div className="audit-security-panel-head">
             <h2>Audit emails activity</h2>
@@ -1103,7 +1142,7 @@ export default function AuditSecurity() {
         </section>
       )}
 
-      {canReadAudit && (
+      {canReadAudit && tab === "chat" && (
         <section className="audit-security-panel">
           <div className="audit-security-panel-head">
             <h2>Audit Chat activity</h2>
@@ -1221,7 +1260,7 @@ export default function AuditSecurity() {
         </section>
       )}
 
-      {canReadAudit && (
+      {canReadAudit && tab === "calendar" && (
         <section className="audit-security-panel">
           <div className="audit-security-panel-head">
             <h2>Audit calendar activity</h2>
@@ -1335,7 +1374,7 @@ export default function AuditSecurity() {
         </section>
       )}
 
-      {canReadAudit && (
+      {canReadAudit && tab === "drive" && (
         <section className="audit-security-panel">
           <div className="audit-security-panel-head">
             <h2>Audit Drive activity</h2>
@@ -1454,7 +1493,7 @@ export default function AuditSecurity() {
         </section>
       )}
 
-      {canReadAudit && (
+      {canReadAudit && tab === "notes" && (
         <section className="audit-security-panel">
           <div className="audit-security-panel-head">
             <h2>Audit Notes activity</h2>
@@ -1551,7 +1590,7 @@ export default function AuditSecurity() {
         </section>
       )}
 
-      {canReadAudit && (
+      {canReadAudit && tab === "tasks" && (
         <section className="audit-security-panel">
           <div className="audit-security-panel-head">
             <h2>Audit tasks activity</h2>
@@ -1667,7 +1706,7 @@ export default function AuditSecurity() {
         </section>
       )}
 
-      {canReadAudit && (
+      {canReadAudit && tab === "auditlog" && (
         <section className="audit-security-panel">
           <div className="audit-security-panel-head">
             <h2>Audit log</h2>
@@ -1825,7 +1864,7 @@ export default function AuditSecurity() {
         </section>
       )}
 
-      {canManageSiem && (
+      {canManageSiem && tab === "siem" && (
         <section className="audit-security-panel">
           <h2>SIEM webhook</h2>
           <form
