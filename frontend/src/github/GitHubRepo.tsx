@@ -433,6 +433,10 @@ type RunsResponse = {
 // repo has more than this.
 const RUNS_PER_PAGE = 50;
 
+// Commits page size. The Commits tab pages through the full branch history
+// 50-at-a-time (Prev/Next) rather than showing just the latest few.
+const COMMITS_PER_PAGE = 50;
+
 // Individual step inside a job — what GitHub renders as the bullet list
 // under each job header on the run page. The `number` field is the
 // 1-indexed position within the job (Setup is usually #1).
@@ -898,6 +902,11 @@ function GitHubRepoViewer({
   const [readmeLoading, setReadmeLoading] = useState(false);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [commits, setCommits] = useState<CommitItem[]>([]);
+  // Commits pagination. GitHub's /commits returns no total and the proxy drops
+  // the Link header, so we infer "there's a next page" from a full page (=50).
+  const [commitsPage, setCommitsPage] = useState(1);
+  const [commitsHasMore, setCommitsHasMore] = useState(false);
+  const [commitsLoading, setCommitsLoading] = useState(false);
   // Open pull requests (read-only). Merging happens on github.com via each
   // PR's html_url — the proxy is GET-only and the shared token has no write
   // access to linked public repos.
@@ -1225,14 +1234,22 @@ function GitHubRepoViewer({
   );
 
   const loadCommits = useCallback(
-    async (nextBranch: string) => {
+    async (nextBranch: string, page: number) => {
+      setCommitsLoading(true);
       try {
         const data = await githubJson<CommitItem[]>(
-          `${API_BASE}/commits?sha=${encodeURIComponent(nextBranch)}&per_page=8`
+          `${API_BASE}/commits?sha=${encodeURIComponent(nextBranch)}` +
+            `&per_page=${COMMITS_PER_PAGE}&page=${page}`
         );
         setCommits(data);
+        setCommitsPage(page);
+        // A full page implies there may be another; a short page is the last.
+        setCommitsHasMore(data.length === COMMITS_PER_PAGE);
       } catch {
         setCommits([]);
+        setCommitsHasMore(false);
+      } finally {
+        setCommitsLoading(false);
       }
     },
     [API_BASE]
@@ -1543,7 +1560,7 @@ function GitHubRepoViewer({
     if (!repo) return;
     void loadReadme(branch);
     void loadWorkflows(branch);
-    void loadCommits(branch);
+    void loadCommits(branch, 1);
     // Reopening the PR list (vs. a stale detail) whenever the repo/branch
     // changes keeps the tab coherent across repo switches. PRs are owner-only,
     // so non-owners never fetch them (the proxy would 403 anyway).
@@ -2219,7 +2236,35 @@ function GitHubRepoViewer({
                 );
               })}
               {commits.length === 0 && (
-                <div className="github-empty">No commits found.</div>
+                <div className="github-empty">
+                  {commitsLoading
+                    ? "Loading commits…"
+                    : commitsPage > 1
+                      ? "No more commits."
+                      : "No commits found."}
+                </div>
+              )}
+
+              {(commitsHasMore || commitsPage > 1) && (
+                <div className="github-pager">
+                  <button
+                    type="button"
+                    disabled={commitsPage <= 1 || commitsLoading}
+                    onClick={() => void loadCommits(branch, commitsPage - 1)}
+                  >
+                    ← Previous
+                  </button>
+                  <span className="github-pager-label">
+                    Page {commitsPage}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={!commitsHasMore || commitsLoading}
+                    onClick={() => void loadCommits(branch, commitsPage + 1)}
+                  >
+                    Next →
+                  </button>
+                </div>
               )}
             </div>
           )}
