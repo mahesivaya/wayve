@@ -58,11 +58,9 @@ function PlanCard({
   onChoose: () => void;
   isCurrent: boolean;
 }) {
-  const navigate = useNavigate();
   const isFree = plan.amount_cents === 0;
-  // Enterprise is contact-sales — never a self-serve "Free" tier. Org plans
-  // (Startups/Business) use an "Upgrade" CTA. These drive the price + button.
-  const isEnterprise = plan.code === "enterprise";
+  // Org plans (Startups/Business/Enterprise) use an "Upgrade" CTA; personal
+  // paid plans use "Choose plan". These drive the button label below.
   const isOrgPlan = plan.audience === "organization";
   // Plans carry a `features.bullets` array of display strings. Fall back to the
   // storage/seats summary for any legacy row without bullets.
@@ -103,18 +101,16 @@ function PlanCard({
       </ul>
       <button
         className="pricing-plan-cta"
-        onClick={isEnterprise ? () => navigate("/support") : onChoose}
+        onClick={onChoose}
         disabled={isCurrent}
       >
-        {isEnterprise
-          ? "Contact sales"
-          : isCurrent
-            ? "Current plan"
-            : isOrgPlan
-              ? "Upgrade"
-              : isFree
-                ? "Get started"
-                : "Choose plan"}
+        {isCurrent
+          ? "Current plan"
+          : isOrgPlan
+            ? "Upgrade"
+            : isFree
+              ? "Get started"
+              : "Choose plan"}
       </button>
     </article>
   );

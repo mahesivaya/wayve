@@ -654,9 +654,8 @@ function BillingInner() {
     const isCurrent = plan.code === effectiveCurrentCode;
     const isFree = plan.amount_cents === 0;
     const copy = PLAN_COPY[plan.code];
-    const isEnterprise = plan.code === "enterprise";
     const isForOwner = plan.audience === ownerType;
-    const canBuy = isForOwner && !isCurrent && !isFree && !isEnterprise;
+    const canBuy = isForOwner && !isCurrent && !isFree;
     const busyHere = busy === `plan:${plan.code}`;
     return (
       <article
@@ -686,10 +685,6 @@ function BillingInner() {
         {isCurrent ? (
           <button type="button" disabled>
             Active
-          </button>
-        ) : isEnterprise ? (
-          <button type="button" onClick={() => navigate("/support")}>
-            Contact sales
           </button>
         ) : canBuy ? (
           <button

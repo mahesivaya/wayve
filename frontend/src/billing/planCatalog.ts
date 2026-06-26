@@ -99,7 +99,7 @@ export const PLAN_CATALOG: PlanTier[] = [
       "Custom onboarding & SLA",
       "SSO, SCIM & advanced security",
     ],
-    cta: "Contact sales",
+    cta: "Choose plan",
   },
 ];
 
