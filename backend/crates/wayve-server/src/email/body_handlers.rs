@@ -98,8 +98,9 @@ pub async fn get_email_body(
     // account-less Wayve-native rows (e.g. the Sent copy of a Wayve-to-Wayve
     // message, which has NULL account_id) still match — authorized via the
     // `source='wayve' AND recipient_user_id` clause, mirroring repo::get_detail.
-    let row = sqlx::query(
-        r#"
+    let row = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let row = sqlx::query(
+            r#"
         SELECT e.id, e.gmail_id, e.source, e.account_id,
                e.body_encrypted, e.body_iv, e.attachments_checked,
                a.refresh_token
@@ -112,10 +113,13 @@ pub async fn get_email_body(
                OR m.user_id IS NOT NULL
                OR (e.source = 'wayve' AND e.recipient_user_id = $2))
         "#,
-    )
-    .bind(email_id)
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
+        )
+        .bind(email_id)
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        Ok((tx, row))
+    })
     .await?;
 
     let row = match row {
