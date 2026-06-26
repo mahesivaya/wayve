@@ -104,6 +104,12 @@ pub fn demo_notify_email() -> String {
     var_or("DEMO_NOTIFY_EMAIL", "maheshiv199@gmail.com")
 }
 
+/// Recipient for "new pull request opened" notifications.
+/// Override with `GITHUB_PR_NOTIFY_EMAIL`; defaults to the founder's inbox.
+pub fn github_pr_notify_email() -> String {
+    var_or("GITHUB_PR_NOTIFY_EMAIL", "maheshiv199@gmail.com")
+}
+
 /// The active environment name (`development` / `production` / ...).
 pub fn app_environment() -> String {
     var_opt("RWAYVE_ENV")
