@@ -933,6 +933,205 @@
   text-decoration: underline;
 }
 
+/* Extra status verdicts shown on the PR detail header. */
+.github-pr-status.is-merged {
+  background: var(--color-surface-tint-cool);
+  color: var(--color-primary-action);
+}
+.github-pr-status.is-closed {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
+/* List row title/meta is a button that opens the in-app detail view. */
+.github-pr-open-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.github-pr-open-btn:hover .github-pr-title {
+  color: var(--color-primary-action);
+}
+
+/* ── PR detail view (description, checks, discussion, files) ────────── */
+.github-pr-detail-head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+.github-pr-detail {
+  display: flex;
+  flex-direction: column;
+}
+.github-pr-detail-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+}
+.github-pr-detail-title h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  color: var(--color-text-primary);
+}
+.github-pr-num {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+.github-pr-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 0 14px 12px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+.github-pr-detail-meta .github-pr-link {
+  margin-left: auto;
+}
+.github-pr-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px 0;
+}
+.github-pr-reviewer,
+.github-pr-label {
+  font-size: var(--text-xs);
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.github-pr-section {
+  padding: 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+.github-pr-section:last-child {
+  border-bottom: 0;
+}
+.github-pr-section h3 {
+  margin: 0 0 10px;
+  font-size: var(--text-md);
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.github-pr-section h3 small {
+  color: var(--color-text-muted);
+  font-weight: 500;
+  font-size: var(--text-sm);
+}
+.github-pr-body,
+.github-pr-comment-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+}
+
+/* CI checks list */
+.github-pr-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.github-pr-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-sm);
+}
+.github-pr-check-icon {
+  width: 18px;
+  text-align: center;
+  font-weight: 700;
+}
+.github-pr-check-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-primary);
+}
+.github-pr-check-state {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+.github-pr-check.is-pass .github-pr-check-icon {
+  color: var(--color-success);
+}
+.github-pr-check.is-fail .github-pr-check-icon {
+  color: var(--color-danger-strong);
+}
+.github-pr-check.is-pending .github-pr-check-icon {
+  color: var(--color-warning);
+}
+.github-pr-check.is-neutral .github-pr-check-icon {
+  color: var(--color-text-muted);
+}
+
+/* Discussion thread (comments + review verdicts) */
+.github-pr-thread {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.github-pr-comment {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--color-surface-soft);
+}
+.github-pr-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.github-pr-comment-head strong {
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+.github-pr-comment-head small {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  margin-left: auto;
+}
+.github-pr-review-badge {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.github-pr-review-badge.is-approved {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+.github-pr-review-badge.is-changes {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+.github-pr-review-badge.is-neutral {
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+}
+
 .github-commit.is-open {
   background: var(--color-surface-hover);
 }
