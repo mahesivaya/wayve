@@ -3,6 +3,7 @@
 // owner-resolution / authorization helpers live here so every submodule can
 // reach them via `use super::...`.
 
+pub mod catalog;
 pub mod checkout;
 pub mod entitlements;
 pub mod invoices;

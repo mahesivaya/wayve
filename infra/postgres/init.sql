@@ -1251,11 +1251,37 @@ CREATE TABLE IF NOT EXISTS plans (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- The plan catalog ROWS are NOT seeded here. They live in the single source of
--- truth `backend/crates/wayve-server/src/billing/catalog.rs` and are upserted
--- into this table by `startup::seed_plan_catalog` on every boot, so fresh and
--- existing DBs converge with no migration. To change pricing/plans, edit that
--- file (and its frontend mirror `frontend/src/billing/planCatalog.ts`).
+-- Baseline catalog. stripe_price_id is filled in by a platform admin once the
+-- matching Stripe Price exists. ON CONFLICT keeps init.sql idempotent.
+-- Two personal tiers (Free Personal / Advanced Personal), two organization
+-- tiers (Free Organization / Advanced Organization), and one Enterprise tier.
+-- `features.bullets` is an ordered list of display strings the UIs render
+-- verbatim. Note: the
+-- backend re-applies this exact catalog on every boot via an upsert in
+-- startup.rs, so this seed only matters for a brand-new volume.
+INSERT INTO plans (code, name, description, audience, tier, amount_cents, billing_interval, storage_limit_bytes, seat_limit, features)
+VALUES
+    ('basic_user', 'Free Personal', 'Free plan for individual accounts.', 'personal', 'personal', 0, 'month', 1073741824, 1,
+     '{"bullets":["1 GB encrypted storage","Up to 1,000 emails per day","End-to-end encrypted chat","1 seat"]}'::jsonb),
+    ('advance_user', 'Advanced Personal', 'Paid personal plan with higher limits.', 'personal', 'personal', 700, 'month', 10737418240, 1,
+     '{"bullets":["10 GB encrypted storage","Unlimited daily emails","1,000 encrypt/decrypt ops per day","Priority email sync"]}'::jsonb),
+    ('business_startups', 'Free Organization', 'Free plan for small teams to evaluate org features.', 'organization', 'startups', 0, 'month', 5368709120, 5,
+     '{"bullets":["Up to 5 members","5 GB shared storage","Shared org workspace","Admin & billing controls"]}'::jsonb),
+    ('organization', 'Advanced Organization', 'For growing organizations up to 100 members.', 'organization', 'business', 1200, 'month', -1, 100,
+     '{"bullets":["Up to 100 members","Unlimited storage & email","SSO + role-based access","Audit logs & priority support"]}'::jsonb),
+    ('enterprise', 'Enterprise', '100+ members with unlimited everything.', 'organization', 'enterprise', 4900, 'month', -1, 100000,
+     '{"bullets":["Unlimited members","Dedicated success manager","Custom onboarding & SLA","SSO, SCIM & advanced security"]}'::jsonb)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    audience = EXCLUDED.audience,
+    tier = EXCLUDED.tier,
+    amount_cents = EXCLUDED.amount_cents,
+    billing_interval = EXCLUDED.billing_interval,
+    storage_limit_bytes = EXCLUDED.storage_limit_bytes,
+    seat_limit = EXCLUDED.seat_limit,
+    features = EXCLUDED.features,
+    is_active = TRUE;
 
 -- Subscriptions: local projection of Stripe subscription state.
 CREATE TABLE IF NOT EXISTS subscriptions (

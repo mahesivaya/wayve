@@ -24,80 +24,15 @@ import { invalidateGetCache } from "../api/client";
 import { getFeatureAccess } from "../api/featureAccess";
 import { useAuth } from "../auth/useAuth";
 import { fmtShortDate } from "../utils/datetime";
+import { PLAN_COPY, PLAN_DISPLAY_ORDER, planName } from "./planCatalog";
 import "./billing.css";
 
 const BYTES_IN_GB = 1024 * 1024 * 1024;
 const UNLIMITED_STORAGE = -1;
 
-const PLAN_COPY: Record<
-  string,
-  { price: string; features: string[]; action?: string }
-> = {
-  basic_user: {
-    price: "Free",
-    features: [
-      "1 GB encrypted storage",
-      "Up to 1,000 emails per day",
-      "End-to-end encrypted chat",
-      "1 seat",
-    ],
-  },
-  advance_user: {
-    price: "$7 / month",
-    features: [
-      "10 GB encrypted storage",
-      "Unlimited daily emails",
-      "1,000 encrypt/decrypt ops per day",
-      "Priority email sync",
-    ],
-  },
-  most_advance_user: {
-    price: "$15 / month",
-    features: [
-      "500 GB encrypted storage",
-      "Unlimited email & calls",
-      "Full AI assistant access",
-      "Priority support",
-    ],
-  },
-  business_startups: {
-    price: "$8 / user / month",
-    features: [
-      "Up to 20 members",
-      "Unlimited shared storage",
-      "Shared org workspace",
-      "Admin & billing controls",
-    ],
-  },
-  organization: {
-    price: "$12 / user / month",
-    features: [
-      "Up to 100 members",
-      "Unlimited storage & email",
-      "SSO + role-based access",
-      "Audit logs & priority support",
-    ],
-  },
-  enterprise: {
-    price: "$49 / user / month",
-    features: [
-      "Unlimited members",
-      "Dedicated success manager",
-      "Custom onboarding & SLA",
-      "SSO, SCIM & advanced security",
-    ],
-    action: "Contact sales",
-  },
-};
-
-const PLAN_DISPLAY_ORDER = [
-  "basic_user",
-  "advance_user",
-  "most_advance_user",
-  "business_startups",
-  "organization",
-  "enterprise",
-];
+// Plan display copy (price/features fallback) + display order come from the
+// single source of truth `planCatalog` (imported above). The in-app cards
+// render live from the API; these only back labels and fallbacks.
 
 // Plan titles come straight from the DB `name` column now (Basic / Advance /
 // Most Advance / Startups / Business / Enterprise), so no per-code override is
@@ -158,19 +93,7 @@ function formatMonth(value: string | null): string {
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-// Friendly names for plan codes; falls back to the raw code, or "Free" when
-// the org has no plan (the free default from effective_entitlements).
-const PLAN_NAMES: Record<string, string> = {
-  basic: "Basic",
-  basic_user: "Basic",
-  advance: "Advance",
-  "most-advance": "Most Advance",
-  startups: "Startups",
-  business: "Business",
-  enterprise: "Enterprise",
-};
-const prettyPlan = (code: string | null | undefined) =>
-  code ? (PLAN_NAMES[code] ?? code) : "Free";
+// Friendly plan-code → name comes from `planCatalog.planName` (imported above).
 
 function loadStripeScript(): Promise<void> {
   if (window.Stripe) return Promise.resolve();
@@ -883,7 +806,7 @@ function BillingInner() {
               <div className="billing-sub">
                 <div className="billing-sub-row">
                   <span>Plan</span>
-                  <strong>{prettyPlan(org?.plan_code)}</strong>
+                  <strong>{planName(org?.plan_code)}</strong>
                 </div>
                 <div className="billing-sub-row">
                   <span>Status</span>
