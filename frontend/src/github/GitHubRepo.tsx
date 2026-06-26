@@ -902,11 +902,14 @@ function GitHubRepoViewer({
   const [readmeLoading, setReadmeLoading] = useState(false);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [commits, setCommits] = useState<CommitItem[]>([]);
-  // Commits pagination. GitHub's /commits returns no total and the proxy drops
-  // the Link header, so we infer "there's a next page" from a full page (=50).
+  // Commits pagination. GitHub's /commits returns no total, so we read the
+  // proxy-forwarded Link header to get the grand total (see loadCommitsTotal).
   const [commitsPage, setCommitsPage] = useState(1);
   const [commitsHasMore, setCommitsHasMore] = useState(false);
   const [commitsLoading, setCommitsLoading] = useState(false);
+  // Total commits on the branch (null = unknown). Derived from the `rel="last"`
+  // page of a `per_page=1` request's Link header.
+  const [commitsTotal, setCommitsTotal] = useState<number | null>(null);
   // Open pull requests (read-only). Merging happens on github.com via each
   // PR's html_url — the proxy is GET-only and the shared token has no write
   // access to linked public repos.
@@ -1255,6 +1258,40 @@ function GitHubRepoViewer({
     [API_BASE]
   );
 
+  // Grand total commits on the branch. GitHub omits a count, but with
+  // `per_page=1` the Link header's `rel="last"` page number IS the total. The
+  // proxy forwards that header; a missing header means a single page (<=1 commit).
+  const loadCommitsTotal = useCallback(
+    async (nextBranch: string) => {
+      try {
+        const token = getAuthToken();
+        const res = await fetch(
+          `${API_BASE}/commits?sha=${encodeURIComponent(nextBranch)}&per_page=1`,
+          {
+            credentials: "include",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
+        );
+        if (!res.ok) {
+          setCommitsTotal(null);
+          return;
+        }
+        const link = res.headers.get("Link");
+        const last = link?.match(/[?&]page=(\d+)>;\s*rel="last"/);
+        if (last) {
+          setCommitsTotal(parseInt(last[1], 10));
+          return;
+        }
+        // No "last" relation → at most one page; the body length is the total.
+        const data = (await res.json()) as unknown;
+        setCommitsTotal(Array.isArray(data) ? data.length : null);
+      } catch {
+        setCommitsTotal(null);
+      }
+    },
+    [API_BASE]
+  );
+
   // Open pull requests. PRs aren't branch-filtered, so this takes no branch.
   const loadPulls = useCallback(async () => {
     setPullsError("");
@@ -1561,6 +1598,7 @@ function GitHubRepoViewer({
     void loadReadme(branch);
     void loadWorkflows(branch);
     void loadCommits(branch, 1);
+    void loadCommitsTotal(branch);
     // Reopening the PR list (vs. a stale detail) whenever the repo/branch
     // changes keeps the tab coherent across repo switches. PRs are owner-only,
     // so non-owners never fetch them (the proxy would 403 anyway).
@@ -1579,6 +1617,7 @@ function GitHubRepoViewer({
     branch,
     isOwner,
     loadCommits,
+    loadCommitsTotal,
     loadPulls,
     loadReadme,
     loadRuns,
@@ -1799,7 +1838,9 @@ function GitHubRepoViewer({
                 📝
               </span>
               <span className="github-sidebar-label">Commits</span>
-              <span className="github-sidebar-count">{commits.length}</span>
+              <span className="github-sidebar-count">
+                {commitsTotal ?? commits.length}
+              </span>
             </button>
             {isOwner && (
               <button
@@ -2025,7 +2066,7 @@ function GitHubRepoViewer({
             <div className="github-panel">
               <div className="github-panel-head">
                 <h2>Commits</h2>
-                <span>{commits.length}</span>
+                <span>{commitsTotal ?? commits.length}</span>
               </div>
               {commits.map((commit) => {
                 const isOpen = expandedCommitShas.has(commit.sha);
