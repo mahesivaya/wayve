@@ -290,9 +290,9 @@ export const EmailList: React.FC<EmailListProps> = ({
             >
               <button
                 type="button"
-                className={`email-bulk-action${activeFolder === "sent" ? "" : " is-active"}`}
+                className={`email-bulk-action${activeFolder === "inbox" ? " is-active" : ""}`}
                 onClick={() => onSelectFolder("inbox")}
-                aria-pressed={activeFolder !== "sent"}
+                aria-pressed={activeFolder === "inbox"}
                 title="Inbox"
               >
                 Inbox
@@ -305,6 +305,15 @@ export const EmailList: React.FC<EmailListProps> = ({
                 title="Sent"
               >
                 Sent
+              </button>
+              <button
+                type="button"
+                className={`email-bulk-action${activeFolder === "github" ? " is-active" : ""}`}
+                onClick={() => onSelectFolder("github")}
+                aria-pressed={activeFolder === "github"}
+                title="GitHub pull request emails"
+              >
+                🐙 GitHub PRs
               </button>
             </div>
           )}
