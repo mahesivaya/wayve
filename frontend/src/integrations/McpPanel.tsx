@@ -156,6 +156,16 @@ function labelFromUrl(url: string): string {
   }
 }
 
+// Bare hostname, lowercased — used to match a connected server back to its
+// preset block ("is GitHub already connected?"). "" for an unparseable URL.
+function urlHost(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 // Connect remote MCP (Model Context Protocol) servers so the AI assistant can
 // call their tools — e.g. read the org's own database. Enterprise org owners and
 // platform owners only (the backend enforces the tier/scope gate). The auth
@@ -172,6 +182,10 @@ export default function McpPanel() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [clientFor, setClientFor] = useState<number | null>(null);
+  const [settingsFor, setSettingsFor] = useState<number | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editUrl, setEditUrl] = useState("");
+  const [editToken, setEditToken] = useState("");
 
   const load = () => {
     void getMcpConnections()
@@ -218,6 +232,12 @@ export default function McpPanel() {
   const isCustom = MCP_PRESETS.find((p) => p.id === selected)?.custom ?? false;
   const canAdd = Boolean(label.trim() && serverUrl.trim()) && busy !== "add";
 
+  // Hosts of already-registered servers, so a preset block can flag itself as
+  // "Connected" (matched by hostname). Refreshes whenever `connections` reloads.
+  const connectedHosts = new Set(
+    (connections ?? []).map((c) => urlHost(c.server_url)).filter(Boolean)
+  );
+
   const add = async () => {
     if (!label.trim() || !serverUrl.trim()) return;
     setBusy("add");
@@ -263,6 +283,45 @@ export default function McpPanel() {
     }
   };
 
+  // Open/close the per-server settings panel, seeding the edit fields from the
+  // connection. The token starts blank (rotate-only — it's never returned).
+  const openSettings = (c: McpConnection) => {
+    setError(null);
+    setMessage(null);
+    if (settingsFor === c.id) {
+      setSettingsFor(null);
+      return;
+    }
+    setSettingsFor(c.id);
+    setClientFor(null);
+    setEditLabel(c.label);
+    setEditUrl(c.server_url);
+    setEditToken("");
+  };
+
+  const saveSettings = async (c: McpConnection) => {
+    if (!editLabel.trim() || !editUrl.trim()) return;
+    setBusy(`save:${c.id}`);
+    setError(null);
+    setMessage(null);
+    const rotate = editToken.trim();
+    try {
+      await updateMcpConnection(c.id, {
+        label: editLabel.trim(),
+        server_url: editUrl.trim(),
+        auth_token: rotate ? rotate : undefined,
+      });
+      setSettingsFor(null);
+      setEditToken("");
+      setMessage(`Updated ${editLabel.trim()}.`);
+      load();
+    } catch (e) {
+      fail(e, "Could not save changes.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const remove = async (c: McpConnection) => {
     setBusy(`del:${c.id}`);
     setError(null);
@@ -270,6 +329,7 @@ export default function McpPanel() {
     try {
       await deleteMcpConnection(c.id);
       if (clientFor === c.id) setClientFor(null);
+      if (settingsFor === c.id) setSettingsFor(null);
       setMessage(`Removed ${c.label}.`);
       load();
     } catch (e) {
@@ -291,21 +351,25 @@ export default function McpPanel() {
           role="radiogroup"
           aria-label="MCP server"
         >
-          {MCP_PRESETS.map((p) => (
-            <button
-              type="button"
-              key={p.id}
-              role="radio"
-              aria-checked={selected === p.id}
-              className={`mcp-block ${selected === p.id ? "is-selected" : ""}`}
-              onClick={() => pick(p)}
-            >
-              <span className="mcp-block-radio" aria-hidden="true" />
-              <span className="mcp-block-label">{p.label}</span>
-              <span className="mcp-block-vendor">{p.vendor}</span>
-              <span className="mcp-block-blurb">{p.blurb}</span>
-            </button>
-          ))}
+          {MCP_PRESETS.map((p) => {
+            const connected = !p.custom && connectedHosts.has(urlHost(p.url));
+            return (
+              <button
+                type="button"
+                key={p.id}
+                role="radio"
+                aria-checked={selected === p.id}
+                className={`mcp-block ${selected === p.id ? "is-selected" : ""}`}
+                onClick={() => pick(p)}
+              >
+                <span className="mcp-block-radio" aria-hidden="true" />
+                <span className="mcp-block-label">{p.label}</span>
+                <span className="mcp-block-vendor">{p.vendor}</span>
+                <span className="mcp-block-blurb">{p.blurb}</span>
+                {connected && <span className="mcp-block-active">Connected</span>}
+              </button>
+            );
+          })}
         </div>
 
         {selected && (
@@ -385,61 +449,137 @@ export default function McpPanel() {
         )}
       </div>
 
-      {/* ---- Connected servers ---- */}
-      {connections === null ? (
-        <p className="mcp-muted">Loading…</p>
-      ) : connections.length === 0 ? (
-        <p className="mcp-muted">No MCP servers connected yet.</p>
-      ) : (
-        <ul className="mcp-list">
-          {connections.map((c) => (
-            <li key={c.id} className="mcp-item-wrap">
-              <div className="mcp-item">
-                <div className="mcp-item-main">
-                  <span className="mcp-item-label">{c.label}</span>
-                  <span className="mcp-item-meta">
-                    {c.server_name ? `${c.server_name} · ` : ""}
-                    {c.last_tool_count ?? 0} tool
-                    {c.last_tool_count === 1 ? "" : "s"}
-                    {c.enabled ? "" : " · disabled"}
-                  </span>
-                  <span className="mcp-item-url">{c.server_url}</span>
+      {/* ---- Connected servers (central management) ---- */}
+      <div className="mcp-manage">
+        <div className="mcp-manage-head">
+          <h3 className="mcp-add-title">Your MCP servers</h3>
+          {connections && connections.length > 0 && (
+            <span className="mcp-count">
+              {connections.filter((c) => c.enabled).length} of{" "}
+              {connections.length} enabled
+            </span>
+          )}
+        </div>
+
+        {connections === null ? (
+          <p className="mcp-muted">Loading…</p>
+        ) : connections.length === 0 ? (
+          <p className="mcp-muted">No MCP servers connected yet.</p>
+        ) : (
+          <ul className="mcp-list">
+            {connections.map((c) => (
+              <li key={c.id} className="mcp-item-wrap">
+                <div className="mcp-item">
+                  <label
+                    className="mcp-switch"
+                    aria-label={`${c.enabled ? "Disable" : "Enable"} ${c.label}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={c.enabled}
+                      onChange={() => void toggle(c)}
+                      disabled={busy === `toggle:${c.id}`}
+                    />
+                    <span className="mcp-switch-track" aria-hidden="true">
+                      <span className="mcp-switch-thumb" />
+                    </span>
+                  </label>
+                  <div className="mcp-item-main">
+                    <span className="mcp-item-label">{c.label}</span>
+                    <span className="mcp-item-meta">
+                      {c.server_name ? `${c.server_name} · ` : ""}
+                      {c.last_tool_count ?? 0} tool
+                      {c.last_tool_count === 1 ? "" : "s"}
+                      {c.enabled ? "" : " · disabled"}
+                    </span>
+                    <span className="mcp-item-url">{c.server_url}</span>
+                  </div>
+                  <div className="mcp-row">
+                    <button
+                      type="button"
+                      className="mcp-btn"
+                      aria-expanded={settingsFor === c.id}
+                      onClick={() => openSettings(c)}
+                    >
+                      {settingsFor === c.id ? "Close settings" : "Settings"}
+                    </button>
+                    <button
+                      type="button"
+                      className="mcp-btn"
+                      onClick={() =>
+                        setClientFor((v) => (v === c.id ? null : c.id))
+                      }
+                    >
+                      {clientFor === c.id ? "Hide clients" : "Connect a client"}
+                    </button>
+                  </div>
                 </div>
-                <div className="mcp-row">
-                  <button
-                    type="button"
-                    className="mcp-btn"
-                    onClick={() =>
-                      setClientFor((v) => (v === c.id ? null : c.id))
-                    }
-                  >
-                    {clientFor === c.id ? "Hide clients" : "Connect a client"}
-                  </button>
-                  <button
-                    type="button"
-                    className="mcp-btn"
-                    onClick={() => void toggle(c)}
-                    disabled={busy === `toggle:${c.id}`}
-                  >
-                    {c.enabled ? "Disable" : "Enable"}
-                  </button>
-                  <button
-                    type="button"
-                    className="mcp-btn mcp-btn--danger"
-                    onClick={() => void remove(c)}
-                    disabled={busy === `del:${c.id}`}
-                  >
-                    {busy === `del:${c.id}` ? "Removing…" : "Remove"}
-                  </button>
-                </div>
-              </div>
-              {clientFor === c.id && (
-                <McpConnectClients label={c.label} serverUrl={c.server_url} />
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+
+                {settingsFor === c.id && (
+                  <div className="mcp-settings">
+                    <div className="mcp-grid">
+                      <div className="mcp-field">
+                        <label className="mcp-label">Label</label>
+                        <input
+                          className="mcp-input"
+                          value={editLabel}
+                          onChange={(e) => setEditLabel(e.target.value)}
+                        />
+                      </div>
+                      <div className="mcp-field">
+                        <label className="mcp-label">Server URL (https)</label>
+                        <input
+                          className="mcp-input"
+                          value={editUrl}
+                          onChange={(e) => setEditUrl(e.target.value)}
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div className="mcp-field">
+                        <label className="mcp-label">Rotate token</label>
+                        <input
+                          type="password"
+                          className="mcp-input"
+                          placeholder="leave blank to keep the current token"
+                          value={editToken}
+                          onChange={(e) => setEditToken(e.target.value)}
+                          autoComplete="off"
+                        />
+                      </div>
+                    </div>
+                    <div className="mcp-row">
+                      <button
+                        type="button"
+                        className="mcp-btn mcp-btn--primary"
+                        onClick={() => void saveSettings(c)}
+                        disabled={
+                          busy === `save:${c.id}` ||
+                          !editLabel.trim() ||
+                          !editUrl.trim()
+                        }
+                      >
+                        {busy === `save:${c.id}` ? "Saving…" : "Save changes"}
+                      </button>
+                      <button
+                        type="button"
+                        className="mcp-btn mcp-btn--danger"
+                        onClick={() => void remove(c)}
+                        disabled={busy === `del:${c.id}`}
+                      >
+                        {busy === `del:${c.id}` ? "Removing…" : "Remove server"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {clientFor === c.id && (
+                  <McpConnectClients label={c.label} serverUrl={c.server_url} />
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {message && <p className="mcp-ok">{message}</p>}
       {error && <p className="mcp-error">{error}</p>}
