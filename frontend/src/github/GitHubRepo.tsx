@@ -271,6 +271,8 @@ type CheckRun = {
   status: string;
   // success | failure | neutral | cancelled | skipped | timed_out | …
   conclusion: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
 };
 
 type CheckRunsResponse = {
@@ -363,6 +365,61 @@ function RawUnifiedDiff({ text }: { text: string }) {
       })}
     </pre>
   );
+}
+
+// Initials for an avatar chip: first letters of the first two word-parts
+// (split on spaces and hyphens), else the first two characters.
+function initials(name: string): string {
+  const parts = name.trim().split(/[\s-]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return (name.slice(0, 2) || "?").toUpperCase();
+}
+
+// A small initials avatar (no network image — works offline and avoids
+// broken-image flashes; mirrors the mockup's MK / GB chips).
+function PrAvatar({ name }: { name: string }) {
+  return (
+    <span className="github-pr-avatar" aria-hidden="true">
+      {initials(name)}
+    </span>
+  );
+}
+
+// Lightweight inline rendering for PR/comment text: `backtick` spans become
+// <code> chips and bare http(s) URLs become links. Newlines are preserved by
+// the container's `white-space: pre-wrap`. Not a full markdown renderer —
+// just the two affordances the PR view needs.
+function renderRichText(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  text.split(/(`[^`]+`)/g).forEach((seg, i) => {
+    if (seg.length >= 2 && seg.startsWith("`") && seg.endsWith("`")) {
+      out.push(
+        <code key={`c${i}`} className="github-pr-code">
+          {seg.slice(1, -1)}
+        </code>
+      );
+      return;
+    }
+    seg.split(/(https?:\/\/[^\s]+)/g).forEach((part, j) => {
+      if (!part) return;
+      if (/^https?:\/\//.test(part)) {
+        out.push(
+          <a
+            key={`u${i}-${j}`}
+            className="github-pr-textlink"
+            href={part}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {part}
+          </a>
+        );
+      } else {
+        out.push(<span key={`t${i}-${j}`}>{part}</span>);
+      }
+    });
+  });
+  return out;
 }
 
 type RunsResponse = {
@@ -862,6 +919,12 @@ function GitHubRepoViewer({
   const [pullFullDiffError, setPullFullDiffError] = useState<
     Record<number, string>
   >({});
+  // PR detail view chrome: whether the long description is expanded, and which
+  // collapsible sections (discussion / files / details / checks) are closed.
+  const [descExpanded, setDescExpanded] = useState(false);
+  const [collapsedPrSections, setCollapsedPrSections] = useState<Set<string>>(
+    new Set()
+  );
   // Per-commit detail (file diffs) loaded on demand when a commit row
   // is expanded. Cached by SHA so toggling open → closed → open doesn't
   // re-hit GitHub. Aux maps track which commits are expanded, currently
@@ -1249,6 +1312,7 @@ function GitHubRepoViewer({
   const openPull = useCallback(
     (number: number) => {
       setSelectedPull(number);
+      setDescExpanded(false);
       void loadPullDetail(number);
     },
     [loadPullDetail]
@@ -2249,224 +2313,385 @@ function GitHubRepoViewer({
                         f.status !== "removed"
                     );
                     const rawDiff = pullFullDiff[selectedPull];
+                    const repoLabel = `${owner}/${repoName}`;
+                    const bodyText = d.body ?? "";
+                    const bodyLong = bodyText.length > 280;
+                    let descShown = bodyText;
+                    if (!descExpanded && bodyLong) {
+                      const firstPara = bodyText.split("\n\n")[0];
+                      descShown =
+                        firstPara.length <= 280
+                          ? firstPara
+                          : `${firstPara.slice(0, 280).trimEnd()}…`;
+                    }
+                    const isCollapsed = (k: string) =>
+                      collapsedPrSections.has(k);
+                    const toggleSection = (k: string) =>
+                      setCollapsedPrSections((cur) => {
+                        const next = new Set(cur);
+                        if (next.has(k)) next.delete(k);
+                        else next.add(k);
+                        return next;
+                      });
                     return (
                       <div className="github-pr-detail">
-                        <header className="github-pr-detail-title">
-                          <h2>
-                            {d.title}{" "}
-                            <span className="github-pr-num">#{d.number}</span>
-                          </h2>
-                          <span className={`github-pr-status ${status.cls}`}>
-                            {status.label}
-                          </span>
-                        </header>
-                        <div className="github-pr-detail-meta">
-                          <span>{d.user?.login ?? "unknown"}</span>
-                          <span>
-                            {d.head.ref} → {d.base.ref}
-                          </span>
-                          <span>{formatDate(d.created_at)}</span>
-                          {typeof d.changed_files === "number" && (
-                            <span>
-                              {d.changed_files}{" "}
-                              {d.changed_files === 1 ? "file" : "files"}
-                            </span>
-                          )}
-                          {(d.additions != null || d.deletions != null) && (
-                            <span>
-                              <span className="github-commit-stat is-add">
-                                +{d.additions ?? 0}
-                              </span>{" "}
-                              <span className="github-commit-stat is-del">
-                                −{d.deletions ?? 0}
-                              </span>
-                            </span>
-                          )}
-                          <a
-                            className="github-pr-link"
-                            href={d.html_url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Open on GitHub →
-                          </a>
-                        </div>
-                        {((d.requested_reviewers?.length ?? 0) > 0 ||
-                          (d.labels?.length ?? 0) > 0) && (
-                          <div className="github-pr-detail-tags">
-                            {d.requested_reviewers?.map((r) => (
+                        <div className="github-pr-grid">
+                          <div className="github-pr-main-col">
+                            <h2 className="github-pr-detail-h">{d.title}</h2>
+                            <div className="github-pr-pillrow">
                               <span
-                                key={r.login}
-                                className="github-pr-reviewer"
+                                className={`github-pr-status ${status.cls}`}
                               >
-                                @{r.login}
+                                {status.label}
                               </span>
-                            ))}
-                            {d.labels?.map((l) => (
-                              <span key={l.name} className="github-pr-label">
-                                {l.name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {d.body?.trim() && (
-                          <section className="github-pr-section">
-                            <h3>Description</h3>
-                            <pre className="github-pr-body">{d.body}</pre>
-                          </section>
-                        )}
-
-                        <section className="github-pr-section">
-                          <h3>
-                            Checks
-                            {bundle.checks.length > 0 && (
-                              <small>
-                                {passed}/{bundle.checks.length} passed
-                              </small>
-                            )}
-                          </h3>
-                          {bundle.checks.length === 0 ? (
-                            <div className="github-empty">
-                              No checks reported.
-                            </div>
-                          ) : (
-                            <ul className="github-pr-checks">
-                              {bundle.checks.map((c) => {
-                                const ck = checkVisual(c);
-                                return (
-                                  <li
-                                    key={c.id}
-                                    className={`github-pr-check ${ck.cls}`}
-                                  >
-                                    <span className="github-pr-check-icon">
-                                      {ck.icon}
-                                    </span>
-                                    <span className="github-pr-check-name">
-                                      {c.name}
-                                    </span>
-                                    <span className="github-pr-check-state">
-                                      {ck.label}
-                                    </span>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-                        </section>
-
-                        <section className="github-pr-section">
-                          <h3>
-                            Discussion
-                            {timeline.length > 0 && (
-                              <small>{timeline.length}</small>
-                            )}
-                          </h3>
-                          {timeline.length === 0 ? (
-                            <div className="github-empty">
-                              No conversation yet.
-                            </div>
-                          ) : (
-                            <ul className="github-pr-thread">
-                              {timeline.map((e) => (
-                                <li key={e.key} className="github-pr-comment">
-                                  <div className="github-pr-comment-head">
-                                    <strong>{e.author}</strong>
-                                    {e.reviewState && (
-                                      <span
-                                        className={`github-pr-review-badge ${reviewBadge(e.reviewState).cls}`}
-                                      >
-                                        {reviewBadge(e.reviewState).label}
-                                      </span>
-                                    )}
-                                    {e.ts && <small>{formatDate(e.ts)}</small>}
-                                  </div>
-                                  {e.body.trim() && (
-                                    <pre className="github-pr-comment-body">
-                                      {e.body}
-                                    </pre>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </section>
-
-                        <section className="github-pr-section">
-                          <h3>
-                            Files changed
-                            {bundle.files.length > 0 && (
-                              <small>{bundle.files.length}</small>
-                            )}
-                          </h3>
-                          {bundle.files.length === 0 ? (
-                            <div className="github-empty">
-                              No file changes to show.
-                            </div>
-                          ) : (
-                            bundle.files.map((file) => (
-                              <article
-                                key={file.filename}
-                                className={`github-commit-file status-${file.status}`}
+                              <a
+                                className="github-pr-repochip"
+                                href={d.html_url}
+                                target="_blank"
+                                rel="noreferrer"
                               >
-                                <header className="github-commit-file-head">
-                                  <span className="github-commit-file-name">
-                                    {file.previous_filename
-                                      ? `${file.previous_filename} → ${file.filename}`
-                                      : file.filename}
+                                {repoLabel}#{d.number}
+                              </a>
+                              {(d.additions != null ||
+                                d.deletions != null) && (
+                                <span className="github-pr-changechip">
+                                  <span className="is-add">
+                                    +{d.additions ?? 0}
+                                  </span>{" "}
+                                  <span className="is-del">
+                                    −{d.deletions ?? 0}
                                   </span>
-                                  <span className="github-commit-file-meta">
-                                    <em
-                                      className={`github-commit-status status-${file.status}`}
-                                    >
-                                      {file.status}
-                                    </em>
-                                    <span className="github-commit-stat is-add">
-                                      +{file.additions}
-                                    </span>
-                                    <span className="github-commit-stat is-del">
-                                      −{file.deletions}
-                                    </span>
-                                  </span>
-                                </header>
-                                {file.patch ? (
-                                  <CommitSplitPatch patch={file.patch} />
-                                ) : (
-                                  <div className="github-commit-nopatch">
-                                    Binary file or diff not available — open on
-                                    GitHub to view.
-                                  </div>
-                                )}
-                              </article>
-                            ))
-                          )}
-                          {(hasMissingPatch || rawDiff) && (
-                            <div className="github-commit-fulldiff">
-                              {!rawDiff && (
-                                <button
-                                  type="button"
-                                  className="github-commit-fulldiff-btn"
-                                  onClick={() =>
-                                    void loadPullFullDiff(selectedPull)
-                                  }
-                                  disabled={pullFullDiffLoading.has(
-                                    selectedPull
-                                  )}
-                                >
-                                  {pullFullDiffLoading.has(selectedPull)
-                                    ? "Loading full diff…"
-                                    : "Load full diff"}
-                                </button>
+                                </span>
                               )}
-                              {pullFullDiffError[selectedPull] && (
-                                <div className="github-banner">
-                                  {pullFullDiffError[selectedPull]}
+                            </div>
+
+                            {bodyText.trim() && (
+                              <div className="github-pr-desc">
+                                {renderRichText(descShown)}
+                                {bodyLong && (
+                                  <button
+                                    type="button"
+                                    className="github-pr-showmore"
+                                    onClick={() => setDescExpanded((v) => !v)}
+                                  >
+                                    {descExpanded ? "Show less" : "Show more"}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            <section className="github-pr-block">
+                              <button
+                                type="button"
+                                className="github-pr-block-head"
+                                onClick={() => toggleSection("discussion")}
+                                aria-expanded={!isCollapsed("discussion")}
+                              >
+                                <span
+                                  className={`github-pr-chevron ${isCollapsed("discussion") ? "" : "open"}`}
+                                >
+                                  <ChevronIcon />
+                                </span>
+                                <h3>Discussion</h3>
+                                {timeline.length > 0 && (
+                                  <span className="github-pr-block-count">
+                                    {timeline.length}
+                                  </span>
+                                )}
+                              </button>
+                              {!isCollapsed("discussion") && (
+                                <div className="github-pr-block-body">
+                                  {timeline.length === 0 ? (
+                                    <div className="github-empty">
+                                      No conversation yet.
+                                    </div>
+                                  ) : (
+                                    <ul className="github-pr-thread">
+                                      {timeline.map((e) => (
+                                        <li
+                                          key={e.key}
+                                          className="github-pr-comment"
+                                        >
+                                          <PrAvatar name={e.author} />
+                                          <div className="github-pr-comment-main">
+                                            <div className="github-pr-comment-head">
+                                              <strong>{e.author}</strong>
+                                              {e.reviewState && (
+                                                <span
+                                                  className={`github-pr-review-badge ${reviewBadge(e.reviewState).cls}`}
+                                                >
+                                                  {
+                                                    reviewBadge(e.reviewState)
+                                                      .label
+                                                  }
+                                                </span>
+                                              )}
+                                              {e.ts && (
+                                                <small className="github-pr-comment-time">
+                                                  {formatDate(e.ts)}
+                                                </small>
+                                              )}
+                                            </div>
+                                            {e.body.trim() && (
+                                              <div className="github-pr-comment-text">
+                                                {renderRichText(e.body)}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  <div
+                                    className="github-pr-composer"
+                                    aria-disabled="true"
+                                    title="Read-only — commenting needs a connected GitHub account"
+                                  >
+                                    <div className="github-pr-composer-input">
+                                      Leave a comment…
+                                    </div>
+                                    <div className="github-pr-composer-foot">
+                                      <span className="github-pr-composer-tools">
+                                        <span aria-hidden="true">📎</span>
+                                        <span aria-hidden="true">Aa</span>
+                                      </span>
+                                      <span
+                                        className="github-pr-composer-send"
+                                        aria-hidden="true"
+                                      >
+                                        ↑
+                                      </span>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
-                              {rawDiff && <RawUnifiedDiff text={rawDiff} />}
+                            </section>
+
+                            <section className="github-pr-block">
+                              <button
+                                type="button"
+                                className="github-pr-block-head"
+                                onClick={() => toggleSection("files")}
+                                aria-expanded={!isCollapsed("files")}
+                              >
+                                <span
+                                  className={`github-pr-chevron ${isCollapsed("files") ? "" : "open"}`}
+                                >
+                                  <ChevronIcon />
+                                </span>
+                                <h3>Files changed</h3>
+                                {bundle.files.length > 0 && (
+                                  <span className="github-pr-block-count">
+                                    {bundle.files.length}
+                                  </span>
+                                )}
+                              </button>
+                              {!isCollapsed("files") && (
+                                <div className="github-pr-block-body">
+                                  {bundle.files.length === 0 ? (
+                                    <div className="github-empty">
+                                      No file changes to show.
+                                    </div>
+                                  ) : (
+                                    bundle.files.map((file) => (
+                                      <article
+                                        key={file.filename}
+                                        className={`github-commit-file status-${file.status}`}
+                                      >
+                                        <header className="github-commit-file-head">
+                                          <span className="github-commit-file-name">
+                                            {file.previous_filename
+                                              ? `${file.previous_filename} → ${file.filename}`
+                                              : file.filename}
+                                          </span>
+                                          <span className="github-commit-file-meta">
+                                            <em
+                                              className={`github-commit-status status-${file.status}`}
+                                            >
+                                              {file.status}
+                                            </em>
+                                            <span className="github-commit-stat is-add">
+                                              +{file.additions}
+                                            </span>
+                                            <span className="github-commit-stat is-del">
+                                              −{file.deletions}
+                                            </span>
+                                          </span>
+                                        </header>
+                                        {file.patch ? (
+                                          <CommitSplitPatch
+                                            patch={file.patch}
+                                          />
+                                        ) : (
+                                          <div className="github-commit-nopatch">
+                                            Binary file or diff not available —
+                                            open on GitHub to view.
+                                          </div>
+                                        )}
+                                      </article>
+                                    ))
+                                  )}
+                                  {(hasMissingPatch || rawDiff) && (
+                                    <div className="github-commit-fulldiff">
+                                      {!rawDiff && (
+                                        <button
+                                          type="button"
+                                          className="github-commit-fulldiff-btn"
+                                          onClick={() =>
+                                            void loadPullFullDiff(selectedPull)
+                                          }
+                                          disabled={pullFullDiffLoading.has(
+                                            selectedPull
+                                          )}
+                                        >
+                                          {pullFullDiffLoading.has(selectedPull)
+                                            ? "Loading full diff…"
+                                            : "Load full diff"}
+                                        </button>
+                                      )}
+                                      {pullFullDiffError[selectedPull] && (
+                                        <div className="github-banner">
+                                          {pullFullDiffError[selectedPull]}
+                                        </div>
+                                      )}
+                                      {rawDiff && (
+                                        <RawUnifiedDiff text={rawDiff} />
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </section>
+                          </div>
+
+                          <aside className="github-pr-side-col">
+                            <div className="github-pr-card">
+                              <button
+                                type="button"
+                                className="github-pr-card-head"
+                                onClick={() => toggleSection("details")}
+                                aria-expanded={!isCollapsed("details")}
+                              >
+                                <span
+                                  className={`github-pr-chevron ${isCollapsed("details") ? "" : "open"}`}
+                                >
+                                  <ChevronIcon />
+                                </span>
+                                <span className="github-pr-card-title">
+                                  Details
+                                </span>
+                              </button>
+                              {!isCollapsed("details") && (
+                                <dl className="github-pr-details">
+                                  <div className="github-pr-detail-row">
+                                    <dt>Author</dt>
+                                    <dd className="github-pr-author">
+                                      <PrAvatar
+                                        name={d.user?.login ?? "unknown"}
+                                      />
+                                      {d.user?.login ?? "unknown"}
+                                    </dd>
+                                  </div>
+                                  <div className="github-pr-detail-row">
+                                    <dt>Repository</dt>
+                                    <dd>{repoLabel}</dd>
+                                  </div>
+                                  <div className="github-pr-detail-row">
+                                    <dt>Status</dt>
+                                    <dd>
+                                      <span
+                                        className={`github-pr-status ${status.cls}`}
+                                      >
+                                        {status.label}
+                                      </span>
+                                    </dd>
+                                  </div>
+                                  <div className="github-pr-detail-row">
+                                    <dt>Changes</dt>
+                                    <dd>
+                                      <span className="github-commit-stat is-add">
+                                        +{d.additions ?? 0}
+                                      </span>{" "}
+                                      <span className="github-commit-stat is-del">
+                                        −{d.deletions ?? 0}
+                                      </span>
+                                    </dd>
+                                  </div>
+                                  <div className="github-pr-detail-row">
+                                    <dt>GitHub</dt>
+                                    <dd>
+                                      <a
+                                        className="github-pr-link"
+                                        href={d.html_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        {repoLabel}#{d.number}
+                                      </a>
+                                    </dd>
+                                  </div>
+                                </dl>
+                              )}
                             </div>
-                          )}
-                        </section>
+
+                            <div className="github-pr-card">
+                              <button
+                                type="button"
+                                className="github-pr-card-head"
+                                onClick={() => toggleSection("checks")}
+                                aria-expanded={!isCollapsed("checks")}
+                              >
+                                <span
+                                  className={`github-pr-chevron ${isCollapsed("checks") ? "" : "open"}`}
+                                >
+                                  <ChevronIcon />
+                                </span>
+                                <span className="github-pr-card-title">
+                                  Checks
+                                </span>
+                                {bundle.checks.length > 0 && (
+                                  <span className="github-pr-checks-sum">
+                                    ✓ {passed} passed
+                                  </span>
+                                )}
+                              </button>
+                              {!isCollapsed("checks") && (
+                                <div className="github-pr-card-body">
+                                  {bundle.checks.length === 0 ? (
+                                    <div className="github-empty">
+                                      No checks reported.
+                                    </div>
+                                  ) : (
+                                    <ul className="github-pr-checks">
+                                      {bundle.checks.map((c) => {
+                                        const ck = checkVisual(c);
+                                        return (
+                                          <li
+                                            key={c.id}
+                                            className={`github-pr-check ${ck.cls}`}
+                                          >
+                                            <span className="github-pr-check-icon">
+                                              {ck.icon}
+                                            </span>
+                                            <span className="github-pr-check-name">
+                                              {c.name}
+                                            </span>
+                                            <span className="github-pr-check-dur">
+                                              {formatDuration(
+                                                c.started_at ?? null,
+                                                c.completed_at ?? null
+                                              )}
+                                            </span>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </aside>
+                        </div>
                       </div>
                     );
                   })()
