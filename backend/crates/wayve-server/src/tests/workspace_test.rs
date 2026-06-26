@@ -221,6 +221,18 @@ mod tests {
         let member_email = random_email();
         let member_id = insert_local_user(&pool, &member_email, "password123").await;
         place_in_org(&pool, member_id, org_id, "member").await;
+        // Code Repo defaults to owner/super_admin/admin/developer, so a plain
+        // member is blocked by the feature gate before ever reaching the per-repo
+        // allowlist this test exercises. The org owner has enabled Code Repo for
+        // members here (an org_feature_access row); without it the member 403s.
+        sqlx::query(
+            "INSERT INTO organization_feature_access (organization_id, feature_key, role) \
+             VALUES ($1, 'code_repo', 'member') ON CONFLICT DO NOTHING",
+        )
+        .bind(org_id)
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("seed org feature access: {e}"));
 
         let app = actix_test::init_service(
             App::new()
