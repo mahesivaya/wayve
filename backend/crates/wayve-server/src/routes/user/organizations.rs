@@ -88,6 +88,10 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
         Err(response) => return Ok(response),
     }
 
+    // notes is RLS-enabled; this platform-staff query SUMs storage (incl. notes)
+    // across all orgs, so it runs with the bypass GUC.
+    let mut tx = pool.begin().await?;
+    crate::db::apply_rls_bypass(&mut tx).await?;
     let rows = sqlx::query(
         r#"
         SELECT
@@ -132,8 +136,9 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
         ORDER BY o.name
         "#,
     )
-    .fetch_all(pool.get_ref())
+    .fetch_all(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     let organizations: Vec<_> = rows
         .into_iter()
@@ -737,6 +742,8 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
             .await?;
 
     let mut tx = pool.begin().await?;
+    // notes is RLS-enabled; this authorized teardown removes other users' rows.
+    crate::db::apply_rls_bypass(&mut tx).await?;
 
     // Notes has user_id with no FK constraint (see init.sql:469), so it
     // doesn't ride the cascade on `users`. Wipe it explicitly for every
@@ -1028,6 +1035,9 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
     .await;
 
     let mut tx = pool.begin().await?;
+    // notes is RLS-enabled; this authorized account deletion removes the
+    // caller's own rows.
+    crate::db::apply_rls_bypass(&mut tx).await?;
     // `notes.user_id` has no FK (see init.sql), so it doesn't ride the cascade
     // on `users`. Wipe it explicitly before the user row goes.
     sqlx::query("DELETE FROM notes WHERE user_id = $1")
@@ -1524,6 +1534,9 @@ pub async fn admin_delete_user(
     }
 
     let mut tx = pool.begin().await?;
+    // notes is RLS-enabled; this authorized admin deletion removes the target
+    // user's rows.
+    crate::db::apply_rls_bypass(&mut tx).await?;
 
     // Notes has user_id but no FK (see init.sql:469) — clean explicitly so
     // it doesn't leave orphan rows after the users-row cascade. Every other

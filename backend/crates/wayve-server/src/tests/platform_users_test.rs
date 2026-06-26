@@ -63,10 +63,17 @@ mod tests {
                 .bind(id)
                 .execute(pool)
                 .await;
-            let _ = sqlx::query("DELETE FROM notes WHERE user_id = $1")
-                .bind(id)
-                .execute(pool)
-                .await;
+            // notes is RLS-FORCEd; delete under the bypass GUC so cleanup runs.
+            if let Ok(mut tx) = pool.begin().await {
+                let _ = sqlx::query("SELECT set_config('app.bypass', 'on', true)")
+                    .execute(&mut *tx)
+                    .await;
+                let _ = sqlx::query("DELETE FROM notes WHERE user_id = $1")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await;
+                let _ = tx.commit().await;
+            }
             let _ = sqlx::query("DELETE FROM users WHERE id = $1")
                 .bind(id)
                 .execute(pool)
@@ -134,12 +141,22 @@ mod tests {
         // Seed exactly one note so the personal user's storage_bytes equals the
         // note body length (a fresh user has no emails/files/chat/tasks).
         let note_body = "platform-users-test-note-30byte"; // 31 bytes
+        // notes is RLS-FORCEd; seed the note under the bypass GUC (test setup).
+        let mut note_tx = pool.begin().await.unwrap_or_else(|e| panic!("begin: {e}"));
+        sqlx::query("SELECT set_config('app.bypass', 'on', true)")
+            .execute(&mut *note_tx)
+            .await
+            .unwrap_or_else(|e| panic!("bypass: {e}"));
         sqlx::query("INSERT INTO notes (user_id, content) VALUES ($1, $2)")
             .bind(personal_id)
             .bind(note_body)
-            .execute(&pool)
+            .execute(&mut *note_tx)
             .await
             .unwrap_or_else(|e| panic!("insert note: {e}"));
+        note_tx
+            .commit()
+            .await
+            .unwrap_or_else(|e| panic!("commit: {e}"));
 
         let app = actix_test::init_service(
             App::new()

@@ -30,12 +30,16 @@ pub(crate) async fn load_connection(
     pool: &PgPool,
     user_id: i32,
 ) -> Result<Option<JiraConnection>, AppError> {
-    let Some(row) = sqlx::query(
-        "SELECT base_url, email, api_token_iv, api_token_encrypted, enabled
-         FROM user_jira_connections WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
+    let Some(row) = crate::db::with_rls_user_tx(pool, user_id, |mut tx| async move {
+        let row = sqlx::query(
+            "SELECT base_url, email, api_token_iv, api_token_encrypted, enabled
+             FROM user_jira_connections WHERE user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        Ok((tx, row))
+    })
     .await?
     else {
         return Ok(None);

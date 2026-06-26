@@ -85,6 +85,10 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
         return Ok(HttpResponse::Ok().json(cached));
     }
 
+    // notes is RLS-enabled; this reads the caller's own storage breakdown, so
+    // it runs in a user-scoped transaction (`app.user_id`).
+    let mut tx = pool.begin().await?;
+    crate::db::apply_rls_user(&mut tx, user_id).await?;
     let result = sqlx::query(
         r#"
         SELECT
@@ -102,8 +106,11 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
         "#,
     )
     .bind(user_id)
-    .fetch_optional(pool.get_ref())
+    .fetch_optional(&mut *tx)
     .await;
+    // Read-only tx: commit succeeds when the query did, otherwise the error is
+    // carried in `result` and handled by the match below.
+    tx.commit().await.ok();
 
     match result {
         Ok(Some(row)) => {

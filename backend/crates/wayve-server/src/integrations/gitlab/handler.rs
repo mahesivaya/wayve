@@ -29,12 +29,16 @@ pub(crate) async fn load_connection(
     pool: &PgPool,
     user_id: i32,
 ) -> Result<Option<GitlabConnection>, AppError> {
-    let Some(row) = sqlx::query(
-        "SELECT base_url, access_token_iv, access_token_encrypted, enabled
-         FROM user_gitlab_connections WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
+    let Some(row) = crate::db::with_rls_user_tx(pool, user_id, |mut tx| async move {
+        let row = sqlx::query(
+            "SELECT base_url, access_token_iv, access_token_encrypted, enabled
+             FROM user_gitlab_connections WHERE user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        Ok((tx, row))
+    })
     .await?
     else {
         return Ok(None);

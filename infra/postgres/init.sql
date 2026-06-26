@@ -1805,3 +1805,94 @@ CREATE OR REPLACE TRIGGER trg_set_org_secure_messages      BEFORE INSERT ON secu
 CREATE OR REPLACE TRIGGER trg_set_org_emails               BEFORE INSERT ON emails                  FOR EACH ROW EXECUTE FUNCTION set_org_emails();
 CREATE OR REPLACE TRIGGER trg_set_org_email_attachments    BEFORE INSERT ON email_attachments       FOR EACH ROW EXECUTE FUNCTION set_org_from_email_id();
 CREATE OR REPLACE TRIGGER trg_set_org_meeting_participants BEFORE INSERT ON meeting_participants    FOR EACH ROW EXECUTE FUNCTION set_org_from_meeting_id();
+
+
+-- ============================================================================
+-- RLS ENFORCEMENT (phase 2) — pilot table: notes.
+--
+-- `notes` are PRIVATE PER USER, so the policy is user-scoped: a row is only
+-- visible/writable to its owner (`user_id = app.user_id`), or to privileged
+-- already-authorized paths that bypass (platform rollups, org-admin member
+-- recovery, account/org teardown). GUCs are set transaction-local by the
+-- helpers in wayve-server/src/db.rs. Deny-by-default: no GUC set ⇒ no rows.
+--
+-- The connecting role is a SUPERUSER, which bypasses RLS. So request handlers
+-- `SET LOCAL ROLE wayve_app` (the restricted role below) inside an RLS-scoped
+-- transaction so the policy engages; workers/migrations/privileged paths stay
+-- the superuser and bypass. Every code path that touches `notes` must run
+-- inside a db.rs helper; a missed path is a visible 0-rows bug, never a leak.
+-- Other tables are NOT yet enforced — migrated one at a time (see docs/plan).
+-- ============================================================================
+
+-- Restricted, non-login app role that RLS-scoped transactions SET LOCAL ROLE
+-- into. Has read on everything + write on the RLS-enabled tables, so the
+-- migrated handlers (which join many tables) keep working under the role.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wayve_app') THEN
+        CREATE ROLE wayve_app NOSUPERUSER NOBYPASSRLS NOLOGIN;
+    END IF;
+END $$;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO wayve_app;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO wayve_app;
+GRANT INSERT, UPDATE, DELETE ON notes TO wayve_app;
+-- Tables/sequences created later (ensure_email_schema, future migrations) also
+-- grant read to wayve_app so newly-added read paths keep working under the role.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO wayve_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO wayve_app;
+
+ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notes FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS notes_rls ON notes;
+CREATE POLICY notes_rls ON notes
+    USING (
+        current_setting('app.bypass', true) = 'on'
+        OR user_id = nullif(current_setting('app.user_id', true), '')::int
+    )
+    WITH CHECK (
+        current_setting('app.bypass', true) = 'on'
+        OR user_id = nullif(current_setting('app.user_id', true), '')::int
+    );
+
+-- RLS phase 2, batch 2 — the rest of the user-private tables. Same user-scoped
+-- model as notes; meeting_participants scopes via its parent meeting. wayve_app
+-- already has SELECT on all tables; here we add write grants + per-table policy.
+DO $$
+DECLARE
+    t text; owner_col text; i int;
+    pairs text[][] := ARRAY[
+        ['tasks','user_id'], ['task_attachments','user_id'],
+        ['drive_files','user_id'], ['folders','user_id'],
+        ['meetings','user_id'], ['secure_messages','sender_user_id'],
+        ['user_jira_connections','user_id'], ['user_gitlab_connections','user_id']
+    ];
+BEGIN
+    FOR i IN 1 .. array_length(pairs, 1) LOOP
+        t := pairs[i][1]; owner_col := pairs[i][2];
+        EXECUTE format('GRANT INSERT, UPDATE, DELETE ON %I TO wayve_app', t);
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_rls', t);
+        EXECUTE format(
+            'CREATE POLICY %I ON %I USING (%s) WITH CHECK (%s)',
+            t || '_rls', t,
+            format($f$current_setting('app.bypass', true) = 'on' OR %I = nullif(current_setting('app.user_id', true), '')::int$f$, owner_col),
+            format($f$current_setting('app.bypass', true) = 'on' OR %I = nullif(current_setting('app.user_id', true), '')::int$f$, owner_col)
+        );
+    END LOOP;
+END $$;
+
+GRANT INSERT, UPDATE, DELETE ON meeting_participants TO wayve_app;
+ALTER TABLE meeting_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE meeting_participants FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS meeting_participants_rls ON meeting_participants;
+CREATE POLICY meeting_participants_rls ON meeting_participants
+    USING (
+        current_setting('app.bypass', true) = 'on'
+        OR EXISTS (SELECT 1 FROM meetings m WHERE m.id = meeting_participants.meeting_id
+                   AND m.user_id = nullif(current_setting('app.user_id', true), '')::int)
+    )
+    WITH CHECK (
+        current_setting('app.bypass', true) = 'on'
+        OR EXISTS (SELECT 1 FROM meetings m WHERE m.id = meeting_participants.meeting_id
+                   AND m.user_id = nullif(current_setting('app.user_id', true), '')::int)
+    );
