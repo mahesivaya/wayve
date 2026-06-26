@@ -11,6 +11,81 @@ import "./mcpPanel.css";
 
 type AuthType = "none" | "bearer";
 
+// Curated connection blocks the owner picks from — mirrors the AI-provider
+// block picker. Selecting a block pre-fills the fields below (the URL stays
+// editable so an owner can point at their own tenant/region). The auth defaults
+// are a starting point; the owner supplies the token. "Custom" reveals the
+// smart-paste box and blank fields for any other remote MCP server.
+type McpPreset = {
+  id: string;
+  label: string;
+  vendor: string;
+  blurb: string;
+  url: string;
+  auth: AuthType;
+  custom?: boolean;
+};
+
+const MCP_PRESETS: McpPreset[] = [
+  {
+    id: "github",
+    label: "GitHub",
+    vendor: "github.com",
+    blurb: "Repos, issues & pull requests",
+    url: "https://api.githubcopilot.com/mcp/",
+    auth: "bearer",
+  },
+  {
+    id: "linear",
+    label: "Linear",
+    vendor: "linear.app",
+    blurb: "Issues & project tracking",
+    url: "https://mcp.linear.app/sse",
+    auth: "bearer",
+  },
+  {
+    id: "notion",
+    label: "Notion",
+    vendor: "notion.so",
+    blurb: "Pages & databases",
+    url: "https://mcp.notion.com/mcp",
+    auth: "bearer",
+  },
+  {
+    id: "sentry",
+    label: "Sentry",
+    vendor: "sentry.io",
+    blurb: "Errors, issues & releases",
+    url: "https://mcp.sentry.dev/mcp",
+    auth: "bearer",
+  },
+  {
+    id: "stripe",
+    label: "Stripe",
+    vendor: "stripe.com",
+    blurb: "Payments & billing data",
+    url: "https://mcp.stripe.com",
+    auth: "bearer",
+  },
+  {
+    id: "atlassian",
+    label: "Atlassian",
+    vendor: "atlassian.com",
+    blurb: "Jira & Confluence",
+    url: "https://mcp.atlassian.com/v1/sse",
+    auth: "bearer",
+  },
+  {
+    id: "custom",
+    label: "Custom server",
+    vendor: "Any remote MCP",
+    blurb: "Paste a URL, command or JSON config",
+    url: "",
+    auth: "none",
+    custom: true,
+  },
+];
+
 // Best-effort parse of a pasted server reference into {label, url, token}. Accepts:
 //  - a bare URL ("https://mcp.acme.com/mcp")
 //  - a `claude mcp add --transport http <name> <url> --header "Authorization: Bearer X"` command
@@ -87,6 +162,7 @@ function labelFromUrl(url: string): string {
 // token is write-only here and never returned.
 export default function McpPanel() {
   const [connections, setConnections] = useState<McpConnection[] | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   const [paste, setPaste] = useState("");
   const [label, setLabel] = useState("");
   const [serverUrl, setServerUrl] = useState("");
@@ -120,6 +196,26 @@ export default function McpPanel() {
     }
   };
 
+  // Pick a connection block: pre-fill the fields from the preset. The URL stays
+  // editable; "Custom" starts blank and reveals the smart-paste box.
+  const pick = (preset: McpPreset) => {
+    setSelected(preset.id);
+    setError(null);
+    setMessage(null);
+    setPaste("");
+    setToken("");
+    if (preset.custom) {
+      setLabel("");
+      setServerUrl("");
+      setAuthType("none");
+    } else {
+      setLabel(preset.label);
+      setServerUrl(preset.url);
+      setAuthType(preset.auth);
+    }
+  };
+
+  const isCustom = MCP_PRESETS.find((p) => p.id === selected)?.custom ?? false;
   const canAdd = Boolean(label.trim() && serverUrl.trim()) && busy !== "add";
 
   const add = async () => {
@@ -140,6 +236,7 @@ export default function McpPanel() {
       setServerUrl("");
       setToken("");
       setAuthType("none");
+      setSelected(null);
       setMessage(
         `Connected ${created.label} · ${created.last_tool_count ?? 0} tool${
           created.last_tool_count === 1 ? "" : "s"
@@ -188,77 +285,104 @@ export default function McpPanel() {
       <div className="mcp-add">
         <h3 className="mcp-add-title">Add a server</h3>
 
-        <div className="mcp-field">
-          <label className="mcp-label">Quick add</label>
-          <textarea
-            className="mcp-input mcp-textarea"
-            rows={2}
-            placeholder={
-              'Paste a URL, a `claude mcp add …` command, or a JSON config — we’ll fill the fields below'
-            }
-            value={paste}
-            onChange={(e) => onPaste(e.target.value)}
-            autoComplete="off"
-          />
-          <span className="mcp-hint">
-            …or fill them in manually:
-          </span>
-        </div>
-
-        <div className="mcp-grid">
-          <div className="mcp-field">
-            <label className="mcp-label">Label</label>
-            <input
-              className="mcp-input"
-              placeholder="Acme orders DB"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-            />
-          </div>
-          <div className="mcp-field">
-            <label className="mcp-label">Server URL (https)</label>
-            <input
-              className="mcp-input"
-              placeholder="https://mcp.acme.com/mcp"
-              value={serverUrl}
-              onChange={(e) => setServerUrl(e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-          <div className="mcp-field">
-            <label className="mcp-label">Authentication</label>
-            <select
-              className="mcp-input mcp-select"
-              value={authType}
-              onChange={(e) => setAuthType(e.target.value as AuthType)}
-            >
-              <option value="none">No authentication</option>
-              <option value="bearer">Bearer token</option>
-            </select>
-          </div>
-          {authType === "bearer" && (
-            <div className="mcp-field">
-              <label className="mcp-label">Bearer token</label>
-              <input
-                type="password"
-                className="mcp-input"
-                placeholder="encrypted at rest · never shown again"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-          )}
-        </div>
-
-        <button
-          type="button"
-          className="mcp-btn mcp-btn--primary"
-          onClick={() => void add()}
-          disabled={!canAdd}
+        {/* Connection blocks — pick one to pre-fill the fields below. */}
+        <div
+          className="mcp-block-grid"
+          role="radiogroup"
+          aria-label="MCP server"
         >
-          {busy === "add" ? "Connecting…" : "Connect server"}
-        </button>
+          {MCP_PRESETS.map((p) => (
+            <button
+              type="button"
+              key={p.id}
+              role="radio"
+              aria-checked={selected === p.id}
+              className={`mcp-block ${selected === p.id ? "is-selected" : ""}`}
+              onClick={() => pick(p)}
+            >
+              <span className="mcp-block-radio" aria-hidden="true" />
+              <span className="mcp-block-label">{p.label}</span>
+              <span className="mcp-block-vendor">{p.vendor}</span>
+              <span className="mcp-block-blurb">{p.blurb}</span>
+            </button>
+          ))}
+        </div>
+
+        {selected && (
+          <>
+            {isCustom && (
+              <div className="mcp-field">
+                <label className="mcp-label">Quick add</label>
+                <textarea
+                  className="mcp-input mcp-textarea"
+                  rows={2}
+                  placeholder={
+                    'Paste a URL, a `claude mcp add …` command, or a JSON config — we’ll fill the fields below'
+                  }
+                  value={paste}
+                  onChange={(e) => onPaste(e.target.value)}
+                  autoComplete="off"
+                />
+                <span className="mcp-hint">…or fill them in manually:</span>
+              </div>
+            )}
+
+            <div className="mcp-grid">
+              <div className="mcp-field">
+                <label className="mcp-label">Label</label>
+                <input
+                  className="mcp-input"
+                  placeholder="Acme orders DB"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                />
+              </div>
+              <div className="mcp-field">
+                <label className="mcp-label">Server URL (https)</label>
+                <input
+                  className="mcp-input"
+                  placeholder="https://mcp.acme.com/mcp"
+                  value={serverUrl}
+                  onChange={(e) => setServerUrl(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="mcp-field">
+                <label className="mcp-label">Authentication</label>
+                <select
+                  className="mcp-input mcp-select"
+                  value={authType}
+                  onChange={(e) => setAuthType(e.target.value as AuthType)}
+                >
+                  <option value="none">No authentication</option>
+                  <option value="bearer">Bearer token</option>
+                </select>
+              </div>
+              {authType === "bearer" && (
+                <div className="mcp-field">
+                  <label className="mcp-label">Bearer token</label>
+                  <input
+                    type="password"
+                    className="mcp-input"
+                    placeholder="encrypted at rest · never shown again"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className="mcp-btn mcp-btn--primary"
+              onClick={() => void add()}
+              disabled={!canAdd}
+            >
+              {busy === "add" ? "Connecting…" : "Connect server"}
+            </button>
+          </>
+        )}
       </div>
 
       {/* ---- Connected servers ---- */}
