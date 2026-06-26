@@ -1,138 +1,32 @@
 import { useNavigate } from "react-router-dom";
+import { PLAN_CATALOG, type PlanTier } from "../billing/planCatalog";
 import "./pricing.css";
 
-// The public marketing pricing tiers, grouped into Personal vs Business. Shared
-// between the /pricing page (wrapped in MarketingShell) and the landing page's
-// pricing section, so both stay in sync. This component renders ONLY the
-// content (no shell), so callers supply their own page chrome.
-
-type PublicTier = {
-  id: string;
-  name: string;
-  price: string;
-  interval: string | null;
-  tagline: string;
-  features: string[];
-  cta: string;
-};
-
-const PUBLIC_TIERS: PublicTier[] = [
-  {
-    id: "basic",
-    name: "Basic",
-    price: "Free",
-    interval: null,
-    tagline: "Free personal plan to get started.",
-    features: [
-      "1 GB encrypted storage",
-      "Up to 1,000 emails per day",
-      "End-to-end encrypted chat",
-      "1 seat",
-    ],
-    cta: "Get started",
-  },
-  {
-    id: "advance",
-    name: "Advance",
-    price: "7.00 USD",
-    interval: "month",
-    tagline: "Personal paid plan with higher limits.",
-    features: [
-      "10 GB encrypted storage",
-      "Unlimited daily emails",
-      "1,000 encrypt/decrypt ops per day",
-      "Priority email sync",
-    ],
-    cta: "Choose plan",
-  },
-  {
-    id: "most-advance",
-    name: "Most Advance",
-    price: "15.00 USD",
-    interval: "month",
-    tagline: "Top personal tier with full AI access.",
-    features: [
-      "500 GB encrypted storage",
-      "Unlimited email & calls",
-      "Full AI assistant access",
-      "Priority support",
-    ],
-    cta: "Choose plan",
-  },
-  {
-    id: "startups",
-    name: "Startups",
-    price: "8.00 USD",
-    interval: "user / month",
-    tagline: "For small teams getting off the ground.",
-    features: [
-      "Up to 20 members",
-      "Unlimited shared storage",
-      "Shared org workspace",
-      "Admin & billing controls",
-    ],
-    cta: "Get started",
-  },
-  {
-    id: "business",
-    name: "Business",
-    price: "12.00 USD",
-    interval: "user / month",
-    tagline: "For growing organizations up to 100 members.",
-    features: [
-      "Up to 100 members",
-      "Unlimited storage & email",
-      "SSO + role-based access",
-      "Audit logs & priority support",
-    ],
-    cta: "Get started",
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: "49.00 USD",
-    interval: "user / month",
-    tagline: "100+ members with unlimited everything.",
-    features: [
-      "Unlimited members",
-      "Dedicated success manager",
-      "Custom onboarding & SLA",
-      "SSO, SCIM & advanced security",
-    ],
-    cta: "Contact sales",
-  },
-];
-
-// Which public tiers belong to the "Personal" section; the rest are org tiers,
-// further split into "Business" and "Enterprise" sections below. Mirrors the
-// grouped layout of the logged-in pricing page.
-const PUBLIC_PERSONAL_IDS = ["basic", "advance", "most-advance"];
+// Public marketing pricing, grouped into Personal / Organization / Enterprise.
+// Shared between the /pricing page (wrapped in MarketingShell) and the landing
+// page's pricing section. The plan data is the single source of truth in
+// `billing/planCatalog.ts` (mirrored by the backend `billing/catalog.rs`); to
+// change pricing/plans, edit those — not this component.
 
 export default function PublicPricingContent() {
   const navigate = useNavigate();
-  const personalTiers = PUBLIC_TIERS.filter((tier) =>
-    PUBLIC_PERSONAL_IDS.includes(tier.id)
+  const personalTiers = PLAN_CATALOG.filter((p) => p.audience === "personal");
+  const businessTiers = PLAN_CATALOG.filter(
+    (p) => p.audience === "organization" && p.tier !== "enterprise"
   );
-  // Org tiers split into Business (Startups + Business) vs Enterprise so each
-  // gets its own section rather than one "Business & Enterprise" bucket.
-  const businessTiers = PUBLIC_TIERS.filter(
-    (tier) => !PUBLIC_PERSONAL_IDS.includes(tier.id) && tier.id !== "enterprise"
-  );
-  const enterpriseTiers = PUBLIC_TIERS.filter(
-    (tier) => tier.id === "enterprise"
-  );
+  const enterpriseTiers = PLAN_CATALOG.filter((p) => p.tier === "enterprise");
 
-  const renderTier = (tier: PublicTier) => {
-    // Personal tiers → personal signup; Startups/Business → direct business
-    // signup; Enterprise → contact sales.
+  const renderTier = (tier: PlanTier) => {
+    // Personal → personal signup; other org tiers → business signup;
+    // Enterprise → contact sales.
     const ctaPath =
-      tier.id === "enterprise"
+      tier.tier === "enterprise"
         ? "/support"
-        : PUBLIC_PERSONAL_IDS.includes(tier.id)
+        : tier.audience === "personal"
           ? "/register"
           : "/register-business";
     return (
-      <article key={tier.id} className="pricing-plan">
+      <article key={tier.code} className="pricing-plan">
         <h3>{tier.name}</h3>
         <p className="pricing-plan-price">
           {tier.price}
@@ -170,7 +64,7 @@ export default function PublicPricingContent() {
       </section>
 
       <section className="pricing-section">
-        <h2>Business</h2>
+        <h2>Organization</h2>
         <p className="pricing-section-sub">
           For teams and growing organizations.
         </p>

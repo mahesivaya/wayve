@@ -4,6 +4,7 @@ import { useAuth } from "../auth/useAuth";
 import { ApiTier, QuotaStatus, getQuota, listTiers } from "../api/tiers";
 import DocsShell from "../docs/DocsShell";
 import { fmtShortDate } from "../utils/datetime";
+import { planName } from "../billing/planCatalog";
 import "./quotas.css";
 
 // Marketing copy + human-friendly labels per plan code. Lives alongside the
@@ -14,23 +15,23 @@ const COPY: Record<
   { headline: string; tagline: string; cta: string; highlight?: boolean }
 > = {
   basic_user: {
-    headline: "Free",
+    headline: planName("basic_user"),
     tagline: "Personal projects, evaluation, and tinkering.",
     cta: "Already included",
   },
   advance_user: {
-    headline: "Advance",
+    headline: planName("advance_user"),
     tagline: "Hobby apps and weekend automations.",
     cta: "Upgrade",
     highlight: true,
   },
   organization: {
-    headline: "Organization",
+    headline: planName("organization"),
     tagline: "Whole-team integrations and shared bots.",
     cta: "Upgrade",
   },
   enterprise: {
-    headline: "Enterprise",
+    headline: planName("enterprise"),
     tagline: "High-throughput or unlimited integrations.",
     cta: "Contact sales",
   },

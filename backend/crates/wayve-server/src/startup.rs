@@ -630,55 +630,20 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             updated_at TIMESTAMP DEFAULT NOW()
         )",
         // ────────────────────────────────────────────────────────────────
-        // Plan catalog. Three personal tiers (Basic / Advance / Most Advance)
-        // and three business tiers (Startups / Business / Enterprise). init.sql
-        // only seeds a fresh volume, so we re-apply the canonical catalog here
-        // on every boot via DO UPDATE — existing & prod DBs converge without a
-        // manual migration. `features.bullets` is the display list the UIs
-        // render. (This intentionally overrides any operator edits to these
-        // rows; new operator-defined plan codes are untouched.)
+        // Plan catalog columns. The catalog ROWS are the single source of
+        // truth in `billing/catalog.rs` and are upserted by `seed_plan_catalog`
+        // after this static DDL runs. These ALTERs just guarantee the columns
+        // that seed writes (`tier`, plus the rate-limit/quota pair below) exist
+        // on older DBs; idempotent. To change pricing or plans, edit
+        // `billing/catalog.rs` — nothing here.
         // ────────────────────────────────────────────────────────────────
-        // `tier` sub-discriminates org plans (Startups / Business / Enterprise)
-        // so the two can be told apart. Added before the catalog upsert so the
-        // INSERT below can populate it; idempotent on existing DBs.
         "ALTER TABLE plans ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'personal'",
-        "INSERT INTO plans (code, name, description, audience, tier, amount_cents, billing_interval, storage_limit_bytes, seat_limit, features) VALUES \
-            ('basic_user', 'Basic', 'Free personal plan to get started.', 'personal', 'personal', 0, 'month', 1073741824, 1, '{\"bullets\":[\"1 GB encrypted storage\",\"Up to 1,000 emails per day\",\"End-to-end encrypted chat\",\"1 seat\"]}'::jsonb), \
-            ('advance_user', 'Advance', 'Personal paid plan with higher limits.', 'personal', 'personal', 700, 'month', 10737418240, 1, '{\"bullets\":[\"10 GB encrypted storage\",\"Unlimited daily emails\",\"1,000 encrypt/decrypt ops per day\",\"Priority email sync\"]}'::jsonb), \
-            ('most_advance_user', 'Most Advance', 'Top personal tier with full AI access.', 'personal', 'personal', 1500, 'month', 53687091200, 1, '{\"bullets\":[\"50 GB encrypted storage\",\"Unlimited email & calls\",\"Full AI assistant access\",\"Priority support\"]}'::jsonb), \
-            ('business_startups', 'Startups', 'For small teams getting off the ground.', 'organization', 'startups', 800, 'month', -1, 20, '{\"bullets\":[\"Up to 20 members\",\"Unlimited shared storage\",\"Shared org workspace\",\"Admin & billing controls\"]}'::jsonb), \
-            ('organization', 'Business', 'For growing organizations up to 100 members.', 'organization', 'business', 1200, 'month', -1, 100, '{\"bullets\":[\"Up to 100 members\",\"Unlimited storage & email\",\"SSO + role-based access\",\"Audit logs & priority support\"]}'::jsonb), \
-            ('enterprise', 'Enterprise', '100+ members with unlimited everything.', 'organization', 'enterprise', 4900, 'month', -1, 100000, '{\"bullets\":[\"Unlimited members\",\"Dedicated success manager\",\"Custom onboarding & SLA\",\"SSO, SCIM & advanced security\"]}'::jsonb) \
-         ON CONFLICT (code) DO UPDATE SET \
-            name = EXCLUDED.name, description = EXCLUDED.description, audience = EXCLUDED.audience, \
-            tier = EXCLUDED.tier, \
-            amount_cents = EXCLUDED.amount_cents, billing_interval = EXCLUDED.billing_interval, \
-            storage_limit_bytes = EXCLUDED.storage_limit_bytes, seat_limit = EXCLUDED.seat_limit, \
-            features = EXCLUDED.features, is_active = TRUE",
-        // ────────────────────────────────────────────────────────────────
-        // Rate-limit tiers. Each plan now carries its own API rate ceiling
-        // and a rolling 30-day monthly request budget. -1 = unlimited. The
-        // middleware reads these per request through a short Redis cache.
-        //
-        // Backfill uses INSERT … ON CONFLICT to land the v1 tier numbers
-        // (basic / advance / organization / enterprise) without disturbing
-        // any operator-edited rows.
-        // ────────────────────────────────────────────────────────────────
+        // Per-plan API rate ceiling + rolling 30-day request budget (-1 =
+        // unlimited); values are written by the catalog seed below.
         "ALTER TABLE plans ADD COLUMN IF NOT EXISTS rate_limit_per_min \
          INTEGER NOT NULL DEFAULT 60",
         "ALTER TABLE plans ADD COLUMN IF NOT EXISTS monthly_quota \
          INTEGER NOT NULL DEFAULT 50000",
-        // basic_user keeps the column DEFAULTs (60, 50000) — skipped here.
-        "UPDATE plans SET rate_limit_per_min = 300,   monthly_quota = 500000    \
-         WHERE code = 'advance_user'",
-        "UPDATE plans SET rate_limit_per_min = 600,   monthly_quota = 2000000   \
-         WHERE code = 'most_advance_user'",
-        "UPDATE plans SET rate_limit_per_min = 600,   monthly_quota = 5000000   \
-         WHERE code = 'business_startups'",
-        "UPDATE plans SET rate_limit_per_min = 1200,  monthly_quota = 10000000  \
-         WHERE code = 'organization'",
-        "UPDATE plans SET rate_limit_per_min = 6000,  monthly_quota = -1        \
-         WHERE code = 'enterprise'",
         // ────────────────────────────────────────────────────────────────
         // SCIM 2.0 provisioning.
         //
@@ -800,6 +765,53 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             warn!(error = ?e, "email schema compatibility check failed");
         }
     }
+
+    // Seed the plan catalog from the single source of truth
+    // (`billing::catalog::PLAN_CATALOG`) now that the columns above exist.
+    if let Err(e) = seed_plan_catalog(pool).await {
+        warn!(error = ?e, "plan catalog seed failed");
+    }
+}
+
+/// Upsert the canonical plan catalog into the `plans` table. Runs on every boot
+/// so fresh and existing DBs converge to `billing::catalog::PLAN_CATALOG`
+/// without a migration. Only catalog codes are overwritten; operator-defined
+/// plan codes are left untouched. **To change pricing/plans, edit
+/// `billing/catalog.rs`, not this function.**
+async fn seed_plan_catalog(pool: &PgPool) -> Result<(), sqlx::Error> {
+    for plan in crate::billing::catalog::PLAN_CATALOG {
+        let features = serde_json::json!({ "bullets": plan.features });
+        sqlx::query(
+            "INSERT INTO plans \
+               (code, name, description, audience, tier, amount_cents, \
+                billing_interval, storage_limit_bytes, seat_limit, features, \
+                rate_limit_per_min, monthly_quota) \
+             VALUES ($1, $2, $3, $4, $5, $6, 'month', $7, $8, $9, $10, $11) \
+             ON CONFLICT (code) DO UPDATE SET \
+               name = EXCLUDED.name, description = EXCLUDED.description, \
+               audience = EXCLUDED.audience, tier = EXCLUDED.tier, \
+               amount_cents = EXCLUDED.amount_cents, \
+               billing_interval = EXCLUDED.billing_interval, \
+               storage_limit_bytes = EXCLUDED.storage_limit_bytes, \
+               seat_limit = EXCLUDED.seat_limit, features = EXCLUDED.features, \
+               rate_limit_per_min = EXCLUDED.rate_limit_per_min, \
+               monthly_quota = EXCLUDED.monthly_quota, is_active = TRUE",
+        )
+        .bind(plan.code)
+        .bind(plan.name)
+        .bind(plan.description)
+        .bind(plan.audience)
+        .bind(plan.tier)
+        .bind(plan.amount_cents)
+        .bind(plan.storage_limit_bytes)
+        .bind(plan.seat_limit)
+        .bind(&features)
+        .bind(plan.rate_limit_per_min)
+        .bind(plan.monthly_quota)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
 }
 
 /// Initialise tracing, load `.env` files, and validate required config.

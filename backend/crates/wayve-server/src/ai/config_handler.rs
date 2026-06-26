@@ -1,0 +1,324 @@
+//! AI provider configuration. The enterprise **owner** selects which AI the
+//! org's assistant runs on (provider + model + their own key/endpoint). Owner-only
+//! AND enterprise-tier (see `require_ai_owner`) — admins/super_admins are
+//! rejected, and every member of the org then uses the owner's choice (resolution
+//! is keyed on the org; members can't change it). The key is validated against the
+//! provider with a live probe, encrypted at rest, and never returned to the
+//! browser. Custom `base_url`s are SSRF-guarded via the MCP guard.
+
+use crate::prelude::*;
+use actix_web::{delete, put};
+use sqlx::Row;
+use tracing::{info, instrument, warn};
+use wayve_security::encryption::{decrypt, encrypt};
+use wayve_security::jwt::get_user_id_from_request;
+use wayve_security::rbac::{Role, Scope, resolve_role_context};
+
+use crate::ai::provider::{AiProvider, ResolvedAi};
+
+pub fn routes(cfg: &mut web::ServiceConfig) {
+    cfg.service(get_config)
+        .service(put_config)
+        .service(delete_config);
+}
+
+/// Resolve the caller as the org's AI owner, or `Forbidden`.
+///
+/// Owner-only (`Role::Owner` — not super_admin/admin), organization scope, and
+/// the org must be on the enterprise tier. Returns the organization id.
+pub(crate) async fn require_ai_owner(pool: &PgPool, user_id: i32) -> Result<i32, AppError> {
+    let ctx = resolve_role_context(pool, user_id)
+        .await
+        .map_err(AppError::from)?;
+    if ctx.role != Role::Owner {
+        return Err(AppError::Forbidden);
+    }
+    match ctx.scope {
+        Scope::Organization => {
+            let org_id = ctx.organization_id.ok_or(AppError::Forbidden)?;
+            if is_enterprise_org(pool, org_id).await? {
+                Ok(org_id)
+            } else {
+                Err(AppError::Forbidden)
+            }
+        }
+        // The org-AI config is an organization feature; platform/personal owners
+        // have no org row to configure.
+        _ => Err(AppError::Forbidden),
+    }
+}
+
+async fn is_enterprise_org(pool: &PgPool, org_id: i32) -> Result<bool, AppError> {
+    let enterprise: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1 FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+            WHERE s.organization_id = $1 AND s.status = 'active' AND p.tier = 'enterprise'
+        )",
+    )
+    .bind(org_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(enterprise)
+}
+
+/// What the owner can pick — surfaced so the settings page renders the blocks
+/// without hardcoding the catalog.
+fn provider_catalog() -> Value {
+    serde_json::json!([
+        { "id": "anthropic", "label": "Claude", "vendor": "Anthropic",
+          "default_model": AiProvider::Anthropic.default_model(), "needs_base_url": false },
+        { "id": "gemini", "label": "Gemini", "vendor": "Google",
+          "default_model": AiProvider::Gemini.default_model(), "needs_base_url": false },
+        { "id": "openai_compatible", "label": "OpenAI-compatible", "vendor": "Azure / Bedrock / gateway",
+          "default_model": AiProvider::OpenAiCompatible.default_model(), "needs_base_url": true },
+    ])
+}
+
+#[derive(Deserialize)]
+pub struct AiConfigInput {
+    pub provider: String,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    /// New API key. Omitted = keep current; "" = clear (Gemini → platform key).
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default = "default_true")]
+    pub fail_closed: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[get("/ai/config")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn get_config(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let org_id = require_ai_owner(pool.get_ref(), user_id).await?;
+
+    let row = sqlx::query(
+        "SELECT provider, base_url, model, api_key_encrypted, fail_closed, enabled, last_validated_at
+           FROM org_ai_configs WHERE organization_id = $1",
+    )
+    .bind(org_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let config = match row {
+        Some(r) => serde_json::json!({
+            "configured": true,
+            "provider": r.get::<String, _>("provider"),
+            "base_url": r.try_get::<Option<String>, _>("base_url").ok().flatten(),
+            "model": r.try_get::<Option<String>, _>("model").ok().flatten(),
+            "fail_closed": r.try_get::<bool, _>("fail_closed").unwrap_or(true),
+            "enabled": r.try_get::<bool, _>("enabled").unwrap_or(true),
+            "has_key": r.try_get::<Option<String>, _>("api_key_encrypted").ok().flatten().is_some(),
+            "last_validated_at": r.try_get::<Option<NaiveDateTime>, _>("last_validated_at").ok().flatten(),
+        }),
+        None => serde_json::json!({
+            "configured": false,
+            "provider": Value::Null,
+            "base_url": Value::Null,
+            "model": Value::Null,
+            "fail_closed": true,
+            "enabled": false,
+            "has_key": false,
+            "last_validated_at": Value::Null,
+        }),
+    };
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "config": config,
+        "providers": provider_catalog(),
+    })))
+}
+
+#[put("/ai/config")]
+#[instrument(target = "http", skip(req, pool, body))]
+pub async fn put_config(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<AiConfigInput>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let org_id = require_ai_owner(pool.get_ref(), user_id).await?;
+
+    let provider = AiProvider::parse(body.provider.trim())
+        .ok_or_else(|| AppError::bad_request("Unknown AI provider"))?;
+    let base_url = body
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let model = body
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+
+    if provider == AiProvider::OpenAiCompatible && base_url.is_none() {
+        return Err(AppError::bad_request(
+            "A base URL is required for an OpenAI-compatible provider",
+        ));
+    }
+    // SSRF-guard any custom endpoint (reuses the MCP guard: https + public IP).
+    if let Some(b) = &base_url {
+        crate::integrations::mcp::client::validate_server_url(b)
+            .await
+            .map_err(|_| AppError::bad_request("Base URL must be a public https endpoint"))?;
+    }
+
+    // Load the existing row so an omitted key is kept.
+    let existing = sqlx::query(
+        "SELECT api_key_iv, api_key_encrypted FROM org_ai_configs WHERE organization_id = $1",
+    )
+    .bind(org_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    let cur_iv: Option<String> = existing
+        .as_ref()
+        .and_then(|r| r.try_get("api_key_iv").ok().flatten());
+    let cur_enc: Option<String> = existing
+        .as_ref()
+        .and_then(|r| r.try_get("api_key_encrypted").ok().flatten());
+
+    // Resolve what to store + the plaintext key to validate with.
+    // - api_key omitted    -> keep current
+    // - api_key = ""       -> clear (Gemini falls back to the platform key)
+    // - api_key = "sk-…"   -> replace
+    let (store_iv, store_enc, effective_key): (Option<String>, Option<String>, Option<String>) =
+        match body.api_key.as_deref() {
+            Some(k) if k.trim().is_empty() => (None, None, None),
+            Some(k) => {
+                let (iv, enc) = encrypt(k.trim()).map_err(|e| {
+                    warn!(target: "worker", error = %e, "ai key encrypt failed");
+                    AppError::Internal("Failed to store AI credentials".into())
+                })?;
+                (Some(iv), Some(enc), Some(k.trim().to_string()))
+            }
+            None => {
+                let eff = match (&cur_iv, &cur_enc) {
+                    (Some(iv), Some(enc)) => Some(decrypt(iv, enc).map_err(|e| {
+                        warn!(target: "worker", error = %e, "ai key decrypt failed");
+                        AppError::Internal("Failed to read AI credentials".into())
+                    })?),
+                    _ => None,
+                };
+                (cur_iv.clone(), cur_enc.clone(), eff)
+            }
+        };
+
+    // The non-Gemini providers must carry their own key.
+    let validate_key = match effective_key {
+        Some(k) => k,
+        None if provider.requires_key() => {
+            return Err(AppError::bad_request(
+                "An API key is required for this provider",
+            ));
+        }
+        None => crate::config::gemini_api_key().ok_or_else(|| {
+            AppError::bad_request("No platform Gemini key configured; provide an API key")
+        })?,
+    };
+
+    let model_eff = model
+        .clone()
+        .unwrap_or_else(|| provider.default_model().to_string());
+
+    // Validate with a live probe before storing — a bad key/model/endpoint 400s.
+    let probe_ai = ResolvedAi {
+        provider,
+        api_key: validate_key,
+        model: model_eff.clone(),
+        base_url: base_url.clone(),
+        fail_closed: true,
+    };
+    crate::ai::agent::probe(&probe_ai).await.map_err(|e| {
+        warn!(target: "ai", error = %e, "ai provider validation failed");
+        AppError::bad_request(
+            "Could not reach the AI provider with these settings — check the key, model, and endpoint",
+        )
+    })?;
+
+    sqlx::query(
+        "INSERT INTO org_ai_configs
+            (organization_id, provider, base_url, model, api_key_iv, api_key_encrypted,
+             fail_closed, enabled, last_validated_at, connected_by, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(), $8, NOW())
+         ON CONFLICT (organization_id) DO UPDATE SET
+            provider = EXCLUDED.provider, base_url = EXCLUDED.base_url, model = EXCLUDED.model,
+            api_key_iv = EXCLUDED.api_key_iv, api_key_encrypted = EXCLUDED.api_key_encrypted,
+            fail_closed = EXCLUDED.fail_closed, enabled = TRUE, last_validated_at = NOW(),
+            connected_by = EXCLUDED.connected_by, updated_at = NOW()",
+    )
+    .bind(org_id)
+    .bind(provider.as_str())
+    .bind(&base_url)
+    .bind(&model)
+    .bind(&store_iv)
+    .bind(&store_enc)
+    .bind(body.fail_closed)
+    .bind(user_id)
+    .execute(pool.get_ref())
+    .await?;
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "ai_provider.update",
+            resource_type: "org_ai_config",
+            resource_id: Some(org_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "provider": provider.as_str(),
+                "model": model_eff,
+                "fail_closed": body.fail_closed,
+            })),
+        },
+    )
+    .await;
+
+    info!(target: "worker", user_id, org_id, provider = provider.as_str(), "ai provider configured");
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "configured": true,
+        "provider": provider.as_str(),
+        "base_url": base_url,
+        "model": model_eff,
+        "fail_closed": body.fail_closed,
+        "enabled": true,
+        "has_key": store_enc.is_some(),
+    })))
+}
+
+#[delete("/ai/config")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn delete_config(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let org_id = require_ai_owner(pool.get_ref(), user_id).await?;
+
+    sqlx::query("DELETE FROM org_ai_configs WHERE organization_id = $1")
+        .bind(org_id)
+        .execute(pool.get_ref())
+        .await?;
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "ai_provider.delete",
+            resource_type: "org_ai_config",
+            resource_id: Some(org_id.to_string()),
+            metadata: None,
+        },
+    )
+    .await;
+
+    info!(target: "worker", user_id, org_id, "ai provider reset to platform default");
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "configured": false })))
+}

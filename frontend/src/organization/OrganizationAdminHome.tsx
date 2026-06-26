@@ -12,11 +12,13 @@ import {
   WebhooksIcon,
   ScimIcon,
   ProjectsTileIcon,
+  AIChatIcon,
 } from "../icons";
 import { hasPermission } from "../auth/permissions";
 import { getOrgKeys } from "../orgKeys/api";
 import { listOrganizationMembers } from "../api/rbac";
 import { getOrganizationBilling } from "../api/billing";
+import { planName } from "../billing/planCatalog";
 import { listApiKeys } from "../api/apiKeys";
 import { listAuditLogs } from "../api/audit";
 import { listSharedInboxes } from "../api/sharedInboxes";
@@ -30,19 +32,8 @@ import "./organizationAdmin.css";
 
 type TileStat = { value: string; label: string };
 
-// Friendly names for plan codes; falls back to the raw code, or "Free" when
-// the org has no plan code (the free default from effective_entitlements).
-const PLAN_NAMES: Record<string, string> = {
-  basic: "Basic",
-  basic_user: "Basic",
-  advance: "Advance",
-  "most-advance": "Most Advance",
-  startups: "Startups",
-  business: "Business",
-  enterprise: "Enterprise",
-};
-const prettyPlan = (code: string | null | undefined) =>
-  code ? (PLAN_NAMES[code] ?? code) : "Free";
+// Plan-code → friendly name comes from the single catalog source of truth
+// (`billing/planCatalog`); `planName` returns "Free" when there's no code.
 
 // Single tile spec — used for both the role-specific consoles row and the
 // app tiles row. `visible` is computed per-user from the RBAC permission
@@ -101,6 +92,8 @@ export default function OrganizationAdminHome() {
   const canSeeSharedInboxes = hasPermission(user, "inbox:manage");
   const canSeeSso = hasPermission(user, "sso:manage");
   const canReadAudit = hasPermission(user, "audit:read");
+  // Owner-only: select the org's AI provider + see its usage/cost governance.
+  const canSeeAi = hasPermission(user, "ai:manage");
 
   // Live figures for the org-owner console tiles.
   const [membersCount, setMembersCount] = useState<number | null>(null);
@@ -141,7 +134,7 @@ export default function OrganizationAdminHome() {
       .then((b) => {
         if (cancelled) return;
         setPlanLabel([
-          { value: prettyPlan(b.plan_code), label: "Current plan" },
+          { value: planName(b.plan_code), label: "Current plan" },
           {
             value:
               b.subscription?.status ?? (b.plan_active ? "active" : "free"),
@@ -317,6 +310,14 @@ export default function OrganizationAdminHome() {
       description: "Browse projects and their linked code repositories.",
       path: "/projects",
       visible: true,
+    },
+    {
+      icon: <AIChatIcon size={26} />,
+      label: "AI Provider",
+      description:
+        "Choose the AI your team's assistant runs on, and track usage & cost.",
+      path: "/settings/ai",
+      visible: canSeeAi,
     },
   ];
 

@@ -34,6 +34,7 @@ mod tests {
                 "sso:manage",
                 "inbox:manage",
                 "mcp:manage",
+                "ai:manage",
                 "org_keys:bootstrap",
                 "org_keys:use_master",
             ],

@@ -960,6 +960,33 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_mcp_connections_platform
 CREATE INDEX IF NOT EXISTS idx_mcp_connections_owner
     ON mcp_connections(owner_scope, organization_id) WHERE enabled;
 
+-- Per-organization AI provider. The enterprise OWNER picks which AI the org's
+-- assistant runs on (provider + model + their own key/endpoint); every member of
+-- the org then uses that one provider (resolution is keyed on the caller's org,
+-- with no per-user override). One row per org (PK on organization_id). The API
+-- key is encrypted at rest via wayve_security::encryption (iv + ciphertext) and
+-- is NULL when the org leans on the platform's default key (gemini only).
+-- `base_url` is the custom endpoint for `openai_compatible` (Azure OpenAI / a
+-- Bedrock gateway / an internal proxy); NULL means the provider's vendor default.
+-- `fail_closed` = once a provider is set, never silently fall back to the
+-- platform default. NOT row-level-secured — it is owner-gated at the handler,
+-- exactly like slack_connections / org_sso_configs.
+CREATE TABLE IF NOT EXISTS org_ai_configs (
+    organization_id   INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+    provider          TEXT NOT NULL
+                      CHECK (provider IN ('gemini', 'anthropic', 'openai_compatible')),
+    base_url          TEXT,
+    model             TEXT,
+    api_key_iv        TEXT,
+    api_key_encrypted TEXT,
+    fail_closed       BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled           BOOLEAN NOT NULL DEFAULT TRUE,
+    last_validated_at TIMESTAMP,
+    connected_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at        TIMESTAMP DEFAULT NOW(),
+    updated_at        TIMESTAMP DEFAULT NOW()
+);
+
 -- Files attached to a task. Stored under ./uploads encrypted at rest just
 -- like drive_files; the on-disk blob is unreferenced (and garbage-collected
 -- on next sweep) when the row is deleted by the task cascade.
@@ -1226,22 +1253,21 @@ CREATE TABLE IF NOT EXISTS plans (
 
 -- Baseline catalog. stripe_price_id is filled in by a platform admin once the
 -- matching Stripe Price exists. ON CONFLICT keeps init.sql idempotent.
--- Three personal tiers (Basic / Advance / Most Advance) and three business
--- tiers (Startups / Business / Enterprise). `features.bullets` is an ordered
--- list of display strings the pricing/billing UIs render verbatim. Note: the
+-- Two personal tiers (Free Personal / Advanced Personal), two organization
+-- tiers (Free Organization / Advanced Organization), and one Enterprise tier.
+-- `features.bullets` is an ordered list of display strings the UIs render
+-- verbatim. Note: the
 -- backend re-applies this exact catalog on every boot via an upsert in
 -- startup.rs, so this seed only matters for a brand-new volume.
 INSERT INTO plans (code, name, description, audience, tier, amount_cents, billing_interval, storage_limit_bytes, seat_limit, features)
 VALUES
-    ('basic_user', 'Basic', 'Free personal plan to get started.', 'personal', 'personal', 0, 'month', 1073741824, 1,
+    ('basic_user', 'Free Personal', 'Free plan for individual accounts.', 'personal', 'personal', 0, 'month', 1073741824, 1,
      '{"bullets":["1 GB encrypted storage","Up to 1,000 emails per day","End-to-end encrypted chat","1 seat"]}'::jsonb),
-    ('advance_user', 'Advance', 'Personal paid plan with higher limits.', 'personal', 'personal', 700, 'month', 10737418240, 1,
+    ('advance_user', 'Advanced Personal', 'Paid personal plan with higher limits.', 'personal', 'personal', 700, 'month', 10737418240, 1,
      '{"bullets":["10 GB encrypted storage","Unlimited daily emails","1,000 encrypt/decrypt ops per day","Priority email sync"]}'::jsonb),
-    ('most_advance_user', 'Most Advance', 'Top personal tier with full AI access.', 'personal', 'personal', 1500, 'month', 53687091200, 1,
-     '{"bullets":["500 GB encrypted storage","Unlimited email & calls","Full AI assistant access","Priority support"]}'::jsonb),
-    ('business_startups', 'Startups', 'For small teams getting off the ground.', 'organization', 'startups', 800, 'month', -1, 20,
-     '{"bullets":["Up to 20 members","Unlimited shared storage","Shared org workspace","Admin & billing controls"]}'::jsonb),
-    ('organization', 'Business', 'For growing organizations up to 100 members.', 'organization', 'business', 1200, 'month', -1, 100,
+    ('business_startups', 'Free Organization', 'Free plan for small teams to evaluate org features.', 'organization', 'startups', 0, 'month', 5368709120, 5,
+     '{"bullets":["Up to 5 members","5 GB shared storage","Shared org workspace","Admin & billing controls"]}'::jsonb),
+    ('organization', 'Advanced Organization', 'For growing organizations up to 100 members.', 'organization', 'business', 1200, 'month', -1, 100,
      '{"bullets":["Up to 100 members","Unlimited storage & email","SSO + role-based access","Audit logs & priority support"]}'::jsonb),
     ('enterprise', 'Enterprise', '100+ members with unlimited everything.', 'organization', 'enterprise', 4900, 'month', -1, 100000,
      '{"bullets":["Unlimited members","Dedicated success manager","Custom onboarding & SLA","SSO, SCIM & advanced security"]}'::jsonb)

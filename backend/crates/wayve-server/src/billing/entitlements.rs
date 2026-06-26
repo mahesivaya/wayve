@@ -3,19 +3,22 @@
 // refreshed whenever a subscription changes (checkout completion / webhook).
 // Feature modules enforce limits by calling the helpers here.
 
+use super::catalog;
 use super::models::{BillingOwner, Entitlement};
 use super::resolve_owner;
 use crate::prelude::*;
 use tracing::{error, instrument};
 
-/// Storage granted to an owner with no paid subscription (free baseline).
-const FREE_STORAGE_BYTES: i64 = 1_073_741_824; // 1 GiB
-
-fn free_defaults() -> Entitlement {
+/// Free baseline for an owner with no paid subscription, sourced from the plan
+/// catalog (single source of truth): an organization with no subscription
+/// lands on Free Organization, a personal account on Free Personal. The
+/// `features` map here is the runtime limit set, not the display bullets.
+fn free_defaults(owner: &BillingOwner) -> Entitlement {
+    let plan = catalog::free_plan_for(owner.kind());
     Entitlement {
-        plan_code: Some("basic_user".to_string()),
-        storage_limit_bytes: FREE_STORAGE_BYTES,
-        seat_limit: 1,
+        plan_code: Some(plan.code.to_string()),
+        storage_limit_bytes: plan.storage_limit_bytes,
+        seat_limit: plan.seat_limit,
         features: serde_json::json!({
             "emails_per_day": 1000,
             "send_receive_per_day": 1000,
@@ -86,10 +89,10 @@ pub async fn effective_entitlements(pool: &PgPool, owner: BillingOwner) -> Entit
 
     match row {
         Ok(Some(entitlement)) => entitlement,
-        Ok(None) => free_defaults(),
+        Ok(None) => free_defaults(&owner),
         Err(e) => {
             error!(target: "billing", error = ?e, "entitlement lookup failed");
-            free_defaults()
+            free_defaults(&owner)
         }
     }
 }
@@ -116,7 +119,18 @@ pub async fn refresh_entitlements(pool: &PgPool, owner: BillingOwner) -> Result<
 
     let (plan_code, storage, seats, features, active) = match plan {
         Some((code, storage, seats, features)) => (Some(code), storage, seats, features, true),
-        None => (None, FREE_STORAGE_BYTES, 1, serde_json::json!({}), false),
+        None => {
+            // No active subscription → scope-aware free baseline (org: Free
+            // Organization 5/5 GB; personal: Free Personal 1/1 GB).
+            let d = free_defaults(&owner);
+            (
+                d.plan_code,
+                d.storage_limit_bytes,
+                d.seat_limit,
+                d.features,
+                false,
+            )
+        }
     };
 
     // Prior snapshot — so the audit row below fires only on a real grant

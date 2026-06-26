@@ -1,3 +1,5 @@
+use crate::ai::agent::ChatMsg;
+use crate::ai::provider::resolve_ai_for_user;
 use crate::prelude::*;
 use tracing::{error, info, instrument};
 use wayve_security::jwt::get_user_id_from_request;
@@ -16,15 +18,15 @@ pub struct ChatRequest {
     pub messages: Vec<ChatTurn>,
 }
 
-/// POST /api/ai/chat — Gemini-backed assistant. The API key lives in
-/// GEMINI_API_KEY on the server and is never exposed to the browser; auth is
-/// JWT-gated like the rest of /api.
+/// POST /api/ai/chat — the assistant. The provider is resolved per request from
+/// the caller's organization: an enterprise org runs on the owner-selected
+/// provider (Gemini / Anthropic / OpenAI-compatible), everyone else on the
+/// platform default (Gemini). Keys live server-side and never reach the browser;
+/// auth is JWT-gated like the rest of /api.
 ///
 /// For an MCP owner (enterprise org / platform) with connected servers, the
-/// request runs through `agent::run`, which declares those servers' tools to
-/// Gemini and runs a bounded tool-call loop so the model can read the customer's
-/// own systems. Everyone else gets the plain passthrough. The `pool` is needed
-/// to resolve the caller's scope + connections.
+/// request runs through `agent::run`, which declares those servers' tools and runs
+/// a bounded tool-call loop so the model can read the customer's own systems.
 #[post("/ai/chat")]
 #[instrument(target = "ai", skip(req, pool, data), fields(turns = data.messages.len()))]
 pub async fn ai_chat(
@@ -34,47 +36,43 @@ pub async fn ai_chat(
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let api_key = match crate::config::gemini_api_key() {
-        Some(key) => key,
+    let ai = match resolve_ai_for_user(pool.get_ref(), user_id).await? {
+        Some(ai) => ai,
         None => {
-            error!("GEMINI_API_KEY missing");
-            return Ok(HttpResponse::InternalServerError()
-                .body("AI not configured (GEMINI_API_KEY missing)"));
+            error!("no AI provider configured (org config absent and GEMINI_API_KEY missing)");
+            return Ok(HttpResponse::InternalServerError().body("AI not configured"));
         }
     };
 
     info!(
-        "AI chat request: user_id={} turns={}",
+        "AI chat request: user_id={} turns={} provider={}",
         user_id,
-        data.messages.len()
+        data.messages.len(),
+        ai.provider.as_str()
     );
 
-    let model = crate::config::gemini_model();
-
-    // Map our {role, content} turns to Gemini's {role, parts:[{text}]} shape.
-    // Gemini accepts roles "user" and "model"; anything else gets coerced
-    // to "user" so a wrong client doesn't 400 the whole request.
-    let contents: Vec<Value> = data
+    // Normalize turns: drop blanks, coerce role to "user"/"model" so a wrong
+    // client can't break the request. Each provider maps these to its own shape.
+    let msgs: Vec<ChatMsg> = data
         .messages
         .iter()
         .filter(|m| !m.content.trim().is_empty())
-        .map(|m| {
-            let role = if m.role == "model" { "model" } else { "user" };
-            serde_json::json!({
-                "role": role,
-                "parts": [{ "text": m.content }],
-            })
+        .map(|m| ChatMsg {
+            role: if m.role == "model" { "model" } else { "user" }.to_string(),
+            content: m.content.clone(),
         })
         .collect();
 
-    if contents.is_empty() {
+    if msgs.is_empty() {
         return Ok(HttpResponse::BadRequest().body("Empty conversation"));
     }
 
-    let result = crate::ai::agent::run(pool.get_ref(), user_id, contents, &api_key, &model).await?;
+    let result = crate::ai::agent::run(pool.get_ref(), user_id, msgs, &ai).await?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "reply": result.reply,
         "tools_used": result.tools_used,
+        "provider": ai.provider.as_str(),
+        "model": ai.model,
     })))
 }

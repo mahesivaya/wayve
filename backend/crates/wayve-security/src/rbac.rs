@@ -162,6 +162,12 @@ pub enum Permission {
     /// platform scope at the handler. Personal/business accounts never hold the
     /// effective capability (the tier/scope gate rejects them even as owners).
     McpManage,
+    /// Select and change the organization's AI provider (which model/endpoint the
+    /// AI assistant runs on) and view its usage/cost governance. Granted to the
+    /// organization **owner only** — not super_admin/admin — and gated further to
+    /// the enterprise tier at the handler. Every member of the org then uses the
+    /// owner's chosen provider; members can never change it.
+    AiManage,
     /// Bootstrap the org master keypair AND promote a member to a key-holder
     /// role (admin / owner). Granted to owner only — the canonical recovery
     /// root must stay single-owner because the mnemonic is a one-time secret.
@@ -175,7 +181,7 @@ pub enum Permission {
 }
 
 impl Permission {
-    pub const ALL: [Permission; 25] = [
+    pub const ALL: [Permission; 26] = [
         AppsUse,
         AppsManage,
         ProfileManageSelf,
@@ -199,6 +205,7 @@ impl Permission {
         SsoManage,
         InboxManage,
         McpManage,
+        AiManage,
         OrgKeysBootstrap,
         OrgKeysUseMaster,
     ];
@@ -228,6 +235,7 @@ impl Permission {
             SsoManage => "sso:manage",
             InboxManage => "inbox:manage",
             McpManage => "mcp:manage",
+            AiManage => "ai:manage",
             OrgKeysBootstrap => "org_keys:bootstrap",
             OrgKeysUseMaster => "org_keys:use_master",
         }
@@ -647,12 +655,34 @@ mod tests {
     #[test]
     fn super_admin_is_owner_minus_billing() {
         for perm in Permission::ALL {
-            let expected = !matches!(perm, BillingManage | BillingRead | OrgKeysBootstrap);
+            // super_admin is everything except billing, the owner-only key
+            // bootstrap, and the owner-only AI provider control.
+            let expected = !matches!(
+                perm,
+                BillingManage | BillingRead | OrgKeysBootstrap | AiManage
+            );
             assert_eq!(
                 role_has(Role::SuperAdmin, perm),
                 expected,
                 "super_admin {perm:?}"
             );
+        }
+    }
+
+    #[test]
+    fn ai_manage_is_owner_only() {
+        assert!(role_has(Role::Owner, AiManage));
+        for role in [
+            Role::SuperAdmin,
+            Role::Admin,
+            Role::Security,
+            Role::Billing,
+            Role::Developer,
+            Role::Support,
+            Role::Member,
+            Role::Guest,
+        ] {
+            assert!(!role_has(role, AiManage), "{role:?} must NOT have AiManage");
         }
     }
 
