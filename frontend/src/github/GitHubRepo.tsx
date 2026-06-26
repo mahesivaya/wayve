@@ -849,6 +849,14 @@ function GitHubRepoViewer({
   // outer wrapper keys this viewer by `${owner}/${repo}` (it remounts when the
   // linked repo changes), so callbacks can capture it safely.
   const API_BASE = `/api/github/repos/${owner}/${repoName}`;
+
+  // Pull Requests are owner-only across every scope (personal / organization /
+  // enterprise / platform). The backend proxy enforces this on the `pulls`
+  // (and PR-comment `issues`) paths; here we just hide the tab so non-owners
+  // never see it or fire 403 fetches. `effective_role === "owner"` mirrors the
+  // backend's `Role::Owner` for all scopes (personal accounts resolve to owner).
+  const { user } = useAuth();
+  const isOwner = user?.effective_role === "owner";
   const [repo, setRepo] = useState<Repo | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branch, setBranch] = useState("main");
@@ -1537,9 +1545,10 @@ function GitHubRepoViewer({
     void loadWorkflows(branch);
     void loadCommits(branch);
     // Reopening the PR list (vs. a stale detail) whenever the repo/branch
-    // changes keeps the tab coherent across repo switches.
+    // changes keeps the tab coherent across repo switches. PRs are owner-only,
+    // so non-owners never fetch them (the proxy would 403 anyway).
     setSelectedPull(null);
-    void loadPulls();
+    if (isOwner) void loadPulls();
     // Actions list is now branch-agnostic (a push to any branch should
     // surface), so we only refresh it on the initial repo load and
     // reset per-run UI state at the same time. Run-detail caches stay
@@ -1549,7 +1558,23 @@ function GitHubRepoViewer({
     setExpandedRunIds(new Set());
     setExpandedJobIds(new Set());
     void loadRuns(1, false);
-  }, [branch, loadCommits, loadPulls, loadReadme, loadRuns, loadWorkflows, repo]);
+  }, [
+    branch,
+    isOwner,
+    loadCommits,
+    loadPulls,
+    loadReadme,
+    loadRuns,
+    loadWorkflows,
+    repo,
+  ]);
+
+  // A non-owner can land on "pulls" if it was persisted from a prior owner
+  // session or the role changed mid-session. PRs are owner-only, so fall back
+  // to the overview instead of showing a blank panel.
+  useEffect(() => {
+    if (!isOwner && activeSection === "pulls") setActiveSection("description");
+  }, [isOwner, activeSection]);
 
   async function openFile(item: ContentItem) {
     setSelectedFile(item);
@@ -1759,17 +1784,19 @@ function GitHubRepoViewer({
               <span className="github-sidebar-label">Commits</span>
               <span className="github-sidebar-count">{commits.length}</span>
             </button>
-            <button
-              type="button"
-              className={`github-sidebar-link ${activeSection === "pulls" ? "active" : ""}`}
-              onClick={() => setActiveSection("pulls")}
-            >
-              <span className="github-sidebar-icon" aria-hidden="true">
-                🔀
-              </span>
-              <span className="github-sidebar-label">Pull Requests</span>
-              <span className="github-sidebar-count">{pulls.length}</span>
-            </button>
+            {isOwner && (
+              <button
+                type="button"
+                className={`github-sidebar-link ${activeSection === "pulls" ? "active" : ""}`}
+                onClick={() => setActiveSection("pulls")}
+              >
+                <span className="github-sidebar-icon" aria-hidden="true">
+                  🔀
+                </span>
+                <span className="github-sidebar-label">Pull Requests</span>
+                <span className="github-sidebar-count">{pulls.length}</span>
+              </button>
+            )}
             <button
               type="button"
               className={`github-sidebar-link ${activeSection === "actions" ? "active" : ""}`}
@@ -2197,7 +2224,8 @@ function GitHubRepoViewer({
             </div>
           )}
 
-          {activeSection === "pulls" &&
+          {isOwner &&
+            activeSection === "pulls" &&
             (selectedPull == null ? (
               <div className="github-panel">
                 <div className="github-panel-head">
