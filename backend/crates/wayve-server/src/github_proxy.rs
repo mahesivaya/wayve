@@ -42,6 +42,9 @@ const CACHE_MAX: u64 = 1_000;
 struct CachedResponse {
     status: u16,
     body: Vec<u8>,
+    /// Upstream `Link` header (GitHub pagination). Forwarded so the frontend can
+    /// derive totals (e.g. commit count via `per_page=1` → `rel="last"` page).
+    link: Option<String>,
 }
 
 static GITHUB_CACHE: Lazy<TtlCache<String, CachedResponse>> =
@@ -294,13 +297,17 @@ pub async fn github_proxy(
     let key = cache_key(&tail, query);
 
     if cache_enabled && let Some(cached) = GITHUB_CACHE.get(&key).await {
-        return HttpResponse::build(
+        let mut builder = HttpResponse::build(
             actix_web::http::StatusCode::from_u16(cached.status)
                 .unwrap_or(actix_web::http::StatusCode::OK),
-        )
-        .insert_header(("X-Wayve-Cache", "HIT"))
-        .insert_header(("Content-Type", "application/json"))
-        .body(cached.body);
+        );
+        builder
+            .insert_header(("X-Wayve-Cache", "HIT"))
+            .insert_header(("Content-Type", "application/json"));
+        if let Some(link) = &cached.link {
+            builder.insert_header(("Link", link.clone()));
+        }
+        return builder.body(cached.body);
     }
 
     let api_base = crate::external::github_api_base();
@@ -346,6 +353,13 @@ pub async fn github_proxy(
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
+    // GitHub's pagination Link header — forwarded so the frontend can read
+    // totals (commit count = the `rel="last"` page number when per_page=1).
+    let upstream_link = response
+        .headers()
+        .get(reqwest::header::LINK)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
     let body = match response.bytes().await {
         Ok(b) => b.to_vec(),
         Err(e) => {
@@ -363,6 +377,7 @@ pub async fn github_proxy(
                 CachedResponse {
                     status,
                     body: body.clone(),
+                    link: upstream_link.clone(),
                 },
             )
             .await;
@@ -376,12 +391,16 @@ pub async fn github_proxy(
         }
     });
 
-    HttpResponse::build(
+    let mut builder = HttpResponse::build(
         actix_web::http::StatusCode::from_u16(status).unwrap_or(actix_web::http::StatusCode::OK),
-    )
-    .insert_header(("X-Wayve-Cache", "MISS"))
-    .insert_header(("Content-Type", response_content_type))
-    .body(body)
+    );
+    builder
+        .insert_header(("X-Wayve-Cache", "MISS"))
+        .insert_header(("Content-Type", response_content_type));
+    if let Some(link) = &upstream_link {
+        builder.insert_header(("Link", link.clone()));
+    }
+    builder.body(body)
 }
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
