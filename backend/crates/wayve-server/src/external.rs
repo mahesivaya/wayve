@@ -25,6 +25,13 @@ pub fn gemini_base() -> String {
         .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string())
 }
 
+/// Root for Anthropic Messages API calls (`/v1/messages` is appended). Defaults
+/// to the public endpoint; `ANTHROPIC_API_BASE` points it at a wiremock server in
+/// tests. An org's `openai_compatible` provider carries its own base URL instead.
+pub fn anthropic_base() -> String {
+    std::env::var("ANTHROPIC_API_BASE").unwrap_or_else(|_| "https://api.anthropic.com".to_string())
+}
+
 /// Root for Gmail REST calls. The two workers (sync + body_worker) build
 /// per-message URLs off this base; tests point it at a wiremock server.
 pub fn gmail_api_base() -> String {

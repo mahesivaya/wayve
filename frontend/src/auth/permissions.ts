@@ -31,6 +31,10 @@ export const PERMISSIONS = [
   // Connect/manage remote MCP servers (enterprise org + platform; gated to the
   // tier/scope on the backend). owner / super_admin / admin.
   "mcp:manage",
+  // Select/change the org's AI provider + view its usage/cost governance.
+  // Owner-only (NOT super_admin/admin), gated to the enterprise tier on the
+  // backend. Every member then uses the owner's choice; members can't change it.
+  "ai:manage",
   // Org master key permissions (mirror backend wayve-security/rbac.rs).
   // org_keys:bootstrap is owner-only; org_keys:use_master is granted to
   // owner / super_admin / admin (NOT security — separation of duties).
@@ -64,7 +68,9 @@ const SUPER_ADMIN: Permission[] = PERMISSIONS.filter(
   (perm) =>
     perm !== "billing:manage" &&
     perm !== "billing:read" &&
-    perm !== "org_keys:bootstrap"
+    perm !== "org_keys:bootstrap" &&
+    // ai:manage is owner-only (the org's AI provider is the owner's call).
+    perm !== "ai:manage"
 );
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {

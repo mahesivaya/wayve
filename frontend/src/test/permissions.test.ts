@@ -18,17 +18,33 @@ describe("permission matrix", () => {
     }
   });
 
-  it("super_admin is owner minus billing AND org_keys:bootstrap", () => {
-    // Matches backend rbac.rs: super_admin gets everything except the
-    // two billing perms AND org_keys:bootstrap (which is owner-only,
-    // because bootstrapping the mnemonic recovery root is the trust
-    // anchor for the org's master key — not delegated to super_admin).
+  it("super_admin is owner minus billing, org_keys:bootstrap AND ai:manage", () => {
+    // Matches backend rbac.rs: super_admin gets everything except the two
+    // billing perms, org_keys:bootstrap (owner-only trust anchor for the org
+    // master key), and ai:manage (the org's AI provider is the owner's call).
     for (const perm of PERMISSIONS) {
       const expected =
         perm !== "billing:manage" &&
         perm !== "billing:read" &&
-        perm !== "org_keys:bootstrap";
+        perm !== "org_keys:bootstrap" &&
+        perm !== "ai:manage";
       expect(ROLE_PERMISSIONS.super_admin.includes(perm)).toBe(expected);
+    }
+  });
+
+  it("ai:manage is owner-only", () => {
+    expect(ROLE_PERMISSIONS.owner).toContain("ai:manage");
+    for (const role of [
+      "super_admin",
+      "admin",
+      "security",
+      "billing",
+      "developer",
+      "support",
+      "member",
+      "guest",
+    ] as const) {
+      expect(ROLE_PERMISSIONS[role]).not.toContain("ai:manage");
     }
   });
 

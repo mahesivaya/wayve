@@ -1,26 +1,50 @@
-//! The agentic chat loop. When the caller is an MCP owner (enterprise org or
-//! platform) with connected servers, their tools are declared to Gemini as
-//! function declarations and a bounded tool-call loop lets the model read the
-//! customer's systems through `tools/call`. Everyone else (personal/business,
-//! or no connections) gets the plain Gemini passthrough — unchanged behavior.
+//! The agentic chat loop, provider-agnostic. The org's AI provider is resolved
+//! per request (see `ai::provider::resolve_ai_for_user`) and the loop dispatches
+//! to Gemini, Anthropic, or any OpenAI-compatible endpoint. When the caller is an
+//! MCP owner (enterprise org or platform) with connected servers, their tools are
+//! declared to the model and a bounded tool-call loop lets it read the customer's
+//! systems through `tools/call`. Everyone else gets the plain passthrough.
 //!
-//! Non-streaming to match the frontend, which awaits a single `{reply}`. The
-//! response is extended with an optional `tools_used` list.
+//! MCP discovery is done once, provider-neutral; each provider then formats those
+//! tools into its own declaration shape and runs its own message loop. Non-
+//! streaming to match the frontend, which awaits a single `{reply}` (extended with
+//! an optional `tools_used` list).
 
-use crate::email::oauth::HTTP_CLIENT;
-use crate::integrations::mcp::client::McpClient;
+use crate::ai::provider::{AiProvider, ResolvedAi};
+use crate::integrations::mcp::client::{McpClient, validate_server_url};
 use crate::integrations::mcp::handler::{load_connections, resolve_mcp_owner_opt};
 use crate::prelude::*;
 use std::collections::HashMap;
+use std::time::Duration;
 use tracing::warn;
 
 /// Max tool-calling rounds before we force a final, tool-less answer. Bounds a
 /// misbehaving server from trapping the model in an endless call cycle.
 const MAX_ROUNDS: usize = 5;
-/// Cap on how many tools we declare to Gemini in one request.
+/// Cap on how many tools we declare to the model in one request.
 const MAX_TOOLS: usize = 64;
 /// Cap on a single tool's textual output fed back to the model (chars).
 const MAX_TOOL_OUTPUT: usize = 8000;
+/// Output token cap for providers that require one (Anthropic).
+const MAX_OUTPUT_TOKENS: u32 = 2048;
+
+/// Dedicated outbound client for AI providers: redirects OFF so a custom
+/// `base_url` can't 302 us onto an internal address, with LLM-friendly timeouts.
+static AI_HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
+    Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(120))
+        .build()
+        .unwrap()
+});
+
+/// A normalized conversation turn from the client: `role` is "user" or "model";
+/// `content` is non-empty (the handler filters blanks).
+pub struct ChatMsg {
+    pub role: String,
+    pub content: String,
+}
 
 /// One tool invocation surfaced to the UI (no arguments/output — just what ran).
 #[derive(Serialize)]
@@ -34,52 +58,152 @@ pub struct ChatResult {
     pub tools_used: Vec<ToolUsed>,
 }
 
-/// Live MCP state for one chat: aligned clients/labels, the Gemini tool
-/// declarations, and a map from the namespaced tool name back to its owning
-/// client + original name.
+/// One discovered MCP tool, provider-neutral. Each provider formats this into its
+/// own declaration shape (Gemini `functionDeclarations`, Anthropic `tools`,
+/// OpenAI `tools`).
+struct NeutralTool {
+    ns_name: String,
+    description: Option<String>,
+    input_schema: Option<Value>,
+}
+
+/// Live MCP state for one chat: the aligned clients/labels, the neutral tool
+/// list, and a map from the namespaced tool name back to its owning client +
+/// original name.
 struct LoadedMcp {
     clients: Vec<McpClient>,
     labels: Vec<String>,
-    decls: Vec<Value>,
+    tools: Vec<NeutralTool>,
     dispatch: HashMap<String, (usize, String)>,
 }
 
-/// Run a chat turn. `contents` is the already-mapped Gemini conversation.
+/// Run a chat turn against the resolved provider. `msgs` is the normalized
+/// conversation. If the provider fails and the org allowed it (`!fail_closed` and
+/// the provider isn't already the platform default), retry on the platform Gemini.
 pub async fn run(
     pool: &PgPool,
     user_id: i32,
-    contents: Vec<Value>,
-    api_key: &str,
-    model: &str,
+    msgs: Vec<ChatMsg>,
+    ai: &ResolvedAi,
 ) -> Result<ChatResult, AppError> {
-    let loaded = match load_mcp_tools(pool, user_id).await {
-        Some(l) => l,
-        None => return passthrough(&contents, api_key, model).await,
+    let loaded = load_mcp_tools(pool, user_id).await;
+
+    match run_one(&msgs, &loaded, ai).await {
+        Ok(result) => Ok(result),
+        Err(e) if !ai.fail_closed && ai.provider != AiProvider::Gemini => {
+            // The owner explicitly allowed falling back to the platform default.
+            match crate::config::gemini_api_key() {
+                Some(key) => {
+                    warn!(target: "ai", error = %e, "AI provider failed; falling back to platform default");
+                    let fallback = ResolvedAi {
+                        provider: AiProvider::Gemini,
+                        api_key: key,
+                        model: crate::config::gemini_model(),
+                        base_url: None,
+                        fail_closed: false,
+                    };
+                    run_one(&msgs, &loaded, &fallback).await
+                }
+                None => Err(e),
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+async fn run_one(
+    msgs: &[ChatMsg],
+    loaded: &Option<LoadedMcp>,
+    ai: &ResolvedAi,
+) -> Result<ChatResult, AppError> {
+    match ai.provider {
+        AiProvider::Gemini => run_gemini(msgs, loaded, ai).await,
+        AiProvider::Anthropic => run_anthropic(msgs, loaded, ai).await,
+        AiProvider::OpenAiCompatible => run_openai(msgs, loaded, ai).await,
+    }
+}
+
+/// Validate a provider config by making one trivial, tool-less request. Used by
+/// the config endpoint to reject a bad key/model/endpoint before storing it.
+pub async fn probe(ai: &ResolvedAi) -> Result<(), AppError> {
+    let msgs = vec![ChatMsg {
+        role: "user".to_string(),
+        content: "ping".to_string(),
+    }];
+    run_one(&msgs, &None, ai).await.map(|_| ())
+}
+
+/// Dispatch one tool call to its owning MCP client. Returns the `ToolUsed`
+/// breadcrumb (for the UI) and the response value (Gemini-shaped object).
+async fn dispatch_tool(
+    loaded: Option<&LoadedMcp>,
+    ns_name: &str,
+    args: Value,
+) -> (Option<ToolUsed>, Value) {
+    let Some(loaded) = loaded else {
+        return (
+            None,
+            serde_json::json!({ "isError": true, "error": "unknown tool" }),
+        );
     };
+    match loaded.dispatch.get(ns_name) {
+        Some((idx, orig)) => {
+            let used = ToolUsed {
+                name: orig.clone(),
+                connection_label: loaded.labels.get(*idx).cloned().unwrap_or_default(),
+            };
+            let resp = match loaded.clients[*idx].call_tool(orig, args).await {
+                Ok(result) => tool_result_to_response(&result),
+                Err(e) => serde_json::json!({ "isError": true, "error": e.to_string() }),
+            };
+            (Some(used), resp)
+        }
+        None => (
+            None,
+            serde_json::json!({ "isError": true, "error": "unknown tool" }),
+        ),
+    }
+}
 
-    let LoadedMcp {
-        clients,
-        labels,
-        decls,
-        dispatch,
-    } = loaded;
+// ───────────────────────────── Gemini ─────────────────────────────
 
-    let mut contents = contents;
+/// SSRF re-check for a custom provider `base_url`, run before every request the
+/// way the MCP client does (defeats DNS rebinding between save and use). Vendor
+/// default bases (operator-configured via env) are trusted and not re-checked.
+async fn guard_base(ai: &ResolvedAi) -> Result<(), AppError> {
+    if let Some(base) = ai.base_url.as_deref() {
+        validate_server_url(base).await?;
+    }
+    Ok(())
+}
+
+async fn run_gemini(
+    msgs: &[ChatMsg],
+    loaded: &Option<LoadedMcp>,
+    ai: &ResolvedAi,
+) -> Result<ChatResult, AppError> {
+    let mut contents: Vec<Value> = msgs
+        .iter()
+        .map(|m| {
+            let role = if m.role == "model" { "model" } else { "user" };
+            serde_json::json!({ "role": role, "parts": [{ "text": m.content }] })
+        })
+        .collect();
+    let decls = loaded
+        .as_ref()
+        .map(|l| gemini_decls(&l.tools))
+        .unwrap_or_default();
     let mut tools_used: Vec<ToolUsed> = Vec::new();
 
     for _round in 0..MAX_ROUNDS {
-        let content = gemini_generate(&contents, &decls, api_key, model).await?;
+        let content = gemini_generate(&contents, &decls, ai).await?;
         let parts = content_parts(&content);
-        let has_call = parts.iter().any(|p| p.get("functionCall").is_some());
-        if !has_call {
+        if !parts.iter().any(|p| p.get("functionCall").is_some()) {
             return Ok(ChatResult {
                 reply: stitch_text(&parts),
                 tools_used,
             });
         }
-
-        // Echo the model's turn (it carries the functionCall parts), then answer
-        // each call with a functionResponse part.
         contents.push(content.clone());
         let mut resp_parts: Vec<Value> = Vec::new();
         for part in parts.iter().filter(|p| p.get("functionCall").is_some()) {
@@ -89,130 +213,64 @@ pub async fn run(
                 .get("args")
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!({}));
-
-            let response = match dispatch.get(ns_name) {
-                Some((idx, orig)) => {
-                    tools_used.push(ToolUsed {
-                        name: orig.clone(),
-                        connection_label: labels.get(*idx).cloned().unwrap_or_default(),
-                    });
-                    match clients[*idx].call_tool(orig, args).await {
-                        Ok(result) => tool_result_to_response(&result),
-                        Err(e) => serde_json::json!({ "isError": true, "error": e.to_string() }),
-                    }
-                }
-                None => serde_json::json!({ "isError": true, "error": "unknown tool" }),
-            };
+            let (used, resp) = dispatch_tool(loaded.as_ref(), ns_name, args).await;
+            if let Some(u) = used {
+                tools_used.push(u);
+            }
             resp_parts.push(serde_json::json!({
-                "functionResponse": { "name": ns_name, "response": response }
+                "functionResponse": { "name": ns_name, "response": resp }
             }));
         }
         contents.push(serde_json::json!({ "role": "user", "parts": resp_parts }));
     }
 
-    // Hit the round cap — force a final answer with tools disabled.
-    let content = gemini_generate(&contents, &[], api_key, model).await?;
+    let content = gemini_generate(&contents, &[], ai).await?;
     Ok(ChatResult {
         reply: stitch_text(&content_parts(&content)),
         tools_used,
     })
 }
 
-/// Plain single-shot Gemini call (no tools). Identical in spirit to the old
-/// passthrough handler.
-async fn passthrough(
-    contents: &[Value],
-    api_key: &str,
-    model: &str,
-) -> Result<ChatResult, AppError> {
-    let content = gemini_generate(contents, &[], api_key, model).await?;
-    Ok(ChatResult {
-        reply: stitch_text(&content_parts(&content)),
-        tools_used: Vec::new(),
-    })
+fn gemini_decls(tools: &[NeutralTool]) -> Vec<Value> {
+    tools
+        .iter()
+        .map(|t| {
+            let mut decl = serde_json::json!({ "name": t.ns_name });
+            if let Some(d) = &t.description {
+                decl["description"] = Value::String(d.clone());
+            }
+            if let Some(p) = tool_parameters(t.input_schema.as_ref()) {
+                decl["parameters"] = p;
+            }
+            decl
+        })
+        .collect()
 }
 
-/// Discover the caller's MCP tools, or `None` if they aren't an MCP owner, have
-/// no enabled connections, or none of them yield usable tools.
-async fn load_mcp_tools(pool: &PgPool, user_id: i32) -> Option<LoadedMcp> {
-    let owner = resolve_mcp_owner_opt(pool, user_id).await?;
-    let connections = load_connections(pool, owner, true).await.ok()?;
-    if connections.is_empty() {
-        return None;
-    }
-
-    let mut clients: Vec<McpClient> = Vec::new();
-    let mut labels: Vec<String> = Vec::new();
-    let mut decls: Vec<Value> = Vec::new();
-    let mut dispatch: HashMap<String, (usize, String)> = HashMap::new();
-
-    for conn in &connections {
-        let client = McpClient::new(&conn.server_url, conn.auth_token.as_deref());
-        // A server that fails the handshake or tool listing is skipped, not fatal
-        // — the chat still works with the remaining servers (or as a passthrough).
-        if let Err(e) = client.initialize().await {
-            warn!(target: "ai", label = %conn.label, error = %e, "mcp server initialize failed; skipping");
-            continue;
-        }
-        let tools = match client.list_tools().await {
-            Ok(t) => t,
-            Err(e) => {
-                warn!(target: "ai", label = %conn.label, error = %e, "mcp tools/list failed; skipping");
-                continue;
-            }
-        };
-        let idx = clients.len();
-        clients.push(client);
-        labels.push(conn.label.clone());
-        for tool in tools {
-            if decls.len() >= MAX_TOOLS {
-                warn!(target: "ai", "mcp tool cap ({MAX_TOOLS}) reached; remaining tools dropped");
-                break;
-            }
-            let ns_name = namespaced_name(idx, &tool.name);
-            let mut decl = serde_json::json!({ "name": ns_name });
-            if let Some(desc) = &tool.description {
-                decl["description"] = Value::String(desc.clone());
-            }
-            if let Some(params) = tool_parameters(tool.input_schema.as_ref()) {
-                decl["parameters"] = params;
-            }
-            decls.push(decl);
-            dispatch.insert(ns_name, (idx, tool.name.clone()));
-        }
-    }
-
-    if decls.is_empty() {
-        return None;
-    }
-    Some(LoadedMcp {
-        clients,
-        labels,
-        decls,
-        dispatch,
-    })
-}
-
-/// POST to Gemini's `generateContent`, optionally with `tools`. Returns the
-/// model turn (`candidates[0].content`), or `Null` if absent.
+/// POST to Gemini's `generateContent`, optionally with `tools`. Returns the model
+/// turn (`candidates[0].content`), or `Null` if absent.
 async fn gemini_generate(
     contents: &[Value],
     decls: &[Value],
-    api_key: &str,
-    model: &str,
+    ai: &ResolvedAi,
 ) -> Result<Value, AppError> {
+    guard_base(ai).await?;
+    let base = ai
+        .base_url
+        .clone()
+        .unwrap_or_else(crate::external::gemini_base);
     let url = format!(
         "{}/v1beta/models/{}:generateContent?key={}",
-        crate::external::gemini_base(),
-        model,
-        api_key
+        base.trim_end_matches('/'),
+        ai.model,
+        ai.api_key
     );
     let mut body = serde_json::json!({ "contents": contents });
     if !decls.is_empty() {
         body["tools"] = serde_json::json!([{ "functionDeclarations": decls }]);
     }
 
-    let res = HTTP_CLIENT
+    let res = AI_HTTP_CLIENT
         .post(&url)
         .json(&body)
         .send()
@@ -237,6 +295,357 @@ async fn gemini_generate(
     Ok(payload["candidates"][0]["content"].clone())
 }
 
+// ──────────────────────────── Anthropic ────────────────────────────
+
+async fn run_anthropic(
+    msgs: &[ChatMsg],
+    loaded: &Option<LoadedMcp>,
+    ai: &ResolvedAi,
+) -> Result<ChatResult, AppError> {
+    let mut messages: Vec<Value> = msgs
+        .iter()
+        .map(|m| {
+            let role = if m.role == "model" {
+                "assistant"
+            } else {
+                "user"
+            };
+            serde_json::json!({ "role": role, "content": m.content })
+        })
+        .collect();
+    let tools = loaded
+        .as_ref()
+        .map(|l| anthropic_tools(&l.tools))
+        .unwrap_or_default();
+    let mut tools_used: Vec<ToolUsed> = Vec::new();
+
+    for _round in 0..MAX_ROUNDS {
+        let payload = anthropic_generate(&messages, &tools, ai).await?;
+        let blocks = payload
+            .get("content")
+            .and_then(|c| c.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let has_tool = blocks
+            .iter()
+            .any(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_use"));
+        if !has_tool {
+            return Ok(ChatResult {
+                reply: anthropic_text(&blocks),
+                tools_used,
+            });
+        }
+        // Echo the assistant turn (carries the tool_use blocks), then answer each.
+        messages.push(serde_json::json!({ "role": "assistant", "content": blocks.clone() }));
+        let mut results: Vec<Value> = Vec::new();
+        for b in blocks
+            .iter()
+            .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_use"))
+        {
+            let id = b.get("id").and_then(|i| i.as_str()).unwrap_or("");
+            let name = b.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            let input = b
+                .get("input")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let (used, resp) = dispatch_tool(loaded.as_ref(), name, input).await;
+            if let Some(u) = used {
+                tools_used.push(u);
+            }
+            results.push(serde_json::json!({
+                "type": "tool_result",
+                "tool_use_id": id,
+                "content": response_to_text(&resp),
+            }));
+        }
+        messages.push(serde_json::json!({ "role": "user", "content": results }));
+    }
+
+    let payload = anthropic_generate(&messages, &[], ai).await?;
+    let blocks = payload
+        .get("content")
+        .and_then(|c| c.as_array())
+        .cloned()
+        .unwrap_or_default();
+    Ok(ChatResult {
+        reply: anthropic_text(&blocks),
+        tools_used,
+    })
+}
+
+fn anthropic_text(blocks: &[Value]) -> String {
+    blocks
+        .iter()
+        .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("text"))
+        .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn anthropic_tools(tools: &[NeutralTool]) -> Vec<Value> {
+    tools
+        .iter()
+        .map(|t| {
+            let mut decl = serde_json::json!({
+                "name": t.ns_name,
+                "input_schema": object_schema(t.input_schema.as_ref()),
+            });
+            if let Some(d) = &t.description {
+                decl["description"] = Value::String(d.clone());
+            }
+            decl
+        })
+        .collect()
+}
+
+/// POST to Anthropic's Messages API. Returns the full response object (caller
+/// reads `content` + decides on tool calls).
+async fn anthropic_generate(
+    messages: &[Value],
+    tools: &[Value],
+    ai: &ResolvedAi,
+) -> Result<Value, AppError> {
+    guard_base(ai).await?;
+    let base = ai
+        .base_url
+        .clone()
+        .unwrap_or_else(crate::external::anthropic_base);
+    let url = format!("{}/v1/messages", base.trim_end_matches('/'));
+    let mut body = serde_json::json!({
+        "model": ai.model,
+        "max_tokens": MAX_OUTPUT_TOKENS,
+        "messages": messages,
+    });
+    if !tools.is_empty() {
+        body["tools"] = serde_json::json!(tools);
+    }
+
+    let res = AI_HTTP_CLIENT
+        .post(&url)
+        .header("x-api-key", &ai.api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            warn!(target: "ai", error = ?e, "anthropic transport error");
+            AppError::Internal("AI upstream error".into())
+        })?;
+    let status = res.status();
+    let payload: Value = res.json().await.map_err(|e| {
+        warn!(target: "ai", error = ?e, "anthropic response parse failed");
+        AppError::Internal("AI bad upstream response".into())
+    })?;
+    if !status.is_success() {
+        let msg = payload["error"]["message"]
+            .as_str()
+            .unwrap_or("Upstream error")
+            .to_string();
+        warn!(target: "ai", %status, msg, "anthropic non-2xx");
+        return Err(AppError::Internal(format!("AI upstream error: {msg}")));
+    }
+    Ok(payload)
+}
+
+// ─────────────────────── OpenAI-compatible ────────────────────────
+
+async fn run_openai(
+    msgs: &[ChatMsg],
+    loaded: &Option<LoadedMcp>,
+    ai: &ResolvedAi,
+) -> Result<ChatResult, AppError> {
+    let mut messages: Vec<Value> = msgs
+        .iter()
+        .map(|m| {
+            let role = if m.role == "model" {
+                "assistant"
+            } else {
+                "user"
+            };
+            serde_json::json!({ "role": role, "content": m.content })
+        })
+        .collect();
+    let tools = loaded
+        .as_ref()
+        .map(|l| openai_tools(&l.tools))
+        .unwrap_or_default();
+    let mut tools_used: Vec<ToolUsed> = Vec::new();
+
+    for _round in 0..MAX_ROUNDS {
+        let message = openai_generate(&messages, &tools, ai).await?;
+        let tool_calls = message
+            .get("tool_calls")
+            .and_then(|t| t.as_array())
+            .cloned()
+            .unwrap_or_default();
+        if tool_calls.is_empty() {
+            return Ok(ChatResult {
+                reply: message
+                    .get("content")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                tools_used,
+            });
+        }
+        // Echo the assistant turn (carries tool_calls), then answer each.
+        messages.push(message.clone());
+        for tc in &tool_calls {
+            let id = tc.get("id").and_then(|i| i.as_str()).unwrap_or("");
+            let func = tc
+                .get("function")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let name = func.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            let args: Value = func
+                .get("arguments")
+                .and_then(|a| a.as_str())
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_else(|| serde_json::json!({}));
+            let (used, resp) = dispatch_tool(loaded.as_ref(), name, args).await;
+            if let Some(u) = used {
+                tools_used.push(u);
+            }
+            messages.push(serde_json::json!({
+                "role": "tool",
+                "tool_call_id": id,
+                "content": response_to_text(&resp),
+            }));
+        }
+    }
+
+    let message = openai_generate(&messages, &[], ai).await?;
+    Ok(ChatResult {
+        reply: message
+            .get("content")
+            .and_then(|c| c.as_str())
+            .unwrap_or("")
+            .to_string(),
+        tools_used,
+    })
+}
+
+fn openai_tools(tools: &[NeutralTool]) -> Vec<Value> {
+    tools
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": t.ns_name,
+                    "description": t.description.clone().unwrap_or_default(),
+                    "parameters": object_schema(t.input_schema.as_ref()),
+                }
+            })
+        })
+        .collect()
+}
+
+/// POST to an OpenAI-compatible `/chat/completions`. Returns `choices[0].message`.
+async fn openai_generate(
+    messages: &[Value],
+    tools: &[Value],
+    ai: &ResolvedAi,
+) -> Result<Value, AppError> {
+    guard_base(ai).await?;
+    let base = ai.base_url.clone().ok_or_else(|| {
+        AppError::Internal("OpenAI-compatible provider requires a base URL".into())
+    })?;
+    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+    let mut body = serde_json::json!({ "model": ai.model, "messages": messages });
+    if !tools.is_empty() {
+        body["tools"] = serde_json::json!(tools);
+    }
+
+    let res = AI_HTTP_CLIENT
+        .post(&url)
+        .bearer_auth(&ai.api_key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            warn!(target: "ai", error = ?e, "openai transport error");
+            AppError::Internal("AI upstream error".into())
+        })?;
+    let status = res.status();
+    let payload: Value = res.json().await.map_err(|e| {
+        warn!(target: "ai", error = ?e, "openai response parse failed");
+        AppError::Internal("AI bad upstream response".into())
+    })?;
+    if !status.is_success() {
+        let msg = payload["error"]["message"]
+            .as_str()
+            .unwrap_or("Upstream error")
+            .to_string();
+        warn!(target: "ai", %status, msg, "openai non-2xx");
+        return Err(AppError::Internal(format!("AI upstream error: {msg}")));
+    }
+    Ok(payload["choices"][0]["message"].clone())
+}
+
+// ───────────────────────── MCP discovery ──────────────────────────
+
+/// Discover the caller's MCP tools, or `None` if they aren't an MCP owner, have
+/// no enabled connections, or none of them yield usable tools.
+async fn load_mcp_tools(pool: &PgPool, user_id: i32) -> Option<LoadedMcp> {
+    let owner = resolve_mcp_owner_opt(pool, user_id).await?;
+    let connections = load_connections(pool, owner, true).await.ok()?;
+    if connections.is_empty() {
+        return None;
+    }
+
+    let mut clients: Vec<McpClient> = Vec::new();
+    let mut labels: Vec<String> = Vec::new();
+    let mut tools: Vec<NeutralTool> = Vec::new();
+    let mut dispatch: HashMap<String, (usize, String)> = HashMap::new();
+
+    for conn in &connections {
+        let client = McpClient::new(&conn.server_url, conn.auth_token.as_deref());
+        // A server that fails the handshake or tool listing is skipped, not fatal
+        // — the chat still works with the remaining servers (or as a passthrough).
+        if let Err(e) = client.initialize().await {
+            warn!(target: "ai", label = %conn.label, error = %e, "mcp server initialize failed; skipping");
+            continue;
+        }
+        let server_tools = match client.list_tools().await {
+            Ok(t) => t,
+            Err(e) => {
+                warn!(target: "ai", label = %conn.label, error = %e, "mcp tools/list failed; skipping");
+                continue;
+            }
+        };
+        let idx = clients.len();
+        clients.push(client);
+        labels.push(conn.label.clone());
+        for tool in server_tools {
+            if tools.len() >= MAX_TOOLS {
+                warn!(target: "ai", "mcp tool cap ({MAX_TOOLS}) reached; remaining tools dropped");
+                break;
+            }
+            let ns_name = namespaced_name(idx, &tool.name);
+            tools.push(NeutralTool {
+                ns_name: ns_name.clone(),
+                description: tool.description.clone(),
+                input_schema: tool.input_schema.clone(),
+            });
+            dispatch.insert(ns_name, (idx, tool.name.clone()));
+        }
+    }
+
+    if tools.is_empty() {
+        return None;
+    }
+    Some(LoadedMcp {
+        clients,
+        labels,
+        tools,
+        dispatch,
+    })
+}
+
+// ───────────────────────────── helpers ─────────────────────────────
+
 fn content_parts(content: &Value) -> Vec<Value> {
     content
         .get("parts")
@@ -255,7 +664,8 @@ fn stitch_text(parts: &[Value]) -> String {
 
 /// Convert an MCP `tools/call` result into the JSON object Gemini's
 /// `functionResponse.response` requires. Prefers `structuredContent`; otherwise
-/// joins text blocks (truncated). Carries `isError` through.
+/// joins text blocks (truncated). Carries `isError` through. Anthropic/OpenAI
+/// reuse this and stringify it via [`response_to_text`].
 fn tool_result_to_response(result: &Value) -> Value {
     let is_error = result
         .get("isError")
@@ -282,6 +692,12 @@ fn tool_result_to_response(result: &Value) -> Value {
     serde_json::json!({ "isError": is_error, "result": truncate(&text, MAX_TOOL_OUTPUT) })
 }
 
+/// Stringify a tool response for providers that pass tool results as text
+/// (Anthropic `tool_result.content`, OpenAI `tool` message content).
+fn response_to_text(resp: &Value) -> String {
+    truncate(&resp.to_string(), MAX_TOOL_OUTPUT)
+}
+
 fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();
@@ -293,7 +709,7 @@ fn truncate(s: &str, max: usize) -> String {
 
 /// Namespace a tool name with its connection index so two servers can expose the
 /// same tool name and the dispatcher knows the owner. Also coerces the name into
-/// Gemini's allowed identifier set and length.
+/// the providers' allowed identifier set and length.
 fn namespaced_name(idx: usize, name: &str) -> String {
     let cleaned: String = name
         .chars()
@@ -312,8 +728,8 @@ fn namespaced_name(idx: usize, name: &str) -> String {
     out
 }
 
-/// Build a Gemini `parameters` schema from an MCP tool's `inputSchema`, or
-/// `None` when the tool takes no arguments.
+/// Build a Gemini `parameters` schema from an MCP tool's `inputSchema`, or `None`
+/// when the tool takes no arguments.
 fn tool_parameters(input_schema: Option<&Value>) -> Option<Value> {
     let schema = input_schema?;
     if !schema.is_object() {
@@ -328,8 +744,24 @@ fn tool_parameters(input_schema: Option<&Value>) -> Option<Value> {
     if has_props { Some(sanitized) } else { None }
 }
 
-/// Recursively reduce full JSON Schema to the subset Gemini's function-calling
-/// accepts. Unknown keywords (`$schema`, `$ref`, `additionalProperties`,
+/// An object JSON Schema for Anthropic `input_schema` / OpenAI `parameters`,
+/// which both require an object schema even when the tool takes no arguments.
+fn object_schema(input_schema: Option<&Value>) -> Value {
+    match input_schema {
+        Some(s) if s.is_object() => {
+            let sanitized = sanitize_schema(s);
+            if sanitized.get("type").and_then(|t| t.as_str()) == Some("object") {
+                sanitized
+            } else {
+                serde_json::json!({ "type": "object", "properties": {} })
+            }
+        }
+        _ => serde_json::json!({ "type": "object", "properties": {} }),
+    }
+}
+
+/// Recursively reduce full JSON Schema to the subset the providers' function-
+/// calling accepts. Unknown keywords (`$schema`, `$ref`, `additionalProperties`,
 /// `format`, `title`, `$defs`, `patternProperties`, …) are dropped, and a
 /// `type: ["string","null"]` union collapses to a single type, since Gemini 400s
 /// on any of those.
@@ -374,7 +806,7 @@ fn sanitize_schema(schema: &Value) -> Value {
             _ => {}
         }
     }
-    // Gemini prefers object schemas to carry a (possibly empty) properties map.
+    // Object schemas should carry a (possibly empty) properties map.
     if out.get("type").and_then(|t| t.as_str()) == Some("object") && !out.contains_key("properties")
     {
         out.insert("properties".into(), Value::Object(serde_json::Map::new()));
@@ -417,6 +849,20 @@ mod tests {
     fn no_args_schema_yields_no_parameters() {
         let schema = serde_json::json!({ "type": "object", "properties": {} });
         assert!(tool_parameters(Some(&schema)).is_none());
+    }
+
+    #[test]
+    fn object_schema_defaults_to_empty_object() {
+        assert_eq!(
+            object_schema(None),
+            serde_json::json!({ "type": "object", "properties": {} })
+        );
+        // A non-object schema is coerced to the empty object schema.
+        let scalar = serde_json::json!({ "type": "string" });
+        assert_eq!(
+            object_schema(Some(&scalar)),
+            serde_json::json!({ "type": "object", "properties": {} })
+        );
     }
 
     #[test]

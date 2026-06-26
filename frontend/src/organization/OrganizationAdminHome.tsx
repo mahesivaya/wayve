@@ -12,6 +12,7 @@ import {
   WebhooksIcon,
   ScimIcon,
   ProjectsTileIcon,
+  AIChatIcon,
 } from "../icons";
 import { hasPermission } from "../auth/permissions";
 import { getOrgKeys } from "../orgKeys/api";
@@ -101,6 +102,8 @@ export default function OrganizationAdminHome() {
   const canSeeSharedInboxes = hasPermission(user, "inbox:manage");
   const canSeeSso = hasPermission(user, "sso:manage");
   const canReadAudit = hasPermission(user, "audit:read");
+  // Owner-only: select the org's AI provider + see its usage/cost governance.
+  const canSeeAi = hasPermission(user, "ai:manage");
 
   // Live figures for the org-owner console tiles.
   const [membersCount, setMembersCount] = useState<number | null>(null);
@@ -317,6 +320,14 @@ export default function OrganizationAdminHome() {
       description: "Browse projects and their linked code repositories.",
       path: "/projects",
       visible: true,
+    },
+    {
+      icon: <AIChatIcon size={26} />,
+      label: "AI Provider",
+      description:
+        "Choose the AI your team's assistant runs on, and track usage & cost.",
+      path: "/settings/ai",
+      visible: canSeeAi,
     },
   ];
 

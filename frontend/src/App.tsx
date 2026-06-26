@@ -99,6 +99,8 @@ const SharedInboxes = lazy(() => import("./settings/SharedInboxes"));
 const Webhooks = lazy(() => import("./settings/Webhooks"));
 const ScimTokens = lazy(() => import("./settings/ScimTokens"));
 const PlanAdmin = lazy(() => import("./settings/PlanAdmin"));
+const AiSettings = lazy(() => import("./settings/AiSettings"));
+const AiUsageGovernance = lazy(() => import("./settings/AiUsageGovernance"));
 const SecureMessageView = lazy(() => import("./emails/SecureMessageView"));
 const AuditSecurity = lazy(() => import("./settings/AuditSecurity"));
 const UserAudit = lazy(() => import("./settings/UserAudit"));
@@ -487,6 +489,11 @@ export default function App() {
               <Route path="/settings/webhooks" element={<Webhooks />} />
               <Route path="/settings/scim" element={<ScimTokens />} />
               <Route path="/settings/plans" element={<PlanAdmin />} />
+              <Route path="/settings/ai" element={<AiSettings />} />
+              <Route
+                path="/settings/ai/usage"
+                element={<AiUsageGovernance />}
+              />
             </Route>
           </Route>
 
