@@ -32,6 +32,17 @@ pub async fn get_messages(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
+    // messages is RLS-enabled; run the DM history read + mark-read under the
+    // restricted role with the caller's GUC so the participant policy engages.
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT set_config('app.user_id', $1, true)")
+        .bind(caller_id.to_string())
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("SET LOCAL ROLE wayve_app")
+        .execute(&mut *tx)
+        .await?;
+
     // Reconnect resync: when `since_id` is set, return everything newer than
     // that id (chronological), so a client that briefly dropped can backfill
     // exactly the messages it missed instead of just re-fetching the latest 50.
@@ -51,7 +62,7 @@ pub async fn get_messages(
         .bind(query.user1)
         .bind(query.user2)
         .bind(since_id)
-        .fetch_all(pool.get_ref())
+        .fetch_all(&mut *tx)
         .await?
     } else {
         // Two ordered scans (each index-served by idx_messages_conversation /
@@ -83,7 +94,7 @@ pub async fn get_messages(
         )
         .bind(query.user1)
         .bind(query.user2)
-        .fetch_all(pool.get_ref())
+        .fetch_all(&mut *tx)
         .await?
     };
 
@@ -101,9 +112,10 @@ pub async fn get_messages(
     )
     .bind(query.user1)
     .bind(query.user2)
-    .fetch_all(pool.get_ref())
+    .fetch_all(&mut *tx)
     .await
     .unwrap_or_default();
+    tx.commit().await?;
 
     for (message_id,) in &read_ids {
         let payload = serde_json::json!({
@@ -165,8 +177,9 @@ pub async fn get_messages(
 pub async fn get_conversation_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let rows = sqlx::query(
-        r#"
+    let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let rows = sqlx::query(
+            r#"
         SELECT
             CASE WHEN sender_id = $1 THEN receiver_id ELSE sender_id END AS other_id,
             MAX(created_at) AS last_message_at,
@@ -178,9 +191,12 @@ pub async fn get_conversation_summary(req: HttpRequest, pool: web::Data<PgPool>)
         GROUP BY other_id
         ORDER BY last_message_at DESC
         "#,
-    )
-    .bind(user_id)
-    .fetch_all(pool.get_ref())
+        )
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        Ok((tx, rows))
+    })
     .await?;
 
     let mut total_unread: i64 = 0;

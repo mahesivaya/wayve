@@ -25,6 +25,17 @@ pub async fn get_channel_messages(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
+    // channel_messages is RLS-enabled; read under the restricted role with the
+    // caller's GUC so the membership policy engages.
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT set_config('app.user_id', $1, true)")
+        .bind(user_id.to_string())
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("SET LOCAL ROLE wayve_app")
+        .execute(&mut *tx)
+        .await?;
+
     // Reconnect resync: when `since_id` is set, return top-level messages newer
     // than that id in chronological order (backfill what was missed while the
     // socket was down). Otherwise return the latest 50.
@@ -53,7 +64,7 @@ pub async fn get_channel_messages(
         )
         .bind(query.channel_id)
         .bind(since_id)
-        .fetch_all(pool.get_ref())
+        .fetch_all(&mut *tx)
         .await?
     } else {
         sqlx::query(
@@ -78,9 +89,10 @@ pub async fn get_channel_messages(
             "#,
         )
         .bind(query.channel_id)
-        .fetch_all(pool.get_ref())
+        .fetch_all(&mut *tx)
         .await?
     };
+    tx.commit().await?;
 
     let mut messages: Vec<_> = rows.into_iter().map(row_to_message_json).collect();
     // The default query is newest-first; the since_id query already ASC.
@@ -118,8 +130,9 @@ pub async fn get_channel_thread(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    let rows = sqlx::query(
-        r#"
+    let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let rows = sqlx::query(
+            r#"
         SELECT m.id,
                m.channel_id,
                m.sender_id,
@@ -134,9 +147,12 @@ pub async fn get_channel_thread(
         WHERE m.parent_message_id = $1
         ORDER BY m.created_at ASC
         "#,
-    )
-    .bind(parent_id)
-    .fetch_all(pool.get_ref())
+        )
+        .bind(parent_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        Ok((tx, rows))
+    })
     .await?;
 
     let messages: Vec<_> = rows.into_iter().map(row_to_message_json).collect();
