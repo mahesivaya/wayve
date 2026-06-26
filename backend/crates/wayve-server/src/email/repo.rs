@@ -292,7 +292,20 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
     qb.push(" ORDER BY e.created_at DESC, e.id DESC LIMIT ");
     qb.push_bind(query_limit);
 
-    let raw = qb.build().fetch_all(pool).await?;
+    // emails is RLS-enabled; run the read under the restricted role with the
+    // caller's GUC so the policy (owner / wayve-recipient / shared-member)
+    // engages. The query's own WHERE already scopes to the user — RLS is the
+    // defense-in-depth safety net. Inline (this fn returns sqlx::Result).
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT set_config('app.user_id', $1, true)")
+        .bind(filters.user_id.to_string())
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("SET LOCAL ROLE wayve_app")
+        .execute(&mut *tx)
+        .await?;
+    let raw = qb.build().fetch_all(&mut *tx).await?;
+    tx.commit().await?;
     Ok(raw.into_iter().map(map_list_row).collect())
 }
 
@@ -353,6 +366,14 @@ pub async fn get_detail(
     // Plan A Phase 2 — same LEFT JOIN + wayve-source recipient extension
     // as the list query, so opening a Wayve-to-Wayve email by id works
     // even though the row has NULL account_id.
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT set_config('app.user_id', $1, true)")
+        .bind(user_id.to_string())
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("SET LOCAL ROLE wayve_app")
+        .execute(&mut *tx)
+        .await?;
     let row = sqlx::query(
         r#"
         SELECT e.id, e.account_id, e.subject, e.subject_iv, e.subject_encrypted,
@@ -371,8 +392,9 @@ pub async fn get_detail(
     )
     .bind(email_id)
     .bind(user_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     Ok(row.map(|r| EmailDetailRow {
         id: r.get::<i32, _>("id"),
@@ -441,6 +463,14 @@ pub async fn list_attachments_for_user(
     pool: &PgPool,
     user_id: i32,
 ) -> sqlx::Result<Vec<AttachmentRow>> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT set_config('app.user_id', $1, true)")
+        .bind(user_id.to_string())
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("SET LOCAL ROLE wayve_app")
+        .execute(&mut *tx)
+        .await?;
     let rows = sqlx::query(
         r#"
         SELECT ea.id, ea.email_id, ea.filename, ea.mime_type, ea.size,
@@ -455,8 +485,9 @@ pub async fn list_attachments_for_user(
         "#,
     )
     .bind(user_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     Ok(rows
         .into_iter()

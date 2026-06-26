@@ -1896,3 +1896,52 @@ CREATE POLICY meeting_participants_rls ON meeting_participants
         OR EXISTS (SELECT 1 FROM meetings m WHERE m.id = meeting_participants.meeting_id
                    AND m.user_id = nullif(current_setting('app.user_id', true), '')::int)
     );
+
+
+-- RLS phase 2 — emails. 3-way visibility: mailbox owner (account_id ->
+-- email_accounts.user_id), wayve recipient (source='wayve' + recipient_user_id),
+-- or shared-inbox member (shared_inbox_members). email_accounts is intentionally
+-- NOT RLS-enabled — the policy reads it to resolve ownership/shared membership.
+-- email_attachments inherit the parent email's visibility.
+GRANT INSERT, UPDATE, DELETE ON emails            TO wayve_app;
+GRANT INSERT, UPDATE, DELETE ON email_attachments TO wayve_app;
+ALTER TABLE emails ENABLE ROW LEVEL SECURITY;
+ALTER TABLE emails FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS emails_rls ON emails;
+CREATE POLICY emails_rls ON emails
+    USING (
+        current_setting('app.bypass', true) = 'on'
+        OR (source = 'wayve'
+            AND recipient_user_id = nullif(current_setting('app.user_id', true), '')::int)
+        OR EXISTS (
+            SELECT 1 FROM email_accounts ea
+            WHERE ea.id = emails.account_id
+              AND ( ea.user_id = nullif(current_setting('app.user_id', true), '')::int
+                 OR EXISTS (SELECT 1 FROM shared_inbox_members sm
+                            WHERE sm.account_id = ea.id
+                              AND sm.user_id = nullif(current_setting('app.user_id', true), '')::int)))
+    )
+    WITH CHECK (
+        current_setting('app.bypass', true) = 'on'
+        OR (source = 'wayve'
+            AND recipient_user_id = nullif(current_setting('app.user_id', true), '')::int)
+        OR EXISTS (
+            SELECT 1 FROM email_accounts ea
+            WHERE ea.id = emails.account_id
+              AND ( ea.user_id = nullif(current_setting('app.user_id', true), '')::int
+                 OR EXISTS (SELECT 1 FROM shared_inbox_members sm
+                            WHERE sm.account_id = ea.id
+                              AND sm.user_id = nullif(current_setting('app.user_id', true), '')::int)))
+    );
+ALTER TABLE email_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_attachments FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS email_attachments_rls ON email_attachments;
+CREATE POLICY email_attachments_rls ON email_attachments
+    USING (
+        current_setting('app.bypass', true) = 'on'
+        OR EXISTS (SELECT 1 FROM emails e WHERE e.id = email_attachments.email_id)
+    )
+    WITH CHECK (
+        current_setting('app.bypass', true) = 'on'
+        OR EXISTS (SELECT 1 FROM emails e WHERE e.id = email_attachments.email_id)
+    );
