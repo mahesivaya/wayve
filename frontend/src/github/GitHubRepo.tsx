@@ -434,8 +434,8 @@ type RunsResponse = {
 const RUNS_PER_PAGE = 50;
 
 // Commits page size. The Commits tab pages through the full branch history
-// 50-at-a-time (Prev/Next) rather than showing just the latest few.
-const COMMITS_PER_PAGE = 50;
+// 25-at-a-time (Prev/Next) rather than showing just the latest few.
+const COMMITS_PER_PAGE = 25;
 
 // Individual step inside a job — what GitHub renders as the bullet list
 // under each job header on the run page. The `number` field is the
