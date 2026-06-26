@@ -1701,6 +1701,34 @@
   padding: var(--space-5) 0;
 }
 
+.email-body-reconnect {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.email-reconnect-btn {
+  height: 30px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-primary-action);
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  cursor: pointer;
+  font: inherit;
+}
+
+.email-reconnect-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.email-reconnect-error {
+  color: var(--color-danger);
+  font-size: var(--text-md);
+}
+
 .email-attachments {
   margin-top: var(--space-8);
   padding-top: var(--space-6);

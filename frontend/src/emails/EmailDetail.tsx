@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { downloadEmailAttachment, sendEmail } from "../api/email";
+import {
+  downloadEmailAttachment,
+  sendEmail,
+  getGmailConnectUrl,
+} from "../api/email";
 import { formatFileSize } from "./renderUtils";
+import { isGmailReconnectError } from "./bodyUtils";
 import EmailBody from "./EmailBody";
 import { EmailItem, EmailAttachment } from "./types";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
@@ -51,6 +56,24 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const [forwardBody, setForwardBody] = useState("");
   const [forwardSending, setForwardSending] = useState(false);
   const [forwardError, setForwardError] = useState<string | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [reconnectError, setReconnectError] = useState<string | null>(null);
+
+  // The body fetch failed because the Gmail account's refresh token is dead.
+  // Hand off to the same per-account OAuth flow the Integrations page uses; on
+  // success Google redirects back and the body loads with a fresh token.
+  const handleReconnectGmail = async () => {
+    setReconnecting(true);
+    setReconnectError(null);
+    try {
+      window.location.href = await getGmailConnectUrl();
+    } catch (err) {
+      setReconnectError(
+        err instanceof Error ? err.message : "Could not start reconnect."
+      );
+      setReconnecting(false);
+    }
+  };
 
   // Local mirror of the shared-inbox workflow state so the UI updates
   // optimistically without waiting for a refetch of the whole list.
@@ -623,11 +646,30 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             <span>Loading email …</span>
           </div>
         ) : selectedEmail._bodyError ? (
-          <p className="email-body-error">
-            {typeof selectedEmail._bodyError === "string"
-              ? selectedEmail._bodyError
-              : "Failed to load email body. Try again."}
-          </p>
+          <div className="email-body-error">
+            <p>
+              {typeof selectedEmail._bodyError === "string"
+                ? selectedEmail._bodyError
+                : "Failed to load email body. Try again."}
+            </p>
+            {isGmailReconnectError(selectedEmail._bodyError) && (
+              <div className="email-body-reconnect">
+                <button
+                  type="button"
+                  className="email-reconnect-btn"
+                  onClick={() => void handleReconnectGmail()}
+                  disabled={reconnecting}
+                >
+                  {reconnecting ? "Redirecting…" : "Reconnect Gmail"}
+                </button>
+                {reconnectError && (
+                  <span className="email-reconnect-error">
+                    {reconnectError}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         ) : (
           <EmailBody body={selectedEmail.body || ""} />
         )}

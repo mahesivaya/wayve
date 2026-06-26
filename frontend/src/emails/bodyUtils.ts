@@ -133,6 +133,22 @@ export function emailBodyErrorMessage(err: unknown) {
   return "Failed to load email body. Try again.";
 }
 
+// The Gmail body endpoint (`/api/emails/{id}/body`) returns a 409 whose message
+// asks the user to reconnect when the account's refresh token is dead — revoked,
+// expired (testing-mode apps), or issued by a since-rotated OAuth client. Detect
+// that case so the detail view can offer a one-click reconnect instead of a
+// dead-end error string. Accepts the raw error or the already-stringified
+// `_bodyError` message.
+export function isGmailReconnectError(error: unknown): boolean {
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : "";
+  return /reconnect/i.test(message);
+}
+
 export async function decryptWayveBodyIfNeeded(
   body: string,
   userId?: number | null

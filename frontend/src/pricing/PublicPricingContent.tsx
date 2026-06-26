@@ -17,14 +17,10 @@ export default function PublicPricingContent() {
   const enterpriseTiers = PLAN_CATALOG.filter((p) => p.tier === "enterprise");
 
   const renderTier = (tier: PlanTier) => {
-    // Personal → personal signup; other org tiers → business signup;
-    // Enterprise → contact sales.
+    // Personal → personal signup; all org tiers (incl. Enterprise) → business
+    // signup, which leads into self-serve checkout.
     const ctaPath =
-      tier.tier === "enterprise"
-        ? "/support"
-        : tier.audience === "personal"
-          ? "/register"
-          : "/register-business";
+      tier.audience === "personal" ? "/register" : "/register-business";
     return (
       <article key={tier.code} className="pricing-plan">
         <h3>{tier.name}</h3>
