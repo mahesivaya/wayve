@@ -171,6 +171,11 @@ services:
       - backend
     env_file:
       - ../frontend/.env.development
+    environment:
+      # macOS Docker bind mounts don't deliver inotify events, so Vite HMR
+      # misses host edits. Force the watcher to poll inside the container only;
+      # native `npm run dev` on the host is unaffected. See vite.config.ts.
+      VITE_USE_POLLING: "true"
     volumes:
       # Live-mount host source so Vite HMR picks up edits without a rebuild.
       - ../frontend:/app
