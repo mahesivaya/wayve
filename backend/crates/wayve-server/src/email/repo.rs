@@ -254,6 +254,17 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
             "trash" => {
                 qb.push(" AND 'TRASH' = ANY(e.labels) ");
             }
+            // "GitHub" is a virtual, source-based folder rather than a Gmail
+            // label: every GitHub notification — pull-request review requests,
+            // PR review comments, merge/close activity — is sent From
+            // `notifications@github.com`, so we match the sender domain and
+            // cross-cut accounts/folders like a saved `from:github.com` search.
+            // The plaintext `sender` column is still populated on every sync
+            // (only `subject` is nulled at rest), and the inbox/sent/search
+            // filters already rely on it, so this stays consistent with them.
+            "github" => {
+                qb.push(" AND lower(coalesce(e.sender, '')) LIKE '%github.com%' ");
+            }
             _ => {}
         }
     }

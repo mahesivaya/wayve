@@ -257,6 +257,15 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           >
             📤 Sent
           </button>
+          {/* Source-based virtual folder: surfaces GitHub PR / notification
+            emails (matched on the notifications@github.com sender by the
+            backend `folder=github` filter), cutting across every account. */}
+          <button
+            className={`filter-btn ${activeFolder === "github" && viewMode === "email" ? "active" : ""}`}
+            onClick={() => setActiveFolder("github")}
+          >
+            🐙 GitHub PRs
+          </button>
           {/* Gmail-style category folders. All wired to `emails.labels`
             (Gmail labelIds + Outlook categories + synthetic SPAM/DRAFT
             from the side-pull sync paths). */}

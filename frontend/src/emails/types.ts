@@ -66,6 +66,9 @@ export type EmailFolder =
   | "spam"
   | "drafts"
   | "social"
-  | "trash";
+  | "trash"
+  // Virtual, source-based folder: GitHub PR/notification emails (matched on
+  // the `notifications@github.com` sender by the backend), not a Gmail label.
+  | "github";
 
 export const STUB_EMAIL_FOLDERS: ReadonlyArray<EmailFolder> = [];
