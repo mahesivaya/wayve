@@ -1945,3 +1945,75 @@ CREATE POLICY email_attachments_rls ON email_attachments
         current_setting('app.bypass', true) = 'on'
         OR EXISTS (SELECT 1 FROM emails e WHERE e.id = email_attachments.email_id)
     );
+
+
+-- RLS phase 2 — chat (participant-scoped). HTTP read endpoints enforce; the
+-- WebSocket actor + channel-management writes run as the superuser and bypass.
+-- Channel policies resolve membership through a SECURITY DEFINER helper (runs as
+-- owner, bypassing RLS) so a policy on channel_members doesn't recurse.
+CREATE OR REPLACE FUNCTION app_is_channel_member(cid int, uid int)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
+    SELECT EXISTS (SELECT 1 FROM channel_members WHERE channel_id = cid AND user_id = uid)
+$$;
+GRANT EXECUTE ON FUNCTION app_is_channel_member(int, int) TO wayve_app;
+GRANT INSERT, UPDATE, DELETE ON
+    messages, channels, channel_members, channel_messages,
+    channel_invites, channel_join_requests, chat_attachments
+TO wayve_app;
+
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS messages_rls ON messages;
+CREATE POLICY messages_rls ON messages
+    USING (current_setting('app.bypass', true) = 'on'
+           OR sender_id   = nullif(current_setting('app.user_id', true), '')::int
+           OR receiver_id = nullif(current_setting('app.user_id', true), '')::int)
+    WITH CHECK (current_setting('app.bypass', true) = 'on'
+           OR sender_id   = nullif(current_setting('app.user_id', true), '')::int
+           OR receiver_id = nullif(current_setting('app.user_id', true), '')::int);
+
+ALTER TABLE channels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE channels FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS channels_rls ON channels;
+CREATE POLICY channels_rls ON channels
+    USING (current_setting('app.bypass', true) = 'on'
+           OR created_by = nullif(current_setting('app.user_id', true), '')::int
+           OR app_is_channel_member(id, nullif(current_setting('app.user_id', true), '')::int))
+    WITH CHECK (current_setting('app.bypass', true) = 'on'
+           OR created_by = nullif(current_setting('app.user_id', true), '')::int);
+
+DO $$
+DECLARE t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['channel_members','channel_messages','channel_invites'] LOOP
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_rls', t);
+        EXECUTE format(
+            'CREATE POLICY %I ON %I USING (%s) WITH CHECK (%s)',
+            t || '_rls', t,
+            $f$current_setting('app.bypass', true) = 'on' OR app_is_channel_member(channel_id, nullif(current_setting('app.user_id', true), '')::int)$f$,
+            $f$current_setting('app.bypass', true) = 'on' OR app_is_channel_member(channel_id, nullif(current_setting('app.user_id', true), '')::int)$f$
+        );
+    END LOOP;
+END $$;
+
+ALTER TABLE channel_join_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE channel_join_requests FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS channel_join_requests_rls ON channel_join_requests;
+CREATE POLICY channel_join_requests_rls ON channel_join_requests
+    USING (current_setting('app.bypass', true) = 'on'
+           OR user_id = nullif(current_setting('app.user_id', true), '')::int
+           OR app_is_channel_member(channel_id, nullif(current_setting('app.user_id', true), '')::int))
+    WITH CHECK (current_setting('app.bypass', true) = 'on'
+           OR user_id = nullif(current_setting('app.user_id', true), '')::int);
+
+ALTER TABLE chat_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_attachments FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS chat_attachments_rls ON chat_attachments;
+CREATE POLICY chat_attachments_rls ON chat_attachments
+    USING (current_setting('app.bypass', true) = 'on'
+           OR uploader_id = nullif(current_setting('app.user_id', true), '')::int
+           OR EXISTS (SELECT 1 FROM messages m WHERE m.id = chat_attachments.message_id))
+    WITH CHECK (current_setting('app.bypass', true) = 'on'
+           OR uploader_id = nullif(current_setting('app.user_id', true), '')::int);
