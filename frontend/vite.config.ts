@@ -16,6 +16,17 @@ export default defineConfig(({ command }) => ({
   },
 
   server: {
+    // macOS Docker bind mounts don't forward host file-change events into the
+    // Linux container, so Vite's watcher misses edits and HMR goes stale until
+    // a manual container restart. When VITE_USE_POLLING=true (set only on the
+    // dev container — see infra/docker-compose.dev.yml) fall back to polling so
+    // HMR works. Native `npm run dev` leaves this off: FS events work there and
+    // polling just burns CPU.
+    watch:
+      process.env.VITE_USE_POLLING === "true"
+        ? { usePolling: true, interval: 120 }
+        : undefined,
+
     // Pre-transform the modules every page hits so the first browser
     // request doesn't cascade through them serially.
     warmup: {
