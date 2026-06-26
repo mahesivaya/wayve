@@ -111,6 +111,16 @@ fn parse_repos_tail(tail: &str) -> Option<(String, String)> {
     Some((owner.to_string(), repo.to_string()))
 }
 
+/// Whether a proxy tail targets the **pull-request surface** —
+/// `repos/{owner}/{repo}/pulls[/...]` (list, detail, files, reviews) plus
+/// `repos/{owner}/{repo}/issues/{n}/comments`, which is where GitHub serves a
+/// PR's conversation comments (and the only way the dashboard uses `issues`).
+/// PRs are owner-only across every scope; this is the predicate for that gate.
+fn is_pr_path(tail: &str) -> bool {
+    let segs: Vec<&str> = tail.split('/').collect();
+    segs.len() >= 4 && segs[0] == "repos" && (segs[3] == "pulls" || segs[3] == "issues")
+}
+
 #[get("/github/{tail:.*}")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn github_proxy(
@@ -252,6 +262,21 @@ pub async fn github_proxy(
             }
         }
     }
+
+    // Pull requests are visible to the OWNER of each scope only — personal,
+    // organization, enterprise, and platform owners (all resolve to
+    // `Role::Owner`). Layered on top of the per-scope repo/feature checks above,
+    // so a non-owner who can otherwise read the repo (org admin/member, platform
+    // support, etc.) still can't read its PRs. The UI hides the tab to match;
+    // this is the real enforcement.
+    if is_pr_path(&tail) && ctx.role != Role::Owner {
+        warn!(target: "auth", user_id, role = ctx.role.as_str(),
+              "github proxy denied: pull requests are owner-only");
+        return HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Only the owner can view pull requests"
+        }));
+    }
+
     let query = req.query_string();
     let media_override = parse_media_override(query);
     // `media=` is our control parameter — never forward it to GitHub.

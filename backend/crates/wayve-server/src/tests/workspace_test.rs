@@ -270,6 +270,125 @@ mod tests {
         cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
 
+    // Pull requests are OWNER-only: an org owner reads them through the proxy,
+    // but a non-owner ADMIN — who CAN still read the rest of the (linked) repo,
+    // since "admin" is in code_repo's default roles — is refused both the PR
+    // list and a PR's issue-comment conversation. Using admin (not a plain
+    // member) isolates the new PR gate from the pre-existing code_repo feature
+    // gate, which already excludes members.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn pull_requests_are_owner_only_via_proxy() {
+        use crate::github_proxy;
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock = MockServer::start().await;
+        // Repo validation (link) + the non-PR repo read both hit this path.
+        Mock::given(method("GET"))
+            .and(path("/repos/octocat/Hello-World"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "name": "Hello-World",
+                "private": false,
+                "owner": { "login": "octocat" }
+            })))
+            .mount(&mock)
+            .await;
+        // The PR list upstream — only the OWNER ever reaches it.
+        Mock::given(method("GET"))
+            .and(path("/repos/octocat/Hello-World/pulls"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&mock)
+            .await;
+        // SAFETY: serialized via #[serial] — env mutation can't race other tests.
+        unsafe {
+            std::env::set_var("GITHUB_API_BASE", mock.uri());
+        }
+
+        let pool = test_pool().await;
+        let org_id = insert_org(&pool, &format!("WS Org {}", random_email())).await;
+        let project_id = insert_org_project(&pool, org_id, "Apollo").await;
+
+        let owner_email = random_email();
+        let owner_id = insert_local_user(&pool, &owner_email, "password123").await;
+        place_in_org(&pool, owner_id, org_id, "owner").await;
+        let admin_email = random_email();
+        let admin_id = insert_local_user(&pool, &admin_email, "password123").await;
+        place_in_org(&pool, admin_id, org_id, "admin").await;
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(workspace::handler::link_project_repo)
+                .service(github_proxy::github_proxy),
+        )
+        .await;
+
+        // Owner links the repo so it's on the org allowlist.
+        let req = actix_test::TestRequest::patch()
+            .uri(&format!("/projects/{project_id}/repo"))
+            .insert_header((
+                "Authorization",
+                format!("Bearer {}", jwt_for(owner_id, &owner_email)),
+            ))
+            .set_json(serde_json::json!({ "repo_url": "https://github.com/octocat/Hello-World" }))
+            .to_request();
+        assert_eq!(
+            actix_test::call_service(&app, req).await.status(),
+            StatusCode::OK
+        );
+
+        let owner_bearer = format!("Bearer {}", jwt_for(owner_id, &owner_email));
+        let admin_bearer = format!("Bearer {}", jwt_for(admin_id, &admin_email));
+
+        // OWNER reads the PR list → 200.
+        let req = actix_test::TestRequest::get()
+            .uri("/github/repos/octocat/Hello-World/pulls")
+            .insert_header(("Authorization", owner_bearer))
+            .to_request();
+        assert_eq!(
+            actix_test::call_service(&app, req).await.status(),
+            StatusCode::OK
+        );
+
+        // ADMIN (non-owner) reads the repo itself (non-PR) → 200: only PRs are
+        // gated, not the whole Code Repo feature.
+        let req = actix_test::TestRequest::get()
+            .uri("/github/repos/octocat/Hello-World")
+            .insert_header(("Authorization", admin_bearer.clone()))
+            .to_request();
+        assert_eq!(
+            actix_test::call_service(&app, req).await.status(),
+            StatusCode::OK
+        );
+
+        // ADMIN reads the PR list → 403, even though the repo is linked and the
+        // admin can read everything else.
+        let req = actix_test::TestRequest::get()
+            .uri("/github/repos/octocat/Hello-World/pulls")
+            .insert_header(("Authorization", admin_bearer.clone()))
+            .to_request();
+        assert_eq!(
+            actix_test::call_service(&app, req).await.status(),
+            StatusCode::FORBIDDEN
+        );
+
+        // ADMIN reads a PR's conversation (issue comments) → 403.
+        let req = actix_test::TestRequest::get()
+            .uri("/github/repos/octocat/Hello-World/issues/5/comments")
+            .insert_header(("Authorization", admin_bearer))
+            .to_request();
+        assert_eq!(
+            actix_test::call_service(&app, req).await.status(),
+            StatusCode::FORBIDDEN
+        );
+
+        unsafe {
+            std::env::remove_var("GITHUB_API_BASE");
+        }
+        cleanup(&pool, &[owner_id, admin_id], &[org_id]).await;
+    }
+
     #[actix_web::test]
     async fn personal_account_sees_empty_lists() {
         let pool = test_pool().await;
