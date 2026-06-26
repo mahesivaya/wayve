@@ -12,6 +12,43 @@
   margin-bottom: 18px;
 }
 
+/* ── Tab bar: one boxed block per audit table; the active one is filled. ── */
+.audit-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.audit-tab {
+  appearance: none;
+  cursor: pointer;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.audit-tab:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-primary-action);
+}
+
+.audit-tab.active {
+  color: var(--color-on-primary);
+  background: var(--color-primary-action);
+  border-color: var(--color-primary-action);
+}
+
+/* With one table visible per tab, let it use most of the viewport height and
+   scroll internally instead of capping at the stacked-layout's 420px. */
+.audit-security-tabbed .audit-table-wrap--scroll {
+  max-height: calc(100vh - 320px);
+}
+
 /* Override the global marketing-size h1 (56px / -1.68px tracking) that these
    in-app titles inherit — that oversized heading overlapped the subtitle.
    Scoped to the whole page so the permission-denied title (rendered outside

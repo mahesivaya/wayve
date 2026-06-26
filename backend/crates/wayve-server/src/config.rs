@@ -98,6 +98,12 @@ fn var_or(key: &str, default: &str) -> String {
     var_opt(key).unwrap_or_else(|| default.to_string())
 }
 
+/// Recipient (and calendar organizer) for "Book a demo" notifications.
+/// Override with `DEMO_NOTIFY_EMAIL`; defaults to the founder's inbox.
+pub fn demo_notify_email() -> String {
+    var_or("DEMO_NOTIFY_EMAIL", "maheshiv199@gmail.com")
+}
+
 /// The active environment name (`development` / `production` / ...).
 pub fn app_environment() -> String {
     var_opt("RWAYVE_ENV")
@@ -177,6 +183,30 @@ pub fn local_json_cache_max_capacity() -> u64 {
     var_opt("LOCAL_JSON_CACHE_MAX_CAPACITY")
         .and_then(|value| value.parse().ok())
         .unwrap_or(10_000)
+}
+
+/// Shared parse+guard for a retention-days env var: a positive integer, else
+/// the default. A non-positive or unparseable value falls back so the daily
+/// pruner (`startup::spawn_log_retention_pruner`) never deletes everything by
+/// accident.
+fn retention_days(key: &str, default: i32) -> i32 {
+    var_opt(key)
+        .and_then(|value| value.parse().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(default)
+}
+
+/// Retention window (days) for the low-value `activity_events` telemetry stream.
+/// Override with `ACTIVITY_RETENTION_DAYS`; defaults to 7.
+pub fn activity_retention_days() -> i32 {
+    retention_days("ACTIVITY_RETENTION_DAYS", 7)
+}
+
+/// Retention window (days) for the `audit_logs` security/audit trail. Override
+/// with `AUDIT_RETENTION_DAYS`; defaults to 7. Longer retention should be served
+/// by the SIEM export/forward (see `routes/audit.rs`), not by raising this alone.
+pub fn audit_retention_days() -> i32 {
+    retention_days("AUDIT_RETENTION_DAYS", 7)
 }
 
 // ---- Observability ------------------------------------------

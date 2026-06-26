@@ -218,6 +218,153 @@ function CommitSplitPatch({ patch }: { patch: string }) {
   );
 }
 
+// ── Pull request detail ─────────────────────────────────────────────
+//
+// The PR list (GitHubPull) only carries enough to render a row. Opening a
+// PR fetches these richer shapes through the same read-only proxy:
+//   * PullDetail   — /pulls/{n}              (body, +/− stats, head.sha, …)
+//   * CommitFile   — /pulls/{n}/files        (identical shape to commit
+//                                             files, so CommitSplitPatch
+//                                             renders them as-is)
+//   * IssueComment — /issues/{n}/comments    (the conversation comments)
+//   * PullReview   — /pulls/{n}/reviews      (approvals / change requests)
+//   * CheckRun     — /commits/{sha}/check-runs (CI status for head.sha)
+type PullDetail = {
+  number: number;
+  title: string;
+  html_url: string;
+  state: string;
+  draft?: boolean;
+  merged?: boolean;
+  body: string | null;
+  user: { login: string } | null;
+  head: { ref: string; sha: string };
+  base: { ref: string };
+  created_at: string;
+  additions?: number;
+  deletions?: number;
+  changed_files?: number;
+  labels?: Array<{ name: string }>;
+  requested_reviewers?: Array<{ login: string }>;
+};
+
+type IssueComment = {
+  id: number;
+  user: { login: string } | null;
+  body: string | null;
+  created_at: string;
+};
+
+type PullReview = {
+  id: number;
+  user: { login: string } | null;
+  body: string | null;
+  // APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED | PENDING
+  state: string;
+  submitted_at: string | null;
+};
+
+type CheckRun = {
+  id: number;
+  name: string;
+  // queued | in_progress | completed
+  status: string;
+  // success | failure | neutral | cancelled | skipped | timed_out | …
+  conclusion: string | null;
+};
+
+type CheckRunsResponse = {
+  total_count: number;
+  check_runs: CheckRun[];
+};
+
+// Everything we cache for one opened PR, fetched together so the detail
+// view renders in a single pass (mirrors commitDetailBySha for commits).
+type PullBundle = {
+  detail: PullDetail;
+  files: CommitFile[];
+  comments: IssueComment[];
+  reviews: PullReview[];
+  checks: CheckRun[];
+};
+
+// Comments and reviews merged into one chronological conversation.
+// `reviewState` is set only on review entries (drives the verdict badge).
+type TimelineEntry = {
+  key: string;
+  author: string;
+  body: string;
+  ts: string;
+  reviewState?: string;
+};
+
+// Status pill for a PR: merged / closed / draft / open (in that priority).
+function pullStatus(d: {
+  state: string;
+  draft?: boolean;
+  merged?: boolean;
+}): { label: string; cls: string } {
+  if (d.merged) return { label: "Merged", cls: "is-merged" };
+  if (d.state === "closed") return { label: "Closed", cls: "is-closed" };
+  if (d.draft) return { label: "Draft", cls: "is-draft" };
+  return { label: "Open", cls: "is-open" };
+}
+
+// Icon + label + class for one CI check run.
+function checkVisual(c: CheckRun): { icon: string; label: string; cls: string } {
+  if (c.status !== "completed") {
+    return { icon: "•", label: "Running", cls: "is-pending" };
+  }
+  switch (c.conclusion) {
+    case "success":
+      return { icon: "✓", label: "Passed", cls: "is-pass" };
+    case "failure":
+    case "timed_out":
+    case "action_required":
+      return { icon: "✕", label: "Failed", cls: "is-fail" };
+    default:
+      // neutral / skipped / cancelled / stale
+      return { icon: "–", label: c.conclusion ?? "—", cls: "is-neutral" };
+  }
+}
+
+// Badge for a review's verdict in the discussion timeline.
+function reviewBadge(state: string): { label: string; cls: string } {
+  switch (state) {
+    case "APPROVED":
+      return { label: "Approved", cls: "is-approved" };
+    case "CHANGES_REQUESTED":
+      return { label: "Changes requested", cls: "is-changes" };
+    case "DISMISSED":
+      return { label: "Dismissed", cls: "is-neutral" };
+    default:
+      return { label: "Commented", cls: "is-neutral" };
+  }
+}
+
+// Render a raw unified diff (the `?media=diff` fallback) with per-line
+// coloring — the same treatment the commit full-diff uses.
+function RawUnifiedDiff({ text }: { text: string }) {
+  return (
+    <pre className="github-commit-patch is-full">
+      {text.split("\n").map((line, idx) => {
+        let cls = "diff-ctx";
+        if (line.startsWith("diff --git")) cls = "diff-file";
+        else if (line.startsWith("@@")) cls = "diff-hunk";
+        else if (line.startsWith("+++") || line.startsWith("---"))
+          cls = "diff-file-marker";
+        else if (line.startsWith("+")) cls = "diff-add";
+        else if (line.startsWith("-")) cls = "diff-del";
+        return (
+          <span key={idx} className={`github-commit-patch-line ${cls}`}>
+            {line || " "}
+          </span>
+        );
+      })}
+    </pre>
+  );
+}
+
 type RunsResponse = {
   workflow_runs: WorkflowRun[];
   total_count: number;
@@ -692,6 +839,29 @@ function GitHubRepoViewer({
   const [pulls, setPulls] = useState<GitHubPull[]>([]);
   const [pullsLoading, setPullsLoading] = useState(false);
   const [pullsError, setPullsError] = useState("");
+  // Master ⇄ detail for the Pull Requests tab. `selectedPull` is the open
+  // PR number (null = list view). Each opened PR's detail + files +
+  // conversation + checks are fetched together and cached by number so
+  // re-opening is instant (mirrors commitDetailBySha).
+  const [selectedPull, setSelectedPull] = useState<number | null>(null);
+  const [pullBundleByNumber, setPullBundleByNumber] = useState<
+    Record<number, PullBundle>
+  >({});
+  const [loadingPullNumbers, setLoadingPullNumbers] = useState<Set<number>>(
+    new Set()
+  );
+  const [errorByPullNumber, setErrorByPullNumber] = useState<
+    Record<number, string>
+  >({});
+  // Raw unified-diff fallback for a PR (via ?media=diff), keyed by PR
+  // number — same opt-in the commit view uses when patches are omitted.
+  const [pullFullDiff, setPullFullDiff] = useState<Record<number, string>>({});
+  const [pullFullDiffLoading, setPullFullDiffLoading] = useState<Set<number>>(
+    new Set()
+  );
+  const [pullFullDiffError, setPullFullDiffError] = useState<
+    Record<number, string>
+  >({});
   // Per-commit detail (file diffs) loaded on demand when a commit row
   // is expanded. Cached by SHA so toggling open → closed → open doesn't
   // re-hit GitHub. Aux maps track which commits are expanded, currently
@@ -1016,6 +1186,118 @@ function GitHubRepoViewer({
     }
   }, [API_BASE]);
 
+  // Fetch one PR's full payload — detail, changed files, conversation
+  // (comments + reviews), and CI checks — through the same read-only proxy,
+  // then cache it by number. Detail is fetched first because its head.sha
+  // drives the check-runs lookup; the rest run in parallel and each degrades
+  // to empty on its own error (a missing checks API shouldn't blank the page).
+  const loadPullDetail = useCallback(
+    async (number: number, force = false) => {
+      if (!force && pullBundleByNumber[number]) return;
+      setLoadingPullNumbers((current) => new Set(current).add(number));
+      setErrorByPullNumber((current) => {
+        const next = { ...current };
+        delete next[number];
+        return next;
+      });
+      try {
+        const detail = await githubJson<PullDetail>(
+          `${API_BASE}/pulls/${number}`
+        );
+        const [files, comments, reviews, checks] = await Promise.all([
+          githubJson<CommitFile[]>(
+            `${API_BASE}/pulls/${number}/files?per_page=100`
+          ).catch(() => [] as CommitFile[]),
+          githubJson<IssueComment[]>(
+            `${API_BASE}/issues/${number}/comments?per_page=100`
+          ).catch(() => [] as IssueComment[]),
+          githubJson<PullReview[]>(
+            `${API_BASE}/pulls/${number}/reviews?per_page=100`
+          ).catch(() => [] as PullReview[]),
+          detail.head?.sha
+            ? githubJson<CheckRunsResponse>(
+                `${API_BASE}/commits/${detail.head.sha}/check-runs`
+              )
+                .then((r) => r.check_runs ?? [])
+                .catch(() => [] as CheckRun[])
+            : Promise.resolve([] as CheckRun[]),
+        ]);
+        setPullBundleByNumber((current) => ({
+          ...current,
+          [number]: { detail, files, comments, reviews, checks },
+        }));
+      } catch (err) {
+        setErrorByPullNumber((current) => ({
+          ...current,
+          [number]:
+            err instanceof Error
+              ? err.message
+              : "Could not load this pull request",
+        }));
+      } finally {
+        setLoadingPullNumbers((current) => {
+          const next = new Set(current);
+          next.delete(number);
+          return next;
+        });
+      }
+    },
+    [API_BASE, pullBundleByNumber]
+  );
+
+  // Open a PR into the detail view and kick off its fetch.
+  const openPull = useCallback(
+    (number: number) => {
+      setSelectedPull(number);
+      void loadPullDetail(number);
+    },
+    [loadPullDetail]
+  );
+
+  // Raw unified diff for a PR via the proxy's `?media=diff` opt-in — the
+  // fallback when GitHub omits per-file patches (large files). Cached by
+  // number. Mirrors loadFullDiff for commits.
+  const loadPullFullDiff = useCallback(
+    async (number: number) => {
+      if (pullFullDiff[number]) return;
+      setPullFullDiffLoading((current) => new Set(current).add(number));
+      setPullFullDiffError((current) => {
+        const next = { ...current };
+        delete next[number];
+        return next;
+      });
+      try {
+        const token = getAuthToken();
+        const response = await fetch(`${API_BASE}/pulls/${number}?media=diff`, {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!response.ok) {
+          throw new Error(`GitHub diff failed (${response.status})`);
+        }
+        const text = await response.text();
+        const capped =
+          text.length > 2_000_000
+            ? `${text.slice(0, 2_000_000)}\n\n…diff truncated; open on GitHub for the full patch`
+            : text;
+        setPullFullDiff((current) => ({ ...current, [number]: capped }));
+      } catch (err) {
+        setPullFullDiffError((current) => ({
+          ...current,
+          [number]:
+            err instanceof Error ? err.message : "Could not load full diff",
+        }));
+      } finally {
+        setPullFullDiffLoading((current) => {
+          const next = new Set(current);
+          next.delete(number);
+          return next;
+        });
+      }
+    },
+    [API_BASE, pullFullDiff]
+  );
+
   // Fetch the per-commit detail (which includes the patch for every changed
   // file) via the same /api/github proxy the rest of this page uses, and cache
   // it by SHA. Skips the network when already cached unless `force` is set
@@ -1190,6 +1472,9 @@ function GitHubRepoViewer({
     void loadReadme(branch);
     void loadWorkflows(branch);
     void loadCommits(branch);
+    // Reopening the PR list (vs. a stale detail) whenever the repo/branch
+    // changes keeps the tab coherent across repo switches.
+    setSelectedPull(null);
     void loadPulls();
     // Actions list is now branch-agnostic (a push to any branch should
     // surface), so we only refresh it on the initial repo load and
@@ -1848,47 +2133,346 @@ function GitHubRepoViewer({
             </div>
           )}
 
-          {activeSection === "pulls" && (
-            <div className="github-panel">
-              <div className="github-panel-head">
-                <h2>Pull Requests</h2>
-                <span>{pulls.length}</span>
-              </div>
-              {pullsLoading ? (
-                <div className="github-empty">Loading pull requests…</div>
-              ) : pullsError ? (
-                <div className="github-empty">{pullsError}</div>
-              ) : pulls.length === 0 ? (
-                <div className="github-empty">No open pull requests.</div>
-              ) : (
-                pulls.map((pr) => (
-                  <div key={pr.number} className="github-pr-node">
-                    <div className="github-pr-main">
-                      <strong className="github-pr-title">{pr.title}</strong>
-                      <small className="github-pr-meta">
-                        #{pr.number} · {pr.user?.login ?? "unknown"} ·{" "}
-                        {pr.head.ref} → {pr.base.ref} ·{" "}
-                        {formatDate(pr.created_at)}
-                      </small>
+          {activeSection === "pulls" &&
+            (selectedPull == null ? (
+              <div className="github-panel">
+                <div className="github-panel-head">
+                  <h2>Pull Requests</h2>
+                  <span>{pulls.length}</span>
+                </div>
+                {pullsLoading ? (
+                  <div className="github-empty">Loading pull requests…</div>
+                ) : pullsError ? (
+                  <div className="github-empty">{pullsError}</div>
+                ) : pulls.length === 0 ? (
+                  <div className="github-empty">No open pull requests.</div>
+                ) : (
+                  pulls.map((pr) => (
+                    <div key={pr.number} className="github-pr-node">
+                      <button
+                        type="button"
+                        className="github-pr-main github-pr-open-btn"
+                        onClick={() => openPull(pr.number)}
+                      >
+                        <strong className="github-pr-title">{pr.title}</strong>
+                        <small className="github-pr-meta">
+                          #{pr.number} · {pr.user?.login ?? "unknown"} ·{" "}
+                          {pr.head.ref} → {pr.base.ref} ·{" "}
+                          {formatDate(pr.created_at)}
+                        </small>
+                      </button>
+                      <span
+                        className={`github-pr-status ${pr.draft ? "is-draft" : "is-open"}`}
+                      >
+                        {pr.draft ? "Draft" : "Open"}
+                      </span>
+                      <a
+                        className="github-pr-link"
+                        href={pr.html_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open on GitHub →
+                      </a>
                     </div>
-                    <span
-                      className={`github-pr-status ${pr.draft ? "is-draft" : "is-open"}`}
-                    >
-                      {pr.draft ? "Draft" : "Open"}
-                    </span>
-                    <a
-                      className="github-pr-link"
-                      href={pr.html_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open on GitHub →
-                    </a>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="github-panel">
+                <div className="github-pr-detail-head">
+                  <button
+                    type="button"
+                    className="github-link-btn"
+                    onClick={() => setSelectedPull(null)}
+                  >
+                    ← Back to pull requests
+                  </button>
+                </div>
+                {loadingPullNumbers.has(selectedPull) ? (
+                  <div className="github-empty">Loading pull request…</div>
+                ) : errorByPullNumber[selectedPull] ? (
+                  <div className="github-banner">
+                    {errorByPullNumber[selectedPull]}
                   </div>
-                ))
-              )}
-            </div>
-          )}
+                ) : !pullBundleByNumber[selectedPull] ? (
+                  <div className="github-empty">
+                    Couldn't load this pull request.{" "}
+                    <button
+                      type="button"
+                      className="github-link-btn"
+                      onClick={() => void loadPullDetail(selectedPull, true)}
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                ) : (
+                  (() => {
+                    const bundle = pullBundleByNumber[selectedPull];
+                    const d = bundle.detail;
+                    const status = pullStatus(d);
+                    const passed = bundle.checks.filter(
+                      (c) => c.conclusion === "success"
+                    ).length;
+                    // Comments + meaningful reviews, oldest first. A bare
+                    // COMMENTED review with no body is GitHub's wrapper around
+                    // inline code comments — drop it so the thread stays clean.
+                    const timeline: TimelineEntry[] = [
+                      ...bundle.comments.map((c) => ({
+                        key: `c${c.id}`,
+                        author: c.user?.login ?? "unknown",
+                        body: c.body ?? "",
+                        ts: c.created_at,
+                      })),
+                      ...bundle.reviews
+                        .filter(
+                          (r) =>
+                            Boolean(r.body?.trim()) ||
+                            r.state === "APPROVED" ||
+                            r.state === "CHANGES_REQUESTED" ||
+                            r.state === "DISMISSED"
+                        )
+                        .map((r) => ({
+                          key: `r${r.id}`,
+                          author: r.user?.login ?? "unknown",
+                          body: r.body ?? "",
+                          ts: r.submitted_at ?? "",
+                          reviewState: r.state,
+                        })),
+                    ].sort(
+                      (a, b) => Date.parse(a.ts || "") - Date.parse(b.ts || "")
+                    );
+                    const hasMissingPatch = bundle.files.some(
+                      (f) =>
+                        !f.patch &&
+                        f.status !== "added" &&
+                        f.status !== "removed"
+                    );
+                    const rawDiff = pullFullDiff[selectedPull];
+                    return (
+                      <div className="github-pr-detail">
+                        <header className="github-pr-detail-title">
+                          <h2>
+                            {d.title}{" "}
+                            <span className="github-pr-num">#{d.number}</span>
+                          </h2>
+                          <span className={`github-pr-status ${status.cls}`}>
+                            {status.label}
+                          </span>
+                        </header>
+                        <div className="github-pr-detail-meta">
+                          <span>{d.user?.login ?? "unknown"}</span>
+                          <span>
+                            {d.head.ref} → {d.base.ref}
+                          </span>
+                          <span>{formatDate(d.created_at)}</span>
+                          {typeof d.changed_files === "number" && (
+                            <span>
+                              {d.changed_files}{" "}
+                              {d.changed_files === 1 ? "file" : "files"}
+                            </span>
+                          )}
+                          {(d.additions != null || d.deletions != null) && (
+                            <span>
+                              <span className="github-commit-stat is-add">
+                                +{d.additions ?? 0}
+                              </span>{" "}
+                              <span className="github-commit-stat is-del">
+                                −{d.deletions ?? 0}
+                              </span>
+                            </span>
+                          )}
+                          <a
+                            className="github-pr-link"
+                            href={d.html_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open on GitHub →
+                          </a>
+                        </div>
+                        {((d.requested_reviewers?.length ?? 0) > 0 ||
+                          (d.labels?.length ?? 0) > 0) && (
+                          <div className="github-pr-detail-tags">
+                            {d.requested_reviewers?.map((r) => (
+                              <span
+                                key={r.login}
+                                className="github-pr-reviewer"
+                              >
+                                @{r.login}
+                              </span>
+                            ))}
+                            {d.labels?.map((l) => (
+                              <span key={l.name} className="github-pr-label">
+                                {l.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {d.body?.trim() && (
+                          <section className="github-pr-section">
+                            <h3>Description</h3>
+                            <pre className="github-pr-body">{d.body}</pre>
+                          </section>
+                        )}
+
+                        <section className="github-pr-section">
+                          <h3>
+                            Checks
+                            {bundle.checks.length > 0 && (
+                              <small>
+                                {passed}/{bundle.checks.length} passed
+                              </small>
+                            )}
+                          </h3>
+                          {bundle.checks.length === 0 ? (
+                            <div className="github-empty">
+                              No checks reported.
+                            </div>
+                          ) : (
+                            <ul className="github-pr-checks">
+                              {bundle.checks.map((c) => {
+                                const ck = checkVisual(c);
+                                return (
+                                  <li
+                                    key={c.id}
+                                    className={`github-pr-check ${ck.cls}`}
+                                  >
+                                    <span className="github-pr-check-icon">
+                                      {ck.icon}
+                                    </span>
+                                    <span className="github-pr-check-name">
+                                      {c.name}
+                                    </span>
+                                    <span className="github-pr-check-state">
+                                      {ck.label}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </section>
+
+                        <section className="github-pr-section">
+                          <h3>
+                            Discussion
+                            {timeline.length > 0 && (
+                              <small>{timeline.length}</small>
+                            )}
+                          </h3>
+                          {timeline.length === 0 ? (
+                            <div className="github-empty">
+                              No conversation yet.
+                            </div>
+                          ) : (
+                            <ul className="github-pr-thread">
+                              {timeline.map((e) => (
+                                <li key={e.key} className="github-pr-comment">
+                                  <div className="github-pr-comment-head">
+                                    <strong>{e.author}</strong>
+                                    {e.reviewState && (
+                                      <span
+                                        className={`github-pr-review-badge ${reviewBadge(e.reviewState).cls}`}
+                                      >
+                                        {reviewBadge(e.reviewState).label}
+                                      </span>
+                                    )}
+                                    {e.ts && <small>{formatDate(e.ts)}</small>}
+                                  </div>
+                                  {e.body.trim() && (
+                                    <pre className="github-pr-comment-body">
+                                      {e.body}
+                                    </pre>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </section>
+
+                        <section className="github-pr-section">
+                          <h3>
+                            Files changed
+                            {bundle.files.length > 0 && (
+                              <small>{bundle.files.length}</small>
+                            )}
+                          </h3>
+                          {bundle.files.length === 0 ? (
+                            <div className="github-empty">
+                              No file changes to show.
+                            </div>
+                          ) : (
+                            bundle.files.map((file) => (
+                              <article
+                                key={file.filename}
+                                className={`github-commit-file status-${file.status}`}
+                              >
+                                <header className="github-commit-file-head">
+                                  <span className="github-commit-file-name">
+                                    {file.previous_filename
+                                      ? `${file.previous_filename} → ${file.filename}`
+                                      : file.filename}
+                                  </span>
+                                  <span className="github-commit-file-meta">
+                                    <em
+                                      className={`github-commit-status status-${file.status}`}
+                                    >
+                                      {file.status}
+                                    </em>
+                                    <span className="github-commit-stat is-add">
+                                      +{file.additions}
+                                    </span>
+                                    <span className="github-commit-stat is-del">
+                                      −{file.deletions}
+                                    </span>
+                                  </span>
+                                </header>
+                                {file.patch ? (
+                                  <CommitSplitPatch patch={file.patch} />
+                                ) : (
+                                  <div className="github-commit-nopatch">
+                                    Binary file or diff not available — open on
+                                    GitHub to view.
+                                  </div>
+                                )}
+                              </article>
+                            ))
+                          )}
+                          {(hasMissingPatch || rawDiff) && (
+                            <div className="github-commit-fulldiff">
+                              {!rawDiff && (
+                                <button
+                                  type="button"
+                                  className="github-commit-fulldiff-btn"
+                                  onClick={() =>
+                                    void loadPullFullDiff(selectedPull)
+                                  }
+                                  disabled={pullFullDiffLoading.has(
+                                    selectedPull
+                                  )}
+                                >
+                                  {pullFullDiffLoading.has(selectedPull)
+                                    ? "Loading full diff…"
+                                    : "Load full diff"}
+                                </button>
+                              )}
+                              {pullFullDiffError[selectedPull] && (
+                                <div className="github-banner">
+                                  {pullFullDiffError[selectedPull]}
+                                </div>
+                              )}
+                              {rawDiff && <RawUnifiedDiff text={rawDiff} />}
+                            </div>
+                          )}
+                        </section>
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            ))}
 
           {activeSection === "actions" && (
             <div className="github-panel">

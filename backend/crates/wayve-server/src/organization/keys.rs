@@ -758,6 +758,10 @@ pub async fn list_member_notes(
 
     ensure_member_of(pool.get_ref(), organization_id, target_user_id).await?;
 
+    // notes is RLS-enabled; this RBAC-gated recovery reads another member's
+    // rows, so it runs with the bypass GUC.
+    let mut tx = pool.begin().await?;
+    crate::db::apply_rls_bypass(&mut tx).await?;
     let rows = sqlx::query(
         "SELECT id, title, content, created_at, updated_at
          FROM notes
@@ -765,8 +769,9 @@ pub async fn list_member_notes(
          ORDER BY updated_at DESC",
     )
     .bind(target_user_id)
-    .fetch_all(pool.get_ref())
+    .fetch_all(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     if let Err(e) = write_audit_row(
         pool.get_ref(),

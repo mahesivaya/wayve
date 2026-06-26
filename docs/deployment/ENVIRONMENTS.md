@@ -208,6 +208,8 @@ endpoint; overridden only by tests (wiremock) or self-hosted gateways.
 ### Tuning & infra
 
 `LOCAL_JSON_CACHE_TTL_SECS` (60), `LOCAL_JSON_CACHE_MAX_CAPACITY` (10000),
+`ACTIVITY_RETENTION_DAYS` (7) / `AUDIT_RETENTION_DAYS` (7) — daily-pruner windows
+for `activity_events` and `audit_logs` respectively,
 `TRACING_LOG_MAX_BYTES`, `TRACING_LOG_MAX_ARCHIVES`; nginx: `CSP_CONNECT_SRC`,
 `NGINX_HOST` (in `infra/.env.<env>`). Frontend build-time `VITE_API_URL` /
 `VITE_WS_URL` remain as optional overrides but are superseded by `/api/config`.

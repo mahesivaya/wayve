@@ -23,14 +23,20 @@ fn note_from_row(row: sqlx::postgres::PgRow) -> Note {
 pub async fn list_notes(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let rows = sqlx::query(
-        "SELECT id, title, content, created_at, updated_at
-         FROM notes
-         WHERE user_id = $1
-         ORDER BY updated_at DESC",
-    )
-    .bind(user_id)
-    .fetch_all(pool.get_ref())
+    // RLS-scoped: the policy also enforces `user_id = app.user_id`; the explicit
+    // WHERE stays as defense-in-depth and keeps the query plan unchanged.
+    let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let rows = sqlx::query(
+            "SELECT id, title, content, created_at, updated_at
+             FROM notes
+             WHERE user_id = $1
+             ORDER BY updated_at DESC",
+        )
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        Ok((tx, rows))
+    })
     .await?;
 
     Ok(HttpResponse::Ok().json(rows.into_iter().map(note_from_row).collect::<Vec<_>>()))
@@ -48,15 +54,19 @@ pub async fn create_note(
     let title = data.title.as_deref().unwrap_or("Untitled");
     let content = data.content.as_deref().unwrap_or("");
 
-    let row = sqlx::query(
-        "INSERT INTO notes (user_id, title, content)
-         VALUES ($1, $2, $3)
-         RETURNING id, title, content, created_at, updated_at",
-    )
-    .bind(user_id)
-    .bind(title)
-    .bind(content)
-    .fetch_one(pool.get_ref())
+    let row = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let row = sqlx::query(
+            "INSERT INTO notes (user_id, title, content)
+             VALUES ($1, $2, $3)
+             RETURNING id, title, content, created_at, updated_at",
+        )
+        .bind(user_id)
+        .bind(title)
+        .bind(content)
+        .fetch_one(&mut *tx)
+        .await?;
+        Ok((tx, row))
+    })
     .await?;
 
     let note_id: i32 = row.get("id");
@@ -96,26 +106,32 @@ pub async fn update_note(
     let content = data.content.as_deref().unwrap_or("");
 
     // Capture the prior title so we can tell a rename from a content edit.
-    let old_title: Option<String> =
-        sqlx::query_scalar("SELECT title FROM notes WHERE id = $1 AND user_id = $2")
+    // Both reads/writes run in one RLS-scoped transaction.
+    let (old_title, row) =
+        crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+            let old_title: Option<String> =
+                sqlx::query_scalar("SELECT title FROM notes WHERE id = $1 AND user_id = $2")
+                    .bind(id)
+                    .bind(user_id)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+
+            let row = sqlx::query(
+                "UPDATE notes
+             SET title = $1, content = $2, updated_at = NOW()
+             WHERE id = $3 AND user_id = $4
+             RETURNING id, title, content, created_at, updated_at",
+            )
+            .bind(title)
+            .bind(content)
             .bind(id)
             .bind(user_id)
-            .fetch_optional(pool.get_ref())
-            .await?;
-
-    let row = sqlx::query(
-        "UPDATE notes
-         SET title = $1, content = $2, updated_at = NOW()
-         WHERE id = $3 AND user_id = $4
-         RETURNING id, title, content, created_at, updated_at",
-    )
-    .bind(title)
-    .bind(content)
-    .bind(id)
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
-    .await?
-    .ok_or(AppError::NotFound("note"))?;
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(AppError::NotFound("note"))?;
+            Ok((tx, (old_title, row)))
+        })
+        .await?;
 
     let renamed = old_title.as_deref() != Some(title);
     crate::audit::record_action(
@@ -152,12 +168,17 @@ pub async fn delete_note(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let id = path.into_inner();
 
-    let removed =
-        sqlx::query("DELETE FROM notes WHERE id = $1 AND user_id = $2 RETURNING title, content")
-            .bind(id)
-            .bind(user_id)
-            .fetch_optional(pool.get_ref())
-            .await?;
+    let removed = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let removed = sqlx::query(
+            "DELETE FROM notes WHERE id = $1 AND user_id = $2 RETURNING title, content",
+        )
+        .bind(id)
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        Ok((tx, removed))
+    })
+    .await?;
 
     let Some(row) = removed else {
         return Err(AppError::NotFound("note"));

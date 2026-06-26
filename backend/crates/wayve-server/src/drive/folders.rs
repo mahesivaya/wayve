@@ -134,22 +134,27 @@ pub async fn list_folders(
     query: web::Query<ListFoldersQuery>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let parent_folder_id = query.parent_folder_id;
 
     // `parent_folder_id IS NOT DISTINCT FROM $2` matches NULL when the param
     // is NULL — Postgres's regular `=` returns NULL on NULL operands, which
     // would silently drop the root-level case.
-    let rows = sqlx::query_as::<_, Folder>(
-        r#"
-        SELECT id, user_id, parent_folder_id, name, created_at
-          FROM folders
-         WHERE user_id = $1
-           AND parent_folder_id IS NOT DISTINCT FROM $2
-         ORDER BY name ASC
-        "#,
-    )
-    .bind(user_id)
-    .bind(query.parent_folder_id)
-    .fetch_all(pool.get_ref())
+    let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let rows = sqlx::query_as::<_, Folder>(
+            r#"
+            SELECT id, user_id, parent_folder_id, name, created_at
+              FROM folders
+             WHERE user_id = $1
+               AND parent_folder_id IS NOT DISTINCT FROM $2
+             ORDER BY name ASC
+            "#,
+        )
+        .bind(user_id)
+        .bind(parent_folder_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        Ok((tx, rows))
+    })
     .await?;
 
     Ok(HttpResponse::Ok().json(rows))

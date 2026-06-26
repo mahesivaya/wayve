@@ -44,15 +44,19 @@ fn normalize_status(value: Option<&str>) -> &'static str {
 pub async fn list_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    let rows = sqlx::query(
-        "SELECT id, name, description, priority, status, assigned_by, assignee,
-                created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url
-         FROM tasks
-         WHERE user_id = $1
-         ORDER BY priority DESC, created_at ASC, id ASC",
-    )
-    .bind(user_id)
-    .fetch_all(pool.get_ref())
+    let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let rows = sqlx::query(
+            "SELECT id, name, description, priority, status, assigned_by, assignee,
+                    created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url
+             FROM tasks
+             WHERE user_id = $1
+             ORDER BY priority DESC, created_at ASC, id ASC",
+        )
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        Ok((tx, rows))
+    })
     .await?;
 
     Ok(HttpResponse::Ok().json(rows.into_iter().map(task_from_row).collect::<Vec<_>>()))

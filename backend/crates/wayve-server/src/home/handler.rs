@@ -235,29 +235,42 @@ pub async fn home_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
 
 // ─────────────────────────── Recent ────────────────────────────
 
-#[allow(clippy::disallowed_methods)]
 async fn load_recent(pool: &PgPool, user_id: i32) -> Result<Vec<RecentItem>, sqlx::Error> {
-    let (note_rows, recent_email_rows) = tokio::try_join!(
-        sqlx::query(
-            "SELECT id, title, updated_at
-             FROM notes
-             WHERE user_id = $1
-             ORDER BY updated_at DESC
-             LIMIT 5",
-        )
-        .bind(user_id)
-        .fetch_all(pool),
-        sqlx::query(
-            "SELECT e.id, e.subject, e.subject_iv, e.subject_encrypted, e.created_at
-             FROM emails e
-             JOIN email_accounts a ON a.id = e.account_id
-             WHERE a.user_id = $1
-             ORDER BY e.created_at DESC
-             LIMIT 3",
-        )
-        .bind(user_id)
-        .fetch_all(pool),
-    )?;
+    // `notes` is RLS-enabled; run both reads in one user-scoped transaction so
+    // the notes policy (`user_id = app.user_id`) admits the caller's own rows.
+    // The GUC is set inline (this fn returns sqlx::Error) — mirrors db::apply_rls_user.
+    // Sequential rather than try_join — a single transaction is one connection.
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT set_config('app.user_id', $1, true)")
+        .bind(user_id.to_string())
+        .execute(&mut *tx)
+        .await?;
+    // Drop superuser so the notes RLS policy engages (mirrors db::apply_rls_user).
+    sqlx::query("SET LOCAL ROLE wayve_app")
+        .execute(&mut *tx)
+        .await?;
+    let note_rows = sqlx::query(
+        "SELECT id, title, updated_at
+         FROM notes
+         WHERE user_id = $1
+         ORDER BY updated_at DESC
+         LIMIT 5",
+    )
+    .bind(user_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let recent_email_rows = sqlx::query(
+        "SELECT e.id, e.subject, e.subject_iv, e.subject_encrypted, e.created_at
+         FROM emails e
+         JOIN email_accounts a ON a.id = e.account_id
+         WHERE a.user_id = $1
+         ORDER BY e.created_at DESC
+         LIMIT 3",
+    )
+    .bind(user_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
 
     let mut recent: Vec<(NaiveDateTime, RecentItem)> = Vec::new();
 

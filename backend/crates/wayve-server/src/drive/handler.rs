@@ -252,17 +252,22 @@ pub async fn get_files(
     // (rows where folder_id IS NULL). `IS NOT DISTINCT FROM` handles the
     // NULL case in a single query.
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let folder_id = query.folder_id;
 
-    let rows = sqlx::query_as::<_, FileRecord>(
-        "SELECT id, name, file_path, file_iv, size, created_at \
-           FROM drive_files \
-          WHERE user_id = $1 \
-            AND folder_id IS NOT DISTINCT FROM $2 \
-          ORDER BY created_at DESC",
-    )
-    .bind(user_id)
-    .bind(query.folder_id)
-    .fetch_all(pool.get_ref())
+    let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let rows = sqlx::query_as::<_, FileRecord>(
+            "SELECT id, name, file_path, file_iv, size, created_at \
+               FROM drive_files \
+              WHERE user_id = $1 \
+                AND folder_id IS NOT DISTINCT FROM $2 \
+              ORDER BY created_at DESC",
+        )
+        .bind(user_id)
+        .bind(folder_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        Ok((tx, rows))
+    })
     .await?;
 
     debug!(target: "http", user_id, count = rows.len(), "files listed");

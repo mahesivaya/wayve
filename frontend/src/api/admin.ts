@@ -70,6 +70,34 @@ export async function createAdminOrganization(
   return data;
 }
 
+// Provision a new ENTERPRISE organization + its owner account in one call. Same
+// endpoint as createAdminOrganization, with `tier: "enterprise"` so the backend
+// also attaches an active enterprise subscription (the org is enterprise-tier
+// immediately — the gate for Slack / MCP / standard-encryption features).
+export async function createEnterpriseOrganization(
+  input: CreateOrganizationInput
+): Promise<AdminOrganization> {
+  const res = await apiFetch("/api/admin/organizations", {
+    method: "POST",
+    preserve401: true,
+    body: JSON.stringify({
+      name: input.name,
+      admin_username: input.adminUsername,
+      admin_email: input.adminEmail,
+      admin_password: input.adminPassword,
+      tier: "enterprise",
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to create enterprise");
+  }
+
+  return data;
+}
+
 // A stored API key as shown in the admin UI. `key_preview` is redacted; the
 // raw key is returned only once, by generateOrganizationApiKey.
 export type ApiKey = {

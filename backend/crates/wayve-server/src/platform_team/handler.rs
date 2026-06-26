@@ -350,6 +350,10 @@ pub async fn users_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
     // tasks), each component restricted to personal users via a join on
     // users.account_type, so the total equals the sum of what each personal
     // user sees on their own profile.
+    // notes is RLS-enabled; this platform-staff rollup SUMs storage (incl.
+    // notes) across all personal users, so it runs with the bypass GUC.
+    let mut tx = pool.begin().await?;
+    crate::db::apply_rls_bypass(&mut tx).await?;
     let row = sqlx::query(
         r#"
         SELECT
@@ -380,8 +384,9 @@ pub async fn users_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
           )::BIGINT AS storage_used_bytes
         "#,
     )
-    .fetch_one(pool.get_ref())
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "users_total": row.try_get::<i64, _>("users_total").unwrap_or(0),
@@ -431,6 +436,10 @@ pub async fn platform_users(
         .filter(|s| !s.is_empty())
         .map(|s| format!("%{s}%"));
 
+    // notes is RLS-enabled; this platform-staff per-user table SUMs storage
+    // (incl. notes) for arbitrary users, so it runs with the bypass GUC.
+    let mut tx = pool.begin().await?;
+    crate::db::apply_rls_bypass(&mut tx).await?;
     let rows = sqlx::query(
         r#"
         SELECT
@@ -454,8 +463,9 @@ pub async fn platform_users(
     .bind(search.as_deref())
     .bind(limit)
     .bind(offset)
-    .fetch_all(pool.get_ref())
+    .fetch_all(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     let users: Vec<_> = rows
         .into_iter()

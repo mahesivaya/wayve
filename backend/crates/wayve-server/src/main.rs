@@ -11,6 +11,7 @@ mod call;
 mod chat;
 mod config;
 mod db;
+mod demo;
 mod docs;
 mod documents;
 mod drive;

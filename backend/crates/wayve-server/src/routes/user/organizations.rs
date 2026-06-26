@@ -49,6 +49,12 @@ pub struct CreateOrganizationInput {
     pub admin_username: Option<String>,
     pub admin_email: Option<String>,
     pub admin_password: Option<String>,
+    /// Optional plan tier to provision immediately. When `"enterprise"`, an active
+    /// enterprise subscription is attached in the same transaction so the org is
+    /// enterprise-tier at once (enterprise is not E2E, so the owner can sign in
+    /// and use it right away).
+    #[serde(default)]
+    pub tier: Option<String>,
 }
 
 /// Require the caller to be platform-scope staff holding `members:manage` — the
@@ -82,6 +88,10 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
         Err(response) => return Ok(response),
     }
 
+    // notes is RLS-enabled; this platform-staff query SUMs storage (incl. notes)
+    // across all orgs, so it runs with the bypass GUC.
+    let mut tx = pool.begin().await?;
+    crate::db::apply_rls_bypass(&mut tx).await?;
     let rows = sqlx::query(
         r#"
         SELECT
@@ -126,8 +136,9 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
         ORDER BY o.name
         "#,
     )
-    .fetch_all(pool.get_ref())
+    .fetch_all(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     let organizations: Vec<_> = rows
         .into_iter()
@@ -360,7 +371,38 @@ pub async fn admin_create_organization(
         }
     }
 
+    // Optionally make the org enterprise-tier immediately by attaching an active
+    // enterprise subscription in the same transaction as the org + owner.
+    let make_enterprise = data.tier.as_deref() == Some("enterprise");
+    if make_enterprise {
+        let plan_id: Option<i32> =
+            sqlx::query_scalar("SELECT id FROM plans WHERE code = 'enterprise'")
+                .fetch_optional(&mut *tx)
+                .await?;
+        let Some(plan_id) = plan_id else {
+            return Err(AppError::Internal(
+                "enterprise plan missing from plans table".into(),
+            ));
+        };
+        sqlx::query(
+            "INSERT INTO subscriptions (organization_id, plan_id, status) VALUES ($1, $2, 'active')",
+        )
+        .bind(organization_id)
+        .bind(plan_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
     tx.commit().await?;
+
+    // Materialize entitlements from the new subscription (post-commit so the
+    // refresh sees the committed row). Best-effort: a failure is logged, not fatal.
+    if make_enterprise
+        && let Err(e) =
+            refresh_entitlements(pool.get_ref(), BillingOwner::Organization(organization_id)).await
+    {
+        error!(target: "auth", organization_id, error = %e, "enterprise entitlement refresh failed");
+    }
 
     let user_count = if admin_json.is_null() { 0 } else { 1 };
     info!(target: "auth", admin_id, organization_id, "platform admin created organization");
@@ -369,6 +411,7 @@ pub async fn admin_create_organization(
         "name": organization_name,
         "slug": organization_slug,
         "user_count": user_count,
+        "tier": if make_enterprise { Some("enterprise") } else { None::<&str> },
         "admin": admin_json
     })))
 }
@@ -699,6 +742,8 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
             .await?;
 
     let mut tx = pool.begin().await?;
+    // notes is RLS-enabled; this authorized teardown removes other users' rows.
+    crate::db::apply_rls_bypass(&mut tx).await?;
 
     // Notes has user_id with no FK constraint (see init.sql:469), so it
     // doesn't ride the cascade on `users`. Wipe it explicitly for every
@@ -990,6 +1035,9 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
     .await;
 
     let mut tx = pool.begin().await?;
+    // notes is RLS-enabled; this authorized account deletion removes the
+    // caller's own rows.
+    crate::db::apply_rls_bypass(&mut tx).await?;
     // `notes.user_id` has no FK (see init.sql), so it doesn't ride the cascade
     // on `users`. Wipe it explicitly before the user row goes.
     sqlx::query("DELETE FROM notes WHERE user_id = $1")
@@ -1486,6 +1534,9 @@ pub async fn admin_delete_user(
     }
 
     let mut tx = pool.begin().await?;
+    // notes is RLS-enabled; this authorized admin deletion removes the target
+    // user's rows.
+    crate::db::apply_rls_bypass(&mut tx).await?;
 
     // Notes has user_id but no FK (see init.sql:469) — clean explicitly so
     // it doesn't leave orphan rows after the users-row cascade. Every other

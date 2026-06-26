@@ -581,6 +581,21 @@ ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS email_encrypted TEXT;
 ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS email_iv TEXT;
 
 
+-- Public "Book a demo" lead form (fluxze.com home → /book-demo). No auth: any
+-- visitor may submit. Each row is emailed to sales and turned into an .ics
+-- calendar invite. `scheduled_at` is the visitor's chosen slot, stored in UTC.
+CREATE TABLE IF NOT EXISTS demo_requests (
+    id           SERIAL PRIMARY KEY,
+    first_name   TEXT NOT NULL,
+    last_name    TEXT NOT NULL,
+    email        TEXT NOT NULL,
+    work_email   TEXT NOT NULL,
+    scheduled_at TIMESTAMPTZ NOT NULL,
+    emailed      BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
 DO $$ BEGIN
     CREATE TYPE message_status AS ENUM ('sent', 'delivered', 'read');
 EXCEPTION
@@ -1678,3 +1693,206 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_action
     ON audit_logs(action, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created
     ON audit_logs(created_at DESC);
+
+
+-- ============================================================================
+-- TENANT TAGGING (RLS phase 1) — tag tenant-owned rows with organization_id.
+--
+-- Foundation for Postgres Row-Level Security. RLS is NOT enabled here; this only
+-- guarantees every tenant-owned row carries a correct organization_id and stays
+-- that way via BEFORE INSERT triggers. The one-time backfill for pre-existing
+-- rows lives in infra/postgres/migrations/2026-06-org-tagging.sql (applied by
+-- hand to running DBs, since init.sql only runs on a fresh volume).
+--
+-- NOT org-tagged on purpose:
+--   * Chat is PARTICIPANT-SCOPED — messages, chat_attachments, channels,
+--     channel_members, channel_messages, channel_invites, channel_join_requests
+--     are visible by membership, not by org. Do NOT add org RLS to them; phase 2
+--     gives them participant policies.
+--   * GLOBAL / cross-tenant tables are never org-scoped — users, organizations,
+--     organization_members, platform_members, plans, subscriptions, invoices,
+--     billing_customers, entitlements, usage_events, api_keys, api_key_audit_log,
+--     password_reset_tokens, demo_requests, support_tickets, etc.
+-- Many tables already carry organization_id (email_accounts, projects, teams,
+-- slack_*, mcp_connections, org_documents, the org-key tables, …) — unchanged.
+-- ============================================================================
+
+-- columns (nullable: personal-account rows stay NULL = "no tenant")
+ALTER TABLE emails                  ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE email_attachments       ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE notes                   ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE tasks                   ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE task_attachments        ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE meetings                ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE meeting_participants    ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE drive_files             ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE folders                 ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE secure_messages         ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE user_jira_connections   ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+ALTER TABLE user_gitlab_connections ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_emails_org                  ON emails(organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_attachments_org       ON email_attachments(organization_id);
+CREATE INDEX IF NOT EXISTS idx_notes_org                   ON notes(organization_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_org                   ON tasks(organization_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_task_attachments_org        ON task_attachments(organization_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_org                ON meetings(organization_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_participants_org    ON meeting_participants(organization_id);
+CREATE INDEX IF NOT EXISTS idx_drive_files_org             ON drive_files(organization_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_folders_org                 ON folders(organization_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_secure_messages_org         ON secure_messages(organization_id);
+CREATE INDEX IF NOT EXISTS idx_user_jira_connections_org   ON user_jira_connections(organization_id);
+CREATE INDEX IF NOT EXISTS idx_user_gitlab_connections_org ON user_gitlab_connections(organization_id);
+
+-- triggers fill organization_id only when the app left it NULL (app-set wins)
+CREATE OR REPLACE FUNCTION set_org_from_user_id() RETURNS trigger AS $$
+BEGIN
+    IF NEW.organization_id IS NULL AND NEW.user_id IS NOT NULL THEN
+        SELECT u.organization_id INTO NEW.organization_id FROM users u WHERE u.id = NEW.user_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_org_from_sender_user_id() RETURNS trigger AS $$
+BEGIN
+    IF NEW.organization_id IS NULL AND NEW.sender_user_id IS NOT NULL THEN
+        SELECT u.organization_id INTO NEW.organization_id FROM users u WHERE u.id = NEW.sender_user_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_org_emails() RETURNS trigger AS $$
+BEGIN
+    IF NEW.organization_id IS NULL AND NEW.account_id IS NOT NULL THEN
+        SELECT ea.organization_id INTO NEW.organization_id FROM email_accounts ea WHERE ea.id = NEW.account_id;
+    END IF;
+    IF NEW.organization_id IS NULL AND NEW.recipient_user_id IS NOT NULL THEN
+        SELECT u.organization_id INTO NEW.organization_id FROM users u WHERE u.id = NEW.recipient_user_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_org_from_email_id() RETURNS trigger AS $$
+BEGIN
+    IF NEW.organization_id IS NULL AND NEW.email_id IS NOT NULL THEN
+        SELECT e.organization_id INTO NEW.organization_id FROM emails e WHERE e.id = NEW.email_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_org_from_meeting_id() RETURNS trigger AS $$
+BEGIN
+    IF NEW.organization_id IS NULL AND NEW.meeting_id IS NOT NULL THEN
+        SELECT m.organization_id INTO NEW.organization_id FROM meetings m WHERE m.id = NEW.meeting_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trg_set_org_notes                BEFORE INSERT ON notes                   FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_tasks                BEFORE INSERT ON tasks                   FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_task_attachments     BEFORE INSERT ON task_attachments        FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_meetings             BEFORE INSERT ON meetings                FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_drive_files          BEFORE INSERT ON drive_files             FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_folders              BEFORE INSERT ON folders                 FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_user_jira            BEFORE INSERT ON user_jira_connections   FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_user_gitlab          BEFORE INSERT ON user_gitlab_connections FOR EACH ROW EXECUTE FUNCTION set_org_from_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_secure_messages      BEFORE INSERT ON secure_messages         FOR EACH ROW EXECUTE FUNCTION set_org_from_sender_user_id();
+CREATE OR REPLACE TRIGGER trg_set_org_emails               BEFORE INSERT ON emails                  FOR EACH ROW EXECUTE FUNCTION set_org_emails();
+CREATE OR REPLACE TRIGGER trg_set_org_email_attachments    BEFORE INSERT ON email_attachments       FOR EACH ROW EXECUTE FUNCTION set_org_from_email_id();
+CREATE OR REPLACE TRIGGER trg_set_org_meeting_participants BEFORE INSERT ON meeting_participants    FOR EACH ROW EXECUTE FUNCTION set_org_from_meeting_id();
+
+
+-- ============================================================================
+-- RLS ENFORCEMENT (phase 2) — pilot table: notes.
+--
+-- `notes` are PRIVATE PER USER, so the policy is user-scoped: a row is only
+-- visible/writable to its owner (`user_id = app.user_id`), or to privileged
+-- already-authorized paths that bypass (platform rollups, org-admin member
+-- recovery, account/org teardown). GUCs are set transaction-local by the
+-- helpers in wayve-server/src/db.rs. Deny-by-default: no GUC set ⇒ no rows.
+--
+-- The connecting role is a SUPERUSER, which bypasses RLS. So request handlers
+-- `SET LOCAL ROLE wayve_app` (the restricted role below) inside an RLS-scoped
+-- transaction so the policy engages; workers/migrations/privileged paths stay
+-- the superuser and bypass. Every code path that touches `notes` must run
+-- inside a db.rs helper; a missed path is a visible 0-rows bug, never a leak.
+-- Other tables are NOT yet enforced — migrated one at a time (see docs/plan).
+-- ============================================================================
+
+-- Restricted, non-login app role that RLS-scoped transactions SET LOCAL ROLE
+-- into. Has read on everything + write on the RLS-enabled tables, so the
+-- migrated handlers (which join many tables) keep working under the role.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wayve_app') THEN
+        CREATE ROLE wayve_app NOSUPERUSER NOBYPASSRLS NOLOGIN;
+    END IF;
+END $$;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO wayve_app;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO wayve_app;
+GRANT INSERT, UPDATE, DELETE ON notes TO wayve_app;
+-- Tables/sequences created later (ensure_email_schema, future migrations) also
+-- grant read to wayve_app so newly-added read paths keep working under the role.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO wayve_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO wayve_app;
+
+ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notes FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS notes_rls ON notes;
+CREATE POLICY notes_rls ON notes
+    USING (
+        current_setting('app.bypass', true) = 'on'
+        OR user_id = nullif(current_setting('app.user_id', true), '')::int
+    )
+    WITH CHECK (
+        current_setting('app.bypass', true) = 'on'
+        OR user_id = nullif(current_setting('app.user_id', true), '')::int
+    );
+
+-- RLS phase 2, batch 2 — the rest of the user-private tables. Same user-scoped
+-- model as notes; meeting_participants scopes via its parent meeting. wayve_app
+-- already has SELECT on all tables; here we add write grants + per-table policy.
+DO $$
+DECLARE
+    t text; owner_col text; i int;
+    pairs text[][] := ARRAY[
+        ['tasks','user_id'], ['task_attachments','user_id'],
+        ['drive_files','user_id'], ['folders','user_id'],
+        ['meetings','user_id'], ['secure_messages','sender_user_id'],
+        ['user_jira_connections','user_id'], ['user_gitlab_connections','user_id']
+    ];
+BEGIN
+    FOR i IN 1 .. array_length(pairs, 1) LOOP
+        t := pairs[i][1]; owner_col := pairs[i][2];
+        EXECUTE format('GRANT INSERT, UPDATE, DELETE ON %I TO wayve_app', t);
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_rls', t);
+        EXECUTE format(
+            'CREATE POLICY %I ON %I USING (%s) WITH CHECK (%s)',
+            t || '_rls', t,
+            format($f$current_setting('app.bypass', true) = 'on' OR %I = nullif(current_setting('app.user_id', true), '')::int$f$, owner_col),
+            format($f$current_setting('app.bypass', true) = 'on' OR %I = nullif(current_setting('app.user_id', true), '')::int$f$, owner_col)
+        );
+    END LOOP;
+END $$;
+
+GRANT INSERT, UPDATE, DELETE ON meeting_participants TO wayve_app;
+ALTER TABLE meeting_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE meeting_participants FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS meeting_participants_rls ON meeting_participants;
+CREATE POLICY meeting_participants_rls ON meeting_participants
+    USING (
+        current_setting('app.bypass', true) = 'on'
+        OR EXISTS (SELECT 1 FROM meetings m WHERE m.id = meeting_participants.meeting_id
+                   AND m.user_id = nullif(current_setting('app.user_id', true), '')::int)
+    )
+    WITH CHECK (
+        current_setting('app.bypass', true) = 'on'
+        OR EXISTS (SELECT 1 FROM meetings m WHERE m.id = meeting_participants.meeting_id
+                   AND m.user_id = nullif(current_setting('app.user_id', true), '')::int)
+    );

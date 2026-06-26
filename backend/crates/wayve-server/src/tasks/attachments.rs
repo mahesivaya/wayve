@@ -165,14 +165,18 @@ pub async fn list_attachments(
         return Err(AppError::NotFound("task"));
     }
 
-    let rows = sqlx::query(
-        "SELECT id, task_id, name, file_type, size, created_at
-         FROM task_attachments
-         WHERE task_id = $1
-         ORDER BY created_at ASC, id ASC",
-    )
-    .bind(task_id)
-    .fetch_all(pool.get_ref())
+    let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let rows = sqlx::query(
+            "SELECT id, task_id, name, file_type, size, created_at
+             FROM task_attachments
+             WHERE task_id = $1
+             ORDER BY created_at ASC, id ASC",
+        )
+        .bind(task_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        Ok((tx, rows))
+    })
     .await?;
 
     Ok(HttpResponse::Ok().json(rows.into_iter().map(row_to_attachment).collect::<Vec<_>>()))

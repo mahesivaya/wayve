@@ -897,7 +897,7 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, has_redis: boo
             tokio::spawn(async move {
                 webhooks::spawn_dispatcher(webhook_pool).await;
             });
-            spawn_activity_pruner(pool.clone());
+            spawn_log_retention_pruner(pool.clone());
             spawn_chat_pubsub(has_redis);
         }
         RuntimeRole::Api => {
@@ -910,25 +910,45 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, has_redis: boo
             tokio::spawn(async move {
                 webhooks::spawn_dispatcher(webhook_pool).await;
             });
-            spawn_activity_pruner(pool.clone());
+            spawn_log_retention_pruner(pool.clone());
             spawn_chat_pubsub(has_redis);
         }
     }
 }
 
-/// Retention for the high-volume `activity_events` stream: delete anything older
-/// than 7 days, then repeat daily. Keeps the table bounded; the data is
-/// low-value telemetry, so a hard 7-day window is acceptable.
-fn spawn_activity_pruner(pool: PgPool) {
+/// Retention for the append-only log streams: delete anything older than each
+/// table's configured window, then repeat daily. Keeps the tables bounded.
+///
+/// - `activity_events` (`ACTIVITY_RETENTION_DAYS`, default 7) is low-value
+///   telemetry, so a short window is fine.
+/// - `audit_logs` (`AUDIT_RETENTION_DAYS`, default 7) is the security/audit
+///   trail; the window is a deliberate data-minimization choice. Anything
+///   needing longer retention is shipped off via the SIEM export/forward (see
+///   `routes/audit.rs`) before it ages out.
+///
+/// The window is bound as a parameter via `make_interval` (not string-formatted
+/// into the SQL) so the config value can never inject. Each table is pruned
+/// independently so a failure on one doesn't skip the other.
+fn spawn_log_retention_pruner(pool: PgPool) {
+    // (table, retention window in days). Resolved once at startup; an env change
+    // takes effect on the next restart, like the other config reads.
+    let tables: [(&str, i32); 2] = [
+        ("activity_events", crate::config::activity_retention_days()),
+        ("audit_logs", crate::config::audit_retention_days()),
+    ];
     tokio::spawn(async move {
         loop {
-            if let Err(e) = sqlx::query(
-                "DELETE FROM activity_events WHERE created_at < NOW() - INTERVAL '7 days'",
-            )
-            .execute(&pool)
-            .await
-            {
-                tracing::warn!(target: "activity", error = ?e, "activity_events prune failed");
+            for (table, retention_days) in tables {
+                let query = format!(
+                    "DELETE FROM {table} WHERE created_at < NOW() - make_interval(days => $1)"
+                );
+                if let Err(e) = sqlx::query(&query)
+                    .bind(retention_days)
+                    .execute(&pool)
+                    .await
+                {
+                    tracing::warn!(target: "activity", table, retention_days, error = ?e, "log retention prune failed");
+                }
             }
             tokio::time::sleep(Duration::from_secs(24 * 60 * 60)).await;
         }

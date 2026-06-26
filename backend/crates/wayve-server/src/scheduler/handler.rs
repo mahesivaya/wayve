@@ -288,8 +288,9 @@ pub async fn get_meetings(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
         Err(resp) => return Ok(resp),
     };
 
-    let rows = sqlx::query(
-        r#"
+    let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let rows = sqlx::query(
+            r#"
         SELECT
             m.id,
             m.title,
@@ -310,9 +311,12 @@ pub async fn get_meetings(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
         WHERE m.user_id = $1
         ORDER BY m.date, m.start_time, m.id, mp.id
         "#,
-    )
-    .bind(user_id)
-    .fetch_all(pool.get_ref())
+        )
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        Ok((tx, rows))
+    })
     .await?;
 
     let mut meetings = Vec::<Meeting>::new();

@@ -483,12 +483,13 @@ html[data-theme="dark"] .api-secrets-raw {
   cursor: pointer;
 }
 
-/* ── User Logs: two stacked blocks that fill the viewport, each scrolling
-   internally instead of growing the whole page. Scoped to .pt-userlogs so
-   other platform-team pages that share .pt-page / .pt-panel are untouched. */
+/* ── User Logs: a tab bar selects one of three tables; the active table fills
+   the viewport and scrolls internally instead of growing the whole page.
+   Scoped to .pt-userlogs so other platform-team pages that share
+   .pt-page / .pt-panel are untouched. */
 .pt-userlogs {
   /* Fill the height the split-pane gives us and never scroll the page itself —
-     the two panels own their own scroll. */
+     the active panel owns its own scroll. */
   flex: 1 1 0;
   height: 100%;
   min-height: 0;
@@ -499,22 +500,47 @@ html[data-theme="dark"] .api-secrets-raw {
   flex: 0 0 auto;
 }
 
+/* Tab bar: a non-shrinking row of separate, boxed blocks between the header
+   and the table — each tab is its own bordered card, the active one filled. */
+.pt-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pt-tab {
+  appearance: none;
+  cursor: pointer;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted, var(--color-text-muted));
+  background: var(--panel-bg, var(--color-surface));
+  border: 1px solid var(--panel-border, var(--color-border));
+  border-radius: 10px;
+}
+
+.pt-tab:hover {
+  color: var(--text-color, var(--color-text-primary));
+  border-color: var(--accent-color, var(--color-primary-action));
+}
+
+.pt-tab.active {
+  color: var(--color-on-primary);
+  background: var(--accent-color, var(--color-primary-action));
+  border-color: var(--accent-color, var(--color-primary-action));
+}
+
 .pt-userlogs .pt-panel {
-  /* Each block is a flex column: fixed head + a scrollable body that takes the
-     rest. min-height:0 lets the inner scroll area actually shrink. */
+  /* The active block is a flex column: fixed head + a scrollable body that
+     takes the rest. min-height:0 lets the inner scroll area actually shrink.
+     flex:1 makes the single visible panel fill all remaining height. */
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-}
-
-/* Activity (the main log) gets more room than Registration types. */
-.pt-userlogs .pt-userlogs-reg {
-  flex: 1 1 35%;
-}
-
-.pt-userlogs .pt-userlogs-activity {
-  flex: 2 1 65%;
 }
 
 .pt-userlogs .pt-panel-head {
