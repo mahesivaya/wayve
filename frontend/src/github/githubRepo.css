@@ -1500,6 +1500,46 @@
   cursor: not-allowed;
 }
 
+/* Prev/Next pager (Commits history) */
+.github-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 8px 6px;
+}
+
+.github-pager button {
+  padding: 7px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.github-pager button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary-action);
+}
+
+.github-pager button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.github-pager-label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  min-width: 64px;
+  text-align: center;
+}
+
 .github-actions-node {
   min-width: 0;
 }
