@@ -69,19 +69,23 @@ pub struct ResolvedAi {
     pub fail_closed: bool,
 }
 
-/// Resolve the AI provider for `user_id`:
-/// 1. the caller's org has an enabled `org_ai_configs` row → use it (this is what
-///    binds every member of the org to the owner's choice);
-/// 2. otherwise the platform default (Gemini from `GEMINI_API_KEY`).
+/// Resolve the AI provider for `user_id`, in order:
+/// 1. the caller's org has an enabled `org_ai_configs` row → use it (binds every
+///    member of the org to the owner's choice);
+/// 2. the caller is a **platform team member** and the platform owner configured
+///    `platform_ai_config` → use it (scoped strictly to platform members — this
+///    never touches org/personal resolution above);
+/// 3. otherwise the platform default (Gemini from `GEMINI_API_KEY`).
 ///
-/// `Ok(None)` means no provider is configured anywhere (no org config AND no
-/// platform key) — the caller should return "AI not configured".
+/// `Ok(None)` means no provider is configured anywhere — the caller should return
+/// "AI not configured".
 pub async fn resolve_ai_for_user(
     pool: &PgPool,
     user_id: i32,
 ) -> Result<Option<ResolvedAi>, AppError> {
-    // One round-trip: join the caller to their org's config. Members and the
-    // owner resolve identically — there is no per-user row.
+    // 1. Org config. One round-trip joining the caller to their org's config;
+    //    members and the owner resolve identically. Platform/personal users have
+    //    organization_id NULL, so this never matches for them.
     let row = sqlx::query(
         "SELECT c.provider, c.base_url, c.model, c.api_key_iv, c.api_key_encrypted, c.fail_closed
            FROM users u
@@ -91,40 +95,31 @@ pub async fn resolve_ai_for_user(
     .bind(user_id)
     .fetch_optional(pool)
     .await?;
-
     if let Some(row) = row {
-        let provider =
-            AiProvider::parse(&row.get::<String, _>("provider")).unwrap_or(AiProvider::Gemini);
-        let base_url: Option<String> = row.try_get("base_url").ok().flatten();
-        let model: Option<String> = row.try_get("model").ok().flatten();
-        let fail_closed: bool = row.try_get("fail_closed").unwrap_or(true);
-
-        let iv: Option<String> = row.try_get("api_key_iv").ok().flatten();
-        let enc: Option<String> = row.try_get("api_key_encrypted").ok().flatten();
-        let api_key = match (iv, enc) {
-            (Some(iv), Some(enc)) => decrypt(&iv, &enc)
-                .map_err(|e| AppError::Internal(format!("Failed to read AI credentials: {e}")))?,
-            // No stored key — only valid for Gemini, which may use the platform key.
-            _ => match (provider, crate::config::gemini_api_key()) {
-                (AiProvider::Gemini, Some(key)) => key,
-                _ => {
-                    return Err(AppError::Internal(
-                        "AI provider has no API key configured".into(),
-                    ));
-                }
-            },
-        };
-
-        return Ok(Some(ResolvedAi {
-            provider,
-            api_key,
-            model: model.unwrap_or_else(|| provider.default_model().to_string()),
-            base_url,
-            fail_closed,
-        }));
+        return Ok(Some(resolved_from_row(&row)?));
     }
 
-    // Platform default — Gemini from env; `None` when unset.
+    // 2. Platform-team config. Only platform members read the platform owner's
+    //    choice; orgs/personal users never reach here (their resolution ended
+    //    above or falls through to the env default below).
+    let is_platform_member: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM platform_members WHERE user_id = $1)")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await?;
+    if is_platform_member {
+        let prow = sqlx::query(
+            "SELECT provider, base_url, model, api_key_iv, api_key_encrypted, fail_closed
+               FROM platform_ai_config WHERE id = 1 AND enabled",
+        )
+        .fetch_optional(pool)
+        .await?;
+        if let Some(row) = prow {
+            return Ok(Some(resolved_from_row(&row)?));
+        }
+    }
+
+    // 3. Platform default — Gemini from env; `None` when unset.
     Ok(crate::config::gemini_api_key().map(|api_key| ResolvedAi {
         provider: AiProvider::Gemini,
         api_key,
@@ -132,4 +127,39 @@ pub async fn resolve_ai_for_user(
         base_url: None,
         fail_closed: false,
     }))
+}
+
+/// Build a [`ResolvedAi`] from a config row (org or platform — both project the
+/// same columns). Decrypts the stored key, or falls back to the platform Gemini
+/// env key when the row stored none (only valid for Gemini).
+fn resolved_from_row(row: &sqlx::postgres::PgRow) -> Result<ResolvedAi, AppError> {
+    let provider =
+        AiProvider::parse(&row.get::<String, _>("provider")).unwrap_or(AiProvider::Gemini);
+    let base_url: Option<String> = row.try_get("base_url").ok().flatten();
+    let model: Option<String> = row.try_get("model").ok().flatten();
+    let fail_closed: bool = row.try_get("fail_closed").unwrap_or(true);
+
+    let iv: Option<String> = row.try_get("api_key_iv").ok().flatten();
+    let enc: Option<String> = row.try_get("api_key_encrypted").ok().flatten();
+    let api_key = match (iv, enc) {
+        (Some(iv), Some(enc)) => decrypt(&iv, &enc)
+            .map_err(|e| AppError::Internal(format!("Failed to read AI credentials: {e}")))?,
+        // No stored key — only valid for Gemini, which may use the platform key.
+        _ => match (provider, crate::config::gemini_api_key()) {
+            (AiProvider::Gemini, Some(key)) => key,
+            _ => {
+                return Err(AppError::Internal(
+                    "AI provider has no API key configured".into(),
+                ));
+            }
+        },
+    };
+
+    Ok(ResolvedAi {
+        provider,
+        api_key,
+        model: model.unwrap_or_else(|| provider.default_model().to_string()),
+        base_url,
+        fail_closed,
+    })
 }

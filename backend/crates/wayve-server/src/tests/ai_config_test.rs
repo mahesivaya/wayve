@@ -102,6 +102,24 @@ mod tests {
         uid
     }
 
+    /// Promote a local user to a platform OWNER (account_type + platform_members
+    /// row, which is what `resolve_ai_for_user`'s platform-member check reads).
+    async fn make_platform_owner(pool: &PgPool, user_id: i32) {
+        sqlx::query("UPDATE users SET account_type = 'platform_admin' WHERE id = $1")
+            .bind(user_id)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("set platform_admin: {e}"));
+        sqlx::query(
+            "INSERT INTO platform_members (user_id, role) VALUES ($1, 'owner')
+             ON CONFLICT (user_id) DO UPDATE SET role = 'owner'",
+        )
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("platform member: {e}"));
+    }
+
     async fn cleanup(pool: &PgPool, org_id: i32) {
         let _ = sqlx::query("DELETE FROM organization_members WHERE organization_id = $1")
             .bind(org_id)
@@ -422,6 +440,99 @@ mod tests {
             std::env::remove_var("GEMINI_API_KEY");
         }
         cleanup(&pool, org_id).await;
+        drop(mock);
+    }
+
+    // A PLATFORM owner can configure the platform-team provider (no enterprise
+    // tier required), it's stored in the platform_ai_config singleton encrypted,
+    // platform members resolve it, and a non-platform user is UNAFFECTED (falls
+    // back to the env default) — i.e. platform config never touches org/personal.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn platform_owner_configures_and_only_platform_members_resolve() {
+        let mock = MockServer::start().await;
+        mount_anthropic_ok(&mock).await;
+        unsafe {
+            std::env::set_var("AES_KEY", HEX64_TEST_KEY);
+            std::env::set_var("ANTHROPIC_API_BASE", mock.uri());
+            std::env::set_var("GEMINI_API_KEY", "platform-gemini-key");
+        }
+
+        let pool = test_pool().await;
+        let email = random_email();
+        let owner = insert_local_user(&pool, &email, "password123").await;
+        make_platform_owner(&pool, owner).await;
+        let bearer = format!("Bearer {}", jwt_for(owner, &email));
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(ai::config_handler::get_config)
+                .service(ai::config_handler::put_config)
+                .service(ai::config_handler::delete_config),
+        )
+        .await;
+
+        // Platform owner selects Anthropic — accepted WITHOUT an enterprise tier.
+        let req = actix_test::TestRequest::put()
+            .uri("/ai/config")
+            .insert_header(("Authorization", bearer.clone()))
+            .set_json(serde_json::json!({
+                "provider": "anthropic",
+                "api_key": "sk-plat-secret"
+            }))
+            .to_request();
+        assert_eq!(
+            actix_test::call_service(&app, req).await.status(),
+            StatusCode::OK
+        );
+
+        // Stored in the platform singleton, encrypted.
+        let row = sqlx::query(
+            "SELECT provider, api_key_iv, api_key_encrypted FROM platform_ai_config WHERE id = 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("platform config row: {e}"));
+        assert_eq!(row.get::<String, _>("provider"), "anthropic");
+        let iv: String = row.get("api_key_iv");
+        let enc: String = row.get("api_key_encrypted");
+        assert_eq!(decrypt(&iv, &enc).unwrap_or_default(), "sk-plat-secret");
+
+        // The platform owner (a platform member) resolves the platform provider.
+        let resolved = ai::provider::resolve_ai_for_user(&pool, owner)
+            .await
+            .unwrap_or_else(|e| panic!("resolve owner: {e}"))
+            .unwrap_or_else(|| panic!("platform owner should resolve a provider"));
+        assert_eq!(resolved.provider, ai::provider::AiProvider::Anthropic);
+        assert_eq!(resolved.api_key, "sk-plat-secret");
+
+        // A personal (non-platform, non-org) user is UNAFFECTED — falls back to
+        // the env default Gemini, never the platform-team config.
+        let outsider_email = random_email();
+        let outsider = insert_local_user(&pool, &outsider_email, "password123").await;
+        let outsider_ai = ai::provider::resolve_ai_for_user(&pool, outsider)
+            .await
+            .unwrap_or_else(|e| panic!("resolve outsider: {e}"))
+            .unwrap_or_else(|| panic!("outsider should resolve the env default"));
+        assert_eq!(outsider_ai.provider, ai::provider::AiProvider::Gemini);
+
+        drop(app);
+        unsafe {
+            std::env::remove_var("ANTHROPIC_API_BASE");
+            std::env::remove_var("GEMINI_API_KEY");
+        }
+        let _ = sqlx::query("DELETE FROM platform_ai_config WHERE id = 1")
+            .execute(&pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM platform_members WHERE user_id = $1")
+            .bind(owner)
+            .execute(&pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM users WHERE id = $1 OR id = $2")
+            .bind(owner)
+            .bind(outsider)
+            .execute(&pool)
+            .await;
         drop(mock);
     }
 }

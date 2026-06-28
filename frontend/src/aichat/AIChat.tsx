@@ -1,16 +1,57 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import "./aichat.css";
 
-import { sendAiChat, type AiTurn } from "../api/ai";
+import { sendAiChat, getAiProvider, type AiTurn } from "../api/ai";
 import { useGlobalSearch } from "../search/SearchContext";
+import { useAuth } from "../auth/useAuth";
+import { hasPermission } from "../auth/permissions";
+
+// Friendly labels for the provider ids the backend returns (mirrors the catalog
+// in ai/config_handler.rs). Unknown ids fall back to the raw id.
+const PROVIDER_LABELS: Record<string, string> = {
+  gemini: "Gemini",
+  anthropic: "Claude",
+  openai_compatible: "OpenAI-compatible",
+};
 
 export default function AIChat() {
   const { normalizedSearchQuery } = useGlobalSearch();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<AiTurn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string | null>(null);
+  const [model, setModel] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // An enterprise org owner OR a platform owner (both have ai:manage) can change
+  // the provider — gate the shortcut exactly like the /settings/ai page does.
+  const canManageAi =
+    hasPermission(user, "ai:manage") &&
+    (user?.current_plan?.tier === "enterprise" || user?.scope === "platform");
+
+  const providerName = provider ? (PROVIDER_LABELS[provider] ?? provider) : null;
+  const badgeText = providerName ?? "AI assistant";
+  const chatWith = providerName ?? "your AI assistant";
+
+  // Show the real provider on load (before any message) so the header never
+  // mislabels the assistant. Best-effort: on failure we keep the neutral label.
+  useEffect(() => {
+    let cancelled = false;
+    void getAiProvider()
+      .then((info) => {
+        if (cancelled) return;
+        setProvider(info.provider);
+        setModel(info.model);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Pin the scroll to the bottom whenever new messages arrive.
   useEffect(() => {
@@ -31,6 +72,10 @@ export default function AIChat() {
 
     try {
       const data = await sendAiChat(next);
+      // Keep the header in sync if the resolved provider changed (e.g. the owner
+      // just switched it in /settings/ai).
+      if (data.provider) setProvider(data.provider);
+      if (data.model) setModel(data.model);
       const reply = (data.reply ?? "").trim();
 
       if (!reply) {
@@ -72,13 +117,25 @@ export default function AIChat() {
         <div className="ai-chat-title">
           <span className="ai-chat-icon">✨</span>
           AI Chat
-          <span className="ai-chat-sub">Gemini</span>
+          <span className="ai-chat-sub">{badgeText}</span>
+          {model && <span className="ai-chat-model">{model}</span>}
         </div>
-        {messages.length > 0 && (
-          <button className="ai-chat-clear" onClick={clear} disabled={busy}>
-            Clear
-          </button>
-        )}
+        <div className="ai-chat-actions">
+          {canManageAi && (
+            <button
+              className="ai-chat-settings"
+              onClick={() => navigate("/settings/ai")}
+              title="Change the AI provider for your organization"
+            >
+              ⚙ AI settings
+            </button>
+          )}
+          {messages.length > 0 && (
+            <button className="ai-chat-clear" onClick={clear} disabled={busy}>
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="ai-chat-messages" ref={scrollRef}>
@@ -87,7 +144,7 @@ export default function AIChat() {
             <div className="ai-chat-empty-icon">✨</div>
             <div className="ai-chat-empty-title">Ask anything</div>
             <div className="ai-chat-empty-hint">
-              Type a message below to start chatting with Gemini.
+              Type a message below to start chatting with {chatWith}.
             </div>
           </div>
         )}

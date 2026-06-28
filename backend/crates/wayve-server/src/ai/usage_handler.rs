@@ -3,7 +3,7 @@
 //! real numbers is a drop-in replacement for `sample_usage`. Gated exactly like
 //! the config endpoints (enterprise owner) via `require_ai_owner`.
 
-use crate::ai::config_handler::require_ai_owner;
+use crate::ai::config_handler::{AiOwner, require_ai_owner};
 use crate::prelude::*;
 use sqlx::Row;
 use tracing::instrument;
@@ -17,13 +17,22 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let org_id = require_ai_owner(pool.get_ref(), user_id).await?;
+    let owner = require_ai_owner(pool.get_ref(), user_id).await?;
 
-    // Label the dashboard with the org's actual provider/model when configured.
-    let row = sqlx::query("SELECT provider, model FROM org_ai_configs WHERE organization_id = $1")
-        .bind(org_id)
-        .fetch_optional(pool.get_ref())
-        .await?;
+    // Label the dashboard with the owner's actual provider/model when configured.
+    let row = match owner {
+        AiOwner::Org(org_id) => {
+            sqlx::query("SELECT provider, model FROM org_ai_configs WHERE organization_id = $1")
+                .bind(org_id)
+                .fetch_optional(pool.get_ref())
+                .await?
+        }
+        AiOwner::Platform => {
+            sqlx::query("SELECT provider, model FROM platform_ai_config WHERE id = 1")
+                .fetch_optional(pool.get_ref())
+                .await?
+        }
+    };
     let provider = row
         .as_ref()
         .map(|r| r.get::<String, _>("provider"))

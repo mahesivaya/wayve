@@ -76,3 +76,24 @@ pub async fn ai_chat(
         "model": ai.model,
     })))
 }
+
+/// GET /api/ai/provider — the resolved provider/model the caller's assistant runs
+/// on, so the UI can label itself truthfully instead of assuming Gemini. Mirrors
+/// the resolution `ai_chat` uses (org-configured provider, else platform Gemini).
+/// Returns ONLY the provider id + model — never the API key — so it is safe for
+/// every authenticated user, members included. `null` when nothing is configured.
+#[get("/ai/provider")]
+#[instrument(target = "ai", skip(req, pool))]
+pub async fn get_ai_provider(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+
+    let (provider, model) = match resolve_ai_for_user(pool.get_ref(), user_id).await? {
+        Some(ai) => (Some(ai.provider.as_str()), Some(ai.model)),
+        None => (None, None),
+    };
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "provider": provider,
+        "model": model,
+    })))
+}
