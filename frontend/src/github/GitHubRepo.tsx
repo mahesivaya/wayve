@@ -11,6 +11,7 @@ import {
   linkProjectRepo,
   type Project,
 } from "../api/workspace";
+import { approvePullRequest } from "../api/github";
 import "./githubRepo.css";
 
 // The platform team's legacy single-repo dashboard (the bare /github route
@@ -945,6 +946,14 @@ function GitHubRepoViewer({
   const [collapsedPrSections, setCollapsedPrSections] = useState<Set<string>>(
     new Set()
   );
+  // PR approval (owner-only write). `approvingPull` is the number mid-request;
+  // `approvedPulls` reflects a successful approve optimistically (the proxied
+  // reviews list stays cached for the TTL); errors carry GitHub's own message.
+  const [approvingPull, setApprovingPull] = useState<number | null>(null);
+  const [approvedPulls, setApprovedPulls] = useState<Set<number>>(new Set());
+  const [approveErrorByPull, setApproveErrorByPull] = useState<
+    Record<number, string>
+  >({});
   // Per-commit detail (file diffs) loaded on demand when a commit row
   // is expanded. Cached by SHA so toggling open → closed → open doesn't
   // re-hit GitHub. Aux maps track which commits are expanded, currently
@@ -1379,6 +1388,32 @@ function GitHubRepoViewer({
     },
     [loadPullDetail]
   );
+
+  // Owner approves the PR via the backend proxy. Optimistic on success; on
+  // failure surface GitHub's verbatim message (e.g. a 422 "Can not approve your
+  // own pull request." or a 403 when the server token lacks write scope).
+  const approvePull = async (prNumber: number) => {
+    setApprovingPull(prNumber);
+    setApproveErrorByPull((cur) => {
+      const next = { ...cur };
+      delete next[prNumber];
+      return next;
+    });
+    try {
+      await approvePullRequest(owner, repoName, prNumber);
+      setApprovedPulls((cur) => new Set(cur).add(prNumber));
+    } catch (err) {
+      setApproveErrorByPull((cur) => ({
+        ...cur,
+        [prNumber]:
+          err instanceof Error
+            ? err.message
+            : "Couldn't approve this pull request.",
+      }));
+    } finally {
+      setApprovingPull(null);
+    }
+  };
 
   // Raw unified diff for a PR via the proxy's `?media=diff` opt-in — the
   // fallback when GitHub omits per-file patches (large files). Cached by
@@ -2679,6 +2714,41 @@ function GitHubRepoViewer({
                           </div>
 
                           <aside className="github-pr-side-col">
+                            {d.state === "open" && !d.merged && (
+                              <div className="github-pr-card github-pr-approve-card">
+                                <span className="github-pr-card-title">
+                                  Owner review
+                                </span>
+                                {approvedPulls.has(selectedPull) ||
+                                bundle.reviews.some(
+                                  (r) => r.state === "APPROVED"
+                                ) ? (
+                                  <div className="github-pr-approved">
+                                    ✓ Approved
+                                  </div>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="github-pr-approve-btn"
+                                      onClick={() =>
+                                        void approvePull(selectedPull)
+                                      }
+                                      disabled={approvingPull === selectedPull}
+                                    >
+                                      {approvingPull === selectedPull
+                                        ? "Approving…"
+                                        : "Approve pull request"}
+                                    </button>
+                                    {approveErrorByPull[selectedPull] && (
+                                      <div className="github-pr-approve-err">
+                                        {approveErrorByPull[selectedPull]}
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
                             <div className="github-pr-card">
                               <button
                                 type="button"

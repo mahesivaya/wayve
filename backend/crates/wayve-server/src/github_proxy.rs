@@ -25,11 +25,11 @@
 
 use crate::cache::TtlCache;
 use crate::email::oauth::HTTP_CLIENT;
-use actix_web::{HttpRequest, HttpResponse, Responder, get, web};
+use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web};
 use once_cell::sync::Lazy;
 use sqlx::PgPool;
 use std::time::Duration;
-use tracing::{instrument, warn};
+use tracing::{info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::rbac::{Role, Scope, resolve_role_context};
 
@@ -124,49 +124,41 @@ fn is_pr_path(tail: &str) -> bool {
     segs.len() >= 4 && segs[0] == "repos" && (segs[3] == "pulls" || segs[3] == "issues")
 }
 
-#[get("/github/{tail:.*}")]
-#[instrument(target = "http", skip(req, pool))]
-pub async fn github_proxy(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    path: web::Path<String>,
-) -> impl Responder {
-    // Authenticated callers only — the shared upstream PAT is never exposed to
-    // anonymous requests. Beyond that, authorization is per-caller so the proxy
-    // can't be used as an open relay against arbitrary (incl. token-readable
-    // private) repos:
-    //   * Platform staff keep full access (the legacy single-repo dashboard).
-    //   * Personal accounts may read ONLY `repos/{owner}/{repo}/...` for a repo
-    //     they've linked to one of their own projects (the allowlist).
-    //   * Organization members may read ONLY `repos/{owner}/{repo}/...` for a
-    //     repo their org owner linked to one of the org's projects.
-    let Some(user_id) = get_user_id_from_request(&req) else {
-        return HttpResponse::Unauthorized().finish();
+/// Run the full per-caller authorization chain against a `repos/{owner}/{repo}/…`
+/// style `tail`, returning `Ok(())` when the caller may touch it or `Err(resp)`
+/// carrying the exact 401/403/500 to return verbatim. Shared by the read proxy
+/// and the PR-approve write endpoint so both enforce the identical scope,
+/// repo-allowlist, and owner-only-PR gates (no drift between read and write).
+async fn authorize_github_access(
+    req: &HttpRequest,
+    pool: &PgPool,
+    tail: &str,
+) -> std::result::Result<(), HttpResponse> {
+    let Some(user_id) = get_user_id_from_request(req) else {
+        return Err(HttpResponse::Unauthorized().finish());
     };
-    let ctx = match resolve_role_context(pool.get_ref(), user_id).await {
+    let ctx = match resolve_role_context(pool, user_id).await {
         Ok(ctx) => ctx,
         Err(e) => {
             warn!(target: "auth", user_id, error = ?e, "github proxy rbac resolution failed");
-            return HttpResponse::InternalServerError().finish();
+            return Err(HttpResponse::InternalServerError().finish());
         }
     };
 
     // Guests never see code, regardless of scope.
     if ctx.role == Role::Guest {
         warn!(target: "auth", user_id, "github proxy denied: guest role");
-        return HttpResponse::Forbidden().json(serde_json::json!({
+        return Err(HttpResponse::Forbidden().json(serde_json::json!({
             "message": "You don't have access to this repository"
-        }));
+        })));
     }
-
-    let tail = path.into_inner();
 
     match ctx.scope {
         Scope::Platform => {
             // Feature gate: the platform owner can restrict which platform roles
             // may use the Code Repo viewer (mirrors the org gate below).
             match crate::feature_access::handler::is_allowed_platform(
-                pool.get_ref(),
+                pool,
                 "code_repo",
                 ctx.role.as_str(),
             )
@@ -176,20 +168,20 @@ pub async fn github_proxy(
                 Ok(false) => {
                     warn!(target: "auth", user_id, role = ctx.role.as_str(),
                           "github proxy denied: code_repo disabled for platform role");
-                    return HttpResponse::Forbidden().json(serde_json::json!({
+                    return Err(HttpResponse::Forbidden().json(serde_json::json!({
                         "message": "Your role doesn't have access to Code Repo"
-                    }));
+                    })));
                 }
                 Err(e) => {
                     warn!(target: "auth", user_id, error = ?e,
                           "github proxy: platform feature access lookup failed");
-                    return HttpResponse::InternalServerError().finish();
+                    return Err(HttpResponse::InternalServerError().finish());
                 }
             }
         }
         Scope::Personal => {
-            let Some((owner, repo)) = parse_repos_tail(&tail) else {
-                return HttpResponse::Forbidden().finish();
+            let Some((owner, repo)) = parse_repos_tail(tail) else {
+                return Err(HttpResponse::Forbidden().finish());
             };
             // Allowlist: the repo must be linked to one of THIS user's projects.
             // GitHub owner/repo are case-insensitive, so compare with LOWER().
@@ -202,24 +194,24 @@ pub async fn github_proxy(
             .bind(user_id)
             .bind(&owner)
             .bind(&repo)
-            .fetch_one(pool.get_ref())
+            .fetch_one(pool)
             .await;
             if !matches!(linked, Ok(true)) {
                 warn!(target: "auth", user_id, owner = %owner, repo = %repo,
                       "github proxy denied: repo not linked to caller");
-                return HttpResponse::Forbidden().json(serde_json::json!({
+                return Err(HttpResponse::Forbidden().json(serde_json::json!({
                     "message": "You don't have access to this repository"
-                }));
+                })));
             }
         }
         Scope::Organization => {
             let Some(org_id) = ctx.organization_id else {
-                return HttpResponse::Forbidden().finish();
+                return Err(HttpResponse::Forbidden().finish());
             };
             // Feature gate: the org owner can restrict which roles may use the
             // Code Repo viewer at all (separate from the per-repo allowlist).
             match crate::feature_access::handler::is_allowed(
-                pool.get_ref(),
+                pool,
                 org_id,
                 "code_repo",
                 ctx.role.as_str(),
@@ -230,18 +222,18 @@ pub async fn github_proxy(
                 Ok(false) => {
                     warn!(target: "auth", user_id, role = ctx.role.as_str(),
                           "github proxy denied: code_repo disabled for role");
-                    return HttpResponse::Forbidden().json(serde_json::json!({
+                    return Err(HttpResponse::Forbidden().json(serde_json::json!({
                         "message": "Your role doesn't have access to Code Repo"
-                    }));
+                    })));
                 }
                 Err(e) => {
                     warn!(target: "auth", user_id, error = ?e,
                           "github proxy: feature access lookup failed");
-                    return HttpResponse::InternalServerError().finish();
+                    return Err(HttpResponse::InternalServerError().finish());
                 }
             }
-            let Some((owner, repo)) = parse_repos_tail(&tail) else {
-                return HttpResponse::Forbidden().finish();
+            let Some((owner, repo)) = parse_repos_tail(tail) else {
+                return Err(HttpResponse::Forbidden().finish());
             };
             // Allowlist: ANY member of the org may read a repo linked to one of
             // the org's projects (owner-only linking is enforced at link time).
@@ -254,30 +246,46 @@ pub async fn github_proxy(
             .bind(org_id)
             .bind(&owner)
             .bind(&repo)
-            .fetch_one(pool.get_ref())
+            .fetch_one(pool)
             .await;
             if !matches!(linked, Ok(true)) {
                 warn!(target: "auth", user_id, owner = %owner, repo = %repo,
                       "github proxy denied: repo not linked to caller's org");
-                return HttpResponse::Forbidden().json(serde_json::json!({
+                return Err(HttpResponse::Forbidden().json(serde_json::json!({
                     "message": "You don't have access to this repository"
-                }));
+                })));
             }
         }
     }
 
-    // Pull requests are visible to the OWNER of each scope only — personal,
-    // organization, enterprise, and platform owners (all resolve to
-    // `Role::Owner`). Layered on top of the per-scope repo/feature checks above,
-    // so a non-owner who can otherwise read the repo (org admin/member, platform
-    // support, etc.) still can't read its PRs. The UI hides the tab to match;
-    // this is the real enforcement.
-    if is_pr_path(&tail) && ctx.role != Role::Owner {
+    // Pull requests are visible to the OWNER of each scope only (personal, org,
+    // enterprise, and platform owners all resolve to `Role::Owner`). Layered on
+    // top of the per-scope repo/feature checks above, so a non-owner who can
+    // otherwise read the repo still can't touch its PRs.
+    if is_pr_path(tail) && ctx.role != Role::Owner {
         warn!(target: "auth", user_id, role = ctx.role.as_str(),
               "github proxy denied: pull requests are owner-only");
-        return HttpResponse::Forbidden().json(serde_json::json!({
+        return Err(HttpResponse::Forbidden().json(serde_json::json!({
             "message": "Only the owner can view pull requests"
-        }));
+        })));
+    }
+
+    Ok(())
+}
+
+#[get("/github/{tail:.*}")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn github_proxy(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<String>,
+) -> impl Responder {
+    // Authenticated, per-caller authorization (scope + repo allowlist +
+    // owner-only PR gate). Shared with the approve endpoint so read and write
+    // enforce the same rules. Returns the exact response to send on denial.
+    let tail = path.into_inner();
+    if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
+        return resp;
     }
 
     let query = req.query_string();
@@ -403,6 +411,153 @@ pub async fn github_proxy(
     builder.body(body)
 }
 
+/// Optional approval message. The frontend sends `{}` or `{"body":"…"}`.
+#[derive(serde::Deserialize, Default)]
+struct ApproveInput {
+    #[serde(default)]
+    body: Option<String>,
+}
+
+/// Build the GitHub review payload from the request body — always an `APPROVE`
+/// event, plus an optional non-blank `body` message. Tolerant of an empty or
+/// malformed payload (defaults to event-only) so a missing JSON body can't fail
+/// the approval.
+fn build_approve_review(payload: &[u8]) -> serde_json::Value {
+    let mut review = serde_json::json!({ "event": "APPROVE" });
+    if let Some(message) = serde_json::from_slice::<ApproveInput>(payload)
+        .ok()
+        .and_then(|input| input.body)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    {
+        review["body"] = serde_json::Value::String(message);
+    }
+    review
+}
+
+/// Owner-only: submit an `APPROVE` review for a pull request from the in-app
+/// code-repo viewer. Reuses the read proxy's authorization chain (so the repo
+/// allowlist AND the owner-only PR gate both apply), then POSTs to GitHub's
+/// reviews endpoint with the server-held PAT.
+///
+/// Approving REQUIRES a token with `Pull requests: write`, and GitHub rejects
+/// approving your own PR — those upstream errors (403 / 422) are mirrored back
+/// verbatim so the UI can surface GitHub's message.
+#[post("/github/repos/{owner}/{repo}/pulls/{number}/approve")]
+#[instrument(target = "http", skip(req, pool, payload))]
+pub async fn approve_pull_request(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(String, String, i64)>,
+    payload: web::Bytes,
+) -> impl Responder {
+    let (owner, repo, number) = path.into_inner();
+    // Reconstruct the canonical PR tail so the shared gate applies the repo
+    // allowlist and the owner-only PR check before any write reaches GitHub.
+    let tail = format!("repos/{owner}/{repo}/pulls/{number}");
+    if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
+        return resp;
+    }
+
+    // Approving can't be anonymous — without a PAT GitHub would 401 and the
+    // action is meaningless. Fail fast with a clear, non-401 message.
+    let Some(pat) = token() else {
+        warn!(target: "http", "pr approve denied: GITHUB_TOKEN not configured");
+        return HttpResponse::ServiceUnavailable().json(serde_json::json!({
+            "message": "GitHub isn't connected on the server (no token configured)."
+        }));
+    };
+
+    let review = build_approve_review(&payload);
+
+    let api_base = crate::external::github_api_base();
+    let url = format!("{api_base}/repos/{owner}/{repo}/pulls/{number}/reviews");
+    let response = match HTTP_CLIENT
+        .post(&url)
+        .timeout(Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app")
+        .header("Authorization", format!("Bearer {pat}"))
+        .json(&review)
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            warn!(target: "http", error = ?e, url = %url, "pr approve upstream call failed");
+            return HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Upstream GitHub call failed"
+            }));
+        }
+    };
+
+    // Mirror GitHub's status + JSON body so the UI surfaces upstream errors
+    // verbatim — e.g. 422 "Can not approve your own pull request." or a 403
+    // when the PAT lacks `Pull requests: write`.
+    let status = response.status().as_u16();
+    let body = match response.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => {
+            warn!(target: "http", error = ?e, "pr approve body read failed");
+            return HttpResponse::BadGateway().finish();
+        }
+    };
+    if (200..300).contains(&status) {
+        info!(target: "http", owner = %owner, repo = %repo, number, "pull request approved");
+    } else {
+        warn!(target: "http", status, owner = %owner, repo = %repo, number, "pr approve rejected by GitHub");
+    }
+    HttpResponse::build(
+        actix_web::http::StatusCode::from_u16(status).unwrap_or(actix_web::http::StatusCode::OK),
+    )
+    .insert_header(("Content-Type", "application/json"))
+    .body(body)
+}
+
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(github_proxy);
+    cfg.service(approve_pull_request);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn approve_review_without_message_is_event_only() {
+        let review = build_approve_review(b"{}");
+        assert_eq!(review["event"], "APPROVE");
+        assert!(review.get("body").is_none());
+    }
+
+    #[test]
+    fn approve_review_includes_trimmed_message() {
+        let review = build_approve_review(br#"{"body":"  LGTM  "}"#);
+        assert_eq!(review["event"], "APPROVE");
+        assert_eq!(review["body"], "LGTM");
+    }
+
+    #[test]
+    fn approve_review_ignores_blank_or_malformed_body() {
+        // Blank message → omitted; malformed JSON → still a valid approve.
+        assert!(
+            build_approve_review(br#"{"body":"   "}"#)
+                .get("body")
+                .is_none()
+        );
+        let from_garbage = build_approve_review(b"not json at all");
+        assert_eq!(from_garbage["event"], "APPROVE");
+        assert!(from_garbage.get("body").is_none());
+    }
+
+    #[test]
+    fn approve_tail_is_owner_gated_pr_path() {
+        // The reconstructed approve tail must trip the owner-only PR gate.
+        assert!(is_pr_path("repos/acme/widgets/pulls/42"));
+        assert_eq!(
+            parse_repos_tail("repos/acme/widgets/pulls/42"),
+            Some(("acme".to_string(), "widgets".to_string()))
+        );
+    }
 }
