@@ -3,6 +3,9 @@
   margin: 32px auto;
   padding: 0 24px 64px;
   color: var(--color-accent-indigo-darkest);
+  /* Own vertical scroll — the page host (.split-pane-body) clips overflow. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .sso-settings-header h1 {

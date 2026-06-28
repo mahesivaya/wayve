@@ -7,6 +7,9 @@
   margin: 0 auto;
   padding: 28px 20px 64px;
   color: var(--color-text-primary);
+  /* Own vertical scroll — the page host (.split-pane-body) clips overflow. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .ai-settings-header h1,

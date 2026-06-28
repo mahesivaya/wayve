@@ -6,6 +6,9 @@
   flex-direction: column;
   gap: 16px;
   color: var(--text-color, var(--color-text-primary));
+  /* Own vertical scroll — the page host (.split-pane-body) clips overflow. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .plan-admin-header {

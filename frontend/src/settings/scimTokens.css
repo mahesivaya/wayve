@@ -6,6 +6,11 @@
   flex-direction: column;
   gap: 16px;
   color: var(--text-color, var(--color-text-primary));
+  /* The page host (.split-pane-body) is overflow:hidden and stretches this
+     page to its height — so the page must own its own vertical scroll, or
+     tall content is clipped with no scrollbar. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .scim-tokens-header h1 {
