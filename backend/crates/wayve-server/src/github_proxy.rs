@@ -25,7 +25,7 @@
 
 use crate::cache::TtlCache;
 use crate::email::oauth::HTTP_CLIENT;
-use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web};
+use actix_web::{HttpRequest, HttpResponse, Responder, get, post, put, web};
 use once_cell::sync::Lazy;
 use sqlx::PgPool;
 use std::time::Duration;
@@ -435,6 +435,26 @@ fn build_approve_review(payload: &[u8]) -> serde_json::Value {
     review
 }
 
+/// Optional merge strategy. The frontend sends `{"merge_method":"merge"|"squash"|"rebase"}`.
+#[derive(serde::Deserialize, Default)]
+struct MergeInput {
+    #[serde(default)]
+    merge_method: Option<String>,
+}
+
+/// Build the GitHub merge payload from the request body. Only `merge`, `squash`,
+/// and `rebase` are accepted; anything else (or an empty/malformed payload)
+/// falls back to a merge commit — the repo's convention ("Merge pull request #N").
+fn build_merge_body(payload: &[u8]) -> serde_json::Value {
+    let method = serde_json::from_slice::<MergeInput>(payload)
+        .ok()
+        .and_then(|input| input.merge_method)
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| matches!(s.as_str(), "merge" | "squash" | "rebase"))
+        .unwrap_or_else(|| "merge".to_string());
+    serde_json::json!({ "merge_method": method })
+}
+
 /// Owner-only: submit an `APPROVE` review for a pull request from the in-app
 /// code-repo viewer. Reuses the read proxy's authorization chain (so the repo
 /// allowlist AND the owner-only PR gate both apply), then POSTs to GitHub's
@@ -515,9 +535,88 @@ pub async fn approve_pull_request(
     .body(body)
 }
 
+/// Owner-only: merge a pull request from the in-app code-repo viewer. Reuses the
+/// read proxy's authorization chain (so the repo allowlist AND the owner-only PR
+/// gate both apply), then PUTs to GitHub's merge endpoint with the server-held
+/// PAT and the chosen `merge_method` (merge / squash / rebase; defaults to a
+/// merge commit).
+///
+/// Merging REQUIRES a token with write access; GitHub's own errors (405 "Pull
+/// Request is not mergeable", 409 head-modified, 422) are mirrored back verbatim.
+#[put("/github/repos/{owner}/{repo}/pulls/{number}/merge")]
+#[instrument(target = "http", skip(req, pool, payload))]
+pub async fn merge_pull_request(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(String, String, i64)>,
+    payload: web::Bytes,
+) -> impl Responder {
+    let (owner, repo, number) = path.into_inner();
+    // Reconstruct the canonical PR tail so the shared gate applies the repo
+    // allowlist and the owner-only PR check before any write reaches GitHub.
+    let tail = format!("repos/{owner}/{repo}/pulls/{number}");
+    if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
+        return resp;
+    }
+
+    // Merging can't be anonymous — without a PAT GitHub would 401. Fail fast.
+    let Some(pat) = token() else {
+        warn!(target: "http", "pr merge denied: GITHUB_TOKEN not configured");
+        return HttpResponse::ServiceUnavailable().json(serde_json::json!({
+            "message": "GitHub isn't connected on the server (no token configured)."
+        }));
+    };
+
+    let merge_body = build_merge_body(&payload);
+
+    let api_base = crate::external::github_api_base();
+    let url = format!("{api_base}/repos/{owner}/{repo}/pulls/{number}/merge");
+    let response = match HTTP_CLIENT
+        .put(&url)
+        .timeout(Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app")
+        .header("Authorization", format!("Bearer {pat}"))
+        .json(&merge_body)
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            warn!(target: "http", error = ?e, url = %url, "pr merge upstream call failed");
+            return HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Upstream GitHub call failed"
+            }));
+        }
+    };
+
+    // Mirror GitHub's status + JSON body so the UI surfaces upstream errors
+    // verbatim — e.g. 405 "Pull Request is not mergeable" or 409 head-modified.
+    let status = response.status().as_u16();
+    let body = match response.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => {
+            warn!(target: "http", error = ?e, "pr merge body read failed");
+            return HttpResponse::BadGateway().finish();
+        }
+    };
+    if (200..300).contains(&status) {
+        info!(target: "http", owner = %owner, repo = %repo, number, "pull request merged");
+    } else {
+        warn!(target: "http", status, owner = %owner, repo = %repo, number, "pr merge rejected by GitHub");
+    }
+    HttpResponse::build(
+        actix_web::http::StatusCode::from_u16(status).unwrap_or(actix_web::http::StatusCode::OK),
+    )
+    .insert_header(("Content-Type", "application/json"))
+    .body(body)
+}
+
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(github_proxy);
     cfg.service(approve_pull_request);
+    cfg.service(merge_pull_request);
 }
 
 #[cfg(test)]
@@ -558,6 +657,34 @@ mod tests {
         assert_eq!(
             parse_repos_tail("repos/acme/widgets/pulls/42"),
             Some(("acme".to_string(), "widgets".to_string()))
+        );
+    }
+
+    #[test]
+    fn merge_body_defaults_to_merge_commit() {
+        assert_eq!(build_merge_body(b"{}")["merge_method"], "merge");
+        assert_eq!(build_merge_body(b"not json")["merge_method"], "merge");
+    }
+
+    #[test]
+    fn merge_body_accepts_valid_methods() {
+        assert_eq!(
+            build_merge_body(br#"{"merge_method":"squash"}"#)["merge_method"],
+            "squash"
+        );
+        // Case-insensitive normalisation.
+        assert_eq!(
+            build_merge_body(br#"{"merge_method":"REBASE"}"#)["merge_method"],
+            "rebase"
+        );
+    }
+
+    #[test]
+    fn merge_body_rejects_unknown_method() {
+        // An unknown/garbage method falls back to a merge commit, never forwarded.
+        assert_eq!(
+            build_merge_body(br#"{"merge_method":"yolo"}"#)["merge_method"],
+            "merge"
         );
     }
 }

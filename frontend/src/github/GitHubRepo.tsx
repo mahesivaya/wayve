@@ -11,7 +11,11 @@ import {
   linkProjectRepo,
   type Project,
 } from "../api/workspace";
-import { approvePullRequest } from "../api/github";
+import {
+  approvePullRequest,
+  mergePullRequest,
+  type MergeMethod,
+} from "../api/github";
 import "./githubRepo.css";
 
 // The platform team's legacy single-repo dashboard (the bare /github route
@@ -247,6 +251,11 @@ type PullDetail = {
   changed_files?: number;
   labels?: Array<{ name: string }>;
   requested_reviewers?: Array<{ login: string }>;
+  // GitHub computes mergeability asynchronously on the single-PR endpoint:
+  // `mergeable` is null until ready, then true / false (conflicts).
+  // `mergeable_state` is "clean" | "dirty" | "unstable" | "blocked" | "draft" | …
+  mergeable?: boolean | null;
+  mergeable_state?: string;
 };
 
 type IssueComment = {
@@ -954,6 +963,15 @@ function GitHubRepoViewer({
   const [approveErrorByPull, setApproveErrorByPull] = useState<
     Record<number, string>
   >({});
+  // PR merge (owner-only write). `mergingPull` is mid-request; `confirmMergePull`
+  // drives the two-step confirm; `mergeMethod` is the chosen strategy; errors
+  // carry GitHub's own message. On success the detail + list are refetched.
+  const [mergingPull, setMergingPull] = useState<number | null>(null);
+  const [confirmMergePull, setConfirmMergePull] = useState<number | null>(null);
+  const [mergeMethod, setMergeMethod] = useState<MergeMethod>("merge");
+  const [mergeErrorByPull, setMergeErrorByPull] = useState<
+    Record<number, string>
+  >({});
   // Per-commit detail (file diffs) loaded on demand when a commit row
   // is expanded. Cached by SHA so toggling open → closed → open doesn't
   // re-hit GitHub. Aux maps track which commits are expanded, currently
@@ -1412,6 +1430,34 @@ function GitHubRepoViewer({
       }));
     } finally {
       setApprovingPull(null);
+    }
+  };
+
+  // Owner merges the PR via the backend proxy. On success, refetch the detail
+  // (flips to merged → the action cards disappear) and the open-PR list (drops
+  // it + the count badge). On failure, surface GitHub's verbatim message.
+  const mergePull = async (prNumber: number) => {
+    setMergingPull(prNumber);
+    setConfirmMergePull(null);
+    setMergeErrorByPull((cur) => {
+      const next = { ...cur };
+      delete next[prNumber];
+      return next;
+    });
+    try {
+      await mergePullRequest(owner, repoName, prNumber, mergeMethod);
+      await loadPullDetail(prNumber, true);
+      await loadPulls();
+    } catch (err) {
+      setMergeErrorByPull((cur) => ({
+        ...cur,
+        [prNumber]:
+          err instanceof Error
+            ? err.message
+            : "Couldn't merge this pull request.",
+      }));
+    } finally {
+      setMergingPull(null);
     }
   };
 
@@ -2746,6 +2792,84 @@ function GitHubRepoViewer({
                                       </div>
                                     )}
                                   </>
+                                )}
+                              </div>
+                            )}
+                            {d.state === "open" && !d.merged && (
+                              <div className="github-pr-card github-pr-merge-card">
+                                <span className="github-pr-card-title">
+                                  Merge
+                                </span>
+                                {d.mergeable === false ? (
+                                  <div className="github-pr-merge-err">
+                                    This branch has conflicts that must be
+                                    resolved before it can be merged.
+                                  </div>
+                                ) : confirmMergePull === selectedPull ? (
+                                  <>
+                                    <div className="github-pr-merge-confirmtext">
+                                      Merge #{selectedPull} into{" "}
+                                      <code>{d.base.ref}</code>?
+                                    </div>
+                                    <div className="github-pr-merge-actions">
+                                      <button
+                                        type="button"
+                                        className="github-pr-merge-confirm"
+                                        onClick={() =>
+                                          void mergePull(selectedPull)
+                                        }
+                                        disabled={mergingPull === selectedPull}
+                                      >
+                                        {mergingPull === selectedPull
+                                          ? "Merging…"
+                                          : "Confirm merge"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="github-pr-merge-cancel"
+                                        onClick={() => setConfirmMergePull(null)}
+                                        disabled={mergingPull === selectedPull}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <select
+                                      className="github-pr-merge-method"
+                                      value={mergeMethod}
+                                      onChange={(e) =>
+                                        setMergeMethod(
+                                          e.target.value as MergeMethod
+                                        )
+                                      }
+                                    >
+                                      <option value="merge">
+                                        Create a merge commit
+                                      </option>
+                                      <option value="squash">
+                                        Squash and merge
+                                      </option>
+                                      <option value="rebase">
+                                        Rebase and merge
+                                      </option>
+                                    </select>
+                                    <button
+                                      type="button"
+                                      className="github-pr-merge-btn"
+                                      onClick={() =>
+                                        setConfirmMergePull(selectedPull)
+                                      }
+                                    >
+                                      Merge pull request
+                                    </button>
+                                  </>
+                                )}
+                                {mergeErrorByPull[selectedPull] && (
+                                  <div className="github-pr-merge-err">
+                                    {mergeErrorByPull[selectedPull]}
+                                  </div>
                                 )}
                               </div>
                             )}

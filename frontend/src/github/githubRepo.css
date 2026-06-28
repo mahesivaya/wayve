@@ -2515,6 +2515,67 @@
   line-height: 1.4;
   color: var(--color-danger);
 }
+/* Owner PR-merge card: method picker + (two-step) merge action. */
+.github-pr-merge-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+.github-pr-merge-method {
+  appearance: auto;
+  font: inherit;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+.github-pr-merge-btn,
+.github-pr-merge-confirm {
+  appearance: none;
+  border: 1px solid var(--color-success, #16a34a);
+  background: var(--color-success, #16a34a);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.github-pr-merge-btn:hover:not(:disabled),
+.github-pr-merge-confirm:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+.github-pr-merge-btn:disabled,
+.github-pr-merge-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.github-pr-merge-actions {
+  display: flex;
+  gap: 8px;
+}
+.github-pr-merge-cancel {
+  appearance: none;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.github-pr-merge-confirmtext {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--color-text-secondary, var(--color-text-primary));
+}
+.github-pr-merge-err {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--color-danger);
+}
 .github-pr-checks-sum {
   margin-left: auto;
   font-size: var(--text-sm);
