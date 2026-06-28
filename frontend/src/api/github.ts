@@ -62,3 +62,26 @@ export const approvePullRequest = (
       preserve401: true,
     }
   );
+
+export type MergeMethod = "merge" | "squash" | "rebase";
+
+// Owner-only: merge a PR via the backend proxy
+// (`PUT /api/github/repos/{owner}/{repo}/pulls/{n}/merge`). `mergeMethod`
+// defaults to a merge commit server-side. `preserve401` so a missing/invalid
+// server token surfaces as a handled error instead of logging the user out.
+// The backend mirrors GitHub's status, so the thrown error carries GitHub's own
+// message (e.g. "Pull Request is not mergeable.").
+export const mergePullRequest = (
+  owner: string,
+  repo: string,
+  prNumber: number,
+  mergeMethod: MergeMethod = "merge"
+) =>
+  apiFetchJson<{ merged?: boolean; sha?: string; message?: string }>(
+    `/api/github/repos/${owner}/${repo}/pulls/${prNumber}/merge`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ merge_method: mergeMethod }),
+      preserve401: true,
+    }
+  );
