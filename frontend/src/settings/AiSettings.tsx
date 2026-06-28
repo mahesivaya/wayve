@@ -25,6 +25,11 @@ export default function AiSettings() {
 
   const canManage = hasPermission(user, "ai:manage");
   const isEnterprise = user?.current_plan?.tier === "enterprise";
+  // Platform owners configure the platform team's provider (a separate, singleton
+  // config that applies only to platform members — never to any org). The backend
+  // accepts platform owners without an enterprise tier, so don't gate them on it.
+  const isPlatform = user?.scope === "platform";
+  const audience = isPlatform ? "platform team" : "organization";
 
   const [providers, setProviders] = useState<AiProviderOption[]>([]);
   const [config, setConfig] = useState<AiConfig | null>(null);
@@ -123,7 +128,11 @@ export default function AiSettings() {
       });
       setConfig(saved);
       setApiKey("");
-      setStatus("Saved. Your whole organization now uses this provider.");
+      setStatus(
+        isPlatform
+          ? "Saved. Your platform team now uses this provider."
+          : "Saved. Your whole organization now uses this provider."
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
     } finally {
@@ -134,7 +143,7 @@ export default function AiSettings() {
   async function onReset() {
     if (
       !window.confirm(
-        "Reset to the platform default AI? Your organization will fall back to the built-in provider."
+        `Reset to the default AI? Your ${audience} will fall back to the built-in provider.`
       )
     ) {
       return;
@@ -158,7 +167,7 @@ export default function AiSettings() {
       <header className="ai-settings-header">
         <h1>AI Provider</h1>
         <p>
-          Choose the AI your organization's assistant runs on — your own provider
+          Choose the AI your {audience}'s assistant runs on — your own provider
           account, key, and (optionally) endpoint. Every member uses what you
           select here; they can't change it. Keys are encrypted at rest and never
           shown again.
@@ -172,7 +181,7 @@ export default function AiSettings() {
         </button>
       </header>
 
-      {!isEnterprise && (
+      {!isEnterprise && !isPlatform && (
         <p className="ai-warn">
           Selecting your own AI provider is an <strong>Enterprise</strong>{" "}
           feature. Saving will be rejected until your organization is on the

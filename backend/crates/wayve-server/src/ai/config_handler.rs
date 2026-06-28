@@ -22,11 +22,39 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(delete_config);
 }
 
-/// Resolve the caller as the org's AI owner, or `Forbidden`.
+/// Who owns an AI provider config: an enterprise organization, or the platform
+/// team. Each maps to a different storage row (org_ai_configs vs the singleton
+/// platform_ai_config) and a different audience (an org's members vs platform
+/// team members) — the platform config never affects org/enterprise resolution.
+#[derive(Clone, Copy)]
+pub(crate) enum AiOwner {
+    Org(i32),
+    Platform,
+}
+
+impl AiOwner {
+    fn audit_resource_type(self) -> &'static str {
+        match self {
+            AiOwner::Org(_) => "org_ai_config",
+            AiOwner::Platform => "platform_ai_config",
+        }
+    }
+    fn audit_resource_id(self) -> String {
+        match self {
+            AiOwner::Org(id) => id.to_string(),
+            AiOwner::Platform => "platform".to_string(),
+        }
+    }
+}
+
+/// Resolve the caller as an AI-config owner, or `Forbidden`.
 ///
-/// Owner-only (`Role::Owner` — not super_admin/admin), organization scope, and
-/// the org must be on the enterprise tier. Returns the organization id.
-pub(crate) async fn require_ai_owner(pool: &PgPool, user_id: i32) -> Result<i32, AppError> {
+/// Owner-only (`Role::Owner` — not super_admin/admin). An **organization** owner
+/// must be on the enterprise tier and configures their org's provider. A
+/// **platform** owner configures the platform team's provider (which applies
+/// only to platform team members — never to any org). Personal owners are
+/// rejected (no scope to configure).
+pub(crate) async fn require_ai_owner(pool: &PgPool, user_id: i32) -> Result<AiOwner, AppError> {
     let ctx = resolve_role_context(pool, user_id)
         .await
         .map_err(AppError::from)?;
@@ -37,14 +65,150 @@ pub(crate) async fn require_ai_owner(pool: &PgPool, user_id: i32) -> Result<i32,
         Scope::Organization => {
             let org_id = ctx.organization_id.ok_or(AppError::Forbidden)?;
             if is_enterprise_org(pool, org_id).await? {
-                Ok(org_id)
+                Ok(AiOwner::Org(org_id))
             } else {
                 Err(AppError::Forbidden)
             }
         }
-        // The org-AI config is an organization feature; platform/personal owners
-        // have no org row to configure.
-        _ => Err(AppError::Forbidden),
+        Scope::Platform => Ok(AiOwner::Platform),
+        Scope::Personal => Err(AppError::Forbidden),
+    }
+}
+
+// ── Owner-scoped storage helpers ──────────────────────────────────────────
+// Each branches on the owner so the org path keeps hitting org_ai_configs
+// (unchanged) while the platform path hits the platform_ai_config singleton.
+
+/// Read the projected config row for `owner` (same column list for both tables).
+async fn load_config_row(
+    pool: &PgPool,
+    owner: AiOwner,
+) -> sqlx::Result<Option<sqlx::postgres::PgRow>> {
+    const COLS: &str =
+        "provider, base_url, model, api_key_encrypted, fail_closed, enabled, last_validated_at";
+    match owner {
+        AiOwner::Org(org_id) => {
+            sqlx::query(&format!(
+                "SELECT {COLS} FROM org_ai_configs WHERE organization_id = $1"
+            ))
+            .bind(org_id)
+            .fetch_optional(pool)
+            .await
+        }
+        AiOwner::Platform => {
+            sqlx::query(&format!(
+                "SELECT {COLS} FROM platform_ai_config WHERE id = 1"
+            ))
+            .fetch_optional(pool)
+            .await
+        }
+    }
+}
+
+/// Read the stored `(iv, encrypted)` key pair so an omitted key is preserved.
+async fn load_key_pair(
+    pool: &PgPool,
+    owner: AiOwner,
+) -> sqlx::Result<(Option<String>, Option<String>)> {
+    let row = match owner {
+        AiOwner::Org(org_id) => sqlx::query(
+            "SELECT api_key_iv, api_key_encrypted FROM org_ai_configs WHERE organization_id = $1",
+        )
+        .bind(org_id)
+        .fetch_optional(pool)
+        .await?,
+        AiOwner::Platform => {
+            sqlx::query("SELECT api_key_iv, api_key_encrypted FROM platform_ai_config WHERE id = 1")
+                .fetch_optional(pool)
+                .await?
+        }
+    };
+    Ok((
+        row.as_ref()
+            .and_then(|r| r.try_get("api_key_iv").ok().flatten()),
+        row.as_ref()
+            .and_then(|r| r.try_get("api_key_encrypted").ok().flatten()),
+    ))
+}
+
+/// Upsert the config for `owner`.
+#[allow(clippy::too_many_arguments)]
+async fn upsert_config(
+    pool: &PgPool,
+    owner: AiOwner,
+    provider: AiProvider,
+    base_url: &Option<String>,
+    model: &Option<String>,
+    store_iv: &Option<String>,
+    store_enc: &Option<String>,
+    fail_closed: bool,
+    user_id: i32,
+) -> sqlx::Result<()> {
+    match owner {
+        AiOwner::Org(org_id) => {
+            sqlx::query(
+                "INSERT INTO org_ai_configs
+                    (organization_id, provider, base_url, model, api_key_iv, api_key_encrypted,
+                     fail_closed, enabled, last_validated_at, connected_by, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(), $8, NOW())
+                 ON CONFLICT (organization_id) DO UPDATE SET
+                    provider = EXCLUDED.provider, base_url = EXCLUDED.base_url, model = EXCLUDED.model,
+                    api_key_iv = EXCLUDED.api_key_iv, api_key_encrypted = EXCLUDED.api_key_encrypted,
+                    fail_closed = EXCLUDED.fail_closed, enabled = TRUE, last_validated_at = NOW(),
+                    connected_by = EXCLUDED.connected_by, updated_at = NOW()",
+            )
+            .bind(org_id)
+            .bind(provider.as_str())
+            .bind(base_url)
+            .bind(model)
+            .bind(store_iv)
+            .bind(store_enc)
+            .bind(fail_closed)
+            .bind(user_id)
+            .execute(pool)
+            .await
+            .map(|_| ())
+        }
+        AiOwner::Platform => {
+            sqlx::query(
+                "INSERT INTO platform_ai_config
+                    (id, provider, base_url, model, api_key_iv, api_key_encrypted,
+                     fail_closed, enabled, last_validated_at, connected_by, updated_at)
+                 VALUES (1, $1, $2, $3, $4, $5, $6, TRUE, NOW(), $7, NOW())
+                 ON CONFLICT (id) DO UPDATE SET
+                    provider = EXCLUDED.provider, base_url = EXCLUDED.base_url, model = EXCLUDED.model,
+                    api_key_iv = EXCLUDED.api_key_iv, api_key_encrypted = EXCLUDED.api_key_encrypted,
+                    fail_closed = EXCLUDED.fail_closed, enabled = TRUE, last_validated_at = NOW(),
+                    connected_by = EXCLUDED.connected_by, updated_at = NOW()",
+            )
+            .bind(provider.as_str())
+            .bind(base_url)
+            .bind(model)
+            .bind(store_iv)
+            .bind(store_enc)
+            .bind(fail_closed)
+            .bind(user_id)
+            .execute(pool)
+            .await
+            .map(|_| ())
+        }
+    }
+}
+
+/// Delete the config for `owner` (reset to the platform/built-in default).
+async fn delete_config_row(pool: &PgPool, owner: AiOwner) -> sqlx::Result<()> {
+    match owner {
+        AiOwner::Org(org_id) => {
+            sqlx::query("DELETE FROM org_ai_configs WHERE organization_id = $1")
+                .bind(org_id)
+                .execute(pool)
+                .await
+                .map(|_| ())
+        }
+        AiOwner::Platform => sqlx::query("DELETE FROM platform_ai_config WHERE id = 1")
+            .execute(pool)
+            .await
+            .map(|_| ()),
     }
 }
 
@@ -96,15 +260,9 @@ fn default_true() -> bool {
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_config(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let org_id = require_ai_owner(pool.get_ref(), user_id).await?;
+    let owner = require_ai_owner(pool.get_ref(), user_id).await?;
 
-    let row = sqlx::query(
-        "SELECT provider, base_url, model, api_key_encrypted, fail_closed, enabled, last_validated_at
-           FROM org_ai_configs WHERE organization_id = $1",
-    )
-    .bind(org_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
+    let row = load_config_row(pool.get_ref(), owner).await?;
 
     let config = match row {
         Some(r) => serde_json::json!({
@@ -143,7 +301,7 @@ pub async fn put_config(
     body: web::Json<AiConfigInput>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let org_id = require_ai_owner(pool.get_ref(), user_id).await?;
+    let owner = require_ai_owner(pool.get_ref(), user_id).await?;
 
     let provider = AiProvider::parse(body.provider.trim())
         .ok_or_else(|| AppError::bad_request("Unknown AI provider"))?;
@@ -173,18 +331,7 @@ pub async fn put_config(
     }
 
     // Load the existing row so an omitted key is kept.
-    let existing = sqlx::query(
-        "SELECT api_key_iv, api_key_encrypted FROM org_ai_configs WHERE organization_id = $1",
-    )
-    .bind(org_id)
-    .fetch_optional(pool.get_ref())
-    .await?;
-    let cur_iv: Option<String> = existing
-        .as_ref()
-        .and_then(|r| r.try_get("api_key_iv").ok().flatten());
-    let cur_enc: Option<String> = existing
-        .as_ref()
-        .and_then(|r| r.try_get("api_key_encrypted").ok().flatten());
+    let (cur_iv, cur_enc) = load_key_pair(pool.get_ref(), owner).await?;
 
     // Resolve what to store + the plaintext key to validate with.
     // - api_key omitted    -> keep current
@@ -244,36 +391,28 @@ pub async fn put_config(
         )
     })?;
 
-    sqlx::query(
-        "INSERT INTO org_ai_configs
-            (organization_id, provider, base_url, model, api_key_iv, api_key_encrypted,
-             fail_closed, enabled, last_validated_at, connected_by, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(), $8, NOW())
-         ON CONFLICT (organization_id) DO UPDATE SET
-            provider = EXCLUDED.provider, base_url = EXCLUDED.base_url, model = EXCLUDED.model,
-            api_key_iv = EXCLUDED.api_key_iv, api_key_encrypted = EXCLUDED.api_key_encrypted,
-            fail_closed = EXCLUDED.fail_closed, enabled = TRUE, last_validated_at = NOW(),
-            connected_by = EXCLUDED.connected_by, updated_at = NOW()",
+    upsert_config(
+        pool.get_ref(),
+        owner,
+        provider,
+        &base_url,
+        &model,
+        &store_iv,
+        &store_enc,
+        body.fail_closed,
+        user_id,
     )
-    .bind(org_id)
-    .bind(provider.as_str())
-    .bind(&base_url)
-    .bind(&model)
-    .bind(&store_iv)
-    .bind(&store_enc)
-    .bind(body.fail_closed)
-    .bind(user_id)
-    .execute(pool.get_ref())
     .await?;
 
+    let owner_label = owner.audit_resource_id();
     crate::audit::record_action(
         pool.get_ref(),
         &req,
         crate::audit::AuditEvent {
             actor_user_id: user_id,
             action: "ai_provider.update",
-            resource_type: "org_ai_config",
-            resource_id: Some(org_id.to_string()),
+            resource_type: owner.audit_resource_type(),
+            resource_id: Some(owner_label.clone()),
             metadata: Some(serde_json::json!({
                 "provider": provider.as_str(),
                 "model": model_eff,
@@ -283,7 +422,7 @@ pub async fn put_config(
     )
     .await;
 
-    info!(target: "worker", user_id, org_id, provider = provider.as_str(), "ai provider configured");
+    info!(target: "worker", user_id, owner = %owner_label, provider = provider.as_str(), "ai provider configured");
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "configured": true,
         "provider": provider.as_str(),
@@ -299,26 +438,24 @@ pub async fn put_config(
 #[instrument(target = "http", skip(req, pool))]
 pub async fn delete_config(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let org_id = require_ai_owner(pool.get_ref(), user_id).await?;
+    let owner = require_ai_owner(pool.get_ref(), user_id).await?;
 
-    sqlx::query("DELETE FROM org_ai_configs WHERE organization_id = $1")
-        .bind(org_id)
-        .execute(pool.get_ref())
-        .await?;
+    delete_config_row(pool.get_ref(), owner).await?;
 
+    let owner_label = owner.audit_resource_id();
     crate::audit::record_action(
         pool.get_ref(),
         &req,
         crate::audit::AuditEvent {
             actor_user_id: user_id,
             action: "ai_provider.delete",
-            resource_type: "org_ai_config",
-            resource_id: Some(org_id.to_string()),
+            resource_type: owner.audit_resource_type(),
+            resource_id: Some(owner_label.clone()),
             metadata: None,
         },
     )
     .await;
 
-    info!(target: "worker", user_id, org_id, "ai provider reset to platform default");
+    info!(target: "worker", user_id, owner = %owner_label, "ai provider reset to default");
     Ok(HttpResponse::Ok().json(serde_json::json!({ "configured": false })))
 }

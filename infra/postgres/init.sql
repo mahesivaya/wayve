@@ -987,6 +987,27 @@ CREATE TABLE IF NOT EXISTS org_ai_configs (
     updated_at        TIMESTAMP DEFAULT NOW()
 );
 
+-- Platform-team AI provider. Mirrors org_ai_configs but is a singleton (the
+-- `id = 1` CHECK enforces exactly one row): the platform owner picks the AI the
+-- *platform team* runs on. Deliberately separate from org_ai_configs so this can
+-- never affect any organization/enterprise resolution — only platform members
+-- read it (see resolve_ai_for_user). Additive: safe to apply to an existing DB.
+CREATE TABLE IF NOT EXISTS platform_ai_config (
+    id                INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    provider          TEXT NOT NULL
+                      CHECK (provider IN ('gemini', 'anthropic', 'openai_compatible')),
+    base_url          TEXT,
+    model             TEXT,
+    api_key_iv        TEXT,
+    api_key_encrypted TEXT,
+    fail_closed       BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled           BOOLEAN NOT NULL DEFAULT TRUE,
+    last_validated_at TIMESTAMP,
+    connected_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at        TIMESTAMP DEFAULT NOW(),
+    updated_at        TIMESTAMP DEFAULT NOW()
+);
+
 -- Files attached to a task. Stored under ./uploads encrypted at rest just
 -- like drive_files; the on-disk blob is unreferenced (and garbage-collected
 -- on next sweep) when the row is deleted by the task cascade.
