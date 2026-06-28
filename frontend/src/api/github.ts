@@ -41,3 +41,24 @@ export const topLanguages = (langs: Record<string, number>, n = 2): string[] =>
     .sort((a, b) => b[1] - a[1])
     .slice(0, n)
     .map(([name]) => name);
+
+// Owner-only: submit an APPROVE review for a pull request via the backend
+// proxy (`POST /api/github/repos/{owner}/{repo}/pulls/{n}/approve`). The body
+// is an optional approval message. `preserve401` so a missing/invalid server
+// token surfaces as a handled error instead of logging the user out of OUR app.
+// The backend mirrors GitHub's status, so the thrown error carries GitHub's own
+// message (e.g. "Can not approve your own pull request.").
+export const approvePullRequest = (
+  owner: string,
+  repo: string,
+  prNumber: number,
+  message?: string
+) =>
+  apiFetchJson<{ state?: string; html_url?: string }>(
+    `/api/github/repos/${owner}/${repo}/pulls/${prNumber}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify({ body: message ?? undefined }),
+      preserve401: true,
+    }
+  );
