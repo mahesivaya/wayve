@@ -4,12 +4,75 @@ use crate::email::account::load_email_account_for_send;
 use crate::email::oauth::HTTP_CLIENT;
 use crate::email::outlook::send_outlook_mail;
 use crate::email::provider::refresh_and_persist_email_token;
-use crate::models::email_request::SendEmailRequest;
+use crate::models::email_request::{EmailAttachmentInput, SendEmailRequest};
 use actix_web::HttpResponse;
 use base64::Engine;
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
+
+/// Caps for standard-mailbox attachments (the E2E/secure paths stay text-only).
+const MAX_OUTGOING_ATTACHMENTS: usize = 10;
+const MAX_OUTGOING_ATTACHMENTS_BYTES: usize = 20 * 1024 * 1024;
+
+/// Strip any path components a browser might send so a filename can't inject a
+/// header or odd MIME name. Falls back to "attachment".
+fn sanitize_attachment_filename(name: &str) -> String {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or(name).trim();
+    if base.is_empty() {
+        "attachment".to_string()
+    } else {
+        base.to_string()
+    }
+}
+
+/// Cheap pre-flight cap check from the base64 lengths (no decode). Returns a
+/// human-readable error when over the count or total-size limit.
+fn validate_attachment_limits(attachments: &[EmailAttachmentInput]) -> Result<(), String> {
+    if attachments.len() > MAX_OUTGOING_ATTACHMENTS {
+        return Err(format!(
+            "Too many attachments (max {MAX_OUTGOING_ATTACHMENTS})."
+        ));
+    }
+    // base64 inflates ~4/3; estimate the decoded size without allocating.
+    let estimated: usize = attachments
+        .iter()
+        .map(|a| a.content_base64.len() / 4 * 3)
+        .sum();
+    if estimated > MAX_OUTGOING_ATTACHMENTS_BYTES {
+        return Err("Attachments exceed the 20 MB total limit.".to_string());
+    }
+    Ok(())
+}
+
+/// Decode the base64 attachments into bytes, sanitising names and defaulting the
+/// MIME type. Returns a human-readable error on malformed base64.
+fn decode_attachments(
+    attachments: &[EmailAttachmentInput],
+) -> Result<Vec<crate::email::sender::OutgoingAttachment>, String> {
+    attachments
+        .iter()
+        .map(|a| {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(a.content_base64.trim())
+                .map_err(|_| {
+                    format!(
+                        "Attachment '{}' is not valid base64.",
+                        sanitize_attachment_filename(&a.filename)
+                    )
+                })?;
+            Ok(crate::email::sender::OutgoingAttachment {
+                filename: sanitize_attachment_filename(&a.filename),
+                mime_type: a
+                    .mime_type
+                    .clone()
+                    .filter(|m| !m.trim().is_empty())
+                    .unwrap_or_else(|| "application/octet-stream".to_string()),
+                bytes,
+            })
+        })
+        .collect()
+}
 
 #[instrument(target = "gmail", skip(req, data, pool), fields(to = %data.to))]
 pub async fn send(
@@ -19,6 +82,10 @@ pub async fn send(
 ) -> AppResult {
     if data.to.trim().is_empty() || data.subject.trim().is_empty() {
         return Ok(HttpResponse::BadRequest().body("Recipient and Subject are required"));
+    }
+
+    if let Err(message) = validate_attachment_limits(&data.attachments) {
+        return Ok(HttpResponse::PayloadTooLarge().json(serde_json::json!({ "error": message })));
     }
 
     let user_id = match get_user_id_from_request(&req) {
@@ -60,22 +127,37 @@ pub async fn send(
         );
         let to = data.to.trim();
         let subject = data.subject.trim();
-        return Ok(
-            match crate::email::sender::send_mail(to, subject, &data.body).await {
-                Ok(()) => HttpResponse::Ok().body("Email sent ✅ (dev → Mailpit)"),
-                Err(e) => {
-                    error!(
-                        target: "gmail",
-                        user_id,
-                        account_id = account.id,
-                        error = ?e,
-                        "dev SMTP shortcut send failed"
-                    );
-                    HttpResponse::InternalServerError()
-                        .body("Failed to deliver dev mail via local SMTP")
+        let send_result = if data.attachments.is_empty() {
+            crate::email::sender::send_mail(to, subject, &data.body).await
+        } else {
+            match decode_attachments(&data.attachments) {
+                Ok(decoded) => {
+                    crate::email::sender::send_mail_with_attachments(
+                        to, subject, &data.body, &decoded,
+                    )
+                    .await
                 }
-            },
-        );
+                Err(message) => {
+                    return Ok(
+                        HttpResponse::BadRequest().json(serde_json::json!({ "error": message }))
+                    );
+                }
+            }
+        };
+        return Ok(match send_result {
+            Ok(()) => HttpResponse::Ok().body("Email sent ✅ (dev → Mailpit)"),
+            Err(e) => {
+                error!(
+                    target: "gmail",
+                    user_id,
+                    account_id = account.id,
+                    error = ?e,
+                    "dev SMTP shortcut send failed"
+                );
+                HttpResponse::InternalServerError()
+                    .body("Failed to deliver dev mail via local SMTP")
+            }
+        });
     }
 
     let token = match refresh_and_persist_email_token(
@@ -124,6 +206,7 @@ pub async fn send(
                 "from": account.email,
                 "to": data.to,
                 "subject": data.subject,
+                "attachments": data.attachments.iter().map(|a| a.filename.as_str()).collect::<Vec<_>>(),
                 "sent_at": chrono::Utc::now(),
             }),
         )
@@ -145,6 +228,7 @@ pub async fn send(
                     "from": account.email,
                     "to": data.to,
                     "subject": data.subject,
+                    "attachments": data.attachments.iter().map(|a| a.filename.as_str()).collect::<Vec<_>>(),
                     "provider": account.provider.as_db(),
                     "account_id": account.id,
                     "sent_at": chrono::Utc::now(),
@@ -357,22 +441,49 @@ pub(super) async fn send_via_gmail(
     data: &SendEmailRequest,
     user_id: i32,
 ) -> HttpResponse {
-    let raw_email = format!(
-        "From: {}\r\n\
-    To: {}\r\n\
-    Subject: {}\r\n\
-    MIME-Version: 1.0\r\n\
-    Content-Type: text/plain; charset=\"UTF-8\"\r\n\
-    Content-Transfer-Encoding: 7bit\r\n\
-    \r\n\
-    {}",
-        from_email.trim(),
-        data.to.trim(),
-        data.subject.trim(),
-        data.body.replace("\n", "\r\n")
-    );
+    let raw_bytes: Vec<u8> = if data.attachments.is_empty() {
+        // Unchanged single-part path — byte-identical to the prior behaviour.
+        format!(
+            "From: {}\r\n\
+        To: {}\r\n\
+        Subject: {}\r\n\
+        MIME-Version: 1.0\r\n\
+        Content-Type: text/plain; charset=\"UTF-8\"\r\n\
+        Content-Transfer-Encoding: 7bit\r\n\
+        \r\n\
+        {}",
+            from_email.trim(),
+            data.to.trim(),
+            data.subject.trim(),
+            data.body.replace("\n", "\r\n")
+        )
+        .into_bytes()
+    } else {
+        // Build a correct multipart/mixed message with lettre, then serialise it
+        // to RFC 822 bytes for Gmail's `raw` field.
+        let decoded = match decode_attachments(&data.attachments) {
+            Ok(decoded) => decoded,
+            Err(message) => {
+                return HttpResponse::BadRequest().json(serde_json::json!({ "error": message }));
+            }
+        };
+        match crate::email::sender::build_message(
+            from_email.trim(),
+            data.to.trim(),
+            data.subject.trim(),
+            &data.body,
+            &decoded,
+        ) {
+            Ok(message) => message.formatted(),
+            Err(e) => {
+                warn!("could not build outgoing email with attachments: {e}");
+                return HttpResponse::BadRequest()
+                    .json(serde_json::json!({ "error": format!("Could not build email: {e}") }));
+            }
+        }
+    };
 
-    let encoded = base64::engine::general_purpose::URL_SAFE.encode(raw_email.as_bytes());
+    let encoded = base64::engine::general_purpose::URL_SAFE.encode(&raw_bytes);
 
     let res = HTTP_CLIENT
         .post(crate::external::gmail_send_url())
@@ -411,11 +522,18 @@ pub(super) async fn send_via_outlook(
     account_id: i32,
     data: &SendEmailRequest,
 ) -> HttpResponse {
+    let attachments = match decode_attachments(&data.attachments) {
+        Ok(decoded) => decoded,
+        Err(message) => {
+            return HttpResponse::BadRequest().json(serde_json::json!({ "error": message }));
+        }
+    };
     match send_outlook_mail(
         access_token,
         data.to.trim(),
         data.subject.trim(),
         &data.body,
+        &attachments,
     )
     .await
     {
@@ -427,5 +545,59 @@ pub(super) async fn send_via_outlook(
             error!(target: "gmail", account_id, error = ?e, "outlook send failed");
             HttpResponse::InternalServerError().body("Failed to send via Outlook")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn att(content_base64: &str) -> EmailAttachmentInput {
+        EmailAttachmentInput {
+            filename: "f.txt".to_string(),
+            mime_type: None,
+            content_base64: content_base64.to_string(),
+        }
+    }
+
+    #[test]
+    fn sanitize_strips_path_and_defaults() {
+        assert_eq!(sanitize_attachment_filename("../../etc/passwd"), "passwd");
+        assert_eq!(sanitize_attachment_filename("a\\b\\c.png"), "c.png");
+        assert_eq!(sanitize_attachment_filename("   "), "attachment");
+    }
+
+    #[test]
+    fn limits_reject_too_many() {
+        let many: Vec<_> = (0..=MAX_OUTGOING_ATTACHMENTS)
+            .map(|_| att("AAAA"))
+            .collect();
+        assert!(validate_attachment_limits(&many).is_err());
+    }
+
+    #[test]
+    fn limits_reject_oversize() {
+        // base64 length whose ~3/4 estimate exceeds the 20 MB cap.
+        let big = "A".repeat(MAX_OUTGOING_ATTACHMENTS_BYTES / 3 * 4 + 8);
+        assert!(validate_attachment_limits(&[att(&big)]).is_err());
+    }
+
+    #[test]
+    fn limits_accept_small_and_empty() {
+        assert!(validate_attachment_limits(&[att("aGVsbG8=")]).is_ok());
+        assert!(validate_attachment_limits(&[]).is_ok());
+    }
+
+    #[test]
+    fn decode_rejects_bad_base64() {
+        assert!(decode_attachments(&[att("not!base64!!")]).is_err());
+    }
+
+    #[test]
+    fn decode_ok_defaults_mime() {
+        let decoded = decode_attachments(&[att("aGVsbG8=")]).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].bytes, b"hello");
+        assert_eq!(decoded[0].mime_type, "application/octet-stream");
     }
 }

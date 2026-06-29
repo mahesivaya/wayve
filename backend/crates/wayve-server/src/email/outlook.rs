@@ -650,7 +650,10 @@ pub async fn send_outlook_mail(
     to: &str,
     subject: &str,
     body: &str,
+    attachments: &[crate::email::sender::OutgoingAttachment],
 ) -> Result<()> {
+    use base64::Engine;
+
     let recipients: Vec<Value> = to
         .split(',')
         .map(str::trim)
@@ -661,12 +664,28 @@ pub async fn send_outlook_mail(
         return Err(anyhow::anyhow!("no valid recipients"));
     }
 
+    let mut message = serde_json::json!({
+        "subject": subject,
+        "body": { "contentType": "Text", "content": body },
+        "toRecipients": recipients,
+    });
+    if !attachments.is_empty() {
+        let graph_attachments: Vec<Value> = attachments
+            .iter()
+            .map(|a| {
+                serde_json::json!({
+                    "@odata.type": "#microsoft.graph.fileAttachment",
+                    "name": a.filename,
+                    "contentType": a.mime_type,
+                    "contentBytes": base64::engine::general_purpose::STANDARD.encode(&a.bytes),
+                })
+            })
+            .collect();
+        message["attachments"] = Value::Array(graph_attachments);
+    }
+
     let payload = serde_json::json!({
-        "message": {
-            "subject": subject,
-            "body": { "contentType": "Text", "content": body },
-            "toRecipients": recipients,
-        },
+        "message": message,
         "saveToSentItems": true,
     });
 
