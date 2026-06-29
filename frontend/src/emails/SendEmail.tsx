@@ -513,11 +513,13 @@ export default function SendEmail({
           style={{
             alignSelf: "flex-start",
             background: "transparent",
-            border: "1px solid #ccc",
+            border: "1px solid var(--color-input-border, #ccc)",
             borderRadius: 5,
             padding: "6px 10px",
             cursor: "pointer",
             fontSize: 13,
+            // Theme-aware so the label stays readable on the dark compose modal.
+            color: "var(--color-text-primary, #111827)",
           }}
         >
           📎 Attach files
@@ -567,7 +569,12 @@ export default function SendEmail({
                 </div>
               ))}
             </div>
-            <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
+            <small
+              style={{
+                color: "var(--color-text-muted, #6b7280)",
+                lineHeight: 1.4,
+              }}
+            >
               Attachments are sent via your mailbox and aren’t end-to-end
               encrypted ({formatFileSize(totalAttachmentBytes)} of 20 MB).
             </small>
