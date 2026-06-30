@@ -496,8 +496,10 @@ async fn dns_txt_contains(domain: &str, expected: &str) -> bool {
 }
 
 /// Single source of truth for "may this org mint `*@domain`?" — true only if
-/// the org has a VERIFIED claim on exactly this domain. Used by the member-
-/// creation gate.
+/// the org has a VERIFIED claim on exactly this domain. No longer enforced at
+/// member creation (domain verification was disabled there); retained for the
+/// domain pages and potential future gates.
+#[allow(dead_code)]
 pub async fn is_domain_verified_for_org(pool: &PgPool, org_id: i32, domain: &str) -> bool {
     let normalized = domain.trim().to_lowercase();
     sqlx::query_scalar::<_, bool>(
