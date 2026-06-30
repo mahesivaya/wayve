@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   downloadEmailAttachment,
   sendEmail,
   getGmailConnectUrl,
+  filesToAttachments,
+  MAX_ATTACHMENTS_BYTES,
 } from "../api/email";
 import { formatFileSize } from "./renderUtils";
 import { isGmailReconnectError } from "./bodyUtils";
@@ -56,6 +58,12 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const [forwardBody, setForwardBody] = useState("");
   const [forwardSending, setForwardSending] = useState(false);
   const [forwardError, setForwardError] = useState<string | null>(null);
+  // Standard-mailbox attachments for reply / forward (not E2E — these always
+  // send via the connected mailbox).
+  const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
+  const replyFileRef = useRef<HTMLInputElement>(null);
+  const [forwardAttachments, setForwardAttachments] = useState<File[]>([]);
+  const forwardFileRef = useRef<HTMLInputElement>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [reconnectError, setReconnectError] = useState<string | null>(null);
 
@@ -331,6 +339,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     setReplyError(null);
     try {
       const subject = selectedEmail.subject?.trim() || "(No Subject)";
+      const attachments =
+        replyAttachments.length > 0
+          ? await filesToAttachments(replyAttachments)
+          : undefined;
       await sendEmail({
         account_id: selectedEmail.account_id,
         to: replyTo,
@@ -338,8 +350,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           ? subject
           : `Re: ${subject}`,
         body,
+        attachments,
       });
       setReplyBody("");
+      setReplyAttachments([]);
       setReplyOpen(false);
     } catch (err) {
       setReplyError(
@@ -372,14 +386,20 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     setForwardSending(true);
     setForwardError(null);
     try {
+      const attachments =
+        forwardAttachments.length > 0
+          ? await filesToAttachments(forwardAttachments)
+          : undefined;
       await sendEmail({
         account_id: selectedEmail.account_id,
         to,
         subject: forwardSubject,
         body,
+        attachments,
       });
       setForwardTo("");
       setForwardBody("");
+      setForwardAttachments([]);
       setForwardOpen(false);
     } catch (err) {
       setForwardError(
@@ -389,6 +409,62 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       setForwardSending(false);
     }
   };
+
+  // Reusable attach field for the reply/forward composers: hidden file input,
+  // an "Attach" button, and removable chips. 20 MB total cap (matches backend).
+  const renderAttachField = (
+    files: File[],
+    setFiles: React.Dispatch<React.SetStateAction<File[]>>,
+    setErr: (message: string | null) => void,
+    inputRef: React.RefObject<HTMLInputElement>
+  ) => (
+    <div className="email-compose-attach">
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const picked = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          if (picked.length === 0) return;
+          const next = [...files, ...picked];
+          if (next.reduce((n, f) => n + f.size, 0) > MAX_ATTACHMENTS_BYTES) {
+            setErr("Attachments exceed the 20 MB limit");
+            return;
+          }
+          setFiles(next);
+        }}
+      />
+      <button
+        type="button"
+        className="email-compose-attach-btn"
+        onClick={() => inputRef.current?.click()}
+      >
+        📎 Attach
+      </button>
+      {files.length > 0 && (
+        <div className="email-compose-attachments">
+          {files.map((file, index) => (
+            <span
+              key={`${file.name}-${index}`}
+              className="email-compose-attachment"
+            >
+              📎 {file.name} · {formatFileSize(file.size)}
+              <button
+                type="button"
+                className="email-compose-attachment-remove"
+                aria-label={`Remove ${file.name}`}
+                onClick={() => setFiles(files.filter((_, i) => i !== index))}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="email-detail">
@@ -576,6 +652,12 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             aria-label="Reply body"
           />
           {replyError && <p className="email-body-error">{replyError}</p>}
+          {renderAttachField(
+            replyAttachments,
+            setReplyAttachments,
+            setReplyError,
+            replyFileRef
+          )}
           <div className="email-reply-actions">
             <button
               type="button"
@@ -616,6 +698,12 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             aria-label="Forward body"
           />
           {forwardError && <p className="email-body-error">{forwardError}</p>}
+          {renderAttachField(
+            forwardAttachments,
+            setForwardAttachments,
+            setForwardError,
+            forwardFileRef
+          )}
           <div className="email-reply-actions">
             <button
               type="button"

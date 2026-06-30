@@ -35,9 +35,19 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(crate::routes::email::download_email_attachment)
         .service(handler::get_email_body)
         .service(handler::get_email_by_id)
-        // Send: canonical POST /api/emails, legacy POST /api/send.
-        .route("/emails", web::post().to(handler::send))
-        .route("/send", web::post().to(handler::send))
+        // Send: canonical POST /api/emails, legacy POST /api/send. The raised
+        // JSON limit allows base64 attachments (the `web::Json` default is 2 MB);
+        // the handler enforces the real 20 MB total-attachment cap.
+        .service(
+            web::resource("/emails")
+                .app_data(web::JsonConfig::default().limit(28 * 1024 * 1024))
+                .route(web::post().to(handler::send)),
+        )
+        .service(
+            web::resource("/send")
+                .app_data(web::JsonConfig::default().limit(28 * 1024 * 1024))
+                .route(web::post().to(handler::send)),
+        )
         // Internal send: canonical POST /api/emails/internal, legacy POST /api/email/send-internal.
         .route("/emails/internal", web::post().to(handler::send_internal))
         .route(
