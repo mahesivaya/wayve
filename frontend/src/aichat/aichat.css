@@ -193,7 +193,7 @@
   gap: 8px;
   padding: 12px 16px 16px;
   border-top: 1px solid var(--color-border);
-  background: var(--color-pane);
+  background: var(--color-canvas);
   flex-shrink: 0;
 }
 
@@ -210,6 +210,9 @@
   transition: 0.15s;
   min-height: 44px;
   max-height: 160px;
+  /* Match the page background instead of a stark white box. */
+  background: var(--color-canvas);
+  color: var(--color-text-primary);
 }
 
 .ai-chat-input:focus {
@@ -242,4 +245,29 @@
 .ai-chat-send:disabled {
   background: var(--color-primary-border);
   cursor: default;
+}
+
+/* Empty state: center the intro + composer in the middle of the page (like a
+   search box). As soon as the first message is sent the composer drops back to
+   the bottom (the default `.ai-chat-input-row` rules above). */
+.ai-chat-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+}
+
+.ai-chat-stage .ai-chat-empty {
+  margin: 0;
+}
+
+.ai-chat-stage .ai-chat-input-row {
+  width: 100%;
+  max-width: 640px;
+  padding: 0;
+  border-top: none;
 }

@@ -111,8 +111,34 @@ export default function AIChat() {
       )
     : messages;
 
+  // Before the conversation starts, center the intro + composer in the middle
+  // of the page; once a message is sent the composer drops to the bottom.
+  const isEmpty = messages.length === 0;
+
+  const inputRow = (
+    <div className="ai-chat-input-row">
+      <textarea
+        className="ai-chat-input"
+        placeholder="Message AI…  (Enter to send, Shift+Enter for newline)"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={onKeyDown}
+        rows={2}
+        disabled={busy}
+      />
+      <button
+        className="ai-chat-send"
+        onClick={send}
+        disabled={busy || !input.trim()}
+        title="Send"
+      >
+        {busy ? "…" : "Send"}
+      </button>
+    </div>
+  );
+
   return (
-    <div className="ai-chat">
+    <div className={`ai-chat${isEmpty ? " is-empty" : ""}`}>
       <div className="ai-chat-header">
         <div className="ai-chat-title">
           <span className="ai-chat-icon">✨</span>
@@ -138,8 +164,8 @@ export default function AIChat() {
         </div>
       </div>
 
-      <div className="ai-chat-messages" ref={scrollRef}>
-        {messages.length === 0 && (
+      {isEmpty ? (
+        <div className="ai-chat-stage">
           <div className="ai-chat-empty">
             <div className="ai-chat-empty-icon">✨</div>
             <div className="ai-chat-empty-title">Ask anything</div>
@@ -147,49 +173,37 @@ export default function AIChat() {
               Type a message below to start chatting with {chatWith}.
             </div>
           </div>
-        )}
+          {error && <div className="ai-chat-error">{error}</div>}
+          {inputRow}
+        </div>
+      ) : (
+        <>
+          <div className="ai-chat-messages" ref={scrollRef}>
+            {visibleMessages.map((m, i) => (
+              <div
+                key={i}
+                className={`ai-msg ${m.role === "user" ? "ai-msg-user" : "ai-msg-model"}`}
+              >
+                <div className="ai-msg-bubble">{m.content}</div>
+              </div>
+            ))}
 
-        {visibleMessages.map((m, i) => (
-          <div
-            key={i}
-            className={`ai-msg ${m.role === "user" ? "ai-msg-user" : "ai-msg-model"}`}
-          >
-            <div className="ai-msg-bubble">{m.content}</div>
+            {busy && (
+              <div className="ai-msg ai-msg-model">
+                <div className="ai-msg-bubble ai-msg-typing">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            )}
           </div>
-        ))}
 
-        {busy && (
-          <div className="ai-msg ai-msg-model">
-            <div className="ai-msg-bubble ai-msg-typing">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-          </div>
-        )}
-      </div>
+          {error && <div className="ai-chat-error">{error}</div>}
 
-      {error && <div className="ai-chat-error">{error}</div>}
-
-      <div className="ai-chat-input-row">
-        <textarea
-          className="ai-chat-input"
-          placeholder="Message AI…  (Enter to send, Shift+Enter for newline)"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          rows={2}
-          disabled={busy}
-        />
-        <button
-          className="ai-chat-send"
-          onClick={send}
-          disabled={busy || !input.trim()}
-          title="Send"
-        >
-          {busy ? "…" : "Send"}
-        </button>
-      </div>
+          {inputRow}
+        </>
+      )}
     </div>
   );
 }
