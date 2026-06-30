@@ -890,13 +890,17 @@ pub fn init_feature_state(pool: &PgPool) {
 /// without it senders fall back to local delivery.
 pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, has_redis: bool) {
     match role {
-        RuntimeRole::EmailSyncWorker => run_sync_worker(pool.clone()).await,
+        RuntimeRole::EmailSyncWorker => {
+            spawn_gmail_watch_renewer(pool.clone());
+            run_sync_worker(pool.clone()).await
+        }
         RuntimeRole::EmailBodyWorker => run_body_worker(pool.clone()).await,
         RuntimeRole::All => {
             let sync_pool = pool.clone();
             tokio::spawn(async move {
                 run_sync_worker(sync_pool).await;
             });
+            spawn_gmail_watch_renewer(pool.clone());
             let body_pool = pool.clone();
             tokio::spawn(async move {
                 run_body_worker(body_pool).await;
@@ -926,6 +930,65 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, has_redis: boo
             spawn_chat_pubsub(has_redis);
         }
     }
+}
+
+/// Periodically (and shortly after startup) (re-)arm Gmail `users.watch` for
+/// Google mailboxes whose watch is missing or within 24h of expiry, so new mail
+/// keeps pushing to Pub/Sub. No-op when `GMAIL_PUSH_TOPIC` is unset (the 30s
+/// poll still covers accounts). Runs on the email-sync role and the `All` role.
+fn spawn_gmail_watch_renewer(pool: PgPool) {
+    tokio::spawn(async move {
+        // Warm-up delay so the token/DB paths are ready.
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        loop {
+            if crate::config::gmail_push_topic().is_some()
+                && let Err(e) = renew_gmail_watches(&pool).await
+            {
+                warn!(target: "worker", error = ?e, "gmail watch renewal cycle failed");
+            }
+            // Watches live ≤7 days; a 6h cadence renews with comfortable margin.
+            tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
+        }
+    });
+}
+
+async fn renew_gmail_watches(pool: &PgPool) -> crate::prelude::Result<()> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT id, refresh_token FROM email_accounts \
+          WHERE provider = 'google' AND access_token IS NOT NULL \
+            AND refresh_token IS NOT NULL AND refresh_token <> '' \
+            AND (watch_expires_at IS NULL OR watch_expires_at < NOW() + INTERVAL '24 hours')",
+    )
+    .fetch_all(pool)
+    .await?;
+    for row in rows {
+        let id: i32 = row.get("id");
+        let refresh_token: String = row.try_get("refresh_token").unwrap_or_default();
+        if refresh_token.trim().is_empty() {
+            continue;
+        }
+        match crate::email::provider::refresh_and_persist_email_token(
+            pool,
+            id,
+            crate::email::provider::MailProvider::Google,
+            &refresh_token,
+        )
+        .await
+        {
+            Ok(token) => {
+                if let Err(e) =
+                    crate::email::gmail_push::start_watch(pool, id, &token.access_token).await
+                {
+                    warn!(target: "worker", account_id = id, error = ?e, "gmail watch arm failed");
+                }
+            }
+            Err(e) => {
+                warn!(target: "worker", account_id = id, error = ?e, "gmail watch: token refresh failed")
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Retention for the append-only log streams: delete anything older than each

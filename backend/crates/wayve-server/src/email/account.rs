@@ -154,6 +154,27 @@ pub async fn load_email_account_for_send(
     Ok(row.map(account_from_row))
 }
 
+/// Load a mailbox by its address (case-insensitive). Used by the Gmail push
+/// receiver, which only knows the email. Uncached on purpose — pushes are
+/// infrequent and we want fresh token/cursor state each time.
+#[instrument(target = "db", skip(pool))]
+pub async fn load_email_account_by_email(
+    pool: &PgPool,
+    email: &str,
+) -> Result<Option<EmailAccount>> {
+    let row = sqlx::query(
+        "SELECT id, user_id, email, provider, refresh_token, last_sync, last_message_at
+         FROM email_accounts
+         WHERE lower(email) = lower($1) AND access_token IS NOT NULL
+         ORDER BY id
+         LIMIT 1",
+    )
+    .bind(email)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(account_from_row))
+}
+
 #[instrument(target = "db", skip(pool))]
 pub async fn load_syncable_email_accounts(pool: &PgPool) -> Result<Vec<EmailAccount>> {
     let rows = sqlx::query(

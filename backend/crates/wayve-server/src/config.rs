@@ -270,6 +270,19 @@ pub fn smtp() -> Result<SmtpConfig, &'static str> {
     })
 }
 
+/// Full Pub/Sub topic resource name for Gmail push
+/// (`projects/<project>/topics/<topic>`). Unset disables `users.watch` — the
+/// 30s poll still covers accounts.
+pub fn gmail_push_topic() -> Option<String> {
+    var_opt("GMAIL_PUSH_TOPIC")
+}
+
+/// Shared secret matched against the `?token=` on the Gmail Pub/Sub push
+/// endpoint. Unset accepts any caller (dev only).
+pub fn gmail_push_secret() -> Option<String> {
+    var_opt("GMAIL_PUSH_SECRET")
+}
+
 // ---- Stripe (billing) ---------------------------------------
 
 pub struct StripeConfig {

@@ -88,6 +88,10 @@ export function useChatSocket(
 
       ws.onmessage = (event) => {
         const msg: ChatMessage & { type?: string } = JSON.parse(event.data);
+        // Non-chat broadcasts (e.g. the Gmail-push `email:new` nudge) ride the
+        // same per-user socket fan-out. The chat page ignores them so they're
+        // never mis-handled as inbound messages.
+        if (msg.type?.startsWith("email:")) return;
         // Delivery-tick update for one of our sent messages (sent → delivered
         // → read). Patch the bubble's status in place; not a new message.
         if (msg.type === "status_update") {

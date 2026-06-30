@@ -2,6 +2,7 @@ pub mod account;
 pub mod attachments;
 mod body_handlers;
 pub mod body_worker;
+pub mod gmail_push;
 pub mod handler;
 pub mod imap;
 mod imap_routes;
@@ -131,5 +132,11 @@ pub fn public_routes(cfg: &mut web::ServiceConfig) {
         .route(
             "/oauth/outlook/callback",
             web::get().to(outlook_oauth::outlook_callback),
+        )
+        // Standard Cloud Pub/Sub push for Gmail `users.watch` (public; verified
+        // by the shared `?token=` secret inside the handler).
+        .route(
+            "/gmail/push",
+            web::post().to(gmail_push::gmail_push_endpoint),
         );
 }

@@ -484,6 +484,19 @@ pub async fn oauth_callback(
         }
     });
 
+    // Arm the Gmail watch so new mail pushes to Pub/Sub immediately (best-effort;
+    // the renewal worker re-arms it later; no-op when GMAIL_PUSH_TOPIC is unset).
+    let watch_pool = pool.clone();
+    let watch_token = access_token.to_string();
+    actix_web::rt::spawn(async move {
+        if let Err(e) =
+            crate::email::gmail_push::start_watch(watch_pool.get_ref(), account_id, &watch_token)
+                .await
+        {
+            warn!(target: "gmail", user_id, account_id, error = ?e, "gmail watch arm failed");
+        }
+    });
+
     let pool_clone = pool.clone();
     let token_clone = access_token.to_string();
     actix_web::rt::spawn(async move {

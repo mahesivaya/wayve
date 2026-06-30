@@ -402,6 +402,13 @@ ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS smtp_host TEXT;
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS smtp_port INTEGER;
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS mail_security TEXT;
 
+-- Gmail push (users.watch → standard Cloud Pub/Sub) state. `gmail_history_id`
+-- is the incremental-sync cursor, advanced after each history.list call;
+-- `watch_expires_at` is when the current watch lapses (Gmail watches live
+-- ≤7 days) so the renewal worker can re-arm before then.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS gmail_history_id BIGINT;
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS watch_expires_at TIMESTAMPTZ;
+
 -- =========================================================================
 -- Shared inboxes (org + platform).
 -- =========================================================================
