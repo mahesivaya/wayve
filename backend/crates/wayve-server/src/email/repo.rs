@@ -217,23 +217,31 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
             // those rows and fall back to the legacy heuristic for
             // provider-synced rows.
             "inbox" => {
+                // Gmail's INBOX label is authoritative — show anything labelled
+                // INBOX (so self-sent mail, sender == account + SENT+INBOX, still
+                // appears here), then fall back to the legacy "sender isn't me"
+                // heuristic for the rare label-less rows. SPAM/DRAFT/TRASH stay out.
                 qb.push(
                     " AND (\
                        (e.source = 'wayve' AND 'INBOX' = ANY(e.labels)) \
                        OR (e.source <> 'wayve' \
                            AND a.email IS NOT NULL \
-                           AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%' \
                            AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)) \
-                           AND NOT ('TRASH' = ANY(e.labels)))) ",
+                           AND NOT ('TRASH' = ANY(e.labels)) \
+                           AND ('INBOX' = ANY(e.labels) \
+                                OR lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'))) ",
                 );
             }
             "sent" => {
+                // The SENT label is authoritative; fall back to the "sender is me"
+                // heuristic for label-less rows.
                 qb.push(
                     " AND (\
                        (e.source = 'wayve' AND 'SENT' = ANY(e.labels)) \
                        OR (e.source <> 'wayve' \
-                           AND a.email IS NOT NULL \
-                           AND lower(coalesce(e.sender, '')) LIKE '%' || lower(a.email) || '%')) ",
+                           AND ('SENT' = ANY(e.labels) \
+                                OR (a.email IS NOT NULL \
+                                    AND lower(coalesce(e.sender, '')) LIKE '%' || lower(a.email) || '%')))) ",
                 );
             }
             "important" => {
