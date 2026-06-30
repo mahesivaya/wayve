@@ -282,7 +282,7 @@ export default function PersonalDashboard() {
               className="personal-card-action"
               onClick={() => navigate("/tasks")}
             >
-              + Add task
+              Open tasks →
             </button>
           </header>
 
