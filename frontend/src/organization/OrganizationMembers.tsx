@@ -80,15 +80,15 @@ export default function OrganizationMembers() {
             <div>
               <h2>Create account</h2>
               <p>
-                Add a new account inside your organization. Enter a handle - the
-                email is generated automatically.
+                Add a new account inside your organization. Enter a username -
+                the email is generated automatically.
               </p>
             </div>
           </div>
 
           <form className="organization-admin-form" onSubmit={createUser}>
             <label className="u-form-label">
-              <span className="u-form-label-text">Handle</span>
+              <span className="u-form-label-text">Username</span>
               <input
                 className="u-form-control"
                 value={handle}
