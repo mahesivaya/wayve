@@ -2097,5 +2097,47 @@
   }
 }
 
+/* Reply / forward compose attachments (standard mailbox, not E2E). */
+.email-compose-attach {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0;
+}
+.email-compose-attach-btn {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--color-input-border, #ccc);
+  border-radius: var(--radius-sm, 5px);
+  padding: 5px 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm, 13px);
+  color: var(--color-text-primary);
+}
+.email-compose-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.email-compose-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  background: var(--color-surface-soft, #f3f4f6);
+  border-radius: var(--radius-sm, 4px);
+  padding: 3px 8px;
+  max-width: 100%;
+}
+.email-compose-attachment-remove {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-text-muted, #6b7280);
+  font: inherit;
+  line-height: 1;
+}
+
 /* Provider connect modals (Outlook / IMAP) live in their own component
    stylesheets. */

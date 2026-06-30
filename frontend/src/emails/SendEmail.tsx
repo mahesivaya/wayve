@@ -4,6 +4,8 @@ import {
   sendEmail as sendEmailApi,
   sendInternalEmail,
   sendSecureEmail,
+  filesToAttachments,
+  MAX_ATTACHMENTS_BYTES,
   type WayveRecipient,
 } from "../api/email";
 import { useAuth } from "../auth/useAuth";
@@ -13,8 +15,9 @@ import {
   type InternalRecipientKey,
 } from "./internalEnvelope";
 import { sealSecureMessage } from "./secureSend";
+import { formatFileSize } from "./renderUtils";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
 
 type SendEmailProps = {
   accountId: number;
@@ -64,6 +67,27 @@ export default function SendEmail({
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Standard-mailbox attachments (not E2E). Picking files forces the send down
+  // the SMTP path (see `forceStandard` below) regardless of the E2E choice.
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const totalAttachmentBytes = attachments.reduce((n, f) => n + f.size, 0);
+
+  const onPickFiles = (e: ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = ""; // let the same file be re-picked after removal
+    if (picked.length === 0) return;
+    const next = [...attachments, ...picked];
+    if (next.reduce((n, f) => n + f.size, 0) > MAX_ATTACHMENTS_BYTES) {
+      setStatus("Attachments exceed the 20 MB limit ⚠️");
+      return;
+    }
+    setAttachments(next);
+  };
+
+  const removeAttachment = (index: number) =>
+    setAttachments((cur) => cur.filter((_, i) => i !== index));
+
   useEffect(() => {
     if (!status) return;
     const timer = setTimeout(() => setStatus(""), 3000);
@@ -78,6 +102,14 @@ export default function SendEmail({
     }
     if (secureSend && passphrase.length < 6) {
       setStatus("Passphrase must be at least 6 characters ⚠️");
+      return;
+    }
+    // Secure-send and E2E can't carry attachments in this scope — block the
+    // mismatch rather than silently dropping files or weakening encryption.
+    if (secureSend && attachments.length > 0) {
+      setStatus(
+        "Secure send can't include attachments — remove them or turn off Secure send ⚠️"
+      );
       return;
     }
 
@@ -137,13 +169,20 @@ export default function SendEmail({
 
       const senderId = user?.id;
 
+      // Encode attachments once (base64) for the standard send payload.
+      const attachmentPayloads =
+        attachments.length > 0 ? await filesToAttachments(attachments) : undefined;
+      // Attachments are standard-mailbox only: when files are attached, force
+      // every recipient down the SMTP path (skip the E2E internal channel).
+      const forceStandard = attachments.length > 0;
+
       // Standard (default) skips the Wayve-user lookups entirely — every
       // recipient gets a plain SMTP email to their real mailbox. Only the
       // "e2e" mode needs to detect Fluxze users to route them through the
       // encrypted internal channel. A lookup failure is treated as "not on
       // Wayve" so a transient API hiccup falls back to SMTP.
       const lookups: Array<{ email: string; user: WayveRecipient | null }> =
-        encryptionMode === "standard"
+        encryptionMode === "standard" || forceStandard
           ? recipients.map((email) => ({ email, user: null }))
           : await Promise.all(
               recipients.map(async (email) => {
@@ -253,6 +292,7 @@ export default function SendEmail({
             to: externalTo,
             subject,
             body,
+            attachments: attachmentPayloads,
           });
           externalDelivered += 1;
         } catch (err) {
@@ -292,6 +332,7 @@ export default function SendEmail({
         setTo("");
         setSubject("");
         setBody("");
+        setAttachments([]);
         onSent?.();
         setTimeout(() => onClose?.(), 800);
       }
@@ -452,6 +493,90 @@ export default function SendEmail({
               browser. <strong>Fluxze never sees the passphrase</strong> — if
               you share it in the same email, you defeat the encryption. Use
               Signal, SMS, or in-person.
+            </small>
+          </>
+        )}
+      </div>
+
+      {/* Attachments (standard mailbox only — see `forceStandard`). */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={onPickFiles}
+        style={{ display: "none" }}
+      />
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            alignSelf: "flex-start",
+            background: "transparent",
+            border: "1px solid var(--color-input-border, #ccc)",
+            borderRadius: 5,
+            padding: "6px 10px",
+            cursor: "pointer",
+            fontSize: 13,
+            // Theme-aware so the label stays readable on the dark compose modal.
+            color: "var(--color-text-primary, #111827)",
+          }}
+        >
+          📎 Attach files
+        </button>
+        {attachments.length > 0 && (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {attachments.map((file, index) => (
+                <div
+                  key={`${file.name}-${index}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 12,
+                    background: "#f3f4f6",
+                    borderRadius: 4,
+                    padding: "4px 8px",
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    📎 {file.name}
+                  </span>
+                  <span style={{ color: "#6b7280" }}>
+                    {formatFileSize(file.size)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(index)}
+                    aria-label={`Remove ${file.name}`}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      color: "#6b7280",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+            <small
+              style={{
+                color: "var(--color-text-muted, #6b7280)",
+                lineHeight: 1.4,
+              }}
+            >
+              Attachments are sent via your mailbox and aren’t end-to-end
+              encrypted ({formatFileSize(totalAttachmentBytes)} of 20 MB).
             </small>
           </>
         )}

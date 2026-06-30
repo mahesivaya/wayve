@@ -30,11 +30,19 @@ export type EmailListResult<T = unknown> = {
   hasMore: boolean;
 };
 
+export type EmailComposeAttachment = {
+  filename: string;
+  mime_type: string;
+  content_base64: string;
+};
+
 export type SendEmailPayload = {
   account_id: number;
   to: string;
   subject: string;
   body: string;
+  // Standard-mailbox attachments only (Gmail/Outlook MIME, not E2E).
+  attachments?: EmailComposeAttachment[];
 };
 
 export type EmailAttachment = {
@@ -298,6 +306,36 @@ export const sendEmail = async (payload: SendEmailPayload) => {
 
   return res.text();
 };
+
+// Read a File into a standard-base64 string (no `data:` URL prefix) for an
+// attachment's `content_base64`.
+export const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+
+// Convert picked Files into the send payload's attachment shape.
+export const filesToAttachments = async (
+  files: File[]
+): Promise<EmailComposeAttachment[]> =>
+  Promise.all(
+    files.map(async (file) => ({
+      filename: file.name,
+      mime_type: file.type || "application/octet-stream",
+      content_base64: await fileToBase64(file),
+    }))
+  );
+
+// Total-attachment cap mirrored on the backend (`MAX_OUTGOING_ATTACHMENTS_BYTES`).
+export const MAX_ATTACHMENTS_BYTES = 20 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Plan A Phase 2 — Wayve-to-Wayve native channel
