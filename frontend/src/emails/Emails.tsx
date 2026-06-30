@@ -25,6 +25,7 @@ import type { EmailItem } from "./types";
 
 const ACCOUNT_NAME_STORAGE_KEY = "rwayve.emailAccountNames";
 const EMAIL_LIST_WIDTH_STORAGE_KEY = "rwayve.emailList.width";
+const HAS_ACCOUNTS_STORAGE_KEY = "rwayve.emailHasAccounts";
 
 export default function Emails() {
   const { user, logout } = useAuth();
@@ -57,6 +58,32 @@ export default function Emails() {
     bulkMarkRead,
     bulkDelete,
   } = useEmailInbox(user?.id, normalizedSearchQuery);
+
+  // The toolbar (Compose / view toggles / search) should only appear once a
+  // mailbox is connected. But `accounts` starts empty on every refresh and
+  // only fills after /api/accounts resolves, so gating purely on
+  // `accounts.length` makes the toolbar flash in (or out) during that load
+  // window. We remember the last-known answer per user in localStorage and use
+  // it as the value during loading: returning users with a mailbox render the
+  // toolbar immediately, and known-empty users never see it flash.
+  const hasAccountsStorageKey = user?.id
+    ? `${HAS_ACCOUNTS_STORAGE_KEY}.${user.id}`
+    : HAS_ACCOUNTS_STORAGE_KEY;
+  const [hadAccountsHint] = useState(
+    () => localStorage.getItem(hasAccountsStorageKey) === "1"
+  );
+  useEffect(() => {
+    if (accountsLoaded) {
+      localStorage.setItem(
+        hasAccountsStorageKey,
+        accounts.length > 0 ? "1" : "0"
+      );
+    }
+  }, [accountsLoaded, accounts.length, hasAccountsStorageKey]);
+
+  // Confirmed-connected once loaded; before that, fall back to the hint.
+  const showToolbar =
+    accounts.length > 0 || (!accountsLoaded && hadAccountsHint);
 
   // The "add a mailbox" picker. Lifted here (rather than living inside the
   // sidebar) so both the sidebar "+" button and the empty-state CTA in the
@@ -500,22 +527,26 @@ export default function Emails() {
   // ================= UI =================
   return (
     <div className="emails-root">
-      <div className="emails-page-toolbar">
-        {/* Organization / platform pages put Compose at the far left of the
-            toolbar and let the search bar fill the rest to the right. Personal
-            accounts keep Compose in the email sidebar. */}
-        {!isPersonalScope && (
-          <button
-            className="compose-btn compose-btn--toolbar"
-            onClick={() => setComposeOpen(true)}
-            disabled={accounts.length === 0}
-            title={accounts.length === 0 ? "No inbox available" : "Compose"}
-          >
-            Compose
-          </button>
-        )}
-        <SearchBar />
-      </div>
+      {/* Compose, view toggles, and search are only useful once a mailbox is
+          connected — hide the whole toolbar until then. The EmailList empty
+          state covers the disconnected case. */}
+      {showToolbar && (
+        <div className="emails-page-toolbar">
+          {/* Organization / platform pages put Compose at the far left of the
+              toolbar and let the search bar fill the rest to the right. Personal
+              accounts keep Compose in the email sidebar. */}
+          {!isPersonalScope && (
+            <button
+              className="compose-btn compose-btn--toolbar"
+              onClick={() => setComposeOpen(true)}
+              title="Compose"
+            >
+              Compose
+            </button>
+          )}
+          <SearchBar />
+        </div>
+      )}
       <div
         ref={mainRef}
         className={[
@@ -575,7 +606,7 @@ export default function Emails() {
               onRenameAccount={renameAccount}
               showAccountFilter={showAccountFilter}
               showAccountManagement={showAccountManagement}
-              showComposeButton={isPersonalScope}
+              showComposeButton={isPersonalScope && showToolbar}
               showFolderNav={isPersonalScope}
             />
 
@@ -606,6 +637,7 @@ export default function Emails() {
             activeFolder={activeFolder}
             hasAccounts={accounts.length > 0}
             accountsLoaded={accountsLoaded}
+            showChrome={showToolbar}
             canAddAccount={showAccountManagement}
             onAddAccount={() => setAddAccountOpen(true)}
             showFolderTabs={!isPersonalScope}

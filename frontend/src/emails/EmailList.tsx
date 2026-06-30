@@ -22,6 +22,11 @@ interface EmailListProps {
   // panel — but only once we're sure there genuinely are zero accounts.
   hasAccounts?: boolean;
   accountsLoaded?: boolean;
+  // Whether to render the bulk/folder-tab chrome at all. The parent passes a
+  // hint-aware "a mailbox is (believed) connected" flag so the Inbox/Sent tab
+  // bar doesn't flash in during the initial accounts fetch and then vanish for
+  // users with no mailbox. Defaults to true to preserve standalone behavior.
+  showChrome?: boolean;
   // Whether this user is allowed to connect mailboxes (personal users and
   // org owners). Non-owner org members see the empty state without a CTA.
   canAddAccount?: boolean;
@@ -81,6 +86,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   activeFolder,
   hasAccounts = true,
   accountsLoaded = true,
+  showChrome = true,
   canAddAccount = false,
   onAddAccount,
   showFolderTabs = false,
@@ -276,7 +282,7 @@ export const EmailList: React.FC<EmailListProps> = ({
       </div>
       <div className="mobile-mail-label">Inbox</div>
 
-      {isListView && !showNoAccounts && (
+      {isListView && showChrome && !showNoAccounts && (
         <div
           className="email-bulk-bar"
           role="toolbar"
