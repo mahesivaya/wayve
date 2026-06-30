@@ -585,8 +585,11 @@ export default function Emails() {
         {/* Organization / platform pages have no use for the email sidebar
             (no per-account filter, folders, or management) — they just read the
             unified inbox, so hide the whole sidebar + its resizer and let the
-            list take the full width. Personal accounts keep it. */}
-        {isPersonalScope && (
+            list take the full width. Personal accounts keep it, but only once a
+            mailbox is connected — until then there are no accounts or folders to
+            show, and onboarding happens through the list's "Add email account"
+            empty state. `showToolbar` is hint-aware so this doesn't flicker. */}
+        {isPersonalScope && showToolbar && (
           <>
             <EmailSidebar
               accounts={displayedAccounts}
