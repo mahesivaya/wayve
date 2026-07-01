@@ -273,12 +273,27 @@ pub async fn delete_email(
             .push(&gmail_id);
         HTTP_CLIENT.delete(url).bearer_auth(&token).send().await
     } else {
+        // Gmail: TRASH, not permanent delete. `messages.delete` (HTTP DELETE)
+        // requires the full `https://mail.google.com/` scope, which we don't
+        // request — it 403s and the row silently resurrects on the next sync.
+        // `messages.trash` works with our `gmail.modify` scope, matches the
+        // "delete" UX (recoverable), and moves the message out of INBOX so the
+        // poll won't re-surface it there.
         let url = format!(
-            "{}/gmail/v1/users/me/messages/{}",
+            "{}/gmail/v1/users/me/messages/{}/trash",
             crate::external::gmail_api_base(),
             gmail_id
         );
-        HTTP_CLIENT.delete(url).bearer_auth(&token).send().await
+        // `messages.trash` is a bodyless POST, but Google's frontend rejects a
+        // POST with no Content-Length (411). reqwest omits Content-Length for an
+        // empty body, so send an empty JSON object `{}` — the trash endpoint
+        // ignores the body but this guarantees a Content-Length is sent.
+        HTTP_CLIENT
+            .post(url)
+            .bearer_auth(&token)
+            .json(&serde_json::json!({}))
+            .send()
+            .await
     };
 
     match remote_delete {
