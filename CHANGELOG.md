@@ -3,6 +3,13 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [5.1.0](https://github.com/mahesivaya/wayve/releases/tag/v5.1.0) - 2026-07-02
+
+### 🧹 Maintenance
+
+- **brand:** Rename Wayve to Fluxze in verification email and getting-started docs
+- **changelog:** Update for v5.0.0 [skip ci]
+
 ## [5.0.0](https://github.com/mahesivaya/wayve/releases/tag/v5.0.0) - 2026-07-02
 
 ### 🚀 Features
