@@ -11,8 +11,7 @@ use crate::organization;
 use rand::RngCore;
 use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::{
-    auth_cookie, create_jwt, create_jwt_for_account_with_max_exp, expired_auth_cookie,
-    get_user_id_from_request,
+    auth_cookie, create_jwt_for_account_with_max_exp, expired_auth_cookie, get_user_id_from_request,
 };
 use wayve_security::password::{hash_password, verify_password};
 
@@ -721,9 +720,13 @@ pub async fn register_business(
 
     let mut tx = pool.begin().await?;
 
+    // Created UNVERIFIED (email_verified = false) — the owner must enter the
+    // emailed 6-digit code before login works, same as a personal signup. The
+    // login gate + verify-email + resend endpoints already handle any local
+    // unverified account, so no other backend change is needed.
     let user_row = sqlx::query(
-        "INSERT INTO users (username, email, password, auth_provider, account_type, recovery_mode) \
-         VALUES ($1, $2, $3, 'local', 'personal', 'full') RETURNING id",
+        "INSERT INTO users (username, email, password, auth_provider, account_type, recovery_mode, email_verified) \
+         VALUES ($1, $2, $3, 'local', 'personal', 'full', false) RETURNING id",
     )
     .bind(username)
     .bind(&email)
@@ -757,28 +760,41 @@ pub async fn register_business(
 
     tx.commit().await?;
 
-    let token = create_jwt(user_id, email.clone());
+    // No auto-login: the owner account stays unverified (and login is blocked)
+    // until they enter the emailed code. Record a register event, not a login.
     crate::audit::record_action(
         pool.get_ref(),
         &req,
         crate::audit::AuditEvent {
             actor_user_id: user_id,
-            action: "login",
-            resource_type: "session",
+            action: "register",
+            resource_type: "account",
             resource_id: None,
             metadata: Some(serde_json::json!({
                 "method": "password",
-                "new_user": true,
                 "business": true,
+                "verification_required": true,
             })),
         },
     )
     .await;
 
-    info!(target: "auth", user_id, email = %email, "business registered (direct)");
-    Ok(HttpResponse::Ok()
-        .cookie(auth_cookie(token.clone()))
-        .json(serde_json::json!({ "token": token, "account_type": "organization_admin" })))
+    info!(target: "auth", user_id, email = %email, "business registered (pending email verification)");
+    match issue_verification_code_and_email(pool.get_ref(), user_id, &email).await {
+        Ok(()) => Ok(HttpResponse::Ok().json(serde_json::json!({
+            "verification_required": true,
+            "message": "Check your email to verify your account."
+        }))),
+        Err(e) => {
+            error!(target: "auth", user_id, error = ?e, "verification email failed at business register");
+            // The account + org exist; the owner can trigger a resend.
+            Ok(HttpResponse::Ok().json(serde_json::json!({
+                "verification_required": true,
+                "email_send_failed": true,
+                "message": "Account created, but we couldn't send the verification email. Please use Resend."
+            })))
+        }
+    }
 }
 
 // Verify a 6-digit code for `email`. Scoped to the user's newest active code;

@@ -1,8 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { registerBusiness } from "../api/Auth";
-import { useAuth } from "../auth/useAuth";
-import { homePathForAccount } from "../auth/accountHome";
 import { useNavigate, Link } from "react-router-dom";
 import PublicHeader from "../components/PublicHeader";
 import "./login.css"; // reuse auth-card styles
@@ -19,7 +17,6 @@ export default function RegisterBusiness() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -31,22 +28,19 @@ export default function RegisterBusiness() {
     }
     setBusy(true);
     try {
-      const data = await registerBusiness({
+      // The owner account + org are created UNVERIFIED and a 6-digit code is
+      // emailed — the owner must enter it before they can log in (that first
+      // login is when the E2E keypair + recovery phrase are set up). No
+      // auto-login; go to the code screen with the email prefilled, same as a
+      // personal signup.
+      await registerBusiness({
         organization_name: orgName,
         username,
         email,
         password,
         confirm_password: confirmPassword,
       });
-      if (!data || !data.token) {
-        throw new Error("No token returned from server");
-      }
-      const accountType = data.account_type ?? "organization_admin";
-      // Fresh registration → AuthContext sets up the owner's E2E keypair +
-      // recovery phrase, same as a personal signup.
-      login(data.token, accountType, true, password);
-      const target = homePathForAccount(accountType);
-      void navigate(target.startsWith("/") ? target : `/${target}`);
+      void navigate(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Business signup failed");
     } finally {
