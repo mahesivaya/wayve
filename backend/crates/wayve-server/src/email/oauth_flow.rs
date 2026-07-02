@@ -412,110 +412,137 @@ pub async fn oauth_callback(
         }
     }
 
-    // Block cross-user duplicate connection: if this Gmail address is
-    // already attached to a different Wayve user's account_id, refuse the
-    // connect and bounce the user back to the UI with a friendly error.
-    // Without this, user A can OAuth-connect user B's Gmail (if A has the
-    // grant) and silently get a parallel synced copy of every email —
-    // see [account::email_owned_by_other_user] for the rationale.
-    match crate::email::account::email_owned_by_other_user(pool.get_ref(), email, user_id).await {
+    // Cross-user mailbox guard. If this Gmail is already attached to a
+    // *different* Wayve user's account_id, we must not silently attach a second
+    // copy (user A OAuth-connecting user B's Gmail — see
+    // [account::email_owned_by_other_user]).
+    //
+    // Crucially this must NOT block a *login*: completing Google OAuth proves the
+    // caller owns this Google identity, so when they're signing in (`is_signup`)
+    // and the mailbox happens to belong to a different local user, we still log
+    // them in and just skip re-attaching the conflicting mailbox. The hard
+    // `email_in_use` rejection applies only to the explicit connect flow.
+    let attach_mailbox = match crate::email::account::email_owned_by_other_user(
+        pool.get_ref(),
+        email,
+        user_id,
+    )
+    .await
+    {
         Ok(Some(other_user_id)) => {
-            warn!(
-                target: "gmail",
-                email,
-                attempted_user = user_id,
-                existing_user = other_user_id,
-                "rejecting Gmail connect — already connected to another Wayve user"
-            );
-            let frontend = crate::config::frontend_url();
-            return HttpResponse::Found()
-                .insert_header((
-                    actix_web::http::header::LOCATION,
-                    format!("{}/emails?error=email_in_use", frontend),
-                ))
-                .finish();
+            if is_signup {
+                warn!(
+                    target: "gmail",
+                    email,
+                    attempted_user = user_id,
+                    existing_user = other_user_id,
+                    "gmail owned by another user; signing in without (re)connecting the mailbox"
+                );
+                false
+            } else {
+                warn!(
+                    target: "gmail",
+                    email,
+                    attempted_user = user_id,
+                    existing_user = other_user_id,
+                    "rejecting Gmail connect — already connected to another Wayve user"
+                );
+                let frontend = crate::config::frontend_url();
+                return HttpResponse::Found()
+                    .insert_header((
+                        actix_web::http::header::LOCATION,
+                        format!("{}/emails?error=email_in_use", frontend),
+                    ))
+                    .finish();
+            }
         }
-        Ok(None) => {}
+        Ok(None) => true,
         Err(e) => {
             error!(
                 target: "gmail",
                 error = %e,
                 "duplicate-account precheck failed; failing open to existing upsert"
             );
-            // Fall through — the upsert will succeed with the existing
+            // Fall through — the upsert will proceed with the existing
             // duplicate behaviour. We log so an operator can investigate.
-        }
-    }
-
-    let account_id = match upsert_connected_email_account(
-        pool.get_ref(),
-        ConnectedEmailAccount {
-            email,
-            user_id,
-            provider: MailProvider::Google,
-            access_token,
-            refresh_token: Some(refresh_token),
-            expires_in,
-        },
-    )
-    .await
-    {
-        Ok(id) => {
-            info!(
-                "Gmail account connected: {} (user_id={}, account_id={})",
-                email, user_id, id
-            );
-            id
-        }
-        Err(e) => {
-            error!("Failed to save Gmail account {}: {:?}", email, e);
-            return HttpResponse::InternalServerError().body("Failed to save account");
+            true
         }
     };
 
-    let pool_clone = pool.clone();
-    let token_clone = access_token.to_string();
-    actix_web::rt::spawn(async move {
-        match sync_account_recent(pool_clone.get_ref(), account_id, &token_clone, 51).await {
-            Ok(_) => info!(target: "gmail", user_id, account_id, "recent email sync primed"),
-            Err(e) => {
-                warn!(target: "gmail", user_id, account_id, error = ?e, "recent email sync failed")
-            }
-        }
-    });
-
-    // Arm the Gmail watch so new mail pushes to Pub/Sub immediately (best-effort;
-    // the renewal worker re-arms it later; no-op when GMAIL_PUSH_TOPIC is unset).
-    let watch_pool = pool.clone();
-    let watch_token = access_token.to_string();
-    actix_web::rt::spawn(async move {
-        if let Err(e) =
-            crate::email::gmail_push::start_watch(watch_pool.get_ref(), account_id, &watch_token)
-                .await
-        {
-            warn!(target: "gmail", user_id, account_id, error = ?e, "gmail watch arm failed");
-        }
-    });
-
-    let pool_clone = pool.clone();
-    let token_clone = access_token.to_string();
-    actix_web::rt::spawn(async move {
-        match crate::scheduler::google_calendar::import_upcoming_events(
-            pool_clone.get_ref(),
-            user_id,
-            account_id,
-            &token_clone,
+    if attach_mailbox {
+        let account_id = match upsert_connected_email_account(
+            pool.get_ref(),
+            ConnectedEmailAccount {
+                email,
+                user_id,
+                provider: MailProvider::Google,
+                access_token,
+                refresh_token: Some(refresh_token),
+                expires_in,
+            },
         )
         .await
         {
-            Ok(n) => {
-                info!(target: "scheduler", user_id, account_id, count = n, "calendar import done")
+            Ok(id) => {
+                info!(
+                    "Gmail account connected: {} (user_id={}, account_id={})",
+                    email, user_id, id
+                );
+                id
             }
             Err(e) => {
-                warn!(target: "scheduler", user_id, account_id, error = %e, "calendar import failed")
+                error!("Failed to save Gmail account {}: {:?}", email, e);
+                return HttpResponse::InternalServerError().body("Failed to save account");
             }
-        }
-    });
+        };
+
+        let pool_clone = pool.clone();
+        let token_clone = access_token.to_string();
+        actix_web::rt::spawn(async move {
+            match sync_account_recent(pool_clone.get_ref(), account_id, &token_clone, 51).await {
+                Ok(_) => info!(target: "gmail", user_id, account_id, "recent email sync primed"),
+                Err(e) => {
+                    warn!(target: "gmail", user_id, account_id, error = ?e, "recent email sync failed")
+                }
+            }
+        });
+
+        // Arm the Gmail watch so new mail pushes to Pub/Sub immediately (best-effort;
+        // the renewal worker re-arms it later; no-op when GMAIL_PUSH_TOPIC is unset).
+        let watch_pool = pool.clone();
+        let watch_token = access_token.to_string();
+        actix_web::rt::spawn(async move {
+            if let Err(e) = crate::email::gmail_push::start_watch(
+                watch_pool.get_ref(),
+                account_id,
+                &watch_token,
+            )
+            .await
+            {
+                warn!(target: "gmail", user_id, account_id, error = ?e, "gmail watch arm failed");
+            }
+        });
+
+        let pool_clone = pool.clone();
+        let token_clone = access_token.to_string();
+        actix_web::rt::spawn(async move {
+            match crate::scheduler::google_calendar::import_upcoming_events(
+                pool_clone.get_ref(),
+                user_id,
+                account_id,
+                &token_clone,
+            )
+            .await
+            {
+                Ok(n) => {
+                    info!(target: "scheduler", user_id, account_id, count = n, "calendar import done")
+                }
+                Err(e) => {
+                    warn!(target: "scheduler", user_id, account_id, error = %e, "calendar import failed")
+                }
+            }
+        });
+    }
 
     info!(target: "gmail", user_id, signup = is_signup, "redirecting to frontend");
 
