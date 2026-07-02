@@ -1,6 +1,6 @@
-# Getting started with Wayve
+# Getting started with Fluxze
 
-Welcome to Wayve — one workspace for **email, chat, calls, scheduling,
+Welcome to Fluxze — one workspace for **email, chat, calls, scheduling,
 drive, notes, tasks, and an AI assistant**, with a scoped, audited API on
 top of all of it. This guide is the fastest path from a new account to a
 working integration. If you only read one page, read this one.
