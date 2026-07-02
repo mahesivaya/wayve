@@ -136,6 +136,12 @@ pub struct EffectiveAccess {
     pub role_label: String,
     pub scope: String,
     pub permissions: Vec<String>,
+    /// True only for THE first owner of an organization — the earliest-joined
+    /// `owner` row (tie-break lowest user_id). Used to gate owner-only,
+    /// single-person affordances (e.g. connecting the org's own OAuth mailbox)
+    /// to one person, not every user who holds the `owner` role. Always false
+    /// for personal and platform scopes.
+    pub is_primary_owner: bool,
 }
 
 /// A snapshot of the user's current plan, suitable for embedding in the
@@ -230,17 +236,42 @@ pub async fn current_plan_for_user(
     .await
 }
 
+/// True only for THE first owner of an organization: the earliest-joined
+/// `owner` membership row (tie-break by lowest user_id). Lets us restrict an
+/// owner-only affordance to a single person rather than everyone holding the
+/// `owner` role. Personal / platform scopes are never a "primary org owner".
+async fn is_primary_org_owner(pool: &PgPool, ctx: &rbac::RoleContext) -> Result<bool, sqlx::Error> {
+    if !matches!(ctx.scope, Scope::Organization) || !matches!(ctx.role, Role::Owner) {
+        return Ok(false);
+    }
+    let Some(org_id) = ctx.organization_id else {
+        return Ok(false);
+    };
+    let first_owner: Option<i32> = sqlx::query_scalar(
+        "SELECT user_id FROM organization_members \
+         WHERE organization_id = $1 AND role = 'owner' \
+         ORDER BY created_at ASC, user_id ASC \
+         LIMIT 1",
+    )
+    .bind(org_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(first_owner == Some(ctx.user_id))
+}
+
 /// Full access info for a user, computed from the RBAC role context.
 pub async fn effective_access_for_user(
     pool: &PgPool,
     user_id: i32,
 ) -> Result<EffectiveAccess, sqlx::Error> {
     let ctx = rbac::resolve_role_context(pool, user_id).await?;
+    let is_primary_owner = is_primary_org_owner(pool, &ctx).await?;
     Ok(EffectiveAccess {
         role: ctx.role.as_str().to_string(),
         role_label: effective_role_label(ctx.scope, ctx.role),
         scope: ctx.scope.as_str().to_string(),
         permissions: ctx.permission_strings(),
+        is_primary_owner,
     })
 }
 
@@ -261,5 +292,8 @@ pub fn fallback_access(account_type: &str) -> EffectiveAccess {
             .iter()
             .map(|perm| perm.as_str().to_string())
             .collect(),
+        // Fallback path can't confirm primary ownership (the DB lookup is what
+        // just failed), so deny the owner-only affordance to be safe.
+        is_primary_owner: false,
     }
 }

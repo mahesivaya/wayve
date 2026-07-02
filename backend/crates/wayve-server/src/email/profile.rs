@@ -108,6 +108,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "role_label": access.role_label,
         "scope": access.scope,
         "permissions": access.permissions,
+        "is_primary_owner": access.is_primary_owner,
         "organization_id": organization_id,
         "organization_slug": organization_slug,
         "organization_name": organization_name,

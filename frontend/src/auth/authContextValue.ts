@@ -39,6 +39,10 @@ export type UserType = {
   // permission strings — server-computed, used to gate UI.
   scope?: string | null;
   permissions?: string[];
+  // True only for THE first owner of an organization (earliest `owner` row).
+  // Server-computed; gates single-person owner affordances like connecting the
+  // org's own OAuth mailbox. Always false for personal/platform scopes.
+  is_primary_owner?: boolean;
   organization_id?: number | null;
   organization_slug?: string | null;
   organization_name?: string | null;

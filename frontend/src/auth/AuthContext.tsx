@@ -458,6 +458,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           role_label: data.role_label ?? null,
           scope: data.scope ?? null,
           permissions: data.permissions ?? [],
+          is_primary_owner: data.is_primary_owner ?? false,
           organization_id: data.organization_id ?? null,
           organization_slug: data.organization_slug ?? null,
           organization_name: data.organization_name ?? null,
