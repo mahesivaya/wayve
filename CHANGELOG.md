@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [5.2.1](https://github.com/mahesivaya/wayve/releases/tag/v5.2.1) - 2026-07-02
+
+### 🐛 Bug Fixes
+
+- **auth:** Normalize email on register to prevent login lockout and case-variant duplicates
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v5.2.0 [skip ci]
+
 ## [5.2.0](https://github.com/mahesivaya/wayve/releases/tag/v5.2.0) - 2026-07-02
 
 ### 🚀 Features
