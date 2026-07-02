@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [5.2.0](https://github.com/mahesivaya/wayve/releases/tag/v5.2.0) - 2026-07-02
+
+### 🚀 Features
+
+- **auth:** Require email verification code for business signup
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v5.1.0 [skip ci]
+
 ## [5.1.0](https://github.com/mahesivaya/wayve/releases/tag/v5.1.0) - 2026-07-02
 
 ### 🧹 Maintenance
