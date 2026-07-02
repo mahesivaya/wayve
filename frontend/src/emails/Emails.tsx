@@ -505,9 +505,9 @@ export default function Emails() {
   const showAccountManagement = isPersonalScope;
   // Who may connect their own external mailbox (Gmail / Outlook / IMAP OAuth):
   // personal accounts, plus the single *primary* owner of an organization /
-  // enterprise (the earliest `owner`, server-computed as `is_primary_owner`).
-  // Every other org role — including additional owners — and all platform users
-  // are excluded; they use shared inboxes (/settings/inboxes).
+  // enterprise OR the platform (the earliest `owner` in that scope, server-
+  // computed as `is_primary_owner`). Every other role — including additional
+  // owners — is excluded; they use shared inboxes (/settings/inboxes).
   const canConnectOwnMailbox =
     isPersonalScope || user?.is_primary_owner === true;
   // But every scope gets the account *filter* (the "🌐 All Accounts" pill + the

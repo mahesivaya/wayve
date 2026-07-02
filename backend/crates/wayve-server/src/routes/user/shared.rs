@@ -136,11 +136,12 @@ pub struct EffectiveAccess {
     pub role_label: String,
     pub scope: String,
     pub permissions: Vec<String>,
-    /// True only for THE first owner of an organization — the earliest-joined
-    /// `owner` row (tie-break lowest user_id). Used to gate owner-only,
-    /// single-person affordances (e.g. connecting the org's own OAuth mailbox)
+    /// True only for THE first owner of an organization OR the platform — the
+    /// earliest-joined `owner` row (tie-break lowest user_id) in
+    /// `organization_members` / `platform_members`. Used to gate owner-only,
+    /// single-person affordances (e.g. connecting the scope's own OAuth mailbox)
     /// to one person, not every user who holds the `owner` role. Always false
-    /// for personal and platform scopes.
+    /// for personal scope.
     pub is_primary_owner: bool,
 }
 
@@ -236,26 +237,45 @@ pub async fn current_plan_for_user(
     .await
 }
 
-/// True only for THE first owner of an organization: the earliest-joined
-/// `owner` membership row (tie-break by lowest user_id). Lets us restrict an
-/// owner-only affordance to a single person rather than everyone holding the
-/// `owner` role. Personal / platform scopes are never a "primary org owner".
-async fn is_primary_org_owner(pool: &PgPool, ctx: &rbac::RoleContext) -> Result<bool, sqlx::Error> {
-    if !matches!(ctx.scope, Scope::Organization) || !matches!(ctx.role, Role::Owner) {
+/// True only for THE first owner of a privileged scope: the earliest-joined
+/// `owner` membership row (tie-break by lowest user_id) in the organization
+/// (`organization_members`) or the platform (`platform_members`). Lets us
+/// restrict an owner-only affordance to a single person rather than everyone
+/// holding the `owner` role. Personal scope is never a primary owner.
+async fn is_primary_scope_owner(
+    pool: &PgPool,
+    ctx: &rbac::RoleContext,
+) -> Result<bool, sqlx::Error> {
+    if !matches!(ctx.role, Role::Owner) {
         return Ok(false);
     }
-    let Some(org_id) = ctx.organization_id else {
-        return Ok(false);
+    let first_owner: Option<i32> = match ctx.scope {
+        Scope::Organization => {
+            let Some(org_id) = ctx.organization_id else {
+                return Ok(false);
+            };
+            sqlx::query_scalar(
+                "SELECT user_id FROM organization_members \
+                 WHERE organization_id = $1 AND role = 'owner' \
+                 ORDER BY created_at ASC, user_id ASC \
+                 LIMIT 1",
+            )
+            .bind(org_id)
+            .fetch_optional(pool)
+            .await?
+        }
+        Scope::Platform => {
+            sqlx::query_scalar(
+                "SELECT user_id FROM platform_members \
+                 WHERE role = 'owner' \
+                 ORDER BY created_at ASC, user_id ASC \
+                 LIMIT 1",
+            )
+            .fetch_optional(pool)
+            .await?
+        }
+        Scope::Personal => return Ok(false),
     };
-    let first_owner: Option<i32> = sqlx::query_scalar(
-        "SELECT user_id FROM organization_members \
-         WHERE organization_id = $1 AND role = 'owner' \
-         ORDER BY created_at ASC, user_id ASC \
-         LIMIT 1",
-    )
-    .bind(org_id)
-    .fetch_optional(pool)
-    .await?;
     Ok(first_owner == Some(ctx.user_id))
 }
 
@@ -265,7 +285,7 @@ pub async fn effective_access_for_user(
     user_id: i32,
 ) -> Result<EffectiveAccess, sqlx::Error> {
     let ctx = rbac::resolve_role_context(pool, user_id).await?;
-    let is_primary_owner = is_primary_org_owner(pool, &ctx).await?;
+    let is_primary_owner = is_primary_scope_owner(pool, &ctx).await?;
     Ok(EffectiveAccess {
         role: ctx.role.as_str().to_string(),
         role_label: effective_role_label(ctx.scope, ctx.role),
