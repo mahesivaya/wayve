@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [5.3.1](https://github.com/mahesivaya/wayve/releases/tag/v5.3.1) - 2026-07-02
+
+### 🚀 Features
+
+- **sso:** Add collapsible Google Workspace setup guide to SSO page
+- **sso:** Surface SSO config in Settings and improve the config page
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v5.3.0 [skip ci]
+
 ## [5.3.0](https://github.com/mahesivaya/wayve/releases/tag/v5.3.0) - 2026-07-02
 
 ### 🚀 Features
