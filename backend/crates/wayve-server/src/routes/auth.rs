@@ -97,13 +97,23 @@ pub async fn register(
     }
     let recovery_mode = "full";
 
+    // Normalize the email so casing/whitespace can't create duplicate accounts —
+    // or (worse) an account that login, which lowercases the identifier, can
+    // never match. Mirrors login and admin_create_user.
+    let email = data.email.trim().to_lowercase();
+    if email.is_empty() {
+        return Ok(
+            HttpResponse::BadRequest().json(serde_json::json!({ "message": "Email is required" }))
+        );
+    }
+
     let hashed = hash_password(&data.password).await?;
 
     let result = sqlx::query(
         "INSERT INTO users (email, password, recovery_mode, email_verified) \
          VALUES ($1, $2, $3, false) RETURNING id",
     )
-    .bind(&data.email)
+    .bind(&email)
     .bind(&hashed)
     .bind(recovery_mode)
     .fetch_one(pool.get_ref())
@@ -112,7 +122,7 @@ pub async fn register(
     match result {
         Ok(row) => {
             let user_id: i32 = row.get("id");
-            info!(target: "auth", user_id, email = %data.email, provider = "local", "user registered (pending email verification)");
+            info!(target: "auth", user_id, email = %email, provider = "local", "user registered (pending email verification)");
             // No auto-login: the account stays unverified (and login is blocked)
             // until the user clicks the emailed link. Record a register event
             // rather than a login.
@@ -131,7 +141,7 @@ pub async fn register(
                 },
             )
             .await;
-            match issue_verification_code_and_email(pool.get_ref(), user_id, &data.email).await {
+            match issue_verification_code_and_email(pool.get_ref(), user_id, &email).await {
                 Ok(()) => Ok(HttpResponse::Ok().json(serde_json::json!({
                     "verification_required": true,
                     "message": "Check your email to verify your account."
@@ -150,7 +160,7 @@ pub async fn register(
 
         Err(e) => {
             if e.to_string().contains("duplicate key") {
-                warn!("Register rejected (already exists): {}", data.email);
+                warn!("Register rejected (already exists): {}", email);
                 Ok(HttpResponse::BadRequest()
                     .json(serde_json::json!({ "message": "User already exists" })))
             } else {
