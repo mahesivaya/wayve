@@ -1,8 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { register } from "../api/Auth";
-import { useAuth } from "../auth/useAuth";
-import { homePathForAccount } from "../auth/accountHome";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { getApiBase } from "../config";
 import PublicHeader from "../components/PublicHeader";
@@ -18,8 +16,7 @@ export default function Register() {
       ? "This email is already registered. Please log in instead."
       : ""
   );
-
-  const { login } = useAuth();
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const handleGmailSignup = () => {
@@ -35,42 +32,17 @@ export default function Register() {
       return;
     }
 
+    setSubmitting(true);
     try {
-      // Plan A: every signup is end-to-end encrypted. The server is
-      // sent `recovery_mode = 'full'` so the user gets a 24-word
-      // BIP-39 mnemonic right after the form submit, generated and
-      // shown by RecoverySeedModal. Forget the password AND lose the
-      // mnemonic → the account is unrecoverable; that's by design.
-      const data = await register(email, password, confirmPassword, "full");
-
-      if (!data || !data.token) {
-        throw new Error("No token returned from server");
-      }
-
-      // Pass the plaintext password so AuthContext can also produce
-      // the PBKDF2 login-wrap (auto-unlock on new browsers w/o mnemonic).
-      login(data.token, data.account_type ?? "personal", true, password);
-
-      // Post-register redirect rules (in priority order):
-      //   1. `?next=/path` from a referring CTA — same-origin only
-      //      (rejects "" / "//other.host" / non-leading-slash to prevent
-      //      open-redirect into another origin). This still covers the
-      //      "create organization → /organizations/new" CTA path; the
-      //      explicit account-kind radio on this form was removed since
-      //      every new signup starts as a personal account by default.
-      //   2. Fall back to the account-type home (e.g. /home for personal).
-      const rawNext = params.get("next") ?? "";
-      const safeNext =
-        rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
-      const fallback = homePathForAccount(data.account_type);
-      const target = safeNext
-        ? safeNext
-        : fallback.startsWith("/")
-          ? fallback
-          : `/${fallback}`;
-      void navigate(target);
+      // The account is created UNVERIFIED and a 6-digit code is emailed — the
+      // user must enter it before they can log in (that first login is when the
+      // E2E keypair + recovery phrase are set up). No auto-login; go to the code
+      // screen with the email prefilled.
+      await register(email, password, confirmPassword, "full");
+      navigate(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
+      setSubmitting(false);
     }
   };
 
@@ -106,7 +78,9 @@ export default function Register() {
             required
           />
 
-          <button type="submit">Register</button>
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Creating…" : "Register"}
+          </button>
 
           <div className="auth-divider">
             <span>or sign up with</span>
@@ -123,10 +97,8 @@ export default function Register() {
             </button>
           </div>
 
-          {/* ✅ Error message */}
           {error && <p className="error">{error}</p>}
 
-          {/* ✅ Switch to login */}
           <p className="switch-auth">
             Already have an account? <Link to="/login">Login</Link>
           </p>

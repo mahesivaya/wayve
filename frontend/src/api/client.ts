@@ -38,6 +38,10 @@ type ApiOptions = RequestInit & {
   // Same, for 410 Gone — e.g. an expired secure-message token.
   preserve410?: boolean;
 
+  // Same, for 403 Forbidden — e.g. login rejected because the email isn't
+  // verified yet, where the caller wants to read the body and branch.
+  preserve403?: boolean;
+
   // Opt-in short-TTL response cache for GET requests, in milliseconds.
   // When set and > 0, a successful GET is cached by URL and re-served
   // (cloned) for repeat calls within the window — so remount-on-navigation
@@ -73,6 +77,7 @@ export async function apiFetch(path: string, options: ApiOptions = {}) {
     preserve401 = false,
     preserve404 = false,
     preserve410 = false,
+    preserve403 = false,
     cacheTtlMs,
     headers,
     ...rest
@@ -180,7 +185,8 @@ export async function apiFetch(path: string, options: ApiOptions = {}) {
     // on the status.
     if (
       (response.status === 404 && preserve404) ||
-      (response.status === 410 && preserve410)
+      (response.status === 410 && preserve410) ||
+      (response.status === 403 && preserve403)
     ) {
       return response;
     }

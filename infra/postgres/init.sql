@@ -244,6 +244,27 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id
     ON password_reset_tokens(user_id);
 
+-- Email verification for personal email+password signups. `email_verified`
+-- defaults TRUE so all EXISTING users plus OAuth/SCIM/business signups are
+-- grandfathered in (never locked out); only new personal `/api/register`
+-- signups explicitly insert FALSE and must confirm via the emailed link.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT true;
+
+-- Email verification codes. Single-use, short-lived 6-digit codes. `token`
+-- holds the code and is NOT unique (6-digit codes collide across users);
+-- verification is always scoped to the user. `attempts` bounds brute force.
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user_id
+    ON email_verification_tokens(user_id);
+
 -- OAuth authorization-code state. State values are opaque, single-use, and
 -- short lived; JWTs must never be sent through provider redirects.
 CREATE TABLE IF NOT EXISTS oauth_states (

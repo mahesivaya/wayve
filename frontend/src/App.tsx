@@ -19,6 +19,7 @@ import RegisterBusiness from "./auth/RegisterBusiness";
 import Login from "./auth/Login";
 import ForgotPassword from "./auth/ForgotPassword";
 import ResetPassword from "./auth/ResetPassword";
+import VerifyEmail from "./auth/VerifyEmail";
 import RecoverWithMnemonicPage from "./auth/RecoverWithMnemonic";
 import { useAuth } from "./auth/useAuth";
 import { homePathForUser, normalizeAccountType } from "./auth/accountHome";
@@ -172,6 +173,7 @@ export default function App() {
           />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route
             path="/recover-with-mnemonic"
             element={<RecoverWithMnemonicPage />}

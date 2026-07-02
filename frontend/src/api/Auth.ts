@@ -80,6 +80,9 @@ export async function login(email: string, password: string) {
     const res = await apiFetch(`/api/login`, {
       auth: false,
       preserve401: true,
+      // Surface the 403 "email_unverified" body so the caller can prompt to
+      // verify/resend instead of a generic failure.
+      preserve403: true,
       method: "POST",
       headers: {
         "X-Request-ID": reqId,
@@ -115,6 +118,27 @@ export async function resetPassword(token: string, newPassword: string) {
     auth: false,
     method: "POST",
     body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  return res.json();
+}
+
+// Confirm the 6-digit email-verification code sent to `email`.
+export async function verifyEmail(email: string, code: string) {
+  const res = await apiFetch(`/api/verify-email`, {
+    auth: false,
+    method: "POST",
+    body: JSON.stringify({ email, code }),
+  });
+  return res.json();
+}
+
+// Re-send the verification link. Always resolves (generic 200) regardless of
+// whether the address exists / is already verified.
+export async function resendVerification(email: string) {
+  const res = await apiFetch(`/api/resend-verification`, {
+    auth: false,
+    method: "POST",
+    body: JSON.stringify({ email }),
   });
   return res.json();
 }

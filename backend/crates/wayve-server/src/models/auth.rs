@@ -53,6 +53,17 @@ pub struct ResetInput {
 }
 
 #[derive(Deserialize)]
+pub struct VerifyEmailInput {
+    pub email: String,
+    pub code: String,
+}
+
+#[derive(Deserialize)]
+pub struct ResendVerificationInput {
+    pub email: String,
+}
+
+#[derive(Deserialize)]
 pub struct ChangePasswordInput {
     pub current_password: Option<String>,
     pub new_password: String,

@@ -2,7 +2,8 @@ use crate::prelude::*;
 
 use crate::email::sender::send_mail;
 use crate::models::auth::{
-    ForgotInput, LoginInput, LoginResponse, MemberLoginWrap, RegisterInput, ResetInput,
+    ForgotInput, LoginInput, LoginResponse, MemberLoginWrap, RegisterInput,
+    ResendVerificationInput, ResetInput, VerifyEmailInput,
 };
 use crate::models::message::MessageResponse;
 use crate::models::user::User;
@@ -16,7 +17,54 @@ use wayve_security::jwt::{
 use wayve_security::password::{hash_password, verify_password};
 
 const RESET_TTL_MINUTES: i64 = 30;
+const CODE_TTL_MINUTES: i64 = 15;
+const MAX_VERIFY_ATTEMPTS: i32 = 5;
 const DUMMY_PASSWORD_HASH: &str = "$2b$12$BeUHqArduWoNmhYKnepJYeYTQdhF/XcdcGFHaxiz0/H3JJUbHyLGe";
+
+/// A 6-digit numeric verification code (zero-padded), from the OS CSPRNG.
+fn random_code() -> String {
+    use rand::Rng;
+    format!("{:06}", rand::rngs::OsRng.gen_range(0..1_000_000u32))
+}
+
+/// Issue a fresh 6-digit email-verification code and email it. Any prior unused
+/// codes for the user are invalidated so only the newest is valid. Shared by
+/// `/register` and `/resend-verification`.
+async fn issue_verification_code_and_email(
+    pool: &PgPool,
+    user_id: i32,
+    email: &str,
+) -> std::result::Result<(), AppError> {
+    // Keep only the newest code valid.
+    sqlx::query(
+        "UPDATE email_verification_tokens SET used_at = NOW() \
+         WHERE user_id = $1 AND used_at IS NULL",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+
+    let code = random_code();
+    let expires_at = chrono::Utc::now() + chrono::Duration::minutes(CODE_TTL_MINUTES);
+    sqlx::query(
+        "INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)",
+    )
+    .bind(user_id)
+    .bind(&code)
+    .bind(expires_at)
+    .execute(pool)
+    .await?;
+
+    let body = format!(
+        "Hi,\n\nWelcome to Wayve! Your email verification code is:\n\n    {code}\n\n\
+         Enter it in the app within {CODE_TTL_MINUTES} minutes to activate your account.\n\
+         If you didn't create a Wayve account, you can safely ignore this email.\n"
+    );
+    send_mail(email, "Your Wayve verification code", &body)
+        .await
+        .map_err(|e| AppError::Internal(format!("verification email send: {e}")))?;
+    Ok(())
+}
 
 #[post("/register")]
 #[instrument(target = "auth", skip(req, pool, data), fields(email = %data.email))]
@@ -53,7 +101,8 @@ pub async fn register(
     let hashed = hash_password(&data.password).await?;
 
     let result = sqlx::query(
-        "INSERT INTO users (email, password, recovery_mode) VALUES ($1, $2, $3) RETURNING id",
+        "INSERT INTO users (email, password, recovery_mode, email_verified) \
+         VALUES ($1, $2, $3, false) RETURNING id",
     )
     .bind(&data.email)
     .bind(&hashed)
@@ -64,32 +113,40 @@ pub async fn register(
     match result {
         Ok(row) => {
             let user_id: i32 = row.get("id");
-            info!(target: "auth", user_id, email = %data.email, provider = "local", "user registered via local account");
-            let token = create_jwt(user_id, data.email.clone());
-            // Registration auto-logs-in (sets the auth cookie), so record a
-            // login event — otherwise a sign-up followed by a sign-out shows an
-            // orphaned logout with no matching login.
+            info!(target: "auth", user_id, email = %data.email, provider = "local", "user registered (pending email verification)");
+            // No auto-login: the account stays unverified (and login is blocked)
+            // until the user clicks the emailed link. Record a register event
+            // rather than a login.
             crate::audit::record_action(
                 pool.get_ref(),
                 &req,
                 crate::audit::AuditEvent {
                     actor_user_id: user_id,
-                    action: "login",
-                    resource_type: "session",
+                    action: "register",
+                    resource_type: "account",
                     resource_id: None,
                     metadata: Some(serde_json::json!({
                         "method": "password",
-                        "new_user": true,
+                        "verification_required": true,
                     })),
                 },
             )
             .await;
-            Ok(HttpResponse::Ok()
-                .cookie(auth_cookie(token.clone()))
-                .json(serde_json::json!({
-                    "token": token,
-                    "account_type": "personal"
-                })))
+            match issue_verification_code_and_email(pool.get_ref(), user_id, &data.email).await {
+                Ok(()) => Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "verification_required": true,
+                    "message": "Check your email to verify your account."
+                }))),
+                Err(e) => {
+                    error!(target: "auth", user_id, error = ?e, "verification email failed at register");
+                    // The account exists; the user can trigger a resend.
+                    Ok(HttpResponse::Ok().json(serde_json::json!({
+                        "verification_required": true,
+                        "email_send_failed": true,
+                        "message": "Account created, but we couldn't send the verification email. Please use Resend."
+                    })))
+                }
+            }
         }
 
         Err(e) => {
@@ -211,6 +268,30 @@ pub(crate) async fn login(
         return Ok(HttpResponse::Unauthorized().json(MessageResponse {
             message: "Invalid credentials".to_string(),
         }));
+    }
+
+    // Email-verification gate: local password accounts must confirm their email
+    // before the first login. OAuth/SCIM/business + all pre-existing accounts
+    // are `email_verified = true` (column default), so they're unaffected.
+    let (auth_provider, email_verified): (String, bool) =
+        sqlx::query_as("SELECT auth_provider, email_verified FROM users WHERE id = $1")
+            .bind(user.id)
+            .fetch_one(pool.get_ref())
+            .await?;
+    if auth_provider == "local" && !email_verified {
+        warn!(target: "auth", email = %data.email, "login blocked: email not verified");
+        crate::audit::record_login_failure(
+            pool.get_ref(),
+            &req,
+            &data.email,
+            "email_unverified",
+            Some(user.id),
+        )
+        .await;
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "error": "email_unverified",
+            "message": "Please verify your email before logging in. Check your inbox for the confirmation link."
+        })));
     }
 
     info!("Login success: {}", data.email);
@@ -700,6 +781,120 @@ pub async fn register_business(
         .json(serde_json::json!({ "token": token, "account_type": "organization_admin" })))
 }
 
+// Verify a 6-digit code for `email`. Scoped to the user's newest active code;
+// wrong codes increment `attempts` and are burned after MAX_VERIFY_ATTEMPTS.
+// Bad email / wrong / expired / used all collapse to a generic 400.
+#[post("/verify-email")]
+#[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
+pub async fn verify_email(pool: web::Data<PgPool>, data: web::Json<VerifyEmailInput>) -> AppResult {
+    info!(target: "auth", "verify-email attempt");
+
+    let bad = || {
+        HttpResponse::BadRequest().json(serde_json::json!({ "message": "Invalid or expired code" }))
+    };
+
+    // Only local, still-unverified accounts have a code to check.
+    let user_row = sqlx::query(
+        "SELECT id FROM users \
+         WHERE email = $1 AND auth_provider = 'local' AND email_verified = false",
+    )
+    .bind(&data.email)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    let Some(user_row) = user_row else {
+        return Ok(bad());
+    };
+    let user_id: i32 = user_row.get("id");
+
+    // Newest code for this user.
+    let row = sqlx::query(
+        "SELECT id, token, attempts, expires_at, used_at \
+         FROM email_verification_tokens WHERE user_id = $1 ORDER BY id DESC LIMIT 1",
+    )
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    let Some(row) = row else {
+        return Ok(bad());
+    };
+    let token_id: i32 = row.get("id");
+    let stored_code: String = row.try_get("token").unwrap_or_default();
+    let attempts: i32 = row.try_get("attempts").unwrap_or(0);
+    let used_at: Option<chrono::DateTime<chrono::Utc>> = row.try_get("used_at").ok().flatten();
+    let expires_at: chrono::DateTime<chrono::Utc> = row.get("expires_at");
+
+    if used_at.is_some() || expires_at < chrono::Utc::now() {
+        return Ok(bad());
+    }
+
+    if attempts >= MAX_VERIFY_ATTEMPTS {
+        // Burn the code so a fresh one must be requested.
+        let _ = sqlx::query("UPDATE email_verification_tokens SET used_at = NOW() WHERE id = $1")
+            .bind(token_id)
+            .execute(pool.get_ref())
+            .await;
+        warn!(target: "auth", user_id, "verify-email rejected: too many attempts");
+        return Ok(HttpResponse::TooManyRequests()
+            .json(serde_json::json!({ "message": "Too many attempts. Request a new code." })));
+    }
+
+    if stored_code != data.code.trim() {
+        sqlx::query("UPDATE email_verification_tokens SET attempts = attempts + 1 WHERE id = $1")
+            .bind(token_id)
+            .execute(pool.get_ref())
+            .await?;
+        warn!(target: "auth", user_id, "verify-email rejected: wrong code");
+        return Ok(bad());
+    }
+
+    let mut tx = pool.begin().await?;
+    sqlx::query("UPDATE users SET email_verified = true WHERE id = $1")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE email_verification_tokens SET used_at = NOW() WHERE id = $1")
+        .bind(token_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+
+    info!(target: "auth", user_id, "email verified");
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "Email verified" })))
+}
+
+// Re-send a verification code. Always responds 200 with a generic message so
+// it can't be used to probe which emails exist / are unverified.
+#[post("/resend-verification")]
+#[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
+pub async fn resend_verification(
+    pool: web::Data<PgPool>,
+    data: web::Json<ResendVerificationInput>,
+) -> HttpResponse {
+    info!(target: "auth", "resend-verification request");
+
+    let generic_ok = HttpResponse::Ok().json(serde_json::json!({
+        "message": "If that account needs verification, a new link has been sent."
+    }));
+
+    let row = sqlx::query(
+        "SELECT id FROM users \
+         WHERE email = $1 AND auth_provider = 'local' AND email_verified = false",
+    )
+    .bind(&data.email)
+    .fetch_optional(pool.get_ref())
+    .await;
+
+    let user_id: i32 = match row {
+        Ok(Some(r)) => r.get("id"),
+        _ => return generic_ok,
+    };
+
+    if let Err(e) = issue_verification_code_and_email(pool.get_ref(), user_id, &data.email).await {
+        error!(target: "auth", error = ?e, "resend verification email failed");
+    }
+    generic_ok
+}
+
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(register)
         .service(register_business)
@@ -707,5 +902,7 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
         .service(logout)
         .service(forgot_password)
         .service(reset_password)
+        .service(verify_email)
+        .service(resend_verification)
         .service(recover_with_mnemonic);
 }

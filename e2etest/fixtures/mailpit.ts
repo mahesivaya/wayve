@@ -1,7 +1,7 @@
 import { MAILPIT_API } from "./env";
 
 // Mailpit captures SMTP messages and exposes them over a JSON API. Used by
-// password-reset tests to read the token Wayve mails out without spelunking
+// password-reset tests to read the token Fluxze mails out without spelunking
 // through the database.
 //
 // Wire format reference: https://mailpit.axllent.org/docs/api-v1/

@@ -40,7 +40,10 @@ function parseSsoError(): string {
 
 export default function Login() {
   const [params] = useSearchParams();
-  const [email, setEmail] = useState("");
+  // Arriving from the email-verification screen (?verified=1&email=...): show a
+  // "Verified — sign in" banner and pre-fill the email so it's basically one tap.
+  const verified = params.get("verified") === "1";
+  const [email, setEmail] = useState(() => params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [ssoMode, setSsoMode] = useState(false);
   const [ssoEmail, setSsoEmail] = useState("");
@@ -70,6 +73,13 @@ export default function Login() {
 
     try {
       const data = await login(email, password);
+
+      // Local account that hasn't confirmed its email yet — send them to the
+      // code-entry screen (email prefilled).
+      if (data && data.error === "email_unverified") {
+        navigate(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
 
       if (!data || !data.token) {
         throw new Error("No token returned");
@@ -213,6 +223,17 @@ export default function Login() {
           </form>
         ) : (
           <form className="login-card" onSubmit={handleLogin}>
+            {verified && (
+              <p
+                className="subtitle"
+                style={{
+                  color: "var(--color-success-strong, #16a34a)",
+                  fontWeight: 600,
+                }}
+              >
+                ✓ Verified — sign in to continue
+              </p>
+            )}
             <p className="subtitle">Login to your Fluxze account</p>
 
             <input
