@@ -28,6 +28,69 @@
   line-height: 1.55;
 }
 
+.sso-help-toggle {
+  align-self: flex-start;
+  margin: 0 0 20px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-accent-indigo);
+  background: white;
+  border: 1px solid var(--color-surface-tint-steel);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sso-help-toggle:hover {
+  background: var(--color-surface-near-white);
+  border-color: var(--color-accent-indigo);
+}
+
+.sso-guide {
+  background: var(--color-surface-tint-blue);
+  border: 1px solid var(--color-info-soft-border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin: 0 0 24px;
+}
+
+.sso-guide h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--color-info-text-deep);
+}
+
+.sso-guide ol {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-info-text-medium);
+}
+
+.sso-guide a {
+  color: var(--color-accent-indigo);
+  font-weight: 600;
+}
+
+.sso-guide code {
+  background: white;
+  color: var(--color-brand-purple-text-mid);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12.5px;
+}
+
+.sso-guide-code {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 10px;
+  word-break: break-all;
+}
+
 .sso-form {
   display: flex;
   flex-direction: column;

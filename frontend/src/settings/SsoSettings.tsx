@@ -53,6 +53,13 @@ export default function SsoSettings() {
   const [testResult, setTestResult] = useState<SsoTestResult | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [showGuide, setShowGuide] = useState(false);
+
+  // The redirect URI to register at Google. Known even before the config is
+  // saved, so the guide can show it up front.
+  const redirectUri =
+    existing?.redirect_uri ??
+    `${window.location.origin}/api/auth/sso/callback`;
 
   const load = useCallback(async () => {
     if (!orgId) {
@@ -198,6 +205,67 @@ export default function SsoSettings() {
           your <strong>allowed domain</strong> can then sign in by entering
           their email on the login screen.
         </p>
+        <button
+          type="button"
+          className="sso-help-toggle"
+          aria-expanded={showGuide}
+          onClick={() => setShowGuide((v) => !v)}
+        >
+          {showGuide ? "Hide setup guide" : "How do I get these from Google Workspace?"}
+        </button>
+
+        {showGuide && (
+          <div className="sso-guide">
+            <h3>Get your OIDC details from Google Workspace</h3>
+            <ol>
+              <li>
+                Open the{" "}
+                <a
+                  href="https://console.cloud.google.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Google Cloud Console
+                </a>{" "}
+                and pick (or create) a project — ideally one under your Workspace
+                organization.
+              </li>
+              <li>
+                Go to <strong>APIs &amp; Services → OAuth consent screen</strong>.
+                Choose <strong>Internal</strong> (so only your Workspace users
+                can sign in), fill in an app name + support email, and save.
+              </li>
+              <li>
+                Go to <strong>APIs &amp; Services → Credentials → Create
+                Credentials → OAuth client ID</strong>. For{" "}
+                <strong>Application type</strong> choose{" "}
+                <strong>Web application</strong> and name it e.g. “Fluxze SSO”.
+              </li>
+              <li>
+                Under <strong>Authorized redirect URIs</strong>, add this exact
+                URL, then click <strong>Create</strong>:
+                <code className="sso-guide-code">{redirectUri}</code>
+              </li>
+              <li>
+                Google shows your <strong>Client ID</strong> (ends in{" "}
+                <code>.apps.googleusercontent.com</code>) and{" "}
+                <strong>Client secret</strong> (starts with <code>GOCSPX-</code>).
+                Copy both into the fields on this page.
+              </li>
+              <li>
+                Set <strong>Issuer URL</strong> to{" "}
+                <code>https://accounts.google.com</code> and{" "}
+                <strong>Allowed email domain</strong> to your Workspace domain
+                (e.g. <code>acme.com</code>).
+              </li>
+              <li>
+                Click <strong>Enable SSO</strong>, then{" "}
+                <strong>Test connection</strong> to confirm it works. Your team
+                can now sign in with their Google Workspace accounts.
+              </li>
+            </ol>
+          </div>
+        )}
       </header>
 
       {loading ? (
