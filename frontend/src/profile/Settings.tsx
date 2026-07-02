@@ -21,6 +21,7 @@ import {
   updateMyOrganization,
 } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
+import { hasPermission } from "../auth/permissions";
 import { listMyTickets, type SupportTicket } from "../api/support";
 import SupportModal from "../support/SupportModal";
 import { fmtDate, fmtShortDate } from "../utils/datetime";
@@ -107,6 +108,43 @@ export default function Settings() {
   const [orgError, setOrgError] = useState("");
   const orgDirty =
     orgName.trim().length > 0 && orgName.trim() !== currentOrgName;
+
+  // Admin consoles (SSO, SCIM, …) live as tiles on the org-home dashboard and
+  // were previously unreachable from this page — so an admin opening Settings
+  // couldn't find SSO. Surface the ones the user may manage here too, reusing
+  // the exact permission gates from OrganizationAdminHome.
+  const adminConsoles = [
+    {
+      label: "Single Sign-On (OIDC)",
+      description: "Let your team sign in with Google Workspace / Okta / Azure AD.",
+      path: "/settings/sso",
+      visible: hasPermission(user, "sso:manage"),
+    },
+    {
+      label: "SCIM provisioning",
+      description: "Mint bearer tokens so Okta / Entra can provision users.",
+      path: "/settings/scim",
+      visible: hasPermission(user, "webhooks:manage"),
+    },
+    {
+      label: "Webhooks",
+      description: "Outgoing event delivery and signing-secret rotation.",
+      path: "/settings/webhooks",
+      visible: hasPermission(user, "webhooks:manage"),
+    },
+    {
+      label: "Shared inboxes",
+      description: "Shared inboxes and customer-support queues.",
+      path: "/settings/inboxes",
+      visible: hasPermission(user, "inbox:manage"),
+    },
+    {
+      label: "AI provider",
+      description: "Choose the AI your team's assistant runs on.",
+      path: "/settings/ai",
+      visible: hasPermission(user, "ai:manage"),
+    },
+  ].filter((c) => c.visible);
 
   // "Encrypt files in chat" toggle (personal accounts + owners).
   const showChatEncrypt = isPersonal || isOwner;
@@ -304,6 +342,26 @@ export default function Settings() {
             {chatEncryptError && (
               <p className="settings-danger-error">{chatEncryptError}</p>
             )}
+          </section>
+        )}
+
+        {adminConsoles.length > 0 && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Administration</h2>
+            <div className="settings-rows">
+              {adminConsoles.map((c) => (
+                <div className="settings-usage-row" key={c.path}>
+                  <span title={c.description}>{c.label}</span>
+                  <button
+                    type="button"
+                    className="settings-billing-link"
+                    onClick={() => navigate(c.path)}
+                  >
+                    Open
+                  </button>
+                </div>
+              ))}
+            </div>
           </section>
         )}
 

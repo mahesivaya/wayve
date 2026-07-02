@@ -1,8 +1,13 @@
 .sso-settings {
-  max-width: 720px;
-  margin: 32px auto;
-  padding: 0 24px 64px;
+  /* Fill the full page width instead of a narrow centered column. */
+  max-width: none;
+  width: 100%;
+  margin: 24px 0;
+  padding: 0 32px 40px;
+  box-sizing: border-box;
   color: var(--color-accent-indigo-darkest);
+  /* #root sets text-align: center — reset so the form reads left-aligned. */
+  text-align: left;
   /* Own vertical scroll — the page host (.split-pane-body) clips overflow. */
   min-height: 0;
   overflow-y: auto;
@@ -10,11 +15,15 @@
 
 .sso-settings-header h1 {
   margin: 0 0 8px;
+  font-size: 22px;
+  line-height: 1.2;
   color: var(--color-accent-indigo-darker);
 }
 
 .sso-settings-header p {
   margin: 0 0 24px;
+  max-width: 640px;
+  font-size: 13px;
   color: var(--color-text-slate-deep);
   line-height: 1.55;
 }
@@ -26,14 +35,27 @@
 }
 
 .sso-form fieldset {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  /* Two-column layout so the whole form fits on one screen without the
+     nested scroll block. Collapses to a single column when narrow. */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 20px;
   border: 1px solid var(--color-surface-tint-cloud);
   border-radius: 12px;
   padding: 20px;
   background: white;
   margin: 0;
+}
+
+/* Checkboxes (Enforce SSO / Enabled) span the full width below the inputs. */
+.sso-form fieldset > .sso-form-checkbox {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .sso-form fieldset {
+    grid-template-columns: 1fr;
+  }
 }
 
 .sso-form label {

@@ -209,7 +209,7 @@ export default function SsoSettings() {
               <span>Issuer URL</span>
               <input
                 type="url"
-                placeholder="https://acme.okta.com"
+                placeholder="https://accounts.google.com"
                 value={form.issuer_url}
                 onChange={(e) => update("issuer_url", e.target.value)}
                 required
@@ -217,6 +217,12 @@ export default function SsoSettings() {
               <small>
                 The base URL of your IdP. Fluxze appends
                 <code> /.well-known/openid-configuration</code> for discovery.
+                E.g. <code>https://accounts.google.com</code> (Google Workspace),
+                {" "}
+                <code>https://acme.okta.com</code> (Okta), or
+                {" "}
+                <code>https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0</code>{" "}
+                (Azure AD).
               </small>
             </label>
 
@@ -224,10 +230,16 @@ export default function SsoSettings() {
               <span>Client ID</span>
               <input
                 type="text"
+                placeholder="1234567890-abc123def456.apps.googleusercontent.com"
                 value={form.client_id}
                 onChange={(e) => update("client_id", e.target.value)}
                 required
               />
+              <small>
+                The OAuth client ID from your IdP. Google Workspace looks like
+                {" "}
+                <code>…apps.googleusercontent.com</code>.
+              </small>
             </label>
 
             <label>
@@ -235,7 +247,11 @@ export default function SsoSettings() {
               <input
                 type="password"
                 autoComplete="new-password"
-                placeholder={existing ? "•••••••• (leave blank to keep)" : ""}
+                placeholder={
+                  existing
+                    ? "•••••••• (leave blank to keep)"
+                    : "GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxx"
+                }
                 value={form.client_secret}
                 onChange={(e) => update("client_secret", e.target.value)}
                 required={!existing}
