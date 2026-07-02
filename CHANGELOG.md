@@ -3,6 +3,208 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [5.0.0](https://github.com/mahesivaya/wayve/releases/tag/v5.0.0) - 2026-07-02
+
+### 🚀 Features
+
+- **auth:** Email verification on personal signup via 6-digit code
+- **emails:** Let an organization's primary owner connect their own mailbox
+- **email:** Gmail instant new-mail via users.watch + Cloud Pub/Sub push
+- **org:** Rename 'Handle' label to 'Username' in create-account form
+- **aichat:** Center composer when empty, match input to page color
+- **home:** Replace '+ Add task' with 'Open tasks' link on dashboard
+- **emails:** Also hide the accounts sidebar until a mailbox is connected
+- **emails:** Hide inbox toolbar and folder tabs until a mailbox is connected
+- **emails:** Attachments in compose, reply, and forward
+- **github:** Owner can merge a pull request from the in-app code repo
+- **ai:** Surface the real provider on the assistant + platform-owner AI config
+- **github:** Owner can approve a pull request from the in-app code repo
+- **emails:** GitHub PRs tab in org/platform inline folder tabs
+- **emails:** GitHub PRs inbox filter for PR-related mail
+- **github:** Email a notification when a new PR is opened
+- **github:** Show total commit count on the Commits tab
+- **emails:** Reconnect Gmail button when a dead token blocks body load
+- **billing:** Self-serve Enterprise checkout instead of contact sales
+- **github:** Paginate the Commits tab (50/page, Prev/Next)
+- **github:** Restrict the in-app Pull Requests view to scope owners
+- **mcp:** Centralize MCP management — toggle, settings, connected badge
+- **mcp:** Pick-a-server connection blocks for the Connect-MCP panel
+- **billing:** Rebrand plan tiers + single plan-name catalog
+- **ai:** Enterprise-owner-selectable AI provider + usage page
+- **db:** Enforce RLS on chat (RLS phase 2 — chat unit)
+- **github:** Two-column PR detail to match the product mockup
+- **db:** Enforce RLS on emails (RLS phase 2 — emails unit)
+- **github:** Two-column PR detail to match the product mockup
+- **github:** PR detail view with read-only discussion
+- **db:** Enforce Row-Level Security on user-private tables (RLS phase 2)
+- **org:** Platform-owner enterprise org provisioning
+- **integrations:** Friendlier Connect-MCP with per-client setup picker
+- **demo:** Public Book-a-Demo lead form
+- **logs:** Show User Logs and Audit Logs tables in tabs
+- **audit:** Prune audit_logs on a configurable retention window
+- **db:** Tag tenant-owned rows with organization_id (RLS phase 1)
+
+### 🐛 Bug Fixes
+
+- **auth:** Complete Google login even when mailbox is linked to another user
+- **emails:** Trash Gmail messages on delete instead of permanent-delete
+- **emails:** Show INBOX/SENT-labelled mail (incl. self-sends) in those folders
+- **emails:** Make compose Attach button + note readable on dark modal
+- **settings:** Let settings pages scroll when content exceeds the viewport
+
+### 🧹 Maintenance
+
+- Gitignore the updated OAuth client_secret file
+- **org:** Stop enforcing domain ownership at account creation
+- **members:** Reduce member list row height
+- **members:** Reduce member list row height
+- Remove PR-approve/merge smoke-test files
+- Smoke file for PR-approve verification (round 2)
+- Smoke file for PR-approve verification
+- **github:** Commits page size 50 -> 25
+- **code-repo:** Add a dashboard overview
+- **ai:** Add an FAQ for the enterprise AI provider
+- **docs:** Note recommended editor settings
+- **github:** Fix owner_links_repo proxy test to seed code_repo for members
+- **dev:** Poll for file changes in the Docker dev container so HMR works on macOS
+
+## [4.1.1](https://github.com/mahesivaya/wayve/releases/tag/v4.1.1) - 2026-06-24
+
+### 🚀 Features
+
+- **org:** Real DNS domain verification, gated to business/enterprise owners
+
+## [4.1.0](https://github.com/mahesivaya/wayve/releases/tag/v4.1.0) - 2026-06-24
+
+### 🚀 Features
+
+- **org:** Add enterprise-owner Domain page with simple verify-ownership flow
+
+## [4.0.1](https://github.com/mahesivaya/wayve/releases/tag/v4.0.1) - 2026-06-24
+
+### 🚀 Features
+
+- **chat:** Include active channels in the sidebar Recent list
+
+### 🐛 Bug Fixes
+
+- **chat:** Keep main composer beside the thread panel and align the two inputs
+
+## [4.0.0](https://github.com/mahesivaya/wayve/releases/tag/v4.0.0) - 2026-06-24
+
+### 🚀 Features
+
+- **chat:** Make the thread panel divider draggable to resize
+- **mcp:** Connect MCP servers so the AI can read enterprise/platform systems
+
+## [3.5.0](https://github.com/mahesivaya/wayve/releases/tag/v3.5.0) - 2026-06-24
+
+### 🐛 Bug Fixes
+
+- **settings:** Reword org danger zone as a full delete, drop revert-to-personal copy
+- **platform:** Tidy console card layout when stacked on mobile
+- **layout:** Stop header search box from overlapping the sidebar toggle on mobile
+
+## [3.4.5](https://github.com/mahesivaya/wayve/releases/tag/v3.4.5) - 2026-06-23
+
+### 🚀 Features
+
+- **github:** Add read-only Pull Requests tab to Code Repo page
+
+### 🧹 Maintenance
+
+- Run smoke/e2e/security on PRs and version tags, not every push to main
+
+## [3.4.4](https://github.com/mahesivaya/wayve/releases/tag/v3.4.4) - 2026-06-23
+
+### 🚀 Features
+
+- **home:** Expand hero mockup slides and add an integrations showcase
+
+## [3.4.3](https://github.com/mahesivaya/wayve/releases/tag/v3.4.3) - 2026-06-23
+
+### 🚀 Features
+
+- **home:** Refresh hero copy (tagline, headline, CTAs, chips)
+
+## [3.4.2](https://github.com/mahesivaya/wayve/releases/tag/v3.4.2) - 2026-06-23
+
+### 🐛 Bug Fixes
+
+- **home:** Render the brand logo in the footer instead of a faint glyph
+
+## [3.4.0](https://github.com/mahesivaya/wayve/releases/tag/v3.4.0) - 2026-06-23
+
+### 🚀 Features
+
+- **user-logs:** Add per-user time-on-site table
+
+## [3.3.5](https://github.com/mahesivaya/wayve/releases/tag/v3.3.5) - 2026-06-23
+
+### 🚀 Features
+
+- **chat:** Relocate search to the sidebar and refine sidebar headers/rows
+
+## [3.3.4](https://github.com/mahesivaya/wayve/releases/tag/v3.3.4) - 2026-06-23
+
+### 🚀 Features
+
+- **chat:** Merge people into the channel list and relabel group visibility
+
+### 🧹 Maintenance
+
+- **theme:** Rename email-* surface tokens to neutral --color-canvas/--color-pane
+
+## [3.3.3](https://github.com/mahesivaya/wayve/releases/tag/v3.3.3) - 2026-06-23
+
+### 🐛 Bug Fixes
+
+- **scheduler:** Theme the sidebar/canvas off email-bg so it follows the selected color
+- **drive:** Show download prompt when the browser can't display PDFs inline
+- **drive:** Preview PDFs inline instead of downloading
+
+## [3.3.2](https://github.com/mahesivaya/wayve/releases/tag/v3.3.2) - 2026-06-22
+
+### 🐛 Bug Fixes
+
+- **slack:** Drop custom icon on bridged messages, use default avatar
+- **chat:** Keep the open conversation across a refresh via the URL
+
+## [3.3.1](https://github.com/mahesivaya/wayve/releases/tag/v3.3.1) - 2026-06-22
+
+### 🚀 Features
+
+- **slack:** Post outbound messages under the Wayve sender's name
+
+### 🐛 Bug Fixes
+
+- **tasks:** Theme Jira panel with app color tokens
+
+## [3.3.0](https://github.com/mahesivaya/wayve/releases/tag/v3.3.0) - 2026-06-22
+
+### 🚀 Features
+
+- **chat:** Show sender name + avatar on channel messages
+- **chat:** Render bridged Slack messages as received, with author
+- **slack:** In-panel setup guide for Enterprise admins
+- **slack:** Real-time Slack Events webhook (Enterprise)
+
+### 🐛 Bug Fixes
+
+- **chat:** Make header/sidebar titles readable in dark mode
+- **slack:** Resolve <@U…> mentions to real names via users.info
+- **slack:** Conversations.list falls back to public channels + surfaces error
+- **upload:** Raise nginx body limit to 50m and clean up 413 errors
+- **desktop:** Land on /login after logout
+- **nginx:** Proxy /webhooks/ to the backend
+- **jira:** Backfill Jira tables in startup migrations
+
+### 🧹 Maintenance
+
+- **slack:** Complete Enterprise Slack onboarding guide
+- Add Jira and Slack integration setup guides
+- **changelog:** Update for v3.2.1 [skip ci]
+
 ## [3.2.1](https://github.com/mahesivaya/wayve/releases/tag/v3.2.1) - 2026-06-21
 
 ### 🚀 Features
