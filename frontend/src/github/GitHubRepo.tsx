@@ -927,10 +927,8 @@ function GitHubRepoViewer({
   const [pullsLoading, setPullsLoading] = useState(false);
   const [pullsError, setPullsError] = useState("");
   // Which PR states to show. We fetch open + closed together (state=all) and
-  // filter client-side, defaulting to "all" so both are visible.
-  const [pullFilter, setPullFilter] = useState<"all" | "open" | "closed">(
-    "all"
-  );
+  // filter client-side, defaulting to "open" — the Closed button switches over.
+  const [pullFilter, setPullFilter] = useState<"open" | "closed">("open");
   // Master ⇄ detail for the Pull Requests tab. `selectedPull` is the open
   // PR number (null = list view). Each opened PR's detail + files +
   // conversation + checks are fetched together and cached by number so
@@ -1362,11 +1360,9 @@ function GitHubRepoViewer({
 
   // Client-side view over the fetched (open + closed/merged) PRs. "closed"
   // includes merged, since a merged PR has state === "closed".
-  const filteredPulls = pulls.filter((pr) => {
-    if (pullFilter === "all") return true;
-    const isOpen = pr.state === "open";
-    return pullFilter === "open" ? isOpen : !isOpen;
-  });
+  const filteredPulls = pulls.filter((pr) =>
+    pullFilter === "open" ? pr.state === "open" : pr.state !== "open"
+  );
 
   // Fetch one PR's full payload — detail, changed files, conversation
   // (comments + reviews), and CI checks — through the same read-only proxy,
@@ -1591,6 +1587,30 @@ function GitHubRepoViewer({
     },
     [loadCommitDetail]
   );
+
+  // Self-heal: any commit that is expanded but has no detail, no error, and
+  // isn't already loading gets its diff fetched automatically. Covers cases
+  // where a row is open without going through the click path — the commit list
+  // reloaded (clearing the detail cache), state reset, or a token/access fix —
+  // so the diff loads on its own instead of stranding the user on the manual
+  // "Refresh" fallback.
+  useEffect(() => {
+    for (const sha of expandedCommitShas) {
+      if (
+        !commitDetailBySha[sha] &&
+        !errorByCommitSha[sha] &&
+        !loadingCommitShas.has(sha)
+      ) {
+        void loadCommitDetail(sha);
+      }
+    }
+  }, [
+    expandedCommitShas,
+    commitDetailBySha,
+    errorByCommitSha,
+    loadingCommitShas,
+    loadCommitDetail,
+  ]);
 
   // Fetch the raw unified diff for a commit through the proxy's
   // `?media=diff` opt-in. Used when the JSON detail returned
@@ -2446,14 +2466,14 @@ function GitHubRepoViewer({
                   <span>{filteredPulls.length}</span>
                 </div>
                 <div className="github-pr-filter">
-                  {(["all", "open", "closed"] as const).map((f) => (
+                  {(["open", "closed"] as const).map((f) => (
                     <button
                       key={f}
                       type="button"
                       className={`github-pr-filter-btn ${pullFilter === f ? "active" : ""}`}
                       onClick={() => setPullFilter(f)}
                     >
-                      {f === "all" ? "All" : f === "open" ? "Open" : "Closed"}
+                      {f === "open" ? "Open" : "Closed"}
                     </button>
                   ))}
                 </div>
@@ -2463,9 +2483,7 @@ function GitHubRepoViewer({
                   <div className="github-empty">{pullsError}</div>
                 ) : filteredPulls.length === 0 ? (
                   <div className="github-empty">
-                    {pullFilter === "all"
-                      ? "No pull requests."
-                      : `No ${pullFilter} pull requests.`}
+                    {`No ${pullFilter} pull requests.`}
                   </div>
                 ) : (
                   filteredPulls.map((pr) => {
