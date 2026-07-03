@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [5.4.3](https://github.com/mahesivaya/wayve/releases/tag/v5.4.3) - 2026-07-03
+
+### 🐛 Bug Fixes
+
+- **github:** Auto-load a commit's diff when its row is expanded but unloaded
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v5.4.1 [skip ci]
+
 ## [5.4.1](https://github.com/mahesivaya/wayve/releases/tag/v5.4.1) - 2026-07-03
 
 ### 🚀 Features
