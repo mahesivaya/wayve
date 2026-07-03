@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [5.4.1](https://github.com/mahesivaya/wayve/releases/tag/v5.4.1) - 2026-07-03
+
+### 🚀 Features
+
+- **github:** Per-file expand/collapse for commit and PR diffs
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v5.3.1 [skip ci]
+
 ## [5.3.1](https://github.com/mahesivaya/wayve/releases/tag/v5.3.1) - 2026-07-02
 
 ### 🚀 Features
