@@ -1235,7 +1235,10 @@
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-surface);
-  overflow: hidden;
+  /* `clip` (not `hidden`) still trims the rounded corners but does NOT
+     create a scroll container, so the sticky file header below anchors to
+     the outer panel viewport instead of getting trapped in this article. */
+  overflow: clip;
 }
 
 .github-commit-file-head {
@@ -1252,6 +1255,16 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
+  /* Keep the file's name + chevron visible while scrolling a long diff so
+     it can be collapsed from anywhere. Pinned to the panel viewport top;
+     the commits tab offsets it below its own sticky "Commits" header. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.github-commit-diff .github-commit-file-head {
+  top: 38px;
 }
 
 .github-commit-file-head:hover {
@@ -2667,4 +2680,87 @@
   margin-left: auto;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+}
+
+/* Commit conversation comments — read-only thread shown at the end of an
+   expanded commit's diff. Reuses the PR comment/composer styles for the list
+   and box; only the wrapper + header are commit-specific. */
+.github-commit-comments {
+  border-top: 1px solid var(--color-border);
+  margin-top: 6px;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.github-commit-comments-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.github-commit-comments-head h4 {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--color-text-primary);
+}
+
+/* Functional comment composer (write). */
+.github-commit-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.github-commit-composer-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-muted);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  outline: none;
+}
+
+.github-commit-composer-input:focus {
+  border-color: var(--color-primary-action);
+}
+
+.github-commit-composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.github-commit-composer-note {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.github-commit-composer-send {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.github-commit-composer-send:hover:not(:disabled) {
+  background: var(--color-primary-action-hover);
+}
+
+.github-commit-composer-send:disabled {
+  opacity: 0.55;
+  cursor: default;
 }

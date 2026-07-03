@@ -613,10 +613,100 @@ pub async fn merge_pull_request(
     .body(body)
 }
 
+/// The comment body posted from the in-app commit view (`{"body": "..."}`).
+#[derive(serde::Deserialize, Default)]
+struct CommitCommentInput {
+    #[serde(default)]
+    body: Option<String>,
+}
+
+/// Post a conversation comment on a commit from the in-app code-repo viewer.
+/// Reuses the read proxy's authorization chain (repo allowlist / platform feature
+/// gate), then POSTs to GitHub with the server-held PAT.
+///
+/// NOTE: the comment is attributed to the **token's** GitHub account (shared),
+/// not the individual app user — per-user attribution would need per-user OAuth.
+/// Requires a token with write access; GitHub's 403/422 errors are mirrored back.
+#[post("/github/repos/{owner}/{repo}/commits/{sha}/comments")]
+#[instrument(target = "http", skip(req, pool, payload))]
+pub async fn create_commit_comment(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(String, String, String)>,
+    payload: web::Bytes,
+) -> impl Responder {
+    let (owner, repo, sha) = path.into_inner();
+    // Same gate as reading the repo — anyone with Code Repo access may comment.
+    let tail = format!("repos/{owner}/{repo}/commits/{sha}");
+    if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
+        return resp;
+    }
+
+    let Some(pat) = token() else {
+        warn!(target: "http", "commit comment denied: GITHUB_TOKEN not configured");
+        return HttpResponse::ServiceUnavailable().json(serde_json::json!({
+            "message": "GitHub isn't connected on the server (no token configured)."
+        }));
+    };
+
+    let body_text = serde_json::from_slice::<CommitCommentInput>(&payload)
+        .ok()
+        .and_then(|input| input.body)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let Some(body_text) = body_text else {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Comment body is required"
+        }));
+    };
+
+    let api_base = crate::external::github_api_base();
+    let url = format!("{api_base}/repos/{owner}/{repo}/commits/{sha}/comments");
+    let response = match HTTP_CLIENT
+        .post(&url)
+        .timeout(Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app")
+        .header("Authorization", format!("Bearer {pat}"))
+        .json(&serde_json::json!({ "body": body_text }))
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            warn!(target: "http", error = ?e, url = %url, "commit comment upstream call failed");
+            return HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Upstream GitHub call failed"
+            }));
+        }
+    };
+
+    let status = response.status().as_u16();
+    let resp_body = match response.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => {
+            warn!(target: "http", error = ?e, "commit comment body read failed");
+            return HttpResponse::BadGateway().finish();
+        }
+    };
+    if (200..300).contains(&status) {
+        info!(target: "http", owner = %owner, repo = %repo, sha = %sha, "commit comment posted");
+    } else {
+        warn!(target: "http", status, owner = %owner, repo = %repo, "commit comment rejected by GitHub");
+    }
+    HttpResponse::build(
+        actix_web::http::StatusCode::from_u16(status).unwrap_or(actix_web::http::StatusCode::OK),
+    )
+    .insert_header(("Content-Type", "application/json"))
+    .body(resp_body)
+}
+
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(github_proxy);
     cfg.service(approve_pull_request);
     cfg.service(merge_pull_request);
+    cfg.service(create_commit_comment);
 }
 
 #[cfg(test)]

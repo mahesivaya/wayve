@@ -14,6 +14,7 @@ import {
 import {
   approvePullRequest,
   mergePullRequest,
+  createCommitComment,
   type MergeMethod,
 } from "../api/github";
 import "./githubRepo.css";
@@ -985,6 +986,23 @@ function GitHubRepoViewer({
   const [commitDetailBySha, setCommitDetailBySha] = useState<
     Record<string, CommitDetail>
   >({});
+  // Conversation comments on a commit (GitHub `/commits/{sha}/comments`),
+  // fetched alongside the diff and shown at the end of the commit — mirrors the
+  // PR conversation. Read-only, same as the PR comment box.
+  const [commitCommentsBySha, setCommitCommentsBySha] = useState<
+    Record<string, IssueComment[]>
+  >({});
+  // Per-commit comment composer: the in-progress draft text, the set of SHAs
+  // whose comment is currently posting, and any per-commit post error.
+  const [commitCommentDraft, setCommitCommentDraft] = useState<
+    Record<string, string>
+  >({});
+  const [postingCommentShas, setPostingCommentShas] = useState<Set<string>>(
+    new Set()
+  );
+  const [commentErrorBySha, setCommentErrorBySha] = useState<
+    Record<string, string>
+  >({});
   const [loadingCommitShas, setLoadingCommitShas] = useState<Set<string>>(
     new Set()
   );
@@ -1546,10 +1564,16 @@ function GitHubRepoViewer({
         return next;
       });
       try {
-        const data = await githubJson<CommitDetail>(
-          `${API_BASE}/commits/${encodeURIComponent(sha)}`
-        );
+        const [data, comments] = await Promise.all([
+          githubJson<CommitDetail>(
+            `${API_BASE}/commits/${encodeURIComponent(sha)}`
+          ),
+          githubJson<IssueComment[]>(
+            `${API_BASE}/commits/${encodeURIComponent(sha)}/comments?per_page=100`
+          ).catch(() => [] as IssueComment[]),
+        ]);
         setCommitDetailBySha((current) => ({ ...current, [sha]: data }));
+        setCommitCommentsBySha((current) => ({ ...current, [sha]: comments }));
       } catch (err) {
         setErrorByCommitSha((current) => ({
           ...current,
@@ -1611,6 +1635,42 @@ function GitHubRepoViewer({
     loadingCommitShas,
     loadCommitDetail,
   ]);
+
+  // Post a comment on a commit. On success the created comment (returned by the
+  // proxy) is appended locally — avoids the 60s GET cache serving a stale list.
+  const submitCommitComment = useCallback(
+    async (sha: string) => {
+      const body = (commitCommentDraft[sha] ?? "").trim();
+      if (!body || postingCommentShas.has(sha)) return;
+      setPostingCommentShas((cur) => new Set(cur).add(sha));
+      setCommentErrorBySha((cur) => {
+        const next = { ...cur };
+        delete next[sha];
+        return next;
+      });
+      try {
+        const created = await createCommitComment(owner, repoName, sha, body);
+        setCommitCommentsBySha((cur) => ({
+          ...cur,
+          [sha]: [...(cur[sha] ?? []), created],
+        }));
+        setCommitCommentDraft((cur) => ({ ...cur, [sha]: "" }));
+      } catch (err) {
+        setCommentErrorBySha((cur) => ({
+          ...cur,
+          [sha]:
+            err instanceof Error ? err.message : "Couldn't post the comment.",
+        }));
+      } finally {
+        setPostingCommentShas((cur) => {
+          const next = new Set(cur);
+          next.delete(sha);
+          return next;
+        });
+      }
+    },
+    [commitCommentDraft, postingCommentShas, owner, repoName]
+  );
 
   // Fetch the raw unified diff for a commit through the proxy's
   // `?media=diff` opt-in. Used when the JSON detail returned
@@ -2413,6 +2473,104 @@ function GitHubRepoViewer({
                                       })}
                                     </pre>
                                   )}
+                                </div>
+                              );
+                            })()}
+
+                            {/* Conversation comments on this commit
+                                (read-only, mirrors the PR comment thread). */}
+                            {(() => {
+                              const comments =
+                                commitCommentsBySha[commit.sha] ?? [];
+                              return (
+                                <div className="github-commit-comments">
+                                  <div className="github-commit-comments-head">
+                                    <h4>Comments</h4>
+                                    <span className="github-pr-block-count">
+                                      {comments.length}
+                                    </span>
+                                  </div>
+                                  {comments.length === 0 ? (
+                                    <div className="github-empty">
+                                      No comments on this commit yet.
+                                    </div>
+                                  ) : (
+                                    <ul className="github-pr-thread">
+                                      {comments.map((c) => (
+                                        <li
+                                          key={c.id}
+                                          className="github-pr-comment"
+                                        >
+                                          <PrAvatar
+                                            name={c.user?.login ?? "ghost"}
+                                          />
+                                          <div className="github-pr-comment-main">
+                                            <div className="github-pr-comment-head">
+                                              <strong>
+                                                {c.user?.login ?? "unknown"}
+                                              </strong>
+                                              {c.created_at && (
+                                                <small className="github-pr-comment-time">
+                                                  {formatDate(c.created_at)}
+                                                </small>
+                                              )}
+                                            </div>
+                                            {c.body?.trim() && (
+                                              <div className="github-pr-comment-text">
+                                                {renderRichText(c.body)}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  <div className="github-commit-composer">
+                                    <textarea
+                                      className="github-commit-composer-input"
+                                      placeholder="Leave a comment on this commit…"
+                                      value={
+                                        commitCommentDraft[commit.sha] ?? ""
+                                      }
+                                      onChange={(e) =>
+                                        setCommitCommentDraft((cur) => ({
+                                          ...cur,
+                                          [commit.sha]: e.target.value,
+                                        }))
+                                      }
+                                      rows={3}
+                                      disabled={postingCommentShas.has(
+                                        commit.sha
+                                      )}
+                                    />
+                                    {commentErrorBySha[commit.sha] && (
+                                      <div className="github-banner">
+                                        {commentErrorBySha[commit.sha]}
+                                      </div>
+                                    )}
+                                    <div className="github-commit-composer-foot">
+                                      <span className="github-commit-composer-note">
+                                        Posts to GitHub as the connected account.
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="github-commit-composer-send"
+                                        disabled={
+                                          postingCommentShas.has(commit.sha) ||
+                                          !(
+                                            commitCommentDraft[commit.sha] ?? ""
+                                          ).trim()
+                                        }
+                                        onClick={() =>
+                                          void submitCommitComment(commit.sha)
+                                        }
+                                      >
+                                        {postingCommentShas.has(commit.sha)
+                                          ? "Posting…"
+                                          : "Comment"}
+                                      </button>
+                                    </div>
+                                  </div>
                                 </div>
                               );
                             })()}

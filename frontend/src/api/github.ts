@@ -85,3 +85,26 @@ export const mergePullRequest = (
       preserve401: true,
     }
   );
+
+// Post a conversation comment on a commit via the backend proxy
+// (`POST /api/github/repos/{owner}/{repo}/commits/{sha}/comments`). Returns the
+// created comment. NOTE: attributed to the server token's GitHub account (shared),
+// not the individual app user. `preserve401` so a token/permission error surfaces
+// as a handled error rather than logging the user out of OUR app. The backend
+// mirrors GitHub's status, so the thrown error carries GitHub's own message.
+export const createCommitComment = (
+  owner: string,
+  repo: string,
+  sha: string,
+  body: string
+) =>
+  apiFetchJson<{
+    id: number;
+    user: { login: string } | null;
+    body: string | null;
+    created_at: string;
+  }>(`/api/github/repos/${owner}/${repo}/commits/${sha}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+    preserve401: true,
+  });
