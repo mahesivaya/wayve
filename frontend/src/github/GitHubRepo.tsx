@@ -926,6 +926,11 @@ function GitHubRepoViewer({
   const [pulls, setPulls] = useState<GitHubPull[]>([]);
   const [pullsLoading, setPullsLoading] = useState(false);
   const [pullsError, setPullsError] = useState("");
+  // Which PR states to show. We fetch open + closed together (state=all) and
+  // filter client-side, defaulting to "all" so both are visible.
+  const [pullFilter, setPullFilter] = useState<"all" | "open" | "closed">(
+    "all"
+  );
   // Master ⇄ detail for the Pull Requests tab. `selectedPull` is the open
   // PR number (null = list view). Each opened PR's detail + files +
   // conversation + checks are fetched together and cached by number so
@@ -1002,6 +1007,20 @@ function GitHubRepoViewer({
   const [errorFullDiffBySha, setErrorFullDiffBySha] = useState<
     Record<string, string>
   >({});
+  // Which individual file diffs (inside an expanded commit or PR) are
+  // collapsed. Files default to expanded, so this Set holds only the
+  // ones the user has folded away. Keys are namespaced by their owner
+  // (`<sha>::<filename>` for commits, `pr-<n>::<filename>` for PR files)
+  // so one Set serves both views without collisions.
+  const [collapsedFiles, setCollapsedFiles] = useState<Set<string>>(new Set());
+  const toggleFile = (key: string) => {
+    setCollapsedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   const [workflows, setWorkflows] = useState<ContentItem[]>([]);
   // Which workflow rows in the Actions tree are expanded. Defaults to
   // empty so every workflow starts collapsed — users can expand the ones
@@ -1043,6 +1062,9 @@ function GitHubRepoViewer({
     html_url: string;
     state: string;
     draft?: boolean;
+    // Present (non-null) only on merged PRs — the list endpoint carries it, so
+    // we can distinguish Merged from plain Closed without the detail fetch.
+    merged_at?: string | null;
     user: { login: string } | null;
     head: { ref: string };
     base: { ref: string };
@@ -1325,7 +1347,7 @@ function GitHubRepoViewer({
     setPullsLoading(true);
     try {
       const data = await githubJson<GitHubPull[]>(
-        `${API_BASE}/pulls?state=open&per_page=50`
+        `${API_BASE}/pulls?state=all&per_page=50`
       );
       setPulls(data);
     } catch (err) {
@@ -1337,6 +1359,14 @@ function GitHubRepoViewer({
       setPullsLoading(false);
     }
   }, [API_BASE]);
+
+  // Client-side view over the fetched (open + closed/merged) PRs. "closed"
+  // includes merged, since a merged PR has state === "closed".
+  const filteredPulls = pulls.filter((pr) => {
+    if (pullFilter === "all") return true;
+    const isOpen = pr.state === "open";
+    return pullFilter === "open" ? isOpen : !isOpen;
+  });
 
   // Fetch one PR's full payload — detail, changed files, conversation
   // (comments + reviews), and CI checks — through the same read-only proxy,
@@ -2232,41 +2262,57 @@ function GitHubRepoViewer({
                         )}
                         {!isLoading && !errorText && detail && (
                           <>
-                            {(detail.files ?? []).map((file) => (
-                              <article
-                                key={file.filename}
-                                className={`github-commit-file status-${file.status}`}
-                              >
-                                <header className="github-commit-file-head">
-                                  <span className="github-commit-file-name">
-                                    {file.previous_filename
-                                      ? `${file.previous_filename} → ${file.filename}`
-                                      : file.filename}
-                                  </span>
-                                  <span className="github-commit-file-meta">
-                                    <em
-                                      className={`github-commit-status status-${file.status}`}
+                            {(detail.files ?? []).map((file) => {
+                              const fileKey = `${commit.sha}::${file.filename}`;
+                              const fileOpen = !collapsedFiles.has(fileKey);
+                              return (
+                                <article
+                                  key={file.filename}
+                                  className={`github-commit-file status-${file.status} ${fileOpen ? "is-open" : "is-collapsed"}`}
+                                >
+                                  <button
+                                    type="button"
+                                    className="github-commit-file-head"
+                                    onClick={() => toggleFile(fileKey)}
+                                    aria-expanded={fileOpen}
+                                  >
+                                    <span
+                                      className={`github-tree-toggle ${fileOpen ? "open" : ""}`}
+                                      aria-hidden="true"
                                     >
-                                      {file.status}
-                                    </em>
-                                    <span className="github-commit-stat is-add">
-                                      +{file.additions}
+                                      <ChevronIcon />
                                     </span>
-                                    <span className="github-commit-stat is-del">
-                                      −{file.deletions}
+                                    <span className="github-commit-file-name">
+                                      {file.previous_filename
+                                        ? `${file.previous_filename} → ${file.filename}`
+                                        : file.filename}
                                     </span>
-                                  </span>
-                                </header>
-                                {file.patch ? (
-                                  <CommitSplitPatch patch={file.patch} />
-                                ) : (
-                                  <div className="github-commit-nopatch">
-                                    Binary file or diff not available — open on
-                                    GitHub to view.
-                                  </div>
-                                )}
-                              </article>
-                            ))}
+                                    <span className="github-commit-file-meta">
+                                      <em
+                                        className={`github-commit-status status-${file.status}`}
+                                      >
+                                        {file.status}
+                                      </em>
+                                      <span className="github-commit-stat is-add">
+                                        +{file.additions}
+                                      </span>
+                                      <span className="github-commit-stat is-del">
+                                        −{file.deletions}
+                                      </span>
+                                    </span>
+                                  </button>
+                                  {fileOpen &&
+                                    (file.patch ? (
+                                      <CommitSplitPatch patch={file.patch} />
+                                    ) : (
+                                      <div className="github-commit-nopatch">
+                                        Binary file or diff not available — open
+                                        on GitHub to view.
+                                      </div>
+                                    ))}
+                                </article>
+                              );
+                            })}
                             {(detail.files ?? []).length === 0 && (
                               <div className="github-empty">
                                 This commit has no file changes recorded.
@@ -2397,44 +2443,67 @@ function GitHubRepoViewer({
               <div className="github-panel">
                 <div className="github-panel-head">
                   <h2>Pull Requests</h2>
-                  <span>{pulls.length}</span>
+                  <span>{filteredPulls.length}</span>
+                </div>
+                <div className="github-pr-filter">
+                  {(["all", "open", "closed"] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      className={`github-pr-filter-btn ${pullFilter === f ? "active" : ""}`}
+                      onClick={() => setPullFilter(f)}
+                    >
+                      {f === "all" ? "All" : f === "open" ? "Open" : "Closed"}
+                    </button>
+                  ))}
                 </div>
                 {pullsLoading ? (
                   <div className="github-empty">Loading pull requests…</div>
                 ) : pullsError ? (
                   <div className="github-empty">{pullsError}</div>
-                ) : pulls.length === 0 ? (
-                  <div className="github-empty">No open pull requests.</div>
+                ) : filteredPulls.length === 0 ? (
+                  <div className="github-empty">
+                    {pullFilter === "all"
+                      ? "No pull requests."
+                      : `No ${pullFilter} pull requests.`}
+                  </div>
                 ) : (
-                  pulls.map((pr) => (
-                    <div key={pr.number} className="github-pr-node">
-                      <button
-                        type="button"
-                        className="github-pr-main github-pr-open-btn"
-                        onClick={() => openPull(pr.number)}
-                      >
-                        <strong className="github-pr-title">{pr.title}</strong>
-                        <small className="github-pr-meta">
-                          #{pr.number} · {pr.user?.login ?? "unknown"} ·{" "}
-                          {pr.head.ref} → {pr.base.ref} ·{" "}
-                          {formatDate(pr.created_at)}
-                        </small>
-                      </button>
-                      <span
-                        className={`github-pr-status ${pr.draft ? "is-draft" : "is-open"}`}
-                      >
-                        {pr.draft ? "Draft" : "Open"}
-                      </span>
-                      <a
-                        className="github-pr-link"
-                        href={pr.html_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open on GitHub →
-                      </a>
-                    </div>
-                  ))
+                  filteredPulls.map((pr) => {
+                    const status = pullStatus({
+                      state: pr.state,
+                      draft: pr.draft,
+                      merged: !!pr.merged_at,
+                    });
+                    return (
+                      <div key={pr.number} className="github-pr-node">
+                        <button
+                          type="button"
+                          className="github-pr-main github-pr-open-btn"
+                          onClick={() => openPull(pr.number)}
+                        >
+                          <strong className="github-pr-title">
+                            {pr.title}
+                          </strong>
+                          <small className="github-pr-meta">
+                            #{pr.number} · {pr.user?.login ?? "unknown"} ·{" "}
+                            {pr.head.ref} → {pr.base.ref} ·{" "}
+                            {formatDate(pr.created_at)}
+                          </small>
+                        </button>
+                        <span className={`github-pr-status ${status.cls}`}>
+                          {status.label}
+                        </span>
+                        <a
+                          className="github-pr-link"
+                          href={pr.html_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open on GitHub →
+                        </a>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             ) : (
@@ -2688,43 +2757,61 @@ function GitHubRepoViewer({
                                       No file changes to show.
                                     </div>
                                   ) : (
-                                    bundle.files.map((file) => (
-                                      <article
-                                        key={file.filename}
-                                        className={`github-commit-file status-${file.status}`}
-                                      >
-                                        <header className="github-commit-file-head">
-                                          <span className="github-commit-file-name">
-                                            {file.previous_filename
-                                              ? `${file.previous_filename} → ${file.filename}`
-                                              : file.filename}
-                                          </span>
-                                          <span className="github-commit-file-meta">
-                                            <em
-                                              className={`github-commit-status status-${file.status}`}
+                                    bundle.files.map((file) => {
+                                      const fileKey = `pr-${selectedPull}::${file.filename}`;
+                                      const fileOpen =
+                                        !collapsedFiles.has(fileKey);
+                                      return (
+                                        <article
+                                          key={file.filename}
+                                          className={`github-commit-file status-${file.status} ${fileOpen ? "is-open" : "is-collapsed"}`}
+                                        >
+                                          <button
+                                            type="button"
+                                            className="github-commit-file-head"
+                                            onClick={() => toggleFile(fileKey)}
+                                            aria-expanded={fileOpen}
+                                          >
+                                            <span
+                                              className={`github-tree-toggle ${fileOpen ? "open" : ""}`}
+                                              aria-hidden="true"
                                             >
-                                              {file.status}
-                                            </em>
-                                            <span className="github-commit-stat is-add">
-                                              +{file.additions}
+                                              <ChevronIcon />
                                             </span>
-                                            <span className="github-commit-stat is-del">
-                                              −{file.deletions}
+                                            <span className="github-commit-file-name">
+                                              {file.previous_filename
+                                                ? `${file.previous_filename} → ${file.filename}`
+                                                : file.filename}
                                             </span>
-                                          </span>
-                                        </header>
-                                        {file.patch ? (
-                                          <CommitSplitPatch
-                                            patch={file.patch}
-                                          />
-                                        ) : (
-                                          <div className="github-commit-nopatch">
-                                            Binary file or diff not available —
-                                            open on GitHub to view.
-                                          </div>
-                                        )}
-                                      </article>
-                                    ))
+                                            <span className="github-commit-file-meta">
+                                              <em
+                                                className={`github-commit-status status-${file.status}`}
+                                              >
+                                                {file.status}
+                                              </em>
+                                              <span className="github-commit-stat is-add">
+                                                +{file.additions}
+                                              </span>
+                                              <span className="github-commit-stat is-del">
+                                                −{file.deletions}
+                                              </span>
+                                            </span>
+                                          </button>
+                                          {fileOpen &&
+                                            (file.patch ? (
+                                              <CommitSplitPatch
+                                                patch={file.patch}
+                                              />
+                                            ) : (
+                                              <div className="github-commit-nopatch">
+                                                Binary file or diff not
+                                                available — open on GitHub to
+                                                view.
+                                              </div>
+                                            ))}
+                                        </article>
+                                      );
+                                    })
                                   )}
                                   {(hasMissingPatch || rawDiff) && (
                                     <div className="github-commit-fulldiff">
