@@ -60,6 +60,56 @@ export async function updatePlatformMemberRole(
   return res.json();
 }
 
+// Full profile + per-service storage for one team member, backing the scoped
+// member detail page. The org variant is authorized to the caller's own org;
+// the platform variant to platform staff only. Both return the same shape.
+export type MemberStorage = {
+  total_bytes: number;
+  gmail_bytes: number;
+  drive_bytes: number;
+  chat_bytes: number;
+  notes_bytes: number;
+  tasks_bytes: number;
+};
+
+export type MemberDetail = {
+  id: number;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  username: string | null;
+  avatar_path: string | null;
+  auth_provider: string | null;
+  account_type: string | null;
+  email_verified: boolean;
+  created_at: string | null;
+  organization_id: number | null;
+  organization_name: string | null;
+  platform_role: string | null;
+  organization_role: string | null;
+  storage: MemberStorage;
+};
+
+export async function getOrganizationMemberDetail(
+  organizationId: number,
+  userId: number
+): Promise<MemberDetail> {
+  const res = await apiFetch(
+    `/api/organizations/${organizationId}/members/${userId}`,
+    { preserve401: true }
+  );
+  return res.json();
+}
+
+export async function getPlatformMemberDetail(
+  userId: number
+): Promise<MemberDetail> {
+  const res = await apiFetch(`/api/platform/members/${userId}`, {
+    preserve401: true,
+  });
+  return res.json();
+}
+
 // Response from POST /api/admin/users. `temp_password` is only present when
 // the backend generated a password (i.e., the form submitted email + role
 // without a password). Surface it to the admin in a "shown once" UI — it

@@ -372,3 +372,178 @@ pub async fn update_platform_member_role(
         "role_label": role_label(new_role.as_str(), "platform_admin"),
     })))
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Member detail (scoped to the caller's own team)
+// ──────────────────────────────────────────────────────────────────────
+
+/// Load the full profile + per-service storage breakdown for one user, the
+/// data behind the scoped member detail page. Returns `None` when the user id
+/// doesn't exist. Callers MUST authorize membership first (own org / platform
+/// team) — this helper does no access control of its own. Runs with the RLS
+/// bypass GUC because it sums storage across RLS-enabled tables (emails, drive,
+/// chat, notes, tasks) for an arbitrary user.
+async fn load_member_detail(
+    pool: &PgPool,
+    user_id: i32,
+) -> std::result::Result<Option<serde_json::Value>, crate::error::AppError> {
+    let mut tx = pool.begin().await?;
+    crate::db::apply_rls_bypass(&mut tx).await?;
+
+    let user = sqlx::query(
+        r#"
+        SELECT
+            u.id, u.email, u.first_name, u.last_name, u.username, u.avatar_path,
+            u.auth_provider, u.account_type, u.created_at, u.email_verified,
+            u.organization_id,
+            o.name  AS organization_name,
+            pm.role AS platform_role,
+            om.role AS organization_role
+        FROM users u
+        LEFT JOIN organizations o     ON o.id = u.organization_id
+        LEFT JOIN platform_members pm ON pm.user_id = u.id
+        LEFT JOIN organization_members om
+               ON om.user_id = u.id AND om.organization_id = u.organization_id
+        WHERE u.id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(row) = user else {
+        tx.commit().await?;
+        return Ok(None);
+    };
+
+    let storage = sqlx::query(
+        r#"
+        SELECT
+            (SELECT COALESCE(SUM(octet_length(e.body_encrypted)), 0)::BIGINT FROM emails e
+               JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = $1) AS gmail_bytes,
+            (SELECT COALESCE(SUM(f.size), 0)::BIGINT FROM drive_files f WHERE f.user_id = $1) AS drive_bytes,
+            (SELECT COALESCE(SUM(octet_length(m.content_encrypted)), 0)::BIGINT FROM messages m WHERE m.sender_id = $1) AS chat_bytes,
+            (SELECT COALESCE(SUM(octet_length(coalesce(n.content_encrypted, n.content, ''))), 0)::BIGINT FROM notes n WHERE n.user_id = $1) AS notes_bytes,
+            (SELECT COALESCE(SUM(octet_length(t.name) + octet_length(coalesce(t.description, ''))), 0)::BIGINT FROM tasks t WHERE t.user_id = $1) AS tasks_bytes
+        "#,
+    )
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    let gmail = storage.try_get::<i64, _>("gmail_bytes").unwrap_or(0);
+    let drive = storage.try_get::<i64, _>("drive_bytes").unwrap_or(0);
+    let chat = storage.try_get::<i64, _>("chat_bytes").unwrap_or(0);
+    let notes = storage.try_get::<i64, _>("notes_bytes").unwrap_or(0);
+    let tasks = storage.try_get::<i64, _>("tasks_bytes").unwrap_or(0);
+    let created_at: Option<chrono::DateTime<chrono::Utc>> = row.try_get("created_at").ok();
+
+    Ok(Some(serde_json::json!({
+        "id": row.try_get::<i32, _>("id").unwrap_or(0),
+        "email": row.try_get::<String, _>("email").unwrap_or_default(),
+        "first_name": row.try_get::<Option<String>, _>("first_name").ok().flatten(),
+        "last_name": row.try_get::<Option<String>, _>("last_name").ok().flatten(),
+        "username": row.try_get::<Option<String>, _>("username").ok().flatten(),
+        "avatar_path": row.try_get::<Option<String>, _>("avatar_path").ok().flatten(),
+        "auth_provider": row.try_get::<Option<String>, _>("auth_provider").ok().flatten(),
+        "account_type": row.try_get::<Option<String>, _>("account_type").ok().flatten(),
+        "email_verified": row.try_get::<Option<bool>, _>("email_verified").ok().flatten().unwrap_or(false),
+        "created_at": created_at,
+        "organization_id": row.try_get::<Option<i32>, _>("organization_id").ok().flatten(),
+        "organization_name": row.try_get::<Option<String>, _>("organization_name").ok().flatten(),
+        "platform_role": row.try_get::<Option<String>, _>("platform_role").ok().flatten(),
+        "organization_role": row.try_get::<Option<String>, _>("organization_role").ok().flatten(),
+        "storage": {
+            "total_bytes": gmail + drive + chat + notes + tasks,
+            "gmail_bytes": gmail,
+            "drive_bytes": drive,
+            "chat_bytes": chat,
+            "notes_bytes": notes,
+            "tasks_bytes": tasks,
+        },
+    })))
+}
+
+/// Detail for one member of an organization. Gated by `require_org_access`, so
+/// an org/enterprise admin only ever resolves members of THEIR OWN org — the
+/// target must also belong to `{id}` (otherwise 404), never a user from
+/// another org or an unrelated personal account.
+#[get("/organizations/{id}/members/{user_id}")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn organization_member_detail(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(i32, i32)>,
+) -> AppResult {
+    let (organization_id, user_id) = path.into_inner();
+    if let Err(response) = rbac::require_org_access(
+        &req,
+        pool.get_ref(),
+        organization_id,
+        Permission::MembersRead,
+    )
+    .await
+    {
+        return Ok(response);
+    }
+
+    // The target must be a member of THIS org. Guard before loading so an admin
+    // can't read a user from another org by guessing an id.
+    let belongs: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND organization_id = $2)",
+    )
+    .bind(user_id)
+    .bind(organization_id)
+    .fetch_one(pool.get_ref())
+    .await?;
+    if !belongs {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Member not found in this organization" })));
+    }
+
+    match load_member_detail(pool.get_ref(), user_id).await? {
+        Some(detail) => Ok(HttpResponse::Ok().json(detail)),
+        None => {
+            Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Member not found" })))
+        }
+    }
+}
+
+/// Detail for one member of the platform team. Gated to `Scope::Platform`; the
+/// target must be a `platform_members` row (the platform staff roster), so this
+/// never exposes arbitrary personal users — only the caller's own team.
+#[get("/platform/members/{user_id}")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn platform_member_detail(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersRead).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+    if ctx.scope != Scope::Platform {
+        return Ok(HttpResponse::Forbidden()
+            .json(serde_json::json!({ "message": "Platform staff access required" })));
+    }
+    let user_id = path.into_inner();
+
+    let is_staff: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM platform_members WHERE user_id = $1)")
+            .bind(user_id)
+            .fetch_one(pool.get_ref())
+            .await?;
+    if !is_staff {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Platform team member not found" })));
+    }
+
+    match load_member_detail(pool.get_ref(), user_id).await? {
+        Some(detail) => Ok(HttpResponse::Ok().json(detail)),
+        None => {
+            Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Member not found" })))
+        }
+    }
+}

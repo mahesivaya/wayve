@@ -64,6 +64,7 @@ const PlatformOrganizations = lazy(
   () => import("./organization/PlatformOrganizations")
 );
 const PlatformUsers = lazy(() => import("./organization/PlatformUsers"));
+const MemberDetail = lazy(() => import("./organization/MemberDetail"));
 const PlatformEnterprises = lazy(
   () => import("./organization/PlatformEnterprises")
 );
@@ -290,6 +291,10 @@ export default function App() {
                 element={<OrganizationMembers />}
               />
               <Route
+                path="/organization/members/:id"
+                element={<MemberDetail scope="organization" />}
+              />
+              <Route
                 path="/organization/domains"
                 element={<OrganizationDomains />}
               />
@@ -396,6 +401,10 @@ export default function App() {
                 element={<PlatformOrganizations />}
               />
               <Route path="/platform/users" element={<PlatformUsers />} />
+              <Route
+                path="/platform/members/:id"
+                element={<MemberDetail scope="platform" />}
+              />
               <Route
                 path="/platform/enterprise"
                 element={<PlatformEnterprises />}

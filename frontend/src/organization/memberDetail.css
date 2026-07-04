@@ -1,0 +1,206 @@
+/* Scoped team-member detail page (organization / platform). Layout mirrors
+   the Workspace user page: breadcrumb, an identity header, a storage-use panel
+   with a per-service breakdown, and a user-information grid. Reuses the
+   platform-admin panel shell (.u-panel / .platform-admin-panel) for chrome. */
+
+.md-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.md-breadcrumb a {
+  color: var(--color-primary, var(--color-text-secondary));
+  text-decoration: none;
+}
+
+.md-breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+/* Identity header — avatar + name + email + status chips. */
+.md-identity {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.md-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  object-fit: cover;
+  background: var(--color-surface-muted);
+}
+
+.md-avatar-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.md-identity-main {
+  min-width: 0;
+}
+
+.md-identity-main h1 {
+  margin: 0;
+  font-size: var(--text-2xl, var(--text-xl));
+  color: var(--color-text-primary);
+}
+
+.md-email {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--color-primary, var(--color-text-secondary));
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.md-email:hover {
+  text-decoration: underline;
+}
+
+.md-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.md-chip {
+  font-size: var(--text-xs);
+  padding: 2px 10px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  text-transform: capitalize;
+  border: 1px solid var(--color-border);
+}
+
+.md-chip.is-ok {
+  background: var(--color-success-soft-mint, var(--color-success-pale));
+  color: var(--color-success, #1a7f37);
+  border-color: var(--color-success-border, transparent);
+}
+
+.md-chip.is-warn {
+  background: var(--color-danger-soft, #fff8c5);
+  color: var(--color-danger, #9a6700);
+  border-color: var(--color-danger-border, transparent);
+}
+
+.md-chip.is-role {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.md-section-title {
+  margin: 0 0 16px;
+  font-size: var(--text-lg, var(--text-md));
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.md-section-title strong {
+  font-weight: 700;
+}
+
+/* Storage total banner. */
+.md-storage-total {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.md-storage-total-label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.md-storage-total-value {
+  font-size: var(--text-2xl, var(--text-xl));
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+/* Per-service storage cells. */
+.md-storage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.md-storage-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.md-storage-cell-label {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.md-storage-cell-value {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.md-storage-bar {
+  height: 6px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface-muted);
+  overflow: hidden;
+}
+
+.md-storage-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary, var(--color-text-secondary));
+  transition: width 0.2s ease;
+}
+
+/* User-information definition grid. */
+.md-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px 32px;
+  margin: 0;
+}
+
+.md-info-grid dt {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+
+.md-info-grid dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  text-transform: capitalize;
+}
+
+.md-info-grid dd a {
+  color: var(--color-primary, var(--color-text-secondary));
+  text-decoration: none;
+}
+
+.md-info-grid dd a:hover {
+  text-decoration: underline;
+}

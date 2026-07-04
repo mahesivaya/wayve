@@ -84,6 +84,13 @@ export default function MembersRolesPanel(props: Props) {
   const organizationId =
     props.scope === "organization" ? props.organizationId : null;
 
+  // Detail-page path for a member, routed by scope. Used by both the list rows
+  // and the tree nodes.
+  const memberHref = (userId: number) =>
+    props.scope === "platform"
+      ? `/platform/members/${userId}`
+      : `/organization/members/${userId}`;
+
   useEffect(() => {
     // Without members:read the panel renders nothing (see the guard at the end
     // of the component), so there is no loading state to reset here.
@@ -554,7 +561,7 @@ export default function MembersRolesPanel(props: Props) {
             </button>
           </div>
           {view === "tree" ? (
-            <MembersTree members={members} />
+            <MembersTree members={members} memberHref={memberHref} />
           ) : (
             <div className="rbac-members-list">
               {members.map((member) => {
@@ -571,7 +578,12 @@ export default function MembersRolesPanel(props: Props) {
                 return (
                   <div className="rbac-members-row" key={member.user_id}>
                     <div className="rbac-members-identity">
-                      <strong>{member.username || member.email}</strong>
+                      <Link
+                        to={memberHref(member.user_id)}
+                        className="rbac-members-name-link"
+                      >
+                        {member.username || member.email}
+                      </Link>
                       <span>{member.email}</span>
                     </div>
                     <div className="rbac-members-actions">

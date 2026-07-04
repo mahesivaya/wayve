@@ -43,6 +43,21 @@
   font-size: var(--text-lg);
 }
 
+/* Member name links to the scoped detail page. Styled to read as the name
+   (inherits weight/size) but signals interactivity on hover. */
+.rbac-members-name-link {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  text-decoration: none;
+  width: fit-content;
+}
+
+.rbac-members-name-link:hover {
+  color: var(--color-primary, #2563eb);
+  text-decoration: underline;
+}
+
 .rbac-members-identity span {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
