@@ -3,6 +3,19 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [5.5.1](https://github.com/mahesivaya/wayve/releases/tag/v5.5.1) - 2026-07-04
+
+### 🚀 Features
+
+- **sidebar:** Restructure Workspace nav and trim Projects page
+- **rbac:** Workspace-style member detail page (v1)
+- **rbac:** Scoped team-member detail page for org, enterprise & platform
+- **github:** Comment on commits in the code-repo viewer (read + write)
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v5.4.3 [skip ci]
+
 ## [5.4.3](https://github.com/mahesivaya/wayve/releases/tag/v5.4.3) - 2026-07-03
 
 ### 🐛 Bug Fixes
