@@ -45,10 +45,8 @@ import {
   DomainsIcon,
   SecretsIcon,
   LogsIcon,
-  VisitorsIcon,
   UserLogsIcon,
   AuditIcon,
-  TracingIcon,
   TeamsIcon,
   DocsIcon,
   ApiRefIcon,
@@ -722,14 +720,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   }
 
   const authedUser = user;
-  // Security/audit surface is platform-team-only. Even a non-platform user
-  // with a stray `audit:read` permission stays hidden from the nav — the
-  // page is for staff operating the platform, not customers of it.
-  // Audit views (Audit Logs + User Logs) are restricted to the platform
-  // OWNER only — not super_admin / security or any other audit:read holder.
-  // Mirrors the backend require_owner gate on the audit endpoints.
-  const canAccessSecurity =
-    user.scope === "platform" && user.effective_role === "owner";
   // Platform-wide billing console: aggregates revenue, customer subscriptions
   // and payroll across the whole platform. Distinct from the per-tenant
   // [/billing](../billing/Billing.tsx) self-service view; staff-only.
@@ -768,10 +758,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Pricing is hidden from roles that don't manage plans/billing (org +
   // platform scope) — only owner / super_admin / billing keep it. Shared with
   // the /pricing route guard so the URL can't bypass the hidden nav link.
-  const canAccessPlatformLogs =
-    user.scope === "platform" &&
-    (hasPermission(user, "logs:read") ||
-      hasPermission(user, "logs:read_limited"));
   const currentPlanCode = authedUser.current_plan?.code ?? "basic_user";
   const isBasicPersonalUser =
     authedUser.account_type === "personal" &&
@@ -806,10 +792,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     canAccessPlatformSupport ||
     canAccessPlatformAnalytics ||
     isPlatformOwner;
-
-  // Logs get their own sidebar group, split out from Platform.
-  const hasLogsSection =
-    canAccessSecurity || canAccessPlatformLogs || isPlatformOwner;
 
   // Code lives in its own "Workspace" group. Same gate as the link itself so
   // the section header never renders empty. Visible to platform staff, any
@@ -1034,50 +1016,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           path: "/platform/access",
           label: "Feature Access",
           icon: <ApiKeysIcon size={16} />,
-          visible: isPlatformOwner,
-        },
-      ],
-    },
-    {
-      key: "logs",
-      label: "Logs",
-      visible: hasLogsSection,
-      icon: <LogsIcon size={16} />,
-      links: [
-        {
-          path: "/logs/app",
-          label: "App Logs",
-          icon: <LogsIcon size={16} />,
-          visible: canAccessPlatformLogs,
-        },
-        {
-          path: "/logs/visitors",
-          label: "Visitors",
-          icon: <VisitorsIcon size={16} />,
-          visible: isPlatformOwner,
-        },
-        {
-          path: "/logs/users",
-          label: "User Logs",
-          icon: <UserLogsIcon size={16} />,
-          visible: canAccessSecurity,
-        },
-        {
-          path: "/logs/audit",
-          label: "Audit Logs",
-          icon: <AuditIcon size={16} />,
-          visible: canAccessSecurity,
-        },
-        {
-          path: "/logs/user-audit",
-          label: "User Audit",
-          icon: <UserLogsIcon size={16} />,
-          visible: canAccessSecurity,
-        },
-        {
-          path: "/logs/tracing",
-          label: "Tracing",
-          icon: <TracingIcon size={16} />,
           visible: isPlatformOwner,
         },
       ],

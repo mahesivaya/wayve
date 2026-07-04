@@ -47,7 +47,11 @@ function parseBrowser(ua: string | null): string {
 // Everyone who opened the public site (incl. anonymous visitors) — from the
 // page_visits table. Owner-only; the backend additionally requires platform
 // scope + audit:read.
-export default function PlatformVisitors() {
+export default function PlatformVisitors({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { user } = useAuth();
   const canView =
     user?.scope === "platform" && user?.effective_role === "owner";
@@ -112,7 +116,14 @@ export default function PlatformVisitors() {
     );
   }, [rows, search]);
 
-  if (!canView) return <Navigate to="/home" replace />;
+  if (!canView)
+    return embedded ? (
+      <div style={{ padding: 16, color: "#6b7280" }}>
+        You don't have access to this log.
+      </div>
+    ) : (
+      <Navigate to="/home" replace />
+    );
 
   return (
     <div className="pt-page">

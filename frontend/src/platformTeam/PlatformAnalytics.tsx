@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
@@ -6,10 +13,28 @@ import { SupportSummary, getSupportSummary } from "../api/platformTeam";
 import { fmtDate } from "../utils/datetime";
 import "./platformTeam.css";
 
+const AppLogs = lazy(() => import("./PlatformLogs"));
+const Visitors = lazy(() => import("./PlatformVisitors"));
+const UserLogs = lazy(() => import("./PlatformUserLogs"));
+const AuditLogs = lazy(() => import("../settings/AuditSecurity"));
+const UserAudit = lazy(() => import("../settings/UserAudit"));
+const Tracing = lazy(() => import("../tracing/TracingDashboard"));
+
 export default function PlatformAnalytics() {
   const { user } = useAuth();
   const canView =
     user?.scope === "platform" && hasPermission(user, "members:read");
+
+  // Mirrors the sidebar gates in Layout.tsx — inaccessible log blocks are
+  // hidden entirely (the embedded component also guards itself).
+  const canAccessPlatformLogs =
+    user?.scope === "platform" &&
+    (hasPermission(user, "logs:read") ||
+      hasPermission(user, "logs:read_limited"));
+  const isPlatformOwner =
+    user?.scope === "platform" && user?.effective_role === "owner";
+  const canAccessSecurity =
+    user?.scope === "platform" && user?.effective_role === "owner";
 
   const [data, setData] = useState<SupportSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,124 +69,198 @@ export default function PlatformAnalytics() {
 
       {error && <div className="pt-banner">{error}</div>}
 
-      <section className="pt-stats">
-        <Stat
-          label="Users"
-          value={data?.users_total ?? 0}
-          sub={`+${data?.users_new_24h ?? 0} today · +${data?.users_new_7d ?? 0} this week`}
-        />
-        <Stat
-          label="Organizations"
-          value={data?.orgs_total ?? 0}
-          sub="Active tenants"
-        />
-        <Stat
-          label="Active subscriptions"
-          value={data?.active_subs ?? 0}
-          sub={`${data?.past_due ?? 0} past due`}
-          alert={(data?.past_due ?? 0) > 0}
-        />
-        <Stat
-          label="Open inbox threads"
-          value={data?.open_inbox_threads ?? 0}
-          sub={`${data?.pending_inbox_threads ?? 0} pending`}
-        />
-        <Stat
-          label="Connected mailboxes"
-          value={data?.connected_mailboxes ?? 0}
-          sub={`${data?.shared_inboxes ?? 0} shared`}
-        />
-      </section>
+      <div className="pt-log-blocks">
+        <LogBlock title="Overview" defaultOpen>
+          <section className="pt-stats">
+            <Stat
+              label="Users"
+              value={data?.users_total ?? 0}
+              sub={`+${data?.users_new_24h ?? 0} today · +${data?.users_new_7d ?? 0} this week`}
+            />
+            <Stat
+              label="Organizations"
+              value={data?.orgs_total ?? 0}
+              sub="Active tenants"
+            />
+            <Stat
+              label="Active subscriptions"
+              value={data?.active_subs ?? 0}
+              sub={`${data?.past_due ?? 0} past due`}
+              alert={(data?.past_due ?? 0) > 0}
+            />
+            <Stat
+              label="Open inbox threads"
+              value={data?.open_inbox_threads ?? 0}
+              sub={`${data?.pending_inbox_threads ?? 0} pending`}
+            />
+            <Stat
+              label="Connected mailboxes"
+              value={data?.connected_mailboxes ?? 0}
+              sub={`${data?.shared_inboxes ?? 0} shared`}
+            />
+          </section>
 
-      <div className="pt-grid">
-        <section className="pt-panel">
-          <div className="pt-panel-head">
-            <h2>Top organizations</h2>
-            <span className="pt-stat-sub">By active member count</span>
-          </div>
-          {data && data.top_organizations.length > 0 ? (
-            <table className="pt-table">
-              <thead>
-                <tr>
-                  <th>Organization</th>
-                  <th>Plan</th>
-                  <th className="right">Members</th>
-                  <th className="right">Mailboxes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.top_organizations.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <strong>{row.name}</strong>
-                      {row.slug && (
-                        <>
-                          <br />
-                          <small style={{ color: "#6b7280" }}>{row.slug}</small>
-                        </>
-                      )}
-                    </td>
-                    <td>
-                      {row.plan_name ?? "—"}{" "}
-                      <span className={`pt-pill ${row.sub_status}`}>
-                        {row.sub_status}
-                      </span>
-                    </td>
-                    <td className="right">{row.member_count}</td>
-                    <td className="right">{row.mailboxes}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="pt-empty">No organizations yet.</div>
-          )}
-        </section>
+          <div className="pt-grid">
+            <section className="pt-panel">
+              <div className="pt-panel-head">
+                <h2>Top organizations</h2>
+                <span className="pt-stat-sub">By active member count</span>
+              </div>
+              {data && data.top_organizations.length > 0 ? (
+                <table className="pt-table">
+                  <thead>
+                    <tr>
+                      <th>Organization</th>
+                      <th>Plan</th>
+                      <th className="right">Members</th>
+                      <th className="right">Mailboxes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.top_organizations.map((row) => (
+                      <tr key={row.id}>
+                        <td>
+                          <strong>{row.name}</strong>
+                          {row.slug && (
+                            <>
+                              <br />
+                              <small style={{ color: "#6b7280" }}>
+                                {row.slug}
+                              </small>
+                            </>
+                          )}
+                        </td>
+                        <td>
+                          {row.plan_name ?? "—"}{" "}
+                          <span className={`pt-pill ${row.sub_status}`}>
+                            {row.sub_status}
+                          </span>
+                        </td>
+                        <td className="right">{row.member_count}</td>
+                        <td className="right">{row.mailboxes}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="pt-empty">No organizations yet.</div>
+              )}
+            </section>
 
-        <section className="pt-panel">
-          <div className="pt-panel-head">
-            <h2>Recent signups</h2>
-            <span className="pt-stat-sub">Last 15</span>
+            <section className="pt-panel">
+              <div className="pt-panel-head">
+                <h2>Recent signups</h2>
+                <span className="pt-stat-sub">Last 15</span>
+              </div>
+              {data && data.recent_signups.length > 0 ? (
+                <table className="pt-table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Type</th>
+                      <th>Provider</th>
+                      <th>Joined</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.recent_signups.map((row) => (
+                      <tr key={row.id}>
+                        <td>
+                          <strong>{row.email}</strong>
+                          {row.username && (
+                            <>
+                              <br />
+                              <small style={{ color: "#6b7280" }}>
+                                {row.username}
+                              </small>
+                            </>
+                          )}
+                        </td>
+                        <td>
+                          <span className="pt-pill info">
+                            {row.account_type}
+                          </span>
+                        </td>
+                        <td>{row.auth_provider ?? "local"}</td>
+                        <td>{fmtDate(row.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="pt-empty">No signups recorded.</div>
+              )}
+            </section>
           </div>
-          {data && data.recent_signups.length > 0 ? (
-            <table className="pt-table">
-              <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Type</th>
-                  <th>Provider</th>
-                  <th>Joined</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recent_signups.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <strong>{row.email}</strong>
-                      {row.username && (
-                        <>
-                          <br />
-                          <small style={{ color: "#6b7280" }}>
-                            {row.username}
-                          </small>
-                        </>
-                      )}
-                    </td>
-                    <td>
-                      <span className="pt-pill info">{row.account_type}</span>
-                    </td>
-                    <td>{row.auth_provider ?? "local"}</td>
-                    <td>{fmtDate(row.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="pt-empty">No signups recorded.</div>
-          )}
-        </section>
+        </LogBlock>
+
+        {canAccessPlatformLogs && (
+          <LogBlock title="App Logs">
+            <AppLogs embedded />
+          </LogBlock>
+        )}
+        {isPlatformOwner && (
+          <LogBlock title="Visitors">
+            <Visitors embedded />
+          </LogBlock>
+        )}
+        {canAccessSecurity && (
+          <LogBlock title="User Logs">
+            <UserLogs embedded />
+          </LogBlock>
+        )}
+        {canAccessSecurity && (
+          <LogBlock title="Audit Logs">
+            <AuditLogs embedded />
+          </LogBlock>
+        )}
+        {canAccessSecurity && (
+          <LogBlock title="User Audit">
+            <UserAudit embedded />
+          </LogBlock>
+        )}
+        {isPlatformOwner && (
+          <LogBlock title="Tracing">
+            <Tracing embedded />
+          </LogBlock>
+        )}
       </div>
     </div>
+  );
+}
+
+function LogBlock({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [everOpened, setEverOpened] = useState(defaultOpen);
+
+  return (
+    <section className="pt-panel">
+      <button
+        type="button"
+        className="pt-panel-toggle"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen((o) => !o);
+          setEverOpened(true);
+        }}
+      >
+        <span className={`pt-panel-caret ${open ? "open" : ""}`}>▸</span>
+        <span>{title}</span>
+      </button>
+      {open && everOpened && (
+        <Suspense fallback={<div className="pt-loader">Loading…</div>}>
+          <div className="pt-log-embed">{children}</div>
+        </Suspense>
+      )}
+    </section>
   );
 }
 

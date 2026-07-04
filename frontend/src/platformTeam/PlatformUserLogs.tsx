@@ -58,7 +58,11 @@ type LogTab = (typeof LOG_TABS)[number]["key"];
 // Security-relevant user actions (sign-in/out, password changes, deletions,
 // file downloads/exports, billing changes) from the audit_logs table. Mirrors
 // logs/user_actions.log. Scoped by the backend: platform staff see everyone.
-export default function PlatformUserLogs() {
+export default function PlatformUserLogs({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { user } = useAuth();
   // Owner-only: even super_admin / security (who hold audit:read) are excluded.
   const canView =
@@ -153,7 +157,14 @@ export default function PlatformUserLogs() {
     );
   }, [rows, search]);
 
-  if (!canView) return <Navigate to="/home" replace />;
+  if (!canView)
+    return embedded ? (
+      <div style={{ padding: 16, color: "#6b7280" }}>
+        You don't have access to this log.
+      </div>
+    ) : (
+      <Navigate to="/home" replace />
+    );
 
   return (
     <div className="pt-page pt-userlogs">

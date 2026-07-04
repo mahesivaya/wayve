@@ -136,7 +136,11 @@ function describe(row: UserActionRow): string {
   return parts.length ? parts.join(" · ") : "-";
 }
 
-export default function UserAudit() {
+export default function UserAudit({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { user } = useAuth();
   const isOwner =
     user?.effective_role === "owner" &&
@@ -178,7 +182,13 @@ export default function UserAudit() {
   }
 
   if (shouldRedirect) {
-    return <Navigate to="/home" replace />;
+    return embedded ? (
+      <div style={{ padding: 16, color: "#6b7280" }}>
+        You don't have access to this log.
+      </div>
+    ) : (
+      <Navigate to="/home" replace />
+    );
   }
 
   return (

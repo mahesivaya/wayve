@@ -42,7 +42,11 @@ const LOG_COLUMNS = [
 
 const COL_WIDTHS_KEY = "rwayve.platformLogs.colWidths";
 
-export default function PlatformLogs() {
+export default function PlatformLogs({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { user } = useAuth();
   const canView =
     (user?.scope === "platform" ||
@@ -150,7 +154,14 @@ export default function PlatformLogs() {
     return () => window.clearInterval(id);
   }, [autoRefresh, reload]);
 
-  if (!canView) return <Navigate to="/" replace />;
+  if (!canView)
+    return embedded ? (
+      <div style={{ padding: 16, color: "#6b7280" }}>
+        You don't have access to this log.
+      </div>
+    ) : (
+      <Navigate to="/" replace />
+    );
   if (loading && rows.length === 0) {
     return <div className="pt-loader">Loading error log…</div>;
   }

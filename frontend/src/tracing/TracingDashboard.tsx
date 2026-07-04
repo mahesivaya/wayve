@@ -34,7 +34,11 @@ function hhmm(iso: string): string {
     : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
-export default function TracingDashboard() {
+export default function TracingDashboard({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { user } = useAuth();
   const isOwner =
     user?.scope === "platform" && user?.effective_role === "owner";
@@ -68,7 +72,14 @@ export default function TracingDashboard() {
     [data]
   );
 
-  if (!isOwner) return <Navigate to="/home" replace />;
+  if (!isOwner)
+    return embedded ? (
+      <div style={{ padding: 16, color: "#6b7280" }}>
+        You don't have access to this log.
+      </div>
+    ) : (
+      <Navigate to="/home" replace />
+    );
 
   const levels = data?.levels ?? {};
 

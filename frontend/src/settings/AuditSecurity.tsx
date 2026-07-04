@@ -389,7 +389,11 @@ const AUDIT_TABS = [
 
 type AuditTab = (typeof AUDIT_TABS)[number]["key"];
 
-export default function AuditSecurity() {
+export default function AuditSecurity({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { user } = useAuth();
   const canReadAudit = hasPermission(user, "audit:read");
   const canManageSiem = hasPermission(user, "webhooks:manage");
@@ -837,7 +841,13 @@ export default function AuditSecurity() {
   }
 
   if (shouldRedirect) {
-    return <Navigate to="/home" replace />;
+    return embedded ? (
+      <div style={{ padding: 16, color: "#6b7280" }}>
+        You don't have access to this log.
+      </div>
+    ) : (
+      <Navigate to="/home" replace />
+    );
   }
 
   if (!canReadAudit && !canManageSiem) {

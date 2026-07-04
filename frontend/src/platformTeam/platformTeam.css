@@ -702,3 +702,53 @@ html[data-theme="dark"] .api-secrets-raw {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Embedded log views inside Analytics collapsible blocks — neutralize the
+   embedded page's full-page chrome and hide its own header so it fits inside
+   the .pt-panel block. */
+.pt-log-embed .pt-page,
+.pt-log-embed .audit-security-page,
+.pt-log-embed .trace-page {
+  padding: 0;
+  min-height: 0;
+  background: transparent;
+}
+.pt-log-embed .pt-header,
+.pt-log-embed .audit-security-header,
+.pt-log-embed .trace-header {
+  display: none;
+}
+
+.pt-log-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pt-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-color, var(--color-text-primary));
+  text-align: left;
+}
+
+.pt-panel-caret {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  color: var(--text-muted, var(--color-text-muted));
+}
+.pt-panel-caret.open {
+  transform: rotate(90deg);
+}
+
+.pt-log-embed {
+  margin-top: 12px;
+}
