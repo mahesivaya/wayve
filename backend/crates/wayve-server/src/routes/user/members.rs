@@ -510,12 +510,15 @@ pub async fn organization_member_detail(
     }
 }
 
-/// Detail for one member of the platform team. Gated to `Scope::Platform`; the
-/// target must be a `platform_members` row (the platform staff roster), so this
-/// never exposes arbitrary personal users — only the caller's own team.
-#[get("/platform/members/{user_id}")]
+// ──────────────────────────────────────────────────────────────────────
+// Per-user project (GitHub repo) access — platform scope
+// ──────────────────────────────────────────────────────────────────────
+
+/// The repos a platform member has been granted access to (by `full_name`).
+/// Gated to platform staff (`MembersRead` + `Scope::Platform`).
+#[get("/platform/members/{user_id}/projects")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn platform_member_detail(
+pub async fn platform_member_projects(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
@@ -529,6 +532,150 @@ pub async fn platform_member_detail(
             .json(serde_json::json!({ "message": "Platform staff access required" })));
     }
     let user_id = path.into_inner();
+    let repos: Vec<String> = sqlx::query_scalar(
+        "SELECT repo_full_name FROM member_project_access \
+         WHERE user_id = $1 ORDER BY repo_full_name",
+    )
+    .bind(user_id)
+    .fetch_all(pool.get_ref())
+    .await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "repos": repos })))
+}
+
+#[derive(Deserialize)]
+pub struct SetMemberProjectsInput {
+    pub repos: Vec<String>,
+}
+
+/// Replace a platform member's granted repo set. Gated `MembersManage` +
+/// `Scope::Platform`; the target must be a platform member. Audited as a
+/// privilege change (mirrors the role-change audit).
+#[put("/platform/members/{user_id}/projects")]
+#[instrument(target = "http", skip(req, pool, data))]
+pub async fn set_platform_member_projects(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    data: web::Json<SetMemberProjectsInput>,
+) -> AppResult {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersManage).await
+    {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+    if ctx.scope != Scope::Platform {
+        return Ok(HttpResponse::Forbidden()
+            .json(serde_json::json!({ "message": "Platform staff access required" })));
+    }
+    let target_user_id = path.into_inner();
+
+    // Only grant to actual platform members — never arbitrary personal users.
+    let is_staff: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM platform_members WHERE user_id = $1)")
+            .bind(target_user_id)
+            .fetch_one(pool.get_ref())
+            .await?;
+    if !is_staff {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Platform team member not found" })));
+    }
+
+    // Normalize: trim, drop blanks, dedupe (preserve order).
+    let mut seen = std::collections::HashSet::new();
+    let repos: Vec<String> = data
+        .repos
+        .iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .filter(|s| seen.insert(s.clone()))
+        .collect();
+
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM member_project_access WHERE user_id = $1")
+        .bind(target_user_id)
+        .execute(&mut *tx)
+        .await?;
+    for repo in &repos {
+        sqlx::query(
+            "INSERT INTO member_project_access (user_id, repo_full_name, granted_by) \
+             VALUES ($1, $2, $3) ON CONFLICT (user_id, repo_full_name) DO NOTHING",
+        )
+        .bind(target_user_id)
+        .bind(repo)
+        .bind(ctx.user_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+
+    audit::record_action(
+        pool.get_ref(),
+        &req,
+        AuditEvent {
+            actor_user_id: ctx.user_id,
+            action: "projects_access_change",
+            resource_type: "platform_member",
+            resource_id: Some(target_user_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "scope": "platform",
+                "target_user_id": target_user_id,
+                "repo_count": repos.len(),
+            })),
+        },
+    )
+    .await;
+
+    info!(
+        target: "http",
+        actor = ctx.user_id, target_user_id, repo_count = repos.len(),
+        "platform member project access updated"
+    );
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "repos": repos })))
+}
+
+/// Detail for one member of the platform team. Gated to `Scope::Platform`; the
+/// target must be a `platform_members` row (the platform staff roster), so this
+/// never exposes arbitrary personal users — only the caller's own team.
+///
+/// The path segment is an **identifier**: the canonical URL uses the member's
+/// `username` (`/platform/members/security`), but a bare integer is still
+/// accepted as the raw user id so legacy `/platform/members/{id}` links and
+/// username-less members keep working.
+#[get("/platform/members/{ident}")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn platform_member_detail(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<String>,
+) -> AppResult {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersRead).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+    if ctx.scope != Scope::Platform {
+        return Ok(HttpResponse::Forbidden()
+            .json(serde_json::json!({ "message": "Platform staff access required" })));
+    }
+    let ident = path.into_inner();
+    let ident = ident.trim();
+
+    // A bare integer is the raw user id; anything else is a (case-insensitive)
+    // username lookup.
+    let user_id: Option<i32> = match ident.parse::<i32>() {
+        Ok(id) => Some(id),
+        Err(_) => {
+            sqlx::query_scalar::<_, i32>(
+                "SELECT id FROM users WHERE lower(username) = lower($1) LIMIT 1",
+            )
+            .bind(ident)
+            .fetch_optional(pool.get_ref())
+            .await?
+        }
+    };
+    let Some(user_id) = user_id else {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Platform team member not found" })));
+    };
 
     let is_staff: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM platform_members WHERE user_id = $1)")

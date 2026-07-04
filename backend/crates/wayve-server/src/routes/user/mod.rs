@@ -261,6 +261,8 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
         .service(list_platform_members)
         .service(platform_member_detail)
         .service(update_platform_member_role)
+        .service(platform_member_projects)
+        .service(set_platform_member_projects)
         .service(get_user_by_email)
         .service(get_all_users)
         .service(get_profile)

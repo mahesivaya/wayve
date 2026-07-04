@@ -3,9 +3,13 @@ import { Link, useParams } from "react-router-dom";
 import {
   getOrganizationMemberDetail,
   getPlatformMemberDetail,
+  getPlatformMemberProjects,
+  setPlatformMemberProjects,
   type MemberDetail as Detail,
 } from "../api/rbac";
+import { listGithubRepos, type GithubRepo } from "../api/github";
 import { useAuth } from "../auth/useAuth";
+import { hasPermission } from "../auth/permissions";
 import { getApiBase } from "../config/env";
 import { formatBytes } from "../utils/bytes";
 import { fmtDate, fmtLongDate } from "../utils/datetime";
@@ -66,6 +70,154 @@ function CloudIcon() {
   );
 }
 
+// Editable per-user project (repo) access, shown on the platform member page.
+// Non-admin platform members only see the repos granted here on their Projects
+// page; admins are unrestricted. Read-only for viewers without members:manage.
+function ProjectsAccessCard({
+  userId,
+  name,
+  canManage,
+}: {
+  userId: number;
+  name: string;
+  canManage: boolean;
+}) {
+  const [granted, setGranted] = useState<string[] | null>(null);
+  const [allRepos, setAllRepos] = useState<GithubRepo[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    getPlatformMemberProjects(userId)
+      .then((repos) => alive && setGranted(repos))
+      .catch(() => alive && setGranted([]));
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+
+  const beginEdit = async () => {
+    setErr("");
+    setDraft(new Set(granted ?? []));
+    setEditing(true);
+    if (allRepos === null) {
+      try {
+        const repos = await listGithubRepos();
+        setAllRepos(Array.isArray(repos) ? repos : []);
+      } catch {
+        setAllRepos([]);
+        setErr("Couldn't load the repository list.");
+      }
+    }
+  };
+
+  const toggle = (fullName: string) =>
+    setDraft((prev) => {
+      const next = new Set(prev);
+      if (next.has(fullName)) next.delete(fullName);
+      else next.add(fullName);
+      return next;
+    });
+
+  const save = async () => {
+    setSaving(true);
+    setErr("");
+    try {
+      const repos = await setPlatformMemberProjects(userId, Array.from(draft));
+      setGranted(repos);
+      setEditing(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="md-card">
+      <div className="md-card-head">
+        <h2 className="md-card-title">Projects access</h2>
+        {canManage && !editing && (
+          <button
+            type="button"
+            className="md-edit-btn"
+            onClick={() => void beginEdit()}
+          >
+            Edit
+          </button>
+        )}
+      </div>
+      <p className="md-card-sub">
+        Repositories {name} can see on their Projects page. Platform admins
+        always see every project regardless of this list.
+      </p>
+
+      {err && <p className="platform-admin-error">{err}</p>}
+
+      {!editing ? (
+        granted === null ? (
+          <p className="md-empty-note">Loading…</p>
+        ) : granted.length === 0 ? (
+          <p className="md-empty-note">No projects granted yet.</p>
+        ) : (
+          <div className="md-chip-list">
+            {granted.map((r) => (
+              <span key={r} className="md-chip is-repo">
+                {r}
+              </span>
+            ))}
+          </div>
+        )
+      ) : allRepos === null ? (
+        <p className="md-empty-note">Loading repositories…</p>
+      ) : allRepos.length === 0 ? (
+        <p className="md-empty-note">No repositories available.</p>
+      ) : (
+        <>
+          <div className="md-repo-checklist">
+            {allRepos.map((r) => (
+              <label key={r.full_name} className="md-repo-row">
+                <input
+                  type="checkbox"
+                  checked={draft.has(r.full_name)}
+                  onChange={() => toggle(r.full_name)}
+                />
+                <span className="md-repo-name">{r.full_name}</span>
+                <span
+                  className={`md-repo-vis ${r.private ? "is-private" : "is-public"}`}
+                >
+                  {r.private ? "Private" : "Public"}
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="md-card-actions">
+            <button
+              type="button"
+              className="md-save-btn"
+              disabled={saving}
+              onClick={() => void save()}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              className="md-cancel-btn"
+              disabled={saving}
+              onClick={() => setEditing(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 type Props = { scope: "organization" | "platform" };
 
 export default function MemberDetail({ scope }: Props) {
@@ -96,7 +248,9 @@ export default function MemberDetail({ scope }: Props) {
     setAvatarFailed(false);
     const request =
       scope === "platform"
-        ? getPlatformMemberDetail(Number(id))
+        ? // `id` here is the member's username (canonical) or numeric id
+          // (legacy) — the platform endpoint resolves either.
+          getPlatformMemberDetail(id)
         : getOrganizationMemberDetail(orgId as number, Number(id));
     request
       .then((m) => {
@@ -270,6 +424,14 @@ export default function MemberDetail({ scope }: Props) {
                 </p>
               )}
             </section>
+
+            {scope === "platform" && (
+              <ProjectsAccessCard
+                userId={member.id}
+                name={name}
+                canManage={hasPermission(authUser, "members:manage")}
+              />
+            )}
           </div>
         </div>
       )}

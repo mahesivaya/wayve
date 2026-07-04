@@ -1,19 +1,24 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listGithubRepos, type GithubRepo } from "../api/github";
+import { getVisibleProjects, type GithubRepo } from "../api/github";
 import "./projects.css";
 
 // Projects page — one block per repository (the same repos shown on the Code
 // Repo page). Clicking a block opens that repo directly in the Code Repo
-// viewer (deep-linked via ?owner=&repo=).
+// viewer (deep-linked via ?owner=&repo=). The repo list is server-filtered per
+// user (see getVisibleProjects): admins/staff see all; a restricted member sees
+// only the repos an admin granted them on the member page.
 export default function ProjectsPage() {
   const navigate = useNavigate();
   const [repos, setRepos] = useState<GithubRepo[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    listGithubRepos()
-      .then((rows) => !cancelled && setRepos(Array.isArray(rows) ? rows : []))
+    getVisibleProjects()
+      .then((data) => {
+        if (cancelled) return;
+        setRepos(Array.isArray(data?.repos) ? data.repos : []);
+      })
       .catch(() => !cancelled && setRepos([]));
     return () => {
       cancelled = true;

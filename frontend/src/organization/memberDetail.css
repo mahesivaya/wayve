@@ -11,6 +11,13 @@
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
+  /* The page host (.split-pane-body) is overflow:hidden and fixed-height, so
+     this page must own its own vertical scroll — otherwise tall content (the
+     Projects checklist, many cards) gets clipped and can't be reached. */
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .md-breadcrumb {
@@ -296,4 +303,128 @@
   margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
+}
+
+/* Projects-access card */
+.md-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+/* The shared card title has a bottom margin for standalone use; inside the
+   flex head it would shove the Edit button out of vertical alignment. */
+.md-card-head .md-card-title {
+  margin: 0;
+}
+
+/* Granted-repo chips reuse .md-chip but must NOT capitalize — repo names like
+   "owner/name" are case-sensitive. */
+.md-chip.is-repo {
+  text-transform: none;
+}
+
+.md-card-sub {
+  margin: 4px 0 12px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.md-edit-btn {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-primary, #2563eb);
+  cursor: pointer;
+}
+.md-edit-btn:hover {
+  background: var(--color-surface-muted);
+}
+
+.md-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.md-repo-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* No inner scrollbox — the full list flows into the page so the whole page
+     scrolls as one (the page owns the scroll; see .md-page). */
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.md-repo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.md-repo-row:hover {
+  background: var(--color-surface-muted);
+}
+
+.md-repo-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+
+.md-repo-vis {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+}
+.md-repo-vis.is-private {
+  color: var(--color-danger, #b54708);
+}
+
+.md-card-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.md-save-btn,
+.md-cancel-btn {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+}
+.md-save-btn {
+  background: var(--color-primary, #2563eb);
+  border-color: var(--color-primary, #2563eb);
+  color: #fff;
+}
+.md-save-btn:disabled,
+.md-cancel-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.md-cancel-btn {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
 }

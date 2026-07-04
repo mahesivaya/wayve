@@ -60,6 +60,32 @@ export async function updatePlatformMemberRole(
   return res.json();
 }
 
+// Per-user project (GitHub repo) access for a platform member. Repos are keyed
+// by GitHub `full_name` ("owner/name").
+export async function getPlatformMemberProjects(
+  userId: number
+): Promise<string[]> {
+  const res = await apiFetch(`/api/platform/members/${userId}/projects`, {
+    preserve401: true,
+  });
+  const data = await res.json();
+  return Array.isArray(data?.repos) ? (data.repos as string[]) : [];
+}
+
+// Replace the member's granted repo set. Returns the persisted list.
+export async function setPlatformMemberProjects(
+  userId: number,
+  repos: string[]
+): Promise<string[]> {
+  const res = await apiFetch(`/api/platform/members/${userId}/projects`, {
+    method: "PUT",
+    preserve401: true,
+    body: JSON.stringify({ repos }),
+  });
+  const data = await res.json();
+  return Array.isArray(data?.repos) ? (data.repos as string[]) : [];
+}
+
 // Full profile + per-service storage for one team member, backing the scoped
 // member detail page. The org variant is authorized to the caller's own org;
 // the platform variant to platform staff only. Both return the same shape.
@@ -101,12 +127,15 @@ export async function getOrganizationMemberDetail(
   return res.json();
 }
 
+// `identifier` is the member's username (the canonical URL) or their numeric
+// user id (legacy links) — the backend accepts either.
 export async function getPlatformMemberDetail(
-  userId: number
+  identifier: string | number
 ): Promise<MemberDetail> {
-  const res = await apiFetch(`/api/platform/members/${userId}`, {
-    preserve401: true,
-  });
+  const res = await apiFetch(
+    `/api/platform/members/${encodeURIComponent(identifier)}`,
+    { preserve401: true }
+  );
   return res.json();
 }
 

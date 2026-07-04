@@ -758,6 +758,20 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         )",
         "CREATE INDEX IF NOT EXISTS idx_org_key_audit_log_org_time \
          ON org_key_audit_log(organization_id, created_at DESC)",
+        // Per-user project (GitHub repo) access. A row grants one user visibility
+        // of one repo (by full_name "owner/name") on the Projects page. Admins /
+        // platform staff are unrestricted and ignore this table. Schema also in
+        // init.sql; mirrored here so existing DBs pick it up without db-reset.
+        "CREATE TABLE IF NOT EXISTS member_project_access (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            repo_full_name TEXT NOT NULL,
+            granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (user_id, repo_full_name)
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_member_project_access_user \
+         ON member_project_access(user_id)",
     ];
 
     for statement in statements {

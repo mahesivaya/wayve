@@ -160,6 +160,21 @@ ALTER TABLE projects ADD CONSTRAINT projects_owner_chk CHECK (
 );
 CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id);
 
+-- Per-user project (GitHub repo) access. One row grants one user visibility of
+-- one repo (by full_name "owner/name") on the Projects page. Platform staff and
+-- org owner/super_admin/admin are unrestricted and ignore this table; regular
+-- members see only the repos granted to them. Mirrored in startup.rs.
+CREATE TABLE IF NOT EXISTS member_project_access (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    repo_full_name TEXT NOT NULL,
+    granted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, repo_full_name)
+);
+CREATE INDEX IF NOT EXISTS idx_member_project_access_user
+    ON member_project_access (user_id);
+
 -- Per-organization feature-access overrides. One row = "this role may use this
 -- feature in this org". The presence of ANY row for (organization_id,
 -- feature_key) means the owner has configured that feature: only the listed

@@ -97,6 +97,34 @@ fn token() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+/// Fetch the raw repo objects the shared token can see — the same query the
+/// frontend used to call directly (`/user/repos`). Used server-side by
+/// `/api/projects/visible` to build the Projects page list (and filter it per
+/// user). `Err(())` on a transport/upstream failure so the caller can 502.
+pub async fn list_repos() -> Result<Vec<serde_json::Value>, ()> {
+    let api_base = crate::external::github_api_base();
+    let url = format!(
+        "{api_base}/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member"
+    );
+    let mut builder = HTTP_CLIENT
+        .get(&url)
+        .timeout(Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app");
+    if let Some(pat) = token() {
+        builder = builder.header("Authorization", format!("Bearer {pat}"));
+    }
+    let response = builder.send().await.map_err(|_| ())?;
+    if !response.status().is_success() {
+        return Err(());
+    }
+    response
+        .json::<Vec<serde_json::Value>>()
+        .await
+        .map_err(|_| ())
+}
+
 /// Extract `(owner, repo)` from a proxy tail of the form
 /// `repos/{owner}/{repo}[/...]`. Returns `None` for any other shape so the
 /// per-caller allowlist only ever applies to the `repos/...` surface the
@@ -702,11 +730,77 @@ pub async fn create_commit_comment(
     .body(resp_body)
 }
 
+/// The Projects page data for the current user. Platform admins (and org /
+/// personal accounts, not yet managed here) are **unrestricted** and see every
+/// repo the shared token exposes; **non-admin platform members** see only the
+/// repos granted to them in `member_project_access`. Enforced server-side so a
+/// restricted member can't bypass a client filter by hitting the proxy directly.
+#[get("/projects/visible")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
+    let Some(user_id) = get_user_id_from_request(&req) else {
+        return HttpResponse::Unauthorized()
+            .json(serde_json::json!({ "message": "Authentication required" }));
+    };
+
+    let unrestricted = match resolve_role_context(pool.get_ref(), user_id).await {
+        Ok(ctx) => match ctx.scope {
+            Scope::Platform => matches!(ctx.role, Role::Owner | Role::SuperAdmin | Role::Admin),
+            // Org and personal accounts aren't managed by this feature yet.
+            _ => true,
+        },
+        // Fail open to "see all" rather than hiding everything on a lookup error.
+        Err(_) => true,
+    };
+
+    let repos = match list_repos().await {
+        Ok(repos) => repos,
+        Err(()) => {
+            return HttpResponse::BadGateway()
+                .json(serde_json::json!({ "message": "Could not load repositories from GitHub" }));
+        }
+    };
+
+    let repos = if unrestricted {
+        repos
+    } else {
+        let allowed: std::collections::HashSet<String> = match sqlx::query_scalar::<_, String>(
+            "SELECT repo_full_name FROM member_project_access WHERE user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_all(pool.get_ref())
+        .await
+        {
+            Ok(rows) => rows.into_iter().collect(),
+            Err(e) => {
+                warn!(target: "http", error = ?e, "visible_projects: grant lookup failed");
+                return HttpResponse::InternalServerError()
+                    .json(serde_json::json!({ "message": "Could not load project access" }));
+            }
+        };
+        repos
+            .into_iter()
+            .filter(|r| {
+                r.get("full_name")
+                    .and_then(|v| v.as_str())
+                    .map(|full_name| allowed.contains(full_name))
+                    .unwrap_or(false)
+            })
+            .collect()
+    };
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "unrestricted": unrestricted,
+        "repos": repos,
+    }))
+}
+
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(github_proxy);
     cfg.service(approve_pull_request);
     cfg.service(merge_pull_request);
     cfg.service(create_commit_comment);
+    cfg.service(visible_projects);
 }
 
 #[cfg(test)]

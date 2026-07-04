@@ -51,7 +51,7 @@ export default function MembersTree({
 }: {
   members: Member[];
   /** Detail-page path for a member, routed by the caller's scope. */
-  memberHref: (userId: number) => string;
+  memberHref: (member: Member) => string;
 }) {
   const tiers = useMemo(() => {
     const sorted = [...members].sort(
@@ -71,7 +71,7 @@ export default function MembersTree({
           {tier.people.map((m) => (
             <Link
               key={m.user_id}
-              to={memberHref(m.user_id)}
+              to={memberHref(m)}
               className="members-tree-node"
               aria-label={`View details for ${displayName(m)}`}
             >

@@ -27,6 +27,15 @@ export const listGithubRepos = () =>
     { preserve401: true }
   );
 
+// The repos the CURRENT user may see on the Projects page, filtered server-side:
+// platform admins/staff (and org/personal accounts) are unrestricted and get
+// every repo; a non-admin platform member gets only the repos granted to them.
+// Preferred over `listGithubRepos` for the Projects page so the filter is
+// actually enforced (not just a client-side hide).
+export type VisibleProjects = { unrestricted: boolean; repos: GithubRepo[] };
+export const getVisibleProjects = () =>
+  apiFetchJson<VisibleProjects>("/api/projects/visible", { preserve401: true });
+
 // Per-repo language breakdown: `{ "TypeScript": 12345, "CSS": 678, ... }` in
 // bytes. Use `topLanguages` to reduce it to the dominant few.
 export const getRepoLanguages = (owner: string, repo: string) =>

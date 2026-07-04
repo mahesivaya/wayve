@@ -85,11 +85,15 @@ export default function MembersRolesPanel(props: Props) {
     props.scope === "organization" ? props.organizationId : null;
 
   // Detail-page path for a member, routed by scope. Used by both the list rows
-  // and the tree nodes.
-  const memberHref = (userId: number) =>
-    props.scope === "platform"
-      ? `/platform/members/${userId}`
-      : `/organization/members/${userId}`;
+  // and the tree nodes. Platform URLs use the member's username (canonical),
+  // falling back to the numeric id when a member has no username.
+  const memberHref = (m: Pick<Member, "user_id" | "username">) => {
+    if (props.scope === "platform") {
+      const slug = m.username?.trim() ? m.username.trim() : String(m.user_id);
+      return `/platform/members/${encodeURIComponent(slug)}`;
+    }
+    return `/organization/members/${m.user_id}`;
+  };
 
   useEffect(() => {
     // Without members:read the panel renders nothing (see the guard at the end
@@ -579,7 +583,7 @@ export default function MembersRolesPanel(props: Props) {
                   <div className="rbac-members-row" key={member.user_id}>
                     <div className="rbac-members-identity">
                       <Link
-                        to={memberHref(member.user_id)}
+                        to={memberHref(member)}
                         className="rbac-members-name-link"
                       >
                         {member.username || member.email}
