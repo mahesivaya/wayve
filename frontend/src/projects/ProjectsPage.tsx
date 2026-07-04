@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  listGithubRepos,
-  getRepoLanguages,
-  topLanguages,
-  type GithubRepo,
-} from "../api/github";
+import { listGithubRepos, type GithubRepo } from "../api/github";
 import "./projects.css";
 
 // Projects page — one block per repository (the same repos shown on the Code
@@ -14,9 +9,6 @@ import "./projects.css";
 export default function ProjectsPage() {
   const navigate = useNavigate();
   const [repos, setRepos] = useState<GithubRepo[] | null>(null);
-  // Top-3 languages per repo (by bytes), keyed by full_name. Fetched lazily
-  // after the repo list loads — one /languages call per repo (proxy-cached).
-  const [langs, setLangs] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -27,26 +19,6 @@ export default function ProjectsPage() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (!repos || repos.length === 0) return;
-    let cancelled = false;
-    repos.forEach((r) => {
-      getRepoLanguages(r.owner.login, r.name)
-        .then((map) => {
-          const top = topLanguages(map, 3);
-          if (!cancelled && top.length > 0) {
-            setLangs((prev) => ({ ...prev, [r.full_name]: top }));
-          }
-        })
-        .catch(() => {
-          /* leave this repo without a language line */
-        });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [repos]);
 
   const open = (r: GithubRepo) =>
     navigate(
@@ -94,20 +66,6 @@ export default function ProjectsPage() {
               {r.description && (
                 <p className="project-card-desc">{r.description}</p>
               )}
-              {(() => {
-                const top =
-                  langs[r.full_name] ?? (r.language ? [r.language] : []);
-                if (top.length === 0) return null;
-                return (
-                  <div className="project-card-langs">
-                    {top.map((lang) => (
-                      <span key={lang} className="project-card-lang">
-                        {lang}
-                      </span>
-                    ))}
-                  </div>
-                );
-              })()}
             </article>
           ))}
         </div>

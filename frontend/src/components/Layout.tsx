@@ -25,17 +25,7 @@ import StorageLimitBanner from "./StorageLimitBanner";
 import { SplitPaneContext } from "./SplitPaneContext";
 import ResizeHandle from "./ResizeHandle";
 import { useResizableWidth } from "./useResizableWidth";
-import {
-  listProjects,
-  createProject,
-  updateProject,
-  deleteProject,
-  linkProjectRepo,
-  listTeams,
-  createTeam,
-  type Project,
-  type Team,
-} from "../api/workspace";
+import { listTeams, createTeam, type Team } from "../api/workspace";
 import { getFeatureAccess } from "../api/featureAccess";
 import "./Layout.css";
 import {
@@ -143,16 +133,10 @@ const ADDABLE_PERSONAL_APPS: {
   { key: "assistant", label: "Assistant", icon: <AssistantIcon size={22} /> },
 ];
 
-// Sample Workspace repos + Teams shown in the sidebar for UI testing when the
-// org has none of its own yet. Negative ids so they can never collide with a
-// real backend row. Used only as a display fallback — the real fetched list
-// (when non-empty) always wins. Remove once real data exists.
-const SAMPLE_PROJECTS: Project[] = [
-  { id: -1, name: "fluxze-web" },
-  { id: -2, name: "fluxze-backend" },
-  { id: -3, name: "infra-terraform" },
-];
-
+// Sample Teams shown in the sidebar for UI testing when the org has none of
+// its own yet. Negative ids so they can never collide with a real backend row.
+// Used only as a display fallback — the real fetched list (when non-empty)
+// always wins. Remove once real data exists.
 const SAMPLE_TEAMS: Team[] = [
   {
     id: -1,
@@ -397,34 +381,19 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // teams/platform/developers). `sections.isOpen(key)` / `.toggle(key)` /
   // `.setOpen(key, bool)`.
   const sections = useSidebarSections();
-  // Projects + teams are org-scoped and fetched from the backend. Creation and
-  // rename are org-owner-only (the controls are hidden otherwise; the backend
-  // enforces it regardless).
-  const [projects, setProjects] = useState<Project[]>([]);
+  // Teams are org-scoped and fetched from the backend. Creation is
+  // org-owner-only (the control is hidden otherwise; the backend enforces it
+  // regardless).
   const [teams, setTeams] = useState<Team[]>([]);
-  // id of the project currently being renamed (null = none) + its draft text.
-  const [editingProject, setEditingProject] = useState<number | null>(null);
-  const [projectDraft, setProjectDraft] = useState("");
-  // id of the project whose rename/delete menu is open (null = none).
-  const [projectMenu, setProjectMenu] = useState<number | null>(null);
-  // Inline "new project" / "new team" rows (opened by the section "+" button).
-  const [creatingProject, setCreatingProject] = useState(false);
-  const [projectCreateDraft, setProjectCreateDraft] = useState("");
+  // Inline "new team" row (opened by the section "+" button).
   const [creatingTeam, setCreatingTeam] = useState(false);
   const [teamCreateDraft, setTeamCreateDraft] = useState("");
-  // Whether the caller's role may use the Code Repo feature (owner-configured
-  // per org). Defaults to true so we don't flash-hide before the fetch; refined
-  // once feature access loads. Non-org accounts keep their existing gating.
-  const [codeRepoAllowed, setCodeRepoAllowed] = useState(true);
   const [billingAllowed, setBillingAllowed] = useState(true);
 
   const userId = user?.id;
   useEffect(() => {
     if (userId == null) return;
     let cancelled = false;
-    listProjects()
-      .then((rows) => !cancelled && setProjects(rows))
-      .catch(() => {});
     listTeams()
       .then((rows) => !cancelled && setTeams(rows))
       .catch(() => {});
@@ -444,10 +413,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       .then((d) => {
         if (cancelled) return;
         const role = userRole ?? "";
-        const cr = d.features.find((f) => f.key === "code_repo");
-        setCodeRepoAllowed(
-          role === "owner" || !cr || cr.allowed_roles.includes(role)
-        );
         const bill = d.features.find((f) => f.key === "billing");
         setBillingAllowed(
           role === "owner" || !bill || bill.allowed_roles.includes(role)
@@ -455,7 +420,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       })
       .catch(() => {
         if (!cancelled) {
-          setCodeRepoAllowed(true);
           setBillingAllowed(true);
         }
       });
@@ -463,76 +427,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       cancelled = true;
     };
   }, [userScope, userRole]);
-
-  const commitProjectName = (id: number) => {
-    const next = projectDraft.trim();
-    setEditingProject(null);
-    const current = projects.find((p) => p.id === id);
-    if (!next || !current || next === current.name) return;
-    setProjects((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, name: next } : p))
-    );
-    updateProject(id, next).catch(() => {
-      // Revert on failure so the sidebar reflects the persisted name.
-      setProjects((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, name: current.name } : p))
-      );
-    });
-  };
-
-  const removeProject = (id: number) => {
-    const current = projects.find((p) => p.id === id);
-    if (
-      !window.confirm(
-        `Delete project "${current?.name ?? "this project"}"? This also removes its linked code repo.`
-      )
-    ) {
-      return;
-    }
-    setProjectMenu(null);
-    const prevProjects = projects;
-    // Optimistic removal; restore on failure.
-    setProjects((prev) => prev.filter((p) => p.id !== id));
-    deleteProject(id).catch(() => setProjects(prevProjects));
-  };
-
-  // Link (or replace) the public GitHub repo on an org project. Owner-only —
-  // the menu item is hidden otherwise and the backend enforces require_owner.
-  // Once linked, every org member can browse the repo via the Code Repo viewer.
-  const linkRepo = (id: number) => {
-    const current = projects.find((p) => p.id === id);
-    setProjectMenu(null);
-    const url = window.prompt(
-      "Public GitHub repo URL (e.g. https://github.com/owner/repo):",
-      current?.github_owner && current?.github_repo
-        ? `https://github.com/${current.github_owner}/${current.github_repo}`
-        : ""
-    );
-    if (url == null) return;
-    const trimmed = url.trim();
-    if (!trimmed) return;
-    linkProjectRepo(id, trimmed)
-      .then((updated) =>
-        setProjects((prev) =>
-          prev.map((p) => (p.id === id ? { ...p, ...updated } : p))
-        )
-      )
-      .catch((err: unknown) =>
-        window.alert(
-          err instanceof Error ? err.message : "Failed to link repository"
-        )
-      );
-  };
-
-  const submitNewProject = () => {
-    const name = projectCreateDraft.trim();
-    setCreatingProject(false);
-    setProjectCreateDraft("");
-    if (!name) return;
-    createProject(name)
-      .then((created) => setProjects((prev) => [created, ...prev]))
-      .catch(() => {});
-  };
 
   const submitNewTeam = () => {
     const name = teamCreateDraft.trim();
@@ -980,9 +874,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     );
   };
 
-  // Fall back to sample rows so the Workspace/Teams sections aren't empty
-  // during testing; real fetched data always takes precedence.
-  const displayProjects = projects.length ? projects : SAMPLE_PROJECTS;
+  // Fall back to sample rows so the Teams section isn't empty during testing;
+  // real fetched data always takes precedence.
   const displayTeams = teams.length ? teams : SAMPLE_TEAMS;
 
   const sectionDefs: SidebarSectionDef[] = [
@@ -1005,142 +898,33 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           >
             📄 Documents
           </Link>
-          {codeRepoAllowed && (
-            <>
-          {renderSectionToggle(
-            "Code Repo",
-            sections.isOpen("projects"),
-            () => sections.toggle("projects"),
-            isOrgOwner && !sidebarCollapsed
-              ? () => {
-                  sections.setOpen("projects", true);
-                  setProjectCreateDraft("");
-                  setCreatingProject(true);
+          <Link
+            to="/projects"
+            title="Projects"
+            className={`sidebar-project-label${
+              location.pathname === "/projects" ? " active" : ""
+            }`}
+            onClick={() => setNavOpen(false)}
+          >
+            🗂 Projects
+          </Link>
+          {user.effective_role !== "guest" && (
+            <Link
+              to="/github"
+              title="Code Repo"
+              className={`sidebar-project-label${
+                location.pathname === "/github" ? " active" : ""
+              }`}
+              onClick={(e) => {
+                setNavOpen(false);
+                if (splitTarget === "right") {
+                  e.preventDefault();
+                  setRightView("github");
                 }
-              : undefined,
-            <GitLogoIcon size={14} />
-          )}
-          {sections.isOpen("projects") && (
-            <div className="sidebar-subitems">
-              {creatingProject && (
-                <input
-                  className="sidebar-project-edit"
-                  value={projectCreateDraft}
-                  autoFocus
-                  placeholder="New project…"
-                  aria-label="New project name"
-                  onChange={(e) => setProjectCreateDraft(e.target.value)}
-                  onBlur={submitNewProject}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") submitNewProject();
-                    else if (e.key === "Escape") {
-                      setCreatingProject(false);
-                      setProjectCreateDraft("");
-                    }
-                  }}
-                />
-              )}
-              {displayProjects.map((proj) =>
-                editingProject === proj.id ? (
-                  <input
-                    key={proj.id}
-                    className="sidebar-project-edit"
-                    value={projectDraft}
-                    autoFocus
-                    aria-label="Project name"
-                    onChange={(e) => setProjectDraft(e.target.value)}
-                    onBlur={() => commitProjectName(proj.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitProjectName(proj.id);
-                      else if (e.key === "Escape") setEditingProject(null);
-                    }}
-                  />
-                ) : (
-                  <div key={proj.id} className="sidebar-project-row">
-                    <Link
-                      to={`/github/${proj.id}`}
-                      title={proj.name}
-                      className="sidebar-project-label"
-                      onClick={(e) => {
-                        setNavOpen(false);
-                        if (splitTarget === "right") {
-                          e.preventDefault();
-                          setRightView("github");
-                        }
-                      }}
-                    >
-                      {proj.name}
-                    </Link>
-                    {isOrgOwner && (
-                      <div className="sidebar-project-menu-wrap">
-                        <button
-                          type="button"
-                          className="sidebar-project-edit-btn"
-                          title="Edit project"
-                          aria-label={`Edit ${proj.name}`}
-                          aria-haspopup="menu"
-                          aria-expanded={projectMenu === proj.id}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setProjectMenu((cur) =>
-                              cur === proj.id ? null : proj.id
-                            );
-                          }}
-                        >
-                          ✎
-                        </button>
-                        {projectMenu === proj.id && (
-                          <div className="sidebar-project-menu" role="menu">
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setProjectMenu(null);
-                                setProjectDraft(proj.name);
-                                setEditingProject(proj.id);
-                              }}
-                            >
-                              Rename
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                linkRepo(proj.id);
-                              }}
-                            >
-                              {proj.github_repo ? "Change repo" : "Link repo"}
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              className="sidebar-project-menu-danger"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                removeProject(proj.id);
-                              }}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              )}
-              {!creatingProject && displayProjects.length === 0 && (
-                <div className="sidebar-empty-hint">No projects yet</div>
-              )}
-            </div>
-          )}
-            </>
+              }}
+            >
+              <GitLogoIcon size={14} /> Code Repo
+            </Link>
           )}
         </div>
       ),
@@ -1565,21 +1349,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 "AI Chat",
                 <AIChatIcon size={18} />
               )}
-              {/* GitHub repo viewer — same access as the /github route:
-                  platform staff, org owner/super_admin/admin, or developers.
-                  Uses the Git logo mark (inherits the sidebar icon color). */}
-              {hasWorkspaceSection &&
-                user.effective_role !== "guest" &&
-                renderSidebarItem(
-                  "/github",
-                  "github",
-                  "Code Repo",
-                  <GitLogoIcon />
-                )}
+              {/* Code Repo moved into the Workspace section (below) for
+                  workspace users. */}
               {/* Personal accounts: opt-in apps they've added (in catalog
                   order), plus a "+" that opens a checkbox picker. Workspace
-                  users get Code Repo from the section above, so the add-app
-                  affordance is personal-only. */}
+                  users get Code Repo inside the Workspace section, so the
+                  add-app affordance is personal-only. */}
               {user.account_type === "personal" && (
                 <>
                   {ADDABLE_PERSONAL_APPS.filter((a) =>
