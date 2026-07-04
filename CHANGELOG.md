@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [5.6.0](https://github.com/mahesivaya/wayve/releases/tag/v5.6.0) - 2026-07-04
+
+### 🚀 Features
+
+- **projects:** Per-user repo access on the platform member page
+- **analytics:** Fold platform logs into Analytics as lazy collapsible blocks
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v5.5.1 [skip ci]
+
 ## [5.5.1](https://github.com/mahesivaya/wayve/releases/tag/v5.5.1) - 2026-07-04
 
 ### 🚀 Features
