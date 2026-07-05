@@ -86,6 +86,31 @@ async fn run_iteration(pool: &PgPool, client: &reqwest::Client) -> Result<()> {
     .fetch_all(pool)
     .await?;
 
+    if rows.is_empty() {
+        return Ok(());
+    }
+
+    // Batch-load every claimed delivery's endpoint in ONE query instead of a
+    // SELECT per delivery. Freshness is per-tick — an endpoint edited between
+    // ticks is re-read on the next tick.
+    let endpoint_ids: Vec<i32> = rows
+        .iter()
+        .map(|r| r.get::<i32, _>("endpoint_id"))
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    let endpoints: std::collections::HashMap<i32, (String, String, bool)> =
+        sqlx::query("SELECT id, url, secret, enabled FROM webhook_endpoints WHERE id = ANY($1)")
+            .bind(&endpoint_ids)
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .map(|e| {
+                let id: i32 = e.get("id");
+                (id, (e.get("url"), e.get("secret"), e.get("enabled")))
+            })
+            .collect();
+
     for row in rows {
         let delivery_id: i64 = row.get("id");
         let endpoint_id: i32 = row.get("endpoint_id");
@@ -94,25 +119,16 @@ async fn run_iteration(pool: &PgPool, client: &reqwest::Client) -> Result<()> {
         let payload: serde_json::Value = row.get("payload");
         let attempt_count: i32 = row.get("attempt_count");
 
-        // Pull the endpoint freshly each delivery — the customer may have
-        // disabled, deleted, or moved its URL between attempts.
-        let endpoint =
-            sqlx::query("SELECT url, secret, enabled FROM webhook_endpoints WHERE id = $1")
-                .bind(endpoint_id)
-                .fetch_optional(pool)
-                .await?;
-        let Some(endpoint) = endpoint else {
-            // Endpoint was deleted; abandon the delivery.
+        // Endpoint state was batch-loaded for this tick (one query, not one
+        // per delivery). A missing entry means the endpoint was deleted.
+        let Some((url, secret, enabled)) = endpoints.get(&endpoint_id) else {
             mark_abandoned(pool, delivery_id, 0, "endpoint deleted").await;
             continue;
         };
-        let enabled: bool = endpoint.get("enabled");
-        if !enabled {
+        if !*enabled {
             mark_abandoned(pool, delivery_id, 0, "endpoint disabled").await;
             continue;
         }
-        let url: String = endpoint.get("url");
-        let secret: String = endpoint.get("secret");
 
         deliver(
             pool,
@@ -124,8 +140,8 @@ async fn run_iteration(pool: &PgPool, client: &reqwest::Client) -> Result<()> {
                 event_type: &event_type,
                 payload: &payload,
                 attempt_count,
-                url: &url,
-                secret: &secret,
+                url,
+                secret,
             },
         )
         .await;

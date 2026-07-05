@@ -127,26 +127,28 @@ export default function SendEmail({
       //    them identically and does not auto-promote Wayve users to
       //    the native channel.
       if (secureSend) {
-        let secureDelivered = 0;
+        // The encrypted bundle is identical for every recipient, so seal ONCE
+        // (WebCrypto sealing is expensive) rather than per recipient. Each
+        // recipient still gets its own upload/token, fired concurrently.
+        const bundle = await sealSecureMessage(body, passphrase);
         const secureErrors: string[] = [];
-        for (const recipient of recipients) {
-          try {
-            const bundle = await sealSecureMessage(body, passphrase);
-            await sendSecureEmail({
-              recipient_email: recipient,
-              subject,
-              ...bundle,
-            });
-            secureDelivered += 1;
-          } catch (err) {
-            logger.error("secure-send failed", err, recipient);
+        const results = await Promise.allSettled(
+          recipients.map((recipient) =>
+            sendSecureEmail({ recipient_email: recipient, subject, ...bundle })
+          )
+        );
+        results.forEach((res, i) => {
+          if (res.status === "rejected") {
+            const recipient = recipients[i];
+            logger.error("secure-send failed", res.reason, recipient);
             secureErrors.push(
-              err instanceof Error
-                ? `${recipient}: ${err.message}`
+              res.reason instanceof Error
+                ? `${recipient}: ${res.reason.message}`
                 : `${recipient}: secure-send failed`
             );
           }
-        }
+        });
+        const secureDelivered = recipients.length - secureErrors.length;
         if (secureDelivered > 0) {
           setStatus(
             `Secure link sent to ${secureDelivered} recipient${secureDelivered === 1 ? "" : "s"} — share the passphrase out-of-band ✅`
