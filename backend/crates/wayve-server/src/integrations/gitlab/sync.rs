@@ -19,45 +19,45 @@ pub async fn pull(
     let client = GitlabClient::new(conn);
     let issues = client.list_assigned_issues(state, max_results).await?;
 
-    let mut imported = 0usize;
-    let mut updated = 0usize;
-    for issue in issues {
-        let mapped = map_issue(&issue);
-
-        // `(xmax::text = '0')` is true only for a fresh INSERT; an ON CONFLICT
-        // UPDATE stamps xmax with the updating xid.
-        let inserted: bool = sqlx::query_scalar(
-            "INSERT INTO tasks
-                (user_id, name, description, priority, status,
-                 gitlab_issue_iid, gitlab_project_id, gitlab_web_url)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (user_id, gitlab_project_id, gitlab_issue_iid)
-                WHERE gitlab_issue_iid IS NOT NULL
-             DO UPDATE SET
-                name = EXCLUDED.name,
-                description = EXCLUDED.description,
-                priority = EXCLUDED.priority,
-                status = EXCLUDED.status,
-                gitlab_web_url = EXCLUDED.gitlab_web_url,
-                updated_at = NOW()
-             RETURNING (xmax::text = '0') AS inserted",
-        )
-        .bind(user_id)
-        .bind(&mapped.name)
-        .bind(&mapped.description)
-        .bind(mapped.priority)
-        .bind(mapped.status)
-        .bind(issue.iid)
-        .bind(issue.project_id)
-        .bind(&issue.web_url)
-        .fetch_one(pool)
-        .await?;
-
-        if inserted {
-            imported += 1;
-        } else {
-            updated += 1;
-        }
+    if issues.is_empty() {
+        return Ok((0, 0));
     }
+
+    // Batch every issue into ONE multi-row upsert instead of a round-trip per
+    // issue. `(xmax::text = '0')` is true only for a fresh INSERT; an ON
+    // CONFLICT UPDATE stamps xmax with the updating xid — so the per-row flag
+    // distinguishes imported (true) from updated (false). Issues in a list are
+    // unique by (project_id, iid), so no row conflicts twice within the batch.
+    let mut qb: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
+        "INSERT INTO tasks \
+            (user_id, name, description, priority, status, \
+             gitlab_issue_iid, gitlab_project_id, gitlab_web_url) ",
+    );
+    qb.push_values(issues.iter(), |mut b, issue| {
+        let mapped = map_issue(issue);
+        b.push_bind(user_id)
+            .push_bind(mapped.name)
+            .push_bind(mapped.description)
+            .push_bind(mapped.priority)
+            .push_bind(mapped.status)
+            .push_bind(issue.iid)
+            .push_bind(issue.project_id)
+            .push_bind(issue.web_url.clone());
+    });
+    qb.push(
+        " ON CONFLICT (user_id, gitlab_project_id, gitlab_issue_iid) \
+            WHERE gitlab_issue_iid IS NOT NULL \
+          DO UPDATE SET \
+            name = EXCLUDED.name, \
+            description = EXCLUDED.description, \
+            priority = EXCLUDED.priority, \
+            status = EXCLUDED.status, \
+            gitlab_web_url = EXCLUDED.gitlab_web_url, \
+            updated_at = NOW() \
+          RETURNING (xmax::text = '0') AS inserted",
+    );
+    let flags: Vec<bool> = qb.build_query_scalar().fetch_all(pool).await?;
+    let imported = flags.iter().filter(|&&b| b).count();
+    let updated = flags.len() - imported;
     Ok((imported, updated))
 }

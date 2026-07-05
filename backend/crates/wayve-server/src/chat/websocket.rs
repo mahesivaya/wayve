@@ -412,20 +412,22 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 .fetch_one(&pool)
                                 .await?;
 
-                                let members = sqlx::query_scalar::<_, i32>(
+                                // The member list and the webhook owner lookup
+                                // are independent — run them concurrently.
+                                let message_id: i32 = row.get("id");
+                                let members_fut = sqlx::query_scalar::<_, i32>(
                                     "SELECT user_id FROM channel_members WHERE channel_id = $1",
                                 )
                                 .bind(channel_id)
-                                .fetch_all(&pool)
-                                .await?;
+                                .fetch_all(&pool);
+                                let owner_fut =
+                                    crate::webhooks::handler::owner_for_user(&pool, sender_id);
+                                let (members, owner) = tokio::join!(members_fut, owner_fut);
+                                let members = members?;
 
                                 // Webhook fan-out. Metadata only — the
                                 // content envelope is end-to-end encrypted
                                 // and the server cannot reveal it.
-                                let message_id: i32 = row.get("id");
-                                let owner =
-                                    crate::webhooks::handler::owner_for_user(&pool, sender_id)
-                                        .await;
                                 crate::webhooks::emit(
                                     &pool,
                                     owner,
@@ -481,14 +483,19 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                         members.into_iter().filter(|&m| m != sender_id).collect();
                                     let payload = msg_json.clone();
                                     actix_web::rt::spawn(async move {
-                                        for member_id in recipients {
-                                            fan_out_user(
-                                                &cache_for_fanout,
-                                                member_id,
-                                                payload.clone(),
-                                            )
-                                            .await;
-                                        }
+                                        // Notify all recipients concurrently
+                                        // rather than serially, so latency
+                                        // doesn't scale with channel size.
+                                        futures::future::join_all(
+                                            recipients.into_iter().map(|member_id| {
+                                                let cache = cache_for_fanout.clone();
+                                                let payload = payload.clone();
+                                                async move {
+                                                    fan_out_user(&cache, member_id, payload).await
+                                                }
+                                            }),
+                                        )
+                                        .await;
                                     });
 
                                     // Outbound Slack bridge: if this channel is

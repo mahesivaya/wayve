@@ -22,43 +22,43 @@ pub async fn pull(
     let client = JiraClient::new(conn);
     let issues = client.search(jql, max_results).await?;
 
-    let mut imported = 0usize;
-    let mut updated = 0usize;
-    for issue in issues {
-        let mapped = map_issue_fields(&issue.key, &issue.fields);
-
-        // `(xmax::text = '0')` is true only for a fresh INSERT; an ON CONFLICT
-        // UPDATE stamps xmax with the updating xid.
-        let inserted: bool = sqlx::query_scalar(
-            "INSERT INTO tasks
-                (user_id, name, description, priority, status, jira_issue_key, jira_base)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             ON CONFLICT (user_id, jira_issue_key) WHERE jira_issue_key IS NOT NULL
-             DO UPDATE SET
-                name = EXCLUDED.name,
-                description = EXCLUDED.description,
-                priority = EXCLUDED.priority,
-                status = EXCLUDED.status,
-                jira_base = EXCLUDED.jira_base,
-                updated_at = NOW()
-             RETURNING (xmax::text = '0') AS inserted",
-        )
-        .bind(user_id)
-        .bind(&mapped.name)
-        .bind(&mapped.description)
-        .bind(mapped.priority)
-        .bind(mapped.status)
-        .bind(&issue.key)
-        .bind(&conn.base_url)
-        .fetch_one(pool)
-        .await?;
-
-        if inserted {
-            imported += 1;
-        } else {
-            updated += 1;
-        }
+    if issues.is_empty() {
+        return Ok((0, 0));
     }
+
+    // Batch every issue into ONE multi-row upsert instead of a round-trip per
+    // issue. `(xmax::text = '0')` is true only for a fresh INSERT; an ON
+    // CONFLICT UPDATE stamps xmax with the updating xid — so the per-row flag
+    // distinguishes imported (true) from updated (false). Search results are
+    // unique by key, so no row conflicts twice within the batch.
+    let mut qb: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
+        "INSERT INTO tasks \
+            (user_id, name, description, priority, status, jira_issue_key, jira_base) ",
+    );
+    qb.push_values(issues.iter(), |mut b, issue| {
+        let mapped = map_issue_fields(&issue.key, &issue.fields);
+        b.push_bind(user_id)
+            .push_bind(mapped.name)
+            .push_bind(mapped.description)
+            .push_bind(mapped.priority)
+            .push_bind(mapped.status)
+            .push_bind(issue.key.clone())
+            .push_bind(conn.base_url.clone());
+    });
+    qb.push(
+        " ON CONFLICT (user_id, jira_issue_key) WHERE jira_issue_key IS NOT NULL \
+          DO UPDATE SET \
+            name = EXCLUDED.name, \
+            description = EXCLUDED.description, \
+            priority = EXCLUDED.priority, \
+            status = EXCLUDED.status, \
+            jira_base = EXCLUDED.jira_base, \
+            updated_at = NOW() \
+          RETURNING (xmax::text = '0') AS inserted",
+    );
+    let flags: Vec<bool> = qb.build_query_scalar().fetch_all(pool).await?;
+    let imported = flags.iter().filter(|&&b| b).count();
+    let updated = flags.len() - imported;
     Ok((imported, updated))
 }
 

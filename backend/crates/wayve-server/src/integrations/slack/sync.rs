@@ -60,6 +60,10 @@ pub async fn import_all(
 
     let mut total_imported = 0i64;
     let mut channels_touched = 0usize;
+    // Resolve each Slack user's display name at most once per run — users.info
+    // is rate-limited and the same author repeats across many messages.
+    let mut author_cache: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
 
     for link in links {
         let mut messages = client
@@ -91,7 +95,14 @@ pub async fn import_all(
             }
 
             let author = match &m.user {
-                Some(u) => client.user_name(u).await.unwrap_or_else(|| u.clone()),
+                Some(u) => match author_cache.get(u) {
+                    Some(name) => name.clone(),
+                    None => {
+                        let name = client.user_name(u).await.unwrap_or_else(|| u.clone());
+                        author_cache.insert(u.clone(), name.clone());
+                        name
+                    }
+                },
                 None => "slack".to_string(),
             };
             let text = client.resolve_mentions(&m.text).await;
