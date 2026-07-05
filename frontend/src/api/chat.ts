@@ -153,8 +153,35 @@ export type ChatConversationSummary = {
   total_unread: number;
   conversations: DmConversationSummary[];
 };
-export const getChatConversationSummary = async () =>
-  apiFetchJson<ChatConversationSummary>("/api/chat/conversations");
+// Three independent consumers poll this — the global unread badge
+// (useChatUnreadCount), the Chat page list (useChatConversations), and the
+// notification bell — so on the Chat page it was fetched twice per interval.
+// Coalesce them: concurrent callers share one in-flight request, and a result
+// newer than SUMMARY_TTL_MS is reused. Real-time updates still arrive over the
+// chat websocket; this poll is only the periodic reconcile, so a few seconds of
+// staleness is harmless.
+const SUMMARY_TTL_MS = 5000;
+let summaryCache: { at: number; data: ChatConversationSummary } | null = null;
+let summaryInFlight: Promise<ChatConversationSummary> | null = null;
+
+export const getChatConversationSummary =
+  async (): Promise<ChatConversationSummary> => {
+    if (summaryCache && Date.now() - summaryCache.at < SUMMARY_TTL_MS) {
+      return summaryCache.data;
+    }
+    if (summaryInFlight) return summaryInFlight;
+    summaryInFlight = apiFetchJson<ChatConversationSummary>(
+      "/api/chat/conversations"
+    )
+      .then((data) => {
+        summaryCache = { at: Date.now(), data };
+        return data;
+      })
+      .finally(() => {
+        summaryInFlight = null;
+      });
+    return summaryInFlight;
+  };
 
 export const getChatMessages = async (
   userId: number,

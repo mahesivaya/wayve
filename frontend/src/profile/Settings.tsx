@@ -22,6 +22,7 @@ import {
 } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
+import { cachedLoad } from "../api/cache";
 import { listMyTickets, type SupportTicket } from "../api/support";
 import SupportModal from "../support/SupportModal";
 import { fmtDate, fmtShortDate } from "../utils/datetime";
@@ -251,11 +252,11 @@ export default function Settings() {
 
   const loadData = useCallback(async () => {
     try {
-      const [accs, prof, sub] = await Promise.all([
-        getAccounts<Account>(),
-        getProfile(),
-        getSubscription(),
-      ]);
+      // loadData only runs on mount, so a short-lived cache is safe — it just
+      // spares the 3-request refetch when navigating back to Settings.
+      const [accs, prof, sub] = await cachedLoad("settings", 8000, () =>
+        Promise.all([getAccounts<Account>(), getProfile(), getSubscription()])
+      );
       setAccounts(accs);
       setProfile(prof);
       setSubscription(sub);

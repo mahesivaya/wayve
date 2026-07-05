@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getFeatureAccess } from "../api/featureAccess";
+import { cachedLoad } from "../api/cache";
 import {
   createEmployee,
   createPayrollRun,
@@ -162,19 +163,27 @@ export default function PlatformBilling() {
     };
   });
 
-  const reload = useCallback(async () => {
+  // `useCache` defaults to false so every post-mutation reload fetches fresh;
+  // only the initial mount opts into the short-lived cache (avoids the
+  // 7-request refetch when navigating back to Platform Billing).
+  const reload = useCallback(async (useCache = false) => {
     if (!canView) return;
     setError("");
     try {
-      const [ov, us, os, inv, emp, runs, hist] = await Promise.all([
-        getPlatformBillingOverview(),
-        listUserSubscriptions(),
-        listOrganizationSubscriptions(),
-        listPlatformInvoices(),
-        listEmployees(),
-        listPayrollRuns(),
-        listBillingHistory(),
-      ]);
+      const [ov, us, os, inv, emp, runs, hist] = await cachedLoad(
+        "platform-billing",
+        useCache ? 8000 : 0,
+        () =>
+          Promise.all([
+            getPlatformBillingOverview(),
+            listUserSubscriptions(),
+            listOrganizationSubscriptions(),
+            listPlatformInvoices(),
+            listEmployees(),
+            listPayrollRuns(),
+            listBillingHistory(),
+          ])
+      );
       setOverview(ov);
       setUserSubs(us);
       setOrgSubs(os);
@@ -193,7 +202,7 @@ export default function PlatformBilling() {
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
-      void reload();
+      void reload(true);
     }, 0);
     return () => window.clearTimeout(handle);
   }, [reload]);

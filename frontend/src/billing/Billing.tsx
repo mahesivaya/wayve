@@ -21,6 +21,7 @@ import {
   type UsageResponse,
 } from "../api/billing";
 import { invalidateGetCache } from "../api/client";
+import { cachedLoad } from "../api/cache";
 import { getFeatureAccess } from "../api/featureAccess";
 import { useAuth } from "../auth/useAuth";
 import { fmtShortDate } from "../utils/datetime";
@@ -173,18 +174,23 @@ function BillingInner() {
 
   const checkoutStatus = params.get("checkout");
 
-  const reload = useCallback(async () => {
+  // `useCache` defaults to false so every post-mutation reload fetches fresh;
+  // only the initial mount opts into the short-lived cache (avoids the 6-request
+  // refetch when navigating back to Billing).
+  const reload = useCallback(async (useCache = false) => {
     setError("");
     try {
       const [planList, subscription, ent, invoiceList, usageData, stripe] =
-        await Promise.all([
-          listPlans(),
-          getSubscription(),
-          getEntitlements(),
-          listInvoices(),
-          getUsage(),
-          getStripeStatus(),
-        ]);
+        await cachedLoad("billing", useCache ? 8000 : 0, () =>
+          Promise.all([
+            listPlans(),
+            getSubscription(),
+            getEntitlements(),
+            listInvoices(),
+            getUsage(),
+            getStripeStatus(),
+          ])
+        );
       setPlans(planList);
       setSub(subscription);
       setEntitlements(ent);
@@ -207,7 +213,7 @@ function BillingInner() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void reload();
+      void reload(true);
     }, 0);
 
     return () => window.clearTimeout(timer);
