@@ -231,9 +231,28 @@ async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> 
         .unwrap_or_default();
     let (body_iv, body_ct) = encrypt(&body_text).context("encrypt imap body")?;
 
+    // A malformed / junk IMAP message — no parseable `From`, or a broken/epoch
+    // `INTERNALDATE` — is a strong spam signal. Route it to Spam so it stays out
+    // of the Inbox instead of surfacing as "Unknown / (No Subject)" or a 1970
+    // date. Real mail always has a From and a sane date.
+    use chrono::Datelike;
+    let bad_date = msg
+        .internal_date
+        .map(|d| d.naive_utc().year() < 2000)
+        .unwrap_or(false);
+    let is_junk = sender.trim().is_empty() || bad_date;
+    let labels: Vec<String> = if is_junk {
+        vec!["SPAM".to_string()]
+    } else {
+        Vec::new()
+    };
+
+    // Never store an epoch/pre-2000 date verbatim (it renders as "Dec 31 1969");
+    // fall back to now for a broken or missing INTERNALDATE.
     let created_at = msg
         .internal_date
         .map(|d| d.naive_utc())
+        .filter(|d| d.year() >= 2000)
         .unwrap_or_else(|| chrono::Utc::now().naive_utc());
 
     let gmail_id = format!("imap-{}", msg.uid);
@@ -244,7 +263,7 @@ async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> 
         subject: &subject,
         created_at,
         is_read: msg.seen,
-        labels: &[],
+        labels: &labels,
         // We already have the full RFC822 in hand, so store the body inline
         // and mark attachments as checked (no second body_worker pass needed).
         body: Some((&body_iv, &body_ct)),
