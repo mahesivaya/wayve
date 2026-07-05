@@ -83,15 +83,16 @@ pub async fn apply_rls_user(
     tx: &mut Transaction<'_, Postgres>,
     user_id: i32,
 ) -> Result<(), AppError> {
-    sqlx::query("SELECT set_config('app.user_id', $1, true)")
-        .bind(user_id.to_string())
-        .execute(&mut **tx)
-        .await?;
-    // Drop superuser so RLS engages. The role name is a fixed constant (no
-    // injection); SET ROLE cannot be parameterized.
-    sqlx::query("SET LOCAL ROLE wayve_app")
-        .execute(&mut **tx)
-        .await?;
+    // Batch both session statements into ONE simple-query round-trip (was two).
+    // This is on the hottest authenticated path (every RLS-scoped read), so the
+    // saved round-trip matters. `user_id` is an `i32` — decimal digits only, no
+    // injection surface — so inlining it is safe; and `set_config` (which needs
+    // a bind) can't be combined with `SET LOCAL ROLE` (which can't be
+    // parameterized) under the extended protocol, so a simple-query batch is the
+    // way to do both at once. Both are transaction-local and reset on COMMIT.
+    let sql =
+        format!("SELECT set_config('app.user_id', '{user_id}', true); SET LOCAL ROLE wayve_app;");
+    sqlx::raw_sql(&sql).execute(&mut **tx).await?;
     Ok(())
 }
 

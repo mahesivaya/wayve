@@ -316,13 +316,15 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
     // engages. The query's own WHERE already scopes to the user — RLS is the
     // defense-in-depth safety net. Inline (this fn returns sqlx::Result).
     let mut tx = pool.begin().await?;
-    sqlx::query("SELECT set_config('app.user_id', $1, true)")
-        .bind(filters.user_id.to_string())
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("SET LOCAL ROLE wayve_app")
-        .execute(&mut *tx)
-        .await?;
+    // Both session statements in ONE simple-query round-trip (mirrors
+    // db::apply_rls_user; this fn returns sqlx::Result so it can't call it).
+    // user_id is an i32 — no injection surface.
+    let uid = filters.user_id;
+    sqlx::raw_sql(&format!(
+        "SELECT set_config('app.user_id', '{uid}', true); SET LOCAL ROLE wayve_app;"
+    ))
+    .execute(&mut *tx)
+    .await?;
     let raw = qb.build().fetch_all(&mut *tx).await?;
     tx.commit().await?;
     Ok(raw.into_iter().map(map_list_row).collect())
