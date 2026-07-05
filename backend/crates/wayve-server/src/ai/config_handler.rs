@@ -12,7 +12,7 @@ use sqlx::Row;
 use tracing::{info, instrument, warn};
 use wayve_security::encryption::{decrypt, encrypt};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{Role, Scope, resolve_role_context};
+use wayve_security::rbac::{Role, Scope, resolve_role_context_moded};
 
 use crate::ai::provider::{AiProvider, ResolvedAi};
 
@@ -54,8 +54,12 @@ impl AiOwner {
 /// **platform** owner configures the platform team's provider (which applies
 /// only to platform team members — never to any org). Personal owners are
 /// rejected (no scope to configure).
-pub(crate) async fn require_ai_owner(pool: &PgPool, user_id: i32) -> Result<AiOwner, AppError> {
-    let ctx = resolve_role_context(pool, user_id)
+pub(crate) async fn require_ai_owner(
+    req: &HttpRequest,
+    pool: &PgPool,
+    user_id: i32,
+) -> Result<AiOwner, AppError> {
+    let ctx = resolve_role_context_moded(req, pool, user_id)
         .await
         .map_err(AppError::from)?;
     if ctx.role != Role::Owner {
@@ -260,7 +264,7 @@ fn default_true() -> bool {
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_config(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let owner = require_ai_owner(pool.get_ref(), user_id).await?;
+    let owner = require_ai_owner(&req, pool.get_ref(), user_id).await?;
 
     let row = load_config_row(pool.get_ref(), owner).await?;
 
@@ -301,7 +305,7 @@ pub async fn put_config(
     body: web::Json<AiConfigInput>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let owner = require_ai_owner(pool.get_ref(), user_id).await?;
+    let owner = require_ai_owner(&req, pool.get_ref(), user_id).await?;
 
     let provider = AiProvider::parse(body.provider.trim())
         .ok_or_else(|| AppError::bad_request("Unknown AI provider"))?;
@@ -438,7 +442,7 @@ pub async fn put_config(
 #[instrument(target = "http", skip(req, pool))]
 pub async fn delete_config(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let owner = require_ai_owner(pool.get_ref(), user_id).await?;
+    let owner = require_ai_owner(&req, pool.get_ref(), user_id).await?;
 
     delete_config_row(pool.get_ref(), owner).await?;
 

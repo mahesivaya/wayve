@@ -9,7 +9,7 @@
 //! `resolve_role_context`) and is **never** trusted from the JWT, so a role
 //! change takes effect on the member's next request.
 
-use crate::jwt::get_user_id_from_request;
+use crate::jwt::{SessionMode, get_user_id_from_request, mode_from_request};
 use actix_web::{HttpRequest, HttpResponse};
 use async_trait::async_trait;
 use once_cell::sync::OnceCell;
@@ -521,6 +521,51 @@ pub async fn resolve_role_context(pool: &PgPool, user_id: i32) -> Result<RoleCon
     Ok(ctx)
 }
 
+/// Downscope a DB-resolved context according to the request's session mode.
+///
+/// `Admin` returns the context unchanged. `Normal` demotes the role to `Member`
+/// while **keeping the scope and `organization_id`** — so a normal-mode owner
+/// becomes exactly a normal member of their existing scope (org owner → org
+/// member; platform owner → platform member). That identity already exists and
+/// is handled correctly everywhere in the app, so no new access path opens: a
+/// `Member` holds only the baseline catalog, so every permission- and
+/// owner-gated admin endpoint 403s, while scope-based data (org chat, tasks,
+/// people-picker) still works. Personal scope has no elevated role to shed, so
+/// it is left unchanged.
+///
+/// **Monotonic** — it can only reduce privilege, never grant it — so carrying
+/// the mode in the JWT is safe: the real role always comes from the DB, and
+/// `Admin` merely declines to reduce it.
+pub fn downscope_for_mode(ctx: RoleContext, mode: SessionMode) -> RoleContext {
+    match mode {
+        SessionMode::Admin => ctx,
+        SessionMode::Normal if ctx.scope == Scope::Personal => ctx,
+        SessionMode::Normal => RoleContext {
+            role: Role::Member,
+            ..ctx
+        },
+    }
+}
+
+/// Whether `true_ctx` (a DB-truth context, NOT a downscoped one) is eligible to
+/// enter admin mode: an owner of an organization or platform scope. Personal
+/// owners have nothing to switch into.
+pub fn can_enter_admin(true_ctx: &RoleContext) -> bool {
+    true_ctx.role == Role::Owner && true_ctx.scope != Scope::Personal
+}
+
+/// Resolve the caller's *effective* context: the DB-truth role/scope, then
+/// downscoped by the request's session mode. This is the single chokepoint the
+/// gates and `/me` use so a `Normal`-mode owner is genuinely restricted.
+pub async fn resolve_role_context_moded(
+    req: &HttpRequest,
+    pool: &PgPool,
+    user_id: i32,
+) -> Result<RoleContext, sqlx::Error> {
+    let ctx = resolve_role_context(pool, user_id).await?;
+    Ok(downscope_for_mode(ctx, mode_from_request(req)))
+}
+
 /// Authenticate the request and require `perm`. `Err` is a ready-to-return
 /// `401` (no/invalid token) or `403` (authenticated but missing the permission).
 pub async fn require_permission(
@@ -533,10 +578,12 @@ pub async fn require_permission(
             .json(serde_json::json!({ "message": "Authentication required" }))
     })?;
 
-    let ctx = resolve_role_context(pool, user_id).await.map_err(|e| {
-        error!(target: "auth", user_id, error = ?e, "rbac role resolution failed");
-        HttpResponse::InternalServerError().finish()
-    })?;
+    let ctx = resolve_role_context_moded(req, pool, user_id)
+        .await
+        .map_err(|e| {
+            error!(target: "auth", user_id, error = ?e, "rbac role resolution failed");
+            HttpResponse::InternalServerError().finish()
+        })?;
 
     if !ctx.has(perm) {
         warn!(
@@ -564,10 +611,12 @@ pub async fn require_owner(req: &HttpRequest, pool: &PgPool) -> Result<RoleConte
             .json(serde_json::json!({ "message": "Authentication required" }))
     })?;
 
-    let ctx = resolve_role_context(pool, user_id).await.map_err(|e| {
-        error!(target: "auth", user_id, error = ?e, "rbac role resolution failed");
-        HttpResponse::InternalServerError().finish()
-    })?;
+    let ctx = resolve_role_context_moded(req, pool, user_id)
+        .await
+        .map_err(|e| {
+            error!(target: "auth", user_id, error = ?e, "rbac role resolution failed");
+            HttpResponse::InternalServerError().finish()
+        })?;
 
     if ctx.role != Role::Owner || ctx.scope == Scope::Personal {
         warn!(
@@ -643,6 +692,74 @@ mod tests {
             role,
             organization_id: Some(1),
         }
+    }
+
+    #[test]
+    fn downscope_normal_demotes_org_owner_to_member_keeping_scope() {
+        let c = downscope_for_mode(ctx(Role::Owner), SessionMode::Normal);
+        assert_eq!(c.role, Role::Member);
+        assert_eq!(c.scope, Scope::Organization);
+        assert_eq!(c.organization_id, Some(1));
+        // A member holds none of the admin permissions the owner did.
+        assert!(!c.has(MembersRead));
+        assert!(!c.has(BillingManage));
+    }
+
+    #[test]
+    fn downscope_normal_demotes_platform_owner_to_member() {
+        let platform = RoleContext {
+            user_id: 1,
+            scope: Scope::Platform,
+            role: Role::Owner,
+            organization_id: None,
+        };
+        let c = downscope_for_mode(platform, SessionMode::Normal);
+        assert_eq!(c.role, Role::Member);
+        assert_eq!(c.scope, Scope::Platform);
+        assert!(!c.has(MembersRead));
+    }
+
+    #[test]
+    fn downscope_admin_is_identity() {
+        let c = downscope_for_mode(ctx(Role::Owner), SessionMode::Admin);
+        assert_eq!(c.role, Role::Owner);
+        assert_eq!(c.scope, Scope::Organization);
+    }
+
+    #[test]
+    fn downscope_never_escalates_and_personal_untouched() {
+        let personal = RoleContext {
+            user_id: 1,
+            scope: Scope::Personal,
+            role: Role::Owner,
+            organization_id: None,
+        };
+        // Personal is left as-is in both modes (no elevated role to shed).
+        for mode in [SessionMode::Normal, SessionMode::Admin] {
+            let c = downscope_for_mode(personal.clone(), mode);
+            assert_eq!(c.scope, Scope::Personal);
+            assert_eq!(c.role, Role::Owner);
+        }
+        // Downscoping a member is a no-op (can't reduce below member).
+        let m = downscope_for_mode(ctx(Role::Member), SessionMode::Normal);
+        assert_eq!(m.role, Role::Member);
+    }
+
+    #[test]
+    fn can_enter_admin_only_for_privileged_owners() {
+        assert!(can_enter_admin(&ctx(Role::Owner)));
+        assert!(can_enter_admin(&RoleContext {
+            scope: Scope::Platform,
+            ..ctx(Role::Owner)
+        }));
+        // Non-owner roles and personal owners are not eligible.
+        assert!(!can_enter_admin(&ctx(Role::Admin)));
+        assert!(!can_enter_admin(&ctx(Role::Member)));
+        assert!(!can_enter_admin(&RoleContext {
+            scope: Scope::Personal,
+            organization_id: None,
+            ..ctx(Role::Owner)
+        }));
     }
 
     #[test]

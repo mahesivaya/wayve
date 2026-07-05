@@ -11,9 +11,11 @@ use crate::organization;
 use rand::RngCore;
 use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::{
-    auth_cookie, create_jwt_for_account_with_max_exp, expired_auth_cookie, get_user_id_from_request,
+    SessionMode, auth_cookie, create_jwt_for_account_with_max_exp, create_jwt_with_mode,
+    expired_auth_cookie, get_user_id_from_request,
 };
 use wayve_security::password::{hash_password, verify_password};
+use wayve_security::rbac;
 
 const RESET_TTL_MINUTES: i64 = 30;
 const CODE_TTL_MINUTES: i64 = 15;
@@ -376,6 +378,93 @@ pub async fn logout(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
     HttpResponse::Ok()
         .cookie(expired_auth_cookie())
         .json(serde_json::json!({ "message": "Logged out" }))
+}
+
+#[derive(Deserialize)]
+pub struct SessionModeInput {
+    pub mode: String,
+}
+
+/// Switch the caller's interactive session between `normal` and `admin`.
+///
+/// Eligibility is checked against the TRUE DB role (never the moded one): only
+/// an organization or platform owner may enter admin. The switch is instant (no
+/// re-auth) and mints a fresh token carrying the new mode, set as both the auth
+/// cookie (survives hard refresh) and the JSON `token` (for the SPA's Bearer
+/// header). Entering admin only *lifts the downscope* — real permissions still
+/// come from the DB every request, so this can never escalate beyond the role.
+#[post("/session/mode")]
+#[instrument(target = "auth", skip(req, pool, data))]
+pub async fn switch_session_mode(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<SessionModeInput>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "message": "Authentication required" })));
+        }
+    };
+    let target = SessionMode::from_str(data.mode.trim());
+
+    // DB-truth context — eligibility must not be affected by the current mode.
+    let true_ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            error!(target: "auth", user_id, error = ?e, "session mode: role resolution failed");
+            return Ok(HttpResponse::InternalServerError().finish());
+        }
+    };
+
+    if target == SessionMode::Admin && !rbac::can_enter_admin(&true_ctx) {
+        return Ok(HttpResponse::Forbidden()
+            .json(serde_json::json!({ "message": "Not eligible for admin mode" })));
+    }
+
+    let user = sqlx::query_as::<_, User>(
+        "SELECT id, email, password, account_type, password_valid_until \
+         FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    let Some(user) = user else {
+        return Ok(
+            HttpResponse::Unauthorized().json(serde_json::json!({ "message": "User not found" }))
+        );
+    };
+
+    let token = create_jwt_with_mode(
+        user.id,
+        user.email.clone(),
+        user.account_type.clone(),
+        user.password_valid_until,
+        target,
+    );
+
+    // The me/profile bodies depend on mode; clear both variants so the next
+    // fetch recomputes for the new mode.
+    crate::email::profile::invalidate_me_cache(user_id).await;
+    crate::routes::user::invalidate_profile_cache(user_id).await;
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "session_mode_switch",
+            resource_type: "session",
+            resource_id: None,
+            metadata: Some(serde_json::json!({ "mode": target.as_str() })),
+        },
+    )
+    .await;
+
+    Ok(HttpResponse::Ok()
+        .cookie(auth_cookie(token.clone()))
+        .json(serde_json::json!({ "token": token, "mode": target.as_str() })))
 }
 
 fn random_token_hex() -> String {
@@ -926,6 +1015,7 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
         .service(register_business)
         .service(login)
         .service(logout)
+        .service(switch_session_mode)
         .service(forgot_password)
         .service(reset_password)
         .service(verify_email)

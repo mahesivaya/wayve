@@ -74,14 +74,28 @@ pub async fn delete_user(pool: &PgPool, user_id: i32) {
         .await;
 }
 
-pub fn jwt_for(user_id: i32, email: &str) -> String {
+/// Mint a test token in the given session mode. Most tests exercise a user's
+/// full DB role, so `jwt_for` defaults to `Admin` (no downscope) — the mode
+/// feature is orthogonal to the RBAC-by-role behavior they assert. Tests that
+/// specifically exercise normal-mode downscoping pass `SessionMode::Normal`.
+pub fn jwt_for_mode(user_id: i32, email: &str, mode: wayve_security::jwt::SessionMode) -> String {
     unsafe {
         if std::env::var("JWT_SECRET").is_err() {
             std::env::set_var("JWT_SECRET", "test-jwt-secret");
         }
     }
 
-    wayve_security::jwt::create_jwt(user_id, email.to_string())
+    wayve_security::jwt::create_jwt_with_mode(
+        user_id,
+        email.to_string(),
+        "personal".to_string(),
+        None,
+        mode,
+    )
+}
+
+pub fn jwt_for(user_id: i32, email: &str) -> String {
+    jwt_for_mode(user_id, email, wayve_security::jwt::SessionMode::Admin)
 }
 
 /// Monotonic counter for synthetic user_ids used by WS tests that don't need

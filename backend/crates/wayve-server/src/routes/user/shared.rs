@@ -10,11 +10,19 @@ use wayve_security::rbac::{self, Role, Scope};
 const PROFILE_CACHE_TTL_SECS: u64 = 30;
 const PROFILE_CACHE_MAX_CAPACITY: u64 = 5000;
 
-pub(super) static PROFILE_CACHE: Lazy<TtlCache<i32, serde_json::Value>> =
-    Lazy::new(|| TtlCache::new(PROFILE_CACHE_MAX_CAPACITY, PROFILE_CACHE_TTL_SECS));
+// Keyed by (user_id, mode) — see the /me cache note; the profile body is
+// likewise mode-dependent.
+pub(super) static PROFILE_CACHE: Lazy<
+    TtlCache<(i32, wayve_security::jwt::SessionMode), serde_json::Value>,
+> = Lazy::new(|| TtlCache::new(PROFILE_CACHE_MAX_CAPACITY, PROFILE_CACHE_TTL_SECS));
 
 pub async fn invalidate_profile_cache(user_id: i32) {
-    PROFILE_CACHE.invalidate(&user_id).await;
+    PROFILE_CACHE
+        .invalidate(&(user_id, wayve_security::jwt::SessionMode::Normal))
+        .await;
+    PROFILE_CACHE
+        .invalidate(&(user_id, wayve_security::jwt::SessionMode::Admin))
+        .await;
 }
 
 /// Canonical account-type string. `account_type` is a plain TEXT column;
@@ -95,15 +103,15 @@ pub(super) fn role_label(role: &str, account_type: &str) -> &'static str {
     }
 }
 
-/// Resolve a user's effective role string and its display label.
-///
-/// Delegates to `rbac::resolve_role_context` so role resolution lives in one
-/// place; this wrapper only adds the scope-prefixed human label.
-pub async fn effective_role_for_user(
+/// Resolve a user's effective role string and its display label, downscoped by
+/// the request's session mode — so a normal-mode owner resolves as a `member`.
+/// Used by admin billing gates so they refuse a normal-mode owner.
+pub async fn effective_role_for_request(
+    req: &HttpRequest,
     pool: &PgPool,
     user_id: i32,
 ) -> Result<(String, String), sqlx::Error> {
-    let ctx = rbac::resolve_role_context(pool, user_id).await?;
+    let ctx = rbac::resolve_role_context_moded(req, pool, user_id).await?;
     Ok((
         ctx.role.as_str().to_string(),
         effective_role_label(ctx.scope, ctx.role),
@@ -279,20 +287,32 @@ async fn is_primary_scope_owner(
     Ok(first_owner == Some(ctx.user_id))
 }
 
-/// Full access info for a user, computed from the RBAC role context.
-pub async fn effective_access_for_user(
+/// Request-aware access: the DB-truth role/scope downscoped by the request's
+/// session mode. Returns the effective access (what the frontend gates on),
+/// whether the caller is eligible to enter admin mode (computed from the TRUE
+/// role, so the switcher shows even while downscoped), and the current mode.
+/// `/me` and `/profile` use this so a normal-mode owner is reported restricted.
+pub async fn effective_access_for_request(
+    req: &HttpRequest,
     pool: &PgPool,
     user_id: i32,
-) -> Result<EffectiveAccess, sqlx::Error> {
-    let ctx = rbac::resolve_role_context(pool, user_id).await?;
+) -> Result<(EffectiveAccess, bool, wayve_security::jwt::SessionMode), sqlx::Error> {
+    let true_ctx = rbac::resolve_role_context(pool, user_id).await?;
+    let can_switch_admin = rbac::can_enter_admin(&true_ctx);
+    let mode = wayve_security::jwt::mode_from_request(req);
+    let ctx = rbac::downscope_for_mode(true_ctx, mode);
     let is_primary_owner = is_primary_scope_owner(pool, &ctx).await?;
-    Ok(EffectiveAccess {
-        role: ctx.role.as_str().to_string(),
-        role_label: effective_role_label(ctx.scope, ctx.role),
-        scope: ctx.scope.as_str().to_string(),
-        permissions: ctx.permission_strings(),
-        is_primary_owner,
-    })
+    Ok((
+        EffectiveAccess {
+            role: ctx.role.as_str().to_string(),
+            role_label: effective_role_label(ctx.scope, ctx.role),
+            scope: ctx.scope.as_str().to_string(),
+            permissions: ctx.permission_strings(),
+            is_primary_owner,
+        },
+        can_switch_admin,
+        mode,
+    ))
 }
 
 /// Best-effort access used only when the role-context query fails (a DB error).

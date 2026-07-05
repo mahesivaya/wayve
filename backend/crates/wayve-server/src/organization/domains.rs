@@ -25,7 +25,7 @@ use sqlx::Row;
 use std::time::Duration;
 use tracing::{info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{Role, Scope, resolve_role_context};
+use wayve_security::rbac::{Role, Scope, resolve_role_context_moded};
 
 /// Free / public email providers can never be claimed as an organization
 /// domain — nobody can prove DNS control of a shared consumer domain, and
@@ -130,10 +130,12 @@ async fn require_platform_owner(req: &HttpRequest, pool: &PgPool) -> Result<i32,
         return Err(HttpResponse::Unauthorized()
             .json(serde_json::json!({ "message": "Authentication required" })));
     };
-    let ctx = resolve_role_context(pool, user_id).await.map_err(|e| {
-        warn!(target: "auth", user_id, error = ?e, "domain admin rbac resolution failed");
-        HttpResponse::InternalServerError().finish()
-    })?;
+    let ctx = resolve_role_context_moded(req, pool, user_id)
+        .await
+        .map_err(|e| {
+            warn!(target: "auth", user_id, error = ?e, "domain admin rbac resolution failed");
+            HttpResponse::InternalServerError().finish()
+        })?;
     if ctx.scope != Scope::Platform || ctx.role != Role::Owner {
         warn!(target: "auth", user_id, role = ctx.role.as_str(), "domain admin denied: not platform owner");
         return Err(HttpResponse::Forbidden().json(serde_json::json!({
@@ -410,7 +412,7 @@ pub async fn verify_domain_ownership(
         return Ok(HttpResponse::Unauthorized()
             .json(serde_json::json!({ "message": "Authentication required" })));
     };
-    let ctx = resolve_role_context(pool.get_ref(), user_id).await?;
+    let ctx = resolve_role_context_moded(&req, pool.get_ref(), user_id).await?;
     if ctx.scope != Scope::Organization {
         return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "message": "Domain verification is for organization accounts"

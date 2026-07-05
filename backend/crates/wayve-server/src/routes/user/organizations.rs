@@ -666,8 +666,9 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
     };
 
     // Resolve scope + role from the DB. Only an organization owner may
-    // tear down their own organization.
-    let ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
+    // tear down their own organization — and only in admin mode (a
+    // normal-mode owner is downscoped to a member and refused here).
+    let ctx = match rbac::resolve_role_context_moded(&req, pool.get_ref(), user_id).await {
         Ok(ctx) => ctx,
         Err(sqlx::Error::RowNotFound) => {
             return Ok(HttpResponse::Unauthorized()
@@ -860,7 +861,9 @@ pub async fn update_my_organization(
         }
     };
 
-    let ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
+    // Mode-aware: updating org settings is an admin action, refused for a
+    // normal-mode owner (downscoped to member).
+    let ctx = match rbac::resolve_role_context_moded(&req, pool.get_ref(), user_id).await {
         Ok(ctx) => ctx,
         Err(sqlx::Error::RowNotFound) => {
             return Ok(HttpResponse::Unauthorized()

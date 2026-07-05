@@ -459,6 +459,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           scope: data.scope ?? null,
           permissions: data.permissions ?? [],
           is_primary_owner: data.is_primary_owner ?? false,
+          mode: data.mode === "admin" ? "admin" : "normal",
+          can_switch_admin: data.can_switch_admin ?? false,
           organization_id: data.organization_id ?? null,
           organization_slug: data.organization_slug ?? null,
           organization_name: data.organization_name ?? null,
@@ -576,6 +578,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role_label: data.role_label ?? null,
             scope: data.scope ?? null,
             permissions: data.permissions ?? [],
+            is_primary_owner: data.is_primary_owner ?? false,
+            mode: data.mode === "admin" ? "admin" : "normal",
+            can_switch_admin: data.can_switch_admin ?? false,
             organization_id: data.organization_id ?? null,
             organization_slug: data.organization_slug ?? null,
             organization_name: data.organization_name ?? null,
@@ -672,6 +677,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role_label: data.role_label ?? null,
       scope: data.scope ?? null,
       permissions: data.permissions ?? [],
+      is_primary_owner: data.is_primary_owner ?? false,
+      mode: data.mode === "admin" ? "admin" : "normal",
+      can_switch_admin: data.can_switch_admin ?? false,
       organization_id: data.organization_id ?? null,
       organization_slug: data.organization_slug ?? null,
       organization_name: data.organization_name ?? null,
@@ -681,9 +689,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  // Switch the interactive session between normal and admin. The server mints a
+  // fresh token carrying the new mode (and sets the auth cookie for hard
+  // refresh); we swap the in-memory token and re-fetch /api/me so scope,
+  // permissions and mode all update. Throws if the server refuses (e.g. a
+  // non-owner requesting admin).
+  const switchMode = async (target: "normal" | "admin") => {
+    const res = await apiFetch("/api/session/mode", {
+      method: "POST",
+      preserve401: true,
+      body: JSON.stringify({ mode: target }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to switch mode (${res.status})`);
+    }
+    const data = await res.json();
+    if (data?.token) setAuthToken(data.token);
+    await refresh();
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, initializing, login, logout, refresh }}
+      value={{ user, initializing, login, logout, refresh, switchMode }}
     >
       {children}
       {pendingMnemonic && (

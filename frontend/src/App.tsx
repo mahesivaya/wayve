@@ -124,10 +124,15 @@ export default function App() {
   const accountHome = homePathForUser(user).toLowerCase();
 
   const accountType = normalizeAccountType(user?.account_type);
+  // A switchable owner only reaches admin surfaces in admin mode. The
+  // account_type-keyed guards below don't auto-restrict from the downscoped
+  // /me (account_type is never mutated), so they're explicitly ANDed with this.
+  const adminMode = user?.mode === "admin";
   const isOrganizationUser =
-    accountType === "organization_admin" ||
-    accountType === "organization" ||
-    user?.organization_id != null;
+    (accountType === "organization_admin" ||
+      accountType === "organization" ||
+      user?.organization_id != null) &&
+    (adminMode || !user?.can_switch_admin);
 
   const isAtAccountHome = location.pathname.toLowerCase() === accountHome;
 

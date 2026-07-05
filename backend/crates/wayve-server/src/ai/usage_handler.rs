@@ -17,7 +17,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let owner = require_ai_owner(pool.get_ref(), user_id).await?;
+    let owner = require_ai_owner(&req, pool.get_ref(), user_id).await?;
 
     // Label the dashboard with the owner's actual provider/model when configured.
     let row = match owner {

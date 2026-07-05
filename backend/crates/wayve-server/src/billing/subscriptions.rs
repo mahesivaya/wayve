@@ -75,7 +75,7 @@ pub async fn cancel_subscription(req: HttpRequest, pool: web::Data<PgPool>) -> A
         Ok(owner) => owner,
         Err(resp) => return Ok(resp),
     };
-    if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
+    if let Err(resp) = require_owner_manager(&req, pool.get_ref(), user_id, &owner).await {
         return Ok(resp);
     }
 
@@ -141,7 +141,7 @@ pub async fn admin_list_subscriptions(req: HttpRequest, pool: web::Data<PgPool>)
         Ok(id) => id,
         Err(resp) => return Ok(resp),
     };
-    if let Err(resp) = super::require_platform_admin(pool.get_ref(), user_id).await {
+    if let Err(resp) = super::require_platform_admin(&req, pool.get_ref(), user_id).await {
         return Ok(resp);
     }
 

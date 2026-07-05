@@ -125,6 +125,21 @@
   gap: 12px;
 }
 
+/* Elevated-session indicator in the header (owner in admin mode). */
+.admin-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-danger, #b54708);
+  background: var(--color-danger-soft, #fff4ed);
+  border: 1px solid var(--color-danger-border, transparent);
+}
+
 .split-hint {
   font-size: var(--text-sm);
   color: var(--color-admin-badge-text);

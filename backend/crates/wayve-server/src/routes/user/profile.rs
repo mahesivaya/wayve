@@ -2,7 +2,7 @@
 //! `/users`, `/users/all`.
 
 use super::shared::{
-    PROFILE_CACHE, current_plan_for_user, display_organization_name, effective_access_for_user,
+    PROFILE_CACHE, current_plan_for_user, display_organization_name, effective_access_for_request,
     fallback_access, invalidate_profile_cache,
 };
 use crate::billing::{entitlements::effective_entitlements, resolve_owner};
@@ -17,7 +17,7 @@ use futures_util::StreamExt;
 use tokio::{fs, io::AsyncWriteExt};
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
-use wayve_security::jwt::get_user_id_from_request;
+use wayve_security::jwt::{get_user_id_from_request, mode_from_request};
 use wayve_security::password::{hash_password, verify_password};
 use wayve_security::rbac;
 
@@ -81,7 +81,8 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
         None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
-    if let Some(cached) = PROFILE_CACHE.get(&user_id).await {
+    let mode = mode_from_request(&req);
+    if let Some(cached) = PROFILE_CACHE.get(&(user_id, mode)).await {
         return Ok(HttpResponse::Ok().json(cached));
     }
 
@@ -148,11 +149,17 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 &email,
                 row.try_get("organization_name").ok().flatten(),
             );
-            let access = match effective_access_for_user(pool.get_ref(), id).await {
-                Ok(value) => value,
+            let (access, can_switch_admin) = match effective_access_for_request(
+                &req,
+                pool.get_ref(),
+                id,
+            )
+            .await
+            {
+                Ok((value, can_switch, _mode)) => (value, can_switch),
                 Err(e) => {
                     error!(target: "db", user_id = id, error = ?e, "effective access lookup failed");
-                    fallback_access(&account_type)
+                    (fallback_access(&account_type), false)
                 }
             };
 
@@ -197,6 +204,8 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 "scope": access.scope,
                 "permissions": access.permissions,
                 "is_primary_owner": access.is_primary_owner,
+                "mode": mode.as_str(),
+                "can_switch_admin": can_switch_admin,
                 "organization_id": organization_id,
                 "organization_name": organization_name,
                 "current_plan": current_plan,
@@ -211,7 +220,9 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 "avatar_url": avatar_url,
             });
 
-            PROFILE_CACHE.insert(user_id, response.clone()).await;
+            PROFILE_CACHE
+                .insert((user_id, mode), response.clone())
+                .await;
             Ok(HttpResponse::Ok().json(response))
         }
         Ok(None) => Ok(HttpResponse::NotFound().finish()),

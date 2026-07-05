@@ -723,6 +723,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Platform-wide billing console: aggregates revenue, customer subscriptions
   // and payroll across the whole platform. Distinct from the per-tenant
   // [/billing](../billing/Billing.tsx) self-service view; staff-only.
+  // A switchable owner only sees admin nav in admin mode. The downscoped /me
+  // already flips scope/role/permissions in normal mode, but ANDing this into
+  // the section flags prevents an admin-nav flash during optimistic (pre-/me)
+  // login state. A non-switchable user (regular member/personal) is unaffected.
+  const adminMode = user.mode !== "normal" || !user.can_switch_admin;
   const canAccessPlatformBilling =
     user.scope === "platform" &&
     billingAllowed &&
@@ -742,12 +747,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Domain administration is restricted to the platform OWNER specifically
   // (not all platform staff) — mirrors the backend require_platform_owner gate.
   const isPlatformOwner =
-    user.scope === "platform" && user.effective_role === "owner";
+    adminMode &&
+    user.scope === "platform" &&
+    user.effective_role === "owner";
   // Organization owners get a Domains shortcut to their own org's custom-domain
   // administration. (Nav only — backend domain endpoints stay platform-owner
   // gated for now, so the link targets their org via ?org=<id>.)
   const isOrgOwner =
-    user.scope === "organization" && user.effective_role === "owner";
+    adminMode &&
+    user.scope === "organization" &&
+    user.effective_role === "owner";
   // Custom-domain verification is a business / enterprise capability — hide the
   // Domains shortcut for lower org tiers (startups / none).
   const orgTier = user.current_plan?.tier;
@@ -787,11 +796,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   }
 
   const hasPlatformSection =
-    canAccessPlatformBilling ||
-    canAccessPlatformDeveloper ||
-    canAccessPlatformSupport ||
-    canAccessPlatformAnalytics ||
-    isPlatformOwner;
+    adminMode &&
+    (canAccessPlatformBilling ||
+      canAccessPlatformDeveloper ||
+      canAccessPlatformSupport ||
+      canAccessPlatformAnalytics ||
+      isPlatformOwner);
 
   // Code lives in its own "Workspace" group. Same gate as the link itself so
   // the section header never renders empty. Visible to platform staff, any
@@ -1132,6 +1142,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             !location.pathname.startsWith("/chat") && <SearchBar />}
 
           <div className="actions">
+            {/* Persistent indicator that the owner is elevated into the admin
+              console. Only shows in admin mode (the ProfileMenu carries the
+              enter/exit control). */}
+            {user.mode === "admin" && user.can_switch_admin && (
+              <span className="admin-mode-badge" title="You are in admin mode">
+                🛡️ Admin mode
+              </span>
+            )}
             {/* Unread notifications (emails + chat). Sits left of the Report
               icon; badge count mirrors the sidebar Emails/Chat badges. */}
             <NotificationBell

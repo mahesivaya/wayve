@@ -10,7 +10,7 @@ use sqlx::Row;
 use tracing::{info, instrument, warn};
 use wayve_security::encryption::{decrypt, encrypt};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{Permission, Scope, resolve_role_context};
+use wayve_security::rbac::{Permission, Scope, resolve_role_context, resolve_role_context_moded};
 
 use super::client::McpClient;
 use super::models::{ConnectInput, ConnectionStatus, McpConnection, McpOwner, UpdateInput};
@@ -30,10 +30,14 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
 ///
 /// A personal owner holds every permission in their own scope, so the
 /// permission check alone is not enough — the scope/tier match is the real gate.
-async fn require_mcp_owner(pool: &PgPool, user_id: i32) -> Result<McpOwner, AppError> {
-    let ctx = resolve_role_context(pool, user_id)
-        .await
-        .map_err(AppError::from)?;
+/// Resolve an MCP owner from an ALREADY-resolved role context. Split out so the
+/// interactive management endpoints pass a mode-downscoped context (a
+/// normal-mode owner is a `Member`, lacks `McpManage`, and is refused), while
+/// the AI loop passes the DB-truth context.
+async fn mcp_owner_for_ctx(
+    pool: &PgPool,
+    ctx: &wayve_security::rbac::RoleContext,
+) -> Result<McpOwner, AppError> {
     if !ctx.has(Permission::McpManage) {
         return Err(AppError::Forbidden);
     }
@@ -51,11 +55,26 @@ async fn require_mcp_owner(pool: &PgPool, user_id: i32) -> Result<McpOwner, AppE
     }
 }
 
+/// Owner gate for the interactive MCP management endpoints — mode-aware, so a
+/// normal-mode owner is refused (they must switch to admin to manage MCP).
+async fn require_mcp_owner(
+    req: &HttpRequest,
+    pool: &PgPool,
+    user_id: i32,
+) -> Result<McpOwner, AppError> {
+    let ctx = resolve_role_context_moded(req, pool, user_id)
+        .await
+        .map_err(AppError::from)?;
+    mcp_owner_for_ctx(pool, &ctx).await
+}
+
 /// Best-effort owner resolution for the AI loop: `None` (no tools) instead of an
 /// error when the caller isn't an MCP owner, so the basic chat still works for
-/// everyone.
+/// everyone. Uses the DB-truth role (not mode-downscoped): using your own
+/// configured tools inside AI chat is not an admin action.
 pub(crate) async fn resolve_mcp_owner_opt(pool: &PgPool, user_id: i32) -> Option<McpOwner> {
-    require_mcp_owner(pool, user_id).await.ok()
+    let ctx = resolve_role_context(pool, user_id).await.ok()?;
+    mcp_owner_for_ctx(pool, &ctx).await.ok()
 }
 
 async fn is_enterprise_org(pool: &PgPool, org_id: i32) -> Result<bool, AppError> {
@@ -132,7 +151,7 @@ async fn validate_server(
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_connections(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let owner = require_mcp_owner(pool.get_ref(), user_id).await?;
+    let owner = require_mcp_owner(&req, pool.get_ref(), user_id).await?;
     let (scope, org_id) = owner.as_columns();
     let rows = sqlx::query(
         "SELECT id, label, server_url, enabled, server_name, last_tool_count, last_validated_at
@@ -173,7 +192,7 @@ pub async fn create_connection(
     body: web::Json<ConnectInput>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let owner = require_mcp_owner(pool.get_ref(), user_id).await?;
+    let owner = require_mcp_owner(&req, pool.get_ref(), user_id).await?;
 
     let label = body.label.trim().to_string();
     let server_url = body.server_url.trim().to_string();
@@ -264,7 +283,7 @@ pub async fn update_connection(
     body: web::Json<UpdateInput>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let owner = require_mcp_owner(pool.get_ref(), user_id).await?;
+    let owner = require_mcp_owner(&req, pool.get_ref(), user_id).await?;
     let id = path.into_inner();
     let (scope, org_id) = owner.as_columns();
 
@@ -432,7 +451,7 @@ pub async fn delete_connection(
     path: web::Path<i32>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let owner = require_mcp_owner(pool.get_ref(), user_id).await?;
+    let owner = require_mcp_owner(&req, pool.get_ref(), user_id).await?;
     let id = path.into_inner();
     let (scope, org_id) = owner.as_columns();
     let result = sqlx::query(

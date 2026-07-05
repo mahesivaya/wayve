@@ -194,7 +194,7 @@ async fn authorize_ticket(
     }
 
     // Not the owner — must hold tickets:manage to proceed.
-    let ctx = rbac::resolve_role_context(pool, user_id)
+    let ctx = rbac::resolve_role_context_moded(req, pool, user_id)
         .await
         .map_err(|_| AppError::Forbidden)?;
     if ctx.has(Permission::TicketsManage) {

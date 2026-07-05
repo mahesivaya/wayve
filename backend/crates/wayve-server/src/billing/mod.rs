@@ -22,7 +22,7 @@ pub use routes::{public_routes, routes};
 
 use crate::prelude::*;
 use crate::routes::user::{
-    effective_role_for_user, normalized_account_type, normalized_platform_role,
+    effective_role_for_request, normalized_account_type, normalized_platform_role,
 };
 use models::BillingOwner;
 use std::time::Duration;
@@ -71,6 +71,7 @@ pub async fn resolve_owner(
 /// Mutating an organization's billing requires an organization or platform
 /// admin. Personal billing is always self-service.
 pub async fn require_owner_manager(
+    req: &HttpRequest,
     pool: &PgPool,
     user_id: i32,
     owner: &BillingOwner,
@@ -79,10 +80,14 @@ pub async fn require_owner_manager(
         return Ok(());
     }
     let (account_type, _) = account_row(pool, user_id).await?;
-    let (role, _) = effective_role_for_user(pool, user_id).await.map_err(|e| {
-        error!(target: "billing", user_id, error = ?e, "role lookup failed");
-        HttpResponse::InternalServerError().finish()
-    })?;
+    // Mode-aware: managing org billing is an admin action, refused for a
+    // normal-mode owner (downscoped to member).
+    let (role, _) = effective_role_for_request(req, pool, user_id)
+        .await
+        .map_err(|e| {
+            error!(target: "billing", user_id, error = ?e, "role lookup failed");
+            HttpResponse::InternalServerError().finish()
+        })?;
 
     if normalized_account_type(&account_type) == "platform_admin" {
         return match normalized_platform_role(&role) {
@@ -103,6 +108,7 @@ pub async fn require_owner_manager(
 
 /// Guard for platform-admin-only endpoints (plan catalog, global views).
 pub async fn require_platform_admin(
+    req: &HttpRequest,
     pool: &PgPool,
     user_id: i32,
 ) -> std::result::Result<(), HttpResponse> {
@@ -113,10 +119,13 @@ pub async fn require_platform_admin(
         })));
     }
 
-    let (role, _) = effective_role_for_user(pool, user_id).await.map_err(|e| {
-        error!(target: "billing", user_id, error = ?e, "platform role lookup failed");
-        HttpResponse::InternalServerError().finish()
-    })?;
+    // Mode-aware: refused for a normal-mode platform owner (member).
+    let (role, _) = effective_role_for_request(req, pool, user_id)
+        .await
+        .map_err(|e| {
+            error!(target: "billing", user_id, error = ?e, "platform role lookup failed");
+            HttpResponse::InternalServerError().finish()
+        })?;
     if matches!(normalized_platform_role(&role), "owner" | "admin") {
         Ok(())
     } else {

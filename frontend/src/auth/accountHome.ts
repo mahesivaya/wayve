@@ -43,6 +43,8 @@ type AccountLike = {
   organization_id?: number | null;
   permissions?: string[] | null;
   effective_role?: string | null;
+  mode?: "normal" | "admin";
+  can_switch_admin?: boolean;
 };
 
 // Landing route for a fully-resolved user. The app intentionally has three
@@ -62,6 +64,13 @@ const PLATFORM_ROLE_HOMES: Record<string, string> = {
 };
 
 export function homePathForUser(user?: AccountLike | null): string {
+  // A switchable owner (org/enterprise/platform) defaults to the personal
+  // workspace and only sees their admin console after entering admin mode.
+  // Gated on `can_switch_admin` so a regular member (also mode "normal") still
+  // lands on their scope home.
+  if (user?.can_switch_admin && user?.mode !== "admin") {
+    return "/home";
+  }
   const normalized = normalizeAccountType(user?.account_type);
   if (normalized === "platform_admin") {
     const role = user?.effective_role ?? "";

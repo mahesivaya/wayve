@@ -153,7 +153,7 @@ pub async fn create_access_request(
     body: web::Json<CreateAccessRequestBody>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let ctx = rbac::resolve_role_context(pool.get_ref(), user_id)
+    let ctx = rbac::resolve_role_context_moded(&req, pool.get_ref(), user_id)
         .await
         .map_err(|_| AppError::internal("role resolution failed"))?;
 

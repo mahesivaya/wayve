@@ -149,7 +149,7 @@ pub async fn require_feature(
     let Some(user_id) = get_user_id_from_request(req) else {
         return Err(HttpResponse::Unauthorized().finish());
     };
-    let ctx = rbac::resolve_role_context(pool, user_id)
+    let ctx = rbac::resolve_role_context_moded(req, pool, user_id)
         .await
         .map_err(|_| HttpResponse::InternalServerError().finish())?;
     let allowed = match ctx.scope {
@@ -184,7 +184,7 @@ pub async fn get_feature_access(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
     let Some(user_id) = get_user_id_from_request(&req) else {
         return Err(AppError::Unauthorized);
     };
-    let ctx = rbac::resolve_role_context(pool.get_ref(), user_id)
+    let ctx = rbac::resolve_role_context_moded(&req, pool.get_ref(), user_id)
         .await
         .map_err(AppError::Db)?;
 

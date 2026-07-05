@@ -43,6 +43,14 @@ export type UserType = {
   // Server-computed; gates single-person owner affordances like connecting the
   // org's own OAuth mailbox. Always false for personal/platform scopes.
   is_primary_owner?: boolean;
+  // Interactive session mode. An owner logs in as "normal" (a downscoped,
+  // restricted identity) and can switch to "admin" to reach the admin console.
+  // Absent ⇒ treat as "normal". Server-authoritative (from the JWT claim).
+  mode?: "normal" | "admin";
+  // True when the caller's TRUE (pre-downscope) role is an org/platform owner,
+  // i.e. eligible to enter admin mode. Server-computed, so it's visible even
+  // while downscoped in normal mode (drives the switcher's visibility).
+  can_switch_admin?: boolean;
   organization_id?: number | null;
   organization_slug?: string | null;
   organization_name?: string | null;
@@ -81,6 +89,10 @@ export type AuthType = {
   // mutations that change the caller's scope/permissions (e.g. a personal
   // user creating an organization and being promoted to organization_admin).
   refresh: () => Promise<void>;
+  // Switch the session between "normal" and "admin". POSTs /api/session/mode,
+  // stores the returned token, and refreshes /api/me. Rejects if the server
+  // refuses (e.g. a non-owner requesting admin).
+  switchMode: (target: "normal" | "admin") => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthType | null>(null);

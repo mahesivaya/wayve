@@ -6,7 +6,7 @@ use super::entitlements::effective_entitlements;
 use super::models::BillingOwner;
 use crate::prelude::*;
 use crate::routes::user::{
-    effective_role_for_user, normalized_account_type, normalized_platform_role,
+    effective_role_for_request, normalized_account_type, normalized_platform_role,
 };
 use chrono::{DateTime, Utc};
 use tracing::{error, instrument};
@@ -112,7 +112,7 @@ pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>)
     })
     .unwrap_or_default();
 
-    let can_manage = match effective_role_for_user(pool.get_ref(), user_id).await {
+    let can_manage = match effective_role_for_request(&req, pool.get_ref(), user_id).await {
         Ok((role, _)) => {
             if normalized_account_type(&account_type) == "platform_admin" {
                 matches!(normalized_platform_role(&role), "owner" | "admin")

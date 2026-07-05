@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { homePathForUser } from "../auth/accountHome";
 import ThemeCustomizer from "../theme/ThemeCustomizer";
 import { useCustomTheme } from "../theme/useCustomTheme";
 import Avatar from "./Avatar";
@@ -18,9 +19,34 @@ const SWATCH_VARS = [
 ] as const;
 
 export default function ProfileMenu() {
-  const { user, logout } = useAuth();
+  const { user, logout, switchMode } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
+
+  const inAdminMode = user?.mode === "admin";
+  // Show the switcher to an eligible owner (in normal mode) or whenever already
+  // elevated (so they can exit). Regular members never see it.
+  const showSwitcher = inAdminMode || (user?.can_switch_admin ?? false);
+
+  const handleSwitch = async (target: "normal" | "admin") => {
+    if (switching) return;
+    setSwitching(true);
+    try {
+      await switchMode(target);
+      setMenuOpen(false);
+      // Land on the admin console (admin) or the personal workspace (normal).
+      navigate(
+        target === "admin"
+          ? homePathForUser({ ...user, mode: "admin", can_switch_admin: true })
+          : "/home"
+      );
+    } catch {
+      // Server refused (e.g. no longer eligible); leave the menu as-is.
+    } finally {
+      setSwitching(false);
+    }
+  };
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const appearanceRef = useRef<HTMLDivElement>(null);
@@ -145,6 +171,26 @@ export default function ProfileMenu() {
               <span className="profile-dropdown-chevron">›</span>
             </span>
           </button>
+
+          {showSwitcher && (
+            <>
+              <div className="profile-dropdown-divider" />
+              <button
+                className="profile-dropdown-item"
+                disabled={switching}
+                onClick={() => void handleSwitch(inAdminMode ? "normal" : "admin")}
+              >
+                <span className="profile-dropdown-icon">
+                  {inAdminMode ? "🚪" : "🛡️"}
+                </span>
+                {switching
+                  ? "Switching…"
+                  : inAdminMode
+                    ? "Exit admin mode"
+                    : "Switch to admin mode"}
+              </button>
+            </>
+          )}
 
           <div className="profile-dropdown-divider" />
 

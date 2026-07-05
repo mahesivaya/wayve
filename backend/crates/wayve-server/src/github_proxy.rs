@@ -31,7 +31,7 @@ use sqlx::PgPool;
 use std::time::Duration;
 use tracing::{info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{Role, Scope, resolve_role_context};
+use wayve_security::rbac::{Role, Scope, resolve_role_context_moded};
 
 const CACHE_TTL_SECS: u64 = 60;
 const CACHE_MAX: u64 = 1_000;
@@ -165,7 +165,7 @@ async fn authorize_github_access(
     let Some(user_id) = get_user_id_from_request(req) else {
         return Err(HttpResponse::Unauthorized().finish());
     };
-    let ctx = match resolve_role_context(pool, user_id).await {
+    let ctx = match resolve_role_context_moded(req, pool, user_id).await {
         Ok(ctx) => ctx,
         Err(e) => {
             warn!(target: "auth", user_id, error = ?e, "github proxy rbac resolution failed");
@@ -743,7 +743,7 @@ pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> Http
             .json(serde_json::json!({ "message": "Authentication required" }));
     };
 
-    let unrestricted = match resolve_role_context(pool.get_ref(), user_id).await {
+    let unrestricted = match resolve_role_context_moded(&req, pool.get_ref(), user_id).await {
         Ok(ctx) => match ctx.scope {
             Scope::Platform => matches!(ctx.role, Role::Owner | Role::SuperAdmin | Role::Admin),
             // Org and personal accounts aren't managed by this feature yet.

@@ -39,7 +39,7 @@ pub async fn admin_list_plans(req: HttpRequest, pool: web::Data<PgPool>) -> AppR
         Ok(id) => id,
         Err(resp) => return Ok(resp),
     };
-    if let Err(resp) = super::require_platform_admin(pool.get_ref(), user_id).await {
+    if let Err(resp) = super::require_platform_admin(&req, pool.get_ref(), user_id).await {
         return Ok(resp);
     }
 
@@ -62,7 +62,7 @@ pub async fn admin_create_plan(
         Ok(id) => id,
         Err(resp) => return Ok(resp),
     };
-    if let Err(resp) = super::require_platform_admin(pool.get_ref(), user_id).await {
+    if let Err(resp) = super::require_platform_admin(&req, pool.get_ref(), user_id).await {
         return Ok(resp);
     }
 
@@ -162,7 +162,7 @@ pub async fn admin_deactivate_plan(
         Ok(id) => id,
         Err(resp) => return Ok(resp),
     };
-    if let Err(resp) = super::require_platform_admin(pool.get_ref(), user_id).await {
+    if let Err(resp) = super::require_platform_admin(&req, pool.get_ref(), user_id).await {
         return Ok(resp);
     }
 

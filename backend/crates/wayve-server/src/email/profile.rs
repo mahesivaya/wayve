@@ -2,21 +2,25 @@ use crate::prelude::*;
 
 use crate::cache::TtlCache;
 use crate::routes::user::{
-    current_plan_for_user, display_organization_name, effective_access_for_user,
+    current_plan_for_user, display_organization_name, effective_access_for_request,
 };
 use actix_web::{HttpResponse, get, put};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
-use wayve_security::jwt::get_user_id_from_request;
+use wayve_security::jwt::{SessionMode, get_user_id_from_request, mode_from_request};
 
 const ME_CACHE_TTL_SECS: u64 = 60;
 const ME_CACHE_MAX_CAPACITY: u64 = 10_000;
 
-static ME_CACHE: Lazy<TtlCache<i32, Value>> =
+// Keyed by (user_id, mode): the /me body depends on the session mode (a
+// normal-mode owner is downscoped), so two open sessions of the same user in
+// different modes must not share a cache entry.
+static ME_CACHE: Lazy<TtlCache<(i32, SessionMode), Value>> =
     Lazy::new(|| TtlCache::new(ME_CACHE_MAX_CAPACITY, ME_CACHE_TTL_SECS));
 
 pub async fn invalidate_me_cache(user_id: i32) {
-    ME_CACHE.invalidate(&user_id).await;
+    ME_CACHE.invalidate(&(user_id, SessionMode::Normal)).await;
+    ME_CACHE.invalidate(&(user_id, SessionMode::Admin)).await;
 }
 
 #[get("/me")]
@@ -30,7 +34,8 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         }
     };
 
-    if let Some(cached) = ME_CACHE.get(&user_id).await {
+    let mode = mode_from_request(&req);
+    if let Some(cached) = ME_CACHE.get(&(user_id, mode)).await {
         return Ok(HttpResponse::Ok().json(cached));
     }
 
@@ -80,13 +85,14 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         &email,
         row.try_get("organization_name").ok().flatten(),
     );
-    let access = match effective_access_for_user(pool.get_ref(), id).await {
-        Ok(value) => value,
-        Err(e) => {
-            error!(target: "db", user_id = id, error = ?e, "effective access lookup failed");
-            crate::routes::user::fallback_access(&account_type)
-        }
-    };
+    let (access, can_switch_admin) =
+        match effective_access_for_request(&req, pool.get_ref(), id).await {
+            Ok((value, can_switch, _mode)) => (value, can_switch),
+            Err(e) => {
+                error!(target: "db", user_id = id, error = ?e, "effective access lookup failed");
+                (crate::routes::user::fallback_access(&account_type), false)
+            }
+        };
 
     // Look up the user's current tier so the frontend can show a tier badge
     // and the "Upgrade" affordance. Falls back to the basic_user plan when
@@ -109,6 +115,8 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "scope": access.scope,
         "permissions": access.permissions,
         "is_primary_owner": access.is_primary_owner,
+        "mode": mode.as_str(),
+        "can_switch_admin": can_switch_admin,
         "organization_id": organization_id,
         "organization_slug": organization_slug,
         "organization_name": organization_name,
@@ -119,7 +127,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "chat_encrypt_files": chat_encrypt_files,
     });
 
-    ME_CACHE.insert(user_id, response.clone()).await;
+    ME_CACHE.insert((user_id, mode), response.clone()).await;
     Ok(HttpResponse::Ok().json(response))
 }
 

@@ -115,7 +115,7 @@ pub async fn create_checkout(
         Ok(owner) => owner,
         Err(resp) => return Ok(resp),
     };
-    if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
+    if let Err(resp) = require_owner_manager(&req, pool.get_ref(), user_id, &owner).await {
         return Ok(resp);
     }
 
@@ -216,7 +216,7 @@ pub async fn create_inline_subscription(
         Ok(owner) => owner,
         Err(resp) => return Ok(resp),
     };
-    if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
+    if let Err(resp) = require_owner_manager(&req, pool.get_ref(), user_id, &owner).await {
         return Ok(resp);
     }
 
@@ -317,7 +317,7 @@ pub async fn create_portal(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         Ok(owner) => owner,
         Err(resp) => return Ok(resp),
     };
-    if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
+    if let Err(resp) = require_owner_manager(&req, pool.get_ref(), user_id, &owner).await {
         return Ok(resp);
     }
 
@@ -361,7 +361,7 @@ pub async fn create_payment_method_setup_intent(
         Ok(owner) => owner,
         Err(resp) => return Ok(resp),
     };
-    if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
+    if let Err(resp) = require_owner_manager(&req, pool.get_ref(), user_id, &owner).await {
         return Ok(resp);
     }
 
@@ -413,7 +413,7 @@ pub async fn set_default_payment_method(
         Ok(owner) => owner,
         Err(resp) => return Ok(resp),
     };
-    if let Err(resp) = require_owner_manager(pool.get_ref(), user_id, &owner).await {
+    if let Err(resp) = require_owner_manager(&req, pool.get_ref(), user_id, &owner).await {
         return Ok(resp);
     }
 
