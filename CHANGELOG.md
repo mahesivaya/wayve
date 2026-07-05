@@ -3,6 +3,21 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [6.0.0](https://github.com/mahesivaya/wayve/releases/tag/v6.0.0) - 2026-07-05
+
+### 🚀 Features
+
+- **auth:** Owner admin-mode switcher with server-enforced downscope
+
+### 🧹 Maintenance
+
+- **logs:** Skip PlatformLogs auto-refresh while tab hidden
+- **frontend:** De-dupe chat-summary polling and cache heavy page loads
+- **db:** Merge RLS session preamble into one round-trip
+- **chat,integrations:** Parallelize chat fan-out; batch sync upserts
+- **webhooks,emails:** Batch endpoint load + seal secure email once
+- **changelog:** Update for v5.6.0 [skip ci]
+
 ## [5.6.0](https://github.com/mahesivaya/wayve/releases/tag/v5.6.0) - 2026-07-04
 
 ### 🚀 Features
