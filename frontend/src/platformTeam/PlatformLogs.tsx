@@ -150,7 +150,11 @@ export default function PlatformLogs({
   // hammering the DB; the dashboard isn't a real-time tail.
   useEffect(() => {
     if (!autoRefresh) return;
-    const id = window.setInterval(() => void reload(), 15_000);
+    // Skip the refresh while the tab is hidden — no point re-fetching and
+    // re-rendering 300 rows nobody is looking at (mirrors the Emails surface).
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void reload();
+    }, 15_000);
     return () => window.clearInterval(id);
   }, [autoRefresh, reload]);
 
