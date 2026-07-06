@@ -18,6 +18,7 @@ import { listPlatformMembers } from "../api/rbac";
 import { adminListTickets } from "../api/support";
 import { listApiKeys } from "../api/apiKeys";
 import { listAuditLogs } from "../api/audit";
+import AIChat from "../aichat/AIChat";
 import { listScimTokens } from "../api/scim";
 import { listGithubRepos } from "../api/github";
 import { formatBytes } from "../utils/bytes";
@@ -433,6 +434,21 @@ export default function PlatformAdminHome() {
 
   return (
     <div className="platform-admin-home u-page-shell">
+      <section className="platform-admin-panel u-panel platform-ai-panel">
+        <div
+          className="platform-ai-chat"
+          style={{
+            height: 560,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            borderRadius: "var(--radius-md, 12px)",
+          }}
+        >
+          <AIChat />
+        </div>
+      </section>
+
       {hasAnyConsole && (
         <section className="platform-admin-panel u-panel">
           <div className="platform-console-rows">

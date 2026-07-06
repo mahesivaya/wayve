@@ -72,6 +72,7 @@ pub async fn ai_chat(
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "reply": result.reply,
         "tools_used": result.tools_used,
+        "pending_actions": result.pending_actions,
         "provider": ai.provider.as_str(),
         "model": ai.model,
     })))
