@@ -2199,6 +2199,51 @@
   font-size: var(--text-md);
 }
 
+/* "or import all" alternative below the paste-URL row. */
+.github-add-repo-alt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.github-add-repo-or {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.github-add-repo-import-btn {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-radius: 6px;
+  padding: 9px 14px;
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.github-add-repo-import-btn:hover:not(:disabled) {
+  background: var(--color-surface-muted, var(--color-surface));
+}
+
+.github-add-repo-import-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* "Connected as @login · Disconnect" line under the connect/import options. */
+.github-add-repo-conn {
+  margin: 12px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
 /* Personal repo selector: a card at the top of the viewer's left rail (above
    the Branch block) — a dropdown of the user's repos + an Add button below it. */
 .github-repo-switch {
@@ -2236,6 +2281,21 @@
 
 .github-repo-switch-form .github-add-repo-error {
   margin: 0;
+}
+
+/* GitHub account controls inside the repo switcher (import more / disconnect). */
+.github-repo-switch-conn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+}
+
+.github-repo-switch-conn-who {
+  color: var(--color-text-muted);
 }
 
 /* Inline preview of an opened workflow .yml inside the Workflows panel (which,

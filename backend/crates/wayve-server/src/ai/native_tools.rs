@@ -13,6 +13,7 @@
 //! collide with the MCP `c{idx}_` namespacing used in `agent::load_mcp_tools`.
 
 use super::agent::{NeutralTool, PendingAction, ToolUsed};
+use super::provider::DataAccess;
 use crate::prelude::*;
 use sqlx::Row;
 use tracing::warn;
@@ -29,9 +30,21 @@ const LIST_MEETINGS: &str = "wayve_list_meetings";
 /// How many rows the read tools return.
 const READ_LIMIT: usize = 10;
 
-/// The native tools declared to the model on every chat.
-pub(crate) fn declarations() -> Vec<NeutralTool> {
-    vec![
+/// Whether a native tool's data category is allowed by `access`. Tools not tied
+/// to a gated category are always allowed.
+fn tool_allowed(name: &str, access: DataAccess) -> bool {
+    match name {
+        COMPOSE_EMAIL | LIST_EMAIL_ACCOUNTS | LIST_RECENT_EMAILS => access.email,
+        LIST_MEETINGS => access.calendar,
+        _ => true,
+    }
+}
+
+/// The native tools declared to the model on a chat, filtered to the data
+/// categories `access` allows. A disabled category's tools are never advertised
+/// to the model (and `dispatch` refuses them too, as defense in depth).
+pub(crate) fn declarations(access: DataAccess) -> Vec<NeutralTool> {
+    let all = vec![
         NeutralTool {
             ns_name: COMPOSE_EMAIL.to_string(),
             description: Some(
@@ -79,7 +92,10 @@ pub(crate) fn declarations() -> Vec<NeutralTool> {
             ),
             input_schema: Some(serde_json::json!({ "type": "object", "properties": {} })),
         },
-    ]
+    ];
+    all.into_iter()
+        .filter(|t| tool_allowed(&t.ns_name, access))
+        .collect()
 }
 
 /// Dispatch a native tool. Returns `None` when `name` is not a native tool, so
@@ -90,9 +106,22 @@ pub(crate) async fn dispatch(
     user_id: i32,
     name: &str,
     args: &Value,
+    access: DataAccess,
 ) -> Option<(Option<ToolUsed>, Value, Option<PendingAction>)> {
     if !name.starts_with(PREFIX) {
         return None;
+    }
+    // Defense in depth: a disabled category's tools aren't declared to the model,
+    // but refuse them here too in case one is called regardless.
+    if !tool_allowed(name, access) {
+        return Some((
+            None,
+            serde_json::json!({
+                "isError": true,
+                "error": "This data category is disabled for the AI assistant."
+            }),
+            None,
+        ));
     }
     let used = ToolUsed {
         name: name.to_string(),

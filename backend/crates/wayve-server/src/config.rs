@@ -366,6 +366,23 @@ pub fn google_oauth() -> GoogleOAuthConfig {
     }
 }
 
+/// Per-user GitHub OAuth (personal accounts connect their own GitHub to import
+/// their repos). Distinct from the shared `GITHUB_TOKEN` PAT the proxy falls
+/// back to for public browsing.
+pub struct GithubOAuthConfig {
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    pub redirect_uri: Option<String>,
+}
+
+pub fn github_oauth() -> GithubOAuthConfig {
+    GithubOAuthConfig {
+        client_id: var_opt("GITHUB_CLIENT_ID"),
+        client_secret: var_opt("GITHUB_CLIENT_SECRET"),
+        redirect_uri: var_opt("GITHUB_OAUTH_REDIRECT_URI"),
+    }
+}
+
 pub struct OutlookOAuthConfig {
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
@@ -407,6 +424,7 @@ pub fn validate() {
     feature("gemini (AI)", gemini_api_key().is_some());
     feature("zoom (scheduler)", zoom().is_ok());
     feature("google oauth", google_oauth().client_id.is_some());
+    feature("github oauth", github_oauth().client_id.is_some());
     feature("outlook oauth", outlook_oauth().client_id.is_some());
     feature("smtp (email send)", smtp().is_ok());
 }

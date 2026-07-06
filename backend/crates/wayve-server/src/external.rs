@@ -45,6 +45,20 @@ pub fn github_api_base() -> String {
     std::env::var("GITHUB_API_BASE").unwrap_or_else(|_| "https://api.github.com".to_string())
 }
 
+/// GitHub OAuth authorize endpoint (the browser redirect target). Overridable
+/// for tests via `GITHUB_OAUTH_AUTHORIZE_URL`.
+pub fn github_oauth_authorize_url() -> String {
+    std::env::var("GITHUB_OAUTH_AUTHORIZE_URL")
+        .unwrap_or_else(|_| "https://github.com/login/oauth/authorize".to_string())
+}
+
+/// GitHub OAuth token-exchange endpoint (server-to-server). Overridable for
+/// tests via `GITHUB_OAUTH_TOKEN_URL` (point at a wiremock server).
+pub fn github_oauth_token_url() -> String {
+    std::env::var("GITHUB_OAUTH_TOKEN_URL")
+        .unwrap_or_else(|_| "https://github.com/login/oauth/access_token".to_string())
+}
+
 /// Root for Jira Cloud REST calls. Each connection carries its own site base
 /// (e.g. `https://acme.atlassian.net`), which is passed in; the `JIRA_API_BASE`
 /// env var overrides it wholesale so tests can point every Jira call at a

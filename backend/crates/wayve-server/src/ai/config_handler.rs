@@ -19,7 +19,9 @@ use crate::ai::provider::{AiProvider, ResolvedAi};
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(get_config)
         .service(put_config)
-        .service(delete_config);
+        .service(delete_config)
+        .service(get_data_access)
+        .service(put_data_access);
 }
 
 /// Who owns an AI provider config: an enterprise organization, or the platform
@@ -387,6 +389,7 @@ pub async fn put_config(
         model: model_eff.clone(),
         base_url: base_url.clone(),
         fail_closed: true,
+        data_access: crate::ai::provider::DataAccess::default(),
     };
     crate::ai::agent::probe(&probe_ai).await.map_err(|e| {
         warn!(target: "ai", error = %e, "ai provider validation failed");
@@ -462,4 +465,104 @@ pub async fn delete_config(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
 
     info!(target: "worker", user_id, owner = %owner_label, "ai provider reset to default");
     Ok(HttpResponse::Ok().json(serde_json::json!({ "configured": false })))
+}
+
+// ── AI data access (platform team only) ────────────────────────────────────
+// Which categories of the user's own Wayve data the platform assistant's native
+// tools may touch. Only the platform owner sees/sets this; it's stored on the
+// `platform_ai_config` singleton and enforced in `native_tools`/`agent`. Org and
+// personal callers are never gated (this endpoint is platform-only).
+
+#[derive(serde::Deserialize)]
+struct DataAccessPayload {
+    email: bool,
+    calendar: bool,
+}
+
+/// Require the caller to be the **platform** owner (not an org owner).
+async fn require_platform_owner(
+    req: &HttpRequest,
+    pool: &PgPool,
+    user_id: i32,
+) -> Result<(), AppError> {
+    match require_ai_owner(req, pool, user_id).await? {
+        AiOwner::Platform => Ok(()),
+        AiOwner::Org(_) => Err(AppError::Forbidden),
+    }
+}
+
+#[get("/ai/data-access")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn get_data_access(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    require_platform_owner(&req, pool.get_ref(), user_id).await?;
+
+    let row = sqlx::query(
+        "SELECT ai_allow_email, ai_allow_calendar FROM platform_ai_config WHERE id = 1",
+    )
+    .fetch_optional(pool.get_ref())
+    .await?;
+    // No configured provider yet → everything is open by default.
+    let (email, calendar) = match row {
+        Some(r) => (
+            r.try_get::<bool, _>("ai_allow_email").unwrap_or(true),
+            r.try_get::<bool, _>("ai_allow_calendar").unwrap_or(true),
+        ),
+        None => (true, true),
+    };
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "email": email,
+        "calendar": calendar,
+    })))
+}
+
+#[put("/ai/data-access")]
+#[instrument(target = "http", skip(req, pool, body))]
+pub async fn put_data_access(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<DataAccessPayload>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    require_platform_owner(&req, pool.get_ref(), user_id).await?;
+
+    // UPDATE only — the row is created by the provider config flow, and the
+    // toggles are meaningless without a configured platform provider.
+    let res = sqlx::query(
+        "UPDATE platform_ai_config
+            SET ai_allow_email = $1, ai_allow_calendar = $2, updated_at = NOW()
+          WHERE id = 1",
+    )
+    .bind(body.email)
+    .bind(body.calendar)
+    .execute(pool.get_ref())
+    .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::bad_request(
+            "Configure the platform AI provider first, then set data access.",
+        ));
+    }
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "ai_data_access.update",
+            resource_type: "platform_ai_config",
+            resource_id: Some("platform".to_string()),
+            metadata: Some(serde_json::json!({
+                "email": body.email,
+                "calendar": body.calendar,
+            })),
+        },
+    )
+    .await;
+
+    info!(target: "worker", user_id, email = body.email, calendar = body.calendar, "ai data access updated");
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "email": body.email,
+        "calendar": body.calendar,
+    })))
 }

@@ -13,11 +13,70 @@ import {
   deleteAiConfig,
   getAiConfig,
   putAiConfig,
+  getAiDataAccess,
+  putAiDataAccess,
   type AiConfig,
+  type AiDataAccess,
   type AiProviderId,
   type AiProviderOption,
 } from "../api/aiProvider";
 import "./aiProvider.css";
+
+// The data categories shown on the platform "Data access" panel. Only the
+// categories the assistant has native tools for today are switchable (email,
+// calendar) — the rest are listed as "coming soon" so the roadmap is visible
+// without pretending a dead toggle does anything.
+type GatedCategory = keyof AiDataAccess; // "email" | "calendar"
+const DATA_CATEGORIES: {
+  key: GatedCategory | "chat" | "drive" | "notes" | "tasks";
+  label: string;
+  icon: string;
+  desc: string;
+  available: boolean;
+}[] = [
+  {
+    key: "email",
+    label: "Email",
+    icon: "✉️",
+    desc: "Read recent emails, list connected accounts, and draft messages.",
+    available: true,
+  },
+  {
+    key: "calendar",
+    label: "Calendar",
+    icon: "📅",
+    desc: "List upcoming meetings and events.",
+    available: true,
+  },
+  {
+    key: "chat",
+    label: "Chat messages",
+    icon: "💬",
+    desc: "Direct and channel messages.",
+    available: false,
+  },
+  {
+    key: "drive",
+    label: "Drive",
+    icon: "📁",
+    desc: "Files and folders.",
+    available: false,
+  },
+  {
+    key: "notes",
+    label: "Notes",
+    icon: "📝",
+    desc: "Personal and shared notes.",
+    available: false,
+  },
+  {
+    key: "tasks",
+    label: "Tasks",
+    icon: "✅",
+    desc: "Task lists and items.",
+    available: false,
+  },
+];
 
 export default function AiSettings() {
   const { user } = useAuth();
@@ -45,6 +104,12 @@ export default function AiSettings() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
 
+  // Platform-only "Data access" panel: which data categories the assistant may
+  // read. `daSaving` holds the category currently being persisted.
+  const [dataAccess, setDataAccess] = useState<AiDataAccess | null>(null);
+  const [daSaving, setDaSaving] = useState<GatedCategory | null>(null);
+  const [daError, setDaError] = useState("");
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -71,6 +136,31 @@ export default function AiSettings() {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [canManage, load]);
+
+  // Data access is a platform-team feature only; skip the fetch elsewhere.
+  useEffect(() => {
+    if (!canManage || !isPlatform) return;
+    void getAiDataAccess()
+      .then(setDataAccess)
+      .catch(() => {});
+  }, [canManage, isPlatform]);
+
+  async function toggleCategory(key: GatedCategory, value: boolean) {
+    if (!dataAccess) return;
+    const previous = dataAccess;
+    const next = { ...dataAccess, [key]: value };
+    setDataAccess(next); // optimistic
+    setDaSaving(key);
+    setDaError("");
+    try {
+      setDataAccess(await putAiDataAccess(next));
+    } catch (err) {
+      setDataAccess(previous); // revert on failure
+      setDaError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setDaSaving(null);
+    }
+  }
 
   if (!canManage) {
     return (
@@ -303,6 +393,73 @@ export default function AiSettings() {
             </p>
           )}
         </form>
+      )}
+
+      {isPlatform && !loading && (
+        <section className="ai-data-access">
+          <h2>Data access</h2>
+          <p>
+            Choose which of your team's data the AI assistant may read. Turning a
+            category off immediately removes those tools from the assistant. Only
+            categories the assistant has tools for today can be changed; the rest
+            are coming soon.
+          </p>
+
+          {!config?.configured && (
+            <p className="ai-warn">
+              Configure a provider above first — data access applies to your
+              platform assistant and can only be changed once a provider is set.
+            </p>
+          )}
+
+          <ul className="ai-da-list">
+            {DATA_CATEGORIES.map((c) => {
+              const on = c.available
+                ? (dataAccess?.[c.key as GatedCategory] ?? true)
+                : false;
+              const disabled =
+                !c.available ||
+                !config?.configured ||
+                daSaving !== null ||
+                !dataAccess;
+              return (
+                <li
+                  key={c.key}
+                  className={`ai-da-row${c.available ? "" : " is-soon"}`}
+                >
+                  <span className="ai-da-icon" aria-hidden="true">
+                    {c.icon}
+                  </span>
+                  <span className="ai-da-text">
+                    <span className="ai-da-label">
+                      {c.label}
+                      {!c.available && (
+                        <span className="ai-da-soon">Coming soon</span>
+                      )}
+                    </span>
+                    <span className="ai-da-desc">{c.desc}</span>
+                  </span>
+                  <label className="ai-da-switch">
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        void toggleCategory(
+                          c.key as GatedCategory,
+                          e.target.checked
+                        )
+                      }
+                    />
+                    <span className="ai-da-slider" aria-hidden="true" />
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+
+          {daError && <p className="ai-error">{daError}</p>}
+        </section>
       )}
     </div>
   );

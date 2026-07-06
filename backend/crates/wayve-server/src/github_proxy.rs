@@ -97,11 +97,29 @@ fn token() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+/// The GitHub token to act as for a request.
+///
+/// **Personal-scope** callers who have connected their own GitHub act as
+/// THEMSELVES (their encrypted per-user token). Every other case — an
+/// unconnected personal user, and ALL organization / platform callers — uses
+/// the shared server PAT, so org/enterprise/platform behavior is byte-for-byte
+/// unchanged. This is the single branch point for the per-user feature.
+async fn effective_github_token(req: &HttpRequest, pool: &PgPool) -> Option<String> {
+    if let Some(user_id) = get_user_id_from_request(req)
+        && let Ok(ctx) = resolve_role_context_moded(req, pool, user_id).await
+        && ctx.scope == Scope::Personal
+        && let Some(user_token) = crate::github_oauth::stored_token_for(pool, user_id).await
+    {
+        return Some(user_token);
+    }
+    token()
+}
+
 /// Fetch the raw repo objects the shared token can see — the same query the
 /// frontend used to call directly (`/user/repos`). Used server-side by
 /// `/api/projects/visible` to build the Projects page list (and filter it per
 /// user). `Err(())` on a transport/upstream failure so the caller can 502.
-pub async fn list_repos() -> Result<Vec<serde_json::Value>, ()> {
+pub async fn list_repos(bearer: Option<&str>) -> Result<Vec<serde_json::Value>, ()> {
     let api_base = crate::external::github_api_base();
     let url = format!(
         "{api_base}/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member"
@@ -112,7 +130,8 @@ pub async fn list_repos() -> Result<Vec<serde_json::Value>, ()> {
         .header("Accept", "application/vnd.github+json")
         .header("X-GitHub-Api-Version", "2022-11-28")
         .header("User-Agent", "rwayve-app");
-    if let Some(pat) = token() {
+    // `bearer` is the caller's own token (personal, connected) or the shared PAT.
+    if let Some(pat) = bearer {
         builder = builder.header("Authorization", format!("Bearer {pat}"));
     }
     let response = builder.send().await.map_err(|_| ())?;
@@ -364,7 +383,9 @@ pub async fn github_proxy(
         .header("X-GitHub-Api-Version", "2022-11-28")
         .header("User-Agent", "rwayve-app");
 
-    if let Some(pat) = token() {
+    // Act as the caller's own GitHub when they're a connected personal user;
+    // otherwise the shared PAT (org/platform unchanged).
+    if let Some(pat) = effective_github_token(&req, pool.get_ref()).await {
         builder = builder.header("Authorization", format!("Bearer {pat}"));
     }
 
@@ -509,7 +530,7 @@ pub async fn approve_pull_request(
 
     // Approving can't be anonymous — without a PAT GitHub would 401 and the
     // action is meaningless. Fail fast with a clear, non-401 message.
-    let Some(pat) = token() else {
+    let Some(pat) = effective_github_token(&req, pool.get_ref()).await else {
         warn!(target: "http", "pr approve denied: GITHUB_TOKEN not configured");
         return HttpResponse::ServiceUnavailable().json(serde_json::json!({
             "message": "GitHub isn't connected on the server (no token configured)."
@@ -588,7 +609,7 @@ pub async fn merge_pull_request(
     }
 
     // Merging can't be anonymous — without a PAT GitHub would 401. Fail fast.
-    let Some(pat) = token() else {
+    let Some(pat) = effective_github_token(&req, pool.get_ref()).await else {
         warn!(target: "http", "pr merge denied: GITHUB_TOKEN not configured");
         return HttpResponse::ServiceUnavailable().json(serde_json::json!({
             "message": "GitHub isn't connected on the server (no token configured)."
@@ -670,7 +691,7 @@ pub async fn create_commit_comment(
         return resp;
     }
 
-    let Some(pat) = token() else {
+    let Some(pat) = effective_github_token(&req, pool.get_ref()).await else {
         warn!(target: "http", "commit comment denied: GITHUB_TOKEN not configured");
         return HttpResponse::ServiceUnavailable().json(serde_json::json!({
             "message": "GitHub isn't connected on the server (no token configured)."
@@ -753,7 +774,8 @@ pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> Http
         Err(_) => true,
     };
 
-    let repos = match list_repos().await {
+    let bearer = effective_github_token(&req, pool.get_ref()).await;
+    let repos = match list_repos(bearer.as_deref()).await {
         Ok(repos) => repos,
         Err(()) => {
             return HttpResponse::BadGateway()
@@ -795,8 +817,75 @@ pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> Http
     }))
 }
 
+/// List the repositories the "Import all repositories" button can pull in.
+/// Always returns `{ connected: bool, repos: [...] }`.
+///
+/// - **Personal** caller: acts as THEM. If they've connected GitHub → their own
+///   repos (public + private); if not → `{ connected: false, repos: [] }` so the
+///   UI prompts to connect (it does NOT fall back to the shared token's repos).
+/// - **Organization**: shared token, PUBLIC repos only (`connected: true`).
+/// - **Platform**: shared token, ALL repos (`connected: true`).
+///
+/// Org/platform behavior is unchanged from before the per-user feature.
+#[get("/github-importable-repos")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn github_importable_repos(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
+    let Some(user_id) = get_user_id_from_request(&req) else {
+        return HttpResponse::Unauthorized().finish();
+    };
+    let ctx = match resolve_role_context_moded(&req, pool.get_ref(), user_id).await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            warn!(target: "auth", user_id, error = ?e, "importable repos rbac resolution failed");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if ctx.role == Role::Guest {
+        return HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "You don't have access to repositories"
+        }));
+    }
+
+    // Personal callers act as themselves — their own token, their own repos.
+    if ctx.scope == Scope::Personal {
+        let Some(user_token) = crate::github_oauth::stored_token_for(pool.get_ref(), user_id).await
+        else {
+            // Not connected: prompt to connect rather than exposing shared repos.
+            return HttpResponse::Ok().json(serde_json::json!({ "connected": false, "repos": [] }));
+        };
+        return match list_repos(Some(&user_token)).await {
+            Ok(repos) => {
+                HttpResponse::Ok().json(serde_json::json!({ "connected": true, "repos": repos }))
+            }
+            Err(()) => HttpResponse::BadGateway()
+                .json(serde_json::json!({ "message": "Couldn't reach GitHub" })),
+        };
+    }
+
+    // Organization / platform: shared token; public-only unless platform.
+    let public_only = ctx.scope != Scope::Platform;
+    let repos = match list_repos(token().as_deref()).await {
+        Ok(repos) => repos,
+        Err(()) => {
+            return HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Couldn't reach GitHub"
+            }));
+        }
+    };
+    let visible: Vec<serde_json::Value> = if public_only {
+        repos
+            .into_iter()
+            .filter(|r| !r.get("private").and_then(|p| p.as_bool()).unwrap_or(false))
+            .collect()
+    } else {
+        repos
+    };
+    HttpResponse::Ok().json(serde_json::json!({ "connected": true, "repos": visible }))
+}
+
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(github_proxy);
+    cfg.service(github_importable_repos);
     cfg.service(approve_pull_request);
     cfg.service(merge_pull_request);
     cfg.service(create_commit_comment);

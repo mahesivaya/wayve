@@ -1,7 +1,7 @@
 use crate::ai::agent::ChatMsg;
 use crate::ai::provider::resolve_ai_for_user;
 use crate::prelude::*;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 
 #[derive(Deserialize)]
@@ -68,6 +68,41 @@ pub async fn ai_chat(
     }
 
     let result = crate::ai::agent::run(pool.get_ref(), user_id, msgs, &ai).await?;
+
+    // Record usage for the owner-only /settings/ai/usage dashboard. Best-effort:
+    // a metering failure must never fail the chat. Owner scope mirrors provider
+    // resolution — an org with its own enabled config owns its members' usage;
+    // everyone else (platform members, personal, platform-default Gemini) is
+    // platform scope (organization_id NULL).
+    let owner_org: Option<i32> = sqlx::query_scalar(
+        "SELECT u.organization_id FROM users u
+           JOIN org_ai_configs c ON c.organization_id = u.organization_id
+          WHERE u.id = $1 AND c.enabled",
+    )
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    .ok()
+    .flatten();
+    let cost_cents =
+        crate::ai::agent::cost_cents(&ai.model, result.input_tokens, result.output_tokens);
+    if let Err(e) = sqlx::query(
+        "INSERT INTO ai_usage_events
+           (user_id, organization_id, provider, model, input_tokens, output_tokens, cost_cents)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    )
+    .bind(user_id)
+    .bind(owner_org)
+    .bind(ai.provider.as_str())
+    .bind(&ai.model)
+    .bind(result.input_tokens)
+    .bind(result.output_tokens)
+    .bind(cost_cents)
+    .execute(pool.get_ref())
+    .await
+    {
+        warn!(target: "ai", error = ?e, "failed to record ai usage event");
+    }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "reply": result.reply,

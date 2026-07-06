@@ -54,6 +54,26 @@ impl AiProvider {
     }
 }
 
+/// Which categories of the user's own Wayve data the assistant's native tools
+/// may touch. Only categories that have native tools today are represented
+/// (email, calendar); the toggle is configured by the platform owner and stored
+/// on `platform_ai_config`. Defaults to fully-open so org/personal callers and
+/// the env fallback behave exactly as before.
+#[derive(Debug, Clone, Copy)]
+pub struct DataAccess {
+    pub email: bool,
+    pub calendar: bool,
+}
+
+impl Default for DataAccess {
+    fn default() -> Self {
+        Self {
+            email: true,
+            calendar: true,
+        }
+    }
+}
+
 /// A fully-resolved provider config, ready to call. Carries the plaintext key —
 /// never serialized.
 #[derive(Clone)]
@@ -67,6 +87,9 @@ pub struct ResolvedAi {
     /// When true a provider error is surfaced to the user instead of silently
     /// falling back. Always true for an org-configured provider.
     pub fail_closed: bool,
+    /// Which data categories the native tools may access. Populated from the
+    /// platform config; open for org/personal/env-fallback resolution.
+    pub data_access: DataAccess,
 }
 
 /// Resolve the AI provider for `user_id`, in order:
@@ -109,7 +132,8 @@ pub async fn resolve_ai_for_user(
             .await?;
     if is_platform_member {
         let prow = sqlx::query(
-            "SELECT provider, base_url, model, api_key_iv, api_key_encrypted, fail_closed
+            "SELECT provider, base_url, model, api_key_iv, api_key_encrypted, fail_closed,
+                    ai_allow_email, ai_allow_calendar
                FROM platform_ai_config WHERE id = 1 AND enabled",
         )
         .fetch_optional(pool)
@@ -126,6 +150,7 @@ pub async fn resolve_ai_for_user(
         model: crate::config::gemini_model(),
         base_url: None,
         fail_closed: false,
+        data_access: DataAccess::default(),
     }))
 }
 
@@ -138,6 +163,12 @@ fn resolved_from_row(row: &sqlx::postgres::PgRow) -> Result<ResolvedAi, AppError
     let base_url: Option<String> = row.try_get("base_url").ok().flatten();
     let model: Option<String> = row.try_get("model").ok().flatten();
     let fail_closed: bool = row.try_get("fail_closed").unwrap_or(true);
+    // Only the platform row projects these columns; org rows don't, so a missing
+    // column falls back to fully-open (the org path is never gated).
+    let data_access = DataAccess {
+        email: row.try_get("ai_allow_email").unwrap_or(true),
+        calendar: row.try_get("ai_allow_calendar").unwrap_or(true),
+    };
 
     let iv: Option<String> = row.try_get("api_key_iv").ok().flatten();
     let enc: Option<String> = row.try_get("api_key_encrypted").ok().flatten();
@@ -161,5 +192,6 @@ fn resolved_from_row(row: &sqlx::postgres::PgRow) -> Result<ResolvedAi, AppError
         model: model.unwrap_or_else(|| provider.default_model().to_string()),
         base_url,
         fail_closed,
+        data_access,
     })
 }

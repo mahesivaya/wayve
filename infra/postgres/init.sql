@@ -298,6 +298,21 @@ WHERE expires_at IS NULL;
 ALTER TABLE oauth_states ALTER COLUMN expires_at SET NOT NULL;
 ALTER TABLE oauth_states ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
+-- Per-user GitHub OAuth connection (personal accounts). The granted access token
+-- is encrypted at rest (AES-256-GCM) via the `*_iv` / `*_encrypted` pair, exactly
+-- like org_sso_configs.client_secret_*. Lets a personal user import their own
+-- public + private repos; org/enterprise/platform keep the shared-token model.
+CREATE TABLE IF NOT EXISTS github_accounts (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    github_login TEXT NOT NULL,
+    github_user_id BIGINT,
+    access_token_iv TEXT NOT NULL,
+    access_token_encrypted TEXT NOT NULL,
+    scope TEXT,
+    connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- =========================================================================
 -- OIDC SSO (multi-tenant: each organization brings its own IdP)
 -- =========================================================================
@@ -1045,11 +1060,45 @@ CREATE TABLE IF NOT EXISTS platform_ai_config (
     api_key_encrypted TEXT,
     fail_closed       BOOLEAN NOT NULL DEFAULT TRUE,
     enabled           BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Per-data-category access for the platform assistant's native tools. The
+    -- platform owner toggles these on the AI Settings page; the agent only
+    -- declares (and dispatches) tools whose category is allowed. Only categories
+    -- that have native tools today are stored (email, calendar); the others
+    -- (chat, drive, notes, tasks) have no AI tools yet.
+    ai_allow_email    BOOLEAN NOT NULL DEFAULT TRUE,
+    ai_allow_calendar BOOLEAN NOT NULL DEFAULT TRUE,
     last_validated_at TIMESTAMP,
     connected_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at        TIMESTAMP DEFAULT NOW(),
     updated_at        TIMESTAMP DEFAULT NOW()
 );
+-- Backfill the data-access columns on already-provisioned databases.
+ALTER TABLE platform_ai_config
+    ADD COLUMN IF NOT EXISTS ai_allow_email    BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS ai_allow_calendar BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Per-turn AI metering, powering the owner-only /settings/ai/usage dashboard.
+-- One row per assistant turn (all tool-call rounds summed). `organization_id`
+-- is the owner scope: set when the caller's org runs its own AI config, NULL for
+-- platform-scope usage (platform members + the platform-default provider). Costs
+-- are estimated from the model + token counts at record time (see
+-- `ai::agent::cost_cents`), so historical rows keep the price they were metered
+-- at even if the pricing table changes later.
+CREATE TABLE IF NOT EXISTS ai_usage_events (
+    id              BIGSERIAL PRIMARY KEY,
+    user_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    provider        TEXT NOT NULL,
+    model           TEXT NOT NULL,
+    input_tokens    BIGINT NOT NULL DEFAULT 0,
+    output_tokens   BIGINT NOT NULL DEFAULT 0,
+    cost_cents      BIGINT NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ai_usage_events_org_idx
+    ON ai_usage_events(organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_usage_events_user_idx
+    ON ai_usage_events(user_id, created_at DESC);
 
 -- Files attached to a task. Stored under ./uploads encrypted at rest just
 -- like drive_files; the on-disk blob is unreferenced (and garbage-collected
