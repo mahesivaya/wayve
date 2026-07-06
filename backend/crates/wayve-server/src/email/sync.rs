@@ -74,13 +74,24 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
         msg_id
     );
 
-    let res: Value = HTTP_CLIENT
-        .get(&url)
-        .bearer_auth(token)
-        .send()
-        .await?
-        .json()
-        .await?;
+    let resp = HTTP_CLIENT.get(&url).bearer_auth(token).send().await?;
+    // A rate-limited / errored metadata fetch returns a JSON *error* object with
+    // no `payload`/`labelIds`/`internalDate`. Parsing that and inserting it would
+    // persist a bogus "Unknown / (No Subject)" row (empty labels, now-timestamp)
+    // for a perfectly real email. Reject non-2xx (and error bodies) so the id is
+    // left for the next sync to retry instead of storing garbage.
+    if !resp.status().is_success() {
+        let status = resp.status();
+        return Err(anyhow::anyhow!(
+            "gmail metadata fetch for {msg_id} failed: HTTP {status}"
+        ));
+    }
+    let res: Value = resp.json().await?;
+    if res.get("error").is_some() || !res["payload"].is_object() {
+        return Err(anyhow::anyhow!(
+            "gmail metadata fetch for {msg_id} returned no message body"
+        ));
+    }
 
     let (sender, receiver, subject) = extract_headers(&res);
     let gmail_timestamp = extract_gmail_timestamp(&res);
