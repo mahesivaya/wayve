@@ -50,6 +50,25 @@ export const deleteAiConfig = async () => {
   await apiFetch("/api/ai/config", { method: "DELETE" });
 };
 
+// ── AI data access (platform team only) ────────────────────────────────────
+// Which categories of the user's own Wayve data the platform assistant's native
+// tools may read. Only the categories with native tools today are enforceable
+// (email, calendar); the endpoint is platform-owner-only. Reading before a
+// provider is configured returns the open defaults; saving requires a provider.
+export type AiDataAccess = {
+  email: boolean;
+  calendar: boolean;
+};
+
+export const getAiDataAccess = async () =>
+  apiFetchJson<AiDataAccess>("/api/ai/data-access");
+
+export const putAiDataAccess = async (payload: AiDataAccess) =>
+  apiFetchJson<AiDataAccess>("/api/ai/data-access", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
 // ── Usage & cost governance (sample data for now) ──────────────────────────
 export type AiUsage = {
   sample: boolean;

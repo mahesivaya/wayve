@@ -360,3 +360,139 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Data access panel (platform team only) ──────────────────────────────
+   A list of the data categories the assistant may read, each with a switch.
+   Categories without native tools yet render as a dimmed "coming soon" row. */
+.ai-data-access {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.ai-data-access h2 {
+  margin: 0 0 6px;
+  font-size: var(--text-xl, 1.15rem);
+  color: var(--color-text-primary);
+}
+
+.ai-data-access > p {
+  margin: 0 0 14px;
+  color: var(--color-text-muted);
+  max-width: 60ch;
+}
+
+.ai-da-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-da-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--color-surface);
+}
+
+.ai-da-row.is-soon {
+  opacity: 0.6;
+}
+
+.ai-da-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ai-da-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-da-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.ai-da-soon {
+  font-size: var(--text-xs, 0.7rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  background: var(--color-surface-tint, rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--color-border);
+  padding: 1px 7px;
+  border-radius: var(--radius-pill, 999px);
+}
+
+.ai-da-desc {
+  font-size: var(--text-sm, 0.85rem);
+  color: var(--color-text-muted);
+}
+
+/* Toggle switch. Reuses the app color tokens; on = primary action color. */
+.ai-da-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+}
+
+.ai-da-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.ai-da-switch input:disabled {
+  cursor: not-allowed;
+}
+
+.ai-da-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--color-input-border-strong, #cbd5e1);
+  transition: background 0.15s;
+}
+
+.ai-da-slider::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.ai-da-switch input:checked + .ai-da-slider {
+  background: var(--color-primary-action, #2563eb);
+}
+
+.ai-da-switch input:checked + .ai-da-slider::before {
+  transform: translateX(18px);
+}
+
+.ai-da-switch input:focus-visible + .ai-da-slider {
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 0.3);
+}

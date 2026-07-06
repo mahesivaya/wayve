@@ -10,7 +10,8 @@
 //! streaming to match the frontend, which awaits a single `{reply}` (extended with
 //! an optional `tools_used` list).
 
-use crate::ai::provider::{AiProvider, ResolvedAi};
+use crate::ai::native_tools;
+use crate::ai::provider::{AiProvider, DataAccess, ResolvedAi};
 use crate::integrations::mcp::client::{McpClient, validate_server_url};
 use crate::integrations::mcp::handler::{load_connections, resolve_mcp_owner_opt};
 use crate::prelude::*;
@@ -53,18 +54,77 @@ pub struct ToolUsed {
     pub connection_label: String,
 }
 
+/// An action the assistant PROPOSED but did not perform. Outward-facing or
+/// irreversible actions (e.g. sending an email) never execute inside the agent
+/// loop — the browser performs them through the existing authenticated endpoint
+/// after the user clicks Confirm. Serialized into the chat response's
+/// `pending_actions` array so the UI can render a confirmation card.
+#[derive(Serialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PendingAction {
+    Email {
+        to: String,
+        subject: String,
+        body: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        account_id: Option<i32>,
+    },
+}
+
 pub struct ChatResult {
     pub reply: String,
     pub tools_used: Vec<ToolUsed>,
+    pub pending_actions: Vec<PendingAction>,
+    /// Prompt/completion tokens summed across every provider call in this turn
+    /// (tool-call rounds included). 0 when the provider didn't report usage.
+    pub input_tokens: i64,
+    pub output_tokens: i64,
 }
 
-/// One discovered MCP tool, provider-neutral. Each provider formats this into its
-/// own declaration shape (Gemini `functionDeclarations`, Anthropic `tools`,
-/// OpenAI `tools`).
-struct NeutralTool {
-    ns_name: String,
-    description: Option<String>,
-    input_schema: Option<Value>,
+/// Pull a nested integer (`root[a][b]`) from a provider response, defaulting to
+/// 0. Used to read token counts, which live at a different path per provider.
+fn nested_i64(root: &Value, a: &str, b: &str) -> i64 {
+    root.get(a)
+        .and_then(|x| x.get(b))
+        .and_then(|x| x.as_i64())
+        .unwrap_or(0)
+}
+
+/// Estimated cost in cents for one turn, from the model and its token counts.
+/// Prices are cents per 1M tokens (input, output); an unknown model bills 0 so a
+/// missing entry never fabricates spend. Matched loosely by model-name substring
+/// so dated/aliased ids resolve to the right family.
+pub fn cost_cents(model: &str, input_tokens: i64, output_tokens: i64) -> i64 {
+    let m = model.to_ascii_lowercase();
+    let (in_per_m, out_per_m): (i64, i64) = if m.contains("opus") {
+        (500, 2500)
+    } else if m.contains("haiku") {
+        (100, 500)
+    } else if m.contains("sonnet") {
+        (300, 1500)
+    } else if m.contains("gpt-4o-mini") || m.contains("mini") {
+        (15, 60)
+    } else if m.contains("gpt-4o") || m.contains("gpt-4") {
+        (250, 1000)
+    } else if m.contains("gemini") && m.contains("pro") {
+        (125, 500)
+    } else if m.contains("gemini") {
+        (8, 30)
+    } else {
+        (0, 0)
+    };
+    (input_tokens * in_per_m + output_tokens * out_per_m) / 1_000_000
+}
+
+/// One tool declared to the model, provider-neutral — either a Wayve-native
+/// action (see `native_tools`) or a discovered MCP tool. Each provider formats
+/// this into its own declaration shape (Gemini `functionDeclarations`, Anthropic
+/// `tools`, OpenAI `tools`).
+#[derive(Clone)]
+pub(crate) struct NeutralTool {
+    pub(crate) ns_name: String,
+    pub(crate) description: Option<String>,
+    pub(crate) input_schema: Option<Value>,
 }
 
 /// Live MCP state for one chat: the aligned clients/labels, the neutral tool
@@ -77,6 +137,58 @@ struct LoadedMcp {
     dispatch: HashMap<String, (usize, String)>,
 }
 
+/// Everything a tool call needs at dispatch time: the DB pool + caller (for
+/// native tools), the always-present native tool set, and the caller's MCP tools
+/// (when they are an MCP owner). Built once per chat in `run`.
+struct ToolCtx<'a> {
+    pool: Option<&'a PgPool>,
+    user_id: i32,
+    native: Vec<NeutralTool>,
+    loaded: Option<LoadedMcp>,
+    /// Which data categories native tools may touch (from the resolved config).
+    access: DataAccess,
+}
+
+impl<'a> ToolCtx<'a> {
+    /// Native action tools are available to EVERY caller; MCP tools only when
+    /// `load_mcp_tools` found some. Native tools are filtered to the data
+    /// categories `access` allows.
+    fn for_chat(
+        pool: &'a PgPool,
+        user_id: i32,
+        loaded: Option<LoadedMcp>,
+        access: DataAccess,
+    ) -> Self {
+        Self {
+            pool: Some(pool),
+            user_id,
+            native: native_tools::declarations(access),
+            loaded,
+            access,
+        }
+    }
+
+    /// A tool-less context for provider probing (config validation).
+    fn none() -> Self {
+        Self {
+            pool: None,
+            user_id: 0,
+            native: Vec::new(),
+            loaded: None,
+            access: DataAccess::default(),
+        }
+    }
+
+    /// Native tools first, then MCP — the full set declared to the model.
+    fn declared_tools(&self) -> Vec<NeutralTool> {
+        let mut all = self.native.clone();
+        if let Some(loaded) = &self.loaded {
+            all.extend(loaded.tools.iter().cloned());
+        }
+        all
+    }
+}
+
 /// Run a chat turn against the resolved provider. `msgs` is the normalized
 /// conversation. If the provider fails and the org allowed it (`!fail_closed` and
 /// the provider isn't already the platform default), retry on the platform Gemini.
@@ -87,8 +199,11 @@ pub async fn run(
     ai: &ResolvedAi,
 ) -> Result<ChatResult, AppError> {
     let loaded = load_mcp_tools(pool, user_id).await;
+    // Native action/read tools are declared to the model for EVERY caller,
+    // alongside any MCP tools the caller owns.
+    let ctx = ToolCtx::for_chat(pool, user_id, loaded, ai.data_access);
 
-    match run_one(&msgs, &loaded, ai).await {
+    match run_one(&msgs, &ctx, ai).await {
         Ok(result) => Ok(result),
         Err(e) if !ai.fail_closed && ai.provider != AiProvider::Gemini => {
             // The owner explicitly allowed falling back to the platform default.
@@ -101,8 +216,10 @@ pub async fn run(
                         model: crate::config::gemini_model(),
                         base_url: None,
                         fail_closed: false,
+                        // Preserve the owner's data-access choice on fallback.
+                        data_access: ai.data_access,
                     };
-                    run_one(&msgs, &loaded, &fallback).await
+                    run_one(&msgs, &ctx, &fallback).await
                 }
                 None => Err(e),
             }
@@ -113,13 +230,13 @@ pub async fn run(
 
 async fn run_one(
     msgs: &[ChatMsg],
-    loaded: &Option<LoadedMcp>,
+    ctx: &ToolCtx<'_>,
     ai: &ResolvedAi,
 ) -> Result<ChatResult, AppError> {
     match ai.provider {
-        AiProvider::Gemini => run_gemini(msgs, loaded, ai).await,
-        AiProvider::Anthropic => run_anthropic(msgs, loaded, ai).await,
-        AiProvider::OpenAiCompatible => run_openai(msgs, loaded, ai).await,
+        AiProvider::Gemini => run_gemini(msgs, ctx, ai).await,
+        AiProvider::Anthropic => run_anthropic(msgs, ctx, ai).await,
+        AiProvider::OpenAiCompatible => run_openai(msgs, ctx, ai).await,
     }
 }
 
@@ -130,20 +247,30 @@ pub async fn probe(ai: &ResolvedAi) -> Result<(), AppError> {
         role: "user".to_string(),
         content: "ping".to_string(),
     }];
-    run_one(&msgs, &None, ai).await.map(|_| ())
+    run_one(&msgs, &ToolCtx::none(), ai).await.map(|_| ())
 }
 
-/// Dispatch one tool call to its owning MCP client. Returns the `ToolUsed`
-/// breadcrumb (for the UI) and the response value (Gemini-shaped object).
+/// Dispatch one tool call. Native Wayve tools are tried first (their reserved
+/// name prefix can't collide with the MCP `c{idx}_` namespacing); otherwise the
+/// call routes to its owning MCP client. Returns the `ToolUsed` breadcrumb (for
+/// the UI), the response value (Gemini-shaped object), and any `PendingAction`
+/// the tool proposed (e.g. a `compose_email` draft awaiting user confirmation).
 async fn dispatch_tool(
-    loaded: Option<&LoadedMcp>,
+    ctx: &ToolCtx<'_>,
     ns_name: &str,
     args: Value,
-) -> (Option<ToolUsed>, Value) {
-    let Some(loaded) = loaded else {
+) -> (Option<ToolUsed>, Value, Option<PendingAction>) {
+    if let Some(pool) = ctx.pool
+        && let Some(outcome) =
+            native_tools::dispatch(pool, ctx.user_id, ns_name, &args, ctx.access).await
+    {
+        return outcome;
+    }
+    let Some(loaded) = &ctx.loaded else {
         return (
             None,
             serde_json::json!({ "isError": true, "error": "unknown tool" }),
+            None,
         );
     };
     match loaded.dispatch.get(ns_name) {
@@ -156,11 +283,12 @@ async fn dispatch_tool(
                 Ok(result) => tool_result_to_response(&result),
                 Err(e) => serde_json::json!({ "isError": true, "error": e.to_string() }),
             };
-            (Some(used), resp)
+            (Some(used), resp, None)
         }
         None => (
             None,
             serde_json::json!({ "isError": true, "error": "unknown tool" }),
+            None,
         ),
     }
 }
@@ -179,7 +307,7 @@ async fn guard_base(ai: &ResolvedAi) -> Result<(), AppError> {
 
 async fn run_gemini(
     msgs: &[ChatMsg],
-    loaded: &Option<LoadedMcp>,
+    ctx: &ToolCtx<'_>,
     ai: &ResolvedAi,
 ) -> Result<ChatResult, AppError> {
     let mut contents: Vec<Value> = msgs
@@ -189,19 +317,25 @@ async fn run_gemini(
             serde_json::json!({ "role": role, "parts": [{ "text": m.content }] })
         })
         .collect();
-    let decls = loaded
-        .as_ref()
-        .map(|l| gemini_decls(&l.tools))
-        .unwrap_or_default();
+    let decls = gemini_decls(&ctx.declared_tools());
     let mut tools_used: Vec<ToolUsed> = Vec::new();
+    let mut pending_actions: Vec<PendingAction> = Vec::new();
+    let mut in_tokens = 0i64;
+    let mut out_tokens = 0i64;
 
     for _round in 0..MAX_ROUNDS {
-        let content = gemini_generate(&contents, &decls, ai).await?;
+        let payload = gemini_generate(&contents, &decls, ai).await?;
+        in_tokens += nested_i64(&payload, "usageMetadata", "promptTokenCount");
+        out_tokens += nested_i64(&payload, "usageMetadata", "candidatesTokenCount");
+        let content = payload["candidates"][0]["content"].clone();
         let parts = content_parts(&content);
         if !parts.iter().any(|p| p.get("functionCall").is_some()) {
             return Ok(ChatResult {
                 reply: stitch_text(&parts),
                 tools_used,
+                pending_actions,
+                input_tokens: in_tokens,
+                output_tokens: out_tokens,
             });
         }
         contents.push(content.clone());
@@ -213,9 +347,12 @@ async fn run_gemini(
                 .get("args")
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!({}));
-            let (used, resp) = dispatch_tool(loaded.as_ref(), ns_name, args).await;
+            let (used, resp, pending) = dispatch_tool(ctx, ns_name, args).await;
             if let Some(u) = used {
                 tools_used.push(u);
+            }
+            if let Some(p) = pending {
+                pending_actions.push(p);
             }
             resp_parts.push(serde_json::json!({
                 "functionResponse": { "name": ns_name, "response": resp }
@@ -224,10 +361,16 @@ async fn run_gemini(
         contents.push(serde_json::json!({ "role": "user", "parts": resp_parts }));
     }
 
-    let content = gemini_generate(&contents, &[], ai).await?;
+    let payload = gemini_generate(&contents, &[], ai).await?;
+    in_tokens += nested_i64(&payload, "usageMetadata", "promptTokenCount");
+    out_tokens += nested_i64(&payload, "usageMetadata", "candidatesTokenCount");
+    let content = payload["candidates"][0]["content"].clone();
     Ok(ChatResult {
         reply: stitch_text(&content_parts(&content)),
         tools_used,
+        pending_actions,
+        input_tokens: in_tokens,
+        output_tokens: out_tokens,
     })
 }
 
@@ -292,14 +435,16 @@ async fn gemini_generate(
         warn!(target: "ai", %status, msg, "gemini non-2xx");
         return Err(AppError::Internal(format!("AI upstream error: {msg}")));
     }
-    Ok(payload["candidates"][0]["content"].clone())
+    // Return the full response so the caller can read both the model turn
+    // (`candidates[0].content`) and token usage (`usageMetadata`).
+    Ok(payload)
 }
 
 // ──────────────────────────── Anthropic ────────────────────────────
 
 async fn run_anthropic(
     msgs: &[ChatMsg],
-    loaded: &Option<LoadedMcp>,
+    ctx: &ToolCtx<'_>,
     ai: &ResolvedAi,
 ) -> Result<ChatResult, AppError> {
     let mut messages: Vec<Value> = msgs
@@ -313,14 +458,16 @@ async fn run_anthropic(
             serde_json::json!({ "role": role, "content": m.content })
         })
         .collect();
-    let tools = loaded
-        .as_ref()
-        .map(|l| anthropic_tools(&l.tools))
-        .unwrap_or_default();
+    let tools = anthropic_tools(&ctx.declared_tools());
     let mut tools_used: Vec<ToolUsed> = Vec::new();
+    let mut pending_actions: Vec<PendingAction> = Vec::new();
+    let mut in_tokens = 0i64;
+    let mut out_tokens = 0i64;
 
     for _round in 0..MAX_ROUNDS {
         let payload = anthropic_generate(&messages, &tools, ai).await?;
+        in_tokens += nested_i64(&payload, "usage", "input_tokens");
+        out_tokens += nested_i64(&payload, "usage", "output_tokens");
         let blocks = payload
             .get("content")
             .and_then(|c| c.as_array())
@@ -333,6 +480,9 @@ async fn run_anthropic(
             return Ok(ChatResult {
                 reply: anthropic_text(&blocks),
                 tools_used,
+                pending_actions,
+                input_tokens: in_tokens,
+                output_tokens: out_tokens,
             });
         }
         // Echo the assistant turn (carries the tool_use blocks), then answer each.
@@ -348,9 +498,12 @@ async fn run_anthropic(
                 .get("input")
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!({}));
-            let (used, resp) = dispatch_tool(loaded.as_ref(), name, input).await;
+            let (used, resp, pending) = dispatch_tool(ctx, name, input).await;
             if let Some(u) = used {
                 tools_used.push(u);
+            }
+            if let Some(p) = pending {
+                pending_actions.push(p);
             }
             results.push(serde_json::json!({
                 "type": "tool_result",
@@ -362,6 +515,8 @@ async fn run_anthropic(
     }
 
     let payload = anthropic_generate(&messages, &[], ai).await?;
+    in_tokens += nested_i64(&payload, "usage", "input_tokens");
+    out_tokens += nested_i64(&payload, "usage", "output_tokens");
     let blocks = payload
         .get("content")
         .and_then(|c| c.as_array())
@@ -370,6 +525,9 @@ async fn run_anthropic(
     Ok(ChatResult {
         reply: anthropic_text(&blocks),
         tools_used,
+        pending_actions,
+        input_tokens: in_tokens,
+        output_tokens: out_tokens,
     })
 }
 
@@ -452,7 +610,7 @@ async fn anthropic_generate(
 
 async fn run_openai(
     msgs: &[ChatMsg],
-    loaded: &Option<LoadedMcp>,
+    ctx: &ToolCtx<'_>,
     ai: &ResolvedAi,
 ) -> Result<ChatResult, AppError> {
     let mut messages: Vec<Value> = msgs
@@ -466,14 +624,17 @@ async fn run_openai(
             serde_json::json!({ "role": role, "content": m.content })
         })
         .collect();
-    let tools = loaded
-        .as_ref()
-        .map(|l| openai_tools(&l.tools))
-        .unwrap_or_default();
+    let tools = openai_tools(&ctx.declared_tools());
     let mut tools_used: Vec<ToolUsed> = Vec::new();
+    let mut pending_actions: Vec<PendingAction> = Vec::new();
+    let mut in_tokens = 0i64;
+    let mut out_tokens = 0i64;
 
     for _round in 0..MAX_ROUNDS {
-        let message = openai_generate(&messages, &tools, ai).await?;
+        let payload = openai_generate(&messages, &tools, ai).await?;
+        in_tokens += nested_i64(&payload, "usage", "prompt_tokens");
+        out_tokens += nested_i64(&payload, "usage", "completion_tokens");
+        let message = payload["choices"][0]["message"].clone();
         let tool_calls = message
             .get("tool_calls")
             .and_then(|t| t.as_array())
@@ -487,6 +648,9 @@ async fn run_openai(
                     .unwrap_or("")
                     .to_string(),
                 tools_used,
+                pending_actions,
+                input_tokens: in_tokens,
+                output_tokens: out_tokens,
             });
         }
         // Echo the assistant turn (carries tool_calls), then answer each.
@@ -503,9 +667,12 @@ async fn run_openai(
                 .and_then(|a| a.as_str())
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or_else(|| serde_json::json!({}));
-            let (used, resp) = dispatch_tool(loaded.as_ref(), name, args).await;
+            let (used, resp, pending) = dispatch_tool(ctx, name, args).await;
             if let Some(u) = used {
                 tools_used.push(u);
+            }
+            if let Some(p) = pending {
+                pending_actions.push(p);
             }
             messages.push(serde_json::json!({
                 "role": "tool",
@@ -515,7 +682,10 @@ async fn run_openai(
         }
     }
 
-    let message = openai_generate(&messages, &[], ai).await?;
+    let payload = openai_generate(&messages, &[], ai).await?;
+    in_tokens += nested_i64(&payload, "usage", "prompt_tokens");
+    out_tokens += nested_i64(&payload, "usage", "completion_tokens");
+    let message = payload["choices"][0]["message"].clone();
     Ok(ChatResult {
         reply: message
             .get("content")
@@ -523,6 +693,9 @@ async fn run_openai(
             .unwrap_or("")
             .to_string(),
         tools_used,
+        pending_actions,
+        input_tokens: in_tokens,
+        output_tokens: out_tokens,
     })
 }
 
@@ -581,7 +754,9 @@ async fn openai_generate(
         warn!(target: "ai", %status, msg, "openai non-2xx");
         return Err(AppError::Internal(format!("AI upstream error: {msg}")));
     }
-    Ok(payload["choices"][0]["message"].clone())
+    // Return the full response so the caller can read both the assistant message
+    // (`choices[0].message`) and token usage (`usage`).
+    Ok(payload)
 }
 
 // ───────────────────────── MCP discovery ──────────────────────────

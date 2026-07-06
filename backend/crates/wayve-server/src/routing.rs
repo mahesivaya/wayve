@@ -12,7 +12,7 @@ use actix_web::web;
 
 use crate::{
     ai, billing, call, chat, demo, docs, documents, drive, email, embed, feature_access,
-    github_proxy, home, integrations, notes, openapi, organization, platform_billing,
+    github_oauth, github_proxy, home, integrations, notes, openapi, organization, platform_billing,
     platform_team, routes, scheduler, scim, tasks, webhooks, workspace,
 };
 
@@ -37,6 +37,7 @@ pub fn wire(cfg: &mut web::ServiceConfig) {
                 .configure(platform_team::routes)
                 .configure(integrations::routes)
                 .configure(github_proxy::routes)
+                .configure(github_oauth::routes)
                 .configure(openapi::routes)
                 .configure(webhooks::routes)
                 .configure(docs::routes)
@@ -49,6 +50,8 @@ pub fn wire(cfg: &mut web::ServiceConfig) {
         )
         // AUTH / GOOGLE
         .configure(email::public_routes)
+        // GITHUB OAuth callback (root, public) — /github/oauth/callback
+        .configure(github_oauth::public_routes)
         // STRIPE WEBHOOK (unauthenticated, signature-verified)
         .configure(billing::public_routes)
         // JIRA WEBHOOK (unauthenticated, URL-token-verified) at /webhooks/*

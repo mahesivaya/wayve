@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod config_handler;
 pub mod handler;
+pub mod native_tools;
 pub mod provider;
 pub mod usage_handler;
 

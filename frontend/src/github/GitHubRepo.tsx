@@ -15,9 +15,50 @@ import {
   approvePullRequest,
   mergePullRequest,
   createCommitComment,
+  listImportableRepos,
+  getGithubConnection,
+  getGithubConnectUrl,
+  disconnectGithub,
   type MergeMethod,
 } from "../api/github";
 import "./githubRepo.css";
+
+// Bulk-import every repository the connected GitHub token can see — one project
+// per repo — skipping any already linked to an existing project (deduped by
+// `owner/repo`). Best-effort: a repo that fails to link is skipped rather than
+// aborting the whole import. `onProgress` reports how many have been created so
+// the button can show a running count. Returns the newly created projects.
+async function importAllRepos(
+  existing: Project[],
+  onProgress?: (done: number) => void
+): Promise<Project[]> {
+  const { connected, repos } = await listImportableRepos();
+  if (!connected) {
+    // Personal account with no GitHub connected — nothing to import.
+    throw new Error("Connect your GitHub account to import your repositories.");
+  }
+  const alreadyLinked = new Set(
+    existing
+      .filter((p) => p.github_owner && p.github_repo)
+      .map((p) => `${p.github_owner}/${p.github_repo}`.toLowerCase())
+  );
+  const toAdd = repos.filter(
+    (r) => !alreadyLinked.has(r.full_name.toLowerCase())
+  );
+  const created: Project[] = [];
+  for (const repo of toAdd) {
+    try {
+      created.push(
+        await createProject(repo.name, `https://github.com/${repo.full_name}`)
+      );
+    } catch {
+      // Skip a repo that fails to link (transient error / permission); the
+      // rest of the import still proceeds.
+    }
+    onProgress?.(created.length);
+  }
+  return created;
+}
 
 // The platform team's legacy single-repo dashboard (the bare /github route
 // with no project). Personal accounts get their own repos via /github/:id.
@@ -3724,6 +3765,75 @@ function PersonalRepoManager() {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importCount, setImportCount] = useState(0);
+  // GitHub connection: null = loading, then { connected, login? }.
+  const [ghConn, setGhConn] = useState<{
+    connected: boolean;
+    login?: string;
+  } | null>(null);
+
+  const refreshConnection = useCallback(() => {
+    void getGithubConnection()
+      .then(setGhConn)
+      .catch(() => setGhConn({ connected: false }));
+  }, []);
+
+  // Load connection on mount, and re-check after returning from the OAuth
+  // redirect (the callback bounces back to /github#connected=true).
+  useEffect(() => {
+    refreshConnection();
+    if (window.location.hash.includes("connected=true")) {
+      history.replaceState(null, "", window.location.pathname);
+      refreshConnection();
+    }
+  }, [refreshConnection]);
+
+  const connectGithub = () => {
+    setErr("");
+    void getGithubConnectUrl()
+      .then((u) => {
+        window.location.href = u;
+      })
+      .catch((e) =>
+        setErr(
+          e instanceof Error ? e.message : "Couldn't start the GitHub connect flow."
+        )
+      );
+  };
+
+  const disconnect = () => {
+    void disconnectGithub()
+      .then(() => setGhConn({ connected: false }))
+      .catch(() => {});
+  };
+
+  // Pull every repo the user's connected GitHub can access and add them all in
+  // one click, instead of pasting URLs one at a time.
+  const importAll = () => {
+    if (busy || importing) return;
+    setImporting(true);
+    setImportCount(0);
+    setErr("");
+    void importAllRepos(projects ?? [], setImportCount)
+      .then((created) => {
+        if (created.length === 0) {
+          setErr("No new repositories to import.");
+          return;
+        }
+        setProjects((prev) => [...created, ...(prev ?? [])]);
+        setSelectedId(created[0].id);
+        setAdding(false);
+      })
+      .catch((e) =>
+        setErr(
+          e instanceof Error
+            ? e.message
+            : "Couldn't reach GitHub — check the connection."
+        )
+      )
+      .finally(() => setImporting(false));
+  };
 
   // No synchronous setState in the effect (react-hooks/set-state-in-effect):
   // listProjects resolves asynchronously and only then sets state.
@@ -3811,6 +3921,45 @@ function PersonalRepoManager() {
           {err && <p className="github-add-repo-error">{err}</p>}
         </div>
       )}
+
+      {/* GitHub account controls — reachable here too (not just the empty
+          state) so a user with repos can still import more / disconnect. */}
+      <div className="github-repo-switch-conn">
+        {ghConn?.connected ? (
+          <>
+            <button
+              type="button"
+              className="github-link-btn"
+              onClick={importAll}
+              disabled={busy || importing}
+            >
+              {importing
+                ? `Importing… (${importCount})`
+                : "Import all my repositories"}
+            </button>
+            <span className="github-repo-switch-conn-who">
+              @{ghConn.login}
+              {" · "}
+              <button
+                type="button"
+                className="github-link-btn"
+                onClick={disconnect}
+              >
+                Disconnect
+              </button>
+            </span>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="github-link-btn"
+            onClick={connectGithub}
+            disabled={ghConn === null}
+          >
+            Connect GitHub
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -3835,18 +3984,55 @@ function PersonalRepoManager() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") submitAdd();
               }}
-              disabled={busy}
+              disabled={busy || importing}
               autoFocus
             />
             <button
               type="button"
               className="github-add-repo-btn"
               onClick={submitAdd}
-              disabled={busy || !url.trim()}
+              disabled={busy || importing || !url.trim()}
             >
               {busy ? "Adding…" : "Add repository"}
             </button>
           </div>
+          <div className="github-add-repo-alt">
+            <span className="github-add-repo-or">or</span>
+            {ghConn?.connected ? (
+              <button
+                type="button"
+                className="github-add-repo-import-btn"
+                onClick={importAll}
+                disabled={busy || importing}
+              >
+                {importing
+                  ? `Importing your repositories… (${importCount})`
+                  : "Import all my repositories"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="github-add-repo-import-btn"
+                onClick={connectGithub}
+                disabled={busy || ghConn === null}
+              >
+                Connect GitHub to import your repos
+              </button>
+            )}
+          </div>
+          {ghConn?.connected && (
+            <p className="github-add-repo-conn">
+              Connected as @{ghConn.login}
+              {" · "}
+              <button
+                type="button"
+                className="github-link-btn"
+                onClick={disconnect}
+              >
+                Disconnect
+              </button>
+            </p>
+          )}
           {err && <p className="github-add-repo-error">{err}</p>}
         </div>
       </div>
@@ -3875,6 +4061,35 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importCount, setImportCount] = useState(0);
+
+  // Import every repo the connected GitHub token can access as its own org
+  // project in one click (owner-only, same gate as the paste-URL form).
+  const importAll = () => {
+    if (busy || importing) return;
+    setImporting(true);
+    setImportCount(0);
+    setErr("");
+    void importAllRepos(projects ?? [], setImportCount)
+      .then((created) => {
+        if (created.length === 0) {
+          setErr("No new repositories to import.");
+          return;
+        }
+        setProjects((prev) => [...created, ...(prev ?? [])]);
+        setSelectedId(created[0].id);
+        setAdding(false);
+      })
+      .catch((e) =>
+        setErr(
+          e instanceof Error
+            ? e.message
+            : "Couldn't reach GitHub — check the connection."
+        )
+      )
+      .finally(() => setImporting(false));
+  };
 
   useEffect(() => {
     void listProjects()
@@ -3948,16 +4163,29 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
               onKeyDown={(e) => {
                 if (e.key === "Enter") submitAdd();
               }}
-              disabled={busy}
+              disabled={busy || importing}
               autoFocus
             />
             <button
               type="button"
               className="github-add-repo-btn"
               onClick={submitAdd}
-              disabled={busy || !url.trim()}
+              disabled={busy || importing || !url.trim()}
             >
               {busy ? "Adding…" : "Add repository"}
+            </button>
+          </div>
+          <div className="github-add-repo-alt">
+            <span className="github-add-repo-or">or</span>
+            <button
+              type="button"
+              className="github-add-repo-import-btn"
+              onClick={importAll}
+              disabled={busy || importing}
+            >
+              {importing
+                ? `Importing all repositories… (${importCount})`
+                : "Import all repositories"}
             </button>
           </div>
           {err && <p className="github-add-repo-error">{err}</p>}

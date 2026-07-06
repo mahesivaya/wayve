@@ -22,6 +22,7 @@ mod error;
 mod external;
 mod feature_access;
 mod geoip;
+mod github_oauth;
 mod github_proxy;
 mod home;
 mod integrations;

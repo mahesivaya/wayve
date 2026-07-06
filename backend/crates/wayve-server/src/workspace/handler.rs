@@ -164,10 +164,17 @@ fn parse_repo_url(raw: &str) -> Option<(String, String)> {
     Some((owner.to_string(), repo.to_string()))
 }
 
-/// Parse a pasted repo URL and confirm with GitHub that it exists and is
-/// **public**. Returns the canonical owner/name casing from GitHub. Any failure
-/// is a 400 with a caller-safe message.
-async fn parse_and_validate_repo(raw: &str) -> Result<(String, String), AppError> {
+/// Parse a pasted repo URL and confirm with GitHub that it exists. Returns the
+/// canonical owner/name casing. `bearer` is the token to look the repo up with
+/// (a connected personal user's own token, else the shared PAT); `allow_private`
+/// permits private repos — set only for a personal caller acting with their own
+/// token, so an org/public paste-URL still stays public-only. Any failure is a
+/// 400 with a caller-safe message.
+async fn parse_and_validate_repo(
+    raw: &str,
+    bearer: Option<&str>,
+    allow_private: bool,
+) -> Result<(String, String), AppError> {
     let (owner, repo) = parse_repo_url(raw)
         .ok_or_else(|| AppError::bad_request("Not a valid GitHub repository URL"))?;
 
@@ -181,7 +188,7 @@ async fn parse_and_validate_repo(raw: &str) -> Result<(String, String), AppError
         .header("Accept", "application/vnd.github+json")
         .header("X-GitHub-Api-Version", "2022-11-28")
         .header("User-Agent", "rwayve-app");
-    if let Some(pat) = github_token() {
+    if let Some(pat) = bearer {
         builder = builder.header("Authorization", format!("Bearer {pat}"));
     }
 
@@ -203,11 +210,11 @@ async fn parse_and_validate_repo(raw: &str) -> Result<(String, String), AppError
         .json()
         .await
         .map_err(|_| AppError::bad_request("Unexpected response from GitHub"))?;
-    if body
+    let is_private = body
         .get("private")
         .and_then(|v| v.as_bool())
-        .unwrap_or(true)
-    {
+        .unwrap_or(true);
+    if is_private && !allow_private {
         return Err(AppError::bad_request(
             "Only public repositories can be added",
         ));
@@ -303,10 +310,16 @@ pub async fn create_project(
     let row = match ctx.scope {
         Scope::Personal => {
             // Personal accounts own projects via user_id; an optional repo URL
-            // is validated (public-only) before storing.
+            // is validated before storing. A user who has connected their own
+            // GitHub validates with THEIR token (so their private repos are
+            // accepted); otherwise it's public-only via the shared PAT.
             let (gh_owner, gh_repo) = match input.repo_url.as_deref().map(str::trim) {
                 Some(raw) if !raw.is_empty() => {
-                    let (o, r) = parse_and_validate_repo(raw).await?;
+                    let user_token =
+                        crate::github_oauth::stored_token_for(pool.get_ref(), user_id).await;
+                    let shared = github_token();
+                    let bearer = user_token.as_deref().or(shared.as_deref());
+                    let (o, r) = parse_and_validate_repo(raw, bearer, user_token.is_some()).await?;
                     (Some(o), Some(r))
                 }
                 _ => (None, None),
@@ -338,7 +351,9 @@ pub async fn create_project(
             // mirroring the personal branch above.
             let (gh_owner, gh_repo) = match input.repo_url.as_deref().map(str::trim) {
                 Some(raw) if !raw.is_empty() => {
-                    let (o, r) = parse_and_validate_repo(raw).await?;
+                    // Org projects stay public-only via the shared token.
+                    let shared = github_token();
+                    let (o, r) = parse_and_validate_repo(raw, shared.as_deref(), false).await?;
                     (Some(o), Some(r))
                 }
                 _ => (None, None),
@@ -468,7 +483,14 @@ pub async fn link_project_repo(
     // only after authorization so a non-owner can't probe GitHub through us.
     let row = match ctx.scope {
         Scope::Personal => {
-            let (owner, repo) = parse_and_validate_repo(input.repo_url.trim()).await?;
+            // Connected personal users validate with their own token (private
+            // repos allowed); otherwise public-only via the shared PAT.
+            let user_token = crate::github_oauth::stored_token_for(pool.get_ref(), user_id).await;
+            let shared = github_token();
+            let bearer = user_token.as_deref().or(shared.as_deref());
+            let (owner, repo) =
+                parse_and_validate_repo(input.repo_url.trim(), bearer, user_token.is_some())
+                    .await?;
             sqlx::query(
                 "UPDATE projects SET github_owner = $1, github_repo = $2
                  WHERE id = $3 AND user_id = $4 AND organization_id IS NULL
@@ -491,7 +513,9 @@ pub async fn link_project_repo(
                 return Ok(HttpResponse::BadRequest()
                     .json(serde_json::json!({ "message": "No organization in context" })));
             };
-            let (owner, repo) = parse_and_validate_repo(input.repo_url.trim()).await?;
+            let shared = github_token();
+            let (owner, repo) =
+                parse_and_validate_repo(input.repo_url.trim(), shared.as_deref(), false).await?;
             sqlx::query(
                 "UPDATE projects SET github_owner = $1, github_repo = $2
                  WHERE id = $3 AND organization_id = $4

@@ -1,7 +1,11 @@
-//! AI usage & cost governance — owner-only dashboard data. **Sample data only**
-//! for now (`sample: true`); real metering is phase-2. Shaped so a later swap to
-//! real numbers is a drop-in replacement for `sample_usage`. Gated exactly like
-//! the config endpoints (enterprise owner) via `require_ai_owner`.
+//! AI usage & cost governance — owner-only dashboard data. Backed by **real
+//! per-turn metering** from `ai_usage_events` (`sample: false`): totals, a
+//! zero-filled 30-day series, and top-10 breakdowns by model and by member.
+//! Every query is owner-scoped — an org sees only its own rows
+//! (`organization_id = $1`), the platform dashboard sees platform-scope rows
+//! (`organization_id IS NULL`). Budget is a fixed soft cap until a real
+//! budget-config feature ships. Gated (enterprise org owner OR platform owner)
+//! exactly like the config endpoints via `require_ai_owner`.
 
 use crate::ai::config_handler::{AiOwner, require_ai_owner};
 use crate::prelude::*;
@@ -41,52 +45,148 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         .as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("model").ok().flatten());
 
-    Ok(HttpResponse::Ok().json(sample_usage(&provider, model.as_deref())))
-}
+    // Owner scope for every metering query: an org sees only its own rows; the
+    // platform dashboard sees platform-scope rows (organization_id IS NULL). The
+    // predicate `(($1 IS NULL AND organization_id IS NULL) OR organization_id = $1)`
+    // handles both from a single Option<i32> bind.
+    let scope: Option<i32> = match owner {
+        AiOwner::Org(org_id) => Some(org_id),
+        AiOwner::Platform => None,
+    };
 
-/// Deterministic placeholder usage. Replace the body with a real query over a
-/// metering table in phase-2 — the JSON shape is the contract the frontend reads.
-fn sample_usage(provider: &str, model: Option<&str>) -> Value {
-    // A simple 30-day cost series (deterministic, no clock/RNG needed).
-    let daily: Vec<Value> = (1..=30)
-        .map(|d| {
-            let requests = 40 + (d * 7) % 90;
-            let cost_cents = 120 + (d * 13) % 400;
-            serde_json::json!({
-                "day": format!("2026-06-{d:02}"),
-                "requests": requests,
-                "cost_cents": cost_cents,
-            })
+    // Totals over the last 30 days.
+    let totals = sqlx::query(
+        "SELECT
+           COUNT(*)::bigint                       AS requests,
+           COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+           COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+           COALESCE(SUM(cost_cents), 0)::bigint   AS cost_cents,
+           COUNT(DISTINCT user_id)::bigint        AS active_users
+         FROM ai_usage_events
+        WHERE created_at >= NOW() - INTERVAL '30 days'
+          AND (($1::int IS NULL AND organization_id IS NULL) OR organization_id = $1)",
+    )
+    .bind(scope)
+    .fetch_one(pool.get_ref())
+    .await?;
+    let requests: i64 = totals.get("requests");
+    let input_tokens: i64 = totals.get("input_tokens");
+    let output_tokens: i64 = totals.get("output_tokens");
+    let cost_cents: i64 = totals.get("cost_cents");
+    let active_users: i64 = totals.get("active_users");
+
+    // 30-day cost/volume series, zero-filled via generate_series so the trend
+    // chart always spans the full window even on quiet days.
+    let daily: Vec<Value> = sqlx::query(
+        "SELECT to_char(d.day, 'YYYY-MM-DD')       AS day,
+                COUNT(e.id)::bigint                AS requests,
+                COALESCE(SUM(e.cost_cents), 0)::bigint AS cost_cents
+           FROM generate_series(
+                  (CURRENT_DATE - INTERVAL '29 days')::date,
+                  CURRENT_DATE::date,
+                  INTERVAL '1 day') AS d(day)
+           LEFT JOIN ai_usage_events e
+             ON e.created_at >= d.day
+            AND e.created_at <  d.day + INTERVAL '1 day'
+            AND (($1::int IS NULL AND e.organization_id IS NULL) OR e.organization_id = $1)
+          GROUP BY d.day
+          ORDER BY d.day",
+    )
+    .bind(scope)
+    .fetch_all(pool.get_ref())
+    .await?
+    .iter()
+    .map(|r| {
+        serde_json::json!({
+            "day": r.get::<String, _>("day"),
+            "requests": r.get::<i64, _>("requests"),
+            "cost_cents": r.get::<i64, _>("cost_cents"),
         })
-        .collect();
+    })
+    .collect();
 
-    serde_json::json!({
-        "sample": true,
+    // Breakdown by model (top 10).
+    let by_model: Vec<Value> = sqlx::query(
+        "SELECT model,
+                COUNT(*)::bigint                     AS requests,
+                COALESCE(SUM(cost_cents), 0)::bigint AS cost_cents
+           FROM ai_usage_events
+          WHERE created_at >= NOW() - INTERVAL '30 days'
+            AND (($1::int IS NULL AND organization_id IS NULL) OR organization_id = $1)
+          GROUP BY model
+          ORDER BY requests DESC
+          LIMIT 10",
+    )
+    .bind(scope)
+    .fetch_all(pool.get_ref())
+    .await?
+    .iter()
+    .map(|r| {
+        serde_json::json!({
+            "model": r.get::<String, _>("model"),
+            "requests": r.get::<i64, _>("requests"),
+            "cost_cents": r.get::<i64, _>("cost_cents"),
+        })
+    })
+    .collect();
+
+    // Breakdown by member (top 10). Name falls back first→last, then username,
+    // then email so a row always has a human label.
+    let by_member: Vec<Value> = sqlx::query(
+        "SELECT COALESCE(
+                    NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), ''),
+                    u.username,
+                    u.email
+                )                                    AS name,
+                COUNT(*)::bigint                     AS requests,
+                COALESCE(SUM(e.cost_cents), 0)::bigint AS cost_cents
+           FROM ai_usage_events e
+           JOIN users u ON u.id = e.user_id
+          WHERE e.created_at >= NOW() - INTERVAL '30 days'
+            AND (($1::int IS NULL AND e.organization_id IS NULL) OR e.organization_id = $1)
+          GROUP BY u.id
+          ORDER BY requests DESC
+          LIMIT 10",
+    )
+    .bind(scope)
+    .fetch_all(pool.get_ref())
+    .await?
+    .iter()
+    .map(|r| {
+        serde_json::json!({
+            "name": r.get::<Option<String>, _>("name").unwrap_or_else(|| "Unknown".into()),
+            "requests": r.get::<i64, _>("requests"),
+            "cost_cents": r.get::<i64, _>("cost_cents"),
+        })
+    })
+    .collect();
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "sample": false,
         "provider": provider,
         "model": model,
         "period": "Last 30 days",
         "totals": {
-            "requests": 2143,
-            "input_tokens": 4_812_990,
-            "output_tokens": 1_233_104,
-            "cost_cents": 7421,
-            "active_users": 18,
+            "requests": requests,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_cents": cost_cents,
+            "active_users": active_users,
         },
         "budget": {
-            "monthly_limit_cents": 20000,
-            "spent_cents": 7421,
+            // No budget-config feature yet: show real month-to-date spend against
+            // a default soft cap so the progress bar renders. Swap the limit for a
+            // configurable value when budgets ship.
+            "monthly_limit_cents": DEFAULT_MONTHLY_LIMIT_CENTS,
+            "spent_cents": cost_cents,
             "alert_threshold_pct": 80,
         },
         "daily": daily,
-        "by_model": [
-            { "model": model.unwrap_or("claude-opus-4-8"), "requests": 1680, "cost_cents": 6120 },
-            { "model": "claude-haiku-4-5", "requests": 463, "cost_cents": 1301 },
-        ],
-        "by_member": [
-            { "name": "Priya N.",  "requests": 612, "cost_cents": 2410 },
-            { "name": "Marcus L.", "requests": 388, "cost_cents": 1502 },
-            { "name": "Dana W.",   "requests": 274, "cost_cents": 998 },
-            { "name": "Sam O.",    "requests": 201, "cost_cents": 760 },
-        ],
-    })
+        "by_model": by_model,
+        "by_member": by_member,
+    })))
 }
+
+/// Placeholder monthly budget cap (cents) until a real budget-config feature
+/// exists. The dashboard renders spend-vs-cap against this.
+const DEFAULT_MONTHLY_LIMIT_CENTS: i64 = 20_000;

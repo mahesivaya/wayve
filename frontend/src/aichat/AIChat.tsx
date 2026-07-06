@@ -2,10 +2,29 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import "./aichat.css";
 
-import { sendAiChat, getAiProvider, type AiTurn } from "../api/ai";
+import {
+  sendAiChat,
+  getAiProvider,
+  type AiTurn,
+  type PendingEmail,
+} from "../api/ai";
+import { sendEmail, getAccounts } from "../api/email";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
+
+// A connected mailbox, as returned by GET /api/accounts — only the fields the
+// from-account selector needs.
+type MailboxLite = { id: number; email: string; display_name?: string | null };
+
+// An email the assistant drafted, awaiting the user's explicit confirmation
+// before it is sent through the existing /api/emails endpoint.
+type EmailDraft = PendingEmail & {
+  key: number;
+  accountId?: number;
+  status: "pending" | "sending" | "sent" | "error";
+  errorText?: string;
+};
 
 // Friendly labels for the provider ids the backend returns (mirrors the catalog
 // in ai/config_handler.rs). Unknown ids fall back to the raw id.
@@ -25,6 +44,10 @@ export default function AIChat() {
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
+  // Email drafts the assistant proposed, each awaiting explicit confirmation.
+  const [drafts, setDrafts] = useState<EmailDraft[]>([]);
+  const [accounts, setAccounts] = useState<MailboxLite[]>([]);
+  const draftKey = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // An enterprise org owner OR a platform owner (both have ai:manage) can change
@@ -48,16 +71,23 @@ export default function AIChat() {
         setModel(info.model);
       })
       .catch(() => {});
+    // The connected mailboxes power the "From" selector on a draft card. Best-
+    // effort: on failure the card still sends using the draft's account_id.
+    void getAccounts<MailboxLite>()
+      .then((rows) => {
+        if (!cancelled) setAccounts(rows);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Pin the scroll to the bottom whenever new messages arrive.
+  // Pin the scroll to the bottom whenever new messages or drafts arrive.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, busy]);
+  }, [messages, drafts, busy]);
 
   const send = async () => {
     const text = input.trim();
@@ -77,18 +107,78 @@ export default function AIChat() {
       if (data.provider) setProvider(data.provider);
       if (data.model) setModel(data.model);
       const reply = (data.reply ?? "").trim();
+      const proposed = (data.pending_actions ?? []).filter(
+        (a): a is PendingEmail => a.type === "email"
+      );
 
-      if (!reply) {
+      // A turn is only empty if there's neither text nor a proposed action.
+      if (!reply && proposed.length === 0) {
         throw new Error("Empty reply from model");
       }
 
-      setMessages((prev) => [...prev, { role: "model", content: reply }]);
+      if (reply) {
+        setMessages((prev) => [...prev, { role: "model", content: reply }]);
+      }
+
+      if (proposed.length > 0) {
+        setDrafts((prev) => [
+          ...prev,
+          ...proposed.map((p) => ({
+            ...p,
+            key: (draftKey.current += 1),
+            accountId: p.account_id,
+            status: "pending" as const,
+          })),
+        ]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setBusy(false);
     }
   };
+
+  const patchDraft = (key: number, patch: Partial<EmailDraft>) =>
+    setDrafts((prev) =>
+      prev.map((d) => (d.key === key ? { ...d, ...patch } : d))
+    );
+
+  // The ONLY place an email is actually sent: an explicit user click, routed
+  // through the existing authenticated /api/emails endpoint. The assistant never
+  // sends on its own.
+  const confirmDraft = async (draft: EmailDraft) => {
+    if (draft.status === "sending" || draft.status === "sent") return;
+    const accountId = draft.accountId ?? accounts[0]?.id;
+    if (!accountId) {
+      patchDraft(draft.key, {
+        status: "error",
+        errorText: "Connect an email account to send.",
+      });
+      return;
+    }
+    patchDraft(draft.key, { status: "sending", errorText: undefined });
+    try {
+      await sendEmail({
+        account_id: accountId,
+        to: draft.to,
+        subject: draft.subject,
+        body: draft.body,
+      });
+      patchDraft(draft.key, { status: "sent" });
+      setMessages((prev) => [
+        ...prev,
+        { role: "model", content: `✅ Email sent to ${draft.to}.` },
+      ]);
+    } catch (err) {
+      patchDraft(draft.key, {
+        status: "error",
+        errorText: err instanceof Error ? err.message : "Send failed",
+      });
+    }
+  };
+
+  const cancelDraft = (key: number) =>
+    setDrafts((prev) => prev.filter((d) => d.key !== key));
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -99,6 +189,7 @@ export default function AIChat() {
 
   const clear = () => {
     setMessages([]);
+    setDrafts([]);
     setError(null);
   };
 
@@ -112,8 +203,72 @@ export default function AIChat() {
     : messages;
 
   // Before the conversation starts, center the intro + composer in the middle
-  // of the page; once a message is sent the composer drops to the bottom.
-  const isEmpty = messages.length === 0;
+  // of the page; once a message is sent (or a draft appears) the composer drops
+  // to the bottom.
+  const isEmpty = messages.length === 0 && drafts.length === 0;
+
+  const draftCards = drafts.map((d) => (
+    <div key={d.key} className="ai-draft">
+      <div className="ai-draft-head">
+        <span className="ai-draft-icon">✉️</span>
+        Draft email — review and confirm to send
+      </div>
+      <label className="ai-draft-row">
+        <span>From</span>
+        <select
+          className="ai-draft-select"
+          value={d.accountId ?? accounts[0]?.id ?? ""}
+          disabled={d.status === "sending" || d.status === "sent"}
+          onChange={(e) =>
+            patchDraft(d.key, {
+              accountId: Number(e.target.value) || undefined,
+            })
+          }
+        >
+          {accounts.length === 0 && (
+            <option value="">No account connected</option>
+          )}
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.display_name ? `${a.display_name} <${a.email}>` : a.email}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="ai-draft-row">
+        <span>To</span>
+        <div className="ai-draft-val">{d.to}</div>
+      </div>
+      <div className="ai-draft-row">
+        <span>Subject</span>
+        <div className="ai-draft-val">{d.subject}</div>
+      </div>
+      <div className="ai-draft-body">{d.body}</div>
+      {d.status === "error" && (
+        <div className="ai-chat-error">{d.errorText}</div>
+      )}
+      {d.status === "sent" ? (
+        <div className="ai-draft-sent">✅ Sent to {d.to}</div>
+      ) : (
+        <div className="ai-draft-actions">
+          <button
+            className="ai-draft-confirm"
+            onClick={() => void confirmDraft(d)}
+            disabled={d.status === "sending"}
+          >
+            {d.status === "sending" ? "Sending…" : "Confirm & send"}
+          </button>
+          <button
+            className="ai-draft-cancel"
+            onClick={() => cancelDraft(d.key)}
+            disabled={d.status === "sending"}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  ));
 
   const inputRow = (
     <div className="ai-chat-input-row">
@@ -187,6 +342,8 @@ export default function AIChat() {
                 <div className="ai-msg-bubble">{m.content}</div>
               </div>
             ))}
+
+            {!normalizedSearchQuery && draftCards}
 
             {busy && (
               <div className="ai-msg ai-msg-model">

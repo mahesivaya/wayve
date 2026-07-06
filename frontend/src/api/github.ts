@@ -27,6 +27,40 @@ export const listGithubRepos = () =>
     { preserve401: true }
   );
 
+// Repos the "Import all" button may pull in. Returns `{ connected, repos }`:
+// - personal caller: their OWN repos (public+private) when connected, else
+//   `{ connected: false, repos: [] }` so the UI prompts to connect;
+// - org caller: shared-token PUBLIC repos; platform: all shared-token repos
+//   (both `connected: true`).
+export type ImportableReposResult = {
+  connected: boolean;
+  repos: GithubRepo[];
+};
+export const listImportableRepos = () =>
+  apiFetchJson<ImportableReposResult>("/api/github-importable-repos", {
+    preserve401: true,
+  });
+
+// Per-user GitHub OAuth (personal accounts). Mirrors the Gmail connect flow.
+export const getGithubConnectUrl = async () => {
+  const data = await apiFetchJson<{ url: string }>(
+    "/api/github-oauth/connect",
+    { method: "POST" }
+  );
+  return data.url;
+};
+
+export type GithubConnection = { connected: boolean; login?: string };
+export const getGithubConnection = () =>
+  apiFetchJson<GithubConnection>("/api/github-oauth/connection", {
+    preserve401: true,
+  });
+
+export const disconnectGithub = () =>
+  apiFetchJson<{ disconnected: boolean }>("/api/github-oauth/connect", {
+    method: "DELETE",
+  });
+
 // The repos the CURRENT user may see on the Projects page, filtered server-side:
 // platform admins/staff (and org/personal accounts) are unrestricted and get
 // every repo; a non-admin platform member gets only the repos granted to them.
