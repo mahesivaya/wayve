@@ -1,7 +1,11 @@
-//! AI usage & cost governance — owner-only dashboard data. **Sample data only**
-//! for now (`sample: true`); real metering is phase-2. Shaped so a later swap to
-//! real numbers is a drop-in replacement for `sample_usage`. Gated exactly like
-//! the config endpoints (enterprise owner) via `require_ai_owner`.
+//! AI usage & cost governance — owner-only dashboard data. Backed by **real
+//! per-turn metering** from `ai_usage_events` (`sample: false`): totals, a
+//! zero-filled 30-day series, and top-10 breakdowns by model and by member.
+//! Every query is owner-scoped — an org sees only its own rows
+//! (`organization_id = $1`), the platform dashboard sees platform-scope rows
+//! (`organization_id IS NULL`). Budget is a fixed soft cap until a real
+//! budget-config feature ships. Gated (enterprise org owner OR platform owner)
+//! exactly like the config endpoints via `require_ai_owner`.
 
 use crate::ai::config_handler::{AiOwner, require_ai_owner};
 use crate::prelude::*;
