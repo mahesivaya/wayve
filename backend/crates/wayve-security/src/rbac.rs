@@ -178,10 +178,15 @@ pub enum Permission {
     /// can provision members (via MembersManage) but not access their
     /// already-existing escrows; that's a separation-of-duties choice.
     OrgKeysUseMaster,
+    /// Create / author, edit content, rename, delete, and upload files in the
+    /// organization's (or platform's) shared Documents workspace. Granted to
+    /// **owner and super_admin only** — every other member gets read-only
+    /// (list / view / download). Not an admin grant.
+    DocumentsManage,
 }
 
 impl Permission {
-    pub const ALL: [Permission; 26] = [
+    pub const ALL: [Permission; 27] = [
         AppsUse,
         AppsManage,
         ProfileManageSelf,
@@ -208,6 +213,7 @@ impl Permission {
         AiManage,
         OrgKeysBootstrap,
         OrgKeysUseMaster,
+        DocumentsManage,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -238,6 +244,7 @@ impl Permission {
             AiManage => "ai:manage",
             OrgKeysBootstrap => "org_keys:bootstrap",
             OrgKeysUseMaster => "org_keys:use_master",
+            DocumentsManage => "documents:manage",
         }
     }
 }
@@ -286,6 +293,8 @@ static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Ve
                     // super_admin is everything-except-billing, so the master
                     // key permission is in. Bootstrap is owner-only.
                     OrgKeysUseMaster,
+                    // Documents management is owner + super_admin only.
+                    DocumentsManage,
                 ],
             ),
             (

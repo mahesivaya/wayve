@@ -108,6 +108,41 @@ export const deleteDocument = async (fileId: number) => {
     throw new Error((await errMessage(res)) ?? "Failed to delete file");
 };
 
+// Author a new text document in-app (owner/super_admin only on the backend).
+export const createTextDocument = async (
+  name: string,
+  content: string,
+  folderId: number | null = null
+) => {
+  const res = await apiFetch("/api/documents/new", {
+    method: "POST",
+    body: JSON.stringify({ name, content, folder_id: folderId }),
+  });
+  if (!res.ok)
+    throw new Error((await errMessage(res)) ?? "Failed to create document");
+  return res.json() as Promise<DocumentFile>;
+};
+
+// Fetch a document's decrypted text for viewing/editing (any member).
+export const getDocumentContent = async (fileId: number) => {
+  return apiFetchJson<{ name: string; content: string }>(
+    `/api/documents/${fileId}/content`
+  );
+};
+
+// Overwrite a document's content (owner/super_admin only on the backend).
+export const updateDocumentContent = async (
+  fileId: number,
+  content: string
+) => {
+  const res = await apiFetch(`/api/documents/${fileId}/content`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok)
+    throw new Error((await errMessage(res)) ?? "Failed to save document");
+};
+
 export const downloadDocument = async (fileId: number, fileName: string) => {
   const res = await apiFetch(`/api/documents/${fileId}/download`);
   const ct = res.headers.get("content-type") ?? "application/octet-stream";

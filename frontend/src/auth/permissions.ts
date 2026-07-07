@@ -40,6 +40,9 @@ export const PERMISSIONS = [
   // owner / super_admin / admin (NOT security — separation of duties).
   "org_keys:bootstrap",
   "org_keys:use_master",
+  // Create/author, edit, rename, delete, upload files in the shared Documents
+  // workspace. owner + super_admin only; everyone else is read-only.
+  "documents:manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

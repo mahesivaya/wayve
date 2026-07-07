@@ -37,6 +37,7 @@ mod tests {
                 "ai:manage",
                 "org_keys:bootstrap",
                 "org_keys:use_master",
+                "documents:manage",
             ],
             Role::SuperAdmin => &[
                 "apps:use",
@@ -64,6 +65,8 @@ mod tests {
                 // bootstrap — only the original owner can mint the
                 // mnemonic recovery root or promote a new key-holder.
                 "org_keys:use_master",
+                // Documents management is owner + super_admin only (not admin).
+                "documents:manage",
             ],
             Role::Admin => &[
                 "apps:use",
