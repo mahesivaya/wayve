@@ -10,11 +10,13 @@
 use crate::ai::config_handler::{AiOwner, require_ai_owner};
 use crate::prelude::*;
 use sqlx::Row;
-use tracing::instrument;
+use std::collections::HashMap;
+use tracing::{error, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(get_usage);
+    cfg.service(get_anthropic_cost);
 }
 
 #[get("/ai/usage")]
@@ -190,3 +192,116 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
 /// Placeholder monthly budget cap (cents) until a real budget-config feature
 /// exists. The dashboard renders spend-vs-cap against this.
 const DEFAULT_MONTHLY_LIMIT_CENTS: i64 = 20_000;
+
+/// Authoritative spend from Anthropic's Admin Cost API — the real USD billed by
+/// Anthropic, as opposed to the local per-turn *estimate* the dashboard above
+/// computes. **Platform-owner only**: the Cost API reports the whole Anthropic
+/// account (every workspace), so an org owner must never see it — it would leak
+/// cross-tenant spend. Reads a single server-side `ANTHROPIC_ADMIN_KEY`
+/// (`sk-ant-admin…`); returns `{configured:false}` when unset so the panel
+/// degrades gracefully. Anthropic can only attribute by workspace/model/API key
+/// — never by Wayve member — so this complements, not replaces, the local
+/// per-member view.
+#[get("/ai/anthropic-cost")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn get_anthropic_cost(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let owner = require_ai_owner(&req, pool.get_ref(), user_id).await?;
+    if !matches!(owner, AiOwner::Platform) {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Authoritative Anthropic spend is available to the platform owner only."
+        })));
+    }
+
+    let Some(admin_key) = std::env::var("ANTHROPIC_ADMIN_KEY")
+        .ok()
+        .filter(|k| !k.trim().is_empty())
+    else {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "configured": false })));
+    };
+
+    // Last 30 days, daily buckets (the Cost API's only granularity). `limit=31`
+    // returns every bucket in one page (the default is only 7).
+    let now = chrono::Utc::now();
+    let start = now - chrono::Duration::days(30);
+    let starting_at = start.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let ending_at = now.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+    let resp = Client::new()
+        .get("https://api.anthropic.com/v1/organizations/cost_report")
+        .query(&[
+            ("starting_at", starting_at.as_str()),
+            ("ending_at", ending_at.as_str()),
+            ("group_by[]", "description"),
+            ("limit", "31"),
+        ])
+        .header("x-api-key", admin_key.trim())
+        .header("anthropic-version", "2023-06-01")
+        .send()
+        .await;
+
+    let resp = match resp {
+        Ok(r) => r,
+        Err(e) => {
+            error!(target: "ai", error = %e, "anthropic cost report request failed");
+            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Could not reach the Anthropic Cost API."
+            })));
+        }
+    };
+    if !resp.status().is_success() {
+        let status = resp.status().as_u16();
+        let body = resp.text().await.unwrap_or_default();
+        warn!(target: "ai", status, body = %body, "anthropic cost report returned non-2xx");
+        return Ok(HttpResponse::BadGateway().json(serde_json::json!({
+            "message": format!("Anthropic Cost API returned HTTP {status}.")
+        })));
+    }
+
+    let payload: Value = resp.json().await.map_err(|e| {
+        error!(target: "ai", error = %e, "anthropic cost report parse failed");
+        AppError::internal("cost report parse failed")
+    })?;
+
+    // Sum `amount` (cents, as decimal strings) across every bucket/result and
+    // aggregate by model (falling back to cost_type for non-token line items).
+    let mut total_cents = 0.0_f64;
+    let mut by_model: HashMap<String, f64> = HashMap::new();
+    for bucket in payload["data"].as_array().into_iter().flatten() {
+        for item in bucket["results"].as_array().into_iter().flatten() {
+            let amount = item["amount"]
+                .as_str()
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            total_cents += amount;
+            let label = item["model"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .or_else(|| item["cost_type"].as_str())
+                .unwrap_or("other");
+            *by_model.entry(label.to_string()).or_insert(0.0) += amount;
+        }
+    }
+
+    let mut by_model: Vec<Value> = by_model
+        .into_iter()
+        .map(|(model, cents)| serde_json::json!({ "model": model, "cost_cents": cents }))
+        .collect();
+    by_model.sort_by(|a, b| {
+        b["cost_cents"]
+            .as_f64()
+            .partial_cmp(&a["cost_cents"].as_f64())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "configured": true,
+        "period": "Last 30 days",
+        "currency": "USD",
+        "total_cents": total_cents,
+        "by_model": by_model,
+        // has_more should never be true at limit=31 for a 30-day window, but
+        // surface it so the UI can flag a partial figure if it ever is.
+        "truncated": payload["has_more"].as_bool().unwrap_or(false),
+    })))
+}

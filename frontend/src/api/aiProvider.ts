@@ -93,3 +93,18 @@ export type AiUsage = {
 };
 
 export const getAiUsage = async () => apiFetchJson<AiUsage>("/api/ai/usage");
+
+// Authoritative spend billed by Anthropic (Admin Cost API), as opposed to the
+// local per-turn estimate in AiUsage. Platform-owner only; the endpoint 403s
+// for org owners and returns { configured: false } when no admin key is set.
+export type AnthropicCost = {
+  configured: boolean;
+  period?: string;
+  currency?: string;
+  total_cents?: number;
+  by_model?: { model: string; cost_cents: number }[];
+  truncated?: boolean;
+};
+
+export const getAnthropicCost = async () =>
+  apiFetchJson<AnthropicCost>("/api/ai/anthropic-cost");
