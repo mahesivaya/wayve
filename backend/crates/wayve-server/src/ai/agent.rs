@@ -90,11 +90,17 @@ fn nested_i64(root: &Value, a: &str, b: &str) -> i64 {
         .unwrap_or(0)
 }
 
-/// Estimated cost in cents for one turn, from the model and its token counts.
-/// Prices are cents per 1M tokens (input, output); an unknown model bills 0 so a
-/// missing entry never fabricates spend. Matched loosely by model-name substring
-/// so dated/aliased ids resolve to the right family.
-pub fn cost_cents(model: &str, input_tokens: i64, output_tokens: i64) -> i64 {
+/// Estimated cost of one turn in **micro-cents** (millionths of a cent), from
+/// the model and its token counts. Prices are cents per 1M tokens (input,
+/// output); an unknown model bills 0 so a missing entry never fabricates spend.
+/// Matched loosely by model-name substring so dated/aliased ids resolve to the
+/// right family.
+///
+/// Micro-cents (not cents) is the stored unit on purpose: a single sub-cent turn
+/// truncated to whole cents reads as `$0.00`, and many such turns each truncate
+/// to zero, systematically understating spend. Storing the un-divided figure
+/// lets the dashboard `SUM(...)` losslessly and divide by 1_000_000 exactly once.
+pub fn cost_micro_cents(model: &str, input_tokens: i64, output_tokens: i64) -> i64 {
     let m = model.to_ascii_lowercase();
     let (in_per_m, out_per_m): (i64, i64) = if m.contains("opus") {
         (500, 2500)
@@ -113,7 +119,7 @@ pub fn cost_cents(model: &str, input_tokens: i64, output_tokens: i64) -> i64 {
     } else {
         (0, 0)
     };
-    (input_tokens * in_per_m + output_tokens * out_per_m) / 1_000_000
+    input_tokens * in_per_m + output_tokens * out_per_m
 }
 
 /// One tool declared to the model, provider-neutral — either a Wayve-native
