@@ -239,11 +239,25 @@ export default function AIChat() {
         <span>To</span>
         <div className="ai-draft-val">{d.to}</div>
       </div>
-      <div className="ai-draft-row">
+      <label className="ai-draft-row">
         <span>Subject</span>
-        <div className="ai-draft-val">{d.subject}</div>
-      </div>
-      <div className="ai-draft-body">{d.body}</div>
+        <input
+          className="ai-draft-input"
+          type="text"
+          value={d.subject}
+          placeholder="Subject"
+          disabled={d.status === "sending" || d.status === "sent"}
+          onChange={(e) => patchDraft(d.key, { subject: e.target.value })}
+        />
+      </label>
+      <textarea
+        className="ai-draft-body-input"
+        value={d.body}
+        placeholder="Write the email…"
+        rows={5}
+        disabled={d.status === "sending" || d.status === "sent"}
+        onChange={(e) => patchDraft(d.key, { body: e.target.value })}
+      />
       {d.status === "error" && (
         <div className="ai-chat-error">{d.errorText}</div>
       )}
