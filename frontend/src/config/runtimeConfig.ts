@@ -8,6 +8,8 @@ export type RuntimeConfig = {
   wsBase: string;
   stripePublishableKey: string | null;
   environment: string;
+  // Platform-wide UI font key (set by the platform owner); null = app default.
+  fontKey: string | null;
 };
 
 const EMPTY: RuntimeConfig = {
@@ -15,6 +17,7 @@ const EMPTY: RuntimeConfig = {
   wsBase: "",
   stripePublishableKey: null,
   environment: "unknown",
+  fontKey: null,
 };
 
 let cached: RuntimeConfig | null = null;
@@ -42,6 +45,10 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
             : null,
         environment:
           typeof data.environment === "string" ? data.environment : "unknown",
+        fontKey:
+          data.ui && typeof data.ui.font_key === "string"
+            ? data.ui.font_key
+            : null,
       };
       return cached;
     }

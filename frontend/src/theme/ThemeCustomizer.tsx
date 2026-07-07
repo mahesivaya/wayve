@@ -34,6 +34,15 @@ import {
 import "./themeCustomizer.css";
 import { PRESETS, type ThemePreset } from "./themePresets";
 import { useCustomTheme } from "./useCustomTheme";
+import { useAuth } from "../auth/useAuth";
+import { getPlatformUiConfig, putPlatformUiConfig } from "../api/platformUi";
+import {
+  FONT_OPTIONS,
+  DEFAULT_FONT_KEY,
+  normalizeFontKey,
+  applyPlatformFont,
+  type FontKey,
+} from "./platformFonts";
 
 type LibTab = "themes" | "ui";
 
@@ -196,6 +205,48 @@ export default function ThemeCustomizer() {
   } = useCustomTheme();
 
   const [libTab, setLibTab] = useState<LibTab>("themes");
+
+  // Platform-wide app font (UI tab) — only the platform owner may change it, and
+  // it applies to EVERY user (unlike the per-user color overrides here). Stored
+  // via /api/platform/ui-config; the key→stack mapping lives in platformFonts.
+  const { user } = useAuth();
+  const isPlatformOwner =
+    user?.scope === "platform" && user?.effective_role === "owner";
+  const [fontKey, setFontKey] = useState<FontKey>(DEFAULT_FONT_KEY);
+  const [fontSaving, setFontSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isPlatformOwner) return;
+    let cancelled = false;
+    void getPlatformUiConfig()
+      .then((cfg) => {
+        if (!cancelled) setFontKey(normalizeFontKey(cfg.font_key));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isPlatformOwner]);
+
+  const chooseFont = async (next: FontKey) => {
+    const previous = fontKey;
+    setFontKey(next);
+    applyPlatformFont(next); // optimistic, instant preview across the app
+    setFontSaving(true);
+    try {
+      const saved = await putPlatformUiConfig(
+        next === DEFAULT_FONT_KEY ? null : next
+      );
+      const resolved = normalizeFontKey(saved.font_key);
+      setFontKey(resolved);
+      applyPlatformFont(resolved);
+    } catch {
+      setFontKey(previous);
+      applyPlatformFont(previous); // revert on failure
+    } finally {
+      setFontSaving(false);
+    }
+  };
 
   // Seed the advanced editor from the active choice when it's custom/saved.
   const initial = useMemo(() => {
@@ -581,7 +632,7 @@ export default function ThemeCustomizer() {
             className={`theme-customizer-tab ${libTab === "ui" ? "active" : ""}`}
             onClick={() => setLibTab("ui")}
           >
-            UI
+            Font
           </button>
         </div>
 
@@ -696,6 +747,27 @@ export default function ThemeCustomizer() {
 
         {libTab === "ui" && (
           <div className="theme-ui-knobs">
+            {isPlatformOwner && (
+              <div className="theme-ui-font">
+                <label htmlFor="ui-app-font">App font</label>
+                <select
+                  id="ui-app-font"
+                  className="theme-ui-font-select"
+                  value={fontKey}
+                  disabled={fontSaving}
+                  onChange={(e) => void chooseFont(e.target.value as FontKey)}
+                >
+                  {FONT_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="theme-ui-font-note">
+                  Platform-wide — applies to every user.
+                </p>
+              </div>
+            )}
             {lowContrast && (
               <div className="theme-ui-warning" role="alert">
                 ⚠ Low contrast between Text and Surface (

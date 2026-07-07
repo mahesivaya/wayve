@@ -13,7 +13,7 @@ use actix_web::web;
 use crate::{
     ai, billing, call, chat, demo, docs, documents, drive, email, embed, feature_access,
     github_oauth, github_proxy, home, integrations, notes, openapi, organization, platform_billing,
-    platform_team, routes, scheduler, scim, tasks, webhooks, workspace,
+    platform_team, platform_ui, routes, scheduler, scim, tasks, webhooks, workspace,
 };
 
 pub fn wire(cfg: &mut web::ServiceConfig) {
@@ -35,6 +35,7 @@ pub fn wire(cfg: &mut web::ServiceConfig) {
                 .configure(billing::routes)
                 .configure(platform_billing::routes)
                 .configure(platform_team::routes)
+                .configure(platform_ui::routes)
                 .configure(integrations::routes)
                 .configure(github_proxy::routes)
                 .configure(github_oauth::routes)

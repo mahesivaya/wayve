@@ -35,6 +35,7 @@ mod organization;
 mod pagination;
 mod platform_billing;
 mod platform_team;
+mod platform_ui;
 mod prelude;
 mod rbac_cache;
 mod routes;
