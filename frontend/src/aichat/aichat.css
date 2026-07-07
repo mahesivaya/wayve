@@ -293,6 +293,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text-primary);
@@ -300,19 +302,64 @@
 
 .ai-draft-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   font-size: var(--text-sm);
 }
 
 .ai-draft-row > span:first-child {
-  flex: 0 0 60px;
+  flex: 0 0 64px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--color-text-muted);
 }
 
 .ai-draft-val {
   color: var(--color-text-primary);
   word-break: break-word;
+}
+
+/* Editable subject + body — clean compose fields on neutral tokens (inherit the
+   UI font, not monospace) so they read right across themes. */
+.ai-draft-input,
+.ai-draft-body-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.ai-draft-input {
+  flex: 1 1 auto;
+}
+
+.ai-draft-body-input {
+  min-height: 120px;
+  max-height: 320px;
+  resize: vertical;
+}
+
+.ai-draft-input:focus,
+.ai-draft-body-input:focus {
+  outline: none;
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--color-primary, #2563eb) 25%, transparent);
+}
+
+.ai-draft-input:disabled,
+.ai-draft-body-input:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .ai-draft-select {
