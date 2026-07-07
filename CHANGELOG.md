@@ -3,6 +3,29 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.0.0](https://github.com/mahesivaya/wayve/releases/tag/v7.0.0) - 2026-07-07
+
+### 🚀 Features
+
+- **documents:** Restrict file management to owners & super admins
+- **members:** Per-organization member project access
+- **theme:** Platform owner can set the app-wide font
+- **aichat:** Editable subject & body on the AI email-draft card
+- **ai:** Usage metering + data-access controls; per-user GitHub OAuth
+- **ai:** Claude assistant panel on platform Home with email actions
+
+### 🐛 Bug Fixes
+
+- **infra:** Route /github/ to backend + add ai-data-access migration
+- **email:** Reject failed Gmail metadata fetches instead of storing them as Unknown
+- **email:** Route malformed/epoch-dated IMAP messages to Spam, not Inbox
+
+### 🧹 Maintenance
+
+- Add tasks_to_complete summary of outstanding work
+- **ai:** Correct usage_handler doc to match real metering
+- **changelog:** Update for v6.0.0 [skip ci]
+
 ## [6.0.0](https://github.com/mahesivaya/wayve/releases/tag/v6.0.0) - 2026-07-05
 
 ### 🚀 Features
