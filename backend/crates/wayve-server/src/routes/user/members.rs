@@ -633,6 +633,139 @@ pub async fn set_platform_member_projects(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "repos": repos })))
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Per-user project (GitHub repo) access — organization scope
+// ──────────────────────────────────────────────────────────────────────
+
+/// Whether `user_id` belongs to `organization_id` — guards the org project
+/// endpoints so an admin can't grant/read across organizations.
+async fn member_belongs_to_org(
+    pool: &PgPool,
+    user_id: i32,
+    organization_id: i32,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND organization_id = $2)")
+        .bind(user_id)
+        .bind(organization_id)
+        .fetch_one(pool)
+        .await
+}
+
+/// The repos an organization member has been granted (by `full_name`). Gated
+/// `require_org_access(org_id, MembersRead)`; the target must belong to the org.
+#[get("/organizations/{id}/members/{user_id}/projects")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn organization_member_projects(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(i32, i32)>,
+) -> AppResult {
+    let (organization_id, user_id) = path.into_inner();
+    if let Err(response) = rbac::require_org_access(
+        &req,
+        pool.get_ref(),
+        organization_id,
+        Permission::MembersRead,
+    )
+    .await
+    {
+        return Ok(response);
+    }
+    if !member_belongs_to_org(pool.get_ref(), user_id, organization_id).await? {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Member not found in this organization" })));
+    }
+    let repos: Vec<String> = sqlx::query_scalar(
+        "SELECT repo_full_name FROM member_project_access \
+         WHERE user_id = $1 ORDER BY repo_full_name",
+    )
+    .bind(user_id)
+    .fetch_all(pool.get_ref())
+    .await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "repos": repos })))
+}
+
+/// Replace an org member's granted repo set. Gated `require_org_access(org_id,
+/// MembersManage)`; the target must belong to the org. Audited.
+#[put("/organizations/{id}/members/{user_id}/projects")]
+#[instrument(target = "http", skip(req, pool, data))]
+pub async fn set_organization_member_projects(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(i32, i32)>,
+    data: web::Json<SetMemberProjectsInput>,
+) -> AppResult {
+    let (organization_id, user_id) = path.into_inner();
+    let ctx = match rbac::require_org_access(
+        &req,
+        pool.get_ref(),
+        organization_id,
+        Permission::MembersManage,
+    )
+    .await
+    {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+    if !member_belongs_to_org(pool.get_ref(), user_id, organization_id).await? {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Member not found in this organization" })));
+    }
+
+    // Normalize: trim, drop blanks, dedupe (preserve order).
+    let mut seen = std::collections::HashSet::new();
+    let repos: Vec<String> = data
+        .repos
+        .iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .filter(|s| seen.insert(s.clone()))
+        .collect();
+
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM member_project_access WHERE user_id = $1")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    for repo in &repos {
+        sqlx::query(
+            "INSERT INTO member_project_access (user_id, repo_full_name, granted_by) \
+             VALUES ($1, $2, $3) ON CONFLICT (user_id, repo_full_name) DO NOTHING",
+        )
+        .bind(user_id)
+        .bind(repo)
+        .bind(ctx.user_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+
+    audit::record_action(
+        pool.get_ref(),
+        &req,
+        AuditEvent {
+            actor_user_id: ctx.user_id,
+            action: "projects_access_change",
+            resource_type: "organization_member",
+            resource_id: Some(user_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "scope": "organization",
+                "organization_id": organization_id,
+                "target_user_id": user_id,
+                "repo_count": repos.len(),
+            })),
+        },
+    )
+    .await;
+
+    info!(
+        target: "http",
+        actor = ctx.user_id, organization_id, target_user_id = user_id, repo_count = repos.len(),
+        "org member project access updated"
+    );
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "repos": repos })))
+}
+
 /// Detail for one member of the platform team. Gated to `Scope::Platform`; the
 /// target must be a `platform_members` row (the platform staff roster), so this
 /// never exposes arbitrary personal users — only the caller's own team.
