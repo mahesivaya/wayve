@@ -14,6 +14,7 @@
 mod ai_config_test;
 mod billing_audit_test;
 mod chat_logging_test;
+mod documents_rbac_test;
 mod email_provider_isp_test;
 mod gitlab_test;
 mod jira_test;

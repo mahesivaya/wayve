@@ -86,6 +86,32 @@ export async function setPlatformMemberProjects(
   return Array.isArray(data?.repos) ? (data.repos as string[]) : [];
 }
 
+// Org variant — the same per-member project access, scoped to one organization.
+export async function getOrganizationMemberProjects(
+  organizationId: number,
+  userId: number
+): Promise<string[]> {
+  const res = await apiFetch(
+    `/api/organizations/${organizationId}/members/${userId}/projects`,
+    { preserve401: true }
+  );
+  const data = await res.json();
+  return Array.isArray(data?.repos) ? (data.repos as string[]) : [];
+}
+
+export async function setOrganizationMemberProjects(
+  organizationId: number,
+  userId: number,
+  repos: string[]
+): Promise<string[]> {
+  const res = await apiFetch(
+    `/api/organizations/${organizationId}/members/${userId}/projects`,
+    { method: "PUT", preserve401: true, body: JSON.stringify({ repos }) }
+  );
+  const data = await res.json();
+  return Array.isArray(data?.repos) ? (data.repos as string[]) : [];
+}
+
 // Full profile + per-service storage for one team member, backing the scoped
 // member detail page. The org variant is authorized to the caller's own org;
 // the platform variant to platform staff only. Both return the same shape.

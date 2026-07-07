@@ -4,7 +4,10 @@ use actix_web::web;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.route("/documents", web::post().to(handler::upload_documents))
+        .service(handler::create_document)
         .service(handler::list_documents)
+        .service(handler::get_document_content)
+        .service(handler::update_document_content)
         .service(handler::download_document)
         .service(handler::rename_document)
         .service(handler::delete_document)

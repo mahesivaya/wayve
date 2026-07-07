@@ -176,6 +176,32 @@ fn is_pr_path(tail: &str) -> bool {
 /// carrying the exact 401/403/500 to return verbatim. Shared by the read proxy
 /// and the PR-approve write endpoint so both enforce the identical scope,
 /// repo-allowlist, and owner-only-PR gates (no drift between read and write).
+/// Roles that see EVERY project in their scope and are never restricted by
+/// per-member grants — owner / super_admin / admin. Every other role
+/// (developer, security, billing, support, member, guest) only reaches the
+/// repos explicitly granted to them in `member_project_access`. Must stay
+/// identical to the arm in `visible_projects` so the list and the 403 gate agree.
+fn is_project_admin(role: Role) -> bool {
+    matches!(role, Role::Owner | Role::SuperAdmin | Role::Admin)
+}
+
+/// Whether `user_id` has been granted `owner/repo` in `member_project_access`.
+/// Case-insensitive (GitHub owner/repo are), matching the link allowlists.
+async fn member_has_repo_grant(pool: &PgPool, user_id: i32, owner: &str, repo: &str) -> bool {
+    let full_name = format!("{owner}/{repo}");
+    matches!(
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM member_project_access \
+             WHERE user_id = $1 AND LOWER(repo_full_name) = LOWER($2))",
+        )
+        .bind(user_id)
+        .bind(&full_name)
+        .fetch_one(pool)
+        .await,
+        Ok(true)
+    )
+}
+
 async fn authorize_github_access(
     req: &HttpRequest,
     pool: &PgPool,
@@ -224,6 +250,19 @@ async fn authorize_github_access(
                           "github proxy: platform feature access lookup failed");
                     return Err(HttpResponse::InternalServerError().finish());
                 }
+            }
+            // Per-member project access: a restricted platform role only reaches
+            // a repo explicitly granted to them. Only applies to repo tails —
+            // `/user/repos` and other list surfaces are unaffected.
+            if !is_project_admin(ctx.role)
+                && let Some((owner, repo)) = parse_repos_tail(tail)
+                && !member_has_repo_grant(pool, user_id, &owner, &repo).await
+            {
+                warn!(target: "auth", user_id, role = ctx.role.as_str(), owner = %owner, repo = %repo,
+                      "github proxy denied: repo not granted to platform member");
+                return Err(HttpResponse::Forbidden().json(serde_json::json!({
+                    "message": "You don't have access to this project"
+                })));
             }
         }
         Scope::Personal => {
@@ -300,6 +339,18 @@ async fn authorize_github_access(
                       "github proxy denied: repo not linked to caller's org");
                 return Err(HttpResponse::Forbidden().json(serde_json::json!({
                     "message": "You don't have access to this repository"
+                })));
+            }
+            // Per-member project access: restricted org roles (developer, member,
+            // …) only reach the repos explicitly granted to them; owner /
+            // super_admin / admin see every org project.
+            if !is_project_admin(ctx.role)
+                && !member_has_repo_grant(pool, user_id, &owner, &repo).await
+            {
+                warn!(target: "auth", user_id, role = ctx.role.as_str(), owner = %owner, repo = %repo,
+                      "github proxy denied: repo not granted to org member");
+                return Err(HttpResponse::Forbidden().json(serde_json::json!({
+                    "message": "You don't have access to this project"
                 })));
             }
         }
@@ -766,9 +817,11 @@ pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> Http
 
     let unrestricted = match resolve_role_context_moded(&req, pool.get_ref(), user_id).await {
         Ok(ctx) => match ctx.scope {
-            Scope::Platform => matches!(ctx.role, Role::Owner | Role::SuperAdmin | Role::Admin),
-            // Org and personal accounts aren't managed by this feature yet.
-            _ => true,
+            // Owner/super_admin/admin see every project; other roles are
+            // restricted to their `member_project_access` grants. Personal
+            // accounts are never managed by this feature.
+            Scope::Platform | Scope::Organization => is_project_admin(ctx.role),
+            Scope::Personal => true,
         },
         // Fail open to "see all" rather than hiding everything on a lookup error.
         Err(_) => true,

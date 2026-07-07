@@ -11,7 +11,7 @@ use crate::billing::resolve_owner;
 use crate::prelude::*;
 use actix_multipart::Multipart;
 use actix_web::http::header;
-use actix_web::{Error, HttpResponse, delete, get, patch, post, web};
+use actix_web::{Error, HttpResponse, delete, get, patch, post, put, web};
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use sqlx::{FromRow, PgPool, Row};
@@ -20,7 +20,7 @@ use tracing::{error, instrument};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{self, Scope};
+use wayve_security::rbac::{self, Permission, Scope};
 
 const NAME_MAX: usize = 255;
 
@@ -44,6 +44,19 @@ pub struct CreateFolderInput {
 #[derive(Deserialize)]
 pub struct RenameInput {
     pub name: String,
+}
+
+#[derive(Deserialize)]
+pub struct CreateDocumentInput {
+    pub name: String,
+    #[serde(default)]
+    pub content: String,
+    pub folder_id: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateContentInput {
+    pub content: String,
 }
 
 #[derive(Serialize, FromRow)]
@@ -83,6 +96,27 @@ async fn org_context(req: &HttpRequest, pool: &PgPool) -> Result<(i32, Option<i3
     match (ctx.scope, ctx.organization_id) {
         (Scope::Organization, Some(org_id)) => Ok((user_id, Some(org_id))),
         (Scope::Platform, _) => Ok((user_id, None)),
+        _ => Err(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Documents is a shared workspace for organization and platform members."
+        }))),
+    }
+}
+
+/// The caller's `(user_id, scope)` for a **mutating** Documents action.
+/// Identical scoping to `org_context`, but additionally requires the
+/// `documents:manage` permission — held by owner and super_admin only. Every
+/// other member is read-only, so they get a 403 here while `org_context`
+/// (list / view / download) still lets them through. A personal-account owner
+/// holds the permission by role but has no shared workspace, so the scope match
+/// below rejects them with the same 403 as `org_context`.
+async fn require_docs_manage(
+    req: &HttpRequest,
+    pool: &PgPool,
+) -> Result<(i32, Option<i32>), HttpResponse> {
+    let ctx = rbac::require_permission(req, pool, Permission::DocumentsManage).await?;
+    match (ctx.scope, ctx.organization_id) {
+        (Scope::Organization, Some(org_id)) => Ok((ctx.user_id, Some(org_id))),
+        (Scope::Platform, _) => Ok((ctx.user_id, None)),
         _ => Err(HttpResponse::Forbidden().json(serde_json::json!({
             "message": "Documents is a shared workspace for organization and platform members."
         }))),
@@ -133,7 +167,7 @@ pub async fn create_folder(
     pool: web::Data<PgPool>,
     body: web::Json<CreateFolderInput>,
 ) -> AppResult {
-    let (user_id, org_id) = match org_context(&req, pool.get_ref()).await {
+    let (user_id, org_id) = match require_docs_manage(&req, pool.get_ref()).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -173,7 +207,7 @@ pub async fn rename_folder(
     path: web::Path<i64>,
     body: web::Json<RenameInput>,
 ) -> AppResult {
-    let (_uid, org_id) = match org_context(&req, pool.get_ref()).await {
+    let (_uid, org_id) = match require_docs_manage(&req, pool.get_ref()).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -208,7 +242,7 @@ pub async fn delete_folder(
     pool: web::Data<PgPool>,
     path: web::Path<i64>,
 ) -> AppResult {
-    let (_uid, org_id) = match org_context(&req, pool.get_ref()).await {
+    let (_uid, org_id) = match require_docs_manage(&req, pool.get_ref()).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -285,7 +319,7 @@ pub async fn upload_documents(
     mut payload: Multipart,
     pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, Error> {
-    let (user_id, org_id) = match org_context(&req, pool.get_ref()).await {
+    let (user_id, org_id) = match require_docs_manage(&req, pool.get_ref()).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -473,7 +507,7 @@ pub async fn rename_document(
     path: web::Path<i64>,
     body: web::Json<RenameInput>,
 ) -> AppResult {
-    let (_uid, org_id) = match org_context(&req, pool.get_ref()).await {
+    let (_uid, org_id) = match require_docs_manage(&req, pool.get_ref()).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -508,7 +542,7 @@ pub async fn delete_document(
     pool: web::Data<PgPool>,
     path: web::Path<i64>,
 ) -> AppResult {
-    let (_uid, org_id) = match org_context(&req, pool.get_ref()).await {
+    let (_uid, org_id) = match require_docs_manage(&req, pool.get_ref()).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -530,6 +564,202 @@ pub async fn delete_document(
             Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "File not found" })))
         }
     }
+}
+
+// POST /api/documents/new — author a new text document in-app
+// (owner/super_admin only). Body: { name, content, folder_id? }. The content is
+// stored as an encrypted blob just like an upload, so download/view paths work
+// unchanged.
+#[post("/documents/new")]
+#[instrument(target = "http", skip(req, pool, body))]
+pub async fn create_document(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<CreateDocumentInput>,
+) -> AppResult {
+    let (user_id, org_id) = match require_docs_manage(&req, pool.get_ref()).await {
+        Ok(v) => v,
+        Err(resp) => return Ok(resp),
+    };
+    let Some(name) = trimmed_name(&body.name) else {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "File name is required" })));
+    };
+
+    if let Some(folder_id) = body.folder_id
+        && !folder_in_org(pool.get_ref(), folder_id, org_id).await?
+    {
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Folder not found" }))
+        );
+    }
+
+    let plaintext = body.content.as_bytes();
+    let size = plaintext.len() as i64;
+
+    // Enforce the org storage limit (the platform-wide set is uncapped).
+    if org_id.is_some() {
+        let owner = match resolve_owner(pool.get_ref(), user_id).await {
+            Ok(owner) => owner,
+            Err(resp) => return Ok(resp),
+        };
+        let entitlement = effective_entitlements(pool.get_ref(), owner).await;
+        if entitlement.storage_limit_bytes >= 0 {
+            let used: i64 = sqlx::query_scalar(
+                "SELECT COALESCE(SUM(size), 0)::BIGINT FROM org_documents WHERE organization_id IS NOT DISTINCT FROM $1",
+            )
+            .bind(org_id)
+            .fetch_one(pool.get_ref())
+            .await?;
+            if used.saturating_add(size) > entitlement.storage_limit_bytes {
+                return Ok(HttpResponse::PaymentRequired().json(serde_json::json!({
+                    "message": "Storage limit exceeded. Remove files or upgrade your plan.",
+                    "storage_limit_bytes": entitlement.storage_limit_bytes,
+                    "storage_used_bytes": used,
+                })));
+            }
+        }
+    }
+
+    let upload_dir = "./uploads";
+    fs::create_dir_all(upload_dir)
+        .await
+        .map_err(|_| AppError::internal("Dir error"))?;
+    let disk_id = Uuid::new_v4().to_string();
+    let safe_name = name.replace(['/', '\\'], "");
+    let filepath = format!("{upload_dir}/{disk_id}_{safe_name}");
+
+    let (file_iv, encrypted_bytes) =
+        encrypt_binary(plaintext).map_err(|_| AppError::internal("Encrypt error"))?;
+    let mut f = fs::File::create(&filepath)
+        .await
+        .map_err(|_| AppError::internal("File create error"))?;
+    f.write_all(&encrypted_bytes)
+        .await
+        .map_err(|_| AppError::internal("Write error"))?;
+
+    let file_type = match name.rsplit_once('.') {
+        Some((_, ext)) if !ext.is_empty() => ext.to_string(),
+        _ => "txt".to_string(),
+    };
+
+    let row = sqlx::query_as::<_, DocumentFile>(
+        "INSERT INTO org_documents
+         (organization_id, folder_id, name, file_type, file_path, file_iv, size, uploaded_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, name, file_type, size, created_at",
+    )
+    .bind(org_id)
+    .bind(body.folder_id)
+    .bind(&name)
+    .bind(&file_type)
+    .bind(&filepath)
+    .bind(&file_iv)
+    .bind(size)
+    .bind(user_id)
+    .fetch_one(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Created().json(row))
+}
+
+// GET /api/documents/{id}/content — decrypted text for in-app viewing/editing.
+// Read access: any org/platform member (read-only members included).
+#[get("/documents/{id}/content")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn get_document_content(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i64>,
+) -> AppResult {
+    let (_uid, org_id) = match org_context(&req, pool.get_ref()).await {
+        Ok(v) => v,
+        Err(resp) => return Ok(resp),
+    };
+
+    let row = sqlx::query(
+        "SELECT name, file_path, file_iv FROM org_documents WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2",
+    )
+    .bind(path.into_inner())
+    .bind(org_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let Some(row) = row else {
+        return Ok(HttpResponse::NotFound().finish());
+    };
+    let name: String = row.get("name");
+    let file_path: String = row.get("file_path");
+    let file_iv: Option<String> = row.get("file_iv");
+
+    let bytes = match fs::read(&file_path).await {
+        Ok(b) => b,
+        Err(_) => return Ok(HttpResponse::NotFound().finish()),
+    };
+    let plaintext = match file_iv.as_deref().filter(|v| !v.is_empty()) {
+        Some(iv) => decrypt_binary(iv, &bytes).map_err(|e| {
+            error!(target: "http", error = %e, "document decrypt failed");
+            AppError::internal("document decrypt failed")
+        })?,
+        None => bytes,
+    };
+    let content = String::from_utf8_lossy(&plaintext).to_string();
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "name": name, "content": content })))
+}
+
+// PUT /api/documents/{id}/content — overwrite a document's content
+// (owner/super_admin only). Re-encrypts the blob in place and updates the size.
+#[put("/documents/{id}/content")]
+#[instrument(target = "http", skip(req, pool, path, body))]
+pub async fn update_document_content(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i64>,
+    body: web::Json<UpdateContentInput>,
+) -> AppResult {
+    let (_uid, org_id) = match require_docs_manage(&req, pool.get_ref()).await {
+        Ok(v) => v,
+        Err(resp) => return Ok(resp),
+    };
+    let id = path.into_inner();
+
+    let file_path: Option<String> = sqlx::query_scalar(
+        "SELECT file_path FROM org_documents WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2",
+    )
+    .bind(id)
+    .bind(org_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let Some(file_path) = file_path else {
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "File not found" }))
+        );
+    };
+
+    let plaintext = body.content.as_bytes();
+    let size = plaintext.len() as i64;
+    let (file_iv, encrypted_bytes) =
+        encrypt_binary(plaintext).map_err(|_| AppError::internal("Encrypt error"))?;
+    let mut f = fs::File::create(&file_path)
+        .await
+        .map_err(|_| AppError::internal("File create error"))?;
+    f.write_all(&encrypted_bytes)
+        .await
+        .map_err(|_| AppError::internal("Write error"))?;
+
+    sqlx::query(
+        "UPDATE org_documents SET file_iv = $1, size = $2, updated_at = NOW()
+         WHERE id = $3 AND organization_id IS NOT DISTINCT FROM $4",
+    )
+    .bind(&file_iv)
+    .bind(size)
+    .bind(id)
+    .bind(org_id)
+    .execute(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "updated": true })))
 }
 
 /// Whether `folder_id` exists within the caller's scope (`Some(org)` or the

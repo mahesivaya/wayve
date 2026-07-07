@@ -5,6 +5,8 @@ import {
   getPlatformMemberDetail,
   getPlatformMemberProjects,
   setPlatformMemberProjects,
+  getOrganizationMemberProjects,
+  setOrganizationMemberProjects,
   type MemberDetail as Detail,
 } from "../api/rbac";
 import { listGithubRepos, type GithubRepo } from "../api/github";
@@ -74,10 +76,15 @@ function CloudIcon() {
 // Non-admin platform members only see the repos granted here on their Projects
 // page; admins are unrestricted. Read-only for viewers without members:manage.
 function ProjectsAccessCard({
+  scope,
+  orgId,
   userId,
   name,
   canManage,
 }: {
+  scope: "organization" | "platform";
+  /** Required for org scope — the org whose member is being granted. */
+  orgId: number | null;
   userId: number;
   name: string;
   canManage: boolean;
@@ -89,15 +96,25 @@ function ProjectsAccessCard({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
+  const loadGranted = () =>
+    scope === "platform"
+      ? getPlatformMemberProjects(userId)
+      : getOrganizationMemberProjects(orgId as number, userId);
+  const saveGranted = (repos: string[]) =>
+    scope === "platform"
+      ? setPlatformMemberProjects(userId, repos)
+      : setOrganizationMemberProjects(orgId as number, userId, repos);
+
   useEffect(() => {
     let alive = true;
-    getPlatformMemberProjects(userId)
+    loadGranted()
       .then((repos) => alive && setGranted(repos))
       .catch(() => alive && setGranted([]));
     return () => {
       alive = false;
     };
-  }, [userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, scope, orgId]);
 
   const beginEdit = async () => {
     setErr("");
@@ -126,7 +143,7 @@ function ProjectsAccessCard({
     setSaving(true);
     setErr("");
     try {
-      const repos = await setPlatformMemberProjects(userId, Array.from(draft));
+      const repos = await saveGranted(Array.from(draft));
       setGranted(repos);
       setEditing(false);
     } catch (e) {
@@ -151,8 +168,8 @@ function ProjectsAccessCard({
         )}
       </div>
       <p className="md-card-sub">
-        Repositories {name} can see on their Projects page. Platform admins
-        always see every project regardless of this list.
+        Repositories {name} can access in Code Repo. Owners, super admins, and
+        admins always see every project regardless of this list.
       </p>
 
       {err && <p className="platform-admin-error">{err}</p>}
@@ -425,8 +442,12 @@ export default function MemberDetail({ scope }: Props) {
               )}
             </section>
 
-            {scope === "platform" && (
+            {/* Per-member Code Repo access. Org scope needs the caller's org id;
+                render only once it's known so the fetch is authorized. */}
+            {(scope === "platform" || (scope === "organization" && orgId != null)) && (
               <ProjectsAccessCard
+                scope={scope}
+                orgId={orgId}
                 userId={member.id}
                 name={name}
                 canManage={hasPermission(authUser, "members:manage")}

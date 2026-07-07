@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { logger } from "../utils/logger";
 import { useAuth } from "../auth/useAuth";
+import { hasPermission } from "../auth/permissions";
 import { useGlobalSearch } from "../search/SearchContext";
 import { formatFileSize } from "../emails/renderUtils";
+import Modal from "../components/Modal";
 import {
   listDocumentFolders,
   createDocumentFolder,
@@ -13,6 +15,9 @@ import {
   renameDocument,
   deleteDocument,
   downloadDocument,
+  createTextDocument,
+  getDocumentContent,
+  updateDocumentContent,
   type DocumentFolder,
   type DocumentFile,
 } from "../api/documents";
@@ -24,6 +29,15 @@ const ROOT_CRUMB: Crumb = { id: null, name: "Documents" };
 
 // What's being renamed inline (a file or a folder), if anything.
 type Editing = { kind: "file" | "folder"; id: number } | null;
+
+// File types we can open in the in-app text editor. Binary files (images,
+// PDFs, archives) are download-only.
+const TEXT_TYPES = [
+  "txt", "md", "markdown", "csv", "json", "log", "yml", "yaml",
+  "html", "css", "js", "ts", "xml", "rtf", "text",
+];
+const isTextFile = (t: string | null): boolean =>
+  TEXT_TYPES.includes((t ?? "").toLowerCase());
 
 function iconFor(fileType: string | null): string {
   const t = (fileType ?? "").toLowerCase();
@@ -38,6 +52,11 @@ function iconFor(fileType: string | null): string {
 
 export default function DocumentsBox() {
   const { user } = useAuth();
+  // Only owners / super_admins may create, edit, rename, delete, or upload.
+  // Every other member gets a read-only view (list / view / download). The
+  // backend enforces this independently via the `documents:manage` permission;
+  // this flag just hides the controls.
+  const canManage = hasPermission(user, "documents:manage");
   const { normalizedSearchQuery } = useGlobalSearch();
 
   const [path, setPath] = useState<Crumb[]>([ROOT_CRUMB]);
@@ -51,6 +70,18 @@ export default function DocumentsBox() {
   const [editDraft, setEditDraft] = useState("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // New-file (author-in-app) modal.
+  const [creatingFile, setCreatingFile] = useState(false);
+  const [newFileName, setNewFileName] = useState("");
+  const [newFileBody, setNewFileBody] = useState("");
+  const [savingNewFile, setSavingNewFile] = useState(false);
+
+  // Content editor modal.
+  const [editorFile, setEditorFile] = useState<DocumentFile | null>(null);
+  const [editorContent, setEditorContent] = useState("");
+  const [editorLoading, setEditorLoading] = useState(false);
+  const [editorSaving, setEditorSaving] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!user) return;
@@ -98,6 +129,55 @@ export default function DocumentsBox() {
       await fetchAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create folder");
+    }
+  };
+
+  const submitNewFile = async () => {
+    const name = newFileName.trim();
+    if (!name) return;
+    setSavingNewFile(true);
+    setError(null);
+    try {
+      await createTextDocument(name, newFileBody, currentFolderId);
+      setCreatingFile(false);
+      setNewFileName("");
+      setNewFileBody("");
+      await fetchAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create document");
+    } finally {
+      setSavingNewFile(false);
+    }
+  };
+
+  const openEditor = async (file: DocumentFile) => {
+    setEditorFile(file);
+    setEditorContent("");
+    setEditorLoading(true);
+    setError(null);
+    try {
+      const data = await getDocumentContent(file.id);
+      setEditorContent(data.content);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to open document");
+      setEditorFile(null);
+    } finally {
+      setEditorLoading(false);
+    }
+  };
+
+  const saveEditor = async () => {
+    if (!editorFile) return;
+    setEditorSaving(true);
+    setError(null);
+    try {
+      await updateDocumentContent(editorFile.id, editorContent);
+      setEditorFile(null);
+      await fetchAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save document");
+    } finally {
+      setEditorSaving(false);
     }
   };
 
@@ -161,80 +241,98 @@ export default function DocumentsBox() {
             </button>
           </span>
         ))}
-        <div className="drive-breadcrumb-actions">
-          {creatingFolder ? (
-            <>
-              <input
-                className="drive-folder-input"
-                value={newFolderName}
-                autoFocus
-                placeholder="Folder name"
-                onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void submitNewFolder();
-                  else if (e.key === "Escape") {
+        {canManage && (
+          <div className="drive-breadcrumb-actions">
+            {creatingFolder ? (
+              <>
+                <input
+                  className="drive-folder-input"
+                  value={newFolderName}
+                  autoFocus
+                  placeholder="Folder name"
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void submitNewFolder();
+                    else if (e.key === "Escape") {
+                      setCreatingFolder(false);
+                      setNewFolderName("");
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="drive-folder-create-btn"
+                  onClick={() => void submitNewFolder()}
+                >
+                  Create
+                </button>
+                <button
+                  type="button"
+                  className="drive-folder-cancel-btn"
+                  onClick={() => {
                     setCreatingFolder(false);
                     setNewFolderName("");
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="drive-folder-create-btn"
-                onClick={() => void submitNewFolder()}
-              >
-                Create
-              </button>
-              <button
-                type="button"
-                className="drive-folder-cancel-btn"
-                onClick={() => {
-                  setCreatingFolder(false);
-                  setNewFolderName("");
-                }}
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="drive-folder-new-btn"
-              onClick={() => setCreatingFolder(true)}
-            >
-              + New folder
-            </button>
-          )}
-        </div>
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="drive-folder-new-btn"
+                  onClick={() => setCreatingFile(true)}
+                >
+                  + New file
+                </button>
+                <button
+                  type="button"
+                  className="drive-folder-new-btn"
+                  onClick={() => setCreatingFolder(true)}
+                >
+                  + New folder
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Upload */}
+      {/* Upload / header */}
       <div className="upload-section">
         <div className="drive-header">
           <h2>Documents</h2>
         </div>
-        <div
-          className="drop-zone"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            void doUpload(Array.from(e.dataTransfer.files));
-          }}
-        >
-          <p>{uploading ? "Uploading…" : "Drag & drop files here, or"}</p>
-          <label className="browse-btn">
-            Browse
-            <input
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => {
-                void doUpload(Array.from(e.target.files ?? []));
-                e.target.value = "";
-              }}
-            />
-          </label>
-        </div>
+        {canManage ? (
+          <div
+            className="drop-zone"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              void doUpload(Array.from(e.dataTransfer.files));
+            }}
+          >
+            <p>{uploading ? "Uploading…" : "Drag & drop files here, or"}</p>
+            <label className="browse-btn">
+              Browse
+              <input
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                  void doUpload(Array.from(e.target.files ?? []));
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+        ) : (
+          <p className="file-meta">
+            You have read-only access to this workspace. Only owners and super
+            admins can add or change files.
+          </p>
+        )}
         {error && <p className="drive-error-msg">{error}</p>}
       </div>
 
@@ -278,25 +376,27 @@ export default function DocumentsBox() {
                     </div>
                   </button>
                 )}
-                <div className="file-right">
-                  <button
-                    type="button"
-                    className="file-download-btn"
-                    onClick={() => {
-                      setEditing({ kind: "folder", id: folder.id });
-                      setEditDraft(folder.name);
-                    }}
-                  >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    className="file-download-btn"
-                    onClick={() => void removeFolder(folder.id, folder.name)}
-                  >
-                    Delete
-                  </button>
-                </div>
+                {canManage && (
+                  <div className="file-right">
+                    <button
+                      type="button"
+                      className="file-download-btn"
+                      onClick={() => {
+                        setEditing({ kind: "folder", id: folder.id });
+                        setEditDraft(folder.name);
+                      }}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      className="file-download-btn"
+                      onClick={() => void removeFolder(folder.id, folder.name)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -342,29 +442,137 @@ export default function DocumentsBox() {
                   >
                     Download
                   </button>
-                  <button
-                    type="button"
-                    className="file-download-btn"
-                    onClick={() => {
-                      setEditing({ kind: "file", id: file.id });
-                      setEditDraft(file.name);
-                    }}
-                  >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    className="file-download-btn"
-                    onClick={() => void removeFile(file.id, file.name)}
-                  >
-                    Delete
-                  </button>
+                  {canManage && isTextFile(file.file_type) && (
+                    <button
+                      type="button"
+                      className="file-download-btn"
+                      onClick={() => void openEditor(file)}
+                    >
+                      Edit
+                    </button>
+                  )}
+                  {canManage && (
+                    <>
+                      <button
+                        type="button"
+                        className="file-download-btn"
+                        onClick={() => {
+                          setEditing({ kind: "file", id: file.id });
+                          setEditDraft(file.name);
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        type="button"
+                        className="file-download-btn"
+                        onClick={() => void removeFile(file.id, file.name)}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* New-file modal */}
+      <Modal
+        isOpen={creatingFile}
+        onClose={() => {
+          if (!savingNewFile) setCreatingFile(false);
+        }}
+        title="New document"
+      >
+        <input
+          className="drive-folder-input"
+          style={{ width: "100%", marginBottom: 12 }}
+          value={newFileName}
+          autoFocus
+          placeholder="File name (e.g. notes.md)"
+          onChange={(e) => setNewFileName(e.target.value)}
+        />
+        <textarea
+          value={newFileBody}
+          placeholder="Write your document…"
+          onChange={(e) => setNewFileBody(e.target.value)}
+          style={{
+            width: "100%",
+            minHeight: 220,
+            resize: "vertical",
+            fontFamily: "inherit",
+            padding: 8,
+            boxSizing: "border-box",
+          }}
+        />
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button
+            type="button"
+            className="drive-folder-create-btn"
+            disabled={savingNewFile || !newFileName.trim()}
+            onClick={() => void submitNewFile()}
+          >
+            {savingNewFile ? "Creating…" : "Create"}
+          </button>
+          <button
+            type="button"
+            className="drive-folder-cancel-btn"
+            disabled={savingNewFile}
+            onClick={() => setCreatingFile(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
+
+      {/* Content editor modal */}
+      <Modal
+        isOpen={editorFile !== null}
+        onClose={() => {
+          if (!editorSaving) setEditorFile(null);
+        }}
+        title={editorFile ? `Edit — ${editorFile.name}` : "Edit"}
+      >
+        {editorLoading ? (
+          <p className="file-meta">Loading…</p>
+        ) : (
+          <>
+            <textarea
+              value={editorContent}
+              onChange={(e) => setEditorContent(e.target.value)}
+              style={{
+                width: "100%",
+                minHeight: 300,
+                resize: "vertical",
+                fontFamily: "inherit",
+                padding: 8,
+                boxSizing: "border-box",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button
+                type="button"
+                className="drive-folder-create-btn"
+                disabled={editorSaving}
+                onClick={() => void saveEditor()}
+              >
+                {editorSaving ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                className="drive-folder-cancel-btn"
+                disabled={editorSaving}
+                onClick={() => setEditorFile(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
