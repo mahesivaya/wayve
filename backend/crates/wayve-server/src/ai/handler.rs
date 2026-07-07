@@ -84,12 +84,15 @@ pub async fn ai_chat(
     .await
     .ok()
     .flatten();
-    let cost_cents =
-        crate::ai::agent::cost_cents(&ai.model, result.input_tokens, result.output_tokens);
+    // Micro-cents is the precise figure the dashboard aggregates; cost_cents is
+    // a rounded legacy copy kept for backward compatibility.
+    let cost_micro_cents =
+        crate::ai::agent::cost_micro_cents(&ai.model, result.input_tokens, result.output_tokens);
+    let cost_cents = (cost_micro_cents + 500_000) / 1_000_000;
     if let Err(e) = sqlx::query(
         "INSERT INTO ai_usage_events
-           (user_id, organization_id, provider, model, input_tokens, output_tokens, cost_cents)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+           (user_id, organization_id, provider, model, input_tokens, output_tokens, cost_cents, cost_micro_cents)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(user_id)
     .bind(owner_org)
@@ -98,6 +101,7 @@ pub async fn ai_chat(
     .bind(result.input_tokens)
     .bind(result.output_tokens)
     .bind(cost_cents)
+    .bind(cost_micro_cents)
     .execute(pool.get_ref())
     .await
     {

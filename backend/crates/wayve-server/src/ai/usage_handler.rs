@@ -62,7 +62,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
            COUNT(*)::bigint                       AS requests,
            COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
            COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
-           COALESCE(SUM(cost_cents), 0)::bigint   AS cost_cents,
+           COALESCE(SUM(cost_micro_cents), 0)::bigint AS cost_micro,
            COUNT(DISTINCT user_id)::bigint        AS active_users
          FROM ai_usage_events
         WHERE created_at >= NOW() - INTERVAL '30 days'
@@ -74,7 +74,8 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let requests: i64 = totals.get("requests");
     let input_tokens: i64 = totals.get("input_tokens");
     let output_tokens: i64 = totals.get("output_tokens");
-    let cost_cents: i64 = totals.get("cost_cents");
+    // Micro-cents summed losslessly, then divided once → fractional cents.
+    let cost_cents: f64 = totals.get::<i64, _>("cost_micro") as f64 / 1_000_000.0;
     let active_users: i64 = totals.get("active_users");
 
     // 30-day cost/volume series, zero-filled via generate_series so the trend
@@ -82,7 +83,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let daily: Vec<Value> = sqlx::query(
         "SELECT to_char(d.day, 'YYYY-MM-DD')       AS day,
                 COUNT(e.id)::bigint                AS requests,
-                COALESCE(SUM(e.cost_cents), 0)::bigint AS cost_cents
+                COALESCE(SUM(e.cost_micro_cents), 0)::bigint AS cost_micro
            FROM generate_series(
                   (CURRENT_DATE - INTERVAL '29 days')::date,
                   CURRENT_DATE::date,
@@ -102,7 +103,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         serde_json::json!({
             "day": r.get::<String, _>("day"),
             "requests": r.get::<i64, _>("requests"),
-            "cost_cents": r.get::<i64, _>("cost_cents"),
+            "cost_cents": r.get::<i64, _>("cost_micro") as f64 / 1_000_000.0,
         })
     })
     .collect();
@@ -111,7 +112,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let by_model: Vec<Value> = sqlx::query(
         "SELECT model,
                 COUNT(*)::bigint                     AS requests,
-                COALESCE(SUM(cost_cents), 0)::bigint AS cost_cents
+                COALESCE(SUM(cost_micro_cents), 0)::bigint AS cost_micro
            FROM ai_usage_events
           WHERE created_at >= NOW() - INTERVAL '30 days'
             AND (($1::int IS NULL AND organization_id IS NULL) OR organization_id = $1)
@@ -127,7 +128,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         serde_json::json!({
             "model": r.get::<String, _>("model"),
             "requests": r.get::<i64, _>("requests"),
-            "cost_cents": r.get::<i64, _>("cost_cents"),
+            "cost_cents": r.get::<i64, _>("cost_micro") as f64 / 1_000_000.0,
         })
     })
     .collect();
@@ -141,7 +142,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
                     u.email
                 )                                    AS name,
                 COUNT(*)::bigint                     AS requests,
-                COALESCE(SUM(e.cost_cents), 0)::bigint AS cost_cents
+                COALESCE(SUM(e.cost_micro_cents), 0)::bigint AS cost_micro
            FROM ai_usage_events e
            JOIN users u ON u.id = e.user_id
           WHERE e.created_at >= NOW() - INTERVAL '30 days'
@@ -158,7 +159,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         serde_json::json!({
             "name": r.get::<Option<String>, _>("name").unwrap_or_else(|| "Unknown".into()),
             "requests": r.get::<i64, _>("requests"),
-            "cost_cents": r.get::<i64, _>("cost_cents"),
+            "cost_cents": r.get::<i64, _>("cost_micro") as f64 / 1_000_000.0,
         })
     })
     .collect();

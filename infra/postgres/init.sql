@@ -1106,6 +1106,15 @@ CREATE TABLE IF NOT EXISTS ai_usage_events (
     cost_cents      BIGINT NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Precise cost in micro-cents (millionths of a cent). `cost_cents` truncates
+-- sub-cent turns to $0.00; the dashboard sums this column and divides by 1e6
+-- exactly once so small turns aggregate without loss. Backfill pre-existing
+-- rows from the rounded cents so historical spend isn't zeroed.
+ALTER TABLE ai_usage_events
+    ADD COLUMN IF NOT EXISTS cost_micro_cents BIGINT NOT NULL DEFAULT 0;
+UPDATE ai_usage_events
+   SET cost_micro_cents = cost_cents * 1000000
+ WHERE cost_micro_cents = 0 AND cost_cents <> 0;
 CREATE INDEX IF NOT EXISTS ai_usage_events_org_idx
     ON ai_usage_events(organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS ai_usage_events_user_idx
