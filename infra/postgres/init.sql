@@ -1077,6 +1077,17 @@ ALTER TABLE platform_ai_config
     ADD COLUMN IF NOT EXISTS ai_allow_email    BOOLEAN NOT NULL DEFAULT TRUE,
     ADD COLUMN IF NOT EXISTS ai_allow_calendar BOOLEAN NOT NULL DEFAULT TRUE;
 
+-- Platform-wide UI settings (singleton). Set by the platform owner and served
+-- to every client via the public GET /api/config so the whole app shares one
+-- look. `font_key` is a short key (system|inter|ibm-plex|serif|mono) the
+-- frontend maps to a CSS font stack; NULL = the app default.
+CREATE TABLE IF NOT EXISTS platform_ui_config (
+    id         INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    font_key   TEXT,
+    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Per-turn AI metering, powering the owner-only /settings/ai/usage dashboard.
 -- One row per assistant turn (all tool-call rounds summed). `organization_id`
 -- is the owner scope: set when the caller's org runs its own AI config, NULL for

@@ -479,8 +479,9 @@ struct DataAccessPayload {
     calendar: bool,
 }
 
-/// Require the caller to be the **platform** owner (not an org owner).
-async fn require_platform_owner(
+/// Require the caller to be the **platform** owner (not an org owner). Reused by
+/// other platform-owner-only endpoints (e.g. `platform_ui`).
+pub(crate) async fn require_platform_owner(
     req: &HttpRequest,
     pool: &PgPool,
     user_id: i32,
