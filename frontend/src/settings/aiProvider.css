@@ -496,3 +496,9 @@
 .ai-da-switch input:focus-visible + .ai-da-slider {
   box-shadow: 0 0 0 3px rgb(37 99 235 / 0.3);
 }
+
+/* Muted helper text (e.g. authoritative-spend caveats). */
+.ai-muted {
+  opacity: 0.7;
+  font-size: 0.85em;
+}

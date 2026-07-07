@@ -7,7 +7,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
-import { getAiUsage, type AiUsage } from "../api/aiProvider";
+import {
+  getAiUsage,
+  getAnthropicCost,
+  type AiUsage,
+  type AnthropicCost,
+} from "../api/aiProvider";
 import "./aiProvider.css";
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
@@ -19,6 +24,7 @@ export default function AiUsageGovernance() {
   const canManage = hasPermission(user, "ai:manage");
 
   const [usage, setUsage] = useState<AiUsage | null>(null);
+  const [anthropicCost, setAnthropicCost] = useState<AnthropicCost | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -31,6 +37,14 @@ export default function AiUsageGovernance() {
       setError(err instanceof Error ? err.message : "Failed to load usage");
     } finally {
       setLoading(false);
+    }
+    // Authoritative Anthropic spend is best-effort and platform-owner-only —
+    // a 403 (org owner) or any failure just hides the panel, never blocks the
+    // page.
+    try {
+      setAnthropicCost(await getAnthropicCost());
+    } catch {
+      setAnthropicCost(null);
     }
   }, []);
 
@@ -130,6 +144,51 @@ export default function AiUsageGovernance() {
               <span className="ai-kpi-label">Active users</span>
             </div>
           </div>
+
+          {anthropicCost?.configured && (
+            <section className="ai-card">
+              <h2>Authoritative spend — billed by Anthropic</h2>
+              <p className="ai-budget-text">
+                <strong>{usd(anthropicCost.total_cents ?? 0)}</strong> ·{" "}
+                {anthropicCost.period}
+                {anthropicCost.truncated ? " (partial)" : ""}
+              </p>
+              {anthropicCost.by_model && anthropicCost.by_model.length > 0 && (
+                <table className="ai-table">
+                  <thead>
+                    <tr>
+                      <th>Line item</th>
+                      <th>Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {anthropicCost.by_model.map((m) => (
+                      <tr key={m.model}>
+                        <td>{m.model}</td>
+                        <td>{usd(m.cost_cents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <p className="ai-budget-text ai-muted">
+                Actual USD from Anthropic's Cost API — organization-wide, across
+                all workspaces. The per-member figures below are local
+                estimates; Anthropic cannot attribute spend to individual
+                members.
+              </p>
+            </section>
+          )}
+          {anthropicCost && !anthropicCost.configured && (
+            <section className="ai-card">
+              <h2>Authoritative spend</h2>
+              <p className="ai-budget-text ai-muted">
+                Set an Anthropic Admin API key (<code>ANTHROPIC_ADMIN_KEY</code>)
+                on the server to show real billed spend from Anthropic's Cost
+                API alongside the local estimate.
+              </p>
+            </section>
+          )}
 
           <section className="ai-card">
             <h2>Budget</h2>
