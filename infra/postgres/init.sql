@@ -175,6 +175,19 @@ CREATE TABLE IF NOT EXISTS member_project_access (
 CREATE INDEX IF NOT EXISTS idx_member_project_access_user
     ON member_project_access (user_id);
 
+-- Wayve-intended access level for the grant ('read' | 'write'). GitHub's live
+-- collaborator permission is authoritative when readable; this records the level
+-- chosen in the per-repo Access panel so the grid still shows one when GitHub
+-- can't be read, and it drives the best-effort GitHub collaborator sync.
+ALTER TABLE member_project_access ADD COLUMN IF NOT EXISTS access_level TEXT NOT NULL DEFAULT 'read';
+ALTER TABLE member_project_access DROP CONSTRAINT IF EXISTS member_project_access_level_check;
+ALTER TABLE member_project_access ADD CONSTRAINT member_project_access_level_check
+    CHECK (access_level IN ('read', 'write'));
+-- The per-repo Access view queries by repo (repo_full_name = $1), the inverse of
+-- the per-member lookup the idx_..._user index serves.
+CREATE INDEX IF NOT EXISTS idx_member_project_access_repo
+    ON member_project_access (repo_full_name);
+
 -- Per-organization feature-access overrides. One row = "this role may use this
 -- feature in this org". The presence of ANY row for (organization_id,
 -- feature_key) means the owner has configured that feature: only the listed

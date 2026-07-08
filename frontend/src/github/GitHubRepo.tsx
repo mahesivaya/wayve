@@ -4,7 +4,9 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { fmtDateTime } from "../utils/datetime";
 import { useResizableWidth } from "../components/useResizableWidth";
 import { useAuth } from "../auth/useAuth";
+import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
+import RepoAccessPanel from "./RepoAccessPanel";
 import {
   listProjects,
   createProject,
@@ -275,7 +277,6 @@ function CommitSplitPatch({ patch }: { patch: string }) {
 //                                             renders them as-is)
 //   * IssueComment — /issues/{n}/comments    (the conversation comments)
 //   * PullReview   — /pulls/{n}/reviews      (approvals / change requests)
-//   * CheckRun     — /commits/{sha}/check-runs (CI status for head.sha)
 type PullDetail = {
   number: number;
   title: string;
@@ -316,22 +317,6 @@ type PullReview = {
   submitted_at: string | null;
 };
 
-type CheckRun = {
-  id: number;
-  name: string;
-  // queued | in_progress | completed
-  status: string;
-  // success | failure | neutral | cancelled | skipped | timed_out | …
-  conclusion: string | null;
-  started_at?: string | null;
-  completed_at?: string | null;
-};
-
-type CheckRunsResponse = {
-  total_count: number;
-  check_runs: CheckRun[];
-};
-
 // Everything we cache for one opened PR, fetched together so the detail
 // view renders in a single pass (mirrors commitDetailBySha for commits).
 type PullBundle = {
@@ -339,7 +324,6 @@ type PullBundle = {
   files: CommitFile[];
   comments: IssueComment[];
   reviews: PullReview[];
-  checks: CheckRun[];
 };
 
 // Comments and reviews merged into one chronological conversation.
@@ -362,24 +346,6 @@ function pullStatus(d: {
   if (d.state === "closed") return { label: "Closed", cls: "is-closed" };
   if (d.draft) return { label: "Draft", cls: "is-draft" };
   return { label: "Open", cls: "is-open" };
-}
-
-// Icon + label + class for one CI check run.
-function checkVisual(c: CheckRun): { icon: string; label: string; cls: string } {
-  if (c.status !== "completed") {
-    return { icon: "•", label: "Running", cls: "is-pending" };
-  }
-  switch (c.conclusion) {
-    case "success":
-      return { icon: "✓", label: "Passed", cls: "is-pass" };
-    case "failure":
-    case "timed_out":
-    case "action_required":
-      return { icon: "✕", label: "Failed", cls: "is-fail" };
-    default:
-      // neutral / skipped / cancelled / stale
-      return { icon: "–", label: c.conclusion ?? "—", cls: "is-neutral" };
-  }
 }
 
 // Badge for a review's verdict in the discussion timeline.
@@ -913,6 +879,10 @@ function GitHubRepoViewer({
   // backend's `Role::Owner` for all scopes (personal accounts resolve to owner).
   const { user } = useAuth();
   const isOwner = user?.effective_role === "owner";
+  // Who may see/manage the per-repo Access panel: a scope owner (personal/org/
+  // platform all resolve to "owner") or anyone with members:manage (org/platform
+  // admins). The backend re-checks; this just gates the sidebar link.
+  const canManageAccess = isOwner || hasPermission(user, "members:manage");
   const [repo, setRepo] = useState<Repo | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branch, setBranch] = useState("main");
@@ -1133,7 +1103,8 @@ function GitHubRepoViewer({
     | "workflows"
     | "commits"
     | "pulls"
-    | "actions";
+    | "actions"
+    | "access";
   const [activeSection, setActiveSection] = useState<Section>(() => {
     try {
       const raw = localStorage.getItem("rwayve.github.section");
@@ -1142,7 +1113,8 @@ function GitHubRepoViewer({
         raw === "workflows" ||
         raw === "commits" ||
         raw === "pulls" ||
-        raw === "actions"
+        raw === "actions" ||
+        raw === "access"
       ) {
         return raw;
       }
@@ -1423,11 +1395,10 @@ function GitHubRepoViewer({
     pullFilter === "open" ? pr.state === "open" : pr.state !== "open"
   );
 
-  // Fetch one PR's full payload — detail, changed files, conversation
-  // (comments + reviews), and CI checks — through the same read-only proxy,
-  // then cache it by number. Detail is fetched first because its head.sha
-  // drives the check-runs lookup; the rest run in parallel and each degrades
-  // to empty on its own error (a missing checks API shouldn't blank the page).
+  // Fetch one PR's full payload — detail, changed files, and conversation
+  // (comments + reviews) — through the same read-only proxy, then cache it
+  // by number. Detail is fetched first; the rest run in parallel and each
+  // degrades to empty on its own error so one failure can't blank the page.
   const loadPullDetail = useCallback(
     async (number: number, force = false) => {
       if (!force && pullBundleByNumber[number]) return;
@@ -1441,7 +1412,7 @@ function GitHubRepoViewer({
         const detail = await githubJson<PullDetail>(
           `${API_BASE}/pulls/${number}`
         );
-        const [files, comments, reviews, checks] = await Promise.all([
+        const [files, comments, reviews] = await Promise.all([
           githubJson<CommitFile[]>(
             `${API_BASE}/pulls/${number}/files?per_page=100`
           ).catch(() => [] as CommitFile[]),
@@ -1451,18 +1422,18 @@ function GitHubRepoViewer({
           githubJson<PullReview[]>(
             `${API_BASE}/pulls/${number}/reviews?per_page=100`
           ).catch(() => [] as PullReview[]),
-          detail.head?.sha
-            ? githubJson<CheckRunsResponse>(
-                `${API_BASE}/commits/${detail.head.sha}/check-runs`
-              )
-                .then((r) => r.check_runs ?? [])
-                .catch(() => [] as CheckRun[])
-            : Promise.resolve([] as CheckRun[]),
         ]);
         setPullBundleByNumber((current) => ({
           ...current,
-          [number]: { detail, files, comments, reviews, checks },
+          [number]: { detail, files, comments, reviews },
         }));
+        // Default every file in this PR to collapsed — the diff opens on
+        // demand. Keys match the `pr-{number}::{filename}` scheme below.
+        setCollapsedFiles((current) => {
+          const next = new Set(current);
+          for (const f of files) next.add(`pr-${number}::${f.filename}`);
+          return next;
+        });
       } catch (err) {
         setErrorByPullNumber((current) => ({
           ...current,
@@ -1865,7 +1836,9 @@ function GitHubRepoViewer({
   // to the overview instead of showing a blank panel.
   useEffect(() => {
     if (!isOwner && activeSection === "pulls") setActiveSection("description");
-  }, [isOwner, activeSection]);
+    if (!canManageAccess && activeSection === "access")
+      setActiveSection("description");
+  }, [isOwner, canManageAccess, activeSection]);
 
   async function openFile(item: ContentItem) {
     setSelectedFile(item);
@@ -2101,6 +2074,18 @@ function GitHubRepoViewer({
               <span className="github-sidebar-label">Actions</span>
               <span className="github-sidebar-count">{runs.length}</span>
             </button>
+            {canManageAccess && (
+              <button
+                type="button"
+                className={`github-sidebar-link ${activeSection === "access" ? "active" : ""}`}
+                onClick={() => setActiveSection("access")}
+              >
+                <span className="github-sidebar-icon" aria-hidden="true">
+                  👥
+                </span>
+                <span className="github-sidebar-label">Access</span>
+              </button>
+            )}
           </div>
         </aside>
 
@@ -2759,9 +2744,6 @@ function GitHubRepoViewer({
                     const bundle = pullBundleByNumber[selectedPull];
                     const d = bundle.detail;
                     const status = pullStatus(d);
-                    const passed = bundle.checks.filter(
-                      (c) => c.conclusion === "success"
-                    ).length;
                     // Comments + meaningful reviews, oldest first. A bare
                     // COMMENTED review with no body is GitHub's wrapper around
                     // inline code comments — drop it so the thread stays clean.
@@ -2820,142 +2802,140 @@ function GitHubRepoViewer({
                     return (
                       <div className="github-pr-detail">
                         <div className="github-pr-grid">
-                          <div className="github-pr-main-col">
+                          <div className="github-pr-main-col github-pr-full">
                             <h2 className="github-pr-detail-h">{d.title}</h2>
-                            <div className="github-pr-pillrow">
-                              <span
-                                className={`github-pr-status ${status.cls}`}
-                              >
-                                {status.label}
+
+                            <div className="github-pr-byline">
+                              <PrAvatar name={d.user?.login ?? "unknown"} />
+                              <span className="github-pr-byline-author">
+                                {d.user?.login ?? "unknown"}
                               </span>
+                              <span className="github-pr-byline-sep">·</span>
                               <a
-                                className="github-pr-repochip"
+                                className="github-pr-byline-ref"
                                 href={d.html_url}
                                 target="_blank"
                                 rel="noreferrer"
                               >
                                 {repoLabel}#{d.number}
                               </a>
-                              {(d.additions != null ||
-                                d.deletions != null) && (
-                                <span className="github-pr-changechip">
-                                  <span className="is-add">
-                                    +{d.additions ?? 0}
-                                  </span>{" "}
-                                  <span className="is-del">
-                                    −{d.deletions ?? 0}
-                                  </span>
+                              <span className="github-pr-byline-sep">·</span>
+                              <span className="github-pr-branches">
+                                <code>{d.base.ref}</code>
+                                <span
+                                  className="github-pr-branch-arrow"
+                                  aria-hidden="true"
+                                >
+                                  ←
                                 </span>
-                              )}
+                                <code>{d.head.ref}</code>
+                              </span>
                             </div>
 
-                            {bodyText.trim() && (
-                              <div className="github-pr-desc">
-                                {renderRichText(descShown)}
-                                {bodyLong && (
-                                  <button
-                                    type="button"
-                                    className="github-pr-showmore"
-                                    onClick={() => setDescExpanded((v) => !v)}
+                            <dl className="github-pr-meta">
+                              <div className="github-pr-meta-row">
+                                <dt>Status</dt>
+                                <dd>
+                                  <span
+                                    className={`github-pr-status ${status.cls}`}
                                   >
-                                    {descExpanded ? "Show less" : "Show more"}
-                                  </button>
+                                    {status.label}
+                                  </span>
+                                </dd>
+                              </div>
+                              <div className="github-pr-meta-row">
+                                <dt>Reviewers</dt>
+                                <dd>
+                                  {d.requested_reviewers &&
+                                  d.requested_reviewers.length > 0 ? (
+                                    d.requested_reviewers
+                                      .map((r) => r.login)
+                                      .join(", ")
+                                  ) : (
+                                    <span className="github-pr-meta-muted">
+                                      None requested
+                                    </span>
+                                  )}
+                                </dd>
+                              </div>
+                              <div className="github-pr-meta-row">
+                                <dt>Changes</dt>
+                                <dd>
+                                  <span className="github-commit-stat is-add">
+                                    +{d.additions ?? 0}
+                                  </span>{" "}
+                                  <span className="github-commit-stat is-del">
+                                    −{d.deletions ?? 0}
+                                  </span>
+                                  {d.changed_files != null && (
+                                    <span className="github-pr-meta-muted">
+                                      {" · "}
+                                      {d.changed_files} files
+                                    </span>
+                                  )}
+                                </dd>
+                              </div>
+                              <div className="github-pr-meta-row">
+                                <dt>Opened</dt>
+                                <dd>{formatDate(d.created_at)}</dd>
+                              </div>
+                              <div className="github-pr-meta-row">
+                                <dt>GitHub</dt>
+                                <dd>
+                                  <a
+                                    className="github-pr-link"
+                                    href={d.html_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    {repoLabel}#{d.number}
+                                  </a>
+                                </dd>
+                              </div>
+                            </dl>
+
+                            {bodyText.trim() && (
+                              <div className="github-pr-descwrap">
+                                <button
+                                  type="button"
+                                  className="github-pr-desc-toggle"
+                                  onClick={() => toggleSection("description")}
+                                  aria-expanded={!isCollapsed("description")}
+                                >
+                                  <span
+                                    className={`github-pr-chevron ${isCollapsed("description") ? "" : "open"}`}
+                                  >
+                                    <ChevronIcon />
+                                  </span>
+                                  Description
+                                </button>
+                                {!isCollapsed("description") && (
+                                  <div className="github-pr-desc">
+                                    {renderRichText(descShown)}
+                                    {bodyLong && (
+                                      <button
+                                        type="button"
+                                        className="github-pr-showmore"
+                                        onClick={() =>
+                                          setDescExpanded((v) => !v)
+                                        }
+                                      >
+                                        {descExpanded
+                                          ? "Show less"
+                                          : "Show more"}
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             )}
+                          </div>
 
-                            <section className="github-pr-block">
-                              <button
-                                type="button"
-                                className="github-pr-block-head"
-                                onClick={() => toggleSection("discussion")}
-                                aria-expanded={!isCollapsed("discussion")}
-                              >
-                                <span
-                                  className={`github-pr-chevron ${isCollapsed("discussion") ? "" : "open"}`}
-                                >
-                                  <ChevronIcon />
-                                </span>
-                                <h3>Discussion</h3>
-                                {timeline.length > 0 && (
-                                  <span className="github-pr-block-count">
-                                    {timeline.length}
-                                  </span>
-                                )}
-                              </button>
-                              {!isCollapsed("discussion") && (
-                                <div className="github-pr-block-body">
-                                  {timeline.length === 0 ? (
-                                    <div className="github-empty">
-                                      No conversation yet.
-                                    </div>
-                                  ) : (
-                                    <ul className="github-pr-thread">
-                                      {timeline.map((e) => (
-                                        <li
-                                          key={e.key}
-                                          className="github-pr-comment"
-                                        >
-                                          <PrAvatar name={e.author} />
-                                          <div className="github-pr-comment-main">
-                                            <div className="github-pr-comment-head">
-                                              <strong>{e.author}</strong>
-                                              {e.reviewState && (
-                                                <span
-                                                  className={`github-pr-review-badge ${reviewBadge(e.reviewState).cls}`}
-                                                >
-                                                  {
-                                                    reviewBadge(e.reviewState)
-                                                      .label
-                                                  }
-                                                </span>
-                                              )}
-                                              {e.ts && (
-                                                <small className="github-pr-comment-time">
-                                                  {formatDate(e.ts)}
-                                                </small>
-                                              )}
-                                            </div>
-                                            {e.body.trim() && (
-                                              <div className="github-pr-comment-text">
-                                                {renderRichText(e.body)}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                  <div
-                                    className="github-pr-composer"
-                                    aria-disabled="true"
-                                    title="Read-only — commenting needs a connected GitHub account"
-                                  >
-                                    <div className="github-pr-composer-input">
-                                      Leave a comment…
-                                    </div>
-                                    <div className="github-pr-composer-foot">
-                                      <span className="github-pr-composer-tools">
-                                        <span aria-hidden="true">📎</span>
-                                        <span aria-hidden="true">Aa</span>
-                                      </span>
-                                      <span
-                                        className="github-pr-composer-send"
-                                        aria-hidden="true"
-                                      >
-                                        ↑
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </section>
-
-                            <section className="github-pr-block">
-                              <button
-                                type="button"
-                                className="github-pr-block-head"
-                                onClick={() => toggleSection("files")}
+                          <section className="github-pr-block github-pr-full">
+                            <button
+                              type="button"
+                              className="github-pr-block-head"
+                              onClick={() => toggleSection("files")}
                                 aria-expanded={!isCollapsed("files")}
                               >
                                 <span
@@ -3064,9 +3044,96 @@ function GitHubRepoViewer({
                                 </div>
                               )}
                             </section>
-                          </div>
 
-                          <aside className="github-pr-side-col">
+                            <section className="github-pr-block github-pr-full">
+                              <button
+                                type="button"
+                                className="github-pr-block-head"
+                                onClick={() => toggleSection("discussion")}
+                                aria-expanded={!isCollapsed("discussion")}
+                              >
+                                <span
+                                  className={`github-pr-chevron ${isCollapsed("discussion") ? "" : "open"}`}
+                                >
+                                  <ChevronIcon />
+                                </span>
+                                <h3>Discussion</h3>
+                                {timeline.length > 0 && (
+                                  <span className="github-pr-block-count">
+                                    {timeline.length}
+                                  </span>
+                                )}
+                              </button>
+                              {!isCollapsed("discussion") && (
+                                <div className="github-pr-block-body">
+                                  {timeline.length === 0 ? (
+                                    <div className="github-empty">
+                                      No conversation yet.
+                                    </div>
+                                  ) : (
+                                    <ul className="github-pr-thread">
+                                      {timeline.map((e) => (
+                                        <li
+                                          key={e.key}
+                                          className="github-pr-comment"
+                                        >
+                                          <PrAvatar name={e.author} />
+                                          <div className="github-pr-comment-main">
+                                            <div className="github-pr-comment-head">
+                                              <strong>{e.author}</strong>
+                                              {e.reviewState && (
+                                                <span
+                                                  className={`github-pr-review-badge ${reviewBadge(e.reviewState).cls}`}
+                                                >
+                                                  {
+                                                    reviewBadge(e.reviewState)
+                                                      .label
+                                                  }
+                                                </span>
+                                              )}
+                                              {e.ts && (
+                                                <small className="github-pr-comment-time">
+                                                  {formatDate(e.ts)}
+                                                </small>
+                                              )}
+                                            </div>
+                                            {e.body.trim() && (
+                                              <div className="github-pr-comment-text">
+                                                {renderRichText(e.body)}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  <div
+                                    className="github-pr-composer"
+                                    aria-disabled="true"
+                                    title="Read-only — commenting needs a connected GitHub account"
+                                  >
+                                    <div className="github-pr-composer-input">
+                                      Leave a comment…
+                                    </div>
+                                    <div className="github-pr-composer-foot">
+                                      <span className="github-pr-composer-tools">
+                                        <span aria-hidden="true">📎</span>
+                                        <span aria-hidden="true">Aa</span>
+                                      </span>
+                                      <span
+                                        className="github-pr-composer-send"
+                                        aria-hidden="true"
+                                      >
+                                        ↑
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </section>
+
+                          {d.state === "open" && !d.merged && (
+                          <aside className="github-pr-side-col github-pr-full">
                             {d.state === "open" && !d.merged && (
                               <div className="github-pr-card github-pr-approve-card">
                                 <span className="github-pr-card-title">
@@ -3180,132 +3247,8 @@ function GitHubRepoViewer({
                                 )}
                               </div>
                             )}
-                            <div className="github-pr-card">
-                              <button
-                                type="button"
-                                className="github-pr-card-head"
-                                onClick={() => toggleSection("details")}
-                                aria-expanded={!isCollapsed("details")}
-                              >
-                                <span
-                                  className={`github-pr-chevron ${isCollapsed("details") ? "" : "open"}`}
-                                >
-                                  <ChevronIcon />
-                                </span>
-                                <span className="github-pr-card-title">
-                                  Details
-                                </span>
-                              </button>
-                              {!isCollapsed("details") && (
-                                <dl className="github-pr-details">
-                                  <div className="github-pr-detail-row">
-                                    <dt>Author</dt>
-                                    <dd className="github-pr-author">
-                                      <PrAvatar
-                                        name={d.user?.login ?? "unknown"}
-                                      />
-                                      {d.user?.login ?? "unknown"}
-                                    </dd>
-                                  </div>
-                                  <div className="github-pr-detail-row">
-                                    <dt>Repository</dt>
-                                    <dd>{repoLabel}</dd>
-                                  </div>
-                                  <div className="github-pr-detail-row">
-                                    <dt>Status</dt>
-                                    <dd>
-                                      <span
-                                        className={`github-pr-status ${status.cls}`}
-                                      >
-                                        {status.label}
-                                      </span>
-                                    </dd>
-                                  </div>
-                                  <div className="github-pr-detail-row">
-                                    <dt>Changes</dt>
-                                    <dd>
-                                      <span className="github-commit-stat is-add">
-                                        +{d.additions ?? 0}
-                                      </span>{" "}
-                                      <span className="github-commit-stat is-del">
-                                        −{d.deletions ?? 0}
-                                      </span>
-                                    </dd>
-                                  </div>
-                                  <div className="github-pr-detail-row">
-                                    <dt>GitHub</dt>
-                                    <dd>
-                                      <a
-                                        className="github-pr-link"
-                                        href={d.html_url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                      >
-                                        {repoLabel}#{d.number}
-                                      </a>
-                                    </dd>
-                                  </div>
-                                </dl>
-                              )}
-                            </div>
-
-                            <div className="github-pr-card">
-                              <button
-                                type="button"
-                                className="github-pr-card-head"
-                                onClick={() => toggleSection("checks")}
-                                aria-expanded={!isCollapsed("checks")}
-                              >
-                                <span
-                                  className={`github-pr-chevron ${isCollapsed("checks") ? "" : "open"}`}
-                                >
-                                  <ChevronIcon />
-                                </span>
-                                <span className="github-pr-card-title">
-                                  Checks
-                                </span>
-                                {bundle.checks.length > 0 && (
-                                  <span className="github-pr-checks-sum">
-                                    ✓ {passed} passed
-                                  </span>
-                                )}
-                              </button>
-                              {!isCollapsed("checks") && (
-                                <div className="github-pr-card-body">
-                                  {bundle.checks.length === 0 ? (
-                                    <div className="github-empty">
-                                      No checks reported.
-                                    </div>
-                                  ) : (
-                                    <ul className="github-pr-checks">
-                                      {bundle.checks.map((c) => {
-                                        const ck = checkVisual(c);
-                                        return (
-                                          <li
-                                            key={c.id}
-                                            className={`github-pr-check ${ck.cls}`}
-                                          >
-                                            <span className="github-pr-check-icon">
-                                              {ck.icon}
-                                            </span>
-                                            <span className="github-pr-check-name">
-                                              {c.name}
-                                            </span>
-                                            <span className="github-pr-check-dur">
-                                              {formatDuration(
-                                                c.started_at ?? null,
-                                                c.completed_at ?? null
-                                              )}
-                                            </span>
-                                          </li>
-                                        );
-                                      })}
-                                    </ul>
-                                  )}
-                                </div>
-                              )}
-                            </div>
                           </aside>
+                          )}
                         </div>
                       </div>
                     );
@@ -3313,6 +3256,12 @@ function GitHubRepoViewer({
                 )}
               </div>
             ))}
+
+          {activeSection === "access" && canManageAccess && (
+            <div className="github-panel">
+              <RepoAccessPanel owner={owner} repo={repoName} />
+            </div>
+          )}
 
           {activeSection === "actions" && (
             <div className="github-panel">
