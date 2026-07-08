@@ -247,7 +247,9 @@ pub async fn list_projects(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         .map_err(AppError::Db)?;
 
     // Org members see their org's projects; personal accounts see their own.
-    // Platform accounts don't own projects here (legacy single-repo view).
+    // Platform staff are unrestricted and see every project (so the create-task
+    // project dropdown and other consumers work for the platform owner too, not
+    // just the Code Repo repo list which reads a different source).
     let rows = match ctx.scope {
         Scope::Organization => {
             let Some(org_id) = ctx.organization_id else {
@@ -274,7 +276,15 @@ pub async fn list_projects(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
             .fetch_all(pool.get_ref())
             .await?
         }
-        Scope::Platform => return Ok(HttpResponse::Ok().json(serde_json::json!([]))),
+        Scope::Platform => {
+            sqlx::query(
+                "SELECT id, name, github_owner, github_repo
+                 FROM projects
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .fetch_all(pool.get_ref())
+            .await?
+        }
     };
 
     let projects: Vec<_> = rows.iter().map(project_json).collect();
