@@ -95,8 +95,12 @@ http {
 
         # Same rule again: the per-user GitHub OAuth callback is root-mounted on
         # the backend at `/github/oauth/callback`, so preserve the `/github/`
-        # prefix and route it to the backend (else it falls through to the SPA).
-        location /github/ {
+        # prefix and route it to the backend. Scope this to `/github/oauth/`
+        # ONLY — a broad `/github/` prefix would also swallow the SPA's own
+        # `/github` app page (where the callback redirects with
+        # `#connected=true`), 404ing it on the backend. Everything else under
+        # `/github` must fall through to the SPA `location /` below.
+        location /github/oauth/ {
             proxy_pass http://backend:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

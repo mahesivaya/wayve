@@ -64,7 +64,9 @@ http {
         }
 
         # Per-user GitHub OAuth callback (root-mounted at /github/oauth/callback).
-        location /github/ {
+        # Scope to /github/oauth/ ONLY so the SPA's /github app page (callback
+        # lands there with #connected=true) falls through to `location /`.
+        location /github/oauth/ {
             proxy_pass http://$backend_upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
