@@ -14,6 +14,10 @@ export type Task = {
   status: TaskStatus;
   assigned_by: string;
   assignee: string;
+  // Real assigned user (null when only the free-text `assignee`/a reference
+  // name is set) and the project the task belongs to.
+  assignee_id?: number | null;
+  project_id?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
   // Set only on tasks imported from Jira; the UI shows a deep-link badge to
@@ -36,9 +40,59 @@ export type SaveTaskPayload = {
   // their UI supplies both fields.
   assigned_by?: string;
   assignee?: string;
+  // The chosen assignee's user id (from a suggestion or the assignable list),
+  // and the project the task is created on (set from the form's dropdown).
+  assignee_id?: number | null;
+  project_id?: number | null;
 };
 
 export const getTasks = async () => apiFetchJson<Task[]>("/api/tasks");
+
+// A project the current account owns/belongs to, for the create-task dropdown.
+// `github_owner`/`github_repo` are set only when the project is linked to a
+// public repo — required for the assignee-suggestion feature to work.
+export type Project = {
+  id: number;
+  name: string;
+  github_owner: string | null;
+  github_repo: string | null;
+};
+
+export const getProjects = async () =>
+  apiFetchJson<Project[]>("/api/projects");
+
+// A suggested assignee, ranked by how much/how recently they've worked in the
+// files the task is likely to touch. `user_id` is set only for connected
+// members (assignable); `is_reference_only` contributors have no Wayve account.
+export type AssigneeSuggestion = {
+  user_id: number | null;
+  github_login: string | null;
+  display: string;
+  email: string | null;
+  is_reference_only: boolean;
+  expertise_score: number;
+  commits: number;
+  recent_commits: number;
+  last_activity: string | null;
+  reason: string;
+};
+
+export type SuggestAssigneeResponse = {
+  used_ai: boolean;
+  files: string[];
+  candidates: AssigneeSuggestion[];
+  note?: string;
+};
+
+export const suggestAssignee = async (payload: {
+  project_id: number;
+  summary: string;
+  description: string;
+}) =>
+  apiFetchJson<SuggestAssigneeResponse>("/api/tasks/suggest-assignee", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 
 // A user the current account can assign tasks to (everyone in the caller's
 // organization, or every platform staff member). Open to any member of the

@@ -12,11 +12,15 @@ import {
   deleteTaskAttachment,
   downloadTaskAttachment,
   getAssignableUsers,
+  getProjects,
   getTasks,
   listTaskAttachments,
+  suggestAssignee,
   updateTaskApi,
   uploadTaskAttachments,
+  type AssigneeSuggestion,
   type AssignableUser,
+  type Project,
   type Task,
   type TaskAttachment,
   type TaskPriority,
@@ -256,6 +260,18 @@ export default function Tasks() {
   const [status, setStatus] = useState<TaskStatus>("to_do");
   const [assignedBy, setAssignedBy] = useState("");
   const [assignee, setAssignee] = useState("");
+  // Chosen assignee's user id (kept in sync when a real member is picked); the
+  // project the task is created on, and the loaded project list for the dropdown.
+  const [assigneeId, setAssigneeId] = useState<number | null>(null);
+  const [projectId, setProjectId] = useState<number | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  // Assignee suggestions from the project's code history.
+  const [suggestions, setSuggestions] = useState<AssigneeSuggestion[] | null>(
+    null
+  );
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestNote, setSuggestNote] = useState<string | null>(null);
+  const [suggestUsedAi, setSuggestUsedAi] = useState(true);
   const [createAnother, setCreateAnother] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -320,6 +336,67 @@ export default function Tasks() {
     };
   }, [isPersonal]);
 
+  // Load the caller's projects for the create-task dropdown. The selected
+  // project links the task to a repo, which drives assignee suggestions.
+  // Failure is non-fatal — the dropdown simply shows no options.
+  useEffect(() => {
+    let alive = true;
+    getProjects()
+      .then((list) => {
+        if (alive) setProjects(list);
+      })
+      .catch(() => {
+        // Non-fatal: no projects to choose from.
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const clearSuggestions = () => {
+    setSuggestions(null);
+    setSuggestNote(null);
+    setSuggestLoading(false);
+  };
+
+  // Ask the backend to rank assignees from the selected project's code history.
+  const loadSuggestions = async () => {
+    if (projectId === null) return;
+    setSuggestLoading(true);
+    setSuggestNote(null);
+    try {
+      const res = await suggestAssignee({
+        project_id: projectId,
+        summary: taskName.trim(),
+        description: description.trim(),
+      });
+      setSuggestions(res.candidates);
+      setSuggestUsedAi(res.used_ai);
+      setSuggestNote(
+        res.note ?? (res.candidates.length === 0 ? "No suggestions found." : null)
+      );
+    } catch (err) {
+      setSuggestions([]);
+      setSuggestNote(
+        err instanceof Error ? err.message : "Couldn't load suggestions."
+      );
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
+  // Choose a suggested person. Connected members become the real assignee (with
+  // an id); reference-only contributors fill the free-text field with no id.
+  const pickSuggestion = (s: AssigneeSuggestion) => {
+    if (s.user_id !== null) {
+      setAssignee(s.email ?? s.display);
+      setAssigneeId(s.user_id);
+    } else {
+      setAssignee(s.display);
+      setAssigneeId(null);
+    }
+  };
+
   const resetForm = () => {
     setTaskName("");
     setDescription("");
@@ -329,6 +406,9 @@ export default function Tasks() {
     // current user (personal accounts leave it unset — implicitly self-owned).
     setAssignedBy(isPersonal ? "" : (user?.email ?? ""));
     setAssignee("");
+    setAssigneeId(null);
+    setProjectId(null);
+    clearSuggestions();
     setEditingId(null);
     setError("");
     setPendingAttachments([]);
@@ -355,6 +435,8 @@ export default function Tasks() {
     setStatus(normalizeStatus(task.status));
     setAssignedBy(task.assigned_by ?? "");
     setAssignee(task.assignee ?? "");
+    setAssigneeId(task.assignee_id ?? null);
+    setProjectId(task.project_id ?? null);
     setError("");
     setCreateAnother(false);
     setPendingAttachments([]);
@@ -517,6 +599,8 @@ export default function Tasks() {
           status,
           assigned_by: assignedBy.trim(),
           assignee: assignee.trim(),
+          assignee_id: assigneeId,
+          project_id: projectId,
         });
         targetTaskId = updated.id;
         setTasks((prev) =>
@@ -540,6 +624,8 @@ export default function Tasks() {
           status,
           assigned_by: assignedBy.trim(),
           assignee: assignee.trim(),
+          assignee_id: assigneeId,
+          project_id: projectId,
         });
         targetTaskId = created.id;
         setTasks((prev) =>
@@ -695,6 +781,34 @@ export default function Tasks() {
               </label>
 
               <label className="task-form-field">
+                <span className="task-form-label">Project</span>
+                <select
+                  className="task-form-select"
+                  value={projectId ?? ""}
+                  onChange={(event) => {
+                    setProjectId(
+                      event.target.value ? Number(event.target.value) : null
+                    );
+                    clearSuggestions();
+                  }}
+                >
+                  <option value="">No project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {p.github_owner && p.github_repo
+                        ? ` (${p.github_owner}/${p.github_repo})`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+                <span className="task-form-hint">
+                  Pick the project so we can suggest assignees from its code
+                  history
+                </span>
+              </label>
+
+              <label className="task-form-field">
                 <span className="task-form-label">
                   Summary <span className="task-form-required-mark">*</span>
                 </span>
@@ -729,7 +843,14 @@ export default function Tasks() {
                     <UserAutocomplete
                       id="task-assignee"
                       value={assignee}
-                      onChange={setAssignee}
+                      onChange={(value) => {
+                        setAssignee(value);
+                        const match = assignableUsers.find(
+                          (u) =>
+                            u.email.toLowerCase() === value.trim().toLowerCase()
+                        );
+                        setAssigneeId(match ? match.user_id : null);
+                      }}
                       users={assignableUsers}
                       placeholder="Search team by name or email"
                     />
@@ -741,14 +862,81 @@ export default function Tasks() {
                             assignee.trim().toLowerCase() ===
                             user.email.toLowerCase()
                           }
-                          onChange={(event) =>
-                            setAssignee(event.target.checked ? user.email : "")
-                          }
+                          onChange={(event) => {
+                            if (event.target.checked && user.email) {
+                              setAssignee(user.email);
+                              const match = assignableUsers.find(
+                                (u) =>
+                                  u.email.toLowerCase() ===
+                                  user.email.toLowerCase()
+                              );
+                              setAssigneeId(match ? match.user_id : null);
+                            } else {
+                              setAssignee("");
+                              setAssigneeId(null);
+                            }
+                          }}
                         />
                         Assign to me
                       </span>
                     )}
                   </div>
+
+                  {/* Assignee suggestions from the project's code history —
+                      available once a project is selected. */}
+                  {projectId !== null && (
+                    <div className="task-suggest">
+                      <button
+                        type="button"
+                        className="task-suggest-btn"
+                        onClick={() => void loadSuggestions()}
+                        disabled={suggestLoading}
+                      >
+                        {suggestLoading
+                          ? "Finding people who worked here…"
+                          : "Suggest assignees from code history"}
+                      </button>
+                      {suggestions &&
+                        suggestions.length > 0 &&
+                        !suggestUsedAi && (
+                          <span className="task-suggest-hint">
+                            Matched by keyword (AI unavailable)
+                          </span>
+                        )}
+                      {suggestNote && (
+                        <p className="task-suggest-note">{suggestNote}</p>
+                      )}
+                      {suggestions && suggestions.length > 0 && (
+                        <ul className="task-suggest-list">
+                          {suggestions.map((s, i) => (
+                            <li
+                              key={`${s.github_login ?? s.display}-${i}`}
+                              className="task-suggest-item"
+                            >
+                              <button
+                                type="button"
+                                className="task-suggest-pick"
+                                onClick={() => pickSuggestion(s)}
+                              >
+                                <span className="task-suggest-name">
+                                  {s.display}
+                                  {s.is_reference_only && (
+                                    <span className="task-suggest-ref">
+                                      {" "}
+                                      · reference
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="task-suggest-reason">
+                                  {s.reason}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 

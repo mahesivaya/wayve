@@ -104,7 +104,7 @@ fn token() -> Option<String> {
 /// unconnected personal user, and ALL organization / platform callers — uses
 /// the shared server PAT, so org/enterprise/platform behavior is byte-for-byte
 /// unchanged. This is the single branch point for the per-user feature.
-async fn effective_github_token(req: &HttpRequest, pool: &PgPool) -> Option<String> {
+pub(crate) async fn effective_github_token(req: &HttpRequest, pool: &PgPool) -> Option<String> {
     if let Some(user_id) = get_user_id_from_request(req)
         && let Ok(ctx) = resolve_role_context_moded(req, pool, user_id).await
         && ctx.scope == Scope::Personal

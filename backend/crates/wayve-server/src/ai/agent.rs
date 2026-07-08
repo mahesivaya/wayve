@@ -256,6 +256,17 @@ pub async fn probe(ai: &ResolvedAi) -> Result<(), AppError> {
     run_one(&msgs, &ToolCtx::none(), ai).await.map(|_| ())
 }
 
+/// Run a single, **tool-less** completion against the resolved provider and
+/// return the model's text. For focused one-shot uses (e.g. mapping a task to
+/// likely files) that want a plain answer, not the agentic tool loop.
+pub async fn complete(ai: &ResolvedAi, prompt: &str) -> Result<String, AppError> {
+    let msgs = vec![ChatMsg {
+        role: "user".to_string(),
+        content: prompt.to_string(),
+    }];
+    run_one(&msgs, &ToolCtx::none(), ai).await.map(|r| r.reply)
+}
+
 /// Dispatch one tool call. Native Wayve tools are tried first (their reserved
 /// name prefix can't collide with the MCP `c{idx}_` namespacing); otherwise the
 /// call routes to its owning MCP client. Returns the `ToolUsed` breadcrumb (for
