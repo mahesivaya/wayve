@@ -1768,18 +1768,21 @@ function GitHubRepoViewer({
   // re-toggling the same run doesn't re-hit GitHub's API.
   const toggleRunFlow = useCallback(
     async (run: WorkflowRun) => {
-      let opened = false;
+      // Decide open/close from the CURRENT state synchronously. Do NOT read a
+      // flag mutated inside the setState updater — React may run that updater
+      // asynchronously, so the flag was still false here and the jobs fetch
+      // below was silently skipped (the run rendered "no jobs to display").
+      const willOpen = !expandedRunIds.has(run.id);
       setExpandedRunIds((current) => {
         const next = new Set(current);
         if (next.has(run.id)) {
           next.delete(run.id);
         } else {
           next.add(run.id);
-          opened = true;
         }
         return next;
       });
-      if (!opened) return;
+      if (!willOpen) return;
       // If we've already fetched jobs for this run, the cached entry is
       // good enough — collapse + re-expand should feel instant.
       if (jobsByRunId[run.id]) return;
@@ -1809,7 +1812,7 @@ function GitHubRepoViewer({
         });
       }
     },
-    [API_BASE, jobsByRunId]
+    [API_BASE, jobsByRunId, expandedRunIds]
   );
 
   useEffect(() => {
