@@ -586,6 +586,37 @@ CREATE TABLE IF NOT EXISTS email_attachments (
     UNIQUE(email_id, attachment_id)
 );
 
+-- User-defined "custom label" tabs for the org/platform shared inbox — a named,
+-- saved sender filter (a generalized version of the hardcoded `github` virtual
+-- folder). A creator types a free-text senders description (an address, a list,
+-- or a phrase like "all github notifications"); the backend normalizes it into
+-- `senders` (lowercase addresses + bare domains) and the inbox matches each
+-- email's `sender` against that list. Shared across a scope, NOT per-user:
+-- `organization_id` NULL = platform-level, set = org-level — mirroring the
+-- `email_accounts.organization_id` shared-inbox convention. Personal scope never
+-- gets rows (creation is gated on org/platform scope). Access is enforced in SQL
+-- by the caller's resolved `organization_id`, so this table is deliberately NOT
+-- in the per-user RLS `pairs` loop (whose policy is `user_id = app.user_id`).
+CREATE TABLE IF NOT EXISTS email_labels (
+    id              SERIAL PRIMARY KEY,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    raw_senders     TEXT NOT NULL DEFAULT '',
+    senders         TEXT[] NOT NULL DEFAULT '{}',
+    created_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at      TIMESTAMP DEFAULT NOW(),
+    updated_at      TIMESTAMP DEFAULT NOW()
+);
+-- Unique label name per org, and a separate partial index for platform-level
+-- (org-null) labels — Postgres treats NULLs as distinct, so a plain UNIQUE on
+-- (organization_id, name) would not dedupe platform rows. Mirrors `teams`.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_labels_org_name
+    ON email_labels(organization_id, name) WHERE organization_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_labels_platform_name
+    ON email_labels(name) WHERE organization_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_email_labels_org
+    ON email_labels(organization_id);
+
 
 
 
@@ -913,6 +944,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_gitlab_issue
     WHERE gitlab_issue_iid IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_tasks_user_priority ON tasks(user_id, priority DESC, created_at DESC);
+
+-- First-class assignment + project linkage (see docs/architecture/ai-task-assignment.md).
+-- `assignee_id` is the real assigned user (FK users); the legacy free-text `assignee`
+-- above is kept for display/back-compat and for reference names that don't map to a
+-- Wayve user. `project_id` links a task to a project (→ its GitHub repo via
+-- projects.github_owner/github_repo), which drives the assignee-suggestion feature.
+-- Both nullable and ON DELETE SET NULL so removing a user/project never deletes tasks.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_id  INTEGER REFERENCES projects(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee_id ON tasks(assignee_id) WHERE assignee_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_project_id  ON tasks(project_id)  WHERE project_id IS NOT NULL;
 
 -- Per-user Jira Cloud connection (Basic auth: email + API token). The token is
 -- stored encrypted at rest via wayve_security::encryption (the same symmetric

@@ -16,6 +16,8 @@ fn task_from_row(row: sqlx::postgres::PgRow) -> Task {
         status: row.get("status"),
         assigned_by: row.try_get("assigned_by").unwrap_or_default(),
         assignee: row.try_get("assignee").unwrap_or_default(),
+        assignee_id: row.try_get("assignee_id").ok().flatten(),
+        project_id: row.try_get("project_id").ok().flatten(),
         created_at: row.try_get("created_at").ok(),
         updated_at: row.try_get("updated_at").ok(),
         jira_issue_key: row.try_get("jira_issue_key").ok().flatten(),
@@ -47,6 +49,7 @@ pub async fn list_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
     let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
         let rows = sqlx::query(
             "SELECT id, name, description, priority, status, assigned_by, assignee,
+                    assignee_id, project_id,
                     created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url
              FROM tasks
              WHERE user_id = $1
@@ -131,11 +134,15 @@ pub async fn create_task(
     let status = normalize_status(data.status.as_deref());
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
+    let assignee_id = data.assignee_id;
+    let project_id = data.project_id;
 
     let row = sqlx::query(
-        "INSERT INTO tasks (user_id, name, description, priority, status, assigned_by, assignee)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        "INSERT INTO tasks (user_id, name, description, priority, status, assigned_by, assignee,
+                            assignee_id, project_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING id, name, description, priority, status, assigned_by, assignee,
+                   assignee_id, project_id,
                    created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url",
     )
     .bind(user_id)
@@ -145,6 +152,8 @@ pub async fn create_task(
     .bind(status)
     .bind(assigned_by)
     .bind(assignee)
+    .bind(assignee_id)
+    .bind(project_id)
     .fetch_one(pool.get_ref())
     .await?;
 
@@ -202,6 +211,8 @@ pub async fn update_task(
     let status = normalize_status(data.status.as_deref());
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
+    let assignee_id = data.assignee_id;
+    let project_id = data.project_id;
 
     // Capture the prior status so we can record "every status change".
     let old_status: Option<String> =
@@ -216,9 +227,11 @@ pub async fn update_task(
     let row = sqlx::query(
         "UPDATE tasks
          SET name = $1, description = $2, priority = $3, status = $4,
-             assigned_by = $5, assignee = $6, updated_at = NOW()
-         WHERE id = $7 AND user_id = $8
+             assigned_by = $5, assignee = $6, assignee_id = $7, project_id = $8,
+             updated_at = NOW()
+         WHERE id = $9 AND user_id = $10
          RETURNING id, name, description, priority, status, assigned_by, assignee,
+                   assignee_id, project_id,
                    created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url",
     )
     .bind(name)
@@ -227,6 +240,8 @@ pub async fn update_task(
     .bind(status)
     .bind(assigned_by)
     .bind(assignee)
+    .bind(assignee_id)
+    .bind(project_id)
     .bind(id)
     .bind(user_id)
     .fetch_optional(pool.get_ref())
