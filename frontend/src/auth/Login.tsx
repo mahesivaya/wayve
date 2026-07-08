@@ -56,6 +56,20 @@ export default function Login() {
     const ssoErr = parseSsoError();
     return ssoErr || queryErr;
   });
+  // One-shot notice when the previous session ended from the 15-min idle
+  // timeout (set by AuthContext.logout("idle")). Read-and-clear so a refresh
+  // doesn't keep showing it.
+  const [idleNotice] = useState(() => {
+    try {
+      if (sessionStorage.getItem("wayve-logout-reason") === "idle") {
+        sessionStorage.removeItem("wayve-logout-reason");
+        return "You were signed out after 15 minutes of inactivity. Please sign in again.";
+      }
+    } catch {
+      /* ignore */
+    }
+    return "";
+  });
   const navigate = useNavigate();
   const { login: authLogin } = useAuth();
 
@@ -206,6 +220,7 @@ export default function Login() {
               {ssoLoading ? "Connecting…" : "Continue with SSO"}
             </button>
 
+            {idleNotice && <p className="login-notice">{idleNotice}</p>}
             {error && <p className="error">{error}</p>}
 
             <p className="switch-auth">
@@ -279,6 +294,7 @@ export default function Login() {
               Continue with Gmail
             </button>
 
+            {idleNotice && <p className="login-notice">{idleNotice}</p>}
             {error && <p className="error">{error}</p>}
 
             <p className="switch-auth">

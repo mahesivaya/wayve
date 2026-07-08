@@ -20,6 +20,7 @@ import RecoverPromptModal from "../recovery/RecoverPromptModal";
 import { getMe, logout as logoutRequest, saveUserPublicKey } from "../api/Auth";
 import { apiFetch } from "../api/client";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./token";
+import { useIdleLogout } from "./useIdleLogout";
 import { logger } from "../utils/logger";
 import { isDesktopApp } from "../utils/desktop";
 import { normalizeAccountType } from "./accountHome";
@@ -617,7 +618,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("rwayve:session-expired", onExpired);
   }, []);
 
-  const logout = () => {
+  const logout = (reason: "manual" | "idle" = "manual") => {
     authVersion.current += 1;
     clearAuthToken();
     // Explicit logout = "I'm leaving this machine": wipe the cached E2E keys so
@@ -625,6 +626,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // on session-expiry (that keeps the key so re-login stays prompt-free).
     void clearKeys();
     setNeedsRecovery(false);
+    // Idle timeout: leave a breadcrumb so the login screen can explain why the
+    // session ended.
+    if (reason === "idle") {
+      try {
+        sessionStorage.setItem("wayve-logout-reason", "idle");
+      } catch {
+        /* ignore */
+      }
+    }
     // Intentionally do NOT setUser(null) here. Nulling the user synchronously
     // re-renders the current (protected) route, which ProtectedRoute then
     // bounces to /login — a visible flash before the hard nav below lands on
@@ -651,10 +661,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // reset. This runs only after the logout POST has either completed or hit
       // the 2s safety cap. In the desktop shell there is no marketing landing
       // page (the window opens straight to /login), so send the user back to
-      // /login there; the browser keeps landing on the public "/" home.
-      window.location.href = isDesktopApp() ? "/login" : "/";
+      // /login there; the browser keeps landing on the public "/" home. An idle
+      // timeout also goes straight to /login (with the reason breadcrumb above).
+      window.location.href =
+        reason === "idle" || isDesktopApp() ? "/login" : "/";
     });
   };
+
+  // Auto sign-out after 15 minutes of inactivity (shared across tabs). Only
+  // armed while logged in; `logout("idle")` flags the reason for the login page.
+  useIdleLogout(!!user, () => logout("idle"));
 
   // Re-fetch /api/me and overwrite the cached user. Used after server-side
   // mutations that change the caller's scope/permissions (e.g. a personal
