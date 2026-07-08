@@ -76,7 +76,8 @@ async fn project_repo(
 ) -> Result<Option<(String, String)>, AppError> {
     let ctx = resolve_role_context(pool, user_id).await?;
     // Scope the lookup exactly like GET /api/projects so a caller can only
-    // resolve a project in their own org (or their own personal projects).
+    // resolve a project in their own org (or their own personal projects);
+    // platform staff are unrestricted and may resolve any project.
     let row = match ctx.scope {
         Scope::Organization => {
             let org_id = ctx.organization_id.ok_or(AppError::NotFound("project"))?;
@@ -99,7 +100,12 @@ async fn project_repo(
             .fetch_optional(pool)
             .await?
         }
-        Scope::Platform => None,
+        Scope::Platform => {
+            sqlx::query("SELECT github_owner, github_repo FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(pool)
+                .await?
+        }
     };
 
     let row = row.ok_or(AppError::NotFound("project"))?;
