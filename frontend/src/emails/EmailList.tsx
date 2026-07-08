@@ -619,13 +619,26 @@ export const EmailList: React.FC<EmailListProps> = ({
         </>
       )}
 
-      {/* Infinite-scroll status row. Renders a faint "Loading more…"
-          while the next page is in flight, and an "End of inbox" hint
-          when there's nothing left to fetch. Replaces the explicit
-          "Show more emails" button. */}
-      {!isStubFolder && hasMore && loadingMore && (
+      {/* Load-more footer. Infinite scroll still auto-pages as the user nears
+          the bottom, but the explicit button is the reliable fallback for the
+          cases where scroll input never reaches the list — e.g. a shrunk
+          multi-pane tab where the initial page fits without overflowing, so
+          there's nothing to scroll and the auto-loader can't trigger. The
+          `.load-more-wrap` sticks to the bottom of the list (position: sticky)
+          so the button stays reachable even when the list isn't scrollable. */}
+      {!isStubFolder && hasMore && (
         <div className="load-more-wrap">
-          <span className="load-more-status">Loading more…</span>
+          {loadingMore ? (
+            <span className="load-more-status">Loading more…</span>
+          ) : (
+            <button
+              type="button"
+              className="load-more-btn"
+              onClick={triggerLoadMore}
+            >
+              Load more emails
+            </button>
+          )}
         </div>
       )}
       {!isStubFolder && !hasMore && emails.length > 0 && (
