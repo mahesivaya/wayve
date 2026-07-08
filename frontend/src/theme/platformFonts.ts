@@ -46,8 +46,38 @@ export function normalizeFontKey(key: string | null | undefined): FontKey {
   return match ? match.key : DEFAULT_FONT_KEY;
 }
 
-// Apply (or clear) the platform font on the document root. Called at boot with
-// the server value and optimistically from the settings page on change.
+// Cache of the caller's resolved font, so a returning signed-in user paints in
+// their font at boot (before /api/ui/font resolves) with no flash. Empty string
+// = an explicit "no override" (system default); absent (null) = unknown, so fall
+// back to the platform/default font from /api/config.
+export const FONT_CACHE_KEY = "wayve-font";
+
+export function cachedFontKey(): string | null {
+  try {
+    return localStorage.getItem(FONT_CACHE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function cacheFontKey(key: string | null): void {
+  try {
+    localStorage.setItem(FONT_CACHE_KEY, key ?? "");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearFontCache(): void {
+  try {
+    localStorage.removeItem(FONT_CACHE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+// Apply (or clear) the app font on the document root. Called at boot with the
+// cached/platform value and optimistically from the settings page on change.
 //
 // `system`/null/unknown → remove the overrides so the app falls back to the
 // index.css defaults (index.css stays the single default source). Any other key

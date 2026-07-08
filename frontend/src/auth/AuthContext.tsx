@@ -21,6 +21,13 @@ import { getMe, logout as logoutRequest, saveUserPublicKey } from "../api/Auth";
 import { apiFetch } from "../api/client";
 import { clearAuthToken, getAuthToken, setAuthToken } from "./token";
 import { useIdleLogout } from "./useIdleLogout";
+import { getFontConfig } from "../api/platformUi";
+import {
+  applyPlatformFont,
+  cacheFontKey,
+  clearFontCache,
+} from "../theme/platformFonts";
+import { runtimeConfig } from "../config/runtimeConfig";
 import { logger } from "../utils/logger";
 import { isDesktopApp } from "../utils/desktop";
 import { normalizeAccountType } from "./accountHome";
@@ -621,6 +628,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = (reason: "manual" | "idle" = "manual") => {
     authVersion.current += 1;
     clearAuthToken();
+    // Drop the cached per-user font so the login page / next user starts from
+    // the platform default rather than this user's resolved font.
+    clearFontCache();
     // Explicit logout = "I'm leaving this machine": wipe the cached E2E keys so
     // the private key doesn't linger in IndexedDB on a shared device. NOT done
     // on session-expiry (that keeps the key so re-login stays prompt-free).
@@ -671,6 +681,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Auto sign-out after 15 minutes of inactivity (shared across tabs). Only
   // armed while logged in; `logout("idle")` flags the reason for the login page.
   useIdleLogout(!!user, () => logout("idle"));
+
+  // Apply the caller's resolved app font (their own > org > platform default)
+  // once the session is known, and cache it for a no-flash next boot. Logged
+  // out → fall back to the platform/default font from /api/config.
+  useEffect(() => {
+    let cancelled = false;
+    if (user) {
+      void getFontConfig()
+        .then((cfg) => {
+          if (cancelled) return;
+          cacheFontKey(cfg.resolved);
+          applyPlatformFont(cfg.resolved);
+        })
+        .catch(() => {});
+    } else {
+      applyPlatformFont(runtimeConfig().fontKey);
+    }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email]);
 
   // Re-fetch /api/me and overwrite the cached user. Used after server-side
   // mutations that change the caller's scope/permissions (e.g. a personal

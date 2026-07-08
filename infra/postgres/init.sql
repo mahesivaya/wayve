@@ -1088,6 +1088,12 @@ CREATE TABLE IF NOT EXISTS platform_ui_config (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Per-scope UI font overrides. A user's own font wins over their organization's,
+-- which wins over the platform default (resolved in `platform_ui`). Same short
+-- key vocabulary as platform_ui_config.font_key; NULL = inherit the next level.
+ALTER TABLE users         ADD COLUMN IF NOT EXISTS ui_font_key TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS ui_font_key TEXT;
+
 -- Per-turn AI metering, powering the owner-only /settings/ai/usage dashboard.
 -- One row per assistant turn (all tool-call rounds summed). `organization_id`
 -- is the owner scope: set when the caller's org runs its own AI config, NULL for

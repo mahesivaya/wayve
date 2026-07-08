@@ -10,17 +10,20 @@ import ThemeSyncBridge from "./theme/ThemeSyncBridge";
 import { installDevLog } from "./utils/devlog";
 import { installErrorReporter } from "./utils/errorReporter";
 import { loadRuntimeConfig, runtimeConfig } from "./config/runtimeConfig";
-import { applyPlatformFont } from "./theme/platformFonts";
+import { applyPlatformFont, cachedFontKey } from "./theme/platformFonts";
 
 installDevLog();
 installErrorReporter();
 
 // Resolve runtime config (API/WS base + platform font) before rendering so the
-// first request uses the right origin and the app paints in the platform-chosen
-// font (no flash). `loadRuntimeConfig` never rejects — it falls back to
-// build-time / same-origin defaults — so the app always boots.
+// first request uses the right origin and the app paints in the right font (no
+// flash). A returning signed-in user has their resolved font cached locally;
+// otherwise fall back to the platform default from /api/config. AuthContext
+// refreshes the per-user resolved font once the session is known.
+// `loadRuntimeConfig` never rejects, so the app always boots.
 void loadRuntimeConfig().finally(() => {
-  applyPlatformFont(runtimeConfig().fontKey);
+  const cached = cachedFontKey();
+  applyPlatformFont(cached !== null ? cached : runtimeConfig().fontKey);
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <CustomThemeProvider>

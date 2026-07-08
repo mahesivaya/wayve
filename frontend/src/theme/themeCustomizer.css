@@ -685,3 +685,18 @@
   font-size: var(--text-xs, 0.7rem);
   color: var(--color-text-muted);
 }
+
+/* Stack of per-scope font dropdowns (Your / Organization / Platform). */
+.theme-ui-fonts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+.theme-ui-fonts .theme-ui-font {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}

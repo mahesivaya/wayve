@@ -35,12 +35,19 @@ import "./themeCustomizer.css";
 import { PRESETS, type ThemePreset } from "./themePresets";
 import { useCustomTheme } from "./useCustomTheme";
 import { useAuth } from "../auth/useAuth";
-import { getPlatformUiConfig, putPlatformUiConfig } from "../api/platformUi";
+import {
+  getFontConfig,
+  putMyFont,
+  putOrgFont,
+  putPlatformFont,
+  type FontConfig,
+} from "../api/platformUi";
 import {
   FONT_OPTIONS,
   DEFAULT_FONT_KEY,
   normalizeFontKey,
   applyPlatformFont,
+  cacheFontKey,
   type FontKey,
 } from "./platformFonts";
 
@@ -206,43 +213,50 @@ export default function ThemeCustomizer() {
 
   const [libTab, setLibTab] = useState<LibTab>("themes");
 
-  // Platform-wide app font (UI tab) — only the platform owner may change it, and
-  // it applies to EVERY user (unlike the per-user color overrides here). Stored
-  // via /api/platform/ui-config; the key→stack mapping lives in platformFonts.
+  // App font (UI tab), resolved per scope: a user's own > their org's > the
+  // platform default. Every signed-in user sets their own; org owners set the
+  // org's; the platform owner sets the default. Changing a level re-styles the
+  // whole app to the newly-resolved font (key→stack mapping in platformFonts).
   const { user } = useAuth();
-  const isPlatformOwner =
-    user?.scope === "platform" && user?.effective_role === "owner";
-  const [fontKey, setFontKey] = useState<FontKey>(DEFAULT_FONT_KEY);
+  const [fontCfg, setFontCfg] = useState<FontConfig | null>(null);
   const [fontSaving, setFontSaving] = useState(false);
 
   useEffect(() => {
-    if (!isPlatformOwner) return;
+    if (!user) return;
     let cancelled = false;
-    void getPlatformUiConfig()
+    void getFontConfig()
       .then((cfg) => {
-        if (!cancelled) setFontKey(normalizeFontKey(cfg.font_key));
+        if (!cancelled) setFontCfg(cfg);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [isPlatformOwner]);
+  }, [user]);
 
-  const chooseFont = async (next: FontKey) => {
-    const previous = fontKey;
-    setFontKey(next);
-    applyPlatformFont(next); // optimistic, instant preview across the app
+  const refreshFonts = () =>
+    void getFontConfig()
+      .then(setFontCfg)
+      .catch(() => {});
+
+  const setFont = async (level: "me" | "org" | "platform", next: FontKey) => {
+    const key = next === DEFAULT_FONT_KEY ? null : next;
+    const field = level === "me" ? "user" : level;
     setFontSaving(true);
+    // Optimistic: reflect the pick in the dropdown immediately.
+    setFontCfg((prev) => (prev ? { ...prev, [field]: key } : prev));
     try {
-      const saved = await putPlatformUiConfig(
-        next === DEFAULT_FONT_KEY ? null : next
-      );
-      const resolved = normalizeFontKey(saved.font_key);
-      setFontKey(resolved);
-      applyPlatformFont(resolved);
+      const res =
+        level === "me"
+          ? await putMyFont(key)
+          : level === "org"
+            ? await putOrgFont(key)
+            : await putPlatformFont(key);
+      cacheFontKey(res.resolved);
+      applyPlatformFont(res.resolved); // instant, whole-app
+      refreshFonts(); // re-sync all levels + capabilities
     } catch {
-      setFontKey(previous);
-      applyPlatformFont(previous); // revert on failure
+      refreshFonts(); // fall back to server truth
     } finally {
       setFontSaving(false);
     }
@@ -747,25 +761,80 @@ export default function ThemeCustomizer() {
 
         {libTab === "ui" && (
           <div className="theme-ui-knobs">
-            {isPlatformOwner && (
-              <div className="theme-ui-font">
-                <label htmlFor="ui-app-font">App font</label>
-                <select
-                  id="ui-app-font"
-                  className="theme-ui-font-select"
-                  value={fontKey}
-                  disabled={fontSaving}
-                  onChange={(e) => void chooseFont(e.target.value as FontKey)}
-                >
-                  {FONT_OPTIONS.map((o) => (
-                    <option key={o.key} value={o.key}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="theme-ui-font-note">
-                  Platform-wide — applies to every user.
-                </p>
+            {fontCfg && (
+              <div className="theme-ui-fonts">
+                <div className="theme-ui-font">
+                  <label htmlFor="ui-font-me">Your font</label>
+                  <select
+                    id="ui-font-me"
+                    className="theme-ui-font-select"
+                    value={normalizeFontKey(fontCfg.user)}
+                    disabled={fontSaving}
+                    onChange={(e) =>
+                      void setFont("me", e.target.value as FontKey)
+                    }
+                  >
+                    {FONT_OPTIONS.map((o) => (
+                      <option key={o.key} value={o.key}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="theme-ui-font-note">
+                    Just for you — overrides your organization &amp; the platform
+                    default.
+                  </p>
+                </div>
+
+                {fontCfg.can_set_org && (
+                  <div className="theme-ui-font">
+                    <label htmlFor="ui-font-org">Organization font</label>
+                    <select
+                      id="ui-font-org"
+                      className="theme-ui-font-select"
+                      value={normalizeFontKey(fontCfg.org)}
+                      disabled={fontSaving}
+                      onChange={(e) =>
+                        void setFont("org", e.target.value as FontKey)
+                      }
+                    >
+                      {FONT_OPTIONS.map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="theme-ui-font-note">
+                      For all members who haven&apos;t set their own font.
+                    </p>
+                  </div>
+                )}
+
+                {fontCfg.can_set_platform && (
+                  <div className="theme-ui-font">
+                    <label htmlFor="ui-font-platform">
+                      Platform font (default)
+                    </label>
+                    <select
+                      id="ui-font-platform"
+                      className="theme-ui-font-select"
+                      value={normalizeFontKey(fontCfg.platform)}
+                      disabled={fontSaving}
+                      onChange={(e) =>
+                        void setFont("platform", e.target.value as FontKey)
+                      }
+                    >
+                      {FONT_OPTIONS.map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="theme-ui-font-note">
+                      The default for everyone on the platform.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             {lowContrast && (
