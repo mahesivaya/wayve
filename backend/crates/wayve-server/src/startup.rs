@@ -772,6 +772,14 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         )",
         "CREATE INDEX IF NOT EXISTS idx_member_project_access_user \
          ON member_project_access(user_id)",
+        // Wayve-intended access level for the per-repo Access panel ('read' |
+        // 'write'); GitHub's live collaborator permission wins when readable.
+        "ALTER TABLE member_project_access ADD COLUMN IF NOT EXISTS access_level TEXT NOT NULL DEFAULT 'read'",
+        "ALTER TABLE member_project_access DROP CONSTRAINT IF EXISTS member_project_access_level_check",
+        "ALTER TABLE member_project_access ADD CONSTRAINT member_project_access_level_check \
+         CHECK (access_level IN ('read', 'write'))",
+        "CREATE INDEX IF NOT EXISTS idx_member_project_access_repo \
+         ON member_project_access(repo_full_name)",
     ];
 
     for statement in statements {

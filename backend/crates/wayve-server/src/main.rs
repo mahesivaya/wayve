@@ -38,6 +38,7 @@ mod platform_team;
 mod platform_ui;
 mod prelude;
 mod rbac_cache;
+mod repo_access;
 mod routes;
 mod routing;
 mod scheduler;
