@@ -411,6 +411,17 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee TEXT NOT NULL DEFAULT ''",
         "CREATE INDEX IF NOT EXISTS idx_tasks_user_priority \
          ON tasks(user_id, priority DESC, created_at DESC)",
+        // Per-user friendly task number (see init.sql). Mirrored here so prod —
+        // where init.sql only runs on a fresh volume — gets the column, a
+        // one-time backfill of existing rows, and the uniqueness guard on boot.
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_number INTEGER",
+        "WITH numbered AS ( \
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id) AS rn \
+            FROM tasks WHERE task_number IS NULL \
+         ) \
+         UPDATE tasks t SET task_number = n.rn FROM numbered n WHERE t.id = n.id",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_task_number \
+         ON tasks(user_id, task_number) WHERE task_number IS NOT NULL",
         // ────────────────────────────────────────────────────────────────
         // Workspace Documents — a shared store. `organization_id` is NULLABLE:
         // non-null = that org's shared docs; NULL = the platform-team-wide set

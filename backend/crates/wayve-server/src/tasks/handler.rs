@@ -10,6 +10,7 @@ use wayve_security::rbac::{Scope, resolve_role_context};
 fn task_from_row(row: sqlx::postgres::PgRow) -> Task {
     Task {
         id: row.get("id"),
+        task_number: row.try_get("task_number").ok().flatten(),
         name: row.get("name"),
         description: row.get("description"),
         priority: row.get("priority"),
@@ -48,7 +49,7 @@ pub async fn list_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
 
     let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
         let rows = sqlx::query(
-            "SELECT id, name, description, priority, status, assigned_by, assignee,
+            "SELECT id, task_number, name, description, priority, status, assigned_by, assignee,
                     assignee_id, project_id,
                     created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url
              FROM tasks
@@ -137,11 +138,15 @@ pub async fn create_task(
     let assignee_id = data.assignee_id;
     let project_id = data.project_id;
 
+    // task_number is the next per-user sequence value (MAX+1, starting at 1).
+    // Computed inline off the same $1 so a single statement assigns it; imported
+    // tasks (Jira/GitLab) never take this path and stay un-numbered.
     let row = sqlx::query(
         "INSERT INTO tasks (user_id, name, description, priority, status, assigned_by, assignee,
-                            assignee_id, project_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING id, name, description, priority, status, assigned_by, assignee,
+                            assignee_id, project_id, task_number)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                 COALESCE((SELECT MAX(task_number) FROM tasks WHERE user_id = $1), 0) + 1)
+         RETURNING id, task_number, name, description, priority, status, assigned_by, assignee,
                    assignee_id, project_id,
                    created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url",
     )
@@ -230,7 +235,7 @@ pub async fn update_task(
              assigned_by = $5, assignee = $6, assignee_id = $7, project_id = $8,
              updated_at = NOW()
          WHERE id = $9 AND user_id = $10
-         RETURNING id, name, description, priority, status, assigned_by, assignee,
+         RETURNING id, task_number, name, description, priority, status, assigned_by, assignee,
                    assignee_id, project_id,
                    created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url",
     )
