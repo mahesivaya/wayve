@@ -24,7 +24,9 @@ import { logger } from "../utils/logger";
 import ChatHeader from "./components/ChatHeader";
 import ChannelSettingsPanel from "./components/ChannelSettingsPanel";
 import ConversationSidebar from "./components/ConversationSidebar";
-import MessageComposer from "./components/MessageComposer";
+import MessageComposer, {
+  type MentionCandidate,
+} from "./components/MessageComposer";
 import MessageThread from "./components/MessageThread";
 import ThreadPanel from "./components/ThreadPanel";
 import ResizeHandle from "../components/ResizeHandle";
@@ -155,6 +157,30 @@ export default function Chat() {
     () => getConversationTitle(selectedConversation),
     [selectedConversation]
   );
+
+  // People the composer can @-mention. Channels only — 1-on-1 DMs get no picker
+  // (the single peer is already implied). Candidates are the channel's members
+  // resolved to their directory id where known, minus the current user. `label`
+  // is the email's local part — what gets inserted after the `@`.
+  const mentionCandidates = useMemo<MentionCandidate[]>(() => {
+    if (selectedConversation?.type !== "channel") return [];
+    const selfEmail = user?.email?.trim().toLowerCase();
+    return (selectedConversation.channel.member_emails ?? [])
+      .map((email) => {
+        const trimmed = email.trim();
+        const match = users.find(
+          (u) => u.email.trim().toLowerCase() === trimmed.toLowerCase()
+        );
+        return {
+          id: match?.id ?? -1,
+          email: trimmed,
+          label: trimmed.split("@")[0],
+        };
+      })
+      .filter(
+        (c) => c.id !== user?.id && c.email.toLowerCase() !== selfEmail
+      );
+  }, [selectedConversation, users, user?.id, user?.email]);
   const isSelectedChannelAdmin = isChannelAdmin(selectedChannel, user);
   const canChatInSelectedChannel =
     !selectedChannel || selectedChannel.is_member;
@@ -959,6 +985,7 @@ export default function Chat() {
               onSend={() => {
                 void sendMessage();
               }}
+              mentionCandidates={mentionCandidates}
               error={composeError}
               onDismissError={() => setComposeError("")}
               allowAttachments={selectedConversation?.type === "user"}
