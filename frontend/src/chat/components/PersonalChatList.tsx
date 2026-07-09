@@ -87,9 +87,10 @@ export default function PersonalChatList({
   };
 
   // Directory of everyone with no chat history, shown under a "Users" header
-  // below the channel list.
+  // below the channel list. The header stays visible even when the list is
+  // empty (everyone has graduated into Recent) so the "Users" section label
+  // doesn't vanish — matching the always-present static "Channels" header.
   if (section === "people") {
-    if (people.length === 0) return null;
     return (
       <>
         <div className="conversation-section-title conversation-section-title--users">
