@@ -969,6 +969,23 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_id  INTEGER REFERENCES projec
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee_id ON tasks(assignee_id) WHERE assignee_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id  ON tasks(project_id)  WHERE project_id IS NOT NULL;
 
+-- Human-friendly, per-user task number assigned sequentially at creation
+-- (each user's own tasks are #1, #2, #3, …). Distinct from the global SERIAL
+-- `id`, which is shared across all users and jumps around. Nullable so imported
+-- tasks (Jira/GitLab) — which already carry their own external key badge — can
+-- be left un-numbered. Assigned in the create-task handler as MAX+1 per user.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_number INTEGER;
+-- Backfill any rows still missing a number: number each user's existing tasks
+-- by creation order. Idempotent — only touches NULL rows.
+WITH numbered AS (
+    SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id) AS rn
+    FROM tasks WHERE task_number IS NULL
+)
+UPDATE tasks t SET task_number = n.rn FROM numbered n WHERE t.id = n.id;
+-- One number per user; partial so un-numbered (imported) rows are exempt.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_task_number
+    ON tasks(user_id, task_number) WHERE task_number IS NOT NULL;
+
 -- Per-user Jira Cloud connection (Basic auth: email + API token). The token is
 -- stored encrypted at rest via wayve_security::encryption (the same symmetric
 -- AES-256-GCM scheme as org_sso_configs.client_secret_*); this is unrelated to

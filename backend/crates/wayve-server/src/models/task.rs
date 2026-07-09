@@ -3,6 +3,10 @@ use crate::prelude::*;
 #[derive(Serialize, FromRow)]
 pub struct Task {
     pub id: i32,
+    /// Human-friendly per-user task number (task #1, #2, … within the owner's
+    /// own list), assigned at creation. None for imported tasks, which carry
+    /// their external key (Jira/GitLab) instead.
+    pub task_number: Option<i32>,
     pub name: String,
     pub description: String,
     pub priority: i16,

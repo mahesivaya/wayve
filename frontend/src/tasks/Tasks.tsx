@@ -1166,6 +1166,14 @@ export default function Tasks() {
                               >
                                 P{task.priority}
                               </span>
+                              {task.task_number != null && (
+                                <span
+                                  className="task-number-badge"
+                                  title="Task number"
+                                >
+                                  #{task.task_number}
+                                </span>
+                              )}
                             </div>
                             <button
                               type="button"
@@ -1262,6 +1270,11 @@ export default function Tasks() {
                           >
                             P{task.priority}
                           </span>
+                          {task.task_number != null && (
+                            <span className="task-number-badge" title="Task number">
+                              #{task.task_number}
+                            </span>
+                          )}
                           <h3>
                             <button
                               type="button"
@@ -1362,6 +1375,11 @@ export default function Tasks() {
                           >
                             P{task.priority}
                           </span>
+                          {task.task_number != null && (
+                            <span className="task-number-badge" title="Task number">
+                              #{task.task_number}
+                            </span>
+                          )}
                           <h3>
                             <button
                               type="button"

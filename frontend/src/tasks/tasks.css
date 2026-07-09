@@ -660,6 +660,23 @@
   background: var(--color-text-slate-light);
 }
 
+/* Friendly per-user task number (#12) — a muted, monospace pill sitting next
+   to the priority badge. Neutral so it reads as an identifier, not a status. */
+.task-number-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .task-error {
   margin-top: 10px;
   color: var(--color-danger);

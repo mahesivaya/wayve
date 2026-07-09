@@ -8,6 +8,10 @@ export type TaskStatus = "to_do" | "in_progress" | "in_review" | "done";
 
 export type Task = {
   id: number;
+  // Friendly per-user task number (task #1, #2, … within your own list),
+  // assigned at creation. Null for imported tasks, which show their external
+  // key badge (Jira/GitLab) instead.
+  task_number?: number | null;
   name: string;
   description: string;
   priority: TaskPriority;
