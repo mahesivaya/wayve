@@ -205,6 +205,18 @@ function buildMenu() {
 }
 
 app.whenReady().then(() => {
+  // Google (and some other providers) refuse to run their OAuth consent screen
+  // inside an embedded user-agent, so "Sign in with Google" dead-ends on the
+  // "this browser or app may not be secure" page. Present a plain Chrome UA by
+  // stripping the "Electron/<v>" and "<app>/<v>" tokens that mark this window as
+  // a webview. Applies to every request in the app (including the redirect to
+  // accounts.google.com), which is what Google inspects.
+  const cleanUa = app.userAgentFallback
+    .replace(/\sElectron\/\S+/i, "")
+    .replace(/\sfluxze[\w-]*\/\S+/i, "");
+  app.userAgentFallback = cleanUa;
+  session.defaultSession.setUserAgent(cleanUa);
+
   // Grant camera/mic (calls), notifications and clipboard reads to fluxze.com;
   // deny everything else.
   session.defaultSession.setPermissionRequestHandler(
