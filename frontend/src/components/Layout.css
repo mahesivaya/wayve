@@ -125,6 +125,21 @@
   gap: 12px;
 }
 
+/* Desktop shell only: the profile button at the sidebar bottom that replaces
+   the Settings link. Uses the standard .sidebar-link chrome; the avatar rides
+   in the icon slot and the username truncates rather than overflowing. */
+.sidebar-profile-btn {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-profile-btn .sidebar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Elevated-session indicator in the header (owner in admin mode). */
 .admin-mode-badge {
   display: inline-flex;

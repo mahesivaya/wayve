@@ -34,7 +34,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   openai_compatible: "OpenAI-compatible",
 };
 
-export default function AIChat() {
+export default function AIChat({ hideHeader = false }: { hideHeader?: boolean }) {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -308,30 +308,34 @@ export default function AIChat() {
 
   return (
     <div className={`ai-chat${isEmpty ? " is-empty" : ""}`}>
-      <div className="ai-chat-header">
-        <div className="ai-chat-title">
-          <span className="ai-chat-icon">✨</span>
-          AI Chat
-          <span className="ai-chat-sub">{badgeText}</span>
-          {model && <span className="ai-chat-model">{model}</span>}
+      {/* Header (title + provider/model + actions). Hidden when embedded as the
+        desktop Home surface, which wants a clean, chrome-free chat. */}
+      {!hideHeader && (
+        <div className="ai-chat-header">
+          <div className="ai-chat-title">
+            <span className="ai-chat-icon">✨</span>
+            AI Chat
+            <span className="ai-chat-sub">{badgeText}</span>
+            {model && <span className="ai-chat-model">{model}</span>}
+          </div>
+          <div className="ai-chat-actions">
+            {canManageAi && (
+              <button
+                className="ai-chat-settings"
+                onClick={() => navigate("/settings/ai")}
+                title="Change the AI provider for your organization"
+              >
+                ⚙ AI settings
+              </button>
+            )}
+            {messages.length > 0 && (
+              <button className="ai-chat-clear" onClick={clear} disabled={busy}>
+                Clear
+              </button>
+            )}
+          </div>
         </div>
-        <div className="ai-chat-actions">
-          {canManageAi && (
-            <button
-              className="ai-chat-settings"
-              onClick={() => navigate("/settings/ai")}
-              title="Change the AI provider for your organization"
-            >
-              ⚙ AI settings
-            </button>
-          )}
-          {messages.length > 0 && (
-            <button className="ai-chat-clear" onClick={clear} disabled={busy}>
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       {isEmpty ? (
         <div className="ai-chat-stage">

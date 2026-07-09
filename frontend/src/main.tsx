@@ -11,9 +11,13 @@ import { installDevLog } from "./utils/devlog";
 import { installErrorReporter } from "./utils/errorReporter";
 import { loadRuntimeConfig, runtimeConfig } from "./config/runtimeConfig";
 import { applyPlatformFont, cachedFontKey } from "./theme/platformFonts";
+import { applyRuntimeClass } from "./utils/desktop";
 
 installDevLog();
 installErrorReporter();
+// Tag <html> with is-desktop/is-web (+ data-platform) so stylesheets can fork
+// between the Electron shell and the browser with pure CSS.
+applyRuntimeClass();
 
 // Resolve runtime config (API/WS base + platform font) before rendering so the
 // first request uses the right origin and the app paints in the right font (no

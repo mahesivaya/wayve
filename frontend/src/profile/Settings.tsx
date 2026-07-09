@@ -26,6 +26,8 @@ import { cachedLoad } from "../api/cache";
 import { listMyTickets, type SupportTicket } from "../api/support";
 import SupportModal from "../support/SupportModal";
 import { fmtDate, fmtShortDate } from "../utils/datetime";
+import { isDesktopApp } from "../utils/desktop";
+import ThemeCustomizer from "../theme/ThemeCustomizer";
 
 type Account = {
   id: number;
@@ -57,6 +59,36 @@ function formatMoney(cents: number, currency: string): string {
 export default function Settings() {
   const navigate = useNavigate();
   const { user, refresh, logout } = useAuth();
+  // Desktop shell only: the header ProfileMenu dropdown is gone there, so its
+  // account links (My Profile / Integrations / Appearance / Log out) are
+  // surfaced as an Account card on this page instead.
+  const desktop = isDesktopApp();
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+
+  // Free personal accounts see an Upgrade CTA (moved here from the header in the
+  // desktop shell). Mirrors the gate + navigation in Layout's header Upgrade.
+  const currentPlanCode = user?.current_plan?.code ?? "basic_user";
+  const isBasicPersonalUser =
+    user?.account_type === "personal" &&
+    currentPlanCode === "basic_user" &&
+    user?.scope !== "platform" &&
+    user?.scope !== "organization";
+
+  const goToUpgrade = () => {
+    if (!user) return;
+    const params = new URLSearchParams({
+      account: user.account_type,
+      plan: currentPlanCode,
+    });
+    void navigate(`/billing?${params.toString()}`, {
+      state: {
+        accountType: user.account_type,
+        currentPlan: user.current_plan,
+        userId: user.id,
+        email: user.email,
+      },
+    });
+  };
   const [profile, setProfile] = useState<
     | (ProfileData & {
         total_emails?: number;
@@ -311,6 +343,77 @@ export default function Settings() {
     <div className="settings-page">
       <div className="settings-stack">
         <h1 className="settings-page-title">Settings &amp; Privacy</h1>
+
+        {/* Desktop shell: the Upgrade CTA, moved here from the header. Only for
+          free personal accounts, matching the header gate on the web. */}
+        {desktop && isBasicPersonalUser && (
+          <section className="settings-card settings-upgrade-card">
+            <h2 className="settings-card-title">Upgrade</h2>
+            <div className="settings-rows">
+              <p className="settings-upgrade-blurb">
+                Get more storage, higher limits, and team features.
+              </p>
+              <button
+                type="button"
+                className="settings-billing-link settings-upgrade-btn"
+                onClick={goToUpgrade}
+              >
+                Upgrade plan
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Desktop shell: the account links that live in the header ProfileMenu
+          dropdown on the web (which the desktop shell hides). */}
+        {desktop && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Account</h2>
+            <div className="settings-rows">
+              <button
+                type="button"
+                className="settings-account-link"
+                onClick={() => void navigate("/profile")}
+              >
+                <span className="settings-account-link-icon">👤</span>
+                <span>My Profile</span>
+              </button>
+              <button
+                type="button"
+                className="settings-account-link"
+                onClick={() => void navigate("/integrations")}
+              >
+                <span className="settings-account-link-icon">🔌</span>
+                <span>Integrations</span>
+              </button>
+              <button
+                type="button"
+                className="settings-account-link"
+                aria-expanded={appearanceOpen}
+                onClick={() => setAppearanceOpen((o) => !o)}
+              >
+                <span className="settings-account-link-icon">🎨</span>
+                <span>Appearance</span>
+                <span className="settings-account-link-chevron">
+                  {appearanceOpen ? "▾" : "›"}
+                </span>
+              </button>
+              {appearanceOpen && (
+                <div className="settings-appearance-panel">
+                  <ThemeCustomizer />
+                </div>
+              )}
+              <button
+                type="button"
+                className="settings-account-link settings-account-logout"
+                onClick={() => logout()}
+              >
+                <span className="settings-account-link-icon">⏻</span>
+                <span>Log out</span>
+              </button>
+            </div>
+          </section>
+        )}
 
         {showChatEncrypt && (
           <section className="settings-card">

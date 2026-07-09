@@ -16,6 +16,8 @@ import {
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
+import Avatar from "./Avatar";
+import { getApiBase } from "../config/env";
 import NotificationBell from "./NotificationBell";
 import SupportModal from "../support/SupportModal";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
@@ -27,6 +29,7 @@ import ResizeHandle from "./ResizeHandle";
 import { useResizableWidth } from "./useResizableWidth";
 import { listTeams, createTeam, type Team } from "../api/workspace";
 import { getFeatureAccess } from "../api/featureAccess";
+import { isDesktopApp } from "../utils/desktop";
 import "./Layout.css";
 import {
   HomeIcon,
@@ -1093,6 +1096,73 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     },
   ];
 
+  // Desktop shell (Electron): only the profile/account menu relocates — to the
+  // bottom of the sidebar, above Settings. Every other header action
+  // (notifications, report, upgrade, split) stays in the header in both
+  // runtimes. `headerActions` is that always-in-header cluster (no ProfileMenu).
+  const desktop = isDesktopApp();
+  const headerActions = (
+    <>
+      {/* Persistent indicator that the owner is elevated into the admin
+        console. Only shows in admin mode (the ProfileMenu carries the
+        enter/exit control). */}
+      {user.mode === "admin" && user.can_switch_admin && (
+        <span className="admin-mode-badge" title="You are in admin mode">
+          🛡️ Admin mode
+        </span>
+      )}
+      {/* Unread notifications (emails + chat). Sits left of the Report
+        icon; badge count mirrors the sidebar Emails/Chat badges. */}
+      <NotificationBell
+        emailUnread={emailsUnreadCount}
+        chatUnread={chatUnreadCount}
+      />
+
+      {/* Bug-report shortcut. Always visible to signed-in users so issues can
+        be filed from anywhere. Same overlay as ProfileMenu's "Help & Report
+        issue". */}
+      <button
+        type="button"
+        className="header-bug-btn"
+        onClick={() => setSupportOpen(true)}
+        title="Report an issue"
+        aria-label="Report an issue"
+      >
+        <BugReportIcon className="header-bug-icon" />
+      </button>
+
+      {/* Upgrade nudge — the single most clickable monetization surface for
+        free personal accounts. Desktop shell moves it into the Settings page
+        (see the Upgrade card there); the browser keeps it in the header. */}
+      {!desktop && isBasicPersonalUser && (
+        <button
+          type="button"
+          className="header-upgrade-btn"
+          onClick={goToUpgrade}
+        >
+          Upgrade
+        </button>
+      )}
+
+      <button
+        type="button"
+        className={`duplicate-pane-btn ${splitTarget === "right" ? "active" : ""}`}
+        onClick={duplicateCurrentApp}
+        title="Duplicate current app"
+        aria-label="Duplicate current app"
+      >
+        <svg
+          className="duplicate-pane-icon"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <rect x="4" y="5" width="16" height="14" rx="2" />
+          <line x1="12" y1="5" x2="12" y2="19" />
+        </svg>
+      </button>
+    </>
+  );
+
   return (
     <div className="app">
       <SearchProvider>
@@ -1141,69 +1211,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             !location.pathname.startsWith("/notes") &&
             !location.pathname.startsWith("/chat") && <SearchBar />}
 
+          {/* Global actions stay in the header in both runtimes. The profile
+            menu is the one exception: the desktop shell renders it at the
+            bottom of the sidebar instead (see .sidebar-profile below). */}
           <div className="actions">
-            {/* Persistent indicator that the owner is elevated into the admin
-              console. Only shows in admin mode (the ProfileMenu carries the
-              enter/exit control). */}
-            {user.mode === "admin" && user.can_switch_admin && (
-              <span className="admin-mode-badge" title="You are in admin mode">
-                🛡️ Admin mode
-              </span>
-            )}
-            {/* Unread notifications (emails + chat). Sits left of the Report
-              icon; badge count mirrors the sidebar Emails/Chat badges. */}
-            <NotificationBell
-              emailUnread={emailsUnreadCount}
-              chatUnread={chatUnreadCount}
-            />
-
-            {/* Bug-report shortcut. Always visible to signed-in users so
-              issues can be filed from anywhere without first hunting through
-              Settings. Same overlay as ProfileMenu's "Help & Report issue".
-              Sits before Upgrade so the monetization CTA still has primary
-              emphasis on the right edge. */}
-            <button
-              type="button"
-              className="header-bug-btn"
-              onClick={() => setSupportOpen(true)}
-              title="Report an issue"
-              aria-label="Report an issue"
-            >
-              <BugReportIcon className="header-bug-icon" />
-            </button>
-
-            {/* Welcome / role label removed — the signed-in identity is
-              already visible via the ProfileMenu avatar on the right.
-              Keep the Upgrade nudge here because it's the single most
-              clickable monetization surface for free personal accounts. */}
-            {isBasicPersonalUser && (
-              <button
-                type="button"
-                className="header-upgrade-btn"
-                onClick={goToUpgrade}
-              >
-                Upgrade
-              </button>
-            )}
-
-            <button
-              type="button"
-              className={`duplicate-pane-btn ${splitTarget === "right" ? "active" : ""}`}
-              onClick={duplicateCurrentApp}
-              title="Duplicate current app"
-              aria-label="Duplicate current app"
-            >
-              <svg
-                className="duplicate-pane-icon"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <rect x="4" y="5" width="16" height="14" rx="2" />
-                <line x1="12" y1="5" x2="12" y2="19" />
-              </svg>
-            </button>
-
-            <ProfileMenu />
+            {headerActions}
+            {!desktop && <ProfileMenu />}
           </div>
         </div>
 
@@ -1299,12 +1312,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 "Tasks",
                 <TasksIcon size={18} />
               )}
-              {renderSidebarItem(
-                "/ai-chat",
-                "aichat",
-                "AI Chat",
-                <AIChatIcon size={18} />
-              )}
+              {/* Desktop shell: AI Chat lives on the Home page, so its own
+                sidebar item is hidden there. */}
+              {!desktop &&
+                renderSidebarItem(
+                  "/ai-chat",
+                  "aichat",
+                  "AI Chat",
+                  <AIChatIcon size={18} />
+                )}
               {/* Code Repo moved into the Workspace section (below) for
                   workspace users. */}
               {/* Personal accounts: opt-in apps they've added (in catalog
@@ -1387,11 +1403,38 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               flex spacer so it stays anchored regardless of how many nav
               groups are present above it. */}
             <div className="sidebar-section sidebar-section-bottom">
-              {renderSidebarLink(
-                "/settings",
-                "Settings",
-                <SettingsIcon size={18} />,
-                location.pathname === "/settings"
+              {/* Desktop shell: a profile button (avatar + username) REPLACES
+                the Settings link. Clicking it opens the full Settings page
+                (plain navigation — no split). The browser keeps the plain
+                Settings link (its ProfileMenu lives in the header). */}
+              {desktop ? (
+                <button
+                  type="button"
+                  className={`sidebar-link sidebar-profile-btn${
+                    location.pathname === "/settings" ? " active" : ""
+                  }`}
+                  title={`${user.email} — open settings`}
+                  onClick={() => {
+                    setNavOpen(false);
+                    void navigate("/settings");
+                  }}
+                >
+                  <span className="sidebar-icon" aria-hidden="true">
+                    <Avatar
+                      name={user.email}
+                      src={`${getApiBase()}/api/users/${user.id}/avatar`}
+                      size={22}
+                    />
+                  </span>
+                  <span className="sidebar-label">{user.email}</span>
+                </button>
+              ) : (
+                renderSidebarLink(
+                  "/settings",
+                  "Settings",
+                  <SettingsIcon size={18} />,
+                  location.pathname === "/settings"
+                )
               )}
             </div>
           </nav>
