@@ -3,13 +3,18 @@ import { BRAND_NAME } from "../config/brand";
 import BrandLogo from "../components/BrandLogo";
 import { BrandIcon } from "../integrations/BrandIcon";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import ActivityDashboard from "./dashboard/ActivityDashboard";
 import HeroMock from "./HeroMock";
 import DownloadApp from "./DownloadApp";
 import PersonalDashboard from "./dashboard/PersonalDashboard";
 import { reportVisit } from "../api/visits";
+import { isDesktopApp } from "../utils/desktop";
 import "./home.css";
+
+// Desktop shell only: Home renders the AI Chat surface (the sidebar AI Chat
+// item is removed there). Lazy so web users loading Home never fetch it.
+const AIChat = lazy(() => import("../aichat/AIChat"));
 
 export default function Home() {
   const { user } = useAuth();
@@ -447,6 +452,20 @@ export default function Home() {
   // Today + Emails) that's shaped around how an individual moves
   // through their day; org and platform-admin users continue to see
   // the 2×2 ActivityDashboard.
+  // Desktop shell: Home IS the AI Chat page. Clicking Home (which routes to
+  // "/") lands the user in AI Chat instead of the dashboard.
+  if (isDesktopApp()) {
+    return (
+      <div className="home-authed-aichat">
+        <Suspense
+          fallback={<div className="split-loading">Loading AI Chat…</div>}
+        >
+          <AIChat hideHeader />
+        </Suspense>
+      </div>
+    );
+  }
+
   const isPersonalUser =
     user.scope === "personal" || user.account_type === "personal";
 

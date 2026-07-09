@@ -213,6 +213,58 @@
   flex-direction: column;
 }
 
+/* Account links (desktop shell): the ProfileMenu dropdown items surfaced as
+   flat rows on the Settings page. Full-width, icon + label, hover highlight. */
+.settings-account-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.settings-account-link:hover {
+  background: var(--color-surface-hover);
+}
+
+.settings-account-link-icon {
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.settings-account-link-chevron {
+  margin-left: auto;
+  color: var(--color-text-muted);
+}
+
+.settings-account-logout {
+  color: var(--color-danger, #dc2626);
+}
+
+.settings-appearance-panel {
+  padding: 4px 8px 8px 42px;
+}
+
+.settings-upgrade-blurb {
+  margin: 0 0 12px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.settings-upgrade-btn {
+  align-self: flex-start;
+}
+
 /* Inline accounts list rendered directly under the "Connected Accounts"
    row inside the Storage & Usage card. Slightly indented and grouped so
    it visually reads as a sub-list of the row above. */
