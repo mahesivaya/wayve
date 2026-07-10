@@ -4,16 +4,13 @@ import BrandLogo from "../components/BrandLogo";
 import { BrandIcon } from "../integrations/BrandIcon";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
-import ActivityDashboard from "./dashboard/ActivityDashboard";
 import HeroMock from "./HeroMock";
 import DownloadApp from "./DownloadApp";
-import PersonalDashboard from "./dashboard/PersonalDashboard";
 import { reportVisit } from "../api/visits";
-import { isDesktopApp } from "../utils/desktop";
 import "./home.css";
 
-// Desktop shell only: Home renders the AI Chat surface (the sidebar AI Chat
-// item is removed there). Lazy so web users loading Home never fetch it.
+// Home renders the AI Chat surface for every signed-in user (the sidebar AI
+// Chat item is removed). Lazy so the logged-out marketing page never fetches it.
 const AIChat = lazy(() => import("../aichat/AIChat"));
 
 export default function Home() {
@@ -351,93 +348,6 @@ export default function Home() {
         </main>
 
         <footer className="public-home-footer">
-          <div className="public-home-footer-grid">
-            <div className="public-home-footer-brand">
-              <button type="button" onClick={() => navigate("/")}>
-                <BrandLogo className="brand-mark" size={28} />
-                <span>{BRAND_NAME}</span>
-              </button>
-            </div>
-
-            <nav className="public-home-footer-column" aria-label="Company">
-              <button type="button" onClick={() => navigate("/support")}>
-                Support
-              </button>
-              <button type="button" onClick={() => navigate("/pricing")}>
-                Pricing
-              </button>
-              <button type="button" onClick={() => navigate("/about")}>
-                Privacy Policy
-              </button>
-              <button type="button" onClick={() => navigate("/developers")}>
-                Developers
-              </button>
-              <button type="button" onClick={() => navigate("/enterprise")}>
-                Technical white paper
-              </button>
-            </nav>
-
-            <nav className="public-home-footer-column" aria-label="Product">
-              <button type="button" onClick={() => navigate("/enterprise")}>
-                Fluxze for Business
-              </button>
-              <button type="button" onClick={() => navigate("/services/email")}>
-                Email Aliases
-              </button>
-              <button type="button" onClick={() => navigate("/developers")}>
-                Release notes
-              </button>
-              <button type="button" onClick={() => navigate("/services/email")}>
-                Encrypted Email
-              </button>
-              <button type="button" onClick={() => navigate("/support")}>
-                Status
-              </button>
-            </nav>
-
-            <nav className="public-home-footer-column" aria-label="Resources">
-              <button type="button" onClick={() => navigate("/about")}>
-                Terms of service
-              </button>
-              <button type="button" onClick={() => navigate("/about")}>
-                Press
-              </button>
-              <button type="button" onClick={() => navigate("/services/email")}>
-                Private Email
-              </button>
-              <button type="button" onClick={() => navigate("/support")}>
-                Contact
-              </button>
-              <button type="button" onClick={() => navigate("/logs/audit")}>
-                Transparency Report
-              </button>
-            </nav>
-
-            <div className="public-home-footer-social" aria-label="Follow us">
-              <h2>Follow us</h2>
-              <div className="public-home-social-links">
-                <a href="https://www.facebook.com" aria-label="Facebook">
-                  f
-                </a>
-                <a href="https://www.instagram.com" aria-label="Instagram">
-                  ◎
-                </a>
-                <a href="https://www.linkedin.com" aria-label="LinkedIn">
-                  in
-                </a>
-                <a href="https://mastodon.social" aria-label="Mastodon">
-                  m
-                </a>
-                <a href="https://x.com" aria-label="X">
-                  x
-                </a>
-                <a href="https://www.youtube.com" aria-label="YouTube">
-                  ▶
-                </a>
-              </div>
-            </div>
-          </div>
-
           <p className="public-home-footer-legal">
             © {BRAND_NAME} {new Date().getFullYear()}
           </p>
@@ -446,43 +356,17 @@ export default function Home() {
     );
   }
 
-  // Signed-in personal home — Activity Dashboard replaces the legacy
-  // grid of app tiles (which duplicated the left sidebar's navigation).
-  // Personal users get a three-section vertical dashboard (welcome +
-  // Today + Emails) that's shaped around how an individual moves
-  // through their day; org and platform-admin users continue to see
-  // the 2×2 ActivityDashboard.
-  // Desktop shell: Home IS the AI Chat page. Clicking Home (which routes to
-  // "/") lands the user in AI Chat instead of the dashboard.
-  if (isDesktopApp()) {
-    return (
-      <div className="home-authed-aichat">
-        <Suspense
-          fallback={<div className="split-loading">Loading AI Chat…</div>}
-        >
-          <AIChat hideHeader />
-        </Suspense>
-      </div>
-    );
-  }
-
-  const isPersonalUser =
-    user.scope === "personal" || user.account_type === "personal";
-
-  if (isPersonalUser) {
-    // Personal home owns its own scroll inside the Emails card, so it
-    // skips the page-level `u-page-shell` (which sets `overflow-y: auto`
-    // on the whole page) and uses a fixed-height flex wrapper instead.
-    return (
-      <div className="home-authed-personal">
-        <PersonalDashboard />
-      </div>
-    );
-  }
-
+  // Home IS the AI Chat page for every signed-in user (personal, organization,
+  // and platform). Clicking Home (which routes to "/") lands the user straight
+  // in AI Chat; the AI Chat sidebar item is removed (see Layout). `hideHeader`
+  // keeps the surface chrome-free — no "AI Chat / provider / model" bar.
   return (
-    <div className="home-authed u-page-shell">
-      <ActivityDashboard />
+    <div className="home-authed-aichat">
+      <Suspense
+        fallback={<div className="split-loading">Loading AI Chat…</div>}
+      >
+        <AIChat hideHeader />
+      </Suspense>
     </div>
   );
 }

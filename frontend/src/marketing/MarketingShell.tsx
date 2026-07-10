@@ -13,6 +13,11 @@ import "./marketing.css";
 export default function MarketingShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  // Docs are internal/platform-only: hide the link from personal accounts,
+  // organizations, and logged-out visitors (the public main page).
+  const isPlatform =
+    user?.account_type === "platform_admin" ||
+    !!user?.username?.startsWith("platform-");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
@@ -49,7 +54,9 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
 
         <nav className="public-home-links" aria-label="Main navigation">
           <button onClick={() => navigate("/pricing")}>Pricing</button>
-          <button onClick={() => navigate("/docs")}>Docs</button>
+          {isPlatform && (
+            <button onClick={() => navigate("/docs")}>Docs</button>
+          )}
           <button onClick={() => navigate("/support")}>Support</button>
         </nav>
 
@@ -100,7 +107,9 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
         {mobileMenuOpen && (
           <div className="public-home-mobile-menu" ref={mobileMenuRef}>
             <button onClick={() => goMobile("/pricing")}>Pricing</button>
-            <button onClick={() => goMobile("/docs")}>Docs</button>
+            {isPlatform && (
+              <button onClick={() => goMobile("/docs")}>Docs</button>
+            )}
             <button onClick={() => goMobile("/support")}>Support</button>
             {user ? (
               <>
@@ -133,50 +142,6 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
       <main className="public-home-main">{children}</main>
 
       <footer className="marketing-footer">
-        <div className="marketing-footer-inner">
-          <div>
-            <strong className="marketing-footer-brand">
-              <BrandLogo
-                className="brand-mark"
-                size={32}
-                gradientId="fluxze-footer-mark"
-              />
-              {BRAND_NAME}
-            </strong>
-            <p>One private workspace for mail, chat, calls, files, and AI.</p>
-          </div>
-          <div>
-            <h4>Product</h4>
-            <button onClick={() => navigate("/pricing")}>Pricing</button>
-            <button onClick={() => navigate("/enterprise")}>Enterprise</button>
-            <button onClick={() => navigate("/support")}>Support</button>
-          </div>
-          <div>
-            <h4>Developers</h4>
-            <button onClick={() => navigate("/docs")}>All docs</button>
-            <button onClick={() => navigate("/docs/api")}>API reference</button>
-            <button onClick={() => navigate("/docs/quotas")}>
-              Quotas & tiers
-            </button>
-            <button onClick={() => navigate("/docs/developers")}>
-              SDK & guides
-            </button>
-          </div>
-          <div>
-            <h4>Account</h4>
-            {user ? (
-              <>
-                <button onClick={() => navigate("/home")}>Home</button>
-                <button onClick={() => logout()}>Logout</button>
-              </>
-            ) : (
-              <>
-                <button onClick={() => navigate("/login")}>Login</button>
-                <button onClick={() => navigate("/register")}>Register</button>
-              </>
-            )}
-          </div>
-        </div>
         <p className="marketing-footer-legal">
           © {new Date().getFullYear()} {BRAND_NAME}. All rights reserved.
         </p>
