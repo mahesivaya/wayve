@@ -3,6 +3,42 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.1.0](https://github.com/mahesivaya/wayve/releases/tag/v7.1.0) - 2026-07-10
+
+### 🚀 Features
+
+- **ui:** Default to a neutral person silhouette instead of name initials
+- **desktop:** Compact mark-only logo in the desktop shell header
+- **home:** Make Home the AI Chat page for all users; drop AI Chat sidebar item
+- **desktop:** Compact header brand + sidebar top in the Electron shell
+- **emails:** Add sender-description normalizer for email labels (WIP, not yet wired)
+- **desktop:** Tailor the Electron shell UI (sidebar profile, Home=AI Chat)
+- **chat:** @-mention autocomplete in channel composer
+- **tasks:** Per-user task number shown on the tasks page
+- **marketing:** Remove Products dropdown from public headers
+- **github:** Per-repo access management + PR detail view refresh
+- **tasks:** Suggest assignees ranked by GitHub file-change history
+- **theme:** Per-scope app font (personal + org, not just platform)
+- **auth:** Auto-logout after 15 minutes of inactivity
+- **ai:** Authoritative Anthropic spend panel (Admin Cost API)
+
+### 🐛 Bug Fixes
+
+- **auth:** Keep login/register text readable under a dark app theme
+- **desktop:** Present a clean Chrome UA so Google OAuth consent loads
+- **chat:** Keep Users section header visible when its list empties into Recent
+- **projects:** Show projects to platform scope so the create-task dropdown works
+- **emails:** Restore Load more button so paging works in shrunk multi-pane view
+- **github:** Scope nginx /github/oauth/ so SPA connect page isn't 404'd
+- **github:** Fetch run jobs on expand (Actions showed 'no jobs')
+- **ai:** Precise usage cost — store micro-cents, stop truncating to $0.00
+
+### 🧹 Maintenance
+
+- **marketing:** Platform-only Docs nav and trim marketing/home footers
+- **tasks:** Remove scratch planning doc from repo
+- **changelog:** Update for v7.0.0 [skip ci]
+
 ## [7.0.0](https://github.com/mahesivaya/wayve/releases/tag/v7.0.0) - 2026-07-07
 
 ### 🚀 Features
