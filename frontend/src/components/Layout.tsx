@@ -39,7 +39,6 @@ import {
   DriveIcon,
   NotesIcon,
   TasksIcon,
-  AIChatIcon,
   TestAccessIcon,
   AccessRequestsIcon,
   BillingIcon,
@@ -1312,15 +1311,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 "Tasks",
                 <TasksIcon size={18} />
               )}
-              {/* Desktop shell: AI Chat lives on the Home page, so its own
-                sidebar item is hidden there. */}
-              {!desktop &&
-                renderSidebarItem(
-                  "/ai-chat",
-                  "aichat",
-                  "AI Chat",
-                  <AIChatIcon size={18} />
-                )}
+              {/* AI Chat has no sidebar item anymore — it's the Home page for
+                every user (see Home.tsx). Reach it via Home. */}
               {/* Code Repo moved into the Workspace section (below) for
                   workspace users. */}
               {/* Personal accounts: opt-in apps they've added (in catalog
