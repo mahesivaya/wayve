@@ -124,6 +124,24 @@
   opacity: 0.9;
 }
 
+/* Inline GitHub connect panel (OAuth) on the Integrations page. */
+.github-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.github-panel-status {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.github-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .integrations-info-badge {
   display: inline-block;
   padding: 5px 10px;

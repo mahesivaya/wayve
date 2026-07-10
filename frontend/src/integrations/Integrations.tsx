@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
-import { getGmailConnectUrl, getOutlookConnectUrl } from "../api/email";
 import { getJiraConnection } from "../api/jira";
+import { getGithubConnection } from "../api/github";
 import { getGitlabConnection } from "../api/gitlab";
 import { getSlackConnection } from "../api/slack";
 import { getMcpConnections } from "../api/mcp";
@@ -10,6 +9,8 @@ import { hasPermission } from "../auth/permissions";
 import SlackPanel from "./SlackPanel";
 import McpPanel from "./McpPanel";
 import GitLabPanel from "./GitLabPanel";
+import JiraPanel from "../tasks/JiraPanel";
+import GitHubPanel from "./GitHubPanel";
 import { BrandIcon } from "./BrandIcon";
 import "./integrations.css";
 
@@ -23,7 +24,6 @@ const STATUS_LABEL: Record<Status, string> = {
 };
 
 export default function Integrations() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   // Slack is an enterprise-only feature (it needs server-readable chat).
   const isEnterprise = user?.current_plan?.tier === "enterprise";
@@ -36,11 +36,30 @@ export default function Integrations() {
   // Live Jira connection state drives the Jira card's badge (Enabled vs
   // Connect). Best-effort: any error just leaves it unconnected.
   const [jiraConnected, setJiraConnected] = useState(false);
+  // Jira setup (connect + import) is done inline here — the card toggles it open
+  // instead of sending the user to the Tasks page.
+  const [showJira, setShowJira] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void getJiraConnection()
       .then((s) => {
         if (!cancelled) setJiraConnected(s.connected);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // GitHub connect (OAuth) is also done inline here — the card toggles the
+  // panel open instead of sending the user to the Code Repo page.
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [showGithub, setShowGithub] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void getGithubConnection()
+      .then((s) => {
+        if (!cancelled) setGithubConnected(s.connected);
       })
       .catch(() => {});
     return () => {
@@ -97,24 +116,6 @@ export default function Integrations() {
     };
   }, []);
 
-  // Mailbox connect: hand off to the per-user OAuth flow (Gmail / Outlook).
-  // `busyKey` marks which card is mid-redirect; errors surface below the grid.
-  const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [connectError, setConnectError] = useState<string | null>(null);
-
-  const connectMailbox = async (key: string, getUrl: () => Promise<string>) => {
-    setBusyKey(key);
-    setConnectError(null);
-    try {
-      window.location.href = await getUrl();
-    } catch (err) {
-      setConnectError(
-        err instanceof Error ? err.message : "Could not start the connection."
-      );
-      setBusyKey(null);
-    }
-  };
-
   const services: {
     key: string;
     name: string;
@@ -130,7 +131,7 @@ export default function Integrations() {
         "Sync Jira issues into Tasks and get real-time updates from Jira via webhook.",
       icon: <BrandIcon name="jira" />,
       status: jiraConnected ? "enabled" : "available",
-      onClick: () => void navigate("/tasks"),
+      onClick: () => setShowJira((v) => !v),
     },
     {
       key: "github",
@@ -138,26 +139,8 @@ export default function Integrations() {
       description:
         "Browse repositories, commits, diffs, and CI runs from your linked projects.",
       icon: <BrandIcon name="github" />,
-      status: "enabled",
-      onClick: () => void navigate("/github"),
-    },
-    {
-      key: "gmail",
-      name: "Gmail",
-      description:
-        "Connect a Gmail mailbox to import its mail and read it under Emails.",
-      icon: <BrandIcon name="gmail" />,
-      status: "available",
-      onClick: () => void connectMailbox("gmail", getGmailConnectUrl),
-    },
-    {
-      key: "outlook",
-      name: "Outlook",
-      description:
-        "Connect an Outlook mailbox to import its mail and read it under Emails.",
-      icon: <BrandIcon name="outlook" />,
-      status: "available",
-      onClick: () => void connectMailbox("outlook", getOutlookConnectUrl),
+      status: githubConnected ? "enabled" : "available",
+      onClick: () => setShowGithub((v) => !v),
     },
     {
       key: "slack",
@@ -209,37 +192,29 @@ export default function Integrations() {
         <section className="settings-card">
           <h2 className="settings-card-title">Connect a service</h2>
           <div className="integrations-cards">
-            {visibleServices.map((s) => {
-              const connecting = busyKey === s.key;
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  className="integration-tile"
-                  onClick={s.onClick}
-                  disabled={
-                    s.status === "soon" ||
-                    s.status === "enterprise" ||
-                    connecting
-                  }
-                >
-                  <div className="integration-tile-head">
-                    <span className="integration-tile-icon">{s.icon}</span>
-                    <span className="integration-tile-titles">
-                      <span className="integration-tile-name">{s.name}</span>
-                      <span
-                        className={`integration-tile-status integration-tile-status--${s.status}`}
-                      >
-                        {connecting ? "Connecting…" : STATUS_LABEL[s.status]}
-                      </span>
+            {visibleServices.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                className="integration-tile"
+                onClick={s.onClick}
+                disabled={s.status === "soon" || s.status === "enterprise"}
+              >
+                <div className="integration-tile-head">
+                  <span className="integration-tile-icon">{s.icon}</span>
+                  <span className="integration-tile-titles">
+                    <span className="integration-tile-name">{s.name}</span>
+                    <span
+                      className={`integration-tile-status integration-tile-status--${s.status}`}
+                    >
+                      {STATUS_LABEL[s.status]}
                     </span>
-                  </div>
-                  <p className="integration-tile-desc">{s.description}</p>
-                </button>
-              );
-            })}
+                  </span>
+                </div>
+                <p className="integration-tile-desc">{s.description}</p>
+              </button>
+            ))}
           </div>
-          {connectError && <p className="integrations-error">{connectError}</p>}
         </section>
 
         <section className="settings-card integrations-info">
@@ -278,6 +253,26 @@ export default function Integrations() {
             )}
           </div>
         </section>
+
+        {showJira && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Jira</h2>
+            <JiraPanel
+              onImported={() =>
+                void getJiraConnection()
+                  .then((s) => setJiraConnected(s.connected))
+                  .catch(() => {})
+              }
+            />
+          </section>
+        )}
+
+        {showGithub && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">GitHub</h2>
+            <GitHubPanel onChange={setGithubConnected} />
+          </section>
+        )}
 
         {isEnterprise && showSlack && (
           <section className="settings-card">
