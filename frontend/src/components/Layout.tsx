@@ -111,12 +111,8 @@ const ADDABLE_PERSONAL_APPS: {
   icon: ReactNode;
   path?: string;
 }[] = [
-  {
-    key: "github",
-    label: "Code Repo",
-    icon: <GitLogoIcon size={22} />,
-    path: "/github",
-  },
+  // Code Repo is a permanent sidebar item (see Layout render), not an opt-in
+  // app anymore — so it's intentionally absent from this add-app catalog.
   { key: "canvas", label: "Canvas", icon: <CanvasIcon size={22} /> },
   { key: "forms", label: "Forms", icon: <FormsIcon size={22} /> },
   {
@@ -1318,12 +1314,18 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               )}
               {/* AI Chat has no sidebar item anymore — it's the Home page for
                 every user (see Home.tsx). Reach it via Home. */}
-              {/* Code Repo moved into the Workspace section (below) for
-                  workspace users. */}
+              {/* Code Repo — a PERMANENT nav item for personal accounts (no
+                  longer opt-in). Workspace users get it inside the Workspace
+                  section below, so this is personal-only to avoid duplicating. */}
+              {user.account_type === "personal" &&
+                renderSidebarItem(
+                  "/github",
+                  "github",
+                  "Code Repo",
+                  <GitLogoIcon size={18} />
+                )}
               {/* Personal accounts: opt-in apps they've added (in catalog
-                  order), plus a "+" that opens a checkbox picker. Workspace
-                  users get Code Repo inside the Workspace section, so the
-                  add-app affordance is personal-only. */}
+                  order), plus a "+" that opens a checkbox picker. */}
               {user.account_type === "personal" && (
                 <>
                   {ADDABLE_PERSONAL_APPS.filter((a) =>
