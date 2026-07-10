@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { PersonIcon } from "../icons";
 import {
   getOrganizationMemberDetail,
   getPlatformMemberDetail,
@@ -44,12 +45,6 @@ const STORAGE_SERVICES: {
 function displayName(u: Detail): string {
   const full = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
   return full || u.username || u.email.split("@")[0];
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return (name.slice(0, 2) || "?").toUpperCase();
 }
 
 function CloudIcon() {
@@ -332,7 +327,7 @@ export default function MemberDetail({ scope }: Props) {
                   className="md-avatar md-avatar-initials"
                   aria-hidden="true"
                 >
-                  {initials(name)}
+                  <PersonIcon size={50} />
                 </span>
               )}
               <h1 className="md-idcard-name">{name}</h1>

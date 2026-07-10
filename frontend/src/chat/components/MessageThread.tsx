@@ -1,6 +1,7 @@
 import type { ChatChannel, ChatMessage } from "../../api/chat";
 import { formatTime, getStatusIcon } from "../utils";
 import MessageAttachments from "./MessageAttachments";
+import { PersonIcon } from "../../icons";
 
 // Inbound Slack messages are stored as `[Slack · <author>] <text>` under the
 // connecting Wayve user's id, so without special handling they'd render as the
@@ -21,22 +22,6 @@ function parseSlackMessage(
     .replace(/<(?:https?:)?[^|>]*\|([^>]+)>/g, "$1")
     .replace(/<(https?:[^>]+)>/g, "$1");
   return { author: m[1], text };
-}
-
-// Up-to-two-letter initials for an avatar. Strips an email domain so
-// "you@example.com" → "Y" and "Ada Lovelace" → "AL".
-function initials(name: string): string {
-  const base = name.replace(/@.*/, "").trim();
-  const parts = base.split(/[\s._-]+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
-}
-
-// Deterministic, readable avatar colour from the name.
-function avatarColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) % 360;
-  return `hsl(${h} 52% 45%)`;
 }
 
 type Props = {
@@ -109,10 +94,10 @@ export default function MessageThread({
                   ) : (
                     <span
                       className="bubble-avatar"
-                      style={{ background: avatarColor(senderName) }}
+                      style={{ background: "#94a3b8" }}
                       aria-hidden="true"
                     >
-                      {initials(senderName)}
+                      <PersonIcon size={14} />
                     </span>
                   )}
                   {senderName}

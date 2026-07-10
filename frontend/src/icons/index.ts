@@ -78,6 +78,9 @@ export {
 export {
   Settings as SettingsTileIcon,
   Users as MembersIcon,
+  // Generic single-person silhouette — the default avatar when a user has no
+  // uploaded photo (never a name-derived initial).
+  UserRound as PersonIcon,
   ShieldCheck as SecurityTileIcon,
   Headphones as SupportTileIcon,
   Fingerprint as SsoIcon,
