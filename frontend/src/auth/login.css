@@ -1,5 +1,13 @@
 /* PAGE BACKGROUND */
 .login-page {
+  /* This surface is always the light marketing design (white card, dark text)
+     regardless of the app's theme. But it still renders under the root
+     `data-theme="dark"` in dark mode (e.g. the desktop shell), where the theme
+     text vars flip to LIGHT — making elements that use them (the idle notice,
+     subtitles, errors) invisible on the white card. Pin the text vars to their
+     light values here so descendants render as designed in any theme. */
+  --color-text-primary: #111827;
+  --color-text-secondary: #374151;
   /* `min-height` instead of `height` so the longer Register card (with
        the recovery-mode fieldset) can extend past the viewport without
        being clipped; the body scrolls instead of the card. */

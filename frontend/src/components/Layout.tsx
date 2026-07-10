@@ -39,7 +39,6 @@ import {
   DriveIcon,
   NotesIcon,
   TasksIcon,
-  AIChatIcon,
   TestAccessIcon,
   AccessRequestsIcon,
   BillingIcon,
@@ -1039,7 +1038,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       visible: user.account_type !== "personal",
       icon: <DevelopersIcon size={16} />,
       links: [
-        { path: "/docs", label: "Docs", icon: <DocsIcon size={16} /> },
+        {
+          path: "/docs",
+          label: "Docs",
+          icon: <DocsIcon size={16} />,
+          visible: user.scope === "platform",
+        },
         {
           path: "/docs/api",
           label: "API reference",
@@ -1171,8 +1175,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         <div className="header">
           <div className="header-brand">
             <div className="logo" onClick={() => navigate("/")}>
-              <BrandLogo className="logo-mark" size={36} />
-              <span className="logo-word">{BRAND_NAME}</span>
+              {/* Desktop shell shows a smaller mark, and only the mark — the
+                wordmark is dropped to keep the top-left clean next to the
+                native window controls. */}
+              <BrandLogo className="logo-mark" size={desktop ? 24 : 36} />
+              {!desktop && <span className="logo-word">{BRAND_NAME}</span>}
             </div>
             {/* Header toggle is the mobile hamburger ONLY. On wide screens the
               show/hide control lives on the sidebar divider (see
@@ -1312,15 +1319,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 "Tasks",
                 <TasksIcon size={18} />
               )}
-              {/* Desktop shell: AI Chat lives on the Home page, so its own
-                sidebar item is hidden there. */}
-              {!desktop &&
-                renderSidebarItem(
-                  "/ai-chat",
-                  "aichat",
-                  "AI Chat",
-                  <AIChatIcon size={18} />
-                )}
+              {/* AI Chat has no sidebar item anymore — it's the Home page for
+                every user (see Home.tsx). Reach it via Home. */}
               {/* Code Repo moved into the Workspace section (below) for
                   workspace users. */}
               {/* Personal accounts: opt-in apps they've added (in catalog
