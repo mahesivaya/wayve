@@ -1,6 +1,7 @@
 import type { ChatConversationSummary, ChatUser } from "../../api/chat";
 import type { Conversation } from "../types";
 import { relativeTime } from "../utils";
+import { PersonIcon } from "../../icons";
 
 type Props = {
   users: ChatUser[];
@@ -68,7 +69,7 @@ export default function PersonalChatList({
         onClick={() => onSelect(r.user)}
       >
         <span className="conversation-icon">
-          {label.charAt(0).toUpperCase()}
+          <PersonIcon size={16} />
         </span>
         <span className="conversation-main">
           <span className="conversation-name">{label}</span>

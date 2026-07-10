@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getTeam, type Team } from "../api/workspace";
+import { PersonIcon } from "../icons";
 import "./teams.css";
 
 // Members aren't yet persisted server-side, so the member list is local-only
@@ -13,15 +14,6 @@ type Member = {
   role: string;
   email: string;
 };
-
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .map((part) => part[0] ?? "")
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
 
 const EMPTY_DRAFT: Member = { name: "", role: "", email: "" };
 
@@ -199,7 +191,7 @@ export default function TeamPage() {
           {members.map((m, i) => (
             <li key={`${m.email || m.name}-${i}`} className="team-member">
               <span className="team-avatar" aria-hidden="true">
-                {initials(m.name)}
+                <PersonIcon size={22} />
               </span>
               <span className="team-member-info">
                 <span className="team-member-name">{m.name}</span>

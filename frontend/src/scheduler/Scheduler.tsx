@@ -1,6 +1,7 @@
 import { logger } from "../utils/logger";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { PersonIcon } from "../icons";
 import "./scheduler.css";
 import { computeLanes } from "./eventLayout";
 import Modal from "../components/Modal";
@@ -1113,7 +1114,7 @@ export default function Scheduler() {
                         }}
                       >
                         <span className="participant-suggestion-avatar">
-                          {u.email.charAt(0).toUpperCase()}
+                          <PersonIcon size={16} />
                         </span>
                         <span className="participant-suggestion-email">
                           {u.email}
