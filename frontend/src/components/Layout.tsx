@@ -764,8 +764,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const orgTier = user.current_plan?.tier;
   const canManageDomains =
     isOrgOwner && (orgTier === "business" || orgTier === "enterprise");
-  // Developers (org or platform scope) get the Code shortcut alongside owners.
-  const isDeveloper = user.effective_role === "developer";
   // Pricing is hidden from roles that don't manage plans/billing (org +
   // platform scope) — only owner / super_admin / billing keep it. Shared with
   // the /pricing route guard so the URL can't bypass the hidden nav link.
@@ -805,14 +803,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       canAccessPlatformAnalytics ||
       isPlatformOwner);
 
-  // Code lives in its own "Workspace" group. Same gate as the link itself so
-  // the section header never renders empty. Visible to platform staff, any
-  // developer, and organization owner / super_admin / admin.
-  const isOrgManager =
-    user.scope === "organization" &&
-    ["owner", "super_admin", "admin"].includes(user.effective_role ?? "");
+  // The "Workspace" group is available to every organization member (all tiers,
+  // including enterprise) and every platform member; personal accounts have no
+  // workspace. Backend RBAC still gates access to the individual pages.
   const hasWorkspaceSection =
-    user.scope === "platform" || isOrgManager || isDeveloper;
+    user.scope === "platform" || user.scope === "organization";
 
   const renderLinks = (links?: SidebarLinkDef[]) =>
     links
@@ -884,13 +879,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               doesn't tower over its Workspace neighbors. */}
           <Link
             to="/documents"
-            title="Documents"
+            title="Library"
             className={`sidebar-project-label${
               location.pathname === "/documents" ? " active" : ""
             }`}
             onClick={() => setNavOpen(false)}
           >
-            📄 Documents
+            📄 Library
           </Link>
           <Link
             to="/projects"

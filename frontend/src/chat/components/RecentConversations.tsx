@@ -30,8 +30,8 @@ const byRecency = (a: RecentRow, b: RecentRow) => ts(b.lastAt) - ts(a.lastAt);
 
 // "Recent" lists the conversations you're actively in — recent DMs AND the
 // channels you're a member of that have activity — interleaved by last-message
-// time. The "Unread" group above it stays DM-only (channels have no per-user
-// unread state to count).
+// time. Unread DMs appear inline here (with their unread badge) rather than in
+// a separate "Unread" group at the top.
 export default function RecentConversations({
   users,
   channels,
@@ -51,11 +51,9 @@ export default function RecentConversations({
     };
   });
 
-  const unread = dmRows
-    .filter((r) => r.unread > 0)
-    .sort((a, b) => ts(b.lastAt) - ts(a.lastAt));
-
-  const recentDMs: RecentRow[] = dmRows.filter((r) => r.unread === 0 && r.lastAt);
+  // Include unread DMs inline (they keep their badge in renderDm) instead of
+  // hoisting them into a separate group above.
+  const recentDMs: RecentRow[] = dmRows.filter((r) => r.lastAt);
   const recentChannels: RecentRow[] = channels
     .filter((ch) => ch.is_member && ch.last_message_at)
     .map((ch) => ({
@@ -120,33 +118,14 @@ export default function RecentConversations({
   const renderRow = (r: RecentRow) =>
     r.kind === "dm" ? renderDm(r) : renderChannel(r);
 
-  if (unread.length === 0 && recent.length === 0) return null;
+  if (recent.length === 0) return null;
 
   return (
     <>
-      {unread.length > 0 && (
-        <>
-          <div className="conversation-section-title conversation-section-title--unread">
-            <span>Unread</span>
-            <span
-              className="conversation-unread-total"
-              aria-label="total unread"
-            >
-              {summary.total_unread > 99 ? "99+" : summary.total_unread}
-            </span>
-          </div>
-          {unread.map(renderDm)}
-        </>
-      )}
-
-      {recent.length > 0 && (
-        <>
-          <div className="conversation-section-title conversation-section-title--recent">
-            Recent
-          </div>
-          {recent.map(renderRow)}
-        </>
-      )}
+      <div className="conversation-section-title conversation-section-title--recent">
+        Recent
+      </div>
+      {recent.map(renderRow)}
     </>
   );
 }
