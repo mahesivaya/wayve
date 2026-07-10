@@ -1579,6 +1579,14 @@
     display: none;
   }
 
+  /* The global header search doesn't fit next to the brand + actions on phones
+     — it overflowed left onto the sidebar toggle and painted over its taps.
+     Hide it in mobile mode; page-level search (chat, emails) stays available
+     inside each view. */
+  .header > .global-search-row {
+    display: none;
+  }
+
   /* Multi-pane is a desktop pattern. Auto-close any open split
      panes by hiding them — the underlying state survives, so when
      the user rotates / resizes wider they reappear. */
