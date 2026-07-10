@@ -32,7 +32,7 @@ import Modal from "../components/Modal";
 import Avatar from "../components/Avatar";
 import { useInSplitPane } from "../components/SplitPaneContext";
 import { getApiBase } from "../config/env";
-import JiraPanel, { JiraBadge } from "./JiraPanel";
+import { JiraBadge } from "./JiraPanel";
 import { GitlabBadge } from "./GitlabBadge";
 import "./tasks.css";
 
@@ -738,8 +738,6 @@ export default function Tasks() {
             </div>
           </div>
         )}
-
-        {!inSplitPane && <JiraPanel onImported={() => void loadTasks()} />}
 
         <Modal
           isOpen={creating}

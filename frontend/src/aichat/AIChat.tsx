@@ -58,7 +58,6 @@ export default function AIChat({ hideHeader = false }: { hideHeader?: boolean })
 
   const providerName = provider ? (PROVIDER_LABELS[provider] ?? provider) : null;
   const badgeText = providerName ?? "AI assistant";
-  const chatWith = providerName ?? "your AI assistant";
 
   // Show the real provider on load (before any message) so the header never
   // mislabels the assistant. Best-effort: on failure we keep the neutral label.
@@ -343,7 +342,7 @@ export default function AIChat({ hideHeader = false }: { hideHeader?: boolean })
             <div className="ai-chat-empty-icon">✨</div>
             <div className="ai-chat-empty-title">Ask anything</div>
             <div className="ai-chat-empty-hint">
-              Type a message below to start chatting with {chatWith}.
+              Type a message below to start chatting.
             </div>
           </div>
           {error && <div className="ai-chat-error">{error}</div>}
