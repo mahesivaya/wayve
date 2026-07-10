@@ -815,16 +815,37 @@ pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> Http
             .json(serde_json::json!({ "message": "Authentication required" }));
     };
 
-    let unrestricted = match resolve_role_context_moded(&req, pool.get_ref(), user_id).await {
-        Ok(ctx) => match ctx.scope {
-            // Owner/super_admin/admin see every project; other roles are
-            // restricted to their `member_project_access` grants. Personal
-            // accounts are never managed by this feature.
-            Scope::Platform | Scope::Organization => is_project_admin(ctx.role),
+    let ctx = resolve_role_context_moded(&req, pool.get_ref(), user_id)
+        .await
+        .ok();
+
+    // Personal accounts must see ONLY their own connected GitHub repos. Without
+    // a personal connection we must NOT fall back to the shared server PAT
+    // below — that would list the server account's repositories to a user who
+    // imported nothing. Return an empty list + connected:false, matching the
+    // /api/github-importable-repos endpoint.
+    if matches!(ctx.as_ref(), Some(c) if c.scope == Scope::Personal)
+        && crate::github_oauth::stored_token_for(pool.get_ref(), user_id)
+            .await
+            .is_none()
+    {
+        return HttpResponse::Ok().json(serde_json::json!({
+            "unrestricted": true,
+            "connected": false,
+            "repos": [],
+        }));
+    }
+
+    let unrestricted = match ctx.as_ref() {
+        // Owner/super_admin/admin see every project; other roles are restricted
+        // to their `member_project_access` grants. Personal accounts (connected,
+        // per the guard above) are never managed by this feature.
+        Some(c) => match c.scope {
+            Scope::Platform | Scope::Organization => is_project_admin(c.role),
             Scope::Personal => true,
         },
         // Fail open to "see all" rather than hiding everything on a lookup error.
-        Err(_) => true,
+        None => true,
     };
 
     let bearer = effective_github_token(&req, pool.get_ref()).await;
