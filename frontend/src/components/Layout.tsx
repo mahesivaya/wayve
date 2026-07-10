@@ -1038,7 +1038,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       visible: user.account_type !== "personal",
       icon: <DevelopersIcon size={16} />,
       links: [
-        { path: "/docs", label: "Docs", icon: <DocsIcon size={16} /> },
+        {
+          path: "/docs",
+          label: "Docs",
+          icon: <DocsIcon size={16} />,
+          visible: user.scope === "platform",
+        },
         {
           path: "/docs/api",
           label: "API reference",
