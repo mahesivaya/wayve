@@ -382,6 +382,19 @@
   justify-content: center;
 }
 
+/* Desktop shell: shrink the empty space above and below the collapse toggle /
+   brand mark at the top of the sidebar so it sits compactly instead of
+   floating. Pulls the row up into the sidebar's top padding and trims the gap
+   to the first nav section below it. */
+.is-desktop .sidebar {
+  padding-top: 2px;
+}
+.is-desktop .sidebar-collapse-row {
+  padding-bottom: 0;
+  border-bottom: none;
+  margin-bottom: -10px;
+}
+
 .sidebar-collapse-btn {
   width: 26px;
   height: 20px;
