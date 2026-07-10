@@ -1175,8 +1175,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         <div className="header">
           <div className="header-brand">
             <div className="logo" onClick={() => navigate("/")}>
-              <BrandLogo className="logo-mark" size={36} />
-              <span className="logo-word">{BRAND_NAME}</span>
+              {/* Desktop shell shows a smaller mark, and only the mark — the
+                wordmark is dropped to keep the top-left clean next to the
+                native window controls. */}
+              <BrandLogo className="logo-mark" size={desktop ? 24 : 36} />
+              {!desktop && <span className="logo-word">{BRAND_NAME}</span>}
             </div>
             {/* Header toggle is the mobile hamburger ONLY. On wide screens the
               show/hide control lives on the sidebar divider (see
