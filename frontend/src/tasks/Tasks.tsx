@@ -32,6 +32,7 @@ import { useGlobalSearch } from "../search/SearchContext";
 import Modal from "../components/Modal";
 import Avatar from "../components/Avatar";
 import { useInSplitPane } from "../components/SplitPaneContext";
+import { useSplitControl } from "../components/SplitControlContext";
 import { getApiBase } from "../config/env";
 import { JiraBadge } from "./JiraPanel";
 import { GitlabBadge } from "./GitlabBadge";
@@ -303,14 +304,26 @@ export default function Tasks() {
   // → list) and clicking a task expands it inline (accordion) instead of
   // opening the edit modal.
   const inSplitPane = useInSplitPane();
+  // When this Tasks instance is the right split pane, a chat task link opens it
+  // with a focus target here; closeApp() dismisses the whole pane.
+  const { target: paneTarget, closeApp } = useSplitControl();
   const [searchParams] = useSearchParams();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   // Id of the task whose share-link was just copied, so its copy button can
   // briefly show a ✓. Cleared after a short delay.
   const [copiedTaskId, setCopiedTaskId] = useState<number | null>(null);
-  // Guards the one-shot deep-link open (?task=<id>) so closing the opened task
-  // doesn't immediately reopen it on the next render.
-  const deepLinkApplied = useRef(false);
+  // Last `?task=<id>` value we auto-opened. Guards the deep-link open so closing
+  // the task doesn't reopen it (param unchanged), while still letting a *new*
+  // task link (param changed) open its task — e.g. clicking a second pasted
+  // task link while already on this page.
+  const deepLinkApplied = useRef<string | null>(null);
+  // True while the currently-expanded task in a split pane was opened from a
+  // chat task link — so collapsing it closes the whole pane (back to chat)
+  // rather than just showing the list. Cleared once the user browses elsewhere.
+  const openedFromLink = useRef(false);
+  // The last split target (task id) we applied, so we don't re-open it every
+  // render — mirrors the deepLinkApplied guard for the pane hand-off path.
+  const paneTargetApplied = useRef<number | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -562,16 +575,17 @@ export default function Tasks() {
 
   // Honor a ?task=<id> deep link once the tasks have loaded: open the target
   // task's details (edit modal in full width, inline accordion in a split
-  // pane). Runs once — guarded so closing the task doesn't reopen it.
+  // pane). Re-runs when the param changes so a freshly-clicked task link opens,
+  // but skips a value we've already opened so closing the task doesn't reopen it.
   useEffect(() => {
-    if (deepLinkApplied.current || loading) return;
+    if (loading) return;
     const raw = searchParams.get("task");
-    if (!raw) return;
+    if (!raw || deepLinkApplied.current === raw) return;
     const id = Number(raw);
     if (!Number.isFinite(id)) return;
     const target = tasks.find((t) => t.id === id);
     if (!target) return;
-    deepLinkApplied.current = true;
+    deepLinkApplied.current = raw;
     // Deferred to a microtask so the effect body doesn't synchronously call
     // setState (same React 19 cascading-render guard as loadTasks above).
     const timer = window.setTimeout(() => {
@@ -583,6 +597,23 @@ export default function Tasks() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loading, tasks, searchParams, inSplitPane]);
+
+  // Split-pane hand-off: when this Tasks instance is opened as the right pane
+  // from a chat task link, `paneTarget` carries the task id (the pane has no URL
+  // of its own, so `?task=` doesn't reach it). Expand that task inline and flag
+  // it as link-opened so collapsing it closes the pane. Applied once per id.
+  useEffect(() => {
+    if (loading || !inSplitPane) return;
+    const id = paneTarget?.app === "tasks" ? paneTarget.taskId : undefined;
+    if (id == null || paneTargetApplied.current === id) return;
+    if (!tasks.some((t) => t.id === id)) return;
+    paneTargetApplied.current = id;
+    const timer = window.setTimeout(() => {
+      setExpandedId(id);
+      openedFromLink.current = true;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loading, inSplitPane, paneTarget, tasks]);
 
   const onPickFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
     const list = event.target.files;
@@ -1467,13 +1498,29 @@ export default function Tasks() {
                             <button
                               type="button"
                               className="task-card-title-link"
-                              onClick={() =>
-                                inSplitPane
-                                  ? setExpandedId((id) =>
-                                      id === task.id ? null : task.id
-                                    )
-                                  : openEdit(task)
-                              }
+                              onClick={() => {
+                                if (!inSplitPane) {
+                                  openEdit(task);
+                                  return;
+                                }
+                                if (expandedId === task.id) {
+                                  // Collapsing the open task. If it was opened
+                                  // from a chat link, close the whole pane
+                                  // (back to full-width chat) instead of just
+                                  // showing the list.
+                                  if (openedFromLink.current && closeApp) {
+                                    openedFromLink.current = false;
+                                    closeApp();
+                                  } else {
+                                    setExpandedId(null);
+                                  }
+                                } else {
+                                  // Browsing to a different task — no longer the
+                                  // link-focused one.
+                                  openedFromLink.current = false;
+                                  setExpandedId(task.id);
+                                }
+                              }}
                               aria-expanded={inSplitPane ? expanded : undefined}
                               title="Open task details"
                             >

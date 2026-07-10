@@ -10,6 +10,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   type ReactNode,
 } from "react";
@@ -25,6 +26,10 @@ import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import { useChatUnreadCount } from "../chat/useChatUnreadCount";
 import StorageLimitBanner from "./StorageLimitBanner";
 import { SplitPaneContext } from "./SplitPaneContext";
+import {
+  SplitControlContext,
+  type SplitTarget,
+} from "./SplitControlContext";
 import ResizeHandle from "./ResizeHandle";
 import { useResizableWidth } from "./useResizableWidth";
 import { listTeams, createTeam, type Team } from "../api/workspace";
@@ -300,6 +305,35 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Decides whether the next header-link click navigates or changes the duplicate pane.
   const [splitTarget, setSplitTarget] = useState<"left" | "right">(
     () => loadPersistedSplit().splitTarget
+  );
+
+  // Focus target for a programmatically-opened pane app (e.g. a chat message's
+  // task link opening the Tasks pane on a specific task). Not persisted — it's
+  // a one-shot hand-off consumed by the pane on mount.
+  const [paneTarget, setPaneTarget] = useState<SplitTarget | null>(null);
+
+  // Open a split app in the right pane, optionally focusing a target (task id).
+  // Used by nested components via SplitControlContext.
+  const openApp = useCallback(
+    (app: AppKey, opts?: { taskId?: number }) => {
+      setRightView(app);
+      setSplitTarget("right");
+      setPaneTarget({ app, taskId: opts?.taskId });
+    },
+    []
+  );
+
+  // Close the right pane (and drop any pending focus target). Given to pane
+  // apps so an in-pane "close" gesture can dismiss the whole pane.
+  const closeApp = useCallback(() => {
+    setRightView(null);
+    setSplitTarget("left");
+    setPaneTarget(null);
+  }, []);
+
+  const splitControl = useMemo(
+    () => ({ openApp, target: paneTarget, closeApp }),
+    [openApp, paneTarget, closeApp]
   );
 
   useEffect(() => {
@@ -1159,6 +1193,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   );
 
   return (
+    <SplitControlContext.Provider value={splitControl}>
     <div className="app">
       <SearchProvider>
         {/* 🔝 HEADER — brand + inline search + global actions. App
@@ -1566,6 +1601,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                     onClick={() => {
                       setRightView(null);
                       setSplitTarget("left");
+                      setPaneTarget(null);
                     }}
                     title="Close pane"
                     aria-label="Close right pane"
@@ -1623,5 +1659,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </div>
       </Modal>
     </div>
+    </SplitControlContext.Provider>
   );
 }

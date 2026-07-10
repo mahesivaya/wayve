@@ -1,6 +1,7 @@
 import type { ChatChannel, ChatMessage } from "../../api/chat";
 import { formatTime, getStatusIcon } from "../utils";
 import MessageAttachments from "./MessageAttachments";
+import MessageText from "./MessageText";
 import { PersonIcon } from "../../icons";
 
 // Inbound Slack messages are stored as `[Slack · <author>] <text>` under the
@@ -103,7 +104,11 @@ export default function MessageThread({
                   {senderName}
                 </div>
               )}
-              {displayContent && <div>{displayContent}</div>}
+              {displayContent && (
+                <div>
+                  <MessageText text={displayContent} />
+                </div>
+              )}
               <MessageAttachments message={msg} currentUserId={currentUserId} />
               <div className="message-meta">
                 {formatTime(msg.created_at)}{" "}
