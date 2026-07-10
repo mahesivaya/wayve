@@ -26,6 +26,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "../api/tasks";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 import Modal from "../components/Modal";
@@ -215,6 +216,85 @@ function UserAutocomplete({
   );
 }
 
+// A small "copy task link" control shown on every task card. Copies a shareable
+// deep link (…/tasks?task=<id>) to the clipboard so the task can be pasted into
+// chat/email and reopened straight to its details. Stays a compact icon — the
+// "Copy link" hint rides the native cursor tooltip (title) — and on a successful
+// copy swaps to a green check and pops a small "Copied!" text confirmation
+// above the button. `stopPropagation` keeps a click from also toggling the
+// card's expand/edit handler.
+function CopyLinkButton({
+  copied,
+  onCopy,
+  label,
+}: {
+  copied: boolean;
+  onCopy: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={`task-copy-link${copied ? " task-copy-link--copied" : ""}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onCopy();
+      }}
+      title={copied ? "Link copied" : "Copy link"}
+      aria-label={copied ? `Link to ${label} copied` : `Copy link to ${label}`}
+    >
+      {copied ? (
+        <svg
+          className="task-copy-link-icon"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M3.5 8.5l3 3 6-6.5" />
+        </svg>
+      ) : (
+        <svg
+          className="task-copy-link-icon"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          {/* Classic "copy" glyph — two overlapping dog-eared pages. */}
+          <path d="M2.5 6.5V13.5H9.5V8.5L7.5 6.5Z" />
+          <path d="M7.5 6.5V8.5H9.5" />
+          <path d="M5.5 6.5V3.5H10.5L12.5 5.5V10.5H9.5" />
+          <path d="M10.5 3.5V5.5H12.5" />
+        </svg>
+      )}
+      {copied && (
+        <span className="task-copy-link-toast" role="status">
+          Copied!
+        </span>
+      )}
+    </button>
+  );
+}
+
+// The friendly task-key pill (e.g. "way12" — project prefix + task number, or
+// "#12" when project-less). Renders nothing when there's no key.
+function TaskKeyBadge({ value }: { value: string | null }) {
+  if (!value) return null;
+  return (
+    <span className="task-number-badge" title="Task key">
+      {value}
+    </span>
+  );
+}
+
+
 export default function Tasks() {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
@@ -223,7 +303,14 @@ export default function Tasks() {
   // → list) and clicking a task expands it inline (accordion) instead of
   // opening the edit modal.
   const inSplitPane = useInSplitPane();
+  const [searchParams] = useSearchParams();
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  // Id of the task whose share-link was just copied, so its copy button can
+  // briefly show a ✓. Cleared after a short delay.
+  const [copiedTaskId, setCopiedTaskId] = useState<number | null>(null);
+  // Guards the one-shot deep-link open (?task=<id>) so closing the opened task
+  // doesn't immediately reopen it on the next render.
+  const deepLinkApplied = useRef(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -242,6 +329,13 @@ export default function Tasks() {
     const saved = window.localStorage.getItem("wayve.tasks.mode");
     return saved === "jira" ? "jira" : "tasks";
   });
+  // Quick status filter (All / To Do / In Progress / In Review / Done). Applies
+  // to the list and board so you can focus on one status at a time.
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
+  // Quick priority filter (All / P5…P1). Combined with the status filter.
+  const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">(
+    "all"
+  );
   // Status column currently being hovered during a drag, for the drop-target
   // highlight.
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
@@ -451,6 +545,45 @@ export default function Tasks() {
       .finally(() => setAttachmentsLoading(false));
   };
 
+  // Shareable deep link for a task — pasteable into chat/email; opening it
+  // navigates to the Tasks page and auto-opens the task's details.
+  const taskLink = (task: Task) =>
+    `${window.location.origin}/tasks?task=${task.id}`;
+
+  const copyTaskLink = (task: Task) => {
+    void navigator.clipboard?.writeText(taskLink(task)).then(() => {
+      setCopiedTaskId(task.id);
+      window.setTimeout(
+        () => setCopiedTaskId((id) => (id === task.id ? null : id)),
+        1500
+      );
+    });
+  };
+
+  // Honor a ?task=<id> deep link once the tasks have loaded: open the target
+  // task's details (edit modal in full width, inline accordion in a split
+  // pane). Runs once — guarded so closing the task doesn't reopen it.
+  useEffect(() => {
+    if (deepLinkApplied.current || loading) return;
+    const raw = searchParams.get("task");
+    if (!raw) return;
+    const id = Number(raw);
+    if (!Number.isFinite(id)) return;
+    const target = tasks.find((t) => t.id === id);
+    if (!target) return;
+    deepLinkApplied.current = true;
+    // Deferred to a microtask so the effect body doesn't synchronously call
+    // setState (same React 19 cascading-render guard as loadTasks above).
+    const timer = window.setTimeout(() => {
+      if (inSplitPane) {
+        setExpandedId(id);
+      } else {
+        openEdit(target);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loading, tasks, searchParams, inSplitPane]);
+
   const onPickFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
     const list = event.target.files;
     if (!list) return;
@@ -538,6 +671,23 @@ export default function Tasks() {
     }
   };
 
+  // Inline priority change from a card's top-right selector. Optimistic like
+  // changeStatus (and re-sorts, since the list is priority-ordered), rolling
+  // back on failure.
+  // Human-friendly task key for the card badge: the task's project name, first
+  // three letters, followed by the per-user task number (e.g. project "wayve"
+  // → "way12"). Falls back to a plain "#12" when the task has no resolvable
+  // project so imported/project-less tasks still show an identifier.
+  const taskKey = (task: Task): string | null => {
+    if (task.task_number == null) return null;
+    const name = projects.find((p) => p.id === task.project_id)?.name ?? "";
+    const prefix = name
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .slice(0, 3)
+      .toLowerCase();
+    return prefix ? `${prefix}${task.task_number}` : `#${task.task_number}`;
+  };
+
   const deleteTask = async (task: Task) => {
     const ok = window.confirm(
       `Delete task "${task.name}"? This cannot be undone.`
@@ -567,14 +717,25 @@ export default function Tasks() {
     );
   }, [normalizedSearchQuery, tasks]);
 
+  // Search-filtered tasks, further narrowed to the selected status and priority.
+  const filteredTasks = useMemo(
+    () =>
+      visibleTasks.filter(
+        (t) =>
+          (statusFilter === "all" || t.status === statusFilter) &&
+          (priorityFilter === "all" || t.priority === priorityFilter)
+      ),
+    [visibleTasks, statusFilter, priorityFilter]
+  );
+
   const activeTasks = useMemo(
-    () => visibleTasks.filter((t) => t.status !== "done"),
-    [visibleTasks]
+    () => filteredTasks.filter((t) => t.status !== "done"),
+    [filteredTasks]
   );
 
   const completedTasks = useMemo(
-    () => visibleTasks.filter((t) => t.status === "done"),
-    [visibleTasks]
+    () => filteredTasks.filter((t) => t.status === "done"),
+    [filteredTasks]
   );
 
   const saveTask = async (event: FormEvent<HTMLFormElement>) => {
@@ -691,6 +852,42 @@ export default function Tasks() {
             </div>
             <div className="tasks-header-actions">
               <span className="tasks-count">{tasks.length} total</span>
+              <select
+                className="tasks-status-filter"
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as TaskStatus | "all")
+                }
+                aria-label="Filter by status"
+                title="Filter by status"
+              >
+                <option value="all">All statuses</option>
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="tasks-status-filter"
+                value={priorityFilter}
+                onChange={(e) =>
+                  setPriorityFilter(
+                    e.target.value === "all"
+                      ? "all"
+                      : (Number(e.target.value) as TaskPriority)
+                  )
+                }
+                aria-label="Filter by priority"
+                title="Filter by priority"
+              >
+                <option value="all">All priorities</option>
+                {PRIORITY_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {`P${value} — ${priorityLabel(value)}`}
+                  </option>
+                ))}
+              </select>
               <div className="view-toggle" role="group" aria-label="View mode">
                 <button
                   type="button"
@@ -1097,7 +1294,7 @@ export default function Tasks() {
           ) : (
             <div className="task-board">
               {STATUS_OPTIONS.map((col) => {
-                const colTasks = visibleTasks.filter(
+                const colTasks = filteredTasks.filter(
                   (t) => t.status === col.value
                 );
                 return (
@@ -1164,14 +1361,12 @@ export default function Tasks() {
                               >
                                 P{task.priority}
                               </span>
-                              {task.task_number != null && (
-                                <span
-                                  className="task-number-badge"
-                                  title="Task number"
-                                >
-                                  #{task.task_number}
-                                </span>
-                              )}
+                              <TaskKeyBadge value={taskKey(task)} />
+                              <CopyLinkButton
+                                copied={copiedTaskId === task.id}
+                                onCopy={() => copyTaskLink(task)}
+                                label={task.name}
+                              />
                             </div>
                             <button
                               type="button"
@@ -1234,7 +1429,7 @@ export default function Tasks() {
                     Try again
                   </button>
                 </div>
-              ) : visibleTasks.length === 0 ? (
+              ) : filteredTasks.length === 0 ? (
                 <div className="tasks-empty">
                   <strong>
                     {tasks.length === 0 ? "No tasks yet" : "No matching tasks"}
@@ -1262,17 +1457,12 @@ export default function Tasks() {
                     >
                       <div className="task-card-body">
                         <div className="task-card-title">
-                          <span
-                            className={`task-priority-badge priority-${task.priority}`}
-                            title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-                          >
-                            P{task.priority}
-                          </span>
-                          {task.task_number != null && (
-                            <span className="task-number-badge" title="Task number">
-                              #{task.task_number}
-                            </span>
-                          )}
+                          <TaskKeyBadge value={taskKey(task)} />
+                          <CopyLinkButton
+                            copied={copiedTaskId === task.id}
+                            onCopy={() => copyTaskLink(task)}
+                            label={task.name}
+                          />
                           <h3>
                             <button
                               type="button"
@@ -1292,6 +1482,12 @@ export default function Tasks() {
                             <JiraBadge task={task} />
                             <GitlabBadge task={task} />
                           </h3>
+                          <span
+                            className={`task-priority-badge priority-${task.priority}`}
+                            title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                          >
+                            P{task.priority}
+                          </span>
                         </div>
                         {formatCreatedAt(task.created_at) && (
                           <span className="task-card-created">
@@ -1367,17 +1563,12 @@ export default function Tasks() {
                     >
                       <div className="task-card-body">
                         <div className="task-card-title">
-                          <span
-                            className={`task-priority-badge priority-${task.priority}`}
-                            title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-                          >
-                            P{task.priority}
-                          </span>
-                          {task.task_number != null && (
-                            <span className="task-number-badge" title="Task number">
-                              #{task.task_number}
-                            </span>
-                          )}
+                          <TaskKeyBadge value={taskKey(task)} />
+                          <CopyLinkButton
+                            copied={copiedTaskId === task.id}
+                            onCopy={() => copyTaskLink(task)}
+                            label={task.name}
+                          />
                           <h3>
                             <button
                               type="button"
@@ -1390,6 +1581,12 @@ export default function Tasks() {
                             <JiraBadge task={task} />
                             <GitlabBadge task={task} />
                           </h3>
+                          <span
+                            className={`task-priority-badge priority-${task.priority}`}
+                            title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                          >
+                            P{task.priority}
+                          </span>
                         </div>
                         {formatCreatedAt(task.created_at) && (
                           <span className="task-card-created">
