@@ -445,7 +445,7 @@ export default function PlatformAdminHome() {
             borderRadius: "var(--radius-md, 12px)",
           }}
         >
-          <AIChat />
+          <AIChat hideHeader />
         </div>
       </section>
 
