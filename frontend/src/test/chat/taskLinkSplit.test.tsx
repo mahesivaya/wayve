@@ -38,7 +38,9 @@ vi.mock("../../api/tasks", () => ({
 }));
 
 vi.mock("../../auth/useAuth", () => ({
-  useAuth: () => ({ user: { id: 1, email: "me@test.local", scope: "personal" } }),
+  useAuth: () => ({
+    user: { id: 1, email: "me@test.local", scope: "personal" },
+  }),
 }));
 
 vi.mock("../../search/SearchContext", () => ({
@@ -115,8 +117,6 @@ describe("task link → split pane (Option A)", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Ship the thing" })
     );
-    await waitFor(() =>
-      expect(screen.queryByTestId("right-pane")).toBeNull()
-    );
+    await waitFor(() => expect(screen.queryByTestId("right-pane")).toBeNull());
   });
 });

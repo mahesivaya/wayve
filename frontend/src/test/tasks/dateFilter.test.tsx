@@ -7,9 +7,30 @@ import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../../api/tasks", () => ({
   getTasks: vi.fn().mockResolvedValue([
-    { id: 1, name: "June task", description: "", priority: 3, status: "todo", created_at: "2026-06-01T12:00:00Z" },
-    { id: 2, name: "July task", description: "", priority: 3, status: "todo", created_at: "2026-07-01T12:00:00Z" },
-    { id: 3, name: "August task", description: "", priority: 3, status: "todo", created_at: "2026-08-01T12:00:00Z" },
+    {
+      id: 1,
+      name: "June task",
+      description: "",
+      priority: 3,
+      status: "todo",
+      created_at: "2026-06-01T12:00:00Z",
+    },
+    {
+      id: 2,
+      name: "July task",
+      description: "",
+      priority: 3,
+      status: "todo",
+      created_at: "2026-07-01T12:00:00Z",
+    },
+    {
+      id: 3,
+      name: "August task",
+      description: "",
+      priority: 3,
+      status: "todo",
+      created_at: "2026-08-01T12:00:00Z",
+    },
   ]),
   getProjects: vi.fn().mockResolvedValue([]),
   getAssignableUsers: vi.fn().mockResolvedValue([]),
@@ -24,7 +45,9 @@ vi.mock("../../api/tasks", () => ({
 }));
 
 vi.mock("../../auth/useAuth", () => ({
-  useAuth: () => ({ user: { id: 1, email: "me@test.local", scope: "personal" } }),
+  useAuth: () => ({
+    user: { id: 1, email: "me@test.local", scope: "personal" },
+  }),
 }));
 
 vi.mock("../../search/SearchContext", () => ({

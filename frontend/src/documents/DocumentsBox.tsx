@@ -33,8 +33,21 @@ type Editing = { kind: "file" | "folder"; id: number } | null;
 // File types we can open in the in-app text editor. Binary files (images,
 // PDFs, archives) are download-only.
 const TEXT_TYPES = [
-  "txt", "md", "markdown", "csv", "json", "log", "yml", "yaml",
-  "html", "css", "js", "ts", "xml", "rtf", "text",
+  "txt",
+  "md",
+  "markdown",
+  "csv",
+  "json",
+  "log",
+  "yml",
+  "yaml",
+  "html",
+  "css",
+  "js",
+  "ts",
+  "xml",
+  "rtf",
+  "text",
 ];
 const isTextFile = (t: string | null): boolean =>
   TEXT_TYPES.includes((t ?? "").toLowerCase());
@@ -144,7 +157,9 @@ export default function DocumentsBox() {
       setNewFileBody("");
       await fetchAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create document");
+      setError(
+        err instanceof Error ? err.message : "Failed to create document"
+      );
     } finally {
       setSavingNewFile(false);
     }

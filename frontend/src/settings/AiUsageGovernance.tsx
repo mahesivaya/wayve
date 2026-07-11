@@ -24,7 +24,9 @@ export default function AiUsageGovernance() {
   const canManage = hasPermission(user, "ai:manage");
 
   const [usage, setUsage] = useState<AiUsage | null>(null);
-  const [anthropicCost, setAnthropicCost] = useState<AnthropicCost | null>(null);
+  const [anthropicCost, setAnthropicCost] = useState<AnthropicCost | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -134,7 +136,9 @@ export default function AiUsageGovernance() {
               <span className="ai-kpi-label">Output tokens</span>
             </div>
             <div className="ai-kpi">
-              <span className="ai-kpi-value">{usd(usage.totals.cost_cents)}</span>
+              <span className="ai-kpi-value">
+                {usd(usage.totals.cost_cents)}
+              </span>
               <span className="ai-kpi-label">Est. cost</span>
             </div>
             <div className="ai-kpi">
@@ -183,8 +187,8 @@ export default function AiUsageGovernance() {
             <section className="ai-card">
               <h2>Authoritative spend</h2>
               <p className="ai-budget-text ai-muted">
-                Set an Anthropic Admin API key (<code>ANTHROPIC_ADMIN_KEY</code>)
-                on the server to show real billed spend from Anthropic's Cost
+                Set an Anthropic Admin API key (<code>ANTHROPIC_ADMIN_KEY</code>
+                ) on the server to show real billed spend from Anthropic's Cost
                 API alongside the local estimate.
               </p>
             </section>

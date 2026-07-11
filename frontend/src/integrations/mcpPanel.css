@@ -104,7 +104,11 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-success, #15803d);
-  background: color-mix(in srgb, var(--color-success, #15803d) 13%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-success, #15803d) 13%,
+    transparent
+  );
   border-radius: 999px;
   padding: 0.12rem 0.45rem;
 }

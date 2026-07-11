@@ -62,8 +62,7 @@ export type Project = {
   github_repo: string | null;
 };
 
-export const getProjects = async () =>
-  apiFetchJson<Project[]>("/api/projects");
+export const getProjects = async () => apiFetchJson<Project[]>("/api/projects");
 
 // A suggested assignee, ranked by how much/how recently they've worked in the
 // files the task is likely to touch. `user_id` is set only for connected

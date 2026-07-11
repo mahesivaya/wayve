@@ -17,7 +17,12 @@ type DomainState = { token: string | null; verifiedAt: string | null };
 function domainFromEmail(email?: string | null): string {
   if (!email) return "";
   const at = email.lastIndexOf("@");
-  return at >= 0 ? email.slice(at + 1).trim().toLowerCase() : "";
+  return at >= 0
+    ? email
+        .slice(at + 1)
+        .trim()
+        .toLowerCase()
+    : "";
 }
 
 function readState(domain: string): DomainState {
@@ -189,11 +194,7 @@ export default function OrganizationDomains() {
               ✓ {d} is verified ·{" "}
               {new Date(state.verifiedAt).toLocaleDateString()}
             </span>
-            <button
-              type="button"
-              className="org-domains-undo"
-              onClick={reset}
-            >
+            <button type="button" className="org-domains-undo" onClick={reset}>
               Remove verification
             </button>
           </div>

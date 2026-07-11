@@ -178,7 +178,9 @@ export default function ProfileMenu() {
               <button
                 className="profile-dropdown-item"
                 disabled={switching}
-                onClick={() => void handleSwitch(inAdminMode ? "normal" : "admin")}
+                onClick={() =>
+                  void handleSwitch(inAdminMode ? "normal" : "admin")
+                }
               >
                 <span className="profile-dropdown-icon">
                   {inAdminMode ? "🚪" : "🛡️"}

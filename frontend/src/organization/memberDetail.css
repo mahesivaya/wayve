@@ -289,7 +289,10 @@
 }
 
 .md-chip.is-role {
-  background: var(--color-success-soft-mint, var(--color-success-pale, #e6f4ea));
+  background: var(
+    --color-success-soft-mint,
+    var(--color-success-pale, #e6f4ea)
+  );
   color: var(--color-success, #1a7f37);
   border-color: transparent;
 }

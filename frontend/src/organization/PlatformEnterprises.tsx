@@ -41,7 +41,9 @@ export default function PlatformEnterprises() {
         setError("");
       })
       .catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed to load enterprises")
+        setError(
+          err instanceof Error ? err.message : "Failed to load enterprises"
+        )
       )
       .finally(() => setLoading(false));
   }, []);
@@ -56,7 +58,9 @@ export default function PlatformEnterprises() {
     const orgName = name.trim();
     const email = ownerEmail.trim().toLowerCase();
     if (!orgName || !email || !ownerPassword) {
-      setCreateError("Organization name, owner email, and password are required.");
+      setCreateError(
+        "Organization name, owner email, and password are required."
+      );
       return;
     }
     if (ownerPassword.length < 6) {
@@ -121,8 +125,8 @@ export default function PlatformEnterprises() {
               <h2>Create an enterprise</h2>
               <p>
                 Provision a new enterprise organization and its owner account.
-                Enterprise data is server-readable (not end-to-end encrypted), so
-                the owner can sign in and use the org right away.
+                Enterprise data is server-readable (not end-to-end encrypted),
+                so the owner can sign in and use the org right away.
               </p>
             </div>
           </div>

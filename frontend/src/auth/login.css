@@ -479,8 +479,13 @@
   margin: 0 0 12px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-primary-action, #2563eb) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-primary-action, #2563eb) 35%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-primary-action, #2563eb) 12%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--color-primary-action, #2563eb) 35%, transparent);
   color: var(--color-text-primary, #111827);
   font-size: 0.9rem;
   line-height: 1.4;

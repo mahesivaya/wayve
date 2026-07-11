@@ -295,7 +295,6 @@ function TaskKeyBadge({ value }: { value: string | null }) {
   );
 }
 
-
 export default function Tasks() {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
@@ -525,7 +524,8 @@ export default function Tasks() {
       setSuggestions(res.candidates);
       setSuggestUsedAi(res.used_ai);
       setSuggestNote(
-        res.note ?? (res.candidates.length === 0 ? "No suggestions found." : null)
+        res.note ??
+          (res.candidates.length === 0 ? "No suggestions found." : null)
       );
     } catch (err) {
       setSuggestions([]);
@@ -804,7 +804,8 @@ export default function Tasks() {
         if (created < new Date(`${dateFrom}T00:00:00`).getTime()) return false;
       }
       if ((dateMode === "before" || dateMode === "between") && dateTo) {
-        if (created > new Date(`${dateTo}T23:59:59.999`).getTime()) return false;
+        if (created > new Date(`${dateTo}T23:59:59.999`).getTime())
+          return false;
       }
       return true;
     },
@@ -1040,7 +1041,9 @@ export default function Tasks() {
                           type="date"
                           value={dateFrom}
                           max={
-                            dateMode === "between" && dateTo ? dateTo : undefined
+                            dateMode === "between" && dateTo
+                              ? dateTo
+                              : undefined
                           }
                           onChange={(e) => setDateFrom(e.target.value)}
                           aria-label={

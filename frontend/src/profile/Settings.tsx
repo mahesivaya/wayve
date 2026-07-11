@@ -149,7 +149,8 @@ export default function Settings() {
   const adminConsoles = [
     {
       label: "Single Sign-On (OIDC)",
-      description: "Let your team sign in with Google Workspace / Okta / Azure AD.",
+      description:
+        "Let your team sign in with Google Workspace / Okta / Azure AD.",
       path: "/settings/sso",
       visible: hasPermission(user, "sso:manage"),
     },

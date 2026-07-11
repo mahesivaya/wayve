@@ -35,9 +35,9 @@ describe("isGmailReconnectError", () => {
         "Unable to decrypt this fully encrypted email on this device."
       )
     ).toBe(false);
-    expect(
-      isGmailReconnectError("Failed to load email body. Try again.")
-    ).toBe(false);
+    expect(isGmailReconnectError("Failed to load email body. Try again.")).toBe(
+      false
+    );
     expect(isGmailReconnectError(null)).toBe(false);
     expect(isGmailReconnectError(undefined)).toBe(false);
   });

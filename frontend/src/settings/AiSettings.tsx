@@ -179,8 +179,7 @@ export default function AiSettings() {
   const needsBaseUrl = selectedOption?.needs_base_url ?? false;
   // Whether the currently-selected provider already has a stored key (only true
   // when the selection matches what's saved).
-  const hasStoredKey =
-    !!config?.has_key && config.provider === selected;
+  const hasStoredKey = !!config?.has_key && config.provider === selected;
 
   function pick(id: AiProviderId) {
     setSelected(id);
@@ -259,8 +258,8 @@ export default function AiSettings() {
         <p>
           Choose the AI your {audience}'s assistant runs on — your own provider
           account, key, and (optionally) endpoint. Every member uses what you
-          select here; they can't change it. Keys are encrypted at rest and never
-          shown again.
+          select here; they can't change it. Keys are encrypted at rest and
+          never shown again.
         </p>
         <button
           type="button"
@@ -283,7 +282,11 @@ export default function AiSettings() {
         <p>Loading…</p>
       ) : (
         <form className="ai-form" onSubmit={onSave}>
-          <div className="ai-block-grid" role="radiogroup" aria-label="AI provider">
+          <div
+            className="ai-block-grid"
+            role="radiogroup"
+            aria-label="AI provider"
+          >
             {providers.map((p) => (
               <button
                 type="button"
@@ -313,7 +316,9 @@ export default function AiSettings() {
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                 />
-                <small>Leave blank to use {selectedOption.default_model}.</small>
+                <small>
+                  Leave blank to use {selectedOption.default_model}.
+                </small>
               </label>
 
               {needsBaseUrl && (
@@ -358,9 +363,9 @@ export default function AiSettings() {
                   onChange={(e) => setFailClosed(e.target.checked)}
                 />
                 <span>
-                  <strong>Fail closed</strong> — if your provider is unreachable,
-                  return an error instead of falling back to the platform default
-                  (recommended for data control).
+                  <strong>Fail closed</strong> — if your provider is
+                  unreachable, return an error instead of falling back to the
+                  platform default (recommended for data control).
                 </span>
               </label>
             </fieldset>
@@ -399,10 +404,10 @@ export default function AiSettings() {
         <section className="ai-data-access">
           <h2>Data access</h2>
           <p>
-            Choose which of your team's data the AI assistant may read. Turning a
-            category off immediately removes those tools from the assistant. Only
-            categories the assistant has tools for today can be changed; the rest
-            are coming soon.
+            Choose which of your team's data the AI assistant may read. Turning
+            a category off immediately removes those tools from the assistant.
+            Only categories the assistant has tools for today can be changed;
+            the rest are coming soon.
           </p>
 
           {!config?.configured && (

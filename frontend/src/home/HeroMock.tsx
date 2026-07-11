@@ -372,7 +372,11 @@ function HomeScreen() {
       subject: "Q3 roadmap — final review before Friday",
       time: "9:24",
     },
-    { from: "GitHub", subject: "[fluxze] PR #482 merged into main", time: "8:10" },
+    {
+      from: "GitHub",
+      subject: "[fluxze] PR #482 merged into main",
+      time: "8:10",
+    },
     {
       from: "Marco Rossi",
       subject: "Re: Q3 invoice — approved, payment sent",

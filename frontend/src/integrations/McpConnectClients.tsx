@@ -99,8 +99,8 @@ export default function McpConnectClients({
         </ol>
         <Code text={serverUrl} />
         <p className="mcp-caveat">
-          The Claude.ai UI has no bearer-token field — use a server that supports
-          OAuth, or use Claude Code / Cursor / VS Code for token auth.
+          The Claude.ai UI has no bearer-token field — use a server that
+          supports OAuth, or use Claude Code / Cursor / VS Code for token auth.
         </p>
       </details>
 
@@ -125,12 +125,14 @@ export default function McpConnectClients({
       <details className="mcp-client-row">
         <summary>IDE (VS Code / Cursor)</summary>
         <p className="mcp-caveat">
-          VS Code — <code>.vscode/mcp.json</code> (note <code>"type": "http"</code>
+          VS Code — <code>.vscode/mcp.json</code> (note{" "}
+          <code>"type": "http"</code>
           ):
         </p>
         <Code text={vscode} />
         <p className="mcp-caveat">
-          Cursor — <code>~/.cursor/mcp.json</code> (note <code>"mcpServers"</code>):
+          Cursor — <code>~/.cursor/mcp.json</code> (note{" "}
+          <code>"mcpServers"</code>):
         </p>
         <Code text={cursor} />
       </details>

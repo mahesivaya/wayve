@@ -215,7 +215,10 @@ export default function MessageComposer({
         {mentionOpen && (
           <ul className="chat-mention-menu" role="listbox">
             {matches.map((candidate, i) => (
-              <li key={`${candidate.id}-${candidate.email}`} role="presentation">
+              <li
+                key={`${candidate.id}-${candidate.email}`}
+                role="presentation"
+              >
                 <button
                   type="button"
                   role="option"
@@ -247,7 +250,11 @@ export default function MessageComposer({
           onClick={(e) => syncMention(e.currentTarget)}
           onKeyUp={(e) => {
             // Arrow/Home/End move the caret without changing text — resync.
-            if (e.key.startsWith("Arrow") || e.key === "Home" || e.key === "End") {
+            if (
+              e.key.startsWith("Arrow") ||
+              e.key === "Home" ||
+              e.key === "End"
+            ) {
               syncMention(e.currentTarget);
             }
           }}

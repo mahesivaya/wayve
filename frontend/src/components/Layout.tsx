@@ -26,10 +26,7 @@ import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import { useChatUnreadCount } from "../chat/useChatUnreadCount";
 import StorageLimitBanner from "./StorageLimitBanner";
 import { SplitPaneContext } from "./SplitPaneContext";
-import {
-  SplitControlContext,
-  type SplitTarget,
-} from "./SplitControlContext";
+import { SplitControlContext, type SplitTarget } from "./SplitControlContext";
 import ResizeHandle from "./ResizeHandle";
 import { useResizableWidth } from "./useResizableWidth";
 import { listTeams, createTeam, type Team } from "../api/workspace";
@@ -314,14 +311,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   // Open a split app in the right pane, optionally focusing a target (task id).
   // Used by nested components via SplitControlContext.
-  const openApp = useCallback(
-    (app: AppKey, opts?: { taskId?: number }) => {
-      setRightView(app);
-      setSplitTarget("right");
-      setPaneTarget({ app, taskId: opts?.taskId });
-    },
-    []
-  );
+  const openApp = useCallback((app: AppKey, opts?: { taskId?: number }) => {
+    setRightView(app);
+    setSplitTarget("right");
+    setPaneTarget({ app, taskId: opts?.taskId });
+  }, []);
 
   // Close the right pane (and drop any pending focus target). Given to pane
   // apps so an in-pane "close" gesture can dismiss the whole pane.
@@ -779,9 +773,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Domain administration is restricted to the platform OWNER specifically
   // (not all platform staff) — mirrors the backend require_platform_owner gate.
   const isPlatformOwner =
-    adminMode &&
-    user.scope === "platform" &&
-    user.effective_role === "owner";
+    adminMode && user.scope === "platform" && user.effective_role === "owner";
   // Organization owners get a Domains shortcut to their own org's custom-domain
   // administration. (Nav only — backend domain endpoints stay platform-owner
   // gated for now, so the link targets their org via ?org=<id>.)
@@ -1194,471 +1186,477 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   return (
     <SplitControlContext.Provider value={splitControl}>
-    <div className="app">
-      <SearchProvider>
-        {/* 🔝 HEADER — brand + inline search + global actions. App
+      <div className="app">
+        <SearchProvider>
+          {/* 🔝 HEADER — brand + inline search + global actions. App
           navigation lives in the left sidebar. */}
-        <div className="header">
-          <div className="header-brand">
-            <div className="logo" onClick={() => navigate("/")}>
-              {/* Desktop shell uses a smaller mark. The wordmark follows the
+          <div className="header">
+            <div className="header-brand">
+              <div className="logo" onClick={() => navigate("/")}>
+                {/* Desktop shell uses a smaller mark. The wordmark follows the
                 sidebar: shown when the sidebar is expanded, hidden (mark only)
                 when it's collapsed to the icon rail. */}
-              <BrandLogo className="logo-mark" size={desktop ? 24 : 36} />
-              {!(desktop && sidebarCollapsed) && (
-                <span className="logo-word">{BRAND_NAME}</span>
-              )}
-            </div>
-            {/* Header toggle is the mobile hamburger ONLY. On wide screens the
+                <BrandLogo className="logo-mark" size={desktop ? 24 : 36} />
+                {!(desktop && sidebarCollapsed) && (
+                  <span className="logo-word">{BRAND_NAME}</span>
+                )}
+              </div>
+              {/* Header toggle is the mobile hamburger ONLY. On wide screens the
               show/hide control lives on the sidebar divider (see
               .sidebar-divider-toggle below); there's no persistent divider in
               the ≤768px off-canvas overlay, so the header button stays for it. */}
-            {isNarrow && (
-              <button
-                type="button"
-                className="sidebar-toggle-btn"
-                onClick={() => setNavOpen((open) => !open)}
-                title={navOpen ? "Hide sidebar" : "Show sidebar"}
-                aria-label={navOpen ? "Hide sidebar" : "Show sidebar"}
-                aria-expanded={navOpen}
-              >
-                <svg
-                  className="sidebar-toggle-icon"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  {/* Panel frame for context */}
-                  <rect x="3" y="5" width="18" height="14" rx="2.2" />
-                  <line x1="9" y1="5" x2="9" y2="19" />
-                  {/* Arrow points the way the panel will move on click:
-                    open → left chevron (will hide); closed → right (show). */}
-                  {navOpen ? (
-                    <polyline points="15 9 12 12 15 15" />
-                  ) : (
-                    <polyline points="12 9 15 12 12 15" />
-                  )}
-                </svg>
-              </button>
-            )}
-          </div>
-
-          {!location.pathname.startsWith("/emails") &&
-            !location.pathname.startsWith("/notes") &&
-            !location.pathname.startsWith("/chat") && <SearchBar />}
-
-          {/* Global actions stay in the header in both runtimes. The profile
-            menu is the one exception: the desktop shell renders it at the
-            bottom of the sidebar instead (see .sidebar-profile below). */}
-          <div className="actions">
-            {headerActions}
-            {!desktop && <ProfileMenu />}
-          </div>
-        </div>
-
-        <StorageLimitBanner onUpgrade={goToUpgrade} />
-
-        {/* 🔥 BODY */}
-        <div className="body">
-          {/* PRIMARY SIDEBAR — every app nav surface lives here. */}
-          <nav
-            ref={sidebarRef}
-            className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`.trim()}
-            style={
-              !sidebarCollapsed && !isNarrow
-                ? { width: `${sidebarWidth}px` }
-                : undefined
-            }
-            aria-label="Primary navigation"
-          >
-            {/* Wide-screen show/hide control — a small chevron pinned at the top
-              of the panel, above Home. Stays put whether expanded or collapsed
-              to the icon rail. The ≤768px overlay uses the header hamburger
-              instead, so this is desktop-only. */}
-            {!isNarrow && (
-              <div className="sidebar-collapse-row">
+              {isNarrow && (
                 <button
                   type="button"
-                  className="sidebar-collapse-btn"
-                  onClick={() => setSidebarCollapsed((c) => !c)}
-                  title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-                  aria-label={
-                    sidebarCollapsed ? "Show sidebar" : "Hide sidebar"
-                  }
-                  aria-expanded={!sidebarCollapsed}
+                  className="sidebar-toggle-btn"
+                  onClick={() => setNavOpen((open) => !open)}
+                  title={navOpen ? "Hide sidebar" : "Show sidebar"}
+                  aria-label={navOpen ? "Hide sidebar" : "Show sidebar"}
+                  aria-expanded={navOpen}
                 >
                   <svg
-                    className="sidebar-collapse-icon"
+                    className="sidebar-toggle-icon"
                     viewBox="0 0 24 24"
                     aria-hidden="true"
                   >
-                    {/* Same panel-frame glyph the header toggle used. The arrow
-                      points the way the panel will move on click:
-                      expanded → left (will hide); collapsed → right (will show). */}
+                    {/* Panel frame for context */}
                     <rect x="3" y="5" width="18" height="14" rx="2.2" />
                     <line x1="9" y1="5" x2="9" y2="19" />
-                    {sidebarCollapsed ? (
-                      <polyline points="12 9 15 12 12 15" />
-                    ) : (
+                    {/* Arrow points the way the panel will move on click:
+                    open → left chevron (will hide); closed → right (show). */}
+                    {navOpen ? (
                       <polyline points="15 9 12 12 15 15" />
+                    ) : (
+                      <polyline points="12 9 15 12 12 15" />
                     )}
                   </svg>
                 </button>
-              </div>
-            )}
-
-            <div className="sidebar-section">
-              {renderSidebarItem("/", "home", "Home", <HomeIcon size={18} />)}
-              {renderSidebarItem(
-                "/emails",
-                "emails",
-                "Inbox",
-                <EmailsIcon size={18} />,
-                emailsUnreadCount
               )}
-              {renderSidebarItem(
-                "/chat",
-                "chat",
-                "Messages",
-                <ChatIcon size={18} />,
-                chatUnreadCount
-              )}
-              {/* /call is intentionally absent — audio/video lives inside Chat. */}
-              {renderSidebarItem(
-                "/scheduler",
-                "scheduler",
-                "Scheduler",
-                <SchedulerIcon size={18} />
-              )}
-              {renderSidebarItem(
-                "/drive",
-                "drive",
-                "Drive",
-                <DriveIcon size={18} />
-              )}
-              {renderSidebarItem(
-                "/notes",
-                "notes",
-                "Notes",
-                <NotesIcon size={18} />
-              )}
-              {renderSidebarItem(
-                "/tasks",
-                "tasks",
-                "Tasks",
-                <TasksIcon size={18} />
-              )}
-              {/* AI Chat has no sidebar item anymore — it's the Home page for
-                every user (see Home.tsx). Reach it via Home. */}
-              {/* Code Repo — a PERMANENT nav item for personal accounts (no
-                  longer opt-in). Workspace users get it inside the Workspace
-                  section below, so this is personal-only to avoid duplicating. */}
-              {user.account_type === "personal" &&
-                renderSidebarItem(
-                  "/github",
-                  "github",
-                  "Code Repo",
-                  <GitLogoIcon size={18} />
-                )}
-              {/* Personal accounts: opt-in apps they've added (in catalog
-                  order), plus a "+" that opens a checkbox picker. */}
-              {user.account_type === "personal" && (
-                <>
-                  {ADDABLE_PERSONAL_APPS.filter((a) =>
-                    personalApps.includes(a.key)
-                  ).map((a) =>
-                    a.path ? (
-                      renderSidebarItem(
-                        a.path,
-                        a.key as AppKey,
-                        a.label,
-                        a.icon
-                      )
-                    ) : (
-                      // Placeholder app — not yet wired to a real route, so it
-                      // navigates to the shared Coming Soon page (carrying its
-                      // label so the page names the feature).
-                      <button
-                        key={a.key}
-                        type="button"
-                        className="sidebar-link sidebar-link-placeholder"
-                        title={`${a.label} (coming soon)`}
-                        onClick={() =>
-                          navigate(
-                            `/coming-soon?feature=${encodeURIComponent(a.label)}`
-                          )
-                        }
-                      >
-                        <span className="sidebar-icon" aria-hidden="true">
-                          {a.icon}
-                        </span>
-                        <span className="sidebar-label">{a.label}</span>
-                      </button>
-                    )
-                  )}
-                  {/* Keep the "+" while at least one app isn't added yet. */}
-                  {ADDABLE_PERSONAL_APPS.some(
-                    (a) => !personalApps.includes(a.key)
-                  ) && (
-                    <button
-                      type="button"
-                      className="sidebar-link sidebar-add-app-btn"
-                      title="Add app"
-                      onClick={() => setAddAppOpen(true)}
-                    >
-                      <span className="sidebar-icon" aria-hidden="true">
-                        <PlusIcon size={18} />
-                      </span>
-                      <span className="sidebar-label">Add</span>
-                    </button>
-                  )}
-                </>
-              )}
-              {(user.scope === "platform" || user.scope === "organization") &&
-                renderSidebarItem(
-                  "/test-access",
-                  "test_access",
-                  "Test Access",
-                  <TestAccessIcon size={18} />
-                )}
-              {(isOrgOwner || isPlatformOwner) &&
-                renderSidebarLink(
-                  "/access-requests",
-                  "Access Requests",
-                  <AccessRequestsIcon size={16} />,
-                  location.pathname === "/access-requests"
-                )}
             </div>
 
-            {sectionDefs.map(renderSection)}
+            {!location.pathname.startsWith("/emails") &&
+              !location.pathname.startsWith("/notes") &&
+              !location.pathname.startsWith("/chat") && <SearchBar />}
 
-            <div className="sidebar-spacer" />
+            {/* Global actions stay in the header in both runtimes. The profile
+            menu is the one exception: the desktop shell renders it at the
+            bottom of the sidebar instead (see .sidebar-profile below). */}
+            <div className="actions">
+              {headerActions}
+              {!desktop && <ProfileMenu />}
+            </div>
+          </div>
 
-            {/* Settings pinned to the very bottom of the sidebar, below the
+          <StorageLimitBanner onUpgrade={goToUpgrade} />
+
+          {/* 🔥 BODY */}
+          <div className="body">
+            {/* PRIMARY SIDEBAR — every app nav surface lives here. */}
+            <nav
+              ref={sidebarRef}
+              className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`.trim()}
+              style={
+                !sidebarCollapsed && !isNarrow
+                  ? { width: `${sidebarWidth}px` }
+                  : undefined
+              }
+              aria-label="Primary navigation"
+            >
+              {/* Wide-screen show/hide control — a small chevron pinned at the top
+              of the panel, above Home. Stays put whether expanded or collapsed
+              to the icon rail. The ≤768px overlay uses the header hamburger
+              instead, so this is desktop-only. */}
+              {!isNarrow && (
+                <div className="sidebar-collapse-row">
+                  <button
+                    type="button"
+                    className="sidebar-collapse-btn"
+                    onClick={() => setSidebarCollapsed((c) => !c)}
+                    title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+                    aria-label={
+                      sidebarCollapsed ? "Show sidebar" : "Hide sidebar"
+                    }
+                    aria-expanded={!sidebarCollapsed}
+                  >
+                    <svg
+                      className="sidebar-collapse-icon"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      {/* Same panel-frame glyph the header toggle used. The arrow
+                      points the way the panel will move on click:
+                      expanded → left (will hide); collapsed → right (will show). */}
+                      <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                      <line x1="9" y1="5" x2="9" y2="19" />
+                      {sidebarCollapsed ? (
+                        <polyline points="12 9 15 12 12 15" />
+                      ) : (
+                        <polyline points="15 9 12 12 15 15" />
+                      )}
+                    </svg>
+                  </button>
+                </div>
+              )}
+
+              <div className="sidebar-section">
+                {renderSidebarItem("/", "home", "Home", <HomeIcon size={18} />)}
+                {renderSidebarItem(
+                  "/emails",
+                  "emails",
+                  "Inbox",
+                  <EmailsIcon size={18} />,
+                  emailsUnreadCount
+                )}
+                {renderSidebarItem(
+                  "/chat",
+                  "chat",
+                  "Messages",
+                  <ChatIcon size={18} />,
+                  chatUnreadCount
+                )}
+                {/* /call is intentionally absent — audio/video lives inside Chat. */}
+                {renderSidebarItem(
+                  "/scheduler",
+                  "scheduler",
+                  "Scheduler",
+                  <SchedulerIcon size={18} />
+                )}
+                {renderSidebarItem(
+                  "/drive",
+                  "drive",
+                  "Drive",
+                  <DriveIcon size={18} />
+                )}
+                {renderSidebarItem(
+                  "/notes",
+                  "notes",
+                  "Notes",
+                  <NotesIcon size={18} />
+                )}
+                {renderSidebarItem(
+                  "/tasks",
+                  "tasks",
+                  "Tasks",
+                  <TasksIcon size={18} />
+                )}
+                {/* AI Chat has no sidebar item anymore — it's the Home page for
+                every user (see Home.tsx). Reach it via Home. */}
+                {/* Code Repo — a PERMANENT nav item for personal accounts (no
+                  longer opt-in). Workspace users get it inside the Workspace
+                  section below, so this is personal-only to avoid duplicating. */}
+                {user.account_type === "personal" &&
+                  renderSidebarItem(
+                    "/github",
+                    "github",
+                    "Code Repo",
+                    <GitLogoIcon size={18} />
+                  )}
+                {/* Personal accounts: opt-in apps they've added (in catalog
+                  order), plus a "+" that opens a checkbox picker. */}
+                {user.account_type === "personal" && (
+                  <>
+                    {ADDABLE_PERSONAL_APPS.filter((a) =>
+                      personalApps.includes(a.key)
+                    ).map((a) =>
+                      a.path ? (
+                        renderSidebarItem(
+                          a.path,
+                          a.key as AppKey,
+                          a.label,
+                          a.icon
+                        )
+                      ) : (
+                        // Placeholder app — not yet wired to a real route, so it
+                        // navigates to the shared Coming Soon page (carrying its
+                        // label so the page names the feature).
+                        <button
+                          key={a.key}
+                          type="button"
+                          className="sidebar-link sidebar-link-placeholder"
+                          title={`${a.label} (coming soon)`}
+                          onClick={() =>
+                            navigate(
+                              `/coming-soon?feature=${encodeURIComponent(a.label)}`
+                            )
+                          }
+                        >
+                          <span className="sidebar-icon" aria-hidden="true">
+                            {a.icon}
+                          </span>
+                          <span className="sidebar-label">{a.label}</span>
+                        </button>
+                      )
+                    )}
+                    {/* Keep the "+" while at least one app isn't added yet. */}
+                    {ADDABLE_PERSONAL_APPS.some(
+                      (a) => !personalApps.includes(a.key)
+                    ) && (
+                      <button
+                        type="button"
+                        className="sidebar-link sidebar-add-app-btn"
+                        title="Add app"
+                        onClick={() => setAddAppOpen(true)}
+                      >
+                        <span className="sidebar-icon" aria-hidden="true">
+                          <PlusIcon size={18} />
+                        </span>
+                        <span className="sidebar-label">Add</span>
+                      </button>
+                    )}
+                  </>
+                )}
+                {(user.scope === "platform" || user.scope === "organization") &&
+                  renderSidebarItem(
+                    "/test-access",
+                    "test_access",
+                    "Test Access",
+                    <TestAccessIcon size={18} />
+                  )}
+                {(isOrgOwner || isPlatformOwner) &&
+                  renderSidebarLink(
+                    "/access-requests",
+                    "Access Requests",
+                    <AccessRequestsIcon size={16} />,
+                    location.pathname === "/access-requests"
+                  )}
+              </div>
+
+              {sectionDefs.map(renderSection)}
+
+              <div className="sidebar-spacer" />
+
+              {/* Settings pinned to the very bottom of the sidebar, below the
               flex spacer so it stays anchored regardless of how many nav
               groups are present above it. */}
-            <div className="sidebar-section sidebar-section-bottom">
-              {/* Desktop shell: a profile button (avatar + username) REPLACES
+              <div className="sidebar-section sidebar-section-bottom">
+                {/* Desktop shell: a profile button (avatar + username) REPLACES
                 the Settings link. Clicking it opens the full Settings page
                 (plain navigation — no split). The browser keeps the plain
                 Settings link (its ProfileMenu lives in the header). */}
-              {desktop ? (
-                <button
-                  type="button"
-                  className={`sidebar-link sidebar-profile-btn${
-                    location.pathname === "/settings" ? " active" : ""
-                  }`}
-                  title={`${user.email} — open settings`}
-                  onClick={() => {
-                    setNavOpen(false);
-                    void navigate("/settings");
-                  }}
-                >
-                  <span className="sidebar-icon" aria-hidden="true">
-                    <Avatar
-                      name={user.email}
-                      src={`${getApiBase()}/api/users/${user.id}/avatar`}
-                      size={22}
-                    />
-                  </span>
-                  <span className="sidebar-label">{user.email}</span>
-                </button>
-              ) : (
-                renderSidebarLink(
-                  "/settings",
-                  "Settings",
-                  <SettingsIcon size={18} />,
-                  location.pathname === "/settings"
-                )
-              )}
-            </div>
-          </nav>
+                {desktop ? (
+                  <button
+                    type="button"
+                    className={`sidebar-link sidebar-profile-btn${
+                      location.pathname === "/settings" ? " active" : ""
+                    }`}
+                    title={`${user.email} — open settings`}
+                    onClick={() => {
+                      setNavOpen(false);
+                      void navigate("/settings");
+                    }}
+                  >
+                    <span className="sidebar-icon" aria-hidden="true">
+                      <Avatar
+                        name={user.email}
+                        src={`${getApiBase()}/api/users/${user.id}/avatar`}
+                        size={22}
+                      />
+                    </span>
+                    <span className="sidebar-label">{user.email}</span>
+                  </button>
+                ) : (
+                  renderSidebarLink(
+                    "/settings",
+                    "Settings",
+                    <SettingsIcon size={18} />,
+                    location.pathname === "/settings"
+                  )
+                )}
+              </div>
+            </nav>
 
-          {/* Drag the nav sidebar wider/narrower (hidden when collapsed to the
+            {/* Drag the nav sidebar wider/narrower (hidden when collapsed to the
             icon rail or in the narrow off-canvas overlay). */}
-          {!sidebarCollapsed && !isNarrow && (
-            <ResizeHandle
-              onPointerDown={startSidebarResize}
-              ariaLabel="Resize sidebar"
-            />
-          )}
+            {!sidebarCollapsed && !isNarrow && (
+              <ResizeHandle
+                onPointerDown={startSidebarResize}
+                ariaLabel="Resize sidebar"
+              />
+            )}
 
-          {/* Scrim catches taps outside the sidebar overlay on narrow screens. */}
-          {navOpen && (
-            <div
-              className="sidebar-scrim"
-              onClick={() => setNavOpen(false)}
-              aria-hidden="true"
-            />
-          )}
+            {/* Scrim catches taps outside the sidebar overlay on narrow screens. */}
+            {navOpen && (
+              <div
+                className="sidebar-scrim"
+                onClick={() => setNavOpen(false)}
+                aria-hidden="true"
+              />
+            )}
 
-          {/* MAIN CONTENT */}
-          <div className={`content`} ref={contentRef}>
-            <div
-              className={`split-pane left ${splitOpen && splitTarget === "left" ? "active-target" : ""}`}
-              onMouseDown={() => setSplitTarget("left")}
-              style={splitOpen ? { flexGrow: paneWeights.left } : undefined}
-            >
-              {splitOpen ? (
-                <>
+            {/* MAIN CONTENT */}
+            <div className={`content`} ref={contentRef}>
+              <div
+                className={`split-pane left ${splitOpen && splitTarget === "left" ? "active-target" : ""}`}
+                onMouseDown={() => setSplitTarget("left")}
+                style={splitOpen ? { flexGrow: paneWeights.left } : undefined}
+              >
+                {splitOpen ? (
+                  <>
+                    <div className="split-pane-toolbar">
+                      <span className="split-pane-title">{leftLabel}</span>
+                      <button
+                        className="split-close-btn"
+                        onClick={closeLeftPane}
+                        title="Close pane"
+                        aria-label="Close left pane"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="split-pane-body">
+                      <SplitPaneContext.Provider value={true}>
+                        <Suspense
+                          fallback={
+                            <div className="split-loading">Loading…</div>
+                          }
+                        >
+                          {children ?? <Outlet />}
+                        </Suspense>
+                      </SplitPaneContext.Provider>
+                    </div>
+                  </>
+                ) : (
+                  <Suspense
+                    fallback={<div className="split-loading">Loading…</div>}
+                  >
+                    {children ?? <Outlet />}
+                  </Suspense>
+                )}
+              </div>
+
+              {/* Resize handle between left and (middle or right) — only when
+              split open. Dragging adjusts the boundary between the two
+              panes the handle sits between. */}
+              {splitOpen && (
+                <div
+                  className="split-resize-handle"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize pane"
+                  onPointerDown={handlePaneResize(
+                    "left",
+                    middleView ? "center" : "right"
+                  )}
+                />
+              )}
+
+              {middleView && (
+                <div
+                  className="split-pane center"
+                  style={{ flexGrow: paneWeights.center }}
+                >
                   <div className="split-pane-toolbar">
-                    <span className="split-pane-title">{leftLabel}</span>
+                    <span className="split-pane-title">{middleLabel}</span>
                     <button
                       className="split-close-btn"
-                      onClick={closeLeftPane}
+                      onClick={() => setMiddleView(null)}
                       title="Close pane"
-                      aria-label="Close left pane"
+                      aria-label="Close center pane"
                     >
                       ✕
                     </button>
                   </div>
                   <div className="split-pane-body">
-                    <SplitPaneContext.Provider value={true}>
-                      <Suspense
-                        fallback={<div className="split-loading">Loading…</div>}
-                      >
-                        {children ?? <Outlet />}
-                      </Suspense>
-                    </SplitPaneContext.Provider>
+                    {MiddleComp && (
+                      <SplitPaneContext.Provider value={true}>
+                        <Suspense
+                          fallback={
+                            <div className="split-loading">Loading…</div>
+                          }
+                        >
+                          <MiddleComp />
+                        </Suspense>
+                      </SplitPaneContext.Provider>
+                    )}
                   </div>
-                </>
-              ) : (
-                <Suspense
-                  fallback={<div className="split-loading">Loading…</div>}
+                </div>
+              )}
+
+              {/* Second handle only when all three panes are visible — sits
+              between center and right. */}
+              {middleView && rightView && (
+                <div
+                  className="split-resize-handle"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize pane"
+                  onPointerDown={handlePaneResize("center", "right")}
+                />
+              )}
+
+              {rightView && (
+                <div
+                  className={`split-pane right ${splitTarget === "right" ? "active-target" : ""}`}
+                  onMouseDown={() => setSplitTarget("right")}
+                  style={{ flexGrow: paneWeights.right }}
                 >
-                  {children ?? <Outlet />}
-                </Suspense>
+                  <div className="split-pane-toolbar">
+                    <span className="split-pane-title">{rightLabel}</span>
+                    <button
+                      className="split-close-btn"
+                      onClick={() => {
+                        setRightView(null);
+                        setSplitTarget("left");
+                        setPaneTarget(null);
+                      }}
+                      title="Close pane"
+                      aria-label="Close right pane"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="split-pane-body">
+                    {RightComp && (
+                      <SplitPaneContext.Provider value={true}>
+                        <Suspense
+                          fallback={
+                            <div className="split-loading">Loading…</div>
+                          }
+                        >
+                          <RightComp />
+                        </Suspense>
+                      </SplitPaneContext.Provider>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
-
-            {/* Resize handle between left and (middle or right) — only when
-              split open. Dragging adjusts the boundary between the two
-              panes the handle sits between. */}
-            {splitOpen && (
-              <div
-                className="split-resize-handle"
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize pane"
-                onPointerDown={handlePaneResize(
-                  "left",
-                  middleView ? "center" : "right"
-                )}
-              />
-            )}
-
-            {middleView && (
-              <div
-                className="split-pane center"
-                style={{ flexGrow: paneWeights.center }}
-              >
-                <div className="split-pane-toolbar">
-                  <span className="split-pane-title">{middleLabel}</span>
-                  <button
-                    className="split-close-btn"
-                    onClick={() => setMiddleView(null)}
-                    title="Close pane"
-                    aria-label="Close center pane"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="split-pane-body">
-                  {MiddleComp && (
-                    <SplitPaneContext.Provider value={true}>
-                      <Suspense
-                        fallback={<div className="split-loading">Loading…</div>}
-                      >
-                        <MiddleComp />
-                      </Suspense>
-                    </SplitPaneContext.Provider>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Second handle only when all three panes are visible — sits
-              between center and right. */}
-            {middleView && rightView && (
-              <div
-                className="split-resize-handle"
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize pane"
-                onPointerDown={handlePaneResize("center", "right")}
-              />
-            )}
-
-            {rightView && (
-              <div
-                className={`split-pane right ${splitTarget === "right" ? "active-target" : ""}`}
-                onMouseDown={() => setSplitTarget("right")}
-                style={{ flexGrow: paneWeights.right }}
-              >
-                <div className="split-pane-toolbar">
-                  <span className="split-pane-title">{rightLabel}</span>
-                  <button
-                    className="split-close-btn"
-                    onClick={() => {
-                      setRightView(null);
-                      setSplitTarget("left");
-                      setPaneTarget(null);
-                    }}
-                    title="Close pane"
-                    aria-label="Close right pane"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="split-pane-body">
-                  {RightComp && (
-                    <SplitPaneContext.Provider value={true}>
-                      <Suspense
-                        fallback={<div className="split-loading">Loading…</div>}
-                      >
-                        <RightComp />
-                      </Suspense>
-                    </SplitPaneContext.Provider>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
-        </div>
-      </SearchProvider>
+        </SearchProvider>
 
-      {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
+        {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
 
-      {/* Personal-account app picker: a grid of checkbox cards. Checking a
+        {/* Personal-account app picker: a grid of checkbox cards. Checking a
           card drops the app into the sidebar live; unchecking removes it. */}
-      <Modal
-        isOpen={addAppOpen}
-        onClose={() => setAddAppOpen(false)}
-        title="Add to sidebar"
-      >
-        <div className="add-app-grid">
-          {ADDABLE_PERSONAL_APPS.map((a) => {
-            const checked = personalApps.includes(a.key);
-            return (
-              <button
-                key={a.key}
-                type="button"
-                className={`add-app-card${checked ? " checked" : ""}`}
-                aria-pressed={checked}
-                onClick={() => togglePersonalApp(a.key)}
-              >
-                <span className="add-app-checkbox" aria-hidden="true">
-                  {checked ? "✓" : ""}
-                </span>
-                <span className="add-app-icon" aria-hidden="true">
-                  {a.icon}
-                </span>
-                <span className="add-app-label">{a.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </Modal>
-    </div>
+        <Modal
+          isOpen={addAppOpen}
+          onClose={() => setAddAppOpen(false)}
+          title="Add to sidebar"
+        >
+          <div className="add-app-grid">
+            {ADDABLE_PERSONAL_APPS.map((a) => {
+              const checked = personalApps.includes(a.key);
+              return (
+                <button
+                  key={a.key}
+                  type="button"
+                  className={`add-app-card${checked ? " checked" : ""}`}
+                  aria-pressed={checked}
+                  onClick={() => togglePersonalApp(a.key)}
+                >
+                  <span className="add-app-checkbox" aria-hidden="true">
+                    {checked ? "✓" : ""}
+                  </span>
+                  <span className="add-app-icon" aria-hidden="true">
+                    {a.icon}
+                  </span>
+                  <span className="add-app-label">{a.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Modal>
+      </div>
     </SplitControlContext.Provider>
   );
 }

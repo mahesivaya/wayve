@@ -171,7 +171,9 @@ export default function RepoAccessPanel({
               </div>
 
               <div className="repo-access-controls">
-                <span className={`repo-access-level repo-access-level--${row.level}`}>
+                <span
+                  className={`repo-access-level repo-access-level--${row.level}`}
+                >
                   {row.level}
                 </span>
                 {canManage && row.level !== "admin" && (

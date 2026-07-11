@@ -173,7 +173,9 @@ export default function SendEmail({
 
       // Encode attachments once (base64) for the standard send payload.
       const attachmentPayloads =
-        attachments.length > 0 ? await filesToAttachments(attachments) : undefined;
+        attachments.length > 0
+          ? await filesToAttachments(attachments)
+          : undefined;
       // Attachments are standard-mailbox only: when files are attached, force
       // every recipient down the SMTP path (skip the E2E internal channel).
       const forceStandard = attachments.length > 0;

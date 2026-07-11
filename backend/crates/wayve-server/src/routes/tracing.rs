@@ -56,18 +56,22 @@ async fn read_tail(path: &str, max_bytes: u64) -> String {
 // "3.44ms" / "1.2s" / "500µs" / "10ns" → milliseconds.
 fn parse_busy_ms(raw: &str) -> Option<f64> {
     let raw = raw.trim();
-    let (num, mult) = if let Some(v) = raw.strip_suffix("ms") {
-        (v, 1.0)
-    } else if let Some(v) = raw.strip_suffix("µs").or_else(|| raw.strip_suffix("us")) {
-        (v, 0.001)
-    } else if let Some(v) = raw.strip_suffix("ns") {
-        (v, 0.000_001)
-    } else if let Some(v) = raw.strip_suffix('s') {
-        (v, 1000.0)
-    } else {
-        return None;
-    };
-    num.trim().parse::<f64>().ok().map(|n| n * mult)
+    // (suffix, multiplier → milliseconds). Longer/more-specific suffixes come
+    // first so "ms"/"µs"/"ns" win before the bare "s". "µs" also accepts the
+    // ASCII "us" spelling.
+    const UNITS: &[(&str, f64)] = &[
+        ("ms", 1.0),
+        ("µs", 0.001),
+        ("us", 0.001),
+        ("ns", 0.000_001),
+        ("s", 1000.0),
+    ];
+    for &(suffix, mult) in UNITS {
+        if let Some(v) = raw.strip_suffix(suffix) {
+            return v.trim().parse::<f64>().ok().map(|n| n * mult);
+        }
+    }
+    None
 }
 
 #[derive(Default)]

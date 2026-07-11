@@ -195,185 +195,190 @@ export default function PlatformUserLogs({
       </nav>
 
       {tab === "registrations" && (
-      <section className="pt-panel pt-userlogs-reg">
-        <div className="pt-panel-head">
-          <h2>Registration types</h2>
-          <div className="pt-reg-summary">
-            {(["google", "microsoft", "local"] as const).map((p) => (
-              <span
-                key={p}
-                className={`pt-pill ${registrationProvider(p).pill}`}
-              >
-                {registrationProvider(p).label}: {registrationCounts[p] ?? 0}
-              </span>
-            ))}
+        <section className="pt-panel pt-userlogs-reg">
+          <div className="pt-panel-head">
+            <h2>Registration types</h2>
+            <div className="pt-reg-summary">
+              {(["google", "microsoft", "local"] as const).map((p) => (
+                <span
+                  key={p}
+                  className={`pt-pill ${registrationProvider(p).pill}`}
+                >
+                  {registrationProvider(p).label}: {registrationCounts[p] ?? 0}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
 
-        {!registrationsLoaded ? (
-          <div className="pt-empty">Loading…</div>
-        ) : registrations.length === 0 ? (
-          <div className="pt-empty">No registered users yet.</div>
-        ) : (
-          <div className="pt-table-scroll">
-            <table className="pt-table">
-              <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Registered via</th>
-                  <th>When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {registrations.map((r) => {
-                  const provider = registrationProvider(
-                    r.auth_provider || "local"
-                  );
-                  return (
-                    <tr key={r.id}>
-                      <td>{r.email}</td>
-                      <td>
-                        <span className={`pt-pill ${provider.pill}`}>
-                          {provider.label}
-                        </span>
-                      </td>
-                      <td>{r.created_at ? fmtDateTime(r.created_at) : "-"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+          {!registrationsLoaded ? (
+            <div className="pt-empty">Loading…</div>
+          ) : registrations.length === 0 ? (
+            <div className="pt-empty">No registered users yet.</div>
+          ) : (
+            <div className="pt-table-scroll">
+              <table className="pt-table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Registered via</th>
+                    <th>When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {registrations.map((r) => {
+                    const provider = registrationProvider(
+                      r.auth_provider || "local"
+                    );
+                    return (
+                      <tr key={r.id}>
+                        <td>{r.email}</td>
+                        <td>
+                          <span className={`pt-pill ${provider.pill}`}>
+                            {provider.label}
+                          </span>
+                        </td>
+                        <td>
+                          {r.created_at ? fmtDateTime(r.created_at) : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       )}
 
       {tab === "timespent" && (
-      <section className="pt-panel pt-userlogs-timespent">
-        <div className="pt-panel-head">
-          <h2>Time on site</h2>
-          <span className="pt-reg-summary">
-            Estimated active minutes per user (recent activity)
-          </span>
-        </div>
-
-        {!timeSpentLoaded ? (
-          <div className="pt-empty">Loading…</div>
-        ) : timeSpent.length === 0 ? (
-          <div className="pt-empty">No user activity recorded yet.</div>
-        ) : (
-          <div className="pt-table-scroll">
-            <table className="pt-table">
-              <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Email</th>
-                  <th>Time spent</th>
-                  <th>Sessions</th>
-                  <th>Last active</th>
-                </tr>
-              </thead>
-              <tbody>
-                {timeSpent.map((t) => (
-                  <tr key={t.user_id}>
-                    <td>{t.username || "—"}</td>
-                    <td>{t.email}</td>
-                    <td>{t.total_minutes} min</td>
-                    <td>{t.session_count}</td>
-                    <td>
-                      {t.last_active ? fmtDateTime(t.last_active) : "-"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <section className="pt-panel pt-userlogs-timespent">
+          <div className="pt-panel-head">
+            <h2>Time on site</h2>
+            <span className="pt-reg-summary">
+              Estimated active minutes per user (recent activity)
+            </span>
           </div>
-        )}
-      </section>
+
+          {!timeSpentLoaded ? (
+            <div className="pt-empty">Loading…</div>
+          ) : timeSpent.length === 0 ? (
+            <div className="pt-empty">No user activity recorded yet.</div>
+          ) : (
+            <div className="pt-table-scroll">
+              <table className="pt-table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Email</th>
+                    <th>Time spent</th>
+                    <th>Sessions</th>
+                    <th>Last active</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {timeSpent.map((t) => (
+                    <tr key={t.user_id}>
+                      <td>{t.username || "—"}</td>
+                      <td>{t.email}</td>
+                      <td>{t.total_minutes} min</td>
+                      <td>{t.session_count}</td>
+                      <td>
+                        {t.last_active ? fmtDateTime(t.last_active) : "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       )}
 
       {tab === "activity" && (
-      <section className="pt-panel pt-userlogs-activity">
-        <div className="pt-panel-head">
-          <h2>Activity</h2>
-          <input
-            type="search"
-            className="pt-filter-select"
-            placeholder="Search user, action, resource…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search user logs"
-          />
-        </div>
+        <section className="pt-panel pt-userlogs-activity">
+          <div className="pt-panel-head">
+            <h2>Activity</h2>
+            <input
+              type="search"
+              className="pt-filter-select"
+              placeholder="Search user, action, resource…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search user logs"
+            />
+          </div>
 
-        {loading ? (
-          <div className="pt-empty">Loading…</div>
-        ) : filtered.length === 0 ? (
-          <div className="pt-empty">
-            {rows.length === 0
-              ? "No user actions recorded yet."
-              : "No matches for that search."}
-          </div>
-        ) : (
-          <div className="pt-table-scroll">
-            <table
-              className="pt-table"
-              style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
-            >
-              <colgroup>
-                {USER_LOG_COLUMNS.map((c) => (
-                  <col key={c.key} style={{ width: `${colWidths[c.key]}px` }} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr>
+          {loading ? (
+            <div className="pt-empty">Loading…</div>
+          ) : filtered.length === 0 ? (
+            <div className="pt-empty">
+              {rows.length === 0
+                ? "No user actions recorded yet."
+                : "No matches for that search."}
+            </div>
+          ) : (
+            <div className="pt-table-scroll">
+              <table
+                className="pt-table"
+                style={{ tableLayout: "fixed", width: `${totalWidth}px` }}
+              >
+                <colgroup>
                   {USER_LOG_COLUMNS.map((c) => (
-                    <th key={c.key} className="pt-th-resizable">
-                      {c.label}
-                      <span
-                        className="pt-col-resize-handle"
-                        onMouseDown={startResize(c.key, c.min)}
-                        role="separator"
-                        aria-orientation="vertical"
-                        aria-label={`Resize ${c.label} column`}
-                      />
-                    </th>
+                    <col
+                      key={c.key}
+                      style={{ width: `${colWidths[c.key]}px` }}
+                    />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((a) => {
-                  const details = formatUserActionDetails(a);
-                  const location = [a.city, a.region, a.country]
-                    .filter(Boolean)
-                    .join(", ");
-                  return (
-                    <tr key={a.id}>
-                      <td>{fmtDateTime(a.created_at)}</td>
-                      <td>{a.actor_email ?? a.actor_user_id ?? "-"}</td>
-                      <td>
-                        <span className="pt-pill info">{a.action}</span>
-                      </td>
-                      <td>
-                        {a.resource_type
-                          ? `${a.resource_type}${a.resource_id ? `#${a.resource_id}` : ""}`
-                          : "-"}
-                      </td>
-                      <td className="pt-details" title={details}>
-                        {details || "-"}
-                      </td>
-                      <td>{a.ip ?? "-"}</td>
-                      <td className="pt-loc" title={location}>
-                        {location || "-"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                </colgroup>
+                <thead>
+                  <tr>
+                    {USER_LOG_COLUMNS.map((c) => (
+                      <th key={c.key} className="pt-th-resizable">
+                        {c.label}
+                        <span
+                          className="pt-col-resize-handle"
+                          onMouseDown={startResize(c.key, c.min)}
+                          role="separator"
+                          aria-orientation="vertical"
+                          aria-label={`Resize ${c.label} column`}
+                        />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((a) => {
+                    const details = formatUserActionDetails(a);
+                    const location = [a.city, a.region, a.country]
+                      .filter(Boolean)
+                      .join(", ");
+                    return (
+                      <tr key={a.id}>
+                        <td>{fmtDateTime(a.created_at)}</td>
+                        <td>{a.actor_email ?? a.actor_user_id ?? "-"}</td>
+                        <td>
+                          <span className="pt-pill info">{a.action}</span>
+                        </td>
+                        <td>
+                          {a.resource_type
+                            ? `${a.resource_type}${a.resource_id ? `#${a.resource_id}` : ""}`
+                            : "-"}
+                        </td>
+                        <td className="pt-details" title={details}>
+                          {details || "-"}
+                        </td>
+                        <td>{a.ip ?? "-"}</td>
+                        <td className="pt-loc" title={location}>
+                          {location || "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

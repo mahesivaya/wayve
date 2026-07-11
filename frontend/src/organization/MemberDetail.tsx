@@ -287,7 +287,7 @@ export default function MemberDetail({ scope }: Props) {
   const scopeLabel = member?.platform_role
     ? "Platform"
     : member?.organization_role
-      ? member.organization_name ?? "Organization"
+      ? (member.organization_name ?? "Organization")
       : null;
   // Left card's "unit" row: org name for org members, "Platform" for staff.
   const unitLabel = scope === "platform" ? "Scope" : "Organization";
@@ -439,7 +439,8 @@ export default function MemberDetail({ scope }: Props) {
 
             {/* Per-member Code Repo access. Org scope needs the caller's org id;
                 render only once it's known so the fetch is authorized. */}
-            {(scope === "platform" || (scope === "organization" && orgId != null)) && (
+            {(scope === "platform" ||
+              (scope === "organization" && orgId != null)) && (
               <ProjectsAccessCard
                 scope={scope}
                 orgId={orgId}

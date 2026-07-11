@@ -399,7 +399,10 @@ export default function App() {
                 the sidebar link is also owner-gated). Same component serves
                 organization and platform owners — the backend resolves the
                 matrix from the caller's scope. */}
-              <Route path="/organization/access" element={<FeatureAccessPage />} />
+              <Route
+                path="/organization/access"
+                element={<FeatureAccessPage />}
+              />
               <Route path="/platform/access" element={<FeatureAccessPage />} />
               <Route path="/billing" element={<Billing />} />
               <Route

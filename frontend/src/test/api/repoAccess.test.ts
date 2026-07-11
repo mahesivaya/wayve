@@ -31,7 +31,12 @@ describe("api/repoAccess", () => {
   });
 
   it("getRepoAccess GETs the encoded repo access path", async () => {
-    const body = { repo: "acme/widgets", github_readable: true, can_manage: true, rows: [] };
+    const body = {
+      repo: "acme/widgets",
+      github_readable: true,
+      can_manage: true,
+      rows: [],
+    };
     const fetchMock = mockFetch(200, body);
     const result = await getRepoAccess("acme", "widgets");
 
@@ -42,7 +47,10 @@ describe("api/repoAccess", () => {
   });
 
   it("setRepoAccess PUTs the login + level", async () => {
-    const fetchMock = mockFetch(200, { dashboard_updated: false, github_outcome: "synced" });
+    const fetchMock = mockFetch(200, {
+      dashboard_updated: false,
+      github_outcome: "synced",
+    });
     const res = await setRepoAccess("acme", "widgets", {
       github_login: "carol",
       level: "read",
@@ -60,7 +68,10 @@ describe("api/repoAccess", () => {
   });
 
   it("removeRepoAccess DELETEs with the user_id query param", async () => {
-    const fetchMock = mockFetch(200, { dashboard_updated: true, github_outcome: "skipped" });
+    const fetchMock = mockFetch(200, {
+      dashboard_updated: true,
+      github_outcome: "skipped",
+    });
     await removeRepoAccess("acme", "widgets", { user_id: 42 });
 
     const [url, init] = fetchMock.mock.calls[0];

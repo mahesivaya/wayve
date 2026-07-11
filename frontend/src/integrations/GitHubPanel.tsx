@@ -49,7 +49,9 @@ export default function GitHubPanel({
       window.location.href = await getGithubConnectUrl();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not start the GitHub connect."
+        err instanceof Error
+          ? err.message
+          : "Could not start the GitHub connect."
       );
       setBusy(false);
     }
@@ -109,8 +111,8 @@ export default function GitHubPanel({
       </div>
 
       <p className="integrations-info-text">
-        Connecting authorizes Fluxze to read your repositories. Import and browse
-        them from the Code Repo page.
+        Connecting authorizes Fluxze to read your repositories. Import and
+        browse them from the Code Repo page.
       </p>
     </div>
   );
