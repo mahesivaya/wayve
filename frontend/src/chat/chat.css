@@ -638,78 +638,173 @@
   overflow-wrap: anywhere;
 }
 
-.channel-edit-row {
-  display: flex;
-  gap: 8px;
-}
-
-.channel-edit-row input {
+/* Shared text input for Name / Invite. */
+.channel-settings-input {
   min-width: 0;
-  flex: 1;
-  padding: 8px 10px;
-  border: 1px solid var(--color-input-border);
-  border-radius: var(--radius-sm);
-}
-
-.channel-edit-row select {
-  min-width: 0;
-  flex: 1;
+  width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
 }
 
-.channel-edit-row button,
-.channel-person-row button,
+/* Primary action button (Add, Approve). */
 .channel-settings-primary {
+  align-self: flex-start;
+  flex: 0 0 auto;
   border: 1px solid var(--color-primary-action);
   border-radius: var(--radius-sm);
   background: var(--color-primary-action);
   color: var(--color-surface);
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-weight: 700;
   cursor: pointer;
 }
 
-.channel-person-row button {
+.channel-settings-primary--sm {
+  padding: 5px 10px;
+  font-size: var(--text-sm);
+}
+
+/* Privacy radio group — stacked options with a title + hint each. */
+.channel-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.channel-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.channel-radio input {
   flex: 0 0 auto;
-  border-color: var(--color-danger-border);
-  background: var(--color-danger-soft);
-  color: var(--color-danger-strong);
+  margin: 0;
+  accent-color: var(--color-primary-action);
+}
+
+.channel-radio--inline {
+  gap: 5px;
+  font-size: var(--text-md);
+  color: var(--color-text-slate);
+}
+
+.channel-radio-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.channel-radio-title {
+  font-weight: 700;
+  color: var(--color-text-slate);
+  font-size: var(--text-md);
+}
+
+.channel-radio-hint {
+  color: var(--color-text-slate-soft);
   font-size: var(--text-sm);
 }
 
 .channel-settings-list {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 4px;
 }
 
-.channel-person-row {
+/* Member / request row — name grows, role tag + remove sit at the end. */
+.channel-member-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
 }
 
-.channel-person {
+.channel-member-row:hover {
+  background: var(--color-surface-tint-cool);
+}
+
+.channel-member-name {
   flex: 1;
   min-width: 0;
-  padding: 8px 10px;
-  border-radius: 7px;
-  background: var(--color-surface-tint-cool);
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--color-text-slate);
   font-size: var(--text-md);
   overflow-wrap: anywhere;
 }
 
+.channel-member-invited {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-surface-soft);
+  color: var(--color-text-slate-soft);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.channel-role-tag {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-surface-soft);
+  color: var(--color-text-slate-light);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.channel-role-tag--admin {
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+}
+
+.channel-member-remove {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-slate-soft);
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.channel-member-remove:hover {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
+.channel-invite-row {
+  display: flex;
+  gap: 8px;
+}
+
+.channel-invite-role {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.channel-invite-role-label {
+  color: var(--color-text-slate-soft);
+  font-size: var(--text-sm);
+}
+
 .channel-empty {
   color: var(--color-text-slate-soft);
   font-size: var(--text-md);
-}
-
-.channel-settings-primary {
-  align-self: flex-start;
 }
 
 .channel-settings-note {

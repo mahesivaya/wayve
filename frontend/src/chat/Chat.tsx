@@ -797,12 +797,15 @@ export default function Chat() {
     }
   };
 
-  const saveVisibility = async () => {
+  // Accepts an explicit value so the settings panel can save-on-change (a radio
+  // toggle) without waiting for the `visibilityDraft` state to flush; falls back
+  // to the draft when called with no argument.
+  const saveVisibility = async (visibility: ChannelVisibility = visibilityDraft) => {
     if (!selectedChannel) return;
     setSettingsError("");
 
     try {
-      await updateChatChannelVisibility(selectedChannel.id, visibilityDraft);
+      await updateChatChannelVisibility(selectedChannel.id, visibility);
       await refreshChannels(selectedChannel.id);
     } catch (err) {
       setSettingsError(
