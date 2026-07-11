@@ -4,10 +4,11 @@ import { getVisibleProjects, type GithubRepo } from "../api/github";
 import "./projects.css";
 
 // Projects page — one block per repository (the same repos shown on the Code
-// Repo page). Clicking a block opens that repo directly in the Code Repo
-// viewer (deep-linked via ?owner=&repo=). The repo list is server-filtered per
-// user (see getVisibleProjects): admins/staff see all; a restricted member sees
-// only the repos an admin granted them on the member page.
+// Repo page). Clicking a block opens that project's detail page (/projects/
+// :owner/:repo), which shows the repo's overview and links onward to the Code
+// Repo viewer. The repo list is server-filtered per user (see
+// getVisibleProjects): admins/staff see all; a restricted member sees only the
+// repos an admin granted them on the member page.
 export default function ProjectsPage() {
   const navigate = useNavigate();
   const [repos, setRepos] = useState<GithubRepo[] | null>(null);
@@ -27,7 +28,10 @@ export default function ProjectsPage() {
 
   const open = (r: GithubRepo) =>
     navigate(
-      `/github?owner=${encodeURIComponent(r.owner.login)}&repo=${encodeURIComponent(r.name)}`
+      `/projects/${encodeURIComponent(r.owner.login)}/${encodeURIComponent(r.name)}`,
+      // Pass the repo along so the detail page renders instantly without
+      // re-fetching the visible-projects list.
+      { state: { repo: r } }
     );
 
   return (
