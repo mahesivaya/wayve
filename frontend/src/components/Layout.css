@@ -367,32 +367,29 @@
 }
 
 /* Wide-screen sidebar show/hide control — a small, dimmed chevron pinned at the
-   top of the sidebar, above Home. A hairline beneath it sets it apart from the
-   nav list so it reads as a control, not a destination. Right-aligned when
-   expanded; centered in the icon rail when collapsed. */
+   top of the sidebar, above Home. Kept compact so it hugs the top of the panel
+   instead of floating: no hairline/extra padding, pulled up into the sidebar's
+   top padding and trimming the gap to the first nav section below it.
+   Right-aligned when expanded; centered in the icon rail when collapsed. */
 .sidebar-collapse-row {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  padding-bottom: 3px;
-  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0;
+  margin-bottom: -12px;
 }
 
 .sidebar.collapsed .sidebar-collapse-row {
   justify-content: center;
 }
 
-/* Desktop shell: shrink the empty space above and below the collapse toggle /
-   brand mark at the top of the sidebar so it sits compactly instead of
-   floating. Pulls the row up into the sidebar's top padding and trims the gap
-   to the first nav section below it. */
-.is-desktop .sidebar {
-  padding-top: 2px;
+/* Both runtimes trim the top padding so the collapse toggle / brand mark sits
+   flush at the very top of the sidebar. */
+.sidebar {
+  padding-top: 0;
 }
 .is-desktop .sidebar-collapse-row {
-  padding-bottom: 0;
-  border-bottom: none;
-  margin-bottom: -10px;
+  margin-bottom: -14px;
 }
 
 .sidebar-collapse-btn {

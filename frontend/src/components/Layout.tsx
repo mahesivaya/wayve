@@ -1202,10 +1202,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <div className="header-brand">
             <div className="logo" onClick={() => navigate("/")}>
               {/* Desktop shell uses a smaller mark. The wordmark follows the
-                sidebar: shown when the sidebar is expanded, hidden (mark only)
-                when it's collapsed to the icon rail. */}
-              <BrandLogo className="logo-mark" size={desktop ? 24 : 36} />
-              {!(desktop && sidebarCollapsed) && (
+                sidebar in both runtimes: shown when the sidebar is expanded,
+                hidden (mark only) when it's collapsed to the icon rail. The
+                narrow off-canvas overlay has no collapsed rail, so the wordmark
+                always shows there. */}
+              <BrandLogo className="logo-mark" size={desktop ? 24 : 26} />
+              {!(sidebarCollapsed && !isNarrow) && (
                 <span className="logo-word">{BRAND_NAME}</span>
               )}
             </div>
