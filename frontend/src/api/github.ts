@@ -78,6 +78,28 @@ export const getRepoLanguages = (owner: string, repo: string) =>
     { preserve401: true }
   );
 
+// A commit as returned by the GitHub proxy `/commits` list. `author` is the
+// GitHub user (null for unmatched email); `commit.author` is the raw git
+// author (name + ISO date), always present for our display.
+export type GithubCommit = {
+  sha: string;
+  html_url: string;
+  commit: {
+    message: string;
+    author: { name: string; date: string } | null;
+  };
+  author: { login: string; avatar_url: string } | null;
+};
+
+// Most-recent commits on the repo's default branch, newest first. Best-effort
+// for the project detail page's activity list; `preserve401` so a missing
+// server token degrades gracefully instead of logging the user out.
+export const getRecentCommits = (owner: string, repo: string, perPage = 5) =>
+  apiFetchJson<GithubCommit[]>(
+    `/api/github/repos/${owner}/${repo}/commits?per_page=${perPage}`,
+    { preserve401: true }
+  );
+
 // The `n` most-used languages (by bytes), highest first.
 export const topLanguages = (langs: Record<string, number>, n = 2): string[] =>
   Object.entries(langs)
