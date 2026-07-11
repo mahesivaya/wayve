@@ -8,6 +8,14 @@ import {
   type GithubCommit,
   type GithubRepo,
 } from "../api/github";
+import {
+  getRepoAccess,
+  getRepoSummary,
+  setRepoSummary,
+  type RepoAccessRow,
+} from "../api/repoAccess";
+import Avatar from "../components/Avatar";
+import { getApiBase } from "../config/env";
 import "./projects.css";
 
 // Relative "time ago" for the Updated / commit rows (e.g. "3 days ago"),
@@ -72,6 +80,19 @@ export default function ProjectDetail() {
   const [notFound, setNotFound] = useState(false);
   const [langs, setLangs] = useState<string[]>([]);
   const [commits, setCommits] = useState<GithubCommit[] | null>(null);
+  // Users with access to this project (Wayve members + GitHub collaborators).
+  // null = still loading; [] = none / not readable.
+  const [members, setMembers] = useState<RepoAccessRow[] | null>(null);
+  const [membersReadable, setMembersReadable] = useState(true);
+  // Wayve-local, editable project summary (separate from the GitHub repo's own
+  // description). `summary` is the stored blurb; `canEditSummary` gates the
+  // edit affordance; the rest drive the inline editor.
+  const [summary, setSummary] = useState("");
+  const [canEditSummary, setCanEditSummary] = useState(false);
+  const [editingSummary, setEditingSummary] = useState(false);
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [savingSummary, setSavingSummary] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
 
   // Resolve the repo when we didn't get it via navigation state (direct URL
   // load / refresh). Fall back to a synthesized stub so the page still renders
@@ -120,6 +141,24 @@ export default function ProjectDetail() {
     getRecentCommits(owner, repoName, 5)
       .then((list) => !cancelled && setCommits(Array.isArray(list) ? list : []))
       .catch(() => !cancelled && setCommits([]));
+    getRepoAccess(owner, repoName)
+      .then((data) => {
+        if (cancelled) return;
+        setMembers(Array.isArray(data?.rows) ? data.rows : []);
+        setMembersReadable(data?.github_readable ?? true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMembers([]);
+        setMembersReadable(false);
+      });
+    getRepoSummary(owner, repoName)
+      .then((data) => {
+        if (cancelled) return;
+        setSummary(data?.summary ?? "");
+        setCanEditSummary(Boolean(data?.can_edit));
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -131,6 +170,32 @@ export default function ProjectDetail() {
         repoName
       )}`
     );
+
+  // The blurb we display: the Wayve summary if set, else the repo's own GitHub
+  // description. Editing seeds from whichever is shown.
+  const displaySummary = summary || repo?.description || "";
+
+  const startEditSummary = () => {
+    setSummaryDraft(displaySummary);
+    setSummaryError("");
+    setEditingSummary(true);
+  };
+
+  const saveSummary = async () => {
+    setSavingSummary(true);
+    setSummaryError("");
+    try {
+      const res = await setRepoSummary(owner, repoName, summaryDraft.trim());
+      setSummary(res.summary);
+      setEditingSummary(false);
+    } catch (err) {
+      setSummaryError(
+        err instanceof Error ? err.message : "Couldn't save the summary"
+      );
+    } finally {
+      setSavingSummary(false);
+    }
+  };
 
   if (resolving && !repo) {
     return (
@@ -191,13 +256,118 @@ export default function ProjectDetail() {
             </span>
             <h1 className="project-detail-name">{repo.name}</h1>
           </div>
-          <p
-            className={`project-detail-summary${
-              repo.description ? "" : " is-empty"
-            }`}
-          >
-            {repo.description || "No summary yet."}
-          </p>
+          {editingSummary ? (
+            <div className="project-detail-summary-edit">
+              <textarea
+                className="project-detail-summary-input"
+                value={summaryDraft}
+                onChange={(e) => setSummaryDraft(e.target.value)}
+                placeholder="Add a short summary of this project…"
+                rows={3}
+                maxLength={2000}
+                autoFocus
+              />
+              {summaryError && (
+                <p className="project-detail-summary-error">{summaryError}</p>
+              )}
+              <div className="project-detail-summary-actions">
+                <button
+                  type="button"
+                  className="project-detail-summary-save"
+                  onClick={() => void saveSummary()}
+                  disabled={savingSummary}
+                >
+                  {savingSummary ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className="project-detail-summary-cancel"
+                  onClick={() => setEditingSummary(false)}
+                  disabled={savingSummary}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="project-detail-summary-row">
+              <p
+                className={`project-detail-summary${
+                  displaySummary ? "" : " is-empty"
+                }`}
+              >
+                {displaySummary || "No summary yet."}
+              </p>
+              {canEditSummary && (
+                <button
+                  type="button"
+                  className="project-detail-summary-edit-btn"
+                  onClick={startEditSummary}
+                >
+                  {displaySummary ? "Edit" : "Add summary"}
+                </button>
+              )}
+            </div>
+          )}
+
+          <section className="project-detail-section">
+            <h2 className="project-detail-section-title">
+              Members
+              {members && members.length > 0 && (
+                <span className="project-detail-count">{members.length}</span>
+              )}
+            </h2>
+            {members === null ? (
+              <p className="project-detail-muted">Loading members…</p>
+            ) : members.length === 0 ? (
+              <p className="project-detail-muted">
+                {membersReadable
+                  ? "No one has access yet."
+                  : "Member list unavailable for this repo."}
+              </p>
+            ) : (
+              <ul className="project-detail-members">
+                {members.map((m, i) => {
+                  const displayName =
+                    m.email || m.github_login || "Unknown user";
+                  return (
+                    <li
+                      key={`${m.user_id ?? m.github_login ?? i}`}
+                      className="project-detail-member"
+                    >
+                      <Avatar
+                        name={displayName}
+                        src={
+                          m.user_id != null
+                            ? `${getApiBase()}/api/users/${m.user_id}/avatar`
+                            : null
+                        }
+                        size={32}
+                      />
+                      <span className="project-detail-member-text">
+                        <span className="project-detail-member-name">
+                          {displayName}
+                        </span>
+                        <span className="project-detail-member-meta">
+                          {m.github_login && <span>@{m.github_login}</span>}
+                          {!m.is_member && (
+                            <span className="project-detail-member-tag">
+                              GitHub only
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                      <span
+                        className={`project-detail-member-level level-${m.level}`}
+                      >
+                        {m.level}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
 
           <section className="project-detail-section">
             <h2 className="project-detail-section-title">Recent activity</h2>
@@ -255,6 +425,10 @@ export default function ProjectDetail() {
             <div className="project-detail-prop">
               <dt>Owner</dt>
               <dd>{repo.owner.login}</dd>
+            </div>
+            <div className="project-detail-prop">
+              <dt>Members</dt>
+              <dd>{members === null ? "…" : members.length}</dd>
             </div>
             <div className="project-detail-prop">
               <dt>Default branch</dt>

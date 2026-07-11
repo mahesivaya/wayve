@@ -20,7 +20,9 @@ use super::github::{self, Level, SyncOutcome};
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(get_access)
         .service(set_access)
-        .service(remove_access);
+        .service(remove_access)
+        .service(get_summary)
+        .service(set_summary);
 }
 
 /// Resolved authorization for a repo-access request.
@@ -552,4 +554,88 @@ async fn resolve_target(
         return Ok((uid, Some(l.to_string())));
     }
     Ok((None, None))
+}
+
+// ───────────────────────────── summary ─────────────────────────────
+
+const SUMMARY_MAX: usize = 2000;
+
+#[derive(Serialize)]
+struct SummaryResponse {
+    summary: String,
+    /// Whether the caller may edit it (mirrors the access `can_manage` gate).
+    can_edit: bool,
+}
+
+#[derive(Deserialize)]
+pub struct SetSummaryInput {
+    pub summary: String,
+}
+
+// GET /api/repos/{owner}/{repo}/summary — the Wayve-local project summary plus
+// whether the caller may edit it. Viewing requires the same access as the
+// repo-access grid; a missing row simply returns an empty summary.
+#[get("/repos/{owner}/{repo}/summary")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn get_summary(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(String, String)>,
+) -> AppResult {
+    let (owner, repo) = path.into_inner();
+    let pool = pool.get_ref();
+    let admin = authorize(&req, pool, &owner, &repo).await?;
+    let summary: Option<String> = sqlx::query_scalar(
+        "SELECT summary FROM project_summaries
+          WHERE LOWER(github_owner) = LOWER($1) AND LOWER(github_repo) = LOWER($2)",
+    )
+    .bind(&owner)
+    .bind(&repo)
+    .fetch_optional(pool)
+    .await?;
+    Ok(HttpResponse::Ok().json(SummaryResponse {
+        summary: summary.unwrap_or_default(),
+        can_edit: admin.can_manage,
+    }))
+}
+
+// PUT /api/repos/{owner}/{repo}/summary — set the summary. Requires the same
+// manage rights as mutating repo access. Owner/repo are stored lowercased so the
+// primary key stays case-stable.
+#[put("/repos/{owner}/{repo}/summary")]
+#[instrument(target = "http", skip(req, pool, body))]
+pub async fn set_summary(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(String, String)>,
+    body: web::Json<SetSummaryInput>,
+) -> AppResult {
+    let (owner, repo) = path.into_inner();
+    let pool = pool.get_ref();
+    let admin = authorize(&req, pool, &owner, &repo).await?;
+    if !admin.can_manage {
+        return Err(AppError::Forbidden);
+    }
+    let summary = body.summary.trim();
+    if summary.chars().count() > SUMMARY_MAX {
+        return Err(AppError::bad_request("Summary is too long"));
+    }
+    sqlx::query(
+        "INSERT INTO project_summaries (github_owner, github_repo, summary, updated_by, updated_at)
+         VALUES (LOWER($1), LOWER($2), $3, $4, NOW())
+         ON CONFLICT (github_owner, github_repo)
+         DO UPDATE SET summary = EXCLUDED.summary,
+                       updated_by = EXCLUDED.updated_by,
+                       updated_at = NOW()",
+    )
+    .bind(&owner)
+    .bind(&repo)
+    .bind(summary)
+    .bind(admin.user_id)
+    .execute(pool)
+    .await?;
+    Ok(HttpResponse::Ok().json(SummaryResponse {
+        summary: summary.to_string(),
+        can_edit: true,
+    }))
 }
