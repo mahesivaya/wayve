@@ -16,6 +16,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT '
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS account_type TEXT NOT NULL DEFAULT 'personal';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
+-- Presence: wall-clock of the last time this user held a live chat WebSocket
+-- (stamped on connect, on graceful disconnect, and when the presence sweeper
+-- reaps a stale session). Read by the presence snapshot endpoint to render
+-- "last seen …" when a user is offline. Live online/offline is driven by the
+-- Redis `presence:online` sorted set (or the local session registry when Redis
+-- is down); this column is only the durable fallback. See chat/presence.rs.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ;
 -- Uploaded profile image: server-relative path on disk under ./uploads/avatars/.
 -- Served (decrypted, plain) via GET /api/users/{id}/avatar so other members can
 -- see it; NULL means "no upload, fall back to the generated initial avatar".

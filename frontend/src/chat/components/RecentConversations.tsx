@@ -3,15 +3,18 @@ import type {
   ChatConversationSummary,
   ChatUser,
 } from "../../api/chat";
+import type { PresenceMap } from "../hooks/usePresence";
 import type { Conversation } from "../types";
 import { relativeTime } from "../utils";
 import { PersonIcon } from "../../icons";
+import PresenceDot from "./PresenceDot";
 
 type Props = {
   users: ChatUser[];
   channels: ChatChannel[];
   selectedConversation: Conversation | null;
   summary: ChatConversationSummary;
+  presence: PresenceMap;
   onSelectUser: (user: ChatUser) => void;
   onSelectChannel: (channel: ChatChannel) => void;
 };
@@ -37,6 +40,7 @@ export default function RecentConversations({
   channels,
   selectedConversation,
   summary,
+  presence,
   onSelectUser,
   onSelectChannel,
 }: Props) {
@@ -77,6 +81,7 @@ export default function RecentConversations({
       >
         <span className="conversation-icon">
           <PersonIcon size={16} />
+          <PresenceDot presence={presence.get(r.user.id)} />
         </span>
         <span className="conversation-main">
           <span className="conversation-name">{r.user.email}</span>

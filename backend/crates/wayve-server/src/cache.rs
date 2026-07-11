@@ -103,6 +103,51 @@ impl Cache {
         raw?.parse::<i64>().ok()
     }
 
+    /// Add/update a member's score in a sorted set (`ZADD`). Presence stores
+    /// `user_id → last-heartbeat unix seconds` in the `presence:online` set so
+    /// online-ness is a cross-instance freshness check rather than per-process
+    /// state. Best-effort: a Redis blip just means the score isn't refreshed
+    /// this tick, and the sweeper reaps it as stale.
+    #[instrument(target = "cache", skip(self), fields(key, member, score))]
+    pub async fn zadd(&self, key: &str, member: &str, score: i64) {
+        let mut conn = self.conn.clone();
+        let res: redis::RedisResult<()> = conn.zadd(key, member, score).await;
+        if let Err(e) = res {
+            warn!(target: "cache", key, member, error = ?e, "redis ZADD failed");
+        }
+    }
+
+    /// A member's score in a sorted set (`ZSCORE`), or `None` if absent. Read
+    /// as `f64` (Redis stores sorted-set scores as doubles) and truncated back
+    /// to the integer unix-seconds we wrote.
+    #[instrument(target = "cache", skip(self), fields(key, member))]
+    pub async fn zscore(&self, key: &str, member: &str) -> Option<i64> {
+        let mut conn = self.conn.clone();
+        let res: redis::RedisResult<Option<f64>> = conn.zscore(key, member).await;
+        res.ok().flatten().map(|s| s as i64)
+    }
+
+    /// Members of a sorted set whose score is within `[min, max]`
+    /// (`ZRANGEBYSCORE`). `min`/`max` accept Redis range syntax (`"-inf"`,
+    /// `"+inf"`, or a stringified bound). The presence sweeper calls this with
+    /// `("-inf", cutoff)` to find stale sessions.
+    #[instrument(target = "cache", skip(self), fields(key, min, max))]
+    pub async fn zrangebyscore(&self, key: &str, min: &str, max: &str) -> Vec<String> {
+        let mut conn = self.conn.clone();
+        let res: redis::RedisResult<Vec<String>> = conn.zrangebyscore(key, min, max).await;
+        res.unwrap_or_default()
+    }
+
+    /// Remove a member from a sorted set (`ZREM`); returns the number removed
+    /// (0 or 1). The presence sweeper uses the return value as a race guard so
+    /// exactly one instance announces a given user offline.
+    #[instrument(target = "cache", skip(self), fields(key, member))]
+    pub async fn zrem(&self, key: &str, member: &str) -> i64 {
+        let mut conn = self.conn.clone();
+        let res: redis::RedisResult<i64> = conn.zrem(key, member).await;
+        res.unwrap_or(0)
+    }
+
     #[instrument(target = "cache", skip(self), fields(key, ttl_secs))]
     pub async fn increment_with_ttl(&self, key: &str, ttl_secs: u64) -> redis::RedisResult<i64> {
         let mut conn = self.conn.clone();

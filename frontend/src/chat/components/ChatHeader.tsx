@@ -1,8 +1,14 @@
 import type { ChatChannel } from "../../api/chat";
+import type { PresenceInfo } from "../hooks/usePresence";
+import { relativeTime } from "../utils";
 
 type Props = {
   title: string;
   selectedChannel: ChatChannel | null;
+  // True when the open conversation is a 1:1 DM (drives the presence line).
+  isDirect: boolean;
+  // The peer's presence for a DM; null until known / not a DM.
+  presence: PresenceInfo | null;
   settingsOpen: boolean;
   // Audio / video call entry points. Only rendered for 1:1 conversations
   // (the host hides them on channels by passing `null` callbacks).
@@ -18,6 +24,8 @@ type Props = {
 export default function ChatHeader({
   title,
   selectedChannel,
+  isDirect,
+  presence,
   settingsOpen,
   onAudioCall,
   onVideoCall,
@@ -27,6 +35,11 @@ export default function ChatHeader({
   onJoinChannel,
 }: Props) {
   const showCallButtons = !selectedChannel && (onAudioCall || onVideoCall);
+  // Presence line under a DM peer's name. Unknown until the first snapshot;
+  // once known, "Online" (green) or "last seen …" from the durable timestamp.
+  const showPresence = isDirect && !selectedChannel && presence !== null;
+  const presenceOnline = presence?.online ?? false;
+  const lastSeenLabel = presence?.lastSeen ? relativeTime(presence.lastSeen) : "";
 
   return (
     <div className="chat-header">
@@ -41,6 +54,21 @@ export default function ChatHeader({
         </button>
         <div className="chat-header-copy">
           <h3>{title}</h3>
+          {showPresence && (
+            <span className="chat-presence-line">
+              <span
+                className={`presence-dot ${
+                  presenceOnline ? "online" : "offline"
+                } presence-dot--inline`}
+                aria-hidden="true"
+              />
+              {presenceOnline
+                ? "Online"
+                : lastSeenLabel
+                  ? `last seen ${lastSeenLabel}`
+                  : "Offline"}
+            </span>
+          )}
           {selectedChannel && (
             <span>
               {selectedChannel.visibility} group

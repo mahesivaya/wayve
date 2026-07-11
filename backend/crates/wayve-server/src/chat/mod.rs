@@ -10,6 +10,7 @@ mod direct_messages;
 mod dto;
 pub mod handler;
 mod helpers;
+pub mod presence;
 pub mod pubsub;
 mod websocket;
 // Re-export the realtime fan-out so other features (e.g. the Slack Events
@@ -29,6 +30,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         "/chat/conversations",
         web::get().to(handler::get_conversation_summary),
     )
+    .route("/chat/presence", web::get().to(presence::get_presence))
     .service(handler::get_channels)
     .service(handler::create_channel)
     .service(handler::update_channel_subject)
