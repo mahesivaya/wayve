@@ -283,6 +283,101 @@
   font-style: italic;
 }
 
+/* Summary row: the blurb + a quiet "Edit / Add summary" affordance that only
+   shows for users who can manage the project. */
+.project-detail-summary-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 14px 0 24px;
+}
+
+.project-detail-summary-row .project-detail-summary {
+  margin: 0;
+  flex: 1;
+}
+
+.project-detail-summary-edit-btn {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-detail-summary-edit-btn:hover {
+  border-color: var(--color-primary-action);
+  color: var(--color-primary-action);
+}
+
+.project-detail-summary-edit {
+  margin: 14px 0 24px;
+}
+
+.project-detail-summary-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--color-input-border, var(--color-border));
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-md);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.project-detail-summary-input:focus {
+  outline: none;
+  border-color: var(--color-primary-action);
+}
+
+.project-detail-summary-error {
+  margin: 8px 0 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.project-detail-summary-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.project-detail-summary-save {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.project-detail-summary-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.project-detail-summary-cancel {
+  padding: 6px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .project-detail-section-title {
   margin: 0 0 10px;
   font-size: var(--text-sm);
@@ -296,6 +391,98 @@
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+/* Small count pill next to a section title (e.g. "Members 4"). */
+.project-detail-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-surface-tint-slate, #eef2f7);
+  color: var(--color-text-slate, #475569);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+/* ---- members list ---- */
+.project-detail-members {
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.project-detail-member {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.project-detail-member:last-child {
+  border-bottom: none;
+}
+
+.project-detail-member-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.project-detail-member-name {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-detail-member-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.project-detail-member-tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-surface-tint-slate, #eef2f7);
+  color: var(--color-text-slate, #475569);
+  font-weight: 700;
+}
+
+.project-detail-member-level {
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: capitalize;
+  background: var(--color-surface-tint-slate, #eef2f7);
+  color: var(--color-text-slate, #475569);
+}
+
+.project-detail-member-level.level-admin {
+  background: var(--color-primary-panel, #e6f0ff);
+  color: var(--color-primary-action);
+}
+
+.project-detail-member-level.level-write {
+  background: var(--color-success-soft, rgba(22, 163, 74, 0.12));
+  color: var(--color-success, #16a34a);
 }
 
 .project-detail-activity {

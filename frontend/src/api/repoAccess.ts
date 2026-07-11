@@ -36,6 +36,27 @@ export type RepoAccessMutation = {
 const repoPath = (owner: string, repo: string) =>
   `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/access`;
 
+const summaryPath = (owner: string, repo: string) =>
+  `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/summary`;
+
+// The Wayve-local project summary for a repo + whether the caller may edit it.
+export type RepoSummary = { summary: string; can_edit: boolean };
+
+export const getRepoSummary = async (owner: string, repo: string) =>
+  apiFetchJson<RepoSummary>(summaryPath(owner, repo));
+
+// Save the summary (requires manage rights server-side). Returns the stored
+// value + can_edit.
+export const setRepoSummary = async (
+  owner: string,
+  repo: string,
+  summary: string
+) =>
+  apiFetchJson<RepoSummary>(summaryPath(owner, repo), {
+    method: "PUT",
+    body: JSON.stringify({ summary }),
+  });
+
 export const getRepoAccess = async (owner: string, repo: string) =>
   apiFetchJson<RepoAccessResponse>(repoPath(owner, repo));
 

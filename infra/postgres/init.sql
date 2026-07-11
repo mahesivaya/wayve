@@ -160,6 +160,19 @@ ALTER TABLE projects ADD CONSTRAINT projects_owner_chk CHECK (
 );
 CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id);
 
+-- Wayve-local project summary, keyed by the linked GitHub repo (owner/name,
+-- stored lowercased so the key is case-stable). One editable blurb per repo,
+-- shown on the project detail page and independent of the GitHub repo's own
+-- description. Editing is gated by the same repo-admin check as repo access.
+CREATE TABLE IF NOT EXISTS project_summaries (
+    github_owner TEXT NOT NULL,
+    github_repo  TEXT NOT NULL,
+    summary      TEXT NOT NULL DEFAULT '',
+    updated_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (github_owner, github_repo)
+);
+
 -- Per-user project (GitHub repo) access. One row grants one user visibility of
 -- one repo (by full_name "owner/name") on the Projects page. Platform staff and
 -- org owner/super_admin/admin are unrestricted and ignore this table; regular
