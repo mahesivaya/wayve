@@ -40,6 +40,11 @@ const renderTasks = () =>
     </MemoryRouter>
   );
 
+// Filters now live in a popover behind the "Filters" button — open it before
+// touching any control.
+const openFilters = () =>
+  fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
+
 const setMode = (v: string) =>
   fireEvent.change(screen.getByLabelText("Filter by date created"), {
     target: { value: v },
@@ -58,6 +63,7 @@ describe("Tasks date-created filter", () => {
   it("filters to tasks created after a date", async () => {
     renderTasks();
     await screen.findByText("June task");
+    openFilters();
     setMode("after");
     fireEvent.change(screen.getByLabelText("Created on or after"), {
       target: { value: "2026-07-01" },
@@ -70,6 +76,7 @@ describe("Tasks date-created filter", () => {
   it("filters to tasks created before a date", async () => {
     renderTasks();
     await screen.findByText("June task");
+    openFilters();
     setMode("before");
     fireEvent.change(screen.getByLabelText("Created on or before"), {
       target: { value: "2026-07-01" },
@@ -82,6 +89,7 @@ describe("Tasks date-created filter", () => {
   it("filters to tasks created between two dates", async () => {
     renderTasks();
     await screen.findByText("June task");
+    openFilters();
     setMode("between");
     fireEvent.change(screen.getByLabelText("From date"), {
       target: { value: "2026-06-15" },
@@ -92,5 +100,29 @@ describe("Tasks date-created filter", () => {
     await waitFor(() => expect(screen.queryByText("June task")).toBeNull());
     expect(screen.queryByText("August task")).toBeNull();
     expect(screen.getByText("July task")).toBeTruthy();
+  });
+
+  it("badges the active filter count and clears all", async () => {
+    renderTasks();
+    await screen.findByText("June task");
+    openFilters();
+    // Apply status + date → two active filters.
+    fireEvent.change(screen.getByLabelText("Filter by status"), {
+      target: { value: "todo" },
+    });
+    setMode("after");
+    fireEvent.change(screen.getByLabelText("Created on or after"), {
+      target: { value: "2026-07-01" },
+    });
+    // Button shows a "2" badge (query by the button's accessible name).
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Filters/ }).textContent
+      ).toContain("2")
+    );
+    // Clear all resets everything and restores all tasks.
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    await waitFor(() => expect(screen.getByText("June task")).toBeTruthy());
+    expect(screen.getByText("August task")).toBeTruthy();
   });
 });

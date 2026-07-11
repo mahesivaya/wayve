@@ -357,9 +357,46 @@ export default function Tasks() {
   >("any");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  // Status, priority and date filters live together in one "Filters" popover.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
+  const activeFilterCount =
+    (statusFilter !== "all" ? 1 : 0) +
+    (priorityFilter !== "all" ? 1 : 0) +
+    (dateMode !== "any" ? 1 : 0);
+  const clearFilters = () => {
+    setStatusFilter("all");
+    setPriorityFilter("all");
+    setDateMode("any");
+    setDateFrom("");
+    setDateTo("");
+  };
   // Status column currently being hovered during a drag, for the drop-target
   // highlight.
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
+
+  // Close the Filters popover on outside click or Escape.
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (
+        filtersRef.current &&
+        e.target instanceof Node &&
+        !filtersRef.current.contains(e.target)
+      ) {
+        setFiltersOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFiltersOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [filtersOpen]);
 
   useEffect(() => {
     window.localStorage.setItem("wayve.tasks.view", view);
@@ -911,93 +948,151 @@ export default function Tasks() {
             </div>
             <div className="tasks-header-actions">
               <span className="tasks-count">{tasks.length} total</span>
-              <select
-                className="tasks-status-filter"
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as TaskStatus | "all")
-                }
-                aria-label="Filter by status"
-                title="Filter by status"
-              >
-                <option value="all">All statuses</option>
-                {STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="tasks-status-filter"
-                value={priorityFilter}
-                onChange={(e) =>
-                  setPriorityFilter(
-                    e.target.value === "all"
-                      ? "all"
-                      : (Number(e.target.value) as TaskPriority)
-                  )
-                }
-                aria-label="Filter by priority"
-                title="Filter by priority"
-              >
-                <option value="all">All priorities</option>
-                {PRIORITY_OPTIONS.map((value) => (
-                  <option key={value} value={value}>
-                    {`P${value} — ${priorityLabel(value)}`}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="tasks-status-filter"
-                value={dateMode}
-                onChange={(e) =>
-                  setDateMode(
-                    e.target.value as "any" | "after" | "before" | "between"
-                  )
-                }
-                aria-label="Filter by date created"
-                title="Filter by date created"
-              >
-                <option value="any">Any date</option>
-                <option value="after">Created after…</option>
-                <option value="before">Created before…</option>
-                <option value="between">Created between…</option>
-              </select>
-              {(dateMode === "after" || dateMode === "between") && (
-                <input
-                  type="date"
-                  className="tasks-date-filter"
-                  value={dateFrom}
-                  max={dateMode === "between" && dateTo ? dateTo : undefined}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  aria-label={
-                    dateMode === "between" ? "From date" : "Created on or after"
-                  }
-                  title={
-                    dateMode === "between" ? "From date" : "Created on or after"
-                  }
-                />
-              )}
-              {dateMode === "between" && (
-                <span className="tasks-date-sep" aria-hidden="true">
-                  –
-                </span>
-              )}
-              {(dateMode === "before" || dateMode === "between") && (
-                <input
-                  type="date"
-                  className="tasks-date-filter"
-                  value={dateTo}
-                  min={dateMode === "between" && dateFrom ? dateFrom : undefined}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  aria-label={
-                    dateMode === "between" ? "To date" : "Created on or before"
-                  }
-                  title={
-                    dateMode === "between" ? "To date" : "Created on or before"
-                  }
-                />
-              )}
+              <div className="tasks-filters" ref={filtersRef}>
+                <button
+                  type="button"
+                  className={`tasks-status-filter tasks-filters-btn${
+                    activeFilterCount > 0 ? " has-active" : ""
+                  }`}
+                  onClick={() => setFiltersOpen((open) => !open)}
+                  aria-haspopup="dialog"
+                  aria-expanded={filtersOpen}
+                  title="Filter tasks"
+                >
+                  <span aria-hidden="true">⌄</span> Filters
+                  {activeFilterCount > 0 && (
+                    <span className="tasks-filters-badge">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+                {filtersOpen && (
+                  <div
+                    className="tasks-filters-popover"
+                    role="dialog"
+                    aria-label="Task filters"
+                  >
+                    <label className="tasks-filter-row">
+                      <span>Status</span>
+                      <select
+                        value={statusFilter}
+                        onChange={(e) =>
+                          setStatusFilter(e.target.value as TaskStatus | "all")
+                        }
+                        aria-label="Filter by status"
+                      >
+                        <option value="all">All statuses</option>
+                        {STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="tasks-filter-row">
+                      <span>Priority</span>
+                      <select
+                        value={priorityFilter}
+                        onChange={(e) =>
+                          setPriorityFilter(
+                            e.target.value === "all"
+                              ? "all"
+                              : (Number(e.target.value) as TaskPriority)
+                          )
+                        }
+                        aria-label="Filter by priority"
+                      >
+                        <option value="all">All priorities</option>
+                        {PRIORITY_OPTIONS.map((value) => (
+                          <option key={value} value={value}>
+                            {`P${value} — ${priorityLabel(value)}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="tasks-filter-row">
+                      <span>Created</span>
+                      <select
+                        value={dateMode}
+                        onChange={(e) =>
+                          setDateMode(
+                            e.target.value as
+                              | "any"
+                              | "after"
+                              | "before"
+                              | "between"
+                          )
+                        }
+                        aria-label="Filter by date created"
+                      >
+                        <option value="any">Any date</option>
+                        <option value="after">Created after…</option>
+                        <option value="before">Created before…</option>
+                        <option value="between">Created between…</option>
+                      </select>
+                    </label>
+                    {(dateMode === "after" || dateMode === "between") && (
+                      <label className="tasks-filter-row">
+                        <span>
+                          {dateMode === "between" ? "From" : "On or after"}
+                        </span>
+                        <input
+                          type="date"
+                          value={dateFrom}
+                          max={
+                            dateMode === "between" && dateTo ? dateTo : undefined
+                          }
+                          onChange={(e) => setDateFrom(e.target.value)}
+                          aria-label={
+                            dateMode === "between"
+                              ? "From date"
+                              : "Created on or after"
+                          }
+                        />
+                      </label>
+                    )}
+                    {(dateMode === "before" || dateMode === "between") && (
+                      <label className="tasks-filter-row">
+                        <span>
+                          {dateMode === "between" ? "To" : "On or before"}
+                        </span>
+                        <input
+                          type="date"
+                          value={dateTo}
+                          min={
+                            dateMode === "between" && dateFrom
+                              ? dateFrom
+                              : undefined
+                          }
+                          onChange={(e) => setDateTo(e.target.value)}
+                          aria-label={
+                            dateMode === "between"
+                              ? "To date"
+                              : "Created on or before"
+                          }
+                        />
+                      </label>
+                    )}
+                    <div className="tasks-filters-footer">
+                      <button
+                        type="button"
+                        className="tasks-filters-clear"
+                        onClick={clearFilters}
+                        disabled={activeFilterCount === 0}
+                      >
+                        Clear all
+                      </button>
+                      <button
+                        type="button"
+                        className="tasks-filters-done"
+                        onClick={() => setFiltersOpen(false)}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="view-toggle" role="group" aria-label="View mode">
                 <button
                   type="button"
