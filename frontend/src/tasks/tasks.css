@@ -181,6 +181,29 @@
   outline-offset: 1px;
 }
 
+/* Date-created filter inputs, styled to match the pill selects beside them. */
+.tasks-date-filter {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.tasks-date-filter:focus-visible {
+  outline: 2px solid var(--color-primary-action);
+  outline-offset: 1px;
+}
+
+.tasks-date-sep {
+  color: var(--color-text-secondary);
+  font-weight: 650;
+}
+
 .create-task-btn--inline {
   width: auto;
   min-height: 36px;

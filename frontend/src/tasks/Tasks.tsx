@@ -349,6 +349,14 @@ export default function Tasks() {
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">(
     "all"
   );
+  // Date-created filter. `after`/`before` use one bound; `between` uses both.
+  // Empty date inputs leave that bound open, so the filter is a no-op until a
+  // date is chosen. Bounds are inclusive (whole days, in local time).
+  const [dateMode, setDateMode] = useState<
+    "any" | "after" | "before" | "between"
+  >("any");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   // Status column currently being hovered during a drag, for the drop-target
   // highlight.
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
@@ -748,15 +756,35 @@ export default function Tasks() {
     );
   }, [normalizedSearchQuery, tasks]);
 
-  // Search-filtered tasks, further narrowed to the selected status and priority.
+  // True if a task's created date passes the date-created filter. Empty bounds
+  // are treated as open; "after"/"before" ignore the unused bound.
+  const inDateRange = useCallback(
+    (t: Task) => {
+      if (dateMode === "any") return true;
+      const created = new Date(t.created_at ?? 0).getTime();
+      if (Number.isNaN(created)) return false;
+      if ((dateMode === "after" || dateMode === "between") && dateFrom) {
+        if (created < new Date(`${dateFrom}T00:00:00`).getTime()) return false;
+      }
+      if ((dateMode === "before" || dateMode === "between") && dateTo) {
+        if (created > new Date(`${dateTo}T23:59:59.999`).getTime()) return false;
+      }
+      return true;
+    },
+    [dateMode, dateFrom, dateTo]
+  );
+
+  // Search-filtered tasks, further narrowed to the selected status, priority,
+  // and date-created range.
   const filteredTasks = useMemo(
     () =>
       visibleTasks.filter(
         (t) =>
           (statusFilter === "all" || t.status === statusFilter) &&
-          (priorityFilter === "all" || t.priority === priorityFilter)
+          (priorityFilter === "all" || t.priority === priorityFilter) &&
+          inDateRange(t)
       ),
-    [visibleTasks, statusFilter, priorityFilter]
+    [visibleTasks, statusFilter, priorityFilter, inDateRange]
   );
 
   const activeTasks = useMemo(
@@ -919,6 +947,57 @@ export default function Tasks() {
                   </option>
                 ))}
               </select>
+              <select
+                className="tasks-status-filter"
+                value={dateMode}
+                onChange={(e) =>
+                  setDateMode(
+                    e.target.value as "any" | "after" | "before" | "between"
+                  )
+                }
+                aria-label="Filter by date created"
+                title="Filter by date created"
+              >
+                <option value="any">Any date</option>
+                <option value="after">Created after…</option>
+                <option value="before">Created before…</option>
+                <option value="between">Created between…</option>
+              </select>
+              {(dateMode === "after" || dateMode === "between") && (
+                <input
+                  type="date"
+                  className="tasks-date-filter"
+                  value={dateFrom}
+                  max={dateMode === "between" && dateTo ? dateTo : undefined}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  aria-label={
+                    dateMode === "between" ? "From date" : "Created on or after"
+                  }
+                  title={
+                    dateMode === "between" ? "From date" : "Created on or after"
+                  }
+                />
+              )}
+              {dateMode === "between" && (
+                <span className="tasks-date-sep" aria-hidden="true">
+                  –
+                </span>
+              )}
+              {(dateMode === "before" || dateMode === "between") && (
+                <input
+                  type="date"
+                  className="tasks-date-filter"
+                  value={dateTo}
+                  min={dateMode === "between" && dateFrom ? dateFrom : undefined}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  aria-label={
+                    dateMode === "between" ? "To date" : "Created on or before"
+                  }
+                  title={
+                    dateMode === "between" ? "To date" : "Created on or before"
+                  }
+                />
+              )}
               <div className="view-toggle" role="group" aria-label="View mode">
                 <button
                   type="button"
