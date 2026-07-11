@@ -48,6 +48,13 @@ pub fn deliver_local(user_id: i32, payload: String) {
     }
 }
 
+/// Whether this user holds a live chat socket **on this instance**. The
+/// single-instance (Redis-down) presence source of truth; see
+/// [`crate::chat::presence`].
+pub fn is_online_local(user_id: i32) -> bool {
+    SESSIONS.addr(user_id).is_some()
+}
+
 /// Fan a realtime frame out to a user. When Redis is available we PUBLISH so the
 /// instance holding their socket (possibly a different one) delivers it; if the
 /// publish fails we fall back to local delivery so single-instance / Redis-down
@@ -188,17 +195,21 @@ impl Actor for ChatSession {
         self.last_seen = Instant::now();
 
         // Flip any messages addressed to this user that are still `sent` to
-        // `delivered` now that they're online, and notify the senders.
+        // `delivered` now that they're online, and notify the senders. Also
+        // mark them online for presence (Redis freshness or local registry)
+        // and announce it to their contacts.
         let pool = self.pool.clone();
         let cache = self.cache.clone();
         let me = self.user_id;
         actix_web::rt::spawn(async move {
             mark_delivered_on_connect(&pool, &cache, me).await;
+            crate::chat::presence::on_connect(&cache, &pool, me).await;
         });
 
         // Heartbeat: ping the client on an interval, and reap the socket if the
         // client has gone silent past CLIENT_TIMEOUT (the browser auto-pongs,
-        // which refreshes `last_seen`).
+        // which refreshes `last_seen`). Each beat also refreshes the presence
+        // freshness score so the user stays online.
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.last_seen) > CLIENT_TIMEOUT {
                 warn!(
@@ -210,12 +221,27 @@ impl Actor for ChatSession {
                 return;
             }
             ctx.ping(b"");
+
+            let cache = act.cache.clone();
+            let me = act.user_id;
+            actix_web::rt::spawn(async move {
+                crate::chat::presence::on_heartbeat(&cache, me).await;
+            });
         });
     }
 
     fn stopped(&mut self, _: &mut Self::Context) {
         info!("Chat WS disconnected: user_id={}", self.user_id);
+        // Drop the local session first so presence sees the accurate
+        // remaining-tabs state before deciding whether to announce offline.
         SESSIONS.unregister(self.user_id);
+
+        let pool = self.pool.clone();
+        let cache = self.cache.clone();
+        let me = self.user_id;
+        actix_web::rt::spawn(async move {
+            crate::chat::presence::on_disconnect(&cache, &pool, me).await;
+        });
     }
 }
 

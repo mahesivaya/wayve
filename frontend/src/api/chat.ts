@@ -141,6 +141,27 @@ export type ChatChannel = {
 export const getChatUsers = async () =>
   apiFetchJson<ChatUser[]>("/api/users/all");
 
+// Live online/offline + durable "last seen" for a set of users. `online` is the
+// realtime signal (a fresh chat socket somewhere); `last_seen` (RFC3339, or
+// null if never connected) is what the UI shows when they're offline. Content-
+// free — no message data crosses here. Live changes for your contacts also
+// arrive over the chat socket as `{ type: "presence" }` frames; this endpoint
+// seeds the initial state and reconciles on a light poll.
+export type UserPresence = {
+  user_id: number;
+  online: boolean;
+  last_seen: string | null;
+};
+
+export const getPresence = async (ids: number[]): Promise<UserPresence[]> => {
+  if (ids.length === 0) return [];
+  const params = new URLSearchParams({ ids: ids.join(",") });
+  const data = await apiFetchJson<{ presence: UserPresence[] }>(
+    `/api/chat/presence?${params.toString()}`
+  );
+  return data.presence;
+};
+
 // Per-DM-conversation summary: unread counts + last-activity time for recency
 // ordering, plus the total unread across all conversations. Counts/timestamps
 // only — message content stays E2E-encrypted, never returned here.

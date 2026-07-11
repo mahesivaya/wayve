@@ -4,6 +4,7 @@ import type {
   ChatUser,
 } from "../../api/chat";
 import { useGlobalSearch } from "../../search/SearchContext";
+import type { PresenceMap } from "../hooks/usePresence";
 import type { ChannelVisibility, Conversation } from "../types";
 import ChannelCreateForm from "./ChannelCreateForm";
 import ChannelList from "./ChannelList";
@@ -27,6 +28,7 @@ type Props = {
   onJoinChannel: (channel: ChatChannel) => void;
   onSelectUser: (user: ChatUser) => void;
   summary: ChatConversationSummary;
+  presence: PresenceMap;
 };
 
 export default function ConversationSidebar({
@@ -46,6 +48,7 @@ export default function ConversationSidebar({
   onJoinChannel,
   onSelectUser,
   summary,
+  presence,
 }: Props) {
   const { searchQuery, setSearchQuery } = useGlobalSearch();
 
@@ -86,6 +89,7 @@ export default function ConversationSidebar({
         channels={channels}
         selectedConversation={selectedConversation}
         summary={summary}
+        presence={presence}
         onSelectUser={onSelectUser}
         onSelectChannel={onSelectChannel}
       />
@@ -127,6 +131,7 @@ export default function ConversationSidebar({
         selectedConversation={selectedConversation}
         onSelect={onSelectUser}
         summary={summary}
+        presence={presence}
         section="people"
       />
     </aside>

@@ -33,6 +33,7 @@ import ResizeHandle from "../components/ResizeHandle";
 import { useResizableWidth } from "../components/useResizableWidth";
 import { useChatConversations } from "./hooks/useChatConversations";
 import { useChatSocket } from "./hooks/useChatSocket";
+import { usePresence } from "./hooks/usePresence";
 import {
   decryptChatMessage,
   decryptChatMessages,
@@ -74,6 +75,12 @@ export default function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [selectedConversation, setSelectedConversation] =
     useState<Conversation | null>(null);
+
+  // Online/offline for everyone in the directory. Seeded from the presence
+  // snapshot, kept live by `presence` WS frames (wired into useChatSocket
+  // below) for contacts, and reconciled on a poll inside the hook.
+  const userIds = useMemo(() => users.map((u) => u.id), [users]);
+  const { presence, applyPresenceEvent } = usePresence(userIds);
   const [input, setInput] = useState("");
   const [isNarrow, setIsNarrow] = useState(false);
 
@@ -177,9 +184,7 @@ export default function Chat() {
           label: trimmed.split("@")[0],
         };
       })
-      .filter(
-        (c) => c.id !== user?.id && c.email.toLowerCase() !== selfEmail
-      );
+      .filter((c) => c.id !== user?.id && c.email.toLowerCase() !== selfEmail);
   }, [selectedConversation, users, user?.id, user?.email]);
   const isSelectedChannelAdmin = isChannelAdmin(selectedChannel, user);
   const canChatInSelectedChannel =
@@ -351,7 +356,9 @@ export default function Chat() {
     // Any inbound DM (even for a conversation we're not viewing) may change an
     // unread count / recency, so refresh the summary that drives the
     // Unread/Recent sections + total badge.
-    refreshSummary
+    refreshSummary,
+    // Flip a contact's online dot the instant they connect/disconnect.
+    applyPresenceEvent
   );
 
   // The 1:1 call entry point lives in [ChatHeader](./components/ChatHeader.tsx).
@@ -361,6 +368,10 @@ export default function Chat() {
   const callSession = useCallSession(user?.id ?? null, user?.email);
   const selectedUser =
     selectedConversation?.type === "user" ? selectedConversation.user : null;
+  // Presence for the open DM's peer, so the header can show Online / last seen.
+  const selectedUserPresence = selectedUser
+    ? (presence.get(selectedUser.id) ?? null)
+    : null;
   const callDisabled =
     !callSession.connected || callSession.callState.kind !== "idle";
   const onAudioCall = selectedUser
@@ -643,7 +654,8 @@ export default function Chat() {
       if (files.length === 0 && standardEncryption) {
         encryptedContent = plaintext;
       } else {
-        const recipientKeys = await recipientPublicKeysFor(selectedConversation);
+        const recipientKeys =
+          await recipientPublicKeysFor(selectedConversation);
         if (!recipientKeys || recipientKeys.size === 0) {
           throw new Error("No chat encryption keys are available");
         }
@@ -930,6 +942,7 @@ export default function Chat() {
         onJoinChannel={joinChannel}
         onSelectUser={loadUserMessages}
         summary={summary}
+        presence={presence}
       />
 
       {/* Drag to trade width between the sidebar and the message area. */}
@@ -945,6 +958,8 @@ export default function Chat() {
         <ChatHeader
           title={selectedTitle}
           selectedChannel={selectedChannel}
+          isDirect={!!selectedUser}
+          presence={selectedUserPresence}
           settingsOpen={channelSettingsOpen}
           onAudioCall={onAudioCall}
           onVideoCall={onVideoCall}

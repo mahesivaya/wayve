@@ -340,6 +340,10 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_recovery_mode_check",
         "ALTER TABLE users ADD CONSTRAINT users_recovery_mode_check \
          CHECK (recovery_mode = 'full')",
+        // Presence: durable "last seen" fallback. Same column lives in
+        // init.sql; mirrored here so already-running deployments pick it up
+        // without a db-reset (the presence snapshot endpoint reads it).
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ",
         // ────────────────────────────────────────────────────────────────
         // OIDC SSO (multi-tenant). One IdP config row per org;
         // allowed_domain routes alice@acme.com → Acme's IdP. The
@@ -921,7 +925,10 @@ pub fn init_feature_state(pool: &PgPool) {
 /// `has_redis` gates the cross-instance chat pub/sub subscriber: it's only
 /// useful on socket-serving roles (`All`/`Api`) and only when Redis is up;
 /// without it senders fall back to local delivery.
-pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, has_redis: bool) {
+pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, cache: &Option<Cache>) {
+    // The chat pub/sub subscriber and the presence sweeper only matter on
+    // socket-serving roles and only when Redis is up.
+    let has_redis = cache.is_some();
     match role {
         RuntimeRole::EmailSyncWorker => {
             spawn_gmail_watch_renewer(pool.clone());
@@ -948,6 +955,7 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, has_redis: boo
             });
             spawn_log_retention_pruner(pool.clone());
             spawn_chat_pubsub(has_redis);
+            spawn_presence_sweeper(pool, cache);
         }
         RuntimeRole::Api => {
             // The webhook dispatcher is a cheap DB poller; spawning it
@@ -961,7 +969,17 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, has_redis: boo
             });
             spawn_log_retention_pruner(pool.clone());
             spawn_chat_pubsub(has_redis);
+            spawn_presence_sweeper(pool, cache);
         }
+    }
+}
+
+/// Reap stale chat sessions from the Redis presence set and announce those
+/// users offline. Redis-only: single-instance offline is announced inline on
+/// disconnect (see `chat::presence`), so this is a no-op without a cache.
+fn spawn_presence_sweeper(pool: &PgPool, cache: &Option<Cache>) {
+    if let Some(cache) = cache {
+        crate::chat::presence::spawn_sweeper(pool.clone(), cache.clone());
     }
 }
 

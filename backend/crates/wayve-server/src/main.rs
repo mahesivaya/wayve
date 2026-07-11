@@ -81,7 +81,7 @@ async fn main() -> std::io::Result<()> {
     // chat pub/sub subscriber on Redis availability. (Worker-only roles block
     // forever inside `spawn_role_workers`, so everything below it is API/All.)
     let redis_cache = startup::connect_redis_and_install_cache().await;
-    startup::spawn_role_workers(role, &pool, redis_cache.is_some()).await;
+    startup::spawn_role_workers(role, &pool, &redis_cache).await;
 
     // Offline IP geolocation for the User Logs page. Best-effort: `None` when
     // GEOIP_DB_PATH is unset/unreadable. The reader isn't `Clone`, so build the

@@ -21,7 +21,14 @@ export function useChatSocket(
   // Called for any inbound real message (not status_update, not a self-echo),
   // regardless of which conversation it belongs to — lets the caller refresh
   // unread counts / recency for the whole list, not just the open chat.
-  onInbound?: (message: ChatMessage) => void
+  onInbound?: (message: ChatMessage) => void,
+  // Called for a `presence` event ({user_id, online, last_seen}) so the caller
+  // can flip a contact's online dot live. Optional.
+  onPresence?: (
+    userId: number,
+    online: boolean,
+    lastSeen: string | null
+  ) => void
 ) {
   const wsRef = useRef<WebSocket | null>(null);
   const [readyState, setReadyState] = useState<number>(WebSocket.CLOSED);
@@ -38,6 +45,7 @@ export function useChatSocket(
   const onOpenRef = useRef(onOpen);
   const onStatusUpdateRef = useRef(onStatusUpdate);
   const onInboundRef = useRef(onInbound);
+  const onPresenceRef = useRef(onPresence);
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
@@ -50,6 +58,9 @@ export function useChatSocket(
   useEffect(() => {
     onInboundRef.current = onInbound;
   }, [onInbound]);
+  useEffect(() => {
+    onPresenceRef.current = onPresence;
+  }, [onPresence]);
 
   const userId = user?.id;
 
@@ -87,11 +98,27 @@ export function useChatSocket(
       };
 
       ws.onmessage = (event) => {
-        const msg: ChatMessage & { type?: string } = JSON.parse(event.data);
+        const msg: ChatMessage & {
+          type?: string;
+          user_id?: number;
+          online?: boolean;
+          last_seen?: string | null;
+        } = JSON.parse(event.data);
         // Non-chat broadcasts (e.g. the Gmail-push `email:new` nudge) ride the
         // same per-user socket fan-out. The chat page ignores them so they're
         // never mis-handled as inbound messages.
         if (msg.type?.startsWith("email:")) return;
+        // A contact came online / went offline — flip their dot live.
+        if (msg.type === "presence") {
+          if (typeof msg.user_id === "number") {
+            onPresenceRef.current?.(
+              msg.user_id,
+              !!msg.online,
+              msg.last_seen ?? null
+            );
+          }
+          return;
+        }
         // Delivery-tick update for one of our sent messages (sent → delivered
         // → read). Patch the bubble's status in place; not a new message.
         if (msg.type === "status_update") {

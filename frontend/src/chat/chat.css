@@ -270,6 +270,7 @@
 }
 
 .conversation-icon {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -280,6 +281,45 @@
   background: var(--color-surface-tint-slate);
   color: var(--color-text-slate-medium);
   font-weight: 800;
+}
+
+/* Online/offline status dot. Pinned to the avatar's bottom-right corner with a
+   ring in the surface colour so it reads as a badge on top of the icon. */
+.presence-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--color-surface);
+  box-sizing: border-box;
+  background: var(--color-text-slate-light);
+}
+
+.presence-dot.online {
+  background: #22c55e;
+}
+
+.presence-dot.offline {
+  background: var(--color-text-slate-light);
+}
+
+/* Header variant: inline with the "Online / last seen" label, not corner-pinned. */
+.presence-dot--inline {
+  position: static;
+  right: auto;
+  bottom: auto;
+  border: none;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+}
+
+.chat-presence-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .conversation-item.active .conversation-icon {

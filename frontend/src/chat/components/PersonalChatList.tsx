@@ -1,13 +1,16 @@
 import type { ChatConversationSummary, ChatUser } from "../../api/chat";
+import type { PresenceMap } from "../hooks/usePresence";
 import type { Conversation } from "../types";
 import { relativeTime } from "../utils";
 import { PersonIcon } from "../../icons";
+import PresenceDot from "./PresenceDot";
 
 type Props = {
   users: ChatUser[];
   selectedConversation: Conversation | null;
   onSelect: (user: ChatUser) => void;
   summary: ChatConversationSummary;
+  presence: PresenceMap;
   /**
    * Which half of the DM list to render. `"recent"` is the active
    * conversations (Unread + Recent) shown above the channels; `"people"` is
@@ -28,6 +31,7 @@ export default function PersonalChatList({
   selectedConversation,
   onSelect,
   summary,
+  presence,
   section,
 }: Props) {
   // Index the DM summary by the other participant's id.
@@ -70,6 +74,7 @@ export default function PersonalChatList({
       >
         <span className="conversation-icon">
           <PersonIcon size={16} />
+          <PresenceDot presence={presence.get(r.user.id)} />
         </span>
         <span className="conversation-main">
           <span className="conversation-name">{label}</span>
