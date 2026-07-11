@@ -759,6 +759,19 @@
   border-left: 3px solid #4a154b;
 }
 
+/* Clickable links inside a message body (e.g. a pasted task link). Underlined
+   so they read as links regardless of bubble color. */
+.message-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 600;
+}
+
+.message-link:hover {
+  text-decoration: none;
+}
+
 .message-meta {
   margin-top: 5px;
   font-size: var(--text-xs);

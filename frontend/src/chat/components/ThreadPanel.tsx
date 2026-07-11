@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { ChatMessage } from "../../api/chat";
 import { formatTime } from "../utils";
+import MessageText from "./MessageText";
 
 type Props = {
   parent: ChatMessage;
@@ -67,7 +68,9 @@ export default function ThreadPanel({
           <div
             className={`bubble ${parent.sender_id === currentUserId ? "me" : "other"}`}
           >
-            <div>{parent.content}</div>
+            <div>
+              <MessageText text={parent.content} />
+            </div>
             <div className="message-meta">{formatTime(parent.created_at)}</div>
           </div>
         </div>
@@ -86,7 +89,9 @@ export default function ThreadPanel({
               className={`message ${mine ? "me" : ""}`}
             >
               <div className={`bubble ${mine ? "me" : "other"}`}>
-                <div>{reply.content}</div>
+                <div>
+                  <MessageText text={reply.content} />
+                </div>
                 <div className="message-meta">
                   {formatTime(reply.created_at)}
                 </div>

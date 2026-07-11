@@ -32,6 +32,7 @@ import { useGlobalSearch } from "../search/SearchContext";
 import Modal from "../components/Modal";
 import Avatar from "../components/Avatar";
 import { useInSplitPane } from "../components/SplitPaneContext";
+import { useSplitControl } from "../components/SplitControlContext";
 import { getApiBase } from "../config/env";
 import { JiraBadge } from "./JiraPanel";
 import { GitlabBadge } from "./GitlabBadge";
@@ -303,14 +304,26 @@ export default function Tasks() {
   // → list) and clicking a task expands it inline (accordion) instead of
   // opening the edit modal.
   const inSplitPane = useInSplitPane();
+  // When this Tasks instance is the right split pane, a chat task link opens it
+  // with a focus target here; closeApp() dismisses the whole pane.
+  const { target: paneTarget, closeApp } = useSplitControl();
   const [searchParams] = useSearchParams();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   // Id of the task whose share-link was just copied, so its copy button can
   // briefly show a ✓. Cleared after a short delay.
   const [copiedTaskId, setCopiedTaskId] = useState<number | null>(null);
-  // Guards the one-shot deep-link open (?task=<id>) so closing the opened task
-  // doesn't immediately reopen it on the next render.
-  const deepLinkApplied = useRef(false);
+  // Last `?task=<id>` value we auto-opened. Guards the deep-link open so closing
+  // the task doesn't reopen it (param unchanged), while still letting a *new*
+  // task link (param changed) open its task — e.g. clicking a second pasted
+  // task link while already on this page.
+  const deepLinkApplied = useRef<string | null>(null);
+  // True while the currently-expanded task in a split pane was opened from a
+  // chat task link — so collapsing it closes the whole pane (back to chat)
+  // rather than just showing the list. Cleared once the user browses elsewhere.
+  const openedFromLink = useRef(false);
+  // The last split target (task id) we applied, so we don't re-open it every
+  // render — mirrors the deepLinkApplied guard for the pane hand-off path.
+  const paneTargetApplied = useRef<number | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -336,9 +349,54 @@ export default function Tasks() {
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">(
     "all"
   );
+  // Date-created filter. `after`/`before` use one bound; `between` uses both.
+  // Empty date inputs leave that bound open, so the filter is a no-op until a
+  // date is chosen. Bounds are inclusive (whole days, in local time).
+  const [dateMode, setDateMode] = useState<
+    "any" | "after" | "before" | "between"
+  >("any");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  // Status, priority and date filters live together in one "Filters" popover.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
+  const activeFilterCount =
+    (statusFilter !== "all" ? 1 : 0) +
+    (priorityFilter !== "all" ? 1 : 0) +
+    (dateMode !== "any" ? 1 : 0);
+  const clearFilters = () => {
+    setStatusFilter("all");
+    setPriorityFilter("all");
+    setDateMode("any");
+    setDateFrom("");
+    setDateTo("");
+  };
   // Status column currently being hovered during a drag, for the drop-target
   // highlight.
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
+
+  // Close the Filters popover on outside click or Escape.
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (
+        filtersRef.current &&
+        e.target instanceof Node &&
+        !filtersRef.current.contains(e.target)
+      ) {
+        setFiltersOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFiltersOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [filtersOpen]);
 
   useEffect(() => {
     window.localStorage.setItem("wayve.tasks.view", view);
@@ -562,16 +620,17 @@ export default function Tasks() {
 
   // Honor a ?task=<id> deep link once the tasks have loaded: open the target
   // task's details (edit modal in full width, inline accordion in a split
-  // pane). Runs once — guarded so closing the task doesn't reopen it.
+  // pane). Re-runs when the param changes so a freshly-clicked task link opens,
+  // but skips a value we've already opened so closing the task doesn't reopen it.
   useEffect(() => {
-    if (deepLinkApplied.current || loading) return;
+    if (loading) return;
     const raw = searchParams.get("task");
-    if (!raw) return;
+    if (!raw || deepLinkApplied.current === raw) return;
     const id = Number(raw);
     if (!Number.isFinite(id)) return;
     const target = tasks.find((t) => t.id === id);
     if (!target) return;
-    deepLinkApplied.current = true;
+    deepLinkApplied.current = raw;
     // Deferred to a microtask so the effect body doesn't synchronously call
     // setState (same React 19 cascading-render guard as loadTasks above).
     const timer = window.setTimeout(() => {
@@ -583,6 +642,23 @@ export default function Tasks() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loading, tasks, searchParams, inSplitPane]);
+
+  // Split-pane hand-off: when this Tasks instance is opened as the right pane
+  // from a chat task link, `paneTarget` carries the task id (the pane has no URL
+  // of its own, so `?task=` doesn't reach it). Expand that task inline and flag
+  // it as link-opened so collapsing it closes the pane. Applied once per id.
+  useEffect(() => {
+    if (loading || !inSplitPane) return;
+    const id = paneTarget?.app === "tasks" ? paneTarget.taskId : undefined;
+    if (id == null || paneTargetApplied.current === id) return;
+    if (!tasks.some((t) => t.id === id)) return;
+    paneTargetApplied.current = id;
+    const timer = window.setTimeout(() => {
+      setExpandedId(id);
+      openedFromLink.current = true;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loading, inSplitPane, paneTarget, tasks]);
 
   const onPickFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
     const list = event.target.files;
@@ -717,15 +793,35 @@ export default function Tasks() {
     );
   }, [normalizedSearchQuery, tasks]);
 
-  // Search-filtered tasks, further narrowed to the selected status and priority.
+  // True if a task's created date passes the date-created filter. Empty bounds
+  // are treated as open; "after"/"before" ignore the unused bound.
+  const inDateRange = useCallback(
+    (t: Task) => {
+      if (dateMode === "any") return true;
+      const created = new Date(t.created_at ?? 0).getTime();
+      if (Number.isNaN(created)) return false;
+      if ((dateMode === "after" || dateMode === "between") && dateFrom) {
+        if (created < new Date(`${dateFrom}T00:00:00`).getTime()) return false;
+      }
+      if ((dateMode === "before" || dateMode === "between") && dateTo) {
+        if (created > new Date(`${dateTo}T23:59:59.999`).getTime()) return false;
+      }
+      return true;
+    },
+    [dateMode, dateFrom, dateTo]
+  );
+
+  // Search-filtered tasks, further narrowed to the selected status, priority,
+  // and date-created range.
   const filteredTasks = useMemo(
     () =>
       visibleTasks.filter(
         (t) =>
           (statusFilter === "all" || t.status === statusFilter) &&
-          (priorityFilter === "all" || t.priority === priorityFilter)
+          (priorityFilter === "all" || t.priority === priorityFilter) &&
+          inDateRange(t)
       ),
-    [visibleTasks, statusFilter, priorityFilter]
+    [visibleTasks, statusFilter, priorityFilter, inDateRange]
   );
 
   const activeTasks = useMemo(
@@ -852,42 +948,151 @@ export default function Tasks() {
             </div>
             <div className="tasks-header-actions">
               <span className="tasks-count">{tasks.length} total</span>
-              <select
-                className="tasks-status-filter"
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as TaskStatus | "all")
-                }
-                aria-label="Filter by status"
-                title="Filter by status"
-              >
-                <option value="all">All statuses</option>
-                {STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="tasks-status-filter"
-                value={priorityFilter}
-                onChange={(e) =>
-                  setPriorityFilter(
-                    e.target.value === "all"
-                      ? "all"
-                      : (Number(e.target.value) as TaskPriority)
-                  )
-                }
-                aria-label="Filter by priority"
-                title="Filter by priority"
-              >
-                <option value="all">All priorities</option>
-                {PRIORITY_OPTIONS.map((value) => (
-                  <option key={value} value={value}>
-                    {`P${value} — ${priorityLabel(value)}`}
-                  </option>
-                ))}
-              </select>
+              <div className="tasks-filters" ref={filtersRef}>
+                <button
+                  type="button"
+                  className={`tasks-status-filter tasks-filters-btn${
+                    activeFilterCount > 0 ? " has-active" : ""
+                  }`}
+                  onClick={() => setFiltersOpen((open) => !open)}
+                  aria-haspopup="dialog"
+                  aria-expanded={filtersOpen}
+                  title="Filter tasks"
+                >
+                  <span aria-hidden="true">⌄</span> Filters
+                  {activeFilterCount > 0 && (
+                    <span className="tasks-filters-badge">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+                {filtersOpen && (
+                  <div
+                    className="tasks-filters-popover"
+                    role="dialog"
+                    aria-label="Task filters"
+                  >
+                    <label className="tasks-filter-row">
+                      <span>Status</span>
+                      <select
+                        value={statusFilter}
+                        onChange={(e) =>
+                          setStatusFilter(e.target.value as TaskStatus | "all")
+                        }
+                        aria-label="Filter by status"
+                      >
+                        <option value="all">All statuses</option>
+                        {STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="tasks-filter-row">
+                      <span>Priority</span>
+                      <select
+                        value={priorityFilter}
+                        onChange={(e) =>
+                          setPriorityFilter(
+                            e.target.value === "all"
+                              ? "all"
+                              : (Number(e.target.value) as TaskPriority)
+                          )
+                        }
+                        aria-label="Filter by priority"
+                      >
+                        <option value="all">All priorities</option>
+                        {PRIORITY_OPTIONS.map((value) => (
+                          <option key={value} value={value}>
+                            {`P${value} — ${priorityLabel(value)}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="tasks-filter-row">
+                      <span>Created</span>
+                      <select
+                        value={dateMode}
+                        onChange={(e) =>
+                          setDateMode(
+                            e.target.value as
+                              | "any"
+                              | "after"
+                              | "before"
+                              | "between"
+                          )
+                        }
+                        aria-label="Filter by date created"
+                      >
+                        <option value="any">Any date</option>
+                        <option value="after">Created after…</option>
+                        <option value="before">Created before…</option>
+                        <option value="between">Created between…</option>
+                      </select>
+                    </label>
+                    {(dateMode === "after" || dateMode === "between") && (
+                      <label className="tasks-filter-row">
+                        <span>
+                          {dateMode === "between" ? "From" : "On or after"}
+                        </span>
+                        <input
+                          type="date"
+                          value={dateFrom}
+                          max={
+                            dateMode === "between" && dateTo ? dateTo : undefined
+                          }
+                          onChange={(e) => setDateFrom(e.target.value)}
+                          aria-label={
+                            dateMode === "between"
+                              ? "From date"
+                              : "Created on or after"
+                          }
+                        />
+                      </label>
+                    )}
+                    {(dateMode === "before" || dateMode === "between") && (
+                      <label className="tasks-filter-row">
+                        <span>
+                          {dateMode === "between" ? "To" : "On or before"}
+                        </span>
+                        <input
+                          type="date"
+                          value={dateTo}
+                          min={
+                            dateMode === "between" && dateFrom
+                              ? dateFrom
+                              : undefined
+                          }
+                          onChange={(e) => setDateTo(e.target.value)}
+                          aria-label={
+                            dateMode === "between"
+                              ? "To date"
+                              : "Created on or before"
+                          }
+                        />
+                      </label>
+                    )}
+                    <div className="tasks-filters-footer">
+                      <button
+                        type="button"
+                        className="tasks-filters-clear"
+                        onClick={clearFilters}
+                        disabled={activeFilterCount === 0}
+                      >
+                        Clear all
+                      </button>
+                      <button
+                        type="button"
+                        className="tasks-filters-done"
+                        onClick={() => setFiltersOpen(false)}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="view-toggle" role="group" aria-label="View mode">
                 <button
                   type="button"
@@ -1467,13 +1672,29 @@ export default function Tasks() {
                             <button
                               type="button"
                               className="task-card-title-link"
-                              onClick={() =>
-                                inSplitPane
-                                  ? setExpandedId((id) =>
-                                      id === task.id ? null : task.id
-                                    )
-                                  : openEdit(task)
-                              }
+                              onClick={() => {
+                                if (!inSplitPane) {
+                                  openEdit(task);
+                                  return;
+                                }
+                                if (expandedId === task.id) {
+                                  // Collapsing the open task. If it was opened
+                                  // from a chat link, close the whole pane
+                                  // (back to full-width chat) instead of just
+                                  // showing the list.
+                                  if (openedFromLink.current && closeApp) {
+                                    openedFromLink.current = false;
+                                    closeApp();
+                                  } else {
+                                    setExpandedId(null);
+                                  }
+                                } else {
+                                  // Browsing to a different task — no longer the
+                                  // link-focused one.
+                                  openedFromLink.current = false;
+                                  setExpandedId(task.id);
+                                }
+                              }}
                               aria-expanded={inSplitPane ? expanded : undefined}
                               title="Open task details"
                             >
