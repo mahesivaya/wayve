@@ -184,9 +184,7 @@ export default function Chat() {
           label: trimmed.split("@")[0],
         };
       })
-      .filter(
-        (c) => c.id !== user?.id && c.email.toLowerCase() !== selfEmail
-      );
+      .filter((c) => c.id !== user?.id && c.email.toLowerCase() !== selfEmail);
   }, [selectedConversation, users, user?.id, user?.email]);
   const isSelectedChannelAdmin = isChannelAdmin(selectedChannel, user);
   const canChatInSelectedChannel =
@@ -656,7 +654,8 @@ export default function Chat() {
       if (files.length === 0 && standardEncryption) {
         encryptedContent = plaintext;
       } else {
-        const recipientKeys = await recipientPublicKeysFor(selectedConversation);
+        const recipientKeys =
+          await recipientPublicKeysFor(selectedConversation);
         if (!recipientKeys || recipientKeys.size === 0) {
           throw new Error("No chat encryption keys are available");
         }

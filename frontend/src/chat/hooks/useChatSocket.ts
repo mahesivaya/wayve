@@ -24,7 +24,11 @@ export function useChatSocket(
   onInbound?: (message: ChatMessage) => void,
   // Called for a `presence` event ({user_id, online, last_seen}) so the caller
   // can flip a contact's online dot live. Optional.
-  onPresence?: (userId: number, online: boolean, lastSeen: string | null) => void
+  onPresence?: (
+    userId: number,
+    online: boolean,
+    lastSeen: string | null
+  ) => void
 ) {
   const wsRef = useRef<WebSocket | null>(null);
   const [readyState, setReadyState] = useState<number>(WebSocket.CLOSED);

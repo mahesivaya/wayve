@@ -39,7 +39,9 @@ export default function ChatHeader({
   // once known, "Online" (green) or "last seen …" from the durable timestamp.
   const showPresence = isDirect && !selectedChannel && presence !== null;
   const presenceOnline = presence?.online ?? false;
-  const lastSeenLabel = presence?.lastSeen ? relativeTime(presence.lastSeen) : "";
+  const lastSeenLabel = presence?.lastSeen
+    ? relativeTime(presence.lastSeen)
+    : "";
 
   return (
     <div className="chat-header">
