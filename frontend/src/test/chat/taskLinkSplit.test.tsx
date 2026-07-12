@@ -1,8 +1,9 @@
-// Integration test for Option A: clicking a task link inside a chat message
-// opens the Tasks app in the split pane (focused on that task), and collapsing
-// the link-opened task closes the pane. Mounts the *real* MessageText and Tasks
-// components inside a harness that mimics Layout's split state machine, so the
-// full openApp → paneTarget → expand → closeApp contract is exercised.
+// Integration test: clicking a task link inside a chat message opens the Tasks
+// app in the split pane FOCUSED on just that task (not the whole list), the pane
+// stays open when the task is clicked, and "Show all tasks" reveals the full
+// list. Mounts the *real* MessageText and Tasks components inside a harness that
+// mimics Layout's split state machine, so the openApp → paneTarget → focus
+// contract is exercised.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -14,7 +15,7 @@ vi.mock("../../api/tasks", () => ({
     {
       id: 42,
       name: "Ship the thing",
-      description: "The one and only linked task.",
+      description: "The linked task.",
       priority: 2,
       status: "todo",
       assigned_by: null,
@@ -23,6 +24,19 @@ vi.mock("../../api/tasks", () => ({
       project_id: null,
       project_key: null,
       created_at: "2026-07-01T00:00:00Z",
+    },
+    {
+      id: 99,
+      name: "Some other task",
+      description: "Not the linked one.",
+      priority: 3,
+      status: "todo",
+      assigned_by: null,
+      assignee: null,
+      assignee_id: null,
+      project_id: null,
+      project_key: null,
+      created_at: "2026-07-02T00:00:00Z",
     },
   ]),
   getProjects: vi.fn().mockResolvedValue([]),
@@ -89,10 +103,10 @@ function SplitHarness({ text }: { text: string }) {
   );
 }
 
-describe("task link → split pane (Option A)", () => {
+describe("task link → split pane", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("opens the Tasks pane focused on the task, then closes it on collapse", async () => {
+  it("opens the pane focused on the linked task, stays open on click, and 'Show all tasks' reveals the list", async () => {
     const url = `${window.location.origin}/tasks?task=42`;
     render(<SplitHarness text={`Take a look: ${url}`} />);
 
@@ -105,18 +119,33 @@ describe("task link → split pane (Option A)", () => {
     // The Tasks pane appears...
     const pane = await screen.findByTestId("right-pane");
     expect(pane).toBeTruthy();
-    // ...and the task's detail is expanded (its description is visible), proving
-    // the paneTarget hand-off reached Tasks and opened THIS task.
+    // ...focused on THIS task: its detail is visible and the other task is not
+    // in the list (proving it opened the specific task, not the whole list).
     await waitFor(() =>
-      expect(screen.getByText("The one and only linked task.")).toBeTruthy()
+      expect(screen.getByText("The linked task.")).toBeTruthy()
     );
+    expect(
+      screen.queryByRole("button", { name: "Some other task" })
+    ).toBeNull();
 
-    // Collapsing the link-opened task (click its title) closes the whole pane.
+    // Clicking the task title opens its full details (the edit modal) and keeps
+    // the pane open.
     await userEvent.click(
       screen.getByRole("button", { name: "Ship the thing" })
     );
-    await waitFor(() =>
-      expect(screen.queryByTestId("right-pane")).toBeNull()
+    await waitFor(() => expect(screen.getByText("Edit Task")).toBeTruthy());
+    expect(screen.queryByTestId("right-pane")).not.toBeNull();
+
+    // Close the modal, then "Show all tasks" reveals the full list.
+    await userEvent.click(screen.getByRole("button", { name: "Close modal" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show all tasks" })
     );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Some other task" })
+      ).toBeTruthy()
+    );
+    expect(screen.queryByTestId("right-pane")).not.toBeNull();
   });
 });

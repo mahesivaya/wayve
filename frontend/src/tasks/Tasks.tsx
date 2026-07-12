@@ -305,10 +305,14 @@ export default function Tasks() {
   // opening the edit modal.
   const inSplitPane = useInSplitPane();
   // When this Tasks instance is the right split pane, a chat task link opens it
-  // with a focus target here; closeApp() dismisses the whole pane.
-  const { target: paneTarget, closeApp } = useSplitControl();
+  // with a focus target carried on `paneTarget`.
+  const { target: paneTarget } = useSplitControl();
   const [searchParams] = useSearchParams();
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  // When opened from a chat task link in a split pane, focus just that task
+  // (render only it, with a "Show all tasks" escape hatch) instead of the whole
+  // list. Null = show the full list.
+  const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);
   // Id of the task whose share-link was just copied, so its copy button can
   // briefly show a ✓. Cleared after a short delay.
   const [copiedTaskId, setCopiedTaskId] = useState<number | null>(null);
@@ -317,10 +321,6 @@ export default function Tasks() {
   // task link (param changed) open its task — e.g. clicking a second pasted
   // task link while already on this page.
   const deepLinkApplied = useRef<string | null>(null);
-  // True while the currently-expanded task in a split pane was opened from a
-  // chat task link — so collapsing it closes the whole pane (back to chat)
-  // rather than just showing the list. Cleared once the user browses elsewhere.
-  const openedFromLink = useRef(false);
   // The last split target (task id) we applied, so we don't re-open it every
   // render — mirrors the deepLinkApplied guard for the pane hand-off path.
   const paneTargetApplied = useRef<number | null>(null);
@@ -645,8 +645,8 @@ export default function Tasks() {
 
   // Split-pane hand-off: when this Tasks instance is opened as the right pane
   // from a chat task link, `paneTarget` carries the task id (the pane has no URL
-  // of its own, so `?task=` doesn't reach it). Expand that task inline and flag
-  // it as link-opened so collapsing it closes the pane. Applied once per id.
+  // of its own, so `?task=` doesn't reach it). Focus that task (show only it)
+  // and expand its detail. Applied once per id.
   useEffect(() => {
     if (loading || !inSplitPane) return;
     const id = paneTarget?.app === "tasks" ? paneTarget.taskId : undefined;
@@ -654,8 +654,7 @@ export default function Tasks() {
     if (!tasks.some((t) => t.id === id)) return;
     paneTargetApplied.current = id;
     const timer = window.setTimeout(() => {
-      setExpandedId(id);
-      openedFromLink.current = true;
+      setFocusedTaskId(id);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loading, inSplitPane, paneTarget, tasks]);
@@ -833,6 +832,21 @@ export default function Tasks() {
     () => filteredTasks.filter((t) => t.status === "done"),
     [filteredTasks]
   );
+
+  // A chat task link opens this pane focused on one task: show only it (with a
+  // "Show all tasks" escape hatch) rather than the whole list. Look it up in the
+  // full set so it shows regardless of the current search / status filters.
+  const focusedTask =
+    inSplitPane && focusedTaskId != null
+      ? tasks.find((t) => t.id === focusedTaskId)
+      : undefined;
+  const focusMode = Boolean(focusedTask);
+  const activeToShow = focusMode
+    ? activeTasks.filter((t) => t.id === focusedTaskId)
+    : activeTasks;
+  const completedToShow = focusMode
+    ? completedTasks.filter((t) => t.id === focusedTaskId)
+    : completedTasks;
 
   const saveTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1617,6 +1631,23 @@ export default function Tasks() {
           )
         ) : (
           <>
+            {focusMode && focusedTask && (
+              <div className="tasks-focus-banner">
+                <span className="tasks-focus-label">
+                  Viewing task <strong>{focusedTask.name}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="tasks-focus-showall"
+                  onClick={() => {
+                    setFocusedTaskId(null);
+                    setExpandedId(null);
+                  }}
+                >
+                  Show all tasks
+                </button>
+              </div>
+            )}
             <div className={`task-list task-list--${view}`}>
               {loading ? (
                 <div className="tasks-empty">
@@ -1634,7 +1665,7 @@ export default function Tasks() {
                     Try again
                   </button>
                 </div>
-              ) : filteredTasks.length === 0 ? (
+              ) : !focusMode && filteredTasks.length === 0 ? (
                 <div className="tasks-empty">
                   <strong>
                     {tasks.length === 0 ? "No tasks yet" : "No matching tasks"}
@@ -1645,7 +1676,7 @@ export default function Tasks() {
                       : "Try a different search term."}
                   </span>
                 </div>
-              ) : activeTasks.length === 0 ? (
+              ) : !focusMode && activeTasks.length === 0 ? (
                 <div className="tasks-empty">
                   <strong>All caught up</strong>
                   <span>
@@ -1653,8 +1684,12 @@ export default function Tasks() {
                   </span>
                 </div>
               ) : (
-                activeTasks.map((task) => {
-                  const expanded = inSplitPane && expandedId === task.id;
+                activeToShow.map((task) => {
+                  // The link-focused task shows its detail + actions inline; in
+                  // the full split list a card can still be expanded via the
+                  // deep-link hand-off. Clicking a title opens the full editor.
+                  const expanded =
+                    inSplitPane && (focusMode || expandedId === task.id);
                   return (
                     <article
                       key={task.id}
@@ -1672,30 +1707,7 @@ export default function Tasks() {
                             <button
                               type="button"
                               className="task-card-title-link"
-                              onClick={() => {
-                                if (!inSplitPane) {
-                                  openEdit(task);
-                                  return;
-                                }
-                                if (expandedId === task.id) {
-                                  // Collapsing the open task. If it was opened
-                                  // from a chat link, close the whole pane
-                                  // (back to full-width chat) instead of just
-                                  // showing the list.
-                                  if (openedFromLink.current && closeApp) {
-                                    openedFromLink.current = false;
-                                    closeApp();
-                                  } else {
-                                    setExpandedId(null);
-                                  }
-                                } else {
-                                  // Browsing to a different task — no longer the
-                                  // link-focused one.
-                                  openedFromLink.current = false;
-                                  setExpandedId(task.id);
-                                }
-                              }}
-                              aria-expanded={inSplitPane ? expanded : undefined}
+                              onClick={() => openEdit(task)}
                               title="Open task details"
                             >
                               {task.name}
@@ -1768,16 +1780,16 @@ export default function Tasks() {
               )}
             </div>
 
-            {!loading && !loadError && completedTasks.length > 0 && (
+            {!loading && !loadError && completedToShow.length > 0 && (
               <section className="task-completed-section">
                 <h3 className="task-completed-title">
                   Completed tasks
                   <span className="task-completed-count">
-                    {completedTasks.length}
+                    {completedToShow.length}
                   </span>
                 </h3>
                 <div className={`task-list task-list--${view}`}>
-                  {completedTasks.map((task) => (
+                  {completedToShow.map((task) => (
                     <article
                       key={task.id}
                       className="task-card task-card--completed"

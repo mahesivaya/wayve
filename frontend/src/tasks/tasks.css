@@ -1214,6 +1214,40 @@
   color: var(--color-text-muted);
 }
 
+/* Focus banner shown when the split pane is opened on a single task from a chat
+   link — names the task and offers a way back to the full list. */
+.tasks-focus-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+}
+
+.tasks-focus-label strong {
+  color: var(--color-text-primary);
+}
+
+.tasks-focus-showall {
+  flex: 0 0 auto;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-primary);
+  padding: 5px 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tasks-focus-showall:hover {
+  background: var(--color-surface-hover);
+}
+
 .tasks-empty {
   min-height: 280px;
   display: flex;
