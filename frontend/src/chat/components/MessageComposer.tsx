@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { Conversation } from "../types";
+import EmojiPicker from "./EmojiPicker";
 
 // A person the composer can @-mention. `label` is what gets inserted after the
 // `@` (typically the email's local part); `email` is shown in the dropdown to
@@ -72,9 +73,11 @@ export default function MessageComposer({
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const emojiAnchorRef = useRef<HTMLDivElement | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionStart, setMentionStart] = useState(0);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   if (!conversation || !canChat) return null;
 
   const disabled = !isConnected || uploading;
@@ -126,6 +129,23 @@ export default function MessageComposer({
         el.setSelectionRange(caret, caret);
       });
     }
+  };
+
+  // Splice the chosen emoji in at the caret (replacing any selection) and put
+  // the caret back after it, so typing continues where the emoji landed. The
+  // textarea keeps its `selectionStart`/`End` while the picker holds focus, so
+  // we can read the caret here without having stashed it when the picker opened.
+  const insertEmoji = (char: string) => {
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? input.length;
+    const end = el?.selectionEnd ?? start;
+    onInputChange(input.slice(0, start) + char + input.slice(end));
+    setEmojiOpen(false);
+    const caret = start + char.length;
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(caret, caret);
+    });
   };
 
   const handlePick = (list: FileList | null) => {
@@ -212,10 +232,33 @@ export default function MessageComposer({
             </button>
           </>
         )}
+        <div className="chat-emoji-anchor" ref={emojiAnchorRef}>
+          {emojiOpen && (
+            <EmojiPicker
+              anchorRef={emojiAnchorRef}
+              onSelect={insertEmoji}
+              onClose={() => setEmojiOpen(false)}
+            />
+          )}
+          <button
+            type="button"
+            className="chat-emoji-btn-toggle"
+            title="Emoji"
+            aria-label="Emoji"
+            aria-expanded={emojiOpen}
+            disabled={disabled}
+            onClick={() => setEmojiOpen((open) => !open)}
+          >
+            🙂
+          </button>
+        </div>
         {mentionOpen && (
           <ul className="chat-mention-menu" role="listbox">
             {matches.map((candidate, i) => (
-              <li key={`${candidate.id}-${candidate.email}`} role="presentation">
+              <li
+                key={`${candidate.id}-${candidate.email}`}
+                role="presentation"
+              >
                 <button
                   type="button"
                   role="option"
@@ -247,7 +290,11 @@ export default function MessageComposer({
           onClick={(e) => syncMention(e.currentTarget)}
           onKeyUp={(e) => {
             // Arrow/Home/End move the caret without changing text — resync.
-            if (e.key.startsWith("Arrow") || e.key === "Home" || e.key === "End") {
+            if (
+              e.key.startsWith("Arrow") ||
+              e.key === "Home" ||
+              e.key === "End"
+            ) {
               syncMention(e.currentTarget);
             }
           }}
