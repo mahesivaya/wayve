@@ -62,10 +62,9 @@ fn parse_busy_ms(raw: &str) -> Option<f64> {
         (v, 0.001)
     } else if let Some(v) = raw.strip_suffix("ns") {
         (v, 0.000_001)
-    } else if let Some(v) = raw.strip_suffix('s') {
-        (v, 1000.0)
     } else {
-        return None;
+        let v = raw.strip_suffix('s')?;
+        (v, 1000.0)
     };
     num.trim().parse::<f64>().ok().map(|n| n * mult)
 }
