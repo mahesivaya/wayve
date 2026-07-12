@@ -4,6 +4,8 @@ import { getGithubConnection } from "../api/github";
 import { getGitlabConnection } from "../api/gitlab";
 import { getSlackConnection } from "../api/slack";
 import { getMcpConnections } from "../api/mcp";
+import { getAccounts } from "../api/email";
+import { type EmailAccount } from "../emails/types";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import SlackPanel from "./SlackPanel";
@@ -11,6 +13,7 @@ import McpPanel from "./McpPanel";
 import GitLabPanel from "./GitLabPanel";
 import JiraPanel from "../tasks/JiraPanel";
 import GitHubPanel from "./GitHubPanel";
+import GmailPanel from "./GmailPanel";
 import { BrandIcon } from "./BrandIcon";
 import "./integrations.css";
 
@@ -32,6 +35,15 @@ export default function Integrations() {
   const canManageMcp =
     hasPermission(user, "mcp:manage") &&
     (isEnterprise || user?.scope === "platform");
+
+  // Who may connect their own external mailbox (Gmail): personal accounts and
+  // the primary owner of an organization / platform — mirrors the backend gate
+  // `require_external_mailbox_actor`. Other members use shared inboxes, so we
+  // hide the Gmail tile for them rather than show a card that would 403.
+  const isPersonalScope = user?.scope
+    ? user.scope === "personal"
+    : user?.account_type === "personal";
+  const canConnectMailbox = isPersonalScope || user?.is_primary_owner === true;
 
   // Live Jira connection state drives the Jira card's badge (Enabled vs
   // Connect). Best-effort: any error just leaves it unconnected.
@@ -116,6 +128,25 @@ export default function Integrations() {
     };
   }, []);
 
+  // Gmail connection badge — only probed for users who can connect a mailbox
+  // (others don't see the tile). "Connected" = the user owns at least one
+  // mailbox (the accounts summary doesn't expose the provider).
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [showGmail, setShowGmail] = useState(false);
+  useEffect(() => {
+    if (!canConnectMailbox) return;
+    let cancelled = false;
+    void getAccounts<EmailAccount>()
+      .then((list) => {
+        if (!cancelled)
+          setGmailConnected(list.some((a) => a.is_owner !== false));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canConnectMailbox]);
+
   const services: {
     key: string;
     name: string;
@@ -124,6 +155,15 @@ export default function Integrations() {
     status: Status;
     onClick?: () => void;
   }[] = [
+    {
+      key: "gmail",
+      name: "Gmail",
+      description:
+        "Connect your Gmail with OAuth to read, send, and manage all your email from the Fluxze inbox.",
+      icon: <BrandIcon name="gmail" />,
+      status: gmailConnected ? "enabled" : "available",
+      onClick: () => setShowGmail((v) => !v),
+    },
     {
       key: "jira",
       name: "Jira",
@@ -181,7 +221,9 @@ export default function Integrations() {
   // disabled badge.
   const visibleServices = services.filter(
     (s) =>
-      (s.key !== "slack" || isEnterprise) && (s.key !== "mcp" || canManageMcp)
+      (s.key !== "slack" || isEnterprise) &&
+      (s.key !== "mcp" || canManageMcp) &&
+      (s.key !== "gmail" || canConnectMailbox)
   );
 
   return (
@@ -253,6 +295,13 @@ export default function Integrations() {
             )}
           </div>
         </section>
+
+        {canConnectMailbox && showGmail && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Gmail</h2>
+            <GmailPanel onChange={setGmailConnected} />
+          </section>
+        )}
 
         {showJira && (
           <section className="settings-card">
