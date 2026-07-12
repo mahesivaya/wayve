@@ -53,7 +53,9 @@ export default function GmailPanel({
       window.location.href = await getGmailConnectUrl();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not start the Gmail connect."
+        err instanceof Error
+          ? err.message
+          : "Could not start the Gmail connect."
       );
       setBusy(false);
     }

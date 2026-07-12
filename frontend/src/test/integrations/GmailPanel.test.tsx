@@ -6,12 +6,16 @@ import GmailPanel from "../../integrations/GmailPanel";
 
 vi.mock("../../api/email", () => ({
   getAccounts: vi.fn().mockResolvedValue([]),
-  getGmailConnectUrl: vi.fn().mockResolvedValue("https://accounts.google.com/o/oauth2/v2/auth?x=1"),
+  getGmailConnectUrl: vi
+    .fn()
+    .mockResolvedValue("https://accounts.google.com/o/oauth2/v2/auth?x=1"),
 }));
 import { getAccounts, getGmailConnectUrl } from "../../api/email";
 
 const setAccounts = (v: unknown) =>
-  (getAccounts as unknown as { mockResolvedValue: (v: unknown) => void }).mockResolvedValue(v);
+  (
+    getAccounts as unknown as { mockResolvedValue: (v: unknown) => void }
+  ).mockResolvedValue(v);
 
 const renderPanel = () =>
   render(
@@ -31,7 +35,9 @@ describe("GmailPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/not connected/i)).toBeInTheDocument();
     // No inbox link until a mailbox exists.
-    expect(screen.queryByRole("link", { name: /open inbox/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /open inbox/i })
+    ).not.toBeInTheDocument();
   });
 
   it("lists the connected mailbox and an Open inbox link when owned", async () => {
