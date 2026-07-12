@@ -546,6 +546,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ) => {
     authVersion.current += 1;
     setAuthToken(token);
+    // On every login, start with the left sidebar expanded for all users
+    // (personal / organization / platform). `Layout` reads this key on mount;
+    // "0" = expanded. Mid-session collapse still works and persists until the
+    // next login. Best-effort — private mode / disabled storage just no-ops
+    // (the layout default is expanded anyway).
+    try {
+      localStorage.setItem("rwayve.sidebar.collapsed", "0");
+    } catch {
+      // storage unavailable — ignore; Layout falls back to expanded.
+    }
     setInitializing(false);
 
     const decoded = parseJwt(token);

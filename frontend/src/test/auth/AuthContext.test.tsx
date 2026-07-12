@@ -91,6 +91,22 @@ describe("AuthContext.resolveBootToken", () => {
     expect(window.location.hash).toBe("");
   });
 
+  it("expands the left sidebar on a Google signup/login landing", () => {
+    localStorage.setItem("rwayve.sidebar.collapsed", "1"); // was collapsed
+    renderProvider(`/home#signup=true&token=${VALID_JWT}`);
+
+    // A fresh login resets the sidebar to expanded ("0") for all users.
+    expect(localStorage.getItem("rwayve.sidebar.collapsed")).toBe("0");
+  });
+
+  it("does NOT touch the sidebar on a mailbox-connect (#connected) return", () => {
+    localStorage.setItem("rwayve.sidebar.collapsed", "1");
+    // #connected is a mid-session return from connecting a mailbox, not a login.
+    renderProvider(`/emails#connected=true`);
+
+    expect(localStorage.getItem("rwayve.sidebar.collapsed")).toBe("1");
+  });
+
   it("does not consume OAuth tokens from the query string", () => {
     vi.stubGlobal(
       "fetch",
