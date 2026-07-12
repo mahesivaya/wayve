@@ -10,6 +10,7 @@ vi.mock("../../api/tasks", () => ({
   getTasks: vi.fn().mockResolvedValue([
     {
       id: 42,
+      task_number: 42,
       name: "Ship the thing",
       description: "The linked task.",
       priority: 2,

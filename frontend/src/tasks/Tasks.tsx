@@ -28,6 +28,7 @@ import {
 } from "../api/tasks";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { taskShareText } from "./taskShareLink";
 import { useGlobalSearch } from "../search/SearchContext";
 import Modal from "../components/Modal";
 import Avatar from "../components/Avatar";
@@ -216,9 +217,9 @@ function UserAutocomplete({
   );
 }
 
-// A small "copy task link" control shown on every task card. Copies a shareable
-// deep link (…/tasks?task=<id>) to the clipboard so the task can be pasted into
-// chat/email and reopened straight to its details. Stays a compact icon — the
+// A small "copy task link" control shown on every task card. Copies a plain
+// share snippet (`#42 Task name`) to the clipboard so the task can be pasted
+// into chat and reopened from the linked reference. Stays a compact icon — the
 // "Copy link" hint rides the native cursor tooltip (title) — and on a successful
 // copy swaps to a green check and pops a small "Copied!" text confirmation
 // above the button. `stopPropagation` keeps a click from also toggling the
@@ -607,13 +608,8 @@ export default function Tasks() {
       .finally(() => setAttachmentsLoading(false));
   };
 
-  // Shareable deep link for a task — pasteable into chat/email; opening it
-  // navigates to the Tasks page and auto-opens the task's details.
-  const taskLink = (task: Task) =>
-    `${window.location.origin}/tasks?task=${task.id}`;
-
   const copyTaskLink = (task: Task) => {
-    void navigator.clipboard?.writeText(taskLink(task)).then(() => {
+    void navigator.clipboard?.writeText(taskShareText(task)).then(() => {
       setCopiedTaskId(task.id);
       window.setTimeout(
         () => setCopiedTaskId((id) => (id === task.id ? null : id)),
@@ -622,19 +618,28 @@ export default function Tasks() {
     });
   };
 
-  // Honor a ?task=<id> deep link once the tasks have loaded: open the target
-  // task's details (the edit modal). Used by chat task links, which navigate
-  // here. Re-runs when the param changes so a freshly-clicked task link opens,
-  // but skips a value we've already opened so closing the task doesn't reopen it.
+  // Honor a ?task=<id> or ?ref=<n> deep link once tasks have loaded: open the
+  // target task's details (the edit modal). `task` is the database id (legacy
+  // URLs); `ref` is the friendly #<n> from a copied task snippet (task_number,
+  // falling back to id). Re-runs when the param changes so a freshly-clicked
+  // task link opens, but skips a value we've already opened so closing the task
+  // doesn't reopen it.
   useEffect(() => {
     if (loading) return;
-    const raw = searchParams.get("task");
-    if (!raw || deepLinkApplied.current === raw) return;
-    const id = Number(raw);
-    if (!Number.isFinite(id)) return;
-    const target = tasks.find((t) => t.id === id);
+    const taskParam = searchParams.get("task");
+    const refParam = searchParams.get("ref");
+    if (!taskParam && !refParam) return;
+    const rawKey = taskParam != null ? `id:${taskParam}` : `ref:${refParam}`;
+    if (deepLinkApplied.current === rawKey) return;
+    const n = Number(taskParam ?? refParam);
+    if (!Number.isFinite(n)) return;
+    const target =
+      taskParam != null
+        ? tasks.find((t) => t.id === n)
+        : tasks.find((t) => t.task_number === n) ??
+          tasks.find((t) => t.id === n);
     if (!target) return;
-    deepLinkApplied.current = raw;
+    deepLinkApplied.current = rawKey;
     // Deferred to a microtask so the effect body doesn't synchronously call
     // setState (same React 19 cascading-render guard as loadTasks above).
     const timer = window.setTimeout(() => {
