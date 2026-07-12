@@ -84,6 +84,18 @@ export const resolveBootToken = (): {
     } else {
       log.info("OAuth redirect (cookie-token); cleaning fragment");
     }
+    // A Google (`#signup`) or enterprise-SSO (`#sso`) landing is a fresh login,
+    // so start the left sidebar expanded for all users (mirrors the password
+    // `login()` path). Skip the mailbox-connect-only landing (`#connected`),
+    // which is a mid-session return, not a login. `Layout` reads this key on
+    // mount; "0" = expanded. Best-effort — storage may be unavailable.
+    if (isSignup || hashParams.has("sso")) {
+      try {
+        localStorage.setItem("rwayve.sidebar.collapsed", "0");
+      } catch {
+        // storage unavailable — Layout falls back to expanded anyway.
+      }
+    }
     const path = window.location.pathname || "/home";
     window.history.replaceState(
       {},
