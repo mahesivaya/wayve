@@ -159,6 +159,42 @@ impl Cache {
 
         Ok(count)
     }
+
+    /// Atomically increment a counter and return the new value (`INCR`).
+    /// Presence keeps one per user counting live chat sockets, so it can flip a
+    /// user offline the instant their *last* socket closes instead of waiting
+    /// for the staleness sweep. Best-effort: a Redis blip returns 0 and the
+    /// sweeper still backstops.
+    #[instrument(target = "cache", skip(self), fields(key))]
+    pub async fn incr(&self, key: &str) -> i64 {
+        let mut conn = self.conn.clone();
+        let res: redis::RedisResult<i64> = conn.incr(key, 1).await;
+        res.unwrap_or_else(|e| {
+            warn!(target: "cache", key, error = ?e, "redis INCR failed");
+            0
+        })
+    }
+
+    /// Atomically decrement a counter and return the new value (`DECR`),
+    /// deleting the key once it hits zero so a stray extra decrement can't drive
+    /// it negative. Paired with [`Cache::incr`] for the presence socket count.
+    #[instrument(target = "cache", skip(self), fields(key))]
+    pub async fn decr(&self, key: &str) -> i64 {
+        let mut conn = self.conn.clone();
+        let res: redis::RedisResult<i64> = conn.decr(key, 1).await;
+        match res {
+            Ok(count) => {
+                if count <= 0 {
+                    let _: redis::RedisResult<()> = conn.del(key).await;
+                }
+                count
+            }
+            Err(e) => {
+                warn!(target: "cache", key, error = ?e, "redis DECR failed");
+                0
+            }
+        }
+    }
 }
 
 /// A bounded, time-to-live in-memory cache — a thin wrapper over
