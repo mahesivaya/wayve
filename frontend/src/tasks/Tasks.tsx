@@ -26,13 +26,12 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "../api/tasks";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 import Modal from "../components/Modal";
 import Avatar from "../components/Avatar";
 import { useInSplitPane } from "../components/SplitPaneContext";
-import { useSplitControl } from "../components/SplitControlContext";
 import { getApiBase } from "../config/env";
 import { JiraBadge } from "./JiraPanel";
 import { GitlabBadge } from "./GitlabBadge";
@@ -304,15 +303,13 @@ export default function Tasks() {
   // → list) and clicking a task expands it inline (accordion) instead of
   // opening the edit modal.
   const inSplitPane = useInSplitPane();
-  // When this Tasks instance is the right split pane, a chat task link opens it
-  // with a focus target carried on `paneTarget`.
-  const { target: paneTarget } = useSplitControl();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  // True while the open details modal was launched from a `?task=` deep link
+  // (i.e. a chat task link). Closing such a task returns the user to Messages
+  // rather than dropping them on the full task list.
+  const openedFromDeepLink = useRef(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  // When opened from a chat task link in a split pane, focus just that task
-  // (render only it, with a "Show all tasks" escape hatch) instead of the whole
-  // list. Null = show the full list.
-  const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null);
   // Id of the task whose share-link was just copied, so its copy button can
   // briefly show a ✓. Cleared after a short delay.
   const [copiedTaskId, setCopiedTaskId] = useState<number | null>(null);
@@ -321,9 +318,6 @@ export default function Tasks() {
   // task link (param changed) open its task — e.g. clicking a second pasted
   // task link while already on this page.
   const deepLinkApplied = useRef<string | null>(null);
-  // The last split target (task id) we applied, so we don't re-open it every
-  // render — mirrors the deepLinkApplied guard for the pane hand-off path.
-  const paneTargetApplied = useRef<number | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -572,14 +566,24 @@ export default function Tasks() {
     resetForm();
     setCreateAnother(false);
     setCreating(false);
+    // A task opened from a chat link (via a `?task=` deep link) returns the user
+    // to Messages on close, rather than leaving them on the full task list.
+    if (openedFromDeepLink.current) {
+      openedFromDeepLink.current = false;
+      navigate("/chat");
+    }
   };
 
   const openCreate = () => {
+    openedFromDeepLink.current = false;
     resetForm();
     setCreating(true);
   };
 
   const openEdit = (task: Task) => {
+    // A normal open (card / Edit button) is not a deep-link open; the deep-link
+    // effect re-sets this flag after it calls openEdit.
+    openedFromDeepLink.current = false;
     setEditingId(task.id);
     setTaskName(task.name);
     setDescription(task.description);
@@ -619,8 +623,8 @@ export default function Tasks() {
   };
 
   // Honor a ?task=<id> deep link once the tasks have loaded: open the target
-  // task's details (edit modal in full width, inline accordion in a split
-  // pane). Re-runs when the param changes so a freshly-clicked task link opens,
+  // task's details (the edit modal). Used by chat task links, which navigate
+  // here. Re-runs when the param changes so a freshly-clicked task link opens,
   // but skips a value we've already opened so closing the task doesn't reopen it.
   useEffect(() => {
     if (loading) return;
@@ -634,30 +638,11 @@ export default function Tasks() {
     // Deferred to a microtask so the effect body doesn't synchronously call
     // setState (same React 19 cascading-render guard as loadTasks above).
     const timer = window.setTimeout(() => {
-      if (inSplitPane) {
-        setExpandedId(id);
-      } else {
-        openEdit(target);
-      }
+      openEdit(target);
+      openedFromDeepLink.current = true;
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [loading, tasks, searchParams, inSplitPane]);
-
-  // Split-pane hand-off: when this Tasks instance is opened as the right pane
-  // from a chat task link, `paneTarget` carries the task id (the pane has no URL
-  // of its own, so `?task=` doesn't reach it). Focus that task (show only it)
-  // and expand its detail. Applied once per id.
-  useEffect(() => {
-    if (loading || !inSplitPane) return;
-    const id = paneTarget?.app === "tasks" ? paneTarget.taskId : undefined;
-    if (id == null || paneTargetApplied.current === id) return;
-    if (!tasks.some((t) => t.id === id)) return;
-    paneTargetApplied.current = id;
-    const timer = window.setTimeout(() => {
-      setFocusedTaskId(id);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loading, inSplitPane, paneTarget, tasks]);
+  }, [loading, tasks, searchParams]);
 
   const onPickFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
     const list = event.target.files;
@@ -832,21 +817,6 @@ export default function Tasks() {
     () => filteredTasks.filter((t) => t.status === "done"),
     [filteredTasks]
   );
-
-  // A chat task link opens this pane focused on one task: show only it (with a
-  // "Show all tasks" escape hatch) rather than the whole list. Look it up in the
-  // full set so it shows regardless of the current search / status filters.
-  const focusedTask =
-    inSplitPane && focusedTaskId != null
-      ? tasks.find((t) => t.id === focusedTaskId)
-      : undefined;
-  const focusMode = Boolean(focusedTask);
-  const activeToShow = focusMode
-    ? activeTasks.filter((t) => t.id === focusedTaskId)
-    : activeTasks;
-  const completedToShow = focusMode
-    ? completedTasks.filter((t) => t.id === focusedTaskId)
-    : completedTasks;
 
   const saveTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1631,23 +1601,6 @@ export default function Tasks() {
           )
         ) : (
           <>
-            {focusMode && focusedTask && (
-              <div className="tasks-focus-banner">
-                <span className="tasks-focus-label">
-                  Viewing task <strong>{focusedTask.name}</strong>
-                </span>
-                <button
-                  type="button"
-                  className="tasks-focus-showall"
-                  onClick={() => {
-                    setFocusedTaskId(null);
-                    setExpandedId(null);
-                  }}
-                >
-                  Show all tasks
-                </button>
-              </div>
-            )}
             <div className={`task-list task-list--${view}`}>
               {loading ? (
                 <div className="tasks-empty">
@@ -1665,7 +1618,7 @@ export default function Tasks() {
                     Try again
                   </button>
                 </div>
-              ) : !focusMode && filteredTasks.length === 0 ? (
+              ) : filteredTasks.length === 0 ? (
                 <div className="tasks-empty">
                   <strong>
                     {tasks.length === 0 ? "No tasks yet" : "No matching tasks"}
@@ -1676,7 +1629,7 @@ export default function Tasks() {
                       : "Try a different search term."}
                   </span>
                 </div>
-              ) : !focusMode && activeTasks.length === 0 ? (
+              ) : activeTasks.length === 0 ? (
                 <div className="tasks-empty">
                   <strong>All caught up</strong>
                   <span>
@@ -1684,12 +1637,8 @@ export default function Tasks() {
                   </span>
                 </div>
               ) : (
-                activeToShow.map((task) => {
-                  // The link-focused task shows its detail + actions inline; in
-                  // the full split list a card can still be expanded via the
-                  // deep-link hand-off. Clicking a title opens the full editor.
-                  const expanded =
-                    inSplitPane && (focusMode || expandedId === task.id);
+                activeTasks.map((task) => {
+                  const expanded = inSplitPane && expandedId === task.id;
                   return (
                     <article
                       key={task.id}
@@ -1780,16 +1729,16 @@ export default function Tasks() {
               )}
             </div>
 
-            {!loading && !loadError && completedToShow.length > 0 && (
+            {!loading && !loadError && completedTasks.length > 0 && (
               <section className="task-completed-section">
                 <h3 className="task-completed-title">
                   Completed tasks
                   <span className="task-completed-count">
-                    {completedToShow.length}
+                    {completedTasks.length}
                   </span>
                 </h3>
                 <div className={`task-list task-list--${view}`}>
-                  {completedToShow.map((task) => (
+                  {completedTasks.map((task) => (
                     <article
                       key={task.id}
                       className="task-card task-card--completed"

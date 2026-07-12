@@ -1,26 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import MessageText from "../../chat/components/MessageText";
-import {
-  SplitControlContext,
-  type SplitControlValue,
-} from "../../components/SplitControlContext";
 
 const renderText = (text: string) =>
   render(
     <MemoryRouter>
       <MessageText text={text} />
-    </MemoryRouter>
-  );
-
-const renderWithSplit = (text: string, value: SplitControlValue) =>
-  render(
-    <MemoryRouter>
-      <SplitControlContext.Provider value={value}>
-        <MessageText text={text} />
-      </SplitControlContext.Provider>
     </MemoryRouter>
   );
 
@@ -48,14 +34,6 @@ describe("MessageText", () => {
     expect(link.getAttribute("href")).toBe("https://example.com/docs");
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toContain("noopener");
-  });
-
-  it("opens a task link in the split pane instead of navigating", async () => {
-    const openApp = vi.fn();
-    const url = `${window.location.origin}/tasks?task=42`;
-    renderWithSplit(`open ${url}`, { openApp, target: null, closeApp: null });
-    await userEvent.click(screen.getByRole("link", { name: url }));
-    expect(openApp).toHaveBeenCalledWith("tasks", { taskId: 42 });
   });
 
   it("peels trailing punctuation out of the link", () => {
