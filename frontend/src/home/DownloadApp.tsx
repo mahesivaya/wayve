@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-type BuildKey = "mac-arm64" | "mac-x64" | "windows" | "linux";
-type IconKind = "apple" | "windows" | "linux";
+type BuildKey = "mac-arm64" | "mac-x64" | "windows";
+type IconKind = "apple" | "windows";
 
 // Installers are hosted on S3 (public-read, Content-Disposition: attachment so
 // they download cross-origin). Updating a build = re-upload to this bucket; no
@@ -32,15 +32,9 @@ const BUILDS: Record<
     sub: "64-bit installer",
     icon: "windows",
   },
-  linux: {
-    href: `${S3}/Fluxze.AppImage`,
-    label: "Linux",
-    sub: "App Image",
-    icon: "linux",
-  },
 };
 
-const ORDER: BuildKey[] = ["mac-arm64", "mac-x64", "windows", "linux"];
+const ORDER: BuildKey[] = ["mac-arm64", "mac-x64", "windows"];
 
 function PlatformIcon({ kind }: { kind: IconKind }) {
   if (kind === "apple") {
@@ -56,31 +50,24 @@ function PlatformIcon({ kind }: { kind: IconKind }) {
       </svg>
     );
   }
-  if (kind === "windows") {
-    return (
-      <svg
-        viewBox="0 0 24 24"
-        width="18"
-        height="18"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <path d="M3 5.4l7.2-1v6.9H3zM11 4.2L21 3v8.3h-10zM3 12.7h7.2v6.9l-7.2-1zM11 12.7h10V21l-10-1.4z" />
-      </svg>
-    );
-  }
-  // linux — Tux (official penguin mark), served from /public.
   return (
-    <img src="/tux.svg" width="18" height="18" alt="" aria-hidden="true" />
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M3 5.4l7.2-1v6.9H3zM11 4.2L21 3v8.3h-10zM3 12.7h7.2v6.9l-7.2-1zM11 12.7h10V21l-10-1.4z" />
+    </svg>
   );
 }
 
-function detectOS(): "mac" | "windows" | "linux" | "other" {
+function detectOS(): "mac" | "windows" | "other" {
   const ua = navigator.userAgent;
   const plat = navigator.platform || "";
   if (/Win/i.test(ua) || /Win/i.test(plat)) return "windows";
   if (/Mac/i.test(ua) || /Mac/i.test(plat)) return "mac";
-  if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) return "linux";
   return "other";
 }
 
@@ -122,7 +109,7 @@ async function detectMacArch(): Promise<"mac-arm64" | "mac-x64"> {
 }
 
 // Cross-platform download control: a "Download for <your OS>" button whose caret
-// opens a polished menu of every build (macOS arm64/Intel, Windows, Linux), each
+// opens a polished menu of every build (macOS arm64/Intel, Windows), each
 // with a platform icon + arch sub-label and the auto-detected one marked.
 export default function DownloadApp() {
   const [primary, setPrimary] = useState<BuildKey>("mac-arm64");
@@ -133,7 +120,6 @@ export default function DownloadApp() {
     let alive = true;
     const os = detectOS();
     if (os === "windows") setPrimary("windows");
-    else if (os === "linux") setPrimary("linux");
     else if (os === "mac") {
       void detectMacArch().then((k) => {
         if (alive) setPrimary(k);
