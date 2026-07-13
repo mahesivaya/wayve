@@ -1,6 +1,7 @@
 import type { ChatChannel, ChatMessage } from "../../api/chat";
 import { formatTime, getStatusIcon } from "../utils";
 import MessageAttachments from "./MessageAttachments";
+import MessageReactions from "./MessageReactions";
 import MessageText from "./MessageText";
 import { PersonIcon } from "../../icons";
 
@@ -33,6 +34,13 @@ type Props = {
   // messages don't support threads (the WS rejects parent_message_id on DMs),
   // so DM contexts pass null here and the hover action is hidden.
   onOpenThread?: ((message: ChatMessage) => void) | null;
+  // Toggle the viewer's emoji reaction on a message. Omitted → no reaction row
+  // (e.g. a read-only render).
+  onToggleReaction?: (
+    messageId: number,
+    isChannel: boolean,
+    emoji: string
+  ) => void;
 };
 
 export default function MessageThread({
@@ -40,6 +48,7 @@ export default function MessageThread({
   selectedChannel,
   currentUserId,
   onOpenThread,
+  onToggleReaction,
 }: Props) {
   if (selectedChannel && !selectedChannel.is_member) {
     return (
@@ -135,6 +144,13 @@ export default function MessageThread({
                 </button>
               )}
             </div>
+            {onToggleReaction && (
+              <MessageReactions
+                message={msg}
+                currentUserId={currentUserId}
+                onToggle={onToggleReaction}
+              />
+            )}
             {replyCount > 0 && canOpenThread && (
               <button
                 type="button"

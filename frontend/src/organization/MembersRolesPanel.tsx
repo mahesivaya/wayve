@@ -12,6 +12,7 @@ import {
   updatePlatformMemberRole,
   type Member,
 } from "../api/rbac";
+import { sendAdminCreateCode } from "../api/admin";
 import {
   assignableRoles,
   canModifyMember,
@@ -67,6 +68,14 @@ export default function MembersRolesPanel(props: Props) {
   const [createRole, setCreateRole] = useState<Role>("member");
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState("");
+  // Email-confirmation step. The account is only created once the admin hands
+  // back the 6-digit code mailed to `deliveryEmail` — which defaults to the
+  // account email but can point at a different, reachable inbox.
+  const [deliveryEmail, setDeliveryEmail] = useState("");
+  const [deliveryEdited, setDeliveryEdited] = useState(false);
+  const [codeSentTo, setCodeSentTo] = useState("");
+  const [createCode, setCreateCode] = useState("");
+  const [sendingCode, setSendingCode] = useState(false);
   // The plaintext password is returned by the backend exactly once. Hold it
   // in component state until the admin dismisses the banner so they can copy
   // and share it. Refresh/navigation away loses it (intentionally).
@@ -214,6 +223,44 @@ export default function MembersRolesPanel(props: Props) {
     }
   };
 
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setCreateError("");
+    setCreateEmail("");
+    setCreateRole("member");
+    setDeliveryEmail("");
+    setDeliveryEdited(false);
+    setCodeSentTo("");
+    setCreateCode("");
+  };
+
+  // Step 1 — mail a code to prove the address is reachable. Creates nothing.
+  const submitSendCode = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const email = createEmail.trim();
+    if (!email) {
+      setCreateError("Email is required");
+      return;
+    }
+    setSendingCode(true);
+    setCreateError("");
+    try {
+      const sent = await sendAdminCreateCode(
+        email,
+        deliveryEdited ? deliveryEmail.trim() : email
+      );
+      setCodeSentTo(sent.delivery_email);
+      setCreateCode("");
+    } catch (err) {
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to send verification code"
+      );
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  // Step 2 — the code is checked server-side before the account is created.
   const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const email = createEmail.trim();
@@ -229,6 +276,7 @@ export default function MembersRolesPanel(props: Props) {
         role: createRole,
         account_type:
           props.scope === "platform" ? "platform_admin" : "organization",
+        verification_code: createCode.trim(),
       });
       setMembers((prev) => [
         ...prev,
@@ -247,9 +295,7 @@ export default function MembersRolesPanel(props: Props) {
           role: created.role,
         });
       }
-      setCreateEmail("");
-      setCreateRole("member");
-      setCreateOpen(false);
+      closeCreate();
     } catch (err) {
       setCreateError(
         err instanceof Error ? err.message : "Failed to create user"
@@ -485,10 +531,10 @@ export default function MembersRolesPanel(props: Props) {
         </div>
       )}
 
-      {props.scope === "platform" && createOpen && (
+      {props.scope === "platform" && createOpen && !codeSentTo && (
         <form
           className="rbac-create-form"
-          onSubmit={(e) => void submitCreate(e)}
+          onSubmit={(e) => void submitSendCode(e)}
         >
           <label>
             <span>Email</span>
@@ -502,6 +548,19 @@ export default function MembersRolesPanel(props: Props) {
                   : "newuser@yourcompany.com"
               }
               autoFocus
+              required
+            />
+          </label>
+          <label>
+            <span>Send code to</span>
+            <input
+              type="email"
+              value={deliveryEdited ? deliveryEmail : createEmail}
+              onChange={(e) => {
+                setDeliveryEdited(true);
+                setDeliveryEmail(e.target.value);
+              }}
+              placeholder="name@example.com"
               required
             />
           </label>
@@ -520,6 +579,45 @@ export default function MembersRolesPanel(props: Props) {
           </label>
           {createError && <p className="rbac-create-error">{createError}</p>}
           <div className="rbac-create-actions">
+            <button type="submit" disabled={sendingCode}>
+              {sendingCode ? "Sending code…" : "Send code"}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={closeCreate}
+              disabled={sendingCode}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      {props.scope === "platform" && createOpen && codeSentTo && (
+        <form
+          className="rbac-create-form"
+          onSubmit={(e) => void submitCreate(e)}
+        >
+          <p className="rbac-create-code-sent">
+            We emailed a 6-digit code to <strong>{codeSentTo}</strong>. Enter it
+            to create <strong>{createEmail.trim()}</strong>.
+          </p>
+          <label>
+            <span>Verification code</span>
+            <input
+              value={createCode}
+              onChange={(e) => setCreateCode(e.target.value)}
+              placeholder="123456"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              autoFocus
+              required
+            />
+          </label>
+          {createError && <p className="rbac-create-error">{createError}</p>}
+          <div className="rbac-create-actions">
             <button type="submit" disabled={createBusy}>
               {createBusy ? "Creating…" : "Create user"}
             </button>
@@ -527,14 +625,13 @@ export default function MembersRolesPanel(props: Props) {
               type="button"
               className="secondary"
               onClick={() => {
-                setCreateOpen(false);
+                setCodeSentTo("");
+                setCreateCode("");
                 setCreateError("");
-                setCreateEmail("");
-                setCreateRole("member");
               }}
               disabled={createBusy}
             >
-              Cancel
+              Edit details
             </button>
           </div>
         </form>

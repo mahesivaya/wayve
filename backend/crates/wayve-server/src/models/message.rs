@@ -18,6 +18,11 @@ pub struct Message {
     pub content: String,
     pub status: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
+    /// Emoji reactions, grouped by emoji. Filled in by the history handler after
+    /// the rows are read; empty for a message nobody has reacted to.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[sqlx(skip)]
+    pub reactions: Vec<crate::chat::reactions::ReactionGroup>,
 }
 //
 #[derive(Serialize)]

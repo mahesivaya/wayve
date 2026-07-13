@@ -10,11 +10,13 @@ import {
   getChannelThread,
   getChatMessages,
   joinChatChannel,
+  reactionFrame,
   removeChatChannelUser,
   uploadChatAttachment,
   type ChatChannel,
   type ChatMessage,
   type ChatUser,
+  type ReactionGroup,
   updateChatChannelSubject,
   updateChatChannelVisibility,
 } from "../api/chat";
@@ -343,6 +345,20 @@ export default function Chat() {
     []
   );
 
+  // A `reaction_updated` WS event carries the message's FULL reaction set, so
+  // we replace rather than merge — that's what lets a client that missed a frame
+  // converge. Patch both the main feed and any open thread, since a reacted-to
+  // message can be visible in either.
+  const handleReactionUpdate = useCallback(
+    (messageId: number, _isChannel: boolean, reactions: ReactionGroup[]) => {
+      const patch = (list: ChatMessage[]) =>
+        list.map((m) => (m.message_id === messageId ? { ...m, reactions } : m));
+      setMessages(patch);
+      setThreadReplies(patch);
+    },
+    []
+  );
+
   const {
     wsRef,
     isConnected: isChatSocketConnected,
@@ -358,7 +374,20 @@ export default function Chat() {
     // Unread/Recent sections + total badge.
     refreshSummary,
     // Flip a contact's online dot the instant they connect/disconnect.
-    applyPresenceEvent
+    applyPresenceEvent,
+    handleReactionUpdate
+  );
+
+  // Toggle our reaction on a message. Fire-and-forget: the pill updates when the
+  // server's `reaction_updated` echo comes back, so what's on screen is always
+  // what's stored — no optimistic state to reconcile or roll back.
+  const toggleReaction = useCallback(
+    (messageId: number, isChannel: boolean, emoji: string) => {
+      const ws = wsRef.current;
+      if (ws?.readyState !== WebSocket.OPEN) return;
+      ws.send(reactionFrame(messageId, isChannel, emoji));
+    },
+    [wsRef]
   );
 
   // The 1:1 call entry point lives in [ChatHeader](./components/ChatHeader.tsx).
@@ -800,7 +829,9 @@ export default function Chat() {
   // Accepts an explicit value so the settings panel can save-on-change (a radio
   // toggle) without waiting for the `visibilityDraft` state to flush; falls back
   // to the draft when called with no argument.
-  const saveVisibility = async (visibility: ChannelVisibility = visibilityDraft) => {
+  const saveVisibility = async (
+    visibility: ChannelVisibility = visibilityDraft
+  ) => {
     if (!selectedChannel) return;
     setSettingsError("");
 
@@ -987,6 +1018,7 @@ export default function Chat() {
               onOpenThread={
                 selectedChannel ? (msg) => void openThread(msg) : null
               }
+              onToggleReaction={toggleReaction}
             />
 
             <MessageComposer
@@ -1032,6 +1064,7 @@ export default function Chat() {
                 isConnected={isChatSocketConnected}
                 onClose={closeThread}
                 onSendReply={sendThreadReply}
+                onToggleReaction={toggleReaction}
                 width={threadWidth}
               />
             </>
