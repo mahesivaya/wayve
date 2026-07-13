@@ -338,11 +338,6 @@ export default function Home() {
                 <h3>Business</h3>
                 <p>Roles and admin controls, shared inboxes, and a single invoice.</p>
               </article>
-              <article className="hx-role">
-                <span className="hx-role-emoji">🏛️</span>
-                <h3>Enterprise</h3>
-                <p>SSO &amp; SCIM, dedicated support, SLAs, and deep audit access.</p>
-              </article>
             </div>
           </section>
         </main>
