@@ -50,16 +50,21 @@ export default function PersonalChatList({
     (b.lastAt ? Date.parse(b.lastAt) : 0) -
     (a.lastAt ? Date.parse(a.lastAt) : 0);
 
-  // Top level: conversations with unread messages. Second level: the rest of
-  // the recent chat history (messaged before, nothing unread). Everyone else
-  // (no history) stays in a plain People directory for starting new chats.
+  // Unread first, then the rest of the recent chat history (messaged before,
+  // nothing unread). These two are shortcuts to active conversations.
   const unread = rows.filter((r) => r.unread > 0).sort(byRecency);
   const recent = rows.filter((r) => r.unread === 0 && r.lastAt).sort(byRecency);
-  const people = rows
-    .filter((r) => r.unread === 0 && !r.lastAt)
-    .sort((a, b) => a.user.email.localeCompare(b.user.email));
+  // The directory is the FULL roster — everyone you can DM, whether or not you
+  // have history with them. Someone you've messaged appears both here and under
+  // Recent; DMing a person must not remove them from the list you find people in.
+  const people = [...rows].sort((a, b) =>
+    a.user.email.localeCompare(b.user.email)
+  );
 
-  const renderRow = (r: Row) => {
+  // `meta` (relative time + unread badge) belongs on the Recent/Unread rows,
+  // where it says why the row is there. The directory row is a plain roster
+  // entry, so it stays quiet even for people you've chatted with.
+  const renderRow = (r: Row, meta = true) => {
     const active =
       selectedConversation?.type === "user" &&
       selectedConversation.user.id === r.user.id;
@@ -83,8 +88,8 @@ export default function PersonalChatList({
             {label}
           </span>
         </span>
-        {time && <span className="conversation-time">{time}</span>}
-        {r.unread > 0 && (
+        {meta && time && <span className="conversation-time">{time}</span>}
+        {meta && r.unread > 0 && (
           <span
             className="conversation-unread-badge"
             aria-label={`${r.unread} unread`}
@@ -96,17 +101,15 @@ export default function PersonalChatList({
     );
   };
 
-  // Directory of everyone with no chat history, shown under a "Users" header
-  // below the channel list. The header stays visible even when the list is
-  // empty (everyone has graduated into Recent) so the "Users" section label
-  // doesn't vanish — matching the always-present static "Channels" header.
+  // The people directory, under a "Users" header below the channel list —
+  // everyone you can start (or resume) a DM with.
   if (section === "people") {
     return (
       <>
         <div className="conversation-section-title conversation-section-title--users">
           Users
         </div>
-        {people.map(renderRow)}
+        {people.map((r) => renderRow(r, false))}
       </>
     );
   }
@@ -125,7 +128,7 @@ export default function PersonalChatList({
               {summary.total_unread > 99 ? "99+" : summary.total_unread}
             </span>
           </div>
-          {unread.map(renderRow)}
+          {unread.map((r) => renderRow(r))}
         </>
       )}
 
@@ -134,7 +137,7 @@ export default function PersonalChatList({
           <div className="conversation-section-title conversation-section-title--recent">
             Recent
           </div>
-          {recent.map(renderRow)}
+          {recent.map((r) => renderRow(r))}
         </>
       )}
     </>
