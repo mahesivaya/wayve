@@ -12,6 +12,7 @@ pub mod handler;
 mod helpers;
 pub mod presence;
 pub mod pubsub;
+pub mod reactions;
 mod websocket;
 // Re-export the realtime fan-out so other features (e.g. the Slack Events
 // webhook) can push a freshly-stored channel message to open clients.

@@ -268,6 +268,25 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
             Ok(ws::Message::Text(text)) => {
                 debug!(target: "ws", user_id = self.user_id, len = text.len(), "chat msg in");
 
+                // ================= REACTION =================
+                // Reaction frames are the only ones carrying a `type` field, so
+                // this parse fails for every ordinary message/read-receipt frame
+                // and falls through to the ChatMessage path below. The emoji is
+                // NOT routed through ChatMessage.content — that field is held to
+                // the E2E-envelope check, which a bare emoji would (correctly)
+                // fail.
+                if let Ok(frame) = serde_json::from_str::<super::reactions::ReactionFrame>(&text)
+                    && frame.r#type == "react"
+                {
+                    let pool = self.pool.clone();
+                    let cache = self.cache.clone();
+                    let actor_id = self.user_id;
+                    actix::spawn(async move {
+                        super::reactions::handle_react(&pool, &cache, actor_id, frame).await;
+                    });
+                    return;
+                }
+
                 let parsed: Result<ChatMessage, _> = serde_json::from_str(&text);
 
                 if let Ok(data) = parsed {

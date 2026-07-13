@@ -1349,6 +1349,86 @@
   cursor: default;
 }
 
+/* Reaction row under a bubble. Sits outside .bubble (like .message-reply-count)
+   so the pills hang below the bubble rather than inside its padding. `.message.me`
+   is right-aligned, so mirror the row for own messages. */
+.message-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.message.me .message-reactions {
+  justify-content: flex-end;
+}
+
+.reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.reaction-pill:hover {
+  border-color: var(--color-border-muted);
+  background: var(--color-surface-hover);
+}
+
+/* The viewer is among the reactors — the pill doubles as "click to remove". */
+.reaction-pill--mine {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-accent-blue-deep);
+}
+
+.reaction-count {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.reaction-add-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Kept faint until the message is hovered (or the button is focused/open) so a
+   quiet conversation isn't littered with add-reaction buttons. Always reachable
+   by keyboard — opacity, not display. */
+.reaction-add {
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.message:hover .reaction-add,
+.reaction-add:focus-visible,
+.reaction-add[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.reaction-add:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
 /* Emoji picker. The anchor is the positioning context shared by the toggle
    button and the popover, so the popover floats above the composer row rather
    than stretching it. */

@@ -808,6 +808,38 @@ CREATE TABLE IF NOT EXISTS channel_messages (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Emoji reactions on a chat message. DMs (`messages`) and channel messages
+-- (`channel_messages`) are separate tables with separate id spaces, so a
+-- reaction points at exactly one of them (the CHECK enforces the XOR) rather
+-- than carrying a single ambiguous message_id.
+--
+-- NOTE ON ENCRYPTION: `emoji` is stored in PLAINTEXT, unlike message content
+-- (which is a client-side E2E envelope the server cannot read). This is
+-- deliberate: reactions have to be aggregated server-side — counts, who-reacted,
+-- joined into the message list queries — and a message's AES key is wrapped
+-- per-recipient at send time, so a reactor cannot produce an aggregatable
+-- ciphertext. The cost is that the server learns "user X reacted 👍 to message
+-- Y", on top of the sender/receiver/channel/timestamp metadata it already sees
+-- in the clear for every message. Message BODIES remain E2E encrypted.
+CREATE TABLE IF NOT EXISTS message_reactions (
+    id BIGSERIAL PRIMARY KEY,
+    message_id INT REFERENCES messages(id) ON DELETE CASCADE,
+    channel_message_id INT REFERENCES channel_messages(id) ON DELETE CASCADE,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT message_reactions_one_target
+        CHECK ((message_id IS NULL) <> (channel_message_id IS NULL))
+);
+
+-- One reaction per (message, user, emoji) — re-reacting with the same emoji is
+-- a toggle-off, not a second row. Partial uniques because of the nullable pair:
+-- a plain UNIQUE would treat NULLs as distinct and let duplicates through.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_message_reactions_dm_unique
+    ON message_reactions (message_id, user_id, emoji) WHERE message_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_message_reactions_channel_unique
+    ON message_reactions (channel_message_id, user_id, emoji) WHERE channel_message_id IS NOT NULL;
+
 
 CREATE TABLE IF NOT EXISTS drive_files (
     id BIGSERIAL PRIMARY KEY,
@@ -2215,7 +2247,8 @@ $$;
 GRANT EXECUTE ON FUNCTION app_is_channel_member(int, int) TO wayve_app;
 GRANT INSERT, UPDATE, DELETE ON
     messages, channels, channel_members, channel_messages,
-    channel_invites, channel_join_requests, chat_attachments
+    channel_invites, channel_join_requests, chat_attachments,
+    message_reactions
 TO wayve_app;
 
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
@@ -2274,3 +2307,21 @@ CREATE POLICY chat_attachments_rls ON chat_attachments
            OR EXISTS (SELECT 1 FROM messages m WHERE m.id = chat_attachments.message_id))
     WITH CHECK (current_setting('app.bypass', true) = 'on'
            OR uploader_id = nullif(current_setting('app.user_id', true), '')::int);
+
+-- Reactions are visible to whoever can see the message they hang off. The
+-- EXISTS subqueries lean on the policies above: under `wayve_app`, `messages`
+-- only yields rows where the caller is sender/receiver, and `channel_messages`
+-- only yields rows in channels the caller belongs to — so a reaction on someone
+-- else's DM matches neither branch. Writes are self-only: you may add or remove
+-- YOUR reaction, never anyone else's.
+ALTER TABLE message_reactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE message_reactions FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS message_reactions_rls ON message_reactions;
+CREATE POLICY message_reactions_rls ON message_reactions
+    USING (current_setting('app.bypass', true) = 'on'
+           OR EXISTS (SELECT 1 FROM messages m WHERE m.id = message_reactions.message_id)
+           OR EXISTS (SELECT 1 FROM channel_messages cm WHERE cm.id = message_reactions.channel_message_id))
+    WITH CHECK (current_setting('app.bypass', true) = 'on'
+           OR (user_id = nullif(current_setting('app.user_id', true), '')::int
+               AND (EXISTS (SELECT 1 FROM messages m WHERE m.id = message_reactions.message_id)
+                    OR EXISTS (SELECT 1 FROM channel_messages cm WHERE cm.id = message_reactions.channel_message_id))));

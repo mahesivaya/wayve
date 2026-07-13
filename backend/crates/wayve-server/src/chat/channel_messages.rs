@@ -99,6 +99,7 @@ pub async fn get_channel_messages(
     if query.since_id.is_none() {
         messages.reverse();
     }
+    super::reactions::attach_to_json(pool.get_ref(), &mut messages, true).await;
     Ok(HttpResponse::Ok().json(messages))
 }
 
@@ -155,7 +156,8 @@ pub async fn get_channel_thread(
     })
     .await?;
 
-    let messages: Vec<_> = rows.into_iter().map(row_to_message_json).collect();
+    let mut messages: Vec<_> = rows.into_iter().map(row_to_message_json).collect();
+    super::reactions::attach_to_json(pool.get_ref(), &mut messages, true).await;
     Ok(HttpResponse::Ok().json(messages))
 }
 

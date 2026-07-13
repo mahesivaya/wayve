@@ -67,6 +67,15 @@ export type ChatUser = {
   public_key?: number[] | null;
 };
 
+// One emoji on a message and everyone who reacted with it. Note the emoji is
+// NOT end-to-end encrypted (message content is): reactions are aggregated
+// server-side, so the server can see who reacted with what. See the
+// `message_reactions` comment in infra/postgres/init.sql.
+export type ReactionGroup = {
+  emoji: string;
+  user_ids: number[];
+};
+
 export type ChatMessage = {
   message_id?: number;
   sender_id: number;
@@ -100,7 +109,25 @@ export type ChatMessage = {
   attachments?: ChatAttachmentMeta[];
   _envelope?: string;
   _localFiles?: File[];
+  // Emoji reactions, grouped by emoji. Returned by the history fetches and
+  // replaced wholesale by each `reaction_updated` WS frame.
+  reactions?: ReactionGroup[];
 };
+
+// Wire frame for toggling a reaction over the chat socket. Reacting with an
+// emoji you've already used removes it — one frame, both directions.
+export function reactionFrame(
+  messageId: number,
+  isChannel: boolean,
+  emoji: string
+): string {
+  return JSON.stringify({
+    type: "react",
+    message_id: messageId,
+    is_channel: isChannel,
+    emoji,
+  });
+}
 
 // One attachment as rendered in a bubble (mirrors the envelope descriptor).
 export type ChatAttachmentMeta = {

@@ -154,6 +154,7 @@ pub async fn get_messages(
                 content,
                 status: Some(row.get::<String, _>("status")),
                 created_at: Some(created_at),
+                reactions: Vec::new(),
             }
         })
         .collect();
@@ -162,6 +163,15 @@ pub async fn get_messages(
     // chronological for the client. The since_id query already selects ASC.
     if query.since_id.is_none() {
         messages.reverse();
+    }
+
+    // One query for the whole page, then hand each message its own group.
+    let ids: Vec<i32> = messages.iter().filter_map(|m| m.message_id).collect();
+    let mut by_message = super::reactions::grouped_for_messages(pool.get_ref(), &ids, false).await;
+    for msg in messages.iter_mut() {
+        if let Some(groups) = msg.message_id.and_then(|id| by_message.remove(&id)) {
+            msg.reactions = groups;
+        }
     }
 
     Ok(HttpResponse::Ok().json(messages))

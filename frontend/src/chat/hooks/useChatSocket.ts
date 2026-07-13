@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { ChatMessage } from "../../api/chat";
+import type { ChatMessage, ReactionGroup } from "../../api/chat";
 import { getWsBase } from "../../config/env";
 import { logger } from "../../utils/logger";
 import type { Conversation } from "../types";
@@ -28,6 +28,14 @@ export function useChatSocket(
     userId: number,
     online: boolean,
     lastSeen: string | null
+  ) => void,
+  // Called for a `reaction_updated` event so the caller can patch the message's
+  // reaction pills. Carries the message's FULL reaction set (not a delta), so a
+  // client that missed a frame still converges. Optional.
+  onReaction?: (
+    messageId: number,
+    isChannel: boolean,
+    reactions: ReactionGroup[]
   ) => void
 ) {
   const wsRef = useRef<WebSocket | null>(null);
@@ -46,6 +54,7 @@ export function useChatSocket(
   const onStatusUpdateRef = useRef(onStatusUpdate);
   const onInboundRef = useRef(onInbound);
   const onPresenceRef = useRef(onPresence);
+  const onReactionRef = useRef(onReaction);
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
@@ -61,6 +70,9 @@ export function useChatSocket(
   useEffect(() => {
     onPresenceRef.current = onPresence;
   }, [onPresence]);
+  useEffect(() => {
+    onReactionRef.current = onReaction;
+  }, [onReaction]);
 
   const userId = user?.id;
 
@@ -103,6 +115,8 @@ export function useChatSocket(
           user_id?: number;
           online?: boolean;
           last_seen?: string | null;
+          is_channel?: boolean;
+          reactions?: ReactionGroup[];
         } = JSON.parse(event.data);
         // Non-chat broadcasts (e.g. the Gmail-push `email:new` nudge) ride the
         // same per-user socket fan-out. The chat page ignores them so they're
@@ -124,6 +138,20 @@ export function useChatSocket(
         if (msg.type === "status_update") {
           if (msg.message_id != null && msg.status) {
             onStatusUpdateRef.current?.(msg.message_id, msg.status);
+          }
+          return;
+        }
+        // Someone reacted (possibly us — the server echoes our own reaction back
+        // rather than us guessing optimistically). Must be handled BEFORE the
+        // self-echo drop below, which would otherwise swallow our own reaction:
+        // a reaction frame has no client_id, and its sender_id is undefined.
+        if (msg.type === "reaction_updated") {
+          if (msg.message_id != null) {
+            onReactionRef.current?.(
+              msg.message_id,
+              !!msg.is_channel,
+              msg.reactions ?? []
+            );
           }
           return;
         }

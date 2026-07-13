@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { ChatMessage } from "../../api/chat";
 import { formatTime } from "../utils";
+import MessageReactions from "./MessageReactions";
 import MessageText from "./MessageText";
 
 type Props = {
@@ -17,6 +18,12 @@ type Props = {
   isConnected: boolean;
   onClose: () => void;
   onSendReply: (text: string) => void | Promise<void>;
+  // Toggle the viewer's emoji reaction on the parent or any reply.
+  onToggleReaction?: (
+    messageId: number,
+    isChannel: boolean,
+    emoji: string
+  ) => void;
   // Draggable width (px). Applied as a CSS variable rather than an inline
   // `width` so the narrow-mode takeover rule (which sets width:auto) still
   // wins. Falls back to the stylesheet default when undefined.
@@ -30,6 +37,7 @@ export default function ThreadPanel({
   isConnected,
   onClose,
   onSendReply,
+  onToggleReaction,
   width,
 }: Props) {
   const [draft, setDraft] = useState("");
@@ -73,6 +81,13 @@ export default function ThreadPanel({
             </div>
             <div className="message-meta">{formatTime(parent.created_at)}</div>
           </div>
+          {onToggleReaction && (
+            <MessageReactions
+              message={parent}
+              currentUserId={currentUserId}
+              onToggle={onToggleReaction}
+            />
+          )}
         </div>
 
         {replies.length > 0 && (
@@ -96,6 +111,13 @@ export default function ThreadPanel({
                   {formatTime(reply.created_at)}
                 </div>
               </div>
+              {onToggleReaction && (
+                <MessageReactions
+                  message={reply}
+                  currentUserId={currentUserId}
+                  onToggle={onToggleReaction}
+                />
+              )}
             </div>
           );
         })}

@@ -27,6 +27,7 @@ mod platform_users_test;
 mod rbac_authorization_test;
 mod rbac_permissions_golden_test;
 mod rbac_resolution_test;
+mod reactions_test;
 mod redis_pubsub_perf_test;
 mod repo_access_test;
 mod rls_chat_test;
