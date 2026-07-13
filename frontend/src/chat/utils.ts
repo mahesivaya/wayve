@@ -1,6 +1,17 @@
 import type { ChatChannel } from "../api/chat";
 import type { ChannelRole, Conversation } from "./types";
+import type { PresenceInfo } from "./hooks/usePresence";
 import { APP_TIME_ZONE } from "../utils/datetime";
+
+// Class for a DM row's name so online/offline reads at a glance: online users
+// stay dark/prominent, offline users go light/muted. Empty while presence is
+// still unknown so a row doesn't flash "offline" before the first snapshot.
+export const presenceNameClass = (presence: PresenceInfo | undefined) =>
+  presence
+    ? presence.online
+      ? "conversation-name--online"
+      : "conversation-name--offline"
+    : "";
 
 export const parseEmails = (value: string) =>
   value

@@ -17,9 +17,14 @@
 //!
 //! Presence *changes* are pushed only to a user's contacts (DM partners +
 //! channel co-members) over the existing `ws:user:*` fan-out, so the dot flips
-//! live without a poll. Connect broadcasts online immediately; offline is
-//! announced by [`run_sweeper`] when the score goes stale (crash-safe, and it
-//! avoids marking a user offline while they still hold a socket elsewhere).
+//! live without a poll. Connect broadcasts online immediately. Offline is
+//! announced the instant a user's *last* socket closes: a per-user live-socket
+//! counter (`presence:conns:{id}`, shared across instances) is incremented on
+//! connect and decremented on disconnect, and when it reaches zero we remove
+//! the score and announce offline right away — multi-tab and multi-instance
+//! safe (another live socket keeps the count above zero). [`run_sweeper`] is
+//! the crash-safe backstop: if an instance dies without decrementing, the score
+//! goes stale and the sweep reaps it (clearing the leaked counter too).
 
 use crate::cache::Cache;
 use crate::prelude::*;
@@ -30,6 +35,11 @@ use super::websocket::{fan_out_user, is_online_local};
 
 /// Redis sorted set holding `user_id → last-heartbeat unix seconds`.
 const PRESENCE_KEY: &str = "presence:online";
+/// Per-user live-socket counter key. Counts open chat sockets across all
+/// instances so the last close can flip the user offline immediately.
+fn conns_key(user_id: i32) -> String {
+    format!("presence:conns:{user_id}")
+}
 /// A session whose last heartbeat is older than this is considered offline.
 /// Must comfortably exceed the chat heartbeat interval (25s) so a live client
 /// is never flapped offline between beats.
@@ -69,6 +79,9 @@ pub async fn on_connect(cache: &Option<Cache>, pool: &PgPool, user_id: i32) {
                 .zscore(PRESENCE_KEY, &user_id.to_string())
                 .await
                 .is_some_and(|prev| now - prev <= STALE_AFTER_SECS);
+            // Count this socket so the last disconnect can flip us offline
+            // immediately (see `on_disconnect`).
+            c.incr(&conns_key(user_id)).await;
             c.zadd(PRESENCE_KEY, &user_id.to_string(), now).await;
             !was_online
         }
@@ -90,16 +103,33 @@ pub async fn on_heartbeat(cache: &Option<Cache>, user_id: i32) {
     }
 }
 
-/// A chat socket for `user_id` closed. Always refresh `last_seen`. Without
-/// Redis, announce offline immediately iff no local socket remains (handles
-/// multi-tab). With Redis we do NOT announce here — the user may still be
-/// connected on another instance; [`run_sweeper`] flips them offline once the
-/// score goes stale.
+/// A chat socket for `user_id` closed. Always refresh `last_seen`, then announce
+/// offline as soon as this was their *last* socket:
+/// * With Redis, decrement the cross-instance socket counter; when it reaches
+///   zero remove the score and announce offline immediately. Another open
+///   socket (any tab, any instance) keeps the count positive, so we don't flap.
+/// * Without Redis, announce offline iff no local socket remains (multi-tab).
+///
+/// The [`run_sweeper`] backstop still catches a socket that vanished without a
+/// clean disconnect (e.g. an instance crash leaves the counter non-zero).
 pub async fn on_disconnect(cache: &Option<Cache>, pool: &PgPool, user_id: i32) {
     persist_last_seen(pool, user_id).await;
 
-    if cache.is_none() && !is_online_local(user_id) {
-        broadcast_presence(pool, cache, user_id, false).await;
+    match cache {
+        Some(c) => {
+            // Last socket anywhere → offline now. The ZREM return value guards
+            // the announce so exactly one caller emits (matches the sweeper).
+            if c.decr(&conns_key(user_id)).await <= 0
+                && c.zrem(PRESENCE_KEY, &user_id.to_string()).await == 1
+            {
+                broadcast_presence(pool, cache, user_id, false).await;
+            }
+        }
+        None => {
+            if !is_online_local(user_id) {
+                broadcast_presence(pool, cache, user_id, false).await;
+            }
+        }
     }
 }
 
@@ -130,6 +160,9 @@ async fn run_sweeper(pool: PgPool, cache: Cache) {
             // Whichever instance's ZREM actually removes the member won the
             // race — only it announces offline, so contacts get one event.
             if cache.zrem(PRESENCE_KEY, &member).await == 1 {
+                // Clear any socket count leaked by a crashed instance so the
+                // fast-path counter starts clean on the user's next connect.
+                cache.del(&conns_key(user_id)).await;
                 persist_last_seen(&pool, user_id).await;
                 broadcast_presence(&pool, &cache_opt, user_id, false).await;
             }

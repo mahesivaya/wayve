@@ -297,12 +297,15 @@
   background: var(--color-text-slate-light);
 }
 
+/* Online reads dark/saturated, offline reads light — so the two states are
+   unmistakable at a glance (and neither collides with the teal selection
+   accent). */
 .presence-dot.online {
-  background: #22c55e;
+  background: #15803d;
 }
 
 .presence-dot.offline {
-  background: var(--color-text-slate-light);
+  background: #cbd5e1;
 }
 
 /* Header variant: inline with the "Online / last seen" label, not corner-pinned. */
@@ -389,6 +392,22 @@
 .conversation-name {
   font-size: var(--text-lg);
   font-weight: 700;
+}
+
+/* Presence-driven name colour for DM rows: online stays dark/prominent, offline
+   goes light/muted. The active (selected) row keeps its accent colour below so
+   selection always wins over presence. */
+.conversation-name--online {
+  color: var(--color-text-primary);
+}
+
+.conversation-name--offline {
+  color: var(--color-text-slate-soft);
+  font-weight: 600;
+}
+
+.conversation-item.active .conversation-name {
+  color: var(--color-accent-blue-deep);
 }
 
 .conversation-meta {

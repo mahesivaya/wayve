@@ -5,7 +5,7 @@ import type {
 } from "../../api/chat";
 import type { PresenceMap } from "../hooks/usePresence";
 import type { Conversation } from "../types";
-import { relativeTime } from "../utils";
+import { presenceNameClass, relativeTime } from "../utils";
 import { PersonIcon } from "../../icons";
 import PresenceDot from "./PresenceDot";
 
@@ -84,7 +84,9 @@ export default function RecentConversations({
           <PresenceDot presence={presence.get(r.user.id)} />
         </span>
         <span className="conversation-main">
-          <span className="conversation-name">{r.user.email}</span>
+          <span className={`conversation-name ${presenceNameClass(presence.get(r.user.id))}`}>
+            {r.user.email}
+          </span>
         </span>
         {time && <span className="conversation-time">{time}</span>}
         {r.unread > 0 && (
