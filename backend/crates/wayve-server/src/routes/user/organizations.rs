@@ -11,8 +11,9 @@ use crate::billing::provider;
 use crate::email::profile::invalidate_me_cache;
 use crate::organization;
 use crate::prelude::*;
+use crate::routes::auth::{CODE_TTL_MINUTES, MAX_VERIFY_ATTEMPTS, random_code};
 use actix_web::{delete, patch};
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::password::hash_password;
 use wayve_security::rbac::{self, Permission, Role, Scope};
@@ -39,6 +40,11 @@ pub struct AdminCreateUserInput {
     // for invalid strings.
     #[serde(default)]
     pub role: Option<String>,
+    // The 6-digit code mailed by `/admin/users/send-code`, proving someone can
+    // actually receive mail for this account. Required — an absent or wrong
+    // code is rejected before anything is written.
+    #[serde(default)]
+    pub verification_code: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1068,6 +1074,241 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }
 
+#[derive(Deserialize)]
+pub struct AdminSendCreateCodeInput {
+    /// The login address the account will be created with.
+    pub account_email: String,
+    /// Where to actually mail the code. Defaults to `account_email`. They differ
+    /// for org accounts, which sit on synthetic `<user>@<org-slug>.com` domains
+    /// with no real inbox — the code goes to the person's reachable mailbox
+    /// while the account keeps the org address as its login identity.
+    #[serde(default)]
+    pub delivery_email: Option<String>,
+}
+
+/// Seconds an admin must wait before re-requesting a code for the same address.
+const CREATE_CODE_RESEND_COOLDOWN_SECS: i64 = 60;
+
+fn normalize_email(value: &str) -> String {
+    value.trim().to_lowercase()
+}
+
+/// Mail a 6-digit code that `admin_create_user` will require before it mints the
+/// account. Nothing is written to `users` here — the code is the proof that the
+/// address is real and reachable, so a typo fails now instead of silently
+/// creating an account nobody can log into.
+#[post("/admin/users/send-code")]
+#[instrument(target = "auth", skip(req, pool, data), fields(account_email = %data.account_email))]
+pub async fn admin_send_create_code(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<AdminSendCreateCodeInput>,
+) -> AppResult {
+    // Same gate as admin_create_user — if you may not create the account, you
+    // may not make us send mail on its behalf either.
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersManage).await
+    {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+    let admin_id = ctx.user_id;
+
+    let account_email = normalize_email(&data.account_email);
+    let delivery_email = data
+        .delivery_email
+        .as_deref()
+        .map(normalize_email)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| account_email.clone());
+
+    if !account_email.contains('@') || !delivery_email.contains('@') {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "A valid email address is required" })));
+    }
+
+    // Fail on an already-taken address now, rather than after the admin has
+    // gone and fetched a code.
+    let taken: Option<i32> = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
+        .bind(&account_email)
+        .fetch_optional(pool.get_ref())
+        .await?;
+    if taken.is_some() {
+        return Ok(HttpResponse::Conflict()
+            .json(serde_json::json!({ "message": "An account with that email already exists" })));
+    }
+
+    // Resend cooldown, so the button can't be used to hammer someone's inbox.
+    let recent: Option<i32> = sqlx::query_scalar(
+        "SELECT id FROM admin_create_verifications \
+         WHERE requested_by = $1 AND account_email = $2 AND used_at IS NULL \
+           AND created_at > NOW() - ($3 || ' seconds')::INTERVAL \
+         LIMIT 1",
+    )
+    .bind(admin_id)
+    .bind(&account_email)
+    .bind(CREATE_CODE_RESEND_COOLDOWN_SECS.to_string())
+    .fetch_optional(pool.get_ref())
+    .await?;
+    if recent.is_some() {
+        return Ok(HttpResponse::TooManyRequests().json(serde_json::json!({
+            "message": format!(
+                "A code was just sent. Wait {CREATE_CODE_RESEND_COOLDOWN_SECS}s before requesting another."
+            )
+        })));
+    }
+
+    // Only the newest code stays valid — mirrors issue_verification_code_and_email.
+    sqlx::query(
+        "UPDATE admin_create_verifications SET used_at = NOW() \
+         WHERE requested_by = $1 AND account_email = $2 AND used_at IS NULL",
+    )
+    .bind(admin_id)
+    .bind(&account_email)
+    .execute(pool.get_ref())
+    .await?;
+
+    let code = random_code();
+    let expires_at = chrono::Utc::now() + chrono::Duration::minutes(CODE_TTL_MINUTES);
+    sqlx::query(
+        "INSERT INTO admin_create_verifications \
+           (requested_by, account_email, delivery_email, code, expires_at) \
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(admin_id)
+    .bind(&account_email)
+    .bind(&delivery_email)
+    .bind(&code)
+    .bind(expires_at)
+    .execute(pool.get_ref())
+    .await?;
+
+    let body = format!(
+        "Hi,\n\nAn administrator is creating a Fluxze account for {account_email}.\n\n\
+         Your verification code is:\n\n    {code}\n\n\
+         Give it to the administrator within {CODE_TTL_MINUTES} minutes to finish creating the account.\n\
+         If you weren't expecting this, you can safely ignore this email — no account is created \
+         until the code is entered.\n"
+    );
+    crate::email::sender::send_mail(
+        &delivery_email,
+        "Your Fluxze account verification code",
+        &body,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("admin create code send: {e}")))?;
+
+    info!(
+        target: "auth",
+        admin_id,
+        account_email = %account_email,
+        delivery_email = %delivery_email,
+        "admin account-creation code sent"
+    );
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "sent": true,
+        "delivery_email": delivery_email,
+        "expires_in_minutes": CODE_TTL_MINUTES,
+    })))
+}
+
+/// Consume the code the admin was mailed by `admin_send_create_code`. Runs
+/// before any mutation in `admin_create_user`, so a bad code leaves no partial
+/// org / seat / keypair state behind. `Ok(())` means the code was valid and has
+/// been burned; `Err(resp)` is the response to return to the admin.
+async fn consume_create_code(
+    pool: &PgPool,
+    admin_id: i32,
+    email: &str,
+    supplied: Option<&str>,
+) -> std::result::Result<(), HttpResponse> {
+    let supplied = supplied.map(str::trim).filter(|value| !value.is_empty());
+
+    let row = sqlx::query(
+        "SELECT id, code, attempts, expires_at FROM admin_create_verifications \
+         WHERE requested_by = $1 AND account_email = $2 AND used_at IS NULL \
+         ORDER BY id DESC LIMIT 1",
+    )
+    .bind(admin_id)
+    .bind(email)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| {
+        error!(target: "auth", error = %e, "create-code lookup failed");
+        HttpResponse::InternalServerError()
+            .json(serde_json::json!({ "message": "Verification lookup failed" }))
+    })?;
+
+    let Some(row) = row else {
+        return Err(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "verification_required",
+            "message": "Send a verification code to this email first"
+        })));
+    };
+
+    let id: i32 = row.get("id");
+    let expected: String = row.get("code");
+    let attempts: i32 = row.get("attempts");
+    let expires_at: chrono::DateTime<chrono::Utc> = row.get("expires_at");
+
+    let burn = |reason: &'static str| async move {
+        let _ = sqlx::query("UPDATE admin_create_verifications SET used_at = NOW() WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await;
+        warn!(target: "auth", admin_id, id, reason, "admin create code burned");
+    };
+
+    if expires_at < chrono::Utc::now() {
+        burn("expired").await;
+        return Err(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "verification_expired",
+            "message": "Verification code expired — send a new one"
+        })));
+    }
+
+    if attempts >= MAX_VERIFY_ATTEMPTS {
+        burn("too_many_attempts").await;
+        return Err(HttpResponse::TooManyRequests().json(serde_json::json!({
+            "error": "too_many_attempts",
+            "message": "Too many incorrect attempts — send a new code"
+        })));
+    }
+
+    let Some(supplied) = supplied else {
+        return Err(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "verification_required",
+            "message": "Enter the verification code that was emailed"
+        })));
+    };
+
+    if supplied != expected {
+        let _ = sqlx::query(
+            "UPDATE admin_create_verifications SET attempts = attempts + 1 WHERE id = $1",
+        )
+        .bind(id)
+        .execute(pool)
+        .await;
+        return Err(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "verification_invalid",
+            "message": "Incorrect verification code"
+        })));
+    }
+
+    // Single-use: burn it the moment it matches.
+    sqlx::query("UPDATE admin_create_verifications SET used_at = NOW() WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            error!(target: "auth", error = %e, "create-code burn failed");
+            HttpResponse::InternalServerError()
+                .json(serde_json::json!({ "message": "Verification failed" }))
+        })?;
+
+    Ok(())
+}
+
 #[post("/admin/users")]
 #[instrument(target = "auth", skip(req, pool, data), fields(email = %data.email))]
 pub async fn admin_create_user(
@@ -1127,6 +1368,21 @@ pub async fn admin_create_user(
         return Ok(
             HttpResponse::BadRequest().json(serde_json::json!({ "message": "Email is required" }))
         );
+    }
+
+    // Email confirmation gate. Deliberately the FIRST thing after input
+    // validation: everything below this line mutates (organizations upsert,
+    // seat accounting, RSA keypair provisioning, the users insert), so a
+    // missing/wrong/expired code must fail here to leave no partial state.
+    if let Err(response) = consume_create_code(
+        pool.get_ref(),
+        admin_id,
+        &email,
+        data.verification_code.as_deref(),
+    )
+    .await
+    {
+        return Ok(response);
     }
 
     // Decide the working password before hashing:
@@ -1286,10 +1542,13 @@ pub async fn admin_create_user(
 
     let hashed = hash_password(&plaintext_password).await?;
 
+    // `email_verified` is stated rather than left to the column default: the
+    // address was just proven reachable by the code above, so the new user can
+    // log in immediately without tripping the unverified-login gate.
     let result = sqlx::query(
         r#"
-        INSERT INTO users (username, email, password, auth_provider, account_type)
-        VALUES ($1, $2, $3, 'local', $4)
+        INSERT INTO users (username, email, password, auth_provider, account_type, email_verified)
+        VALUES ($1, $2, $3, 'local', $4, true)
         RETURNING id, username, email, account_type, organization_id
         "#,
     )

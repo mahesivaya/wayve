@@ -249,6 +249,7 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
         .service(delete_my_organization)
         .service(update_my_organization)
         .service(delete_my_account)
+        .service(admin_send_create_code)
         .service(admin_create_user)
         .service(admin_delete_user)
         .service(admin_generate_api_key)

@@ -313,6 +313,27 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
 CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user_id
     ON email_verification_tokens(user_id);
 
+-- Pre-creation email confirmation for admin-provisioned accounts. The code is
+-- issued BEFORE the users row exists, so it cannot hang off
+-- email_verification_tokens.user_id; it is keyed by (requesting admin,
+-- account_email) instead. `delivery_email` is where the code was actually
+-- mailed, which is not always the account address: org accounts are minted on
+-- synthetic domains (<user>@<org-slug>.com) that have no real inbox, so the
+-- admin points the code at the person's reachable mailbox.
+CREATE TABLE IF NOT EXISTS admin_create_verifications (
+    id SERIAL PRIMARY KEY,
+    requested_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    account_email TEXT NOT NULL,
+    delivery_email TEXT NOT NULL,
+    code TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_admin_create_verifications_lookup
+    ON admin_create_verifications(requested_by, account_email, used_at);
+
 -- OAuth authorization-code state. State values are opaque, single-use, and
 -- short lived; JWTs must never be sent through provider redirects.
 CREATE TABLE IF NOT EXISTS oauth_states (

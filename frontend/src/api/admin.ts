@@ -236,16 +236,55 @@ export async function deleteMyAccount(): Promise<void> {
   }
 }
 
-// Creates a user as the calling admin. `email` is the full login address; the
-// caller builds it from a handle and the organization domain (or wayve.com for
-// personal accounts).
+export type SentCreateCode = {
+  sent: boolean;
+  delivery_email: string;
+  expires_in_minutes: number;
+};
+
+// Step 1 of admin account creation: mail a 6-digit code that proves someone can
+// receive mail for the new account. No user is created by this call.
+//
+// `deliveryEmail` is where the code is actually sent, and defaults server-side
+// to `accountEmail`. They differ for org accounts, whose login address sits on a
+// synthetic <user>@<org-slug>.com domain with no real inbox — the code goes to
+// the person's reachable mailbox instead. The code is never returned here; it
+// comes back from the admin, who reads it out of that inbox.
+export async function sendAdminCreateCode(
+  accountEmail: string,
+  deliveryEmail?: string
+): Promise<SentCreateCode> {
+  const res = await apiFetch("/api/admin/users/send-code", {
+    method: "POST",
+    preserve401: true,
+    body: JSON.stringify({
+      account_email: accountEmail,
+      ...(deliveryEmail ? { delivery_email: deliveryEmail } : {}),
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to send verification code");
+  }
+
+  return data;
+}
+
+// Step 2: creates a user as the calling admin. `email` is the full login
+// address; the caller builds it from a handle and the organization domain (or
+// wayve.com for personal accounts). `verificationCode` is the code mailed by
+// sendAdminCreateCode — the backend rejects the call without a valid one, so
+// this always follows a send.
 export async function createAdminUser(
   username: string,
   email: string,
   password: string,
   accountType = "personal",
   organizationName = "",
-  role?: string
+  role?: string,
+  verificationCode?: string
 ): Promise<AdminCreatedUser> {
   const res = await apiFetch("/api/admin/users", {
     method: "POST",
@@ -257,6 +296,7 @@ export async function createAdminUser(
       account_type: accountType,
       organization_name: organizationName,
       ...(role ? { role } : {}),
+      ...(verificationCode ? { verification_code: verificationCode } : {}),
     }),
   });
 

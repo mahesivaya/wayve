@@ -187,6 +187,9 @@ export type AdminCreateUserInput = {
   // org-context callers to "organization" regardless, so this is mostly a
   // hint for platform admins to create platform-scoped users.
   account_type: "platform_admin" | "organization";
+  // The 6-digit code mailed by sendAdminCreateCode (api/admin.ts). The backend
+  // refuses to create the account without a valid one.
+  verification_code: string;
 };
 
 export async function adminCreateUser(
@@ -199,9 +202,14 @@ export async function adminCreateUser(
       email: input.email,
       role: input.role,
       account_type: input.account_type,
+      verification_code: input.verification_code,
     }),
   });
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to create user");
+  }
+  return data;
 }
 
 // Hard-deletes the user. Backend gates this by `members:manage` AND the same

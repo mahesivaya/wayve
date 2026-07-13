@@ -18,12 +18,15 @@ use wayve_security::password::{hash_password, verify_password};
 use wayve_security::rbac;
 
 const RESET_TTL_MINUTES: i64 = 30;
-const CODE_TTL_MINUTES: i64 = 15;
-const MAX_VERIFY_ATTEMPTS: i32 = 5;
+/// Lifetime of an emailed 6-digit code. Shared with the admin account-creation
+/// flow (`routes::user::admin_send_create_code`) so both surfaces expire alike.
+pub(crate) const CODE_TTL_MINUTES: i64 = 15;
+/// Wrong-code guesses allowed before a code is burned. Shared as above.
+pub(crate) const MAX_VERIFY_ATTEMPTS: i32 = 5;
 const DUMMY_PASSWORD_HASH: &str = "$2b$12$BeUHqArduWoNmhYKnepJYeYTQdhF/XcdcGFHaxiz0/H3JJUbHyLGe";
 
 /// A 6-digit numeric verification code (zero-padded), from the OS CSPRNG.
-fn random_code() -> String {
+pub(crate) fn random_code() -> String {
     use rand::Rng;
     format!("{:06}", rand::rngs::OsRng.gen_range(0..1_000_000u32))
 }

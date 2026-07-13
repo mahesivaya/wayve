@@ -11,6 +11,7 @@
 // scale. The kept files cover surfaces where bugs are silent (encryption,
 // authorization, JWT, signing) plus the new long-term API contracts
 // (webhooks event catalog, embed tokens, SCIM, rate-limit tiers).
+mod admin_create_verification_test;
 mod ai_config_test;
 mod billing_audit_test;
 mod chat_logging_test;
