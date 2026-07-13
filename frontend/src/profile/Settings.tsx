@@ -21,7 +21,7 @@ import {
   updateMyOrganization,
 } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
-import { hasPermission } from "../auth/permissions";
+import { canViewIntegrations, hasPermission } from "../auth/permissions";
 import { cachedLoad } from "../api/cache";
 import { listMyTickets, type SupportTicket } from "../api/support";
 import SupportModal from "../support/SupportModal";
@@ -149,7 +149,8 @@ export default function Settings() {
   const adminConsoles = [
     {
       label: "Single Sign-On (OIDC)",
-      description: "Let your team sign in with Google Workspace / Okta / Azure AD.",
+      description:
+        "Let your team sign in with Google Workspace / Okta / Azure AD.",
       path: "/settings/sso",
       visible: hasPermission(user, "sso:manage"),
     },
@@ -378,14 +379,16 @@ export default function Settings() {
                 <span className="settings-account-link-icon">👤</span>
                 <span>My Profile</span>
               </button>
-              <button
-                type="button"
-                className="settings-account-link"
-                onClick={() => void navigate("/integrations")}
-              >
-                <span className="settings-account-link-icon">🔌</span>
-                <span>Integrations</span>
-              </button>
+              {canViewIntegrations(user) && (
+                <button
+                  type="button"
+                  className="settings-account-link"
+                  onClick={() => void navigate("/integrations")}
+                >
+                  <span className="settings-account-link-icon">🔌</span>
+                  <span>Integrations</span>
+                </button>
+              )}
               <button
                 type="button"
                 className="settings-account-link"
