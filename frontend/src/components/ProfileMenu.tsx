@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { homePathForUser } from "../auth/accountHome";
+import { canViewIntegrations } from "../auth/permissions";
 import ThemeCustomizer from "../theme/ThemeCustomizer";
 import { useCustomTheme } from "../theme/useCustomTheme";
 import Avatar from "./Avatar";
@@ -142,16 +143,18 @@ export default function ProfileMenu() {
             Settings & Privacy
           </button>
 
-          <button
-            className="profile-dropdown-item"
-            onClick={() => {
-              setMenuOpen(false);
-              void navigate("/integrations");
-            }}
-          >
-            <span className="profile-dropdown-icon">🔌</span>
-            Integrations
-          </button>
+          {canViewIntegrations(user) && (
+            <button
+              className="profile-dropdown-item"
+              onClick={() => {
+                setMenuOpen(false);
+                void navigate("/integrations");
+              }}
+            >
+              <span className="profile-dropdown-icon">🔌</span>
+              Integrations
+            </button>
+          )}
 
           <button
             className="profile-dropdown-item"
@@ -178,7 +181,9 @@ export default function ProfileMenu() {
               <button
                 className="profile-dropdown-item"
                 disabled={switching}
-                onClick={() => void handleSwitch(inAdminMode ? "normal" : "admin")}
+                onClick={() =>
+                  void handleSwitch(inAdminMode ? "normal" : "admin")
+                }
               >
                 <span className="profile-dropdown-icon">
                   {inAdminMode ? "🚪" : "🛡️"}

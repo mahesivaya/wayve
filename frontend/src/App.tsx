@@ -23,6 +23,7 @@ import VerifyEmail from "./auth/VerifyEmail";
 import RecoverWithMnemonicPage from "./auth/RecoverWithMnemonic";
 import { useAuth } from "./auth/useAuth";
 import { homePathForUser, normalizeAccountType } from "./auth/accountHome";
+import { canViewIntegrations } from "./auth/permissions";
 import { SPLIT_APPS } from "./components/LayoutConfig";
 
 // 🔥 Lazy loaded pages
@@ -394,12 +395,28 @@ export default function App() {
               />
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/integrations" element={<Integrations />} />
+              {/* Integrations is for personal accounts (their only route to
+                connecting a Gmail mailbox) and organization / platform OWNERS.
+                Other members are bounced home — the sidebar and Settings links
+                are gated on the same predicate. */}
+              <Route
+                path="/integrations"
+                element={
+                  canViewIntegrations(user) ? (
+                    <Integrations />
+                  ) : (
+                    <Navigate to={accountHome} replace />
+                  )
+                }
+              />
               {/* Owner-only feature access matrix (the page self-guards;
                 the sidebar link is also owner-gated). Same component serves
                 organization and platform owners — the backend resolves the
                 matrix from the caller's scope. */}
-              <Route path="/organization/access" element={<FeatureAccessPage />} />
+              <Route
+                path="/organization/access"
+                element={<FeatureAccessPage />}
+              />
               <Route path="/platform/access" element={<FeatureAccessPage />} />
               <Route path="/billing" element={<Billing />} />
               <Route

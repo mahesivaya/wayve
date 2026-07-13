@@ -177,6 +177,53 @@ export function canViewPricing(
   return !PRICING_HIDDEN_ROLES.includes(normalizeRole(user?.effective_role));
 }
 
+/**
+ * Whether this user may see the Integrations page.
+ *
+ * Personal accounts (it is their only route to connecting a Gmail mailbox —
+ * `GmailPanel` is rendered nowhere else) plus the `owner` of an organization
+ * (enterprise included, since enterprise is an org plan tier rather than a
+ * separate scope) or of the platform. Every other member — org/platform admin,
+ * developer, member, guest — is not meant to wire up company-wide integrations,
+ * and the tiles they would see are gated server-side anyway, so the page would
+ * mostly 403 at them.
+ *
+ * UI visibility only. The individual integration endpoints keep their own
+ * backend gates (Slack = enterprise tier, MCP = `mcp:manage`, Gmail =
+ * `require_external_mailbox_actor`), so hiding the page grants no new access —
+ * it just stops showing a page of tiles that wouldn't work.
+ */
+export function canViewIntegrations(
+  user:
+    | {
+        scope?: string | null;
+        account_type?: string | null;
+        effective_role?: string | null;
+      }
+    | null
+    | undefined
+): boolean {
+  if (!user) return false;
+  // `scope` is the authority. Fall back to account_type when it hasn't resolved
+  // yet — but they use different vocabularies: account_type carries the
+  // `organization_admin` / `platform_admin` discriminators, which map onto the
+  // organization / platform scopes.
+  const scope =
+    user.scope ??
+    {
+      personal: "personal",
+      organization: "organization",
+      organization_admin: "organization",
+      platform_admin: "platform",
+    }[user.account_type ?? ""];
+
+  if (scope === "personal") return true;
+  if (scope === "organization" || scope === "platform") {
+    return normalizeRole(user.effective_role) === "owner";
+  }
+  return false;
+}
+
 type PermissionHolder = { permissions?: string[] | null } | null | undefined;
 
 /** Whether the holder (typically the auth user) has `perm`. */
