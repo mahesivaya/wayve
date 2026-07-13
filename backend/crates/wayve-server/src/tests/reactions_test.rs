@@ -24,20 +24,33 @@ mod tests {
         handle_react(pool, &None, actor, f).await;
     }
 
-    async fn dm_reaction_count(pool: &PgPool, message_id: i32) -> i64 {
-        sqlx::query_scalar("SELECT count(*) FROM message_reactions WHERE message_id = $1")
-            .bind(message_id)
-            .fetch_one(pool)
-            .await
-            .unwrap_or_else(|e| panic!("count: {e}"))
+    // Counts are scoped to the reacting user, not just the message id. `messages`
+    // and `channel_messages` have INDEPENDENT id spaces, so a DM left behind by an
+    // earlier test can share an id with this test's channel message — counting by
+    // id alone would then pick up that unrelated row. Every test seeds fresh users,
+    // so the actor id is unique and makes these counts deterministic against a
+    // database that already holds other tests' data.
+    async fn dm_reaction_count(pool: &PgPool, message_id: i32, user_id: i32) -> i64 {
+        sqlx::query_scalar(
+            "SELECT count(*) FROM message_reactions WHERE message_id = $1 AND user_id = $2",
+        )
+        .bind(message_id)
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("count: {e}"))
     }
 
-    async fn channel_reaction_count(pool: &PgPool, message_id: i32) -> i64 {
-        sqlx::query_scalar("SELECT count(*) FROM message_reactions WHERE channel_message_id = $1")
-            .bind(message_id)
-            .fetch_one(pool)
-            .await
-            .unwrap_or_else(|e| panic!("count: {e}"))
+    async fn channel_reaction_count(pool: &PgPool, message_id: i32, user_id: i32) -> i64 {
+        sqlx::query_scalar(
+            "SELECT count(*) FROM message_reactions \
+             WHERE channel_message_id = $1 AND user_id = $2",
+        )
+        .bind(message_id)
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("count: {e}"))
     }
 
     async fn seed_dm(pool: &PgPool, sender: i32, receiver: i32) -> i32 {
@@ -90,15 +103,19 @@ mod tests {
         let dm = seed_dm(&pool, a, b).await;
 
         react(&pool, b, frame(dm, false, "👍")).await;
-        assert_eq!(dm_reaction_count(&pool, dm).await, 1, "first react adds");
+        assert_eq!(dm_reaction_count(&pool, dm, b).await, 1, "first react adds");
 
         react(&pool, b, frame(dm, false, "👍")).await;
-        assert_eq!(dm_reaction_count(&pool, dm).await, 0, "same emoji removes");
+        assert_eq!(
+            dm_reaction_count(&pool, dm, b).await,
+            0,
+            "same emoji removes"
+        );
 
         // A different emoji is an independent reaction, not a replacement.
         react(&pool, b, frame(dm, false, "👍")).await;
         react(&pool, b, frame(dm, false, "🎉")).await;
-        assert_eq!(dm_reaction_count(&pool, dm).await, 2);
+        assert_eq!(dm_reaction_count(&pool, dm, b).await, 2);
     }
 
     #[tokio::test]
@@ -111,7 +128,7 @@ mod tests {
 
         react(&pool, stranger, frame(dm, false, "👍")).await;
         assert_eq!(
-            dm_reaction_count(&pool, dm).await,
+            dm_reaction_count(&pool, dm, stranger).await,
             0,
             "a user who is neither sender nor receiver must not be able to react"
         );
@@ -127,13 +144,13 @@ mod tests {
 
         react(&pool, outsider, frame(cm, true, "👍")).await;
         assert_eq!(
-            channel_reaction_count(&pool, cm).await,
+            channel_reaction_count(&pool, cm, outsider).await,
             0,
             "a non-member must not be able to react to a channel message"
         );
 
         react(&pool, member, frame(cm, true, "👍")).await;
-        assert_eq!(channel_reaction_count(&pool, cm).await, 1);
+        assert_eq!(channel_reaction_count(&pool, cm, member).await, 1);
     }
 
     #[tokio::test]
@@ -151,15 +168,15 @@ mod tests {
         let dm = seed_dm(&pool, owner, peer).await;
 
         react(&pool, owner, frame(cm, true, "🔥")).await;
-        assert_eq!(channel_reaction_count(&pool, cm).await, 1);
+        assert_eq!(channel_reaction_count(&pool, cm, owner).await, 1);
         assert_eq!(
-            dm_reaction_count(&pool, cm).await,
+            dm_reaction_count(&pool, cm, owner).await,
             0,
             "the channel reaction must not have been written against messages.id"
         );
 
         react(&pool, owner, frame(dm, false, "🔥")).await;
-        assert_eq!(dm_reaction_count(&pool, dm).await, 1);
+        assert_eq!(dm_reaction_count(&pool, dm, owner).await, 1);
     }
 
     #[tokio::test]
@@ -170,14 +187,18 @@ mod tests {
         let dm = seed_dm(&pool, a, b).await;
 
         react(&pool, b, frame(dm, false, "   ")).await;
-        assert_eq!(dm_reaction_count(&pool, dm).await, 0, "empty is rejected");
+        assert_eq!(
+            dm_reaction_count(&pool, dm, b).await,
+            0,
+            "empty is rejected"
+        );
 
         // The length cap is what stops `emoji` from being used to smuggle a
         // message body past the E2E envelope check on `content`.
         let essay = "x".repeat(33);
         react(&pool, b, frame(dm, false, &essay)).await;
         assert_eq!(
-            dm_reaction_count(&pool, dm).await,
+            dm_reaction_count(&pool, dm, b).await,
             0,
             "an oversized 'emoji' is rejected"
         );
