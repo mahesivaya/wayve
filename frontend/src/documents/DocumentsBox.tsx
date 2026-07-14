@@ -33,8 +33,21 @@ type Editing = { kind: "file" | "folder"; id: number } | null;
 // File types we can open in the in-app text editor. Binary files (images,
 // PDFs, archives) are download-only.
 const TEXT_TYPES = [
-  "txt", "md", "markdown", "csv", "json", "log", "yml", "yaml",
-  "html", "css", "js", "ts", "xml", "rtf", "text",
+  "txt",
+  "md",
+  "markdown",
+  "csv",
+  "json",
+  "log",
+  "yml",
+  "yaml",
+  "html",
+  "css",
+  "js",
+  "ts",
+  "xml",
+  "rtf",
+  "text",
 ];
 const isTextFile = (t: string | null): boolean =>
   TEXT_TYPES.includes((t ?? "").toLowerCase());
@@ -144,7 +157,9 @@ export default function DocumentsBox() {
       setNewFileBody("");
       await fetchAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create document");
+      setError(
+        err instanceof Error ? err.message : "Failed to create document"
+      );
     } finally {
       setSavingNewFile(false);
     }
@@ -227,77 +242,84 @@ export default function DocumentsBox() {
 
   return (
     <div className="drive-container">
-      {/* Breadcrumb */}
-      <div className="drive-breadcrumb">
-        {path.map((crumb, idx) => (
-          <span key={`${crumb.id ?? "root"}-${idx}`} className="drive-crumb">
-            {idx > 0 && <span className="drive-crumb-sep"> / </span>}
-            <button
-              type="button"
-              className="drive-crumb-link"
-              onClick={() => setPath((prev) => prev.slice(0, idx + 1))}
-            >
-              {crumb.name}
-            </button>
-          </span>
-        ))}
-        {canManage && (
-          <div className="drive-breadcrumb-actions">
-            {creatingFolder ? (
-              <>
-                <input
-                  className="drive-folder-input"
-                  value={newFolderName}
-                  autoFocus
-                  placeholder="Folder name"
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void submitNewFolder();
-                    else if (e.key === "Escape") {
+      {/* Breadcrumb — hidden at the root, where the only crumb would repeat the
+          page heading; kept when there are folder crumbs or manage actions. */}
+      {(path.length > 1 || canManage) && (
+        <div className="drive-breadcrumb">
+          {path.length > 1 &&
+            path.map((crumb, idx) => (
+              <span
+                key={`${crumb.id ?? "root"}-${idx}`}
+                className="drive-crumb"
+              >
+                {idx > 0 && <span className="drive-crumb-sep"> / </span>}
+                <button
+                  type="button"
+                  className="drive-crumb-link"
+                  onClick={() => setPath((prev) => prev.slice(0, idx + 1))}
+                >
+                  {crumb.name}
+                </button>
+              </span>
+            ))}
+          {canManage && (
+            <div className="drive-breadcrumb-actions">
+              {creatingFolder ? (
+                <>
+                  <input
+                    className="drive-folder-input"
+                    value={newFolderName}
+                    autoFocus
+                    placeholder="Folder name"
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void submitNewFolder();
+                      else if (e.key === "Escape") {
+                        setCreatingFolder(false);
+                        setNewFolderName("");
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="drive-folder-create-btn"
+                    onClick={() => void submitNewFolder()}
+                  >
+                    Create
+                  </button>
+                  <button
+                    type="button"
+                    className="drive-folder-cancel-btn"
+                    onClick={() => {
                       setCreatingFolder(false);
                       setNewFolderName("");
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="drive-folder-create-btn"
-                  onClick={() => void submitNewFolder()}
-                >
-                  Create
-                </button>
-                <button
-                  type="button"
-                  className="drive-folder-cancel-btn"
-                  onClick={() => {
-                    setCreatingFolder(false);
-                    setNewFolderName("");
-                  }}
-                >
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="drive-folder-new-btn"
-                  onClick={() => setCreatingFile(true)}
-                >
-                  + New file
-                </button>
-                <button
-                  type="button"
-                  className="drive-folder-new-btn"
-                  onClick={() => setCreatingFolder(true)}
-                >
-                  + New folder
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="drive-folder-new-btn"
+                    onClick={() => setCreatingFile(true)}
+                  >
+                    + New file
+                  </button>
+                  <button
+                    type="button"
+                    className="drive-folder-new-btn"
+                    onClick={() => setCreatingFolder(true)}
+                  >
+                    + New folder
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Upload / header */}
       <div className="upload-section">
