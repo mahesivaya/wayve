@@ -1,6 +1,6 @@
-// Customer-facing HTTP API for managing webhook subscriptions + reviewing
-// delivery history. Gated by JWT auth (not API-key) so a key issued for a
-// narrower scope can't silently subscribe its owner to event flows.
+// Customer-facing API for managing webhook subscriptions and reviewing delivery
+// history. Gated on JWT auth rather than API keys, so a key issued for a
+// narrower scope cannot silently subscribe its owner to event flows.
 
 use crate::prelude::*;
 use crate::webhooks::events::{Event, EventOwner};
@@ -87,8 +87,8 @@ pub struct CreateWebhookInput {
 }
 
 fn validate_url(url: &str) -> std::result::Result<(), AppError> {
-    // Production requires https. Dev escape hatches for hitting the host
-    // from inside docker-compose: localhost, 127.0.0.1, host.docker.internal.
+    // Production requires https. The plain-http exceptions exist only so a dev
+    // stack can reach the host from inside docker-compose.
     let dev_ok = url.starts_with("http://localhost")
         || url.starts_with("http://127.0.0.1")
         || url.starts_with("http://host.docker.internal");
@@ -174,9 +174,8 @@ pub async fn create_webhook(
     .fetch_one(pool.get_ref())
     .await?;
 
-    // Return the raw secret exactly once. The customer needs it to verify
-    // Wayve-Signature headers; we only store the value (and never re-reveal
-    // it on subsequent list/update calls).
+    // The raw secret is returned exactly once, since the customer needs it to
+    // verify Wayve-Signature headers. List and update calls never re-reveal it.
     let mut body = endpoint_json(&row);
     if let Some(obj) = body.as_object_mut() {
         obj.insert("secret".to_string(), serde_json::Value::String(secret));
@@ -272,8 +271,8 @@ pub async fn test_webhook(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let id = path.into_inner();
 
-    // Confirm ownership before emitting; otherwise a user could trigger
-    // pings into someone else's webhook.
+    // Confirm ownership first, or a user could trigger pings into someone else's
+    // webhook.
     let owns = sqlx::query_scalar::<_, i32>(
         "SELECT 1 FROM webhook_endpoints WHERE id = $1 AND user_id = $2",
     )
@@ -285,9 +284,8 @@ pub async fn test_webhook(
     if !owns {
         return Err(AppError::NotFound("webhook"));
     }
-    // Insert a `pending` row directly targeted at this one endpoint, so the
-    // test bypasses the normal fan-out predicate (and works even if the
-    // endpoint hasn't subscribed to `wayve.ping`).
+    // Targeting this one endpoint directly bypasses the fan-out predicate, so a
+    // test works even when the endpoint has not subscribed to `wayve.ping`.
     let payload = serde_json::json!({
         "id": format!("evt_test_{}", uuid::Uuid::new_v4().simple()),
         "type": "wayve.ping",
@@ -377,7 +375,7 @@ pub async fn list_event_catalog() -> AppResult {
     })))
 }
 
-// Helper for producers to discover their org context once.
+/// Lets a producer discover its org context once.
 pub async fn owner_for_user(pool: &PgPool, user_id: i32) -> EventOwner {
     match user_org(pool, user_id).await.unwrap_or(None) {
         Some(org) => EventOwner::user_in_org(user_id, org),

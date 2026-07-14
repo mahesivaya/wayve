@@ -60,8 +60,6 @@ fn encrypt_optional_field(
     }
 }
 
-// ================= CREATE MEETING =================
-
 #[derive(Serialize)]
 struct MeetingResponse {
     message: String,
@@ -75,13 +73,11 @@ pub async fn create_meeting(
     pool: web::Data<PgPool>,
     data: web::Json<CreateMeeting>,
 ) -> AppResult {
-    // ================= AUTH =================
     let user_id = match get_user_id(&req) {
         Ok(id) => id,
         Err(resp) => return Ok(resp),
     };
 
-    // ================= VALIDATION =================
     let ValidatedMeetingInput {
         title,
         participants,
@@ -95,7 +91,6 @@ pub async fn create_meeting(
         Err(e) => return Ok(HttpResponse::BadRequest().body(e.message())),
     };
 
-    // ================= ZOOM MEETING =================
     // Tolerant: if Zoom is misconfigured or fails, still create the meeting
     // without a join link rather than blocking the user.
     let zoom_join_url = match create_zoom_meeting(&title, meeting_utc, duration_min).await {
@@ -125,11 +120,9 @@ pub async fn create_meeting(
         .map(|(_, encrypted)| encrypted.clone())
         .collect();
 
-    // ================= TRANSACTION =================
     // A `?` on any statement below drops `tx`, which rolls back automatically.
     let mut tx = pool.begin().await?;
 
-    // ================= INSERT MEETING =================
     let meeting = sqlx::query(
         r#"
         INSERT INTO meetings (
@@ -153,7 +146,6 @@ pub async fn create_meeting(
 
     let meeting_id: i32 = meeting.get("id");
 
-    // ================= INSERT PARTICIPANTS =================
     sqlx::query(
         r#"
         INSERT INTO meeting_participants (meeting_id, email, email_encrypted, email_iv, user_id)
@@ -176,15 +168,12 @@ pub async fn create_meeting(
     .execute(&mut *tx)
     .await?;
 
-    // ================= COMMIT =================
     tx.commit().await?;
     info!(
         "Meeting created: id={} user_id={} title=\"{}\"",
         meeting_id, user_id, title
     );
 
-    // ================= AUDIT =================
-    // Calendar audit trail (Security → calendar activity).
     crate::audit::record_action(
         pool.get_ref(),
         &req,
@@ -203,7 +192,7 @@ pub async fn create_meeting(
         },
     )
     .await;
-    // One "invitation received" row per invitee that has a Fluxze account.
+    // One "invitation received" row per invitee that has an account.
     let invited_user_ids: Vec<i32> = sqlx::query_scalar(
         "SELECT user_id FROM meeting_participants WHERE meeting_id = $1 AND user_id IS NOT NULL",
     )
@@ -232,7 +221,6 @@ pub async fn create_meeting(
         .await;
     }
 
-    // ================= BACKGROUND EMAIL =================
     let pool_clone = pool.clone();
 
     let email_req = MeetingEmailRequest {
@@ -252,8 +240,7 @@ pub async fn create_meeting(
         }
     });
 
-    // ================= WEBHOOK FAN-OUT =================
-    // Plaintext title/date/time only — encrypted-at-rest columns are an
+    // Plaintext title, date, and time only: the encrypted-at-rest columns are an
     // internal storage concern, not part of the public event contract.
     let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
     crate::webhooks::emit(
@@ -272,14 +259,12 @@ pub async fn create_meeting(
     )
     .await;
 
-    // ================= RESPONSE =================
     Ok(HttpResponse::Ok().json(MeetingResponse {
         message: "Meeting created successfully".into(),
         meeting_id,
     }))
 }
 
-// ================= GET =================
 #[get("/meetings")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_meetings(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -383,12 +368,9 @@ pub async fn update_meeting(
 
     let id = path.into_inner();
 
-    // ================= VALIDATION =================
     if data.title.trim().is_empty() {
         return Ok(HttpResponse::BadRequest().body("Title is required"));
     }
-
-    // Participants optional — see `create_meeting` above for rationale.
 
     let date = match chrono::NaiveDate::parse_from_str(&data.date, "%Y-%m-%d") {
         Ok(d) => d,
@@ -402,7 +384,7 @@ pub async fn update_meeting(
         return Ok(HttpResponse::BadRequest().body("Invalid time range"));
     }
 
-    // ================= LOAD EXISTING (for change detection) =================
+    // Loaded so the notify step below can tell what actually changed.
     let existing = sqlx::query(
         r#"
         SELECT title, title_encrypted, title_iv, date, start_time, end_time,
@@ -445,11 +427,9 @@ pub async fn update_meeting(
         .filter(|email| email.contains("@") && email.contains("."))
         .collect();
 
-    // Participants optional — if all submitted entries were garbage we end
-    // up with an empty list here and continue. The downstream INSERT uses
-    // UNNEST on the array, which handles zero-length input cleanly, and
-    // the email-send block below is already guarded with `!is_empty()`.
-
+    // Participants are optional, so an all-garbage list becomes an empty one and
+    // the request continues: the UNNEST insert handles zero rows and the email
+    // block is guarded on `!is_empty()`.
     let encrypted_participants: Vec<(String, String)> = participants
         .iter()
         .map(|email| encrypt_required_field(email))
@@ -463,11 +443,9 @@ pub async fn update_meeting(
         .map(|(_, encrypted)| encrypted.clone())
         .collect();
 
-    // ================= TRANSACTION =================
     // A `?` on any statement below drops `tx`, which rolls back automatically.
     let mut tx = pool.begin().await?;
 
-    // ================= UPDATE MEETING =================
     sqlx::query(
         r#"
         UPDATE meetings
@@ -486,7 +464,7 @@ pub async fn update_meeting(
     .execute(&mut *tx)
     .await?;
 
-    // ================= DELETE OLD PARTICIPANTS =================
+    // The participant list is replaced wholesale on every update.
     sqlx::query(
         r#"
         DELETE FROM meeting_participants mp
@@ -501,7 +479,6 @@ pub async fn update_meeting(
     .execute(&mut *tx)
     .await?;
 
-    // ================= INSERT NEW PARTICIPANTS =================
     sqlx::query(
         r#"
         INSERT INTO meeting_participants (meeting_id, email, email_encrypted, email_iv, user_id)
@@ -523,11 +500,9 @@ pub async fn update_meeting(
     .execute(&mut *tx)
     .await?;
 
-    // ================= COMMIT =================
     tx.commit().await?;
     info!("Meeting updated: id={} user_id={}", id, user_id);
 
-    // ================= AUDIT =================
     crate::audit::record_action(
         pool.get_ref(),
         &req,
@@ -547,9 +522,8 @@ pub async fn update_meeting(
     )
     .await;
 
-    // ================= NOTIFY ON CONTENT CHANGES =================
-    // Email participants only when title/date/start/end actually changed —
-    // a participant-list-only edit should not spam everyone.
+    // Email participants only when the title, date, or times changed; a
+    // participant-list-only edit should not spam everyone.
     let (content_changed, existing_zoom_url) = match &existing {
         Some((t, d, s, e, z)) => (
             t != &data.title || d != &date || s != &start_time || e != &end_time,
@@ -577,7 +551,6 @@ pub async fn update_meeting(
         });
     }
 
-    // ================= WEBHOOK FAN-OUT =================
     let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
     crate::webhooks::emit(
         pool.get_ref(),
@@ -594,7 +567,6 @@ pub async fn update_meeting(
     )
     .await;
 
-    // ================= RESPONSE =================
     Ok(HttpResponse::Ok().json(json!({
         "message": "Meeting updated successfully"
     })))
@@ -645,8 +617,8 @@ pub async fn delete_meeting(
         )
     });
 
-    // A failed participant read is non-fatal — the meeting is still deleted,
-    // we just skip the cancellation emails.
+    // Non-fatal: the meeting is still deleted, only the cancellation emails are
+    // skipped.
     let participants: Vec<String> = match sqlx::query(
         r#"
         SELECT mp.email, mp.email_encrypted, mp.email_iv
@@ -686,7 +658,6 @@ pub async fn delete_meeting(
         return Ok(HttpResponse::NotFound().finish());
     }
 
-    // ================= AUDIT =================
     if let Some((title, date, start_time, end_time, _zoom)) = snapshot.clone() {
         crate::audit::record_action(
             pool.get_ref(),
@@ -729,7 +700,6 @@ pub async fn delete_meeting(
     }
     info!("Meeting deleted: id={} user_id={}", id, user_id);
 
-    // ================= WEBHOOK FAN-OUT =================
     let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
     crate::webhooks::emit(
         pool.get_ref(),

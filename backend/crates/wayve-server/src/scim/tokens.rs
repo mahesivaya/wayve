@@ -1,15 +1,13 @@
-// SCIM bearer token issuance + lookup.
-//
-// A raw `wv_scim_<48 hex>` token is shown once at creation. We store only
-// its SHA-256 hash + a redacted preview for the dashboard. Lookup is one
-// indexed query, identical pattern to `api_keys.key_hash`.
+// SCIM bearer token issuance and lookup. The raw `wv_scim_<48 hex>` token is
+// shown once at creation; only its SHA-256 hash and a redacted preview are
+// stored, mirroring the `api_keys.key_hash` pattern.
 
 use crate::prelude::*;
 use rand::RngCore;
 use sha2::Digest;
 
-/// Resolved identity of a SCIM caller — the organization the token belongs
-/// to. Handlers scope every query through this id.
+/// Resolved identity of a SCIM caller. Handlers scope every query through
+/// `organization_id`.
 #[derive(Debug, Clone)]
 pub struct ScimPrincipal {
     /// For log correlation; not consumed yet.
@@ -43,8 +41,7 @@ pub fn sha256_hex(raw: &str) -> String {
     })
 }
 
-/// Look up a presented bearer token. Returns the principal if the token
-/// exists and is not revoked. `last_used_at` is stamped best-effort.
+/// Resolve a presented bearer token, if it exists and is not revoked.
 pub async fn resolve(pool: &PgPool, raw: &str) -> Option<ScimPrincipal> {
     let hash = sha256_hex(raw);
     let row = sqlx::query(
@@ -59,7 +56,7 @@ pub async fn resolve(pool: &PgPool, raw: &str) -> Option<ScimPrincipal> {
     let id: i32 = row.get("id");
     let organization_id: i32 = row.get("organization_id");
 
-    // Fire-and-forget; never block on the stamp.
+    // Stamping last_used_at is fire-and-forget; auth must never block on it.
     let pool_clone = pool.clone();
     tokio::spawn(async move {
         let _ = sqlx::query("UPDATE scim_tokens SET last_used_at = NOW() WHERE id = $1")

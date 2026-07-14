@@ -65,11 +65,9 @@ impl Cache {
         let _: redis::RedisResult<()> = conn.del(key).await;
     }
 
-    /// Publish a payload to a Redis pub/sub channel. Used to fan WebSocket
-    /// messages out across backend instances (the subscriber on whichever
-    /// instance holds the recipient's socket delivers it locally). Returns
-    /// `true` on success so callers can fall back to local delivery if Redis
-    /// is momentarily unavailable.
+    /// Publish to a Redis pub/sub channel, fanning WebSocket messages out across
+    /// backend instances. Returns `true` on success so callers can fall back to
+    /// local delivery when Redis is momentarily unavailable.
     #[instrument(target = "cache", skip(self, payload), fields(channel))]
     pub async fn publish(&self, channel: &str, payload: &str) -> bool {
         let mut conn = self.conn.clone();
@@ -83,8 +81,8 @@ impl Cache {
         }
     }
 
-    /// Round-trips a `PING` to confirm Redis is reachable. Used by the
-    /// readiness probe; never panics — a transport error just means "down".
+    /// Round-trip a `PING` to confirm Redis is reachable. Backs the readiness
+    /// probe; a transport error just means "down".
     #[instrument(target = "cache", skip(self))]
     pub async fn ping(&self) -> bool {
         let mut conn = self.conn.clone();
@@ -92,10 +90,8 @@ impl Cache {
         res.is_ok()
     }
 
-    /// Read a counter key (set by `increment_with_ttl`) without incrementing
-    /// it. Returns `None` if the key doesn't exist or the value isn't a
-    /// parseable integer. Used by the quota-view endpoint so the dashboard
-    /// can show "used / limit" without spending a quota slot itself.
+    /// Read a counter key without incrementing it, so the quota-view endpoint can
+    /// show "used / limit" without spending a quota slot itself.
     #[instrument(target = "cache", skip(self), fields(key))]
     pub async fn get_counter(&self, key: &str) -> Option<i64> {
         let mut conn = self.conn.clone();
@@ -103,11 +99,10 @@ impl Cache {
         raw?.parse::<i64>().ok()
     }
 
-    /// Add/update a member's score in a sorted set (`ZADD`). Presence stores
-    /// `user_id → last-heartbeat unix seconds` in the `presence:online` set so
-    /// online-ness is a cross-instance freshness check rather than per-process
-    /// state. Best-effort: a Redis blip just means the score isn't refreshed
-    /// this tick, and the sweeper reaps it as stale.
+    /// Add or update a member's score in a sorted set. Presence stores
+    /// `user_id -> last-heartbeat unix seconds` in `presence:online`, making
+    /// online-ness a cross-instance freshness check rather than per-process state.
+    /// Best-effort: a Redis blip skips a refresh and the sweeper reaps it as stale.
     #[instrument(target = "cache", skip(self), fields(key, member, score))]
     pub async fn zadd(&self, key: &str, member: &str, score: i64) {
         let mut conn = self.conn.clone();
@@ -117,9 +112,8 @@ impl Cache {
         }
     }
 
-    /// A member's score in a sorted set (`ZSCORE`), or `None` if absent. Read
-    /// as `f64` (Redis stores sorted-set scores as doubles) and truncated back
-    /// to the integer unix-seconds we wrote.
+    /// A member's score in a sorted set, or `None` if absent. Redis stores scores
+    /// as doubles, so the `f64` is truncated back to the unix seconds we wrote.
     #[instrument(target = "cache", skip(self), fields(key, member))]
     pub async fn zscore(&self, key: &str, member: &str) -> Option<i64> {
         let mut conn = self.conn.clone();
@@ -127,10 +121,9 @@ impl Cache {
         res.ok().flatten().map(|s| s as i64)
     }
 
-    /// Members of a sorted set whose score is within `[min, max]`
-    /// (`ZRANGEBYSCORE`). `min`/`max` accept Redis range syntax (`"-inf"`,
-    /// `"+inf"`, or a stringified bound). The presence sweeper calls this with
-    /// `("-inf", cutoff)` to find stale sessions.
+    /// Members of a sorted set scored within `[min, max]`. Bounds accept Redis
+    /// range syntax; the presence sweeper passes `("-inf", cutoff)` to find stale
+    /// sessions.
     #[instrument(target = "cache", skip(self), fields(key, min, max))]
     pub async fn zrangebyscore(&self, key: &str, min: &str, max: &str) -> Vec<String> {
         let mut conn = self.conn.clone();
@@ -138,9 +131,9 @@ impl Cache {
         res.unwrap_or_default()
     }
 
-    /// Remove a member from a sorted set (`ZREM`); returns the number removed
-    /// (0 or 1). The presence sweeper uses the return value as a race guard so
-    /// exactly one instance announces a given user offline.
+    /// Remove a member from a sorted set, returning the number removed. The
+    /// presence sweeper uses that count as a race guard so exactly one instance
+    /// announces a given user offline.
     #[instrument(target = "cache", skip(self), fields(key, member))]
     pub async fn zrem(&self, key: &str, member: &str) -> i64 {
         let mut conn = self.conn.clone();
@@ -160,11 +153,10 @@ impl Cache {
         Ok(count)
     }
 
-    /// Atomically increment a counter and return the new value (`INCR`).
-    /// Presence keeps one per user counting live chat sockets, so it can flip a
-    /// user offline the instant their *last* socket closes instead of waiting
-    /// for the staleness sweep. Best-effort: a Redis blip returns 0 and the
-    /// sweeper still backstops.
+    /// Atomically increment a counter. Presence keeps one per user counting live
+    /// chat sockets, so a user flips offline the instant their last socket closes
+    /// rather than at the next staleness sweep. Best-effort: a Redis blip returns
+    /// 0 and the sweeper still backstops.
     #[instrument(target = "cache", skip(self), fields(key))]
     pub async fn incr(&self, key: &str) -> i64 {
         let mut conn = self.conn.clone();
@@ -175,9 +167,8 @@ impl Cache {
         })
     }
 
-    /// Atomically decrement a counter and return the new value (`DECR`),
-    /// deleting the key once it hits zero so a stray extra decrement can't drive
-    /// it negative. Paired with [`Cache::incr`] for the presence socket count.
+    /// Atomically decrement a counter, deleting the key at zero so a stray extra
+    /// decrement can't drive it negative. Paired with [`Cache::incr`].
     #[instrument(target = "cache", skip(self), fields(key))]
     pub async fn decr(&self, key: &str) -> i64 {
         let mut conn = self.conn.clone();
@@ -197,10 +188,9 @@ impl Cache {
     }
 }
 
-/// A bounded, time-to-live in-memory cache — a thin wrapper over
-/// `moka::future::Cache` that bundles the builder boilerplate. Used for the
-/// per-feature lookup caches (user profiles, `/me`, email bodies, ...) so each
-/// is one `TtlCache::new(capacity, ttl)` instead of a repeated builder chain.
+/// A bounded, time-to-live in-memory cache. Wraps `moka::future::Cache` so the
+/// per-feature lookup caches are one `TtlCache::new(capacity, ttl)` instead of a
+/// repeated builder chain.
 pub struct TtlCache<K, V> {
     inner: MokaCache<K, V>,
 }
@@ -210,8 +200,7 @@ where
     K: std::hash::Hash + Eq + Send + Sync + 'static,
     V: Clone + Send + Sync + 'static,
 {
-    /// A cache holding at most `max_capacity` entries, each expiring
-    /// `ttl_secs` after insertion.
+    /// Hold at most `max_capacity` entries, each expiring `ttl_secs` after insert.
     pub fn new(max_capacity: u64, ttl_secs: u64) -> Self {
         Self {
             inner: MokaCache::builder()

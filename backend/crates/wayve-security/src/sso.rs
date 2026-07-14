@@ -1,22 +1,19 @@
-//! OpenID Connect (OIDC) client — hand-implemented so we don't pull in the
-//! whole `openidconnect`/`oauth2` dependency tree. Only the Authorization
-//! Code flow + PKCE is supported; that's what every modern enterprise IdP
-//! (Okta, Azure AD, Google Workspace, Auth0, Keycloak, ...) accepts for
-//! confidential clients.
+//! Hand-rolled OpenID Connect client, avoiding the `openidconnect`/`oauth2`
+//! dependency tree. Only the Authorization Code flow with PKCE is supported,
+//! which is what every modern enterprise IdP accepts for confidential clients.
 //!
-//! Security checklist (verify when touching this file):
-//!   - state is 256 bits of entropy, single-use, server-stored, ≤10 min TTL
-//!   - nonce is 256 bits, bound to the state row, checked against id_token
-//!   - PKCE S256 is used; the verifier never leaves the server
-//!   - id_token signature is verified against the IdP's JWKS (RS256/ES256)
-//!   - id_token claims are checked: iss, aud, exp (with skew), iat, nonce
-//!   - email_verified is required to be `true` for JIT provisioning
+//! Security checklist to re-verify when touching this file:
+//!   - state is 256 bits of entropy, single-use, server-stored, TTL ≤ 10 min
+//!   - nonce is 256 bits, bound to the state row, checked against the id_token
+//!   - PKCE S256 is used and the verifier never leaves the server
+//!   - the id_token signature is verified against the IdP's JWKS (RS256/ES256)
+//!   - the id_token's iss, aud, exp (with skew), iat, and nonce are all checked
+//!   - email_verified must be `true` for JIT provisioning
 //!   - the `code` is exchanged exactly once; the state row is DELETEd first
-//!   - JWKS + discovery are cached with a 1-hour TTL; rotation is automatic
+//!   - JWKS and discovery are cached for an hour; rotation is automatic
 //!
-//! Threat model assumes the IdP is honest and the channel to it is TLS.
-//! Defensive depth (sub-min JWKS refresh on `kid` miss, audience mismatch
-//! handling, etc.) is intentional and should be preserved.
+//! The threat model assumes an honest IdP reached over TLS. The defensive depth
+//! here (JWKS refresh on a `kid` miss, explicit audience handling) is deliberate.
 
 use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -32,9 +29,8 @@ use tracing::{instrument, warn};
 const DISCOVERY_TTL_SECS: u64 = 3600;
 const JWKS_TTL_SECS: u64 = 3600;
 const HTTP_TIMEOUT_SECS: u64 = 10;
-// 60s clock skew tolerance for exp/iat. Generous but standard; OIDC servers
-// and ours can disagree by a handful of seconds and we don't want to bounce
-// a legitimate login over it.
+// Clock skew tolerance for exp/iat, so a few seconds of drift against the IdP
+// does not bounce a legitimate login.
 const JWT_LEEWAY_SECS: u64 = 60;
 
 /// IdP-provided OIDC discovery document (only the fields we use).
@@ -44,16 +40,14 @@ pub struct DiscoveryDoc {
     pub authorization_endpoint: String,
     pub token_endpoint: String,
     pub jwks_uri: String,
-    /// `userinfo_endpoint` is optional in the spec; we don't currently call
-    /// it (the id_token carries enough claims for sign-in), but parsing it
-    /// makes future expansion straightforward.
+    /// Optional in the spec and unused here; the id_token carries enough claims
+    /// for sign-in.
     #[serde(default)]
     pub userinfo_endpoint: Option<String>,
 }
 
-/// A single key out of the IdP's JWK Set. Only RSA (RS256/RS384/RS512) is
-/// currently supported — that's what 95% of IdPs use. EC keys are a small
-/// follow-up if any prospect demands them.
+/// A single key from the IdP's JWK Set. Only RSA is supported; EC keys are
+/// rejected at verification time.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Jwk {
     pub kty: String,
@@ -72,7 +66,7 @@ pub struct Jwks {
     pub keys: Vec<Jwk>,
 }
 
-/// Claims we read off the id_token. Standard OIDC, no extensions.
+/// Standard OIDC id_token claims, no extensions.
 #[derive(Debug, Clone, Deserialize)]
 pub struct IdTokenClaims {
     pub iss: String,
@@ -94,10 +88,8 @@ pub struct IdTokenClaims {
     pub family_name: Option<String>,
 }
 
-/// Token endpoint response. `access_token` and `refresh_token` aren't used
-/// by Wayve (we mint our own session JWT after login), but parsing them
-/// keeps the surface easy to extend later (e.g. for OIDC RP-Initiated
-/// Logout).
+/// Token endpoint response. The access and refresh tokens are parsed but unused:
+/// Wayve mints its own session JWT after login.
 #[derive(Debug, Deserialize)]
 struct TokenResponse {
     id_token: String,
@@ -108,10 +100,6 @@ struct TokenResponse {
     #[serde(default)]
     _token_type: Option<String>,
 }
-
-// =============================================================
-// Caches
-// =============================================================
 
 static DISCOVERY_CACHE: Lazy<MokaCache<String, DiscoveryDoc>> = Lazy::new(|| {
     MokaCache::builder()
@@ -139,10 +127,6 @@ fn normalize_issuer(issuer: &str) -> String {
     issuer.trim_end_matches('/').to_string()
 }
 
-// =============================================================
-// PKCE + state + nonce
-// =============================================================
-
 /// 256 bits of CSPRNG entropy, base64url-no-pad encoded. Used for `state`,
 /// `nonce`, and the PKCE `code_verifier`.
 pub fn random_token() -> String {
@@ -157,13 +141,7 @@ pub fn pkce_challenge_s256(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(digest)
 }
 
-// =============================================================
-// Discovery
-// =============================================================
-
-/// Fetch (and cache) the IdP's discovery document. Falls back to the
-/// cached copy if a refresh fails — IdP blips shouldn't immediately break
-/// in-flight logins.
+/// Fetch and cache the IdP's discovery document.
 #[instrument(target = "auth", skip_all, fields(issuer = %issuer))]
 pub async fn discovery(issuer: &str) -> Result<DiscoveryDoc> {
     let issuer = normalize_issuer(issuer);
@@ -188,9 +166,8 @@ pub async fn discovery(issuer: &str) -> Result<DiscoveryDoc> {
         .await
         .map_err(|e| anyhow!("OIDC discovery JSON parse failed: {e}"))?;
     if normalize_issuer(&doc.issuer) != issuer {
-        // The discovery doc's `issuer` field MUST match the URL it was
-        // served from. A mismatch is grounds to abort — the IdP could be
-        // attempting an issuer-swap attack.
+        // The document's `issuer` must match the URL it was served from;
+        // a mismatch is an issuer-swap attack.
         return Err(anyhow!(
             "OIDC discovery issuer mismatch: expected {issuer}, got {}",
             doc.issuer
@@ -199,10 +176,6 @@ pub async fn discovery(issuer: &str) -> Result<DiscoveryDoc> {
     DISCOVERY_CACHE.insert(issuer, doc.clone()).await;
     Ok(doc)
 }
-
-// =============================================================
-// JWKS
-// =============================================================
 
 #[instrument(target = "auth", skip_all, fields(jwks_uri = %jwks_uri))]
 pub async fn jwks(jwks_uri: &str) -> Result<Jwks> {
@@ -229,25 +202,18 @@ pub async fn jwks(jwks_uri: &str) -> Result<Jwks> {
     Ok(jwks)
 }
 
-/// Force-refresh the JWKS cache. Called when verification fails to find
-/// the `kid` — IdPs rotate keys on their own schedule, and a `kid` miss
-/// usually means the key set changed since we last fetched.
+/// Force-refresh the JWKS cache after a `kid` miss, which usually means the IdP
+/// rotated keys since the last fetch.
 async fn refresh_jwks(jwks_uri: &str) -> Result<Jwks> {
     JWKS_CACHE.invalidate(jwks_uri).await;
     jwks(jwks_uri).await
 }
 
-// =============================================================
-// Authorize URL + token exchange
-// =============================================================
-
-/// Build the IdP authorize URL. The caller is responsible for storing
-/// `(state, nonce, pkce_verifier)` server-side before redirecting.
+/// Build the IdP authorize URL. The caller must store `(state, nonce,
+/// pkce_verifier)` server-side before redirecting.
 ///
-/// Keep scope minimal: `openid` is mandatory; `profile email` gets us
-/// the claims we need for JIT provisioning. `offline_access` is NOT
-/// requested — Wayve uses its own session JWT, not the IdP's refresh
-/// token.
+/// The scope stays minimal. `offline_access` is deliberately not requested,
+/// since Wayve uses its own session JWT rather than the IdP's refresh token.
 #[allow(clippy::too_many_arguments)]
 pub fn build_authorize_url(
     discovery: &DiscoveryDoc,
@@ -277,10 +243,8 @@ pub fn build_authorize_url(
     Ok(url.into())
 }
 
-/// Exchange the authorization code for an id_token. PKCE verifier is
-/// mandatory; client secret is sent in the body (most IdPs prefer body
-/// over Basic auth for confidential clients these days, and it's what
-/// Okta/Azure/Google all accept).
+/// Exchange the authorization code for an id_token. The PKCE verifier is
+/// mandatory, and the client secret goes in the body rather than Basic auth.
 #[allow(clippy::too_many_arguments)]
 #[instrument(target = "auth", skip_all)]
 pub async fn exchange_code(
@@ -318,12 +282,8 @@ pub async fn exchange_code(
     Ok(token.id_token)
 }
 
-// =============================================================
-// id_token verification
-// =============================================================
-
-/// Verify the id_token signature against the IdP's JWKS and check all
-/// standard OIDC claims. Returns the parsed claims on success.
+/// Verify the id_token signature against the IdP's JWKS and check every standard
+/// OIDC claim, returning the parsed claims on success.
 #[instrument(target = "auth", skip_all)]
 pub async fn verify_id_token(
     id_token: &str,
@@ -331,17 +291,15 @@ pub async fn verify_id_token(
     expected_client_id: &str,
     expected_nonce: &str,
 ) -> Result<IdTokenClaims> {
-    // 1. Inspect the unverified header to learn the `kid` and `alg` the
-    //    IdP signed with. This is safe — we use it only as a lookup key
-    //    into JWKS, not to make trust decisions.
+    // The unverified header is only ever used as a JWKS lookup key, never to
+    // make a trust decision.
     let header =
         decode_header(id_token).map_err(|e| anyhow!("id_token header decode failed: {e}"))?;
     let kid = header
         .kid
         .ok_or_else(|| anyhow!("id_token missing `kid` header"))?;
 
-    // 2. Look up the matching JWK. On a `kid` miss, force-refresh JWKS
-    //    (the IdP may have rotated). If still missing, abort.
+    // A `kid` miss triggers one forced JWKS refresh in case the IdP rotated.
     let mut jwks_set = jwks(&discovery.jwks_uri).await?;
     let mut jwk = jwks_set
         .keys
@@ -360,8 +318,6 @@ pub async fn verify_id_token(
     }
     let jwk = jwk.ok_or_else(|| anyhow!("id_token kid {kid} not found in JWKS"))?;
 
-    // 3. Build a DecodingKey from the JWK. Only RSA is supported in this
-    //    pass; EC support would be ~20 lines and a follow-up.
     if jwk.kty != "RSA" {
         return Err(anyhow!(
             "Unsupported JWK type {} (only RSA is implemented)",
@@ -379,9 +335,8 @@ pub async fn verify_id_token(
     let decoding_key = DecodingKey::from_rsa_components(n, e)
         .map_err(|e| anyhow!("RSA JWK component decode failed: {e}"))?;
 
-    // 4. Build a Validation that matches the header alg (RS256/RS384/RS512),
-    //    enforces issuer + audience, and applies clock skew. `jsonwebtoken`
-    //    checks exp/iat/nbf automatically.
+    // Restricting the algorithm to the RSA family is what stops an alg-confusion
+    // attack; `jsonwebtoken` then checks exp/iat/nbf itself.
     let alg = match header.alg {
         Algorithm::RS256 | Algorithm::RS384 | Algorithm::RS512 => header.alg,
         other => return Err(anyhow!("Unsupported id_token alg: {other:?}")),
@@ -396,11 +351,9 @@ pub async fn verify_id_token(
         .map_err(|e| anyhow!("id_token validation failed: {e}"))?;
     let claims = token_data.claims;
 
-    // 5. Audience check is duplicated here because `set_audience` accepts a
-    //    match-any list — but if the id_token came with a JSON array, we
-    //    additionally want to confirm our client_id is in it (jsonwebtoken
-    //    handles this, but being explicit catches IdP quirks where the
-    //    array contains the client_id PLUS other resources).
+    // The audience check is deliberately repeated: `aud` may arrive as a string
+    // or an array, and being explicit catches IdPs that list our client_id
+    // alongside other resources.
     let aud_ok = match &claims.aud {
         serde_json::Value::String(s) => s == expected_client_id,
         serde_json::Value::Array(arr) => arr.iter().any(|v| v.as_str() == Some(expected_client_id)),
@@ -412,8 +365,8 @@ pub async fn verify_id_token(
         ));
     }
 
-    // 6. Nonce binding — the one defense against a stolen id_token being
-    //    replayed against a different session.
+    // Nonce binding is the only defense against a stolen id_token being replayed
+    // against a different session.
     match &claims.nonce {
         Some(n) if n == expected_nonce => {}
         Some(_) => return Err(anyhow!("id_token nonce mismatch")),
@@ -422,10 +375,6 @@ pub async fn verify_id_token(
 
     Ok(claims)
 }
-
-// =============================================================
-// Tests
-// =============================================================
 
 #[cfg(test)]
 mod tests {

@@ -10,8 +10,7 @@ use wayve_security::rbac::{self, Role, Scope};
 const PROFILE_CACHE_TTL_SECS: u64 = 30;
 const PROFILE_CACHE_MAX_CAPACITY: u64 = 5000;
 
-// Keyed by (user_id, mode) — see the /me cache note; the profile body is
-// likewise mode-dependent.
+// Keyed by (user_id, mode) because the profile body is mode-dependent.
 pub(super) static PROFILE_CACHE: Lazy<
     TtlCache<(i32, wayve_security::jwt::SessionMode), serde_json::Value>,
 > = Lazy::new(|| TtlCache::new(PROFILE_CACHE_MAX_CAPACITY, PROFILE_CACHE_TTL_SECS));
@@ -103,9 +102,9 @@ pub(super) fn role_label(role: &str, account_type: &str) -> &'static str {
     }
 }
 
-/// Resolve a user's effective role string and its display label, downscoped by
-/// the request's session mode — so a normal-mode owner resolves as a `member`.
-/// Used by admin billing gates so they refuse a normal-mode owner.
+/// Resolve a user's effective role and display label, downscoped by the
+/// request's session mode, so that a normal-mode owner resolves as a `member`.
+/// Admin billing gates rely on this to refuse a normal-mode owner.
 pub async fn effective_role_for_request(
     req: &HttpRequest,
     pool: &PgPool,
@@ -144,50 +143,40 @@ pub struct EffectiveAccess {
     pub role_label: String,
     pub scope: String,
     pub permissions: Vec<String>,
-    /// True only for THE first owner of an organization OR the platform — the
-    /// earliest-joined `owner` row (tie-break lowest user_id) in
-    /// `organization_members` / `platform_members`. Used to gate owner-only,
-    /// single-person affordances (e.g. connecting the scope's own OAuth mailbox)
-    /// to one person, not every user who holds the `owner` role. Always false
-    /// for personal scope.
+    /// True only for the single first owner of an organization or the platform:
+    /// the earliest-joined `owner` membership row. This gates owner-only,
+    /// single-person affordances (such as connecting the scope's own OAuth
+    /// mailbox) to one person rather than everyone holding the `owner` role.
+    /// Always false for personal scope.
     pub is_primary_owner: bool,
 }
 
-/// A snapshot of the user's current plan, suitable for embedding in the
-/// `/api/me` / `/api/profile` response. The frontend uses `code` + `name`
-/// to render the tier badge and decide whether to show the "Upgrade" CTA.
+/// The user's current plan, embedded in the `/api/me` and `/api/profile`
+/// responses. The frontend renders the tier badge from `code` and `name` and
+/// decides from them whether to show the Upgrade CTA.
 #[derive(serde::Serialize, sqlx::FromRow)]
 pub struct CurrentPlan {
     pub code: String,
     pub name: String,
     pub audience: String,
-    /// Sub-tier within the audience: `personal`, `startups`, `business`, or
-    /// `enterprise` (mirrors `plans.tier`). The synthetic "not subscribed" org
-    /// row carries `none`. Lets the UI distinguish Business from Enterprise.
+    /// Sub-tier within the audience, mirroring `plans.tier`; the synthetic "not
+    /// subscribed" org row carries `none`. This is what lets the UI distinguish
+    /// Business from Enterprise.
     pub tier: String,
     pub amount_cents: i64,
 }
 
-/// Resolve the user's current tier.
-///
-/// Strategy:
-///   1. If the user belongs to an organization → the org's active
-///      subscription plan (org members inherit it). A leftover *personal*
-///      subscription is ignored so it can't shadow the org plan. With no org
-///      subscription, a synthetic `organization_free` row (so org headers
-///      don't mislabel as the personal "Basic User" tier).
-///   2. Otherwise (personal account) → the user's own active subscription,
-///      else the canonical `basic_user` free tier.
+/// Resolve the user's current tier. An org member inherits the org's active
+/// subscription; otherwise a personal account resolves to its own active
+/// subscription, else the free `basic_user` tier.
 pub async fn current_plan_for_user(
     pool: &PgPool,
     user_id: i32,
     organization_id: Option<i32>,
 ) -> Result<CurrentPlan, sqlx::Error> {
-    // Organization accounts resolve to the ORG's plan first. A user who later
-    // becomes an org owner/member may still carry a leftover *personal*
-    // subscription from before; that must not shadow the org plan (it would
-    // read as "Organization account · Current plan: Advance"). So when the
-    // user belongs to an org, the org subscription is authoritative.
+    // The org subscription is authoritative whenever the user belongs to an org.
+    // A user who later joined an org may still carry a leftover personal
+    // subscription, and that must not shadow the org plan.
     if let Some(org_id) = organization_id {
         if let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
             r#"
@@ -207,9 +196,8 @@ pub async fn current_plan_for_user(
             return Ok(plan);
         }
 
-        // Org with no active subscription. Synthesize an org-audience
-        // "free" row instead of leaking the personal basic_user name into
-        // org headers (which read as a contradiction in the UI).
+        // A synthetic org-audience "free" row, rather than leaking the personal
+        // basic_user name into org headers, where it reads as a contradiction.
         return Ok(CurrentPlan {
             code: "organization_free".to_string(),
             name: "Not subscribed".to_string(),
@@ -219,7 +207,6 @@ pub async fn current_plan_for_user(
         });
     }
 
-    // Personal accounts: their own active subscription, else the free tier.
     if let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
         r#"
         SELECT p.code, p.name, p.audience, p.tier, p.amount_cents
@@ -245,11 +232,9 @@ pub async fn current_plan_for_user(
     .await
 }
 
-/// True only for THE first owner of a privileged scope: the earliest-joined
-/// `owner` membership row (tie-break by lowest user_id) in the organization
-/// (`organization_members`) or the platform (`platform_members`). Lets us
-/// restrict an owner-only affordance to a single person rather than everyone
-/// holding the `owner` role. Personal scope is never a primary owner.
+/// True only for the first owner of a privileged scope: the earliest-joined
+/// `owner` membership row, tie-broken by lowest user id. Personal scope is never
+/// a primary owner.
 async fn is_primary_scope_owner(
     pool: &PgPool,
     ctx: &rbac::RoleContext,
@@ -287,11 +272,11 @@ async fn is_primary_scope_owner(
     Ok(first_owner == Some(ctx.user_id))
 }
 
-/// Request-aware access: the DB-truth role/scope downscoped by the request's
-/// session mode. Returns the effective access (what the frontend gates on),
-/// whether the caller is eligible to enter admin mode (computed from the TRUE
-/// role, so the switcher shows even while downscoped), and the current mode.
-/// `/me` and `/profile` use this so a normal-mode owner is reported restricted.
+/// The DB-truth role and scope, downscoped by the request's session mode.
+/// Returns the effective access the frontend gates on, whether the caller may
+/// enter admin mode (computed from the true role, so the switcher still shows
+/// while downscoped), and the current mode. Used by `/me` and `/profile` so a
+/// normal-mode owner is reported as restricted.
 pub async fn effective_access_for_request(
     req: &HttpRequest,
     pool: &PgPool,
@@ -332,8 +317,8 @@ pub fn fallback_access(account_type: &str) -> EffectiveAccess {
             .iter()
             .map(|perm| perm.as_str().to_string())
             .collect(),
-        // Fallback path can't confirm primary ownership (the DB lookup is what
-        // just failed), so deny the owner-only affordance to be safe.
+        // The DB lookup is what just failed, so primary ownership cannot be
+        // confirmed and the owner-only affordance is denied.
         is_primary_owner: false,
     }
 }

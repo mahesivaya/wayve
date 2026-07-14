@@ -125,8 +125,8 @@ pub async fn approve_channel_join_request(
 
     tx.commit().await?;
 
-    // Audit the approved user's join. record_action_system (no HttpRequest IP)
-    // because the request actor is the approving admin, not the joining user.
+    // Recorded via record_action_system, without the request IP, because the
+    // request actor is the approving admin rather than the joining user.
     let channel_name: Option<String> =
         sqlx::query_scalar("SELECT name FROM channels WHERE id = $1")
             .bind(channel_id)

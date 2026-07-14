@@ -1,9 +1,5 @@
-//! Organization-scoped endpoints that don't fit into an existing feature
-//! module. Currently houses the master-key handler set (bootstrap, fetch
-//! per-caller wraps, fetch member escrow for recovery/reset, add a new
-//! key-holder, read audit log).
-//!
-//! Wired into `/api` from `main.rs::app_routes` via `organization::routes`.
+//! Organization-scoped endpoints that don't belong to an existing feature
+//! module: the master-key handlers, admin-read-as-member, and custom domains.
 
 pub mod domains;
 pub mod impersonate;

@@ -1,16 +1,13 @@
-// Integration/regression tests. Each file is `#[cfg(test)] mod tests { ... }`
-// and imports the items it exercises with explicit `use crate::...` paths.
+// Integration and regression tests. Each file is a `#[cfg(test)] mod tests`
+// that imports what it exercises through explicit `use crate::...` paths.
 //
-// Tests that touch the database require a Postgres reachable via
-// TEST_DATABASE_URL or DATABASE_URL (see test_support::test_pool). CI provides
-// one; locally, run `psql "$DATABASE_URL" -f infra/postgres/init.sql` first.
+// Tests that touch the database need a Postgres reachable via TEST_DATABASE_URL
+// or DATABASE_URL (see test_support::test_pool). CI provides one; locally, run
+// `psql "$DATABASE_URL" -f infra/postgres/init.sql` first.
 //
-// Scope: pared down to a security-critical core for solo development. The
-// deleted suites covered CRUD-shaped endpoints — easy to verify manually
-// with `curl` and the live UI, and not worth the maintenance cost at this
-// scale. The kept files cover surfaces where bugs are silent (encryption,
-// authorization, JWT, signing) plus the new long-term API contracts
-// (webhooks event catalog, embed tokens, SCIM, rate-limit tiers).
+// The suite is deliberately scoped to surfaces where a bug would be silent:
+// encryption, authorization, JWT, signing, and the long-term API contracts.
+// CRUD-shaped endpoints are verified by hand instead.
 mod admin_create_verification_test;
 mod ai_config_test;
 mod billing_audit_test;
@@ -43,8 +40,7 @@ mod slack_test;
 mod slack_webhook_test;
 mod task_suggest_test;
 
-// Long-term API contracts — adding/changing these has customer-visible
-// blast radius, so the tests stay.
+// Long-term API contracts, where a change is customer-visible.
 mod embed_tokens_test;
 mod quotas_test;
 mod scim_tokens_test;

@@ -1,6 +1,5 @@
-// Route registration for the billing module. `routes` is mounted under the
-// authenticated `/api` scope; `public_routes` carries the unauthenticated
-// Stripe webhook and is mounted at the root.
+// Route registration. `routes` mounts under the authenticated `/api` scope;
+// `public_routes` carries the unauthenticated Stripe webhook at the root.
 
 use super::{
     checkout, entitlements, invoices, organization_billing, plans, subscriptions, tiers,
@@ -19,8 +18,8 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(checkout::create_payment_method_setup_intent)
         .service(checkout::set_default_payment_method)
         .service(checkout::get_default_payment_method)
-        // Provider status: canonical /api/billing/provider-status, legacy /api/billing/stripe-status.
-        // The "stripe" name leaks the vendor; provider-status survives a future switch.
+        // provider-status is canonical; the stripe-status alias is legacy and
+        // names the vendor, so it should not be used by new callers.
         .route(
             "/billing/provider-status",
             web::get().to(checkout::stripe_status),
@@ -30,8 +29,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
             web::get().to(checkout::stripe_status),
         )
         .service(subscriptions::get_subscription)
-        // Cancel subscription: canonical DELETE /api/billing/subscription,
-        // legacy POST /api/billing/subscription/cancel.
+        // The POST /cancel form is a legacy alias of the canonical DELETE.
         .route(
             "/billing/subscription",
             web::delete().to(subscriptions::cancel_subscription),

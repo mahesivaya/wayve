@@ -15,14 +15,11 @@ use wayve_security::jwt::get_user_id_from_request;
 
 #[derive(Deserialize)]
 pub struct FilesQuery {
-    /// Filter to files in this folder. `None` → files at drive root.
-    /// Same NULL-distinct semantics as `folders::list_folders`.
+    /// Filter to files in this folder. `None` means the drive root, with the
+    /// same NULL-distinct semantics as `folders::list_folders`.
     pub folder_id: Option<i64>,
 }
 
-//
-// ✅ RESPONSE STRUCT
-//
 #[derive(Serialize)]
 struct FileResponse {
     id: i64,
@@ -35,9 +32,6 @@ struct FileResponse {
     permission: Option<String>,
 }
 
-//
-// ✅ DB STRUCT
-//
 #[derive(Serialize, FromRow)]
 pub struct FileRecord {
     pub id: i64,
@@ -48,17 +42,17 @@ pub struct FileRecord {
     pub created_at: NaiveDateTime,
 }
 
-//
-// 🔥 UPDATED UPLOAD FILE (FIXED USER_ID)
-//
+// Blobs are written to disk encrypted at rest (AES-GCM, per-file IV stored in
+// `drive_files.file_iv`) and are never served statically; reads go through the
+// authenticated `/api/files/{id}/download` handler below.
 #[instrument(target = "http", skip(req, payload, pool))]
 pub async fn upload_file(
     req: HttpRequest,
     mut payload: Multipart,
     pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, Error> {
-    // Owner is derived from the verified JWT, never from the request body —
-    // a `user_id` form field (if any) is ignored.
+    // Owner comes from the verified JWT, never the request body; a `user_id`
+    // form field, if present, is ignored.
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
         None => return Ok(HttpResponse::Unauthorized().finish()),
@@ -82,9 +76,8 @@ pub async fn upload_file(
         actix_web::error::ErrorInternalServerError("Dir error")
     })?;
 
-    // Optional target folder. Multipart forms send this as a regular text
-    // field alongside the file parts. Collected in the loop below and
-    // validated once before any INSERTs happen.
+    // Optional target folder, sent as a plain text part alongside the files and
+    // validated once below before any INSERT happens.
     let mut folder_id: Option<i64> = None;
 
     while let Some(item) = payload.next().await {
@@ -92,9 +85,8 @@ pub async fn upload_file(
 
         let field_name = field.name().to_string();
 
-        // Pick up `folder_id` (text field) before the `files` parts arrive.
-        // Multipart fields can be interleaved in arbitrary order, but in
-        // practice browsers send non-file fields first.
+        // Multipart fields may arrive in any order, but browsers send non-file
+        // fields first, so `folder_id` lands before the `files` parts.
         if field_name == "folder_id" {
             let mut bytes = Vec::new();
             while let Some(chunk) = field.next().await {
@@ -127,7 +119,6 @@ pub async fn upload_file(
             continue;
         }
 
-        // ✅ FILES ONLY (any other field, e.g. a stray user_id, is skipped)
         if field_name != "files" {
             continue;
         }
@@ -138,7 +129,7 @@ pub async fn upload_file(
             .get_filename()
             .ok_or_else(|| actix_web::error::ErrorBadRequest("Missing filename"))?;
 
-        // ✅ sanitize
+        // Strip path separators so an uploaded name cannot escape upload_dir.
         let filename = raw_filename.replace(['/', '\\'], "");
 
         let file_id = Uuid::new_v4().to_string();
@@ -180,7 +171,6 @@ pub async fn upload_file(
             actix_web::error::ErrorInternalServerError("Write error")
         })?;
 
-        // ✅ better file type extraction
         let file_type = filename.rsplit('.').next().unwrap_or("").to_string();
 
         sqlx::query(
@@ -208,8 +198,6 @@ pub async fn upload_file(
             filename, size, user_id
         );
 
-        // Drive audit trail (Security → drive activity). folder context lets the
-        // view show "files added in <folder>".
         let folder = audit_folder_name(pool.get_ref(), folder_id).await;
         crate::audit::record_action(
             pool.get_ref(),
@@ -236,9 +224,6 @@ pub async fn upload_file(
     Ok(HttpResponse::Ok().body("Upload successful"))
 }
 
-//
-// ✅ GET FILES
-//
 #[get("/files")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn get_files(
@@ -246,11 +231,9 @@ pub async fn get_files(
     pool: web::Data<PgPool>,
     query: web::Query<FilesQuery>,
 ) -> AppResult {
-    // Files are scoped to the authenticated user — the previous `?user_id=`
-    // query param let any caller list anyone's files. The new `?folder_id=`
-    // optionally narrows to a specific folder; absence means "drive root"
-    // (rows where folder_id IS NULL). `IS NOT DISTINCT FROM` handles the
-    // NULL case in a single query.
+    // Files are scoped to the authenticated user; never accept a caller-supplied
+    // user id here. An absent `?folder_id=` means the drive root, i.e. rows
+    // where folder_id IS NULL, which `IS NOT DISTINCT FROM` handles in one query.
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let folder_id = query.folder_id;
 
@@ -282,7 +265,6 @@ pub async fn get_files(
                 name: row.name,
                 file_type,
                 size: row.size,
-                // Authenticated, ownership-checked download route.
                 drive_url: format!("/api/files/{}/download", row.id),
                 created_at: row.created_at,
                 shared: false,
@@ -294,9 +276,8 @@ pub async fn get_files(
     Ok(HttpResponse::Ok().json(files))
 }
 
-//
-// 🔥 AUTHENTICATED DOWNLOAD
-//
+// The only read path for a blob: files are not served statically, so every
+// download is authenticated, ownership-checked, and decrypted here.
 #[get("/files/{id}/download")]
 #[instrument(target = "http", skip(req, pool, path))]
 pub async fn download_file(
@@ -308,8 +289,8 @@ pub async fn download_file(
 
     let file_id = path.into_inner();
 
-    // Ownership check: the row is only returned when it belongs to the caller,
-    // so a 404 leaks nothing about other users' files.
+    // The row is returned only when it belongs to the caller, so the 404 leaks
+    // nothing about other users' files.
     let row = sqlx::query(
         "SELECT name, file_path, file_iv, size, folder_id \
            FROM drive_files WHERE id = $1 AND user_id = $2",
@@ -358,9 +339,6 @@ pub async fn download_file(
     serve_file_parts(user_id, file_id, file_name, file_path, file_iv).await
 }
 
-//
-// ✏️ RENAME FILE
-//
 #[derive(Deserialize)]
 pub struct RenameFileRequest {
     pub name: String,
@@ -377,8 +355,8 @@ pub async fn rename_file(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let file_id = path.into_inner();
 
-    // Strip any path separators a client might sneak in — `name` is a display
-    // label only; the on-disk path is keyed by a UUID and never changes here.
+    // `name` is a display label only; the on-disk path is keyed by a UUID and
+    // never changes here. Strip separators anyway.
     let name = body.name.replace(['/', '\\'], "");
     let name = name.trim();
     if name.is_empty() {
@@ -390,11 +368,9 @@ pub async fn rename_file(
             .json(serde_json::json!({ "error": "File name is too long (max 255 chars)" })));
     }
 
-    // `file_type` is derived from the (new) name's extension so the icon/meta
-    // stays consistent with what `get_files` recomputes on read.
+    // Must match what `get_files` recomputes from the name on read.
     let file_type = name.rsplit('.').next().unwrap_or("").to_string();
 
-    // Capture the prior name + folder for the audit trail before the rename.
     let prior: Option<(String, Option<i64>)> =
         sqlx::query_as("SELECT name, folder_id FROM drive_files WHERE id = $1 AND user_id = $2")
             .bind(file_id)
@@ -402,8 +378,8 @@ pub async fn rename_file(
             .fetch_optional(pool.get_ref())
             .await?;
 
-    // UPDATE ... RETURNING folds the ownership check and "did it exist?" check
-    // into one round-trip; a 404 (not 403) avoids leaking other users' rows.
+    // UPDATE ... RETURNING folds the ownership and existence checks into one
+    // round-trip. Returning 404 rather than 403 avoids leaking other users' rows.
     let updated: Option<i64> = sqlx::query_scalar(
         "UPDATE drive_files SET name = $1, file_type = $2 \
            WHERE id = $3 AND user_id = $4 RETURNING id",
@@ -443,9 +419,6 @@ pub async fn rename_file(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "id": file_id, "name": name })))
 }
 
-//
-// 🗑️ DELETE FILE
-//
 #[delete("/files/{id}")]
 #[instrument(target = "http", skip(req, pool, path))]
 pub async fn delete_file(
@@ -456,9 +429,9 @@ pub async fn delete_file(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let file_id = path.into_inner();
 
-    // DELETE ... RETURNING combines the ownership check, the delete, and the
-    // "did it exist?" check into one round-trip, and hands back the path/size
-    // we need to remove the blob and decrement storage usage.
+    // DELETE ... RETURNING folds the ownership and existence checks into one
+    // round-trip and hands back the path and size needed to remove the blob and
+    // decrement storage usage.
     let row = sqlx::query(
         "DELETE FROM drive_files WHERE id = $1 AND user_id = $2 \
          RETURNING file_path, size, name, folder_id",
@@ -482,14 +455,12 @@ pub async fn delete_file(
         }
     };
 
-    // Best-effort blob removal — the DB row is already gone, so a stray file on
-    // disk is harmless (and will never be served again). Log but don't fail.
+    // Blob removal is best-effort: the row is already gone, so a stray file on
+    // disk is unreachable and harmless. Log it, but do not fail the request.
     if let Err(e) = fs::remove_file(&file_path).await {
         warn!(target: "http", user_id, file_id, path = %file_path, error = ?e, "delete_file blob remove failed");
     }
 
-    // Decrement storage usage with a negative event, mirroring the positive
-    // event recorded on upload.
     if let Ok(owner) = resolve_owner(pool.get_ref(), user_id).await {
         let _ =
             usage_metering::record_event(pool.get_ref(), owner, "drive_storage_bytes", -size).await;
@@ -517,7 +488,8 @@ pub async fn delete_file(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }
 
-/// Best-effort folder-name lookup for audit metadata (None for root / missing).
+/// Best-effort folder-name lookup for audit metadata. `None` for root or a
+/// missing folder.
 async fn audit_folder_name(pool: &PgPool, folder_id: Option<i64>) -> Option<String> {
     let id = folder_id?;
     sqlx::query_scalar::<_, String>("SELECT name FROM folders WHERE id = $1")

@@ -1,37 +1,18 @@
 //! Database transaction helpers.
 //!
-//! `with_tx` is a thin wrapper around `pool.begin()` / `tx.commit()` that
-//! turns the common
-//!
-//! ```ignore
-//! let mut tx = pool.begin().await?;
-//! // … do work …
-//! tx.commit().await?;
-//! Ok(value)
-//! ```
-//!
-//! into a single closure-based call. sqlx already rolls a transaction back
-//! when it's dropped without committing, so the lifecycle is safe either way
-//! — but `with_tx` makes "every path commits or returns the error" obvious to
-//! a reader and impossible to forget.
-//!
-//! The closure takes ownership of the `Transaction` and must return
-//! `(tx, value)` on success so the wrapper can commit. On any `?` failure
-//! inside the closure, the `Transaction` drops and rolls back automatically.
+//! `with_tx` wraps `pool.begin()` / `tx.commit()` in a closure-based call. The
+//! closure takes ownership of the `Transaction` and returns `(tx, value)` on
+//! success so the wrapper can commit; on any `?` failure the `Transaction` drops
+//! and sqlx rolls it back. Existing handlers are not migrated; use this in new code.
 //!
 //! ```ignore
 //! let id = db::with_tx(&pool, |mut tx| async move {
 //!     let id: i32 = sqlx::query_scalar("INSERT … RETURNING id")
 //!         .fetch_one(&mut *tx)
 //!         .await?;
-//!     sqlx::query("INSERT INTO audit …")
-//!         .execute(&mut *tx)
-//!         .await?;
 //!     Ok((tx, id))
 //! }).await?;
 //! ```
-//!
-//! Existing transactional handlers are not migrated; adopt this in new code.
 
 use crate::error::AppError;
 use sqlx::{PgPool, Postgres, Transaction};
@@ -49,32 +30,22 @@ where
     Ok(value)
 }
 
-// ============================================================================
-// Row-Level Security (RLS) session context.
+// Row-Level Security session context.
 //
-// RLS policies filter on Postgres session GUCs naming the caller, set
-// TRANSACTION-LOCAL (`set_config(..., is_local => true)`) so they auto-reset on
-// COMMIT/ROLLBACK — a pooled connection can never leak one request's context
-// into the next.
+// RLS policies filter on Postgres GUCs naming the caller: `app.user_id` is the
+// row owner, `app.bypass = 'on'` marks privileged, already-authorized
+// cross-tenant work (platform aggregates, member recovery, org teardown,
+// workers). Both are transaction-local, so they auto-reset on COMMIT/ROLLBACK
+// and a pooled connection can never leak one request's context into the next.
 //
-//   app.user_id — the row owner allowed to see their own rows
-//   app.bypass  — "on" for privileged, already-authorized cross-tenant work
-//                 (platform aggregates, member recovery, org teardown, workers)
+// The connecting role (wayve_user / rwayve) is a SUPERUSER and bypasses RLS
+// unconditionally. A user-scoped transaction therefore sets the GUC and then
+// `SET LOCAL ROLE wayve_app`, a restricted non-superuser role, or the policy
+// never engages. Privileged paths stay superuser and read/write everything.
 //
-// CRUCIAL: the connecting role (wayve_user / rwayve) is a SUPERUSER, which
-// bypasses RLS unconditionally. So a user-scoped transaction first sets the GUC
-// and then `SET LOCAL ROLE wayve_app` — a restricted, non-superuser role — so
-// the policy actually engages. Bypass/privileged paths simply stay the
-// superuser (no SET ROLE) and read/write everything. Both the GUC and the role
-// are transaction-local and reset on COMMIT/ROLLBACK, so nothing leaks across
-// pooled connections.
-//
-// Policies are deny-by-default: a non-superuser connection with no GUC sees no
-// rows. Every access path to an RLS-enabled table must run inside one of the
-// helpers below — a missed path is a visible 0-rows bug, never a cross-tenant
-// leak. User-private tables (notes, …) use the user_id seam; org-shared tables
-// will add an `app.org_id` seam when they are migrated.
-// ============================================================================
+// Policies are deny-by-default, so every access path to an RLS-enabled table must
+// run inside one of the helpers below; a missed path is a visible 0-rows bug, not
+// a cross-tenant leak.
 
 /// Scope an existing transaction to one user: set `app.user_id` then drop to the
 /// restricted `wayve_app` role (see infra/postgres/init.sql) so the RLS policy
@@ -83,21 +54,18 @@ pub async fn apply_rls_user(
     tx: &mut Transaction<'_, Postgres>,
     user_id: i32,
 ) -> Result<(), AppError> {
-    // Batch both session statements into ONE simple-query round-trip (was two).
-    // This is on the hottest authenticated path (every RLS-scoped read), so the
-    // saved round-trip matters. `user_id` is an `i32` — decimal digits only, no
-    // injection surface — so inlining it is safe; and `set_config` (which needs
-    // a bind) can't be combined with `SET LOCAL ROLE` (which can't be
-    // parameterized) under the extended protocol, so a simple-query batch is the
-    // way to do both at once. Both are transaction-local and reset on COMMIT.
+    // One simple-query round-trip for both statements: this is the hottest
+    // authenticated path, and `set_config` (needs a bind) can't be combined with
+    // `SET LOCAL ROLE` (can't be parameterized) under the extended protocol.
+    // Inlining `user_id` is safe because an `i32` is decimal digits only.
     let sql =
         format!("SELECT set_config('app.user_id', '{user_id}', true); SET LOCAL ROLE wayve_app;");
     sqlx::raw_sql(&sql).execute(&mut **tx).await?;
     Ok(())
 }
 
-/// Set `app.bypass = 'on'` (transaction-local) on an existing transaction — for
-/// privileged paths that have already done their own RBAC authorization.
+/// Set `app.bypass = 'on'` on an existing transaction. Only for privileged paths
+/// that have already done their own RBAC authorization.
 pub async fn apply_rls_bypass(tx: &mut Transaction<'_, Postgres>) -> Result<(), AppError> {
     sqlx::query("SELECT set_config('app.bypass', 'on', true)")
         .execute(&mut **tx)
@@ -105,9 +73,8 @@ pub async fn apply_rls_bypass(tx: &mut Transaction<'_, Postgres>) -> Result<(), 
     Ok(())
 }
 
-/// Begin a transaction scoped to one user (`app.user_id`), run the closure, and
-/// commit. For user-private tables where a handler only touches the caller's
-/// own rows. The transaction is the request's pinned connection.
+/// Begin a transaction scoped to one user, run the closure, and commit. For
+/// user-private tables where a handler only touches the caller's own rows.
 pub async fn with_rls_user_tx<R, F, Fut>(pool: &PgPool, user_id: i32, f: F) -> Result<R, AppError>
 where
     F: FnOnce(Transaction<'static, Postgres>) -> Fut,
@@ -120,9 +87,9 @@ where
     Ok(value)
 }
 
-/// Begin a transaction in bypass mode (privileged cross-tenant), run the
-/// closure, and commit. Only for paths that have done their own authorization.
-/// (Most call sites use the inline `apply_rls_bypass` instead; kept for symmetry.)
+/// Begin a privileged cross-tenant transaction, run the closure, and commit. Only
+/// for paths that have done their own authorization. Most call sites use the
+/// inline `apply_rls_bypass` instead; this is kept for symmetry.
 #[allow(dead_code)]
 pub async fn with_rls_bypass_tx<R, F, Fut>(pool: &PgPool, f: F) -> Result<R, AppError>
 where

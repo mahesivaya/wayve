@@ -1,24 +1,15 @@
-//! Bcrypt-based password hashing and verification.
+//! Bcrypt password hashing and verification.
 //!
-//! Both operations are deliberately CPU-heavy (`DEFAULT_COST = 12` ≈
-//! 100–300 ms on a typical server). Calling them inline from an `async fn`
-//! pins the tokio worker thread for that whole window — under any
-//! concurrent-login burst, the runtime stops servicing other requests.
-//!
-//! These helpers forward the work to [`tokio::task::spawn_blocking`], which
-//! runs it on tokio's separate blocking pool so the async workers stay free.
-//! The calling task is suspended at the `.await` until the result is ready,
-//! so handler control flow is unchanged.
-//!
-//! Returns `BcryptError` rather than an application-level `AppError` so this
-//! crate stays free of the consumer crate's error taxonomy. Callers map
-//! into their own error type at the boundary.
+//! Both operations are deliberately CPU-heavy (100–300 ms at `DEFAULT_COST`).
+//! Run inline from an `async fn` they would pin a tokio worker thread for that
+//! whole window and stall the runtime under a concurrent-login burst, so these
+//! helpers hand the work to [`tokio::task::spawn_blocking`].
 
 use bcrypt::{BcryptError, DEFAULT_COST, hash, verify};
 
-/// Wraps the `tokio::task::spawn_blocking` `JoinError` plus the underlying
-/// `bcrypt` error in a single type the caller can pattern-match on if it
-/// cares to. Most callers will just propagate.
+/// The `spawn_blocking` join error and the underlying `bcrypt` error in one
+/// type. Deliberately not an application-level error, to keep this crate free of
+/// the consumer crate's taxonomy.
 #[derive(Debug, thiserror::Error)]
 pub enum PasswordError {
     #[error("bcrypt failed: {0}")]

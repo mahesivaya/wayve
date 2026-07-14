@@ -12,22 +12,20 @@ use actix_web::put;
 use tracing::{info, instrument};
 use wayve_security::rbac::{self, Permission, Role, Scope};
 
-/// Body of a role-change request.
 #[derive(Deserialize)]
 pub struct UpdateRoleInput {
     pub role: String,
 }
 
-/// Parse a request's target role, rejecting anything that is not an exact
-/// canonical role token (so "Owner", "MEMBER", "bogus" are 400s rather than
-/// silently normalizing to `member`).
+/// Parse the target role, rejecting anything that is not an exact canonical role
+/// token, so that "Owner", "MEMBER", or "bogus" is a 400 rather than silently
+/// normalizing to `member`.
 fn parse_assignable_role(raw: &str) -> Option<Role> {
     let trimmed = raw.trim();
     let role = Role::from_str(trimmed);
     (role.as_str() == trimmed).then_some(role)
 }
 
-/// JSON for one member row of a `/members` listing.
 fn member_row_json(row: &sqlx::postgres::PgRow, platform: bool) -> serde_json::Value {
     let user_id: i32 = row.get("user_id");
     let email: String = row.get("email");
@@ -123,7 +121,6 @@ pub async fn update_organization_member_role(
 
     let mut tx = pool.begin().await?;
 
-    // Confirm the target belongs to this organization and read their role.
     let current = match sqlx::query(
         r#"
         SELECT u.organization_id, COALESCE(om.role, 'member') AS role
@@ -192,8 +189,9 @@ pub async fn update_organization_member_role(
 
     tx.commit().await?;
 
-    // Refresh the target's cached identity so the new permissions take effect
-    // on their next request rather than after the 60s cache TTL.
+    // Authorization is recomputed from the DB on every request, so busting these
+    // caches is what makes the new role take effect on the target's next request
+    // rather than after the cache TTL.
     invalidate_me_cache(target_user_id).await;
     invalidate_profile_cache(target_user_id).await;
     rbac::invalidate_role_context(target_user_id).await;
@@ -204,8 +202,7 @@ pub async fn update_organization_member_role(
         "organization member role updated"
     );
 
-    // Audit the privilege change (Tier-1: escalation/lateral movement). Skip
-    // the no-op case where the role didn't actually change. Best-effort.
+    // Privilege changes are audited; a no-op role change is not.
     if current_role != new_role {
         audit::record_action(
             pool.get_ref(),
@@ -344,8 +341,7 @@ pub async fn update_platform_member_role(
         "platform member role updated"
     );
 
-    // Audit the privilege change (Tier-1: escalation/lateral movement). Skip
-    // the no-op case where the role didn't actually change. Best-effort.
+    // Privilege changes are audited; a no-op role change is not.
     if current_role != new_role {
         audit::record_action(
             pool.get_ref(),
@@ -373,16 +369,10 @@ pub async fn update_platform_member_role(
     })))
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Member detail (scoped to the caller's own team)
-// ──────────────────────────────────────────────────────────────────────
-
-/// Load the full profile + per-service storage breakdown for one user, the
-/// data behind the scoped member detail page. Returns `None` when the user id
-/// doesn't exist. Callers MUST authorize membership first (own org / platform
-/// team) — this helper does no access control of its own. Runs with the RLS
-/// bypass GUC because it sums storage across RLS-enabled tables (emails, drive,
-/// chat, notes, tasks) for an arbitrary user.
+/// Load the profile and per-service storage breakdown behind the member detail
+/// page. Callers MUST authorize membership first: this helper does no access
+/// control of its own. It runs with the RLS bypass GUC because it sums storage
+/// across RLS-enabled tables for an arbitrary user.
 async fn load_member_detail(
     pool: &PgPool,
     user_id: i32,
@@ -465,10 +455,9 @@ async fn load_member_detail(
     })))
 }
 
-/// Detail for one member of an organization. Gated by `require_org_access`, so
-/// an org/enterprise admin only ever resolves members of THEIR OWN org — the
-/// target must also belong to `{id}` (otherwise 404), never a user from
-/// another org or an unrelated personal account.
+/// Detail for one member of an organization. `require_org_access` confines an
+/// admin to their own org, and the target must belong to `{id}` or this 404s, so
+/// a user from another org or an unrelated personal account is never exposed.
 #[get("/organizations/{id}/members/{user_id}")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn organization_member_detail(
@@ -488,8 +477,8 @@ pub async fn organization_member_detail(
         return Ok(response);
     }
 
-    // The target must be a member of THIS org. Guard before loading so an admin
-    // can't read a user from another org by guessing an id.
+    // Guard before loading, so an admin cannot read a user from another org by
+    // guessing an id.
     let belongs: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND organization_id = $2)",
     )
@@ -510,12 +499,8 @@ pub async fn organization_member_detail(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Per-user project (GitHub repo) access — platform scope
-// ──────────────────────────────────────────────────────────────────────
-
-/// The repos a platform member has been granted access to (by `full_name`).
-/// Gated to platform staff (`MembersRead` + `Scope::Platform`).
+/// The repos a platform member has been granted access to, gated to platform
+/// staff holding `MembersRead`.
 #[get("/platform/members/{user_id}/projects")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn platform_member_projects(
@@ -547,9 +532,9 @@ pub struct SetMemberProjectsInput {
     pub repos: Vec<String>,
 }
 
-/// Replace a platform member's granted repo set. Gated `MembersManage` +
-/// `Scope::Platform`; the target must be a platform member. Audited as a
-/// privilege change (mirrors the role-change audit).
+/// Replace a platform member's granted repo set. Gated on `MembersManage` in
+/// platform scope, and the target must already be a platform member. Audited as
+/// a privilege change, like a role change.
 #[put("/platform/members/{user_id}/projects")]
 #[instrument(target = "http", skip(req, pool, data))]
 pub async fn set_platform_member_projects(
@@ -569,7 +554,8 @@ pub async fn set_platform_member_projects(
     }
     let target_user_id = path.into_inner();
 
-    // Only grant to actual platform members — never arbitrary personal users.
+    // Grants are only ever made to actual platform members, never to arbitrary
+    // personal users.
     let is_staff: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM platform_members WHERE user_id = $1)")
             .bind(target_user_id)
@@ -580,7 +566,6 @@ pub async fn set_platform_member_projects(
             .json(serde_json::json!({ "message": "Platform team member not found" })));
     }
 
-    // Normalize: trim, drop blanks, dedupe (preserve order).
     let mut seen = std::collections::HashSet::new();
     let repos: Vec<String> = data
         .repos
@@ -633,12 +618,8 @@ pub async fn set_platform_member_projects(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "repos": repos })))
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Per-user project (GitHub repo) access — organization scope
-// ──────────────────────────────────────────────────────────────────────
-
-/// Whether `user_id` belongs to `organization_id` — guards the org project
-/// endpoints so an admin can't grant/read across organizations.
+/// Guards the org project endpoints so an admin cannot grant or read across
+/// organizations.
 async fn member_belongs_to_org(
     pool: &PgPool,
     user_id: i32,
@@ -651,8 +632,8 @@ async fn member_belongs_to_org(
         .await
 }
 
-/// The repos an organization member has been granted (by `full_name`). Gated
-/// `require_org_access(org_id, MembersRead)`; the target must belong to the org.
+/// The repos an organization member has been granted. Gated on `MembersRead` for
+/// the org, and the target must belong to it.
 #[get("/organizations/{id}/members/{user_id}/projects")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn organization_member_projects(
@@ -685,8 +666,8 @@ pub async fn organization_member_projects(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "repos": repos })))
 }
 
-/// Replace an org member's granted repo set. Gated `require_org_access(org_id,
-/// MembersManage)`; the target must belong to the org. Audited.
+/// Replace an org member's granted repo set. Gated on `MembersManage` for the
+/// org, and the target must belong to it. Audited.
 #[put("/organizations/{id}/members/{user_id}/projects")]
 #[instrument(target = "http", skip(req, pool, data))]
 pub async fn set_organization_member_projects(
@@ -712,7 +693,6 @@ pub async fn set_organization_member_projects(
             .json(serde_json::json!({ "message": "Member not found in this organization" })));
     }
 
-    // Normalize: trim, drop blanks, dedupe (preserve order).
     let mut seen = std::collections::HashSet::new();
     let repos: Vec<String> = data
         .repos
@@ -766,14 +746,13 @@ pub async fn set_organization_member_projects(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "repos": repos })))
 }
 
-/// Detail for one member of the platform team. Gated to `Scope::Platform`; the
-/// target must be a `platform_members` row (the platform staff roster), so this
-/// never exposes arbitrary personal users — only the caller's own team.
+/// Detail for one member of the platform team. Gated to platform scope, and the
+/// target must have a `platform_members` row, so arbitrary personal users are
+/// never exposed.
 ///
-/// The path segment is an **identifier**: the canonical URL uses the member's
-/// `username` (`/platform/members/security`), but a bare integer is still
-/// accepted as the raw user id so legacy `/platform/members/{id}` links and
-/// username-less members keep working.
+/// The path segment is an identifier, not an id: the canonical URL uses the
+/// member's `username`, but a bare integer is still accepted as the raw user id
+/// so legacy links and username-less members keep working.
 #[get("/platform/members/{ident}")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn platform_member_detail(
@@ -792,8 +771,6 @@ pub async fn platform_member_detail(
     let ident = path.into_inner();
     let ident = ident.trim();
 
-    // A bare integer is the raw user id; anything else is a (case-insensitive)
-    // username lookup.
     let user_id: Option<i32> = match ident.parse::<i32>() {
         Ok(id) => Some(id),
         Err(_) => {

@@ -1,18 +1,16 @@
 //! Chat file attachments, for both direct messages and channel messages.
 //!
-//! Upload (`POST /api/chat/attachments`) stores one file under `./uploads`,
-//! always wrapped in the server at-rest AES layer. When the client marks the
-//! upload `e2e=true` the bytes it sends are ALREADY a client-side ciphertext
-//! (decryptable only by the conversation's participants), so the at-rest layer
-//! double-wraps something the server can't read; when `e2e=false` the at-rest
-//! layer is the only encryption. Upload is conversation-agnostic: the row
-//! starts unlinked (both target columns NULL) and the WS send links it to
-//! either a DM (`message_id`) or a channel message (`channel_message_id`) —
-//! see `chat::websocket`.
+//! Upload stores one file under `./uploads`, always wrapped in the server
+//! at-rest AES layer. With `e2e=true` the uploaded bytes are already a client
+//! ciphertext, so the at-rest layer double-wraps something the server cannot
+//! read; with `e2e=false` it is the only encryption. Upload is
+//! conversation-agnostic: the row starts unlinked and the WS send later sets
+//! exactly one of `message_id` (DM) or `channel_message_id`, since DMs and
+//! channel messages are separate tables with separate id spaces.
 //!
-//! Download (`GET /api/chat/attachments/{id}/download`) is gated to the
-//! uploader (before the message is sent) or, once linked, the DM's sender /
-//! receiver or a current member of the message's channel.
+//! Download is gated to the uploader before the message is sent and, once
+//! linked, to the DM's participants or a current member of the message's
+//! channel.
 
 use crate::prelude::*;
 use actix_multipart::Multipart;
@@ -161,11 +159,8 @@ pub async fn download_chat_attachment(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let attachment_id = path.into_inner();
 
-    // Authorize: the uploader (e.g. before the message is sent), or — once the
-    // attachment is linked to a message — that DM's sender/receiver, or any
-    // current member of the channel the message was posted in. Membership is
-    // re-checked here on every download, so removing someone from a channel
-    // also cuts off their access to its attachments.
+    // Membership is re-checked on every download, so removing someone from a
+    // channel also cuts off their access to its attachments.
     let row = sqlx::query(
         r#"
         SELECT a.filename, a.mime_type, a.file_path, a.file_iv
@@ -206,8 +201,8 @@ pub async fn download_chat_attachment(
         }
     };
 
-    // Strip the server at-rest layer; the result is still the client ciphertext
-    // when e2e (the browser decrypts that), else the plaintext file.
+    // Strip the server at-rest layer. For an e2e upload the result is still the
+    // client ciphertext, which only the browser can decrypt.
     let body = match file_iv.as_deref().filter(|v| !v.is_empty()) {
         Some(iv) => decrypt_binary(iv, &bytes)
             .map_err(|e| AppError::Internal(format!("attachment decrypt failed: {e}")))?,

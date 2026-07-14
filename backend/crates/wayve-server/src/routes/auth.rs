@@ -85,12 +85,9 @@ pub async fn register(
             .json(serde_json::json!({ "message": "Passwords do not match" })));
     }
 
-    // Plan A: every new signup lands on 'full'. The legacy 'basic' and
-    // 'password_only' values are no longer accepted — any client still
-    // sending them is silently coerced to 'full' rather than rejected
-    // outright, because the user's intent ("create an account") is
-    // unchanged and the constraint will reject anything else at the
-    // DB layer anyway.
+    // Every new signup lands on 'full'. A client still sending a legacy
+    // recovery_mode is coerced rather than rejected: their intent is unchanged
+    // and the DB constraint rejects anything else anyway.
     if let Some(requested) = data.recovery_mode.as_deref()
         && requested != "full"
     {
@@ -102,9 +99,9 @@ pub async fn register(
     }
     let recovery_mode = "full";
 
-    // Normalize the email so casing/whitespace can't create duplicate accounts —
-    // or (worse) an account that login, which lowercases the identifier, can
-    // never match. Mirrors login and admin_create_user.
+    // Normalize so casing or whitespace cannot create a duplicate account, or
+    // worse an account that login (which lowercases the identifier) can never
+    // match. Must stay in sync with login and admin_create_user.
     let email = data.email.trim().to_lowercase();
     if email.is_empty() {
         return Ok(
@@ -128,9 +125,8 @@ pub async fn register(
         Ok(row) => {
             let user_id: i32 = row.get("id");
             info!(target: "auth", user_id, email = %email, provider = "local", "user registered (pending email verification)");
-            // No auto-login: the account stays unverified (and login is blocked)
-            // until the user clicks the emailed link. Record a register event
-            // rather than a login.
+            // No auto-login: the account stays unverified and login is blocked
+            // until the emailed code is entered.
             crate::audit::record_action(
                 pool.get_ref(),
                 &req,
@@ -184,12 +180,9 @@ pub(crate) async fn login(
 ) -> AppResult {
     info!(target: "auth", "login attempt");
 
-    // Accept either the email or the username as the identifier. Admin-created
-    // users (platform/org "create user") are shown an email + temp password,
-    // but the derived username is globally unique too — so a person entering
-    // the username should still get in. Normalize (trim + lowercase) so a
-    // stray space or different casing doesn't read as wrong credentials;
-    // emails are stored lowercased and usernames are matched case-insensitively.
+    // Either the email or the username works as the identifier: the derived
+    // username of an admin-created user is globally unique too. Normalizing
+    // means a stray space or different casing does not read as bad credentials.
     let identifier = data.email.trim().to_lowercase();
     let user = sqlx::query_as::<_, User>(
         "SELECT id, email, password, account_type, password_valid_until \
@@ -203,8 +196,8 @@ pub(crate) async fn login(
         Some(user) => user,
         None => {
             // Burn the same bcrypt cost as a real verify so the unknown-email
-            // path doesn't return faster than a wrong-password path. Result
-            // intentionally discarded.
+            // path does not return faster than a wrong-password path and become
+            // a timing oracle. The result is intentionally discarded.
             let _ = verify_password(&data.password, DUMMY_PASSWORD_HASH).await;
             warn!("Invalid login attempt: {}", data.email);
             crate::audit::record_login_failure(
@@ -221,7 +214,6 @@ pub(crate) async fn login(
         }
     };
 
-    // Google-signup users have no password — guide them to the right flow.
     let stored_password = match &user.password {
         Some(p) => p,
         None => {
@@ -257,11 +249,10 @@ pub(crate) async fn login(
         }));
     }
 
-    // Short-lived (e.g. guest) accounts carry a hard expiry on the
-    // password itself. Refuse login once past that timestamp — bcrypt
-    // verify succeeding is not enough on its own. We answer with the
-    // generic "Invalid credentials" message to avoid leaking whether
-    // an account exists vs has expired.
+    // Short-lived accounts (guests) carry a hard expiry on the password itself,
+    // so a successful bcrypt verify is not sufficient on its own. The response
+    // stays the generic "Invalid credentials" so it does not leak whether an
+    // account exists but has expired.
     if let Some(valid_until) = user.password_valid_until
         && chrono::Utc::now() > valid_until
     {
@@ -284,9 +275,9 @@ pub(crate) async fn login(
         }));
     }
 
-    // Email-verification gate: local password accounts must confirm their email
-    // before the first login. OAuth/SCIM/business + all pre-existing accounts
-    // are `email_verified = true` (column default), so they're unaffected.
+    // Local password accounts must confirm their email before the first login.
+    // OAuth, SCIM, and pre-existing accounts default to `email_verified = true`,
+    // so they are unaffected.
     let (auth_provider, email_verified): (String, bool) =
         sqlx::query_as("SELECT auth_provider, email_verified FROM users WHERE id = $1")
             .bind(user.id)
@@ -321,9 +312,8 @@ pub(crate) async fn login(
         },
     )
     .await;
-    // Clamp the JWT's `exp` so it never outlives the account's hard
-    // expiry. For non-expiring accounts (the default), `max_exp` is
-    // None and the standard 24h TTL applies.
+    // Clamp `exp` so the JWT never outlives the account's hard expiry. For
+    // non-expiring accounts the standard TTL applies.
     let token = create_jwt_for_account_with_max_exp(
         user.id,
         user.email.clone(),
@@ -331,11 +321,10 @@ pub(crate) async fn login(
         user.password_valid_until,
     );
 
-    // Org members get their password-wrapped private key in the login
-    // response so the browser can unwrap on a fresh device (where
-    // IndexedDB has no cached key). Personal users don't have a row in
-    // member_login_wrapped_keys — they get None and stay on the
-    // existing mnemonic recovery path.
+    // Org members get their password-wrapped private key in the login response
+    // so the browser can unwrap it on a fresh device, where IndexedDB has no
+    // cached key. Personal users have no member_login_wrapped_keys row and stay
+    // on the mnemonic recovery path.
     let login_wrap = match organization::keys::fetch_login_wrap(pool.get_ref(), user.id).await {
         Ok(Some(wrap)) => Some(MemberLoginWrap {
             iv: wrap.iv,
@@ -362,8 +351,7 @@ pub(crate) async fn login(
 #[post("/logout")]
 #[instrument(target = "auth", skip(req, pool))]
 pub async fn logout(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
-    // Best-effort: record the action only when the request still carries a
-    // resolvable identity. Logout always succeeds regardless.
+    // Best-effort audit: logout succeeds even without a resolvable identity.
     if let Some(user_id) = get_user_id_from_request(&req) {
         crate::audit::record_action(
             pool.get_ref(),
@@ -390,12 +378,12 @@ pub struct SessionModeInput {
 
 /// Switch the caller's interactive session between `normal` and `admin`.
 ///
-/// Eligibility is checked against the TRUE DB role (never the moded one): only
-/// an organization or platform owner may enter admin. The switch is instant (no
-/// re-auth) and mints a fresh token carrying the new mode, set as both the auth
-/// cookie (survives hard refresh) and the JSON `token` (for the SPA's Bearer
-/// header). Entering admin only *lifts the downscope* — real permissions still
-/// come from the DB every request, so this can never escalate beyond the role.
+/// Eligibility is checked against the true DB role, never the moded one: only an
+/// organization or platform owner may enter admin. The new token is returned
+/// both as the auth cookie (surviving a hard refresh) and as JSON `token` (for
+/// the SPA's Bearer header). Entering admin only lifts the downscope; real
+/// permissions still come from the DB on every request, so this can never
+/// escalate beyond the caller's role.
 #[post("/session/mode")]
 #[instrument(target = "auth", skip(req, pool, data))]
 pub async fn switch_session_mode(
@@ -412,7 +400,7 @@ pub async fn switch_session_mode(
     };
     let target = SessionMode::from_str(data.mode.trim());
 
-    // DB-truth context — eligibility must not be affected by the current mode.
+    // Eligibility must not be affected by the current mode.
     let true_ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
         Ok(ctx) => ctx,
         Err(e) => {
@@ -447,8 +435,7 @@ pub async fn switch_session_mode(
         target,
     );
 
-    // The me/profile bodies depend on mode; clear both variants so the next
-    // fetch recomputes for the new mode.
+    // The me/profile bodies depend on mode, so both variants must be cleared.
     crate::email::profile::invalidate_me_cache(user_id).await;
     crate::routes::user::invalidate_profile_cache(user_id).await;
 
@@ -476,8 +463,8 @@ fn random_token_hex() -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-// Always responds 200 with a generic message — never reveals whether the
-// email exists, to avoid an enumeration oracle.
+/// Always responds 200 with a generic message, so it can never become an
+/// account-enumeration oracle.
 #[post("/forgot-password")]
 #[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
 pub async fn forgot_password(
@@ -504,7 +491,7 @@ pub async fn forgot_password(
         }
     };
 
-    // Google-signup users (NULL password) can't reset what they don't have.
+    // Google-signup users (NULL password) cannot reset what they do not have.
     let stored_password: Option<String> = row.try_get("password").ok();
     if stored_password.is_none() {
         info!(target: "auth", "forgot ignored: google-only account");
@@ -554,8 +541,8 @@ pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>
             .json(serde_json::json!({ "message": "Password must be at least 6 characters" })));
     }
 
-    // A lookup failure is treated like an unknown token (400) rather than a
-    // 500 — the caller learns nothing either way.
+    // A lookup failure is treated as an unknown token (400) rather than a 500,
+    // so the caller learns nothing either way.
     let row = sqlx::query(
         "SELECT user_id, expires_at, used_at \
          FROM password_reset_tokens WHERE token = $1",
@@ -604,34 +591,21 @@ pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>
     Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "Password updated" })))
 }
 
-// ---- Recover with mnemonic ------------------------------------------------
+// Password reset via the 6-word recovery phrase, with no email round-trip. The
+// server proves the phrase by AES-GCM-decrypting the user's wrapped envelope
+// with the PBKDF2-derived key: a passing auth tag can only mean the mnemonic is
+// right. The response carries the envelope back so the same page can unlock the
+// user's E2E keys without the phrase being typed twice.
 //
-// A user who forgot their password but kept their 6-word recovery phrase can
-// reset their password directly here, no email round-trip. The server proves
-// the phrase is correct by trying to AES-GCM-decrypt the user's wrapped
-// envelope with the PBKDF2-derived key. If the auth tag passes, the
-// mnemonic must be right — no other branch can produce a valid tag.
-//
-// Wire shape (frontend computes entropy from words client-side so the
-// server doesn't need to embed the 2048-word BIP-39 list):
-//   { "email": "...", "mnemonic_entropy": "<b64 of 9 bytes>",
-//     "new_password": "..." }
-//
-// On success the response includes the wrapped envelope so the same page
-// can immediately unlock the user's E2E keys client-side — saves entering
-// the phrase twice.
-//
-// Note: this endpoint runs a 600,000-iteration PBKDF2 per request, which
-// is expensive on purpose. If you ever expose this without rate-limiting
-// you give attackers a free DoS surface — gate it at nginx or add a
-// per-email throttle table before opening it to the public internet.
-
+// Hazard: each request runs a deliberately expensive 600,000-iteration PBKDF2,
+// so this must stay rate-limited (nginx, or a per-email throttle table) or it
+// becomes a free DoS surface.
 #[derive(Deserialize)]
 pub struct RecoverWithMnemonicInput {
     pub email: String,
-    /// Base64 of the 9-byte BIP-39 entropy derived from the user's 6-word
-    /// phrase. Naming reflects what's actually on the wire — the words
-    /// never cross the network in this flow.
+    /// Base64 of the 9-byte BIP-39 entropy the frontend derives from the phrase.
+    /// The words themselves never cross the network, which also spares the
+    /// server the 2048-word BIP-39 list.
     pub mnemonic_entropy: String,
     pub new_password: String,
 }
@@ -658,9 +632,8 @@ pub async fn recover_with_mnemonic(
             .json(serde_json::json!({ "message": "Password must be at least 6 characters" })));
     }
 
-    // Look up the user and their wrapped envelope in one query. Either
-    // missing → return the same generic 400 so probing for emails or
-    // for accounts-without-recovery yields the same answer.
+    // Either the user or the envelope being missing yields the same generic 400,
+    // so probing for emails and for accounts-without-recovery are alike.
     let row = sqlx::query(
         "SELECT u.id, u.recovery_mode, w.v, w.iv, w.ct, w.pub_key \
          FROM users u \
@@ -702,8 +675,8 @@ pub async fn recover_with_mnemonic(
             .json(serde_json::json!({ "message": "Unsupported envelope version" })));
     }
 
-    // Derive the same PBKDF2 wrapping key the frontend used. Same salt,
-    // same iteration count, same hash — see frontend/src/crypto/recovery.ts.
+    // The salt, iteration count, and hash must stay in sync with
+    // frontend/src/crypto/recovery.ts, which derives the same wrapping key.
     let entropy = match B64.decode(data.mnemonic_entropy.trim()) {
         Ok(bytes) if !bytes.is_empty() => bytes,
         _ => {
@@ -714,8 +687,8 @@ pub async fn recover_with_mnemonic(
     let mut key_bytes = [0u8; 32];
     pbkdf2::pbkdf2_hmac::<sha2::Sha256>(&entropy, PBKDF2_SALT, PBKDF2_ITERATIONS, &mut key_bytes);
 
-    // Try AES-GCM decrypt. Auth-tag mismatch == wrong mnemonic; no other
-    // failure mode produces a successful decrypt with a wrong key.
+    // An auth-tag mismatch means a wrong mnemonic: no other failure mode
+    // produces a successful decrypt under a wrong key.
     let iv = match B64.decode(&iv_b64) {
         Ok(v) if v.len() == 12 => v,
         _ => {
@@ -746,9 +719,8 @@ pub async fn recover_with_mnemonic(
             .json(serde_json::json!({ "message": "Invalid email or recovery phrase" })));
     }
 
-    // Mnemonic verified. Set the new password. The wrapped envelope is
-    // intentionally untouched — the phrase keeps wrapping the same private
-    // key, so the user's existing E2E data stays unlockable.
+    // The wrapped envelope is intentionally left untouched: the phrase keeps
+    // wrapping the same private key, so existing E2E data stays unlockable.
     let hashed = hash_password(&data.new_password).await?;
     sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
         .bind(&hashed)
@@ -758,11 +730,8 @@ pub async fn recover_with_mnemonic(
 
     info!(target: "auth", user_id, recovery_mode = %recovery_mode, "recover-with-mnemonic: password reset via recovery phrase");
 
-    // Plan A: every user is 'full', so always return the envelope so
-    // the SPA can unlock E2E keys client-side without making the user
-    // type the mnemonic a second time. The 'password_only' branch is
-    // gone; legacy callers will still see a sensible payload because
-    // any pre-migration row was pinned to 'full' by the schema migration.
+    // The envelope is always returned so the SPA can unlock E2E keys client-side
+    // without the user typing the mnemonic a second time.
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "user_id": user_id,
         "wrapped_envelope": {
@@ -775,7 +744,6 @@ pub async fn recover_with_mnemonic(
     })))
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 #[derive(serde::Deserialize)]
 pub struct RegisterBusinessInput {
     pub organization_name: String,
@@ -785,11 +753,9 @@ pub struct RegisterBusinessInput {
     pub confirm_password: String,
 }
 
-/// Direct business signup: create the owner account AND the organization in one
-/// step — the owner is minted straight as `organization_admin`, instead of
-/// creating a personal account first and upgrading it. Public; no payment here
-/// (billing is added later from the billing page). Everything runs in one
-/// transaction, so an org-name clash rolls back the just-created user too.
+/// Direct business signup: mint the owner as `organization_admin` and create the
+/// organization in one step. Public, and no payment is taken here. Everything
+/// runs in one transaction, so an org-name clash rolls back the new user too.
 #[post("/register-business")]
 #[instrument(target = "auth", skip(req, pool, data), fields(email = %data.email))]
 pub async fn register_business(
@@ -822,10 +788,8 @@ pub async fn register_business(
 
     let mut tx = pool.begin().await?;
 
-    // Created UNVERIFIED (email_verified = false) — the owner must enter the
-    // emailed 6-digit code before login works, same as a personal signup. The
-    // login gate + verify-email + resend endpoints already handle any local
-    // unverified account, so no other backend change is needed.
+    // Created unverified: the owner must enter the emailed code before login
+    // works, exactly as in a personal signup.
     let user_row = sqlx::query(
         "INSERT INTO users (username, email, password, auth_provider, account_type, recovery_mode, email_verified) \
          VALUES ($1, $2, $3, 'local', 'personal', 'full', false) RETURNING id",
@@ -848,9 +812,7 @@ pub async fn register_business(
         }
     };
 
-    // Promote the just-created user into the org owner: creates the org + owner
-    // membership + starter entitlements and flips account_type to
-    // organization_admin. None => org name already taken (tx rolls back).
+    // `None` means the org name is already taken, and the transaction rolls back.
     let created =
         crate::routes::user::create_org_for_user(&mut tx, user_id, name, None, Some(&email))
             .await?;
@@ -862,8 +824,8 @@ pub async fn register_business(
 
     tx.commit().await?;
 
-    // No auto-login: the owner account stays unverified (and login is blocked)
-    // until they enter the emailed code. Record a register event, not a login.
+    // No auto-login: the owner account stays unverified, and login is blocked,
+    // until they enter the emailed code.
     crate::audit::record_action(
         pool.get_ref(),
         &req,
@@ -899,9 +861,9 @@ pub async fn register_business(
     }
 }
 
-// Verify a 6-digit code for `email`. Scoped to the user's newest active code;
-// wrong codes increment `attempts` and are burned after MAX_VERIFY_ATTEMPTS.
-// Bad email / wrong / expired / used all collapse to a generic 400.
+/// Verify a 6-digit code against the user's newest active one. Wrong codes
+/// increment `attempts` and are burned after `MAX_VERIFY_ATTEMPTS`. A bad email,
+/// wrong code, expired code, and used code all collapse to a generic 400.
 #[post("/verify-email")]
 #[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
 pub async fn verify_email(pool: web::Data<PgPool>, data: web::Json<VerifyEmailInput>) -> AppResult {
@@ -911,7 +873,6 @@ pub async fn verify_email(pool: web::Data<PgPool>, data: web::Json<VerifyEmailIn
         HttpResponse::BadRequest().json(serde_json::json!({ "message": "Invalid or expired code" }))
     };
 
-    // Only local, still-unverified accounts have a code to check.
     let user_row = sqlx::query(
         "SELECT id FROM users \
          WHERE email = $1 AND auth_provider = 'local' AND email_verified = false",
@@ -924,7 +885,6 @@ pub async fn verify_email(pool: web::Data<PgPool>, data: web::Json<VerifyEmailIn
     };
     let user_id: i32 = user_row.get("id");
 
-    // Newest code for this user.
     let row = sqlx::query(
         "SELECT id, token, attempts, expires_at, used_at \
          FROM email_verification_tokens WHERE user_id = $1 ORDER BY id DESC LIMIT 1",
@@ -980,8 +940,8 @@ pub async fn verify_email(pool: web::Data<PgPool>, data: web::Json<VerifyEmailIn
     Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "Email verified" })))
 }
 
-// Re-send a verification code. Always responds 200 with a generic message so
-// it can't be used to probe which emails exist / are unverified.
+/// Re-send a verification code. Always responds 200 with a generic message so it
+/// cannot be used to probe which emails exist or are unverified.
 #[post("/resend-verification")]
 #[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
 pub async fn resend_verification(

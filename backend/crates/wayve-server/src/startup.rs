@@ -43,10 +43,9 @@ pub async fn establish_db_connection(db_url: &str, max_conns: u32) -> PgPool {
 #[instrument(target = "startup", skip(pool))]
 pub async fn ensure_email_schema(pool: &PgPool) {
     let statements = [
-        // Rename the legacy `files` table to `drive_files`. Idempotent:
-        // only fires when the old table is present and the new one isn't.
-        // PK, sequence, and indexes are renamed alongside since
-        // ALTER TABLE RENAME doesn't propagate to owned objects.
+        // Rename legacy `files` to `drive_files`. PK, sequence, and indexes are
+        // renamed alongside because ALTER TABLE RENAME doesn't propagate to
+        // owned objects.
         "DO $$ BEGIN \
            IF EXISTS (SELECT 1 FROM pg_class WHERE relname='files' AND relkind='r') \
            AND NOT EXISTS (SELECT 1 FROM pg_class WHERE relname='drive_files' AND relkind='r') \
@@ -59,19 +58,15 @@ pub async fn ensure_email_schema(pool: &PgPool) {
            END IF; \
          END $$",
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT TRUE",
-        // Subject at-rest encryption — same envelope shape as body_*.
-        // New writes go through email::repo which populates these and
-        // leaves `subject` NULL; legacy plaintext rows are migrated by
+        // Subject at-rest encryption, same envelope shape as body_*. New writes
+        // leave `subject` NULL; legacy rows are migrated by
         // email::repo::backfill_subjects at startup.
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS subject_encrypted TEXT",
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS subject_iv TEXT",
-        // Sender/receiver at-rest encryption (same AES-GCM(AES_KEY)
-        // envelope as subject_*/body_*). The `*_hash` siblings hold an
-        // HMAC-SHA256 of the lowercased address keyed by a HKDF-derived
-        // subkey of AES_KEY — used by the Sent-folder filter and any
-        // exact-address lookup so we don't have to decrypt every row
-        // to filter. `backfill_email_addresses` migrates legacy rows
-        // at startup.
+        // Sender/receiver at-rest encryption. The `*_hash` siblings hold an
+        // HMAC-SHA256 of the lowercased address, keyed by an HKDF subkey of
+        // AES_KEY, so exact-address lookups (e.g. the Sent filter) don't have to
+        // decrypt every row.
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_iv TEXT",
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_encrypted TEXT",
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_hash TEXT",
@@ -82,57 +77,43 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          WHERE sender_hash IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS idx_emails_receiver_hash ON emails(receiver_hash) \
          WHERE receiver_hash IS NOT NULL",
-        // Provider labels (Gmail labelIds + Outlook categories + synthetic
-        // IMPORTANT for Outlook importance=high). Used by the sidebar
-        // category folders. Backfills as `{}` for legacy rows; new syncs
-        // populate. GIN index keeps `<label> = ANY(labels)` index-scanned.
+        // Provider labels (Gmail labelIds, Outlook categories) backing the
+        // sidebar category folders. The GIN index keeps `<label> = ANY(labels)`
+        // index-scanned.
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS labels TEXT[] NOT NULL DEFAULT '{}'",
         "CREATE INDEX IF NOT EXISTS idx_emails_labels ON emails USING GIN (labels)",
-        // Plan A Phase 2 — Wayve-to-Wayve native channel. `source` tags
-        // the provenance of each row so the list query knows whether to
-        // join through email_accounts (imap/gmail/outlook) or scan by
-        // recipient_user_id (wayve). recipient_user_id is the owner of a
-        // 'wayve'-source row when account_id is NULL — the send-internal
-        // path inserts one row per recipient with their user_id stamped
-        // here. Same definitions live in init.sql; mirrored here for
-        // already-running deployments.
+        // Wayve-to-Wayve native channel. `source` tags row provenance so the
+        // list query knows whether to join through email_accounts
+        // (imap/gmail/outlook) or scan by recipient_user_id (wayve), which owns
+        // a 'wayve'-source row when account_id is NULL.
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'imap'",
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS recipient_user_id INTEGER \
          REFERENCES users(id) ON DELETE CASCADE",
         "CREATE INDEX IF NOT EXISTS idx_emails_recipient_user_id \
          ON emails(recipient_user_id, created_at DESC) \
          WHERE recipient_user_id IS NOT NULL",
-        // Widen the body-worker partial index to match the worker's full
-        // predicate: missing body OR pending attachment verification. The
-        // CREATE INDEX IF NOT EXISTS clause is a no-op when the index
-        // already exists with the old predicate, so we DROP first. Safe
-        // to re-run; takes a few ms on any inbox.
+        // Widen the body-worker partial index to match the worker's predicate:
+        // missing body OR pending attachment verification. CREATE INDEX IF NOT
+        // EXISTS won't replace the old predicate, so DROP first.
         "DROP INDEX IF EXISTS idx_emails_pending_body",
         "CREATE INDEX IF NOT EXISTS idx_emails_pending_body \
          ON emails (account_id, id) \
          WHERE body_encrypted = '' OR body_encrypted IS NULL OR attachments_checked = false",
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS display_name TEXT",
-        // Provider-reported unread count for the inbox label/folder. NULL
-        // until the first sync writes it; the SELECT in `load_account_summaries_for_user`
+        // NULL until the first sync writes it; `load_account_summaries_for_user`
         // falls back to a local COUNT during that window.
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS provider_unread_count INTEGER",
-        // Adaptive-backoff signal for the sync worker. Stamped on every
-        // upsert that inserts a fresh row; the worker reads it to decide
-        // whether this account should be polled every 30s (hot), 60s
-        // (warm), 5min (cool), or 30min (cold).
+        // Adaptive-backoff signal: the sync worker reads this to pick the poll
+        // cadence for the account — 30s (hot), 60s (warm), 5min (cool), or
+        // 30min (cold).
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP",
-        // Backfill once: existing DBs deployed before adaptive-backoff
-        // shipped have NULL last_message_at, which would force every
-        // account into the cold (30min) bucket. Seed from the actual
-        // max(created_at) per account. Idempotent — only touches NULL
-        // rows, so it's a no-op on every subsequent boot.
+        // Seed last_message_at on DBs that predate adaptive backoff; NULL would
+        // otherwise force every account into the cold (30min) bucket. Touches
+        // only NULL rows, so it is a no-op on later boots.
         "UPDATE email_accounts a \
          SET last_message_at = sub.last_at \
          FROM (SELECT account_id, MAX(created_at) AS last_at FROM emails GROUP BY account_id) sub \
          WHERE a.id = sub.account_id AND a.last_message_at IS NULL",
-        // Drive folders. The new table + the FK column on drive_files
-        // self-heal existing DBs on backend startup so a deployed instance
-        // picks up the v1 folder feature without a manual psql step.
         "CREATE TABLE IF NOT EXISTS folders (
             id BIGSERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -146,27 +127,22 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE drive_files ADD COLUMN IF NOT EXISTS folder_id BIGINT \
          REFERENCES folders(id) ON DELETE CASCADE",
         "CREATE INDEX IF NOT EXISTS idx_drive_files_folder ON drive_files(folder_id)",
-        // Partial unique indexes that prevent duplicate active subscriptions
-        // for the same user or organization. Stripe webhooks can race during
-        // plan upgrades; without this guard `current_plan_for_user` would
-        // non-deterministically pick whichever row has the higher id.
-        // `CREATE UNIQUE INDEX IF NOT EXISTS` is idempotent BUT will fail
-        // outright if the table already contains duplicate active rows —
-        // the existing `warn!` handler in this loop will log that and
-        // continue, so an operator can spot it and clean up the dupes by
-        // canceling the older one. Doing the cleanup automatically here
-        // would risk overwriting actual subscription state.
+        // Prevent duplicate active subscriptions per user/org: Stripe webhooks
+        // can race during upgrades, and without this `current_plan_for_user`
+        // picks whichever duplicate has the higher id. Creation fails if
+        // duplicates already exist; the `warn!` below logs it and an operator
+        // cancels the older row by hand — automatic cleanup could clobber real
+        // subscription state.
         "CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_active_user_uniq \
          ON subscriptions(user_id) \
          WHERE status = 'active' AND user_id IS NOT NULL",
         "CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_active_org_uniq \
          ON subscriptions(organization_id) \
          WHERE status = 'active' AND organization_id IS NOT NULL",
-        // Self-heal accounts that connected before `last_sync` was stamped on
-        // INSERT — NULL forces the sync worker into a full-mailbox crawl on
-        // every tick, which can never finish for large mailboxes. The
-        // on-connect backfill has already pulled the recent history, so it's
-        // safe to seed the cursor to NOW.
+        // Accounts connected before `last_sync` was stamped on INSERT have NULL,
+        // which forces the sync worker into a full-mailbox crawl every tick and
+        // can never finish for large mailboxes. The on-connect backfill already
+        // pulled recent history, so seeding the cursor to NOW is safe.
         "UPDATE email_accounts \
          SET last_sync = EXTRACT(EPOCH FROM NOW())::BIGINT \
          WHERE last_sync IS NULL",
@@ -262,13 +238,8 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          ON drive_shares(resource_type, resource_id, scope, COALESCE(organization_id, 0))",
         "CREATE INDEX IF NOT EXISTS drive_shares_org_idx
          ON drive_shares(organization_id, resource_type, resource_id)",
-        // ────────────────────────────────────────────────────────────────
-        // Shared inboxes (multi-tenant). The email/account queries JOIN
-        // against these tables on every /api/emails and /api/accounts
-        // call — without the self-heal here those endpoints 500 on any
-        // pre-existing DB that hasn't had `db-reset` run since the
-        // feature shipped.
-        // ────────────────────────────────────────────────────────────────
+        // Shared inboxes (multi-tenant). /api/emails and /api/accounts JOIN
+        // against these on every call, so a DB without them 500s.
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS organization_id INTEGER \
          REFERENCES organizations(id) ON DELETE CASCADE",
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE",
@@ -295,12 +266,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          ON shared_inbox_email_state(assignee_id) WHERE assignee_id IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS idx_shared_inbox_state_status \
          ON shared_inbox_email_state(status)",
-        // ────────────────────────────────────────────────────────────────
-        // Recovery seed: server-side wrapped private key. Encrypted with
-        // PBKDF2(mnemonic) → AES-GCM; opaque to the server. One row per
-        // user; PUT overwrites. See backend/src/routes/recovery.rs and
-        // frontend/src/crypto/recovery.ts for the wire format.
-        // ────────────────────────────────────────────────────────────────
+        // Recovery seed: the user's private key wrapped with
+        // PBKDF2(mnemonic) → AES-GCM, opaque to the server. Wire format must
+        // stay in sync with routes/recovery.rs and frontend/src/crypto/recovery.ts.
         "CREATE TABLE IF NOT EXISTS user_wrapped_keys (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             v INTEGER NOT NULL,
@@ -310,29 +278,18 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )",
-        // ────────────────────────────────────────────────────────────────
-        // Threaded channel replies: parent_message_id points at the top
-        // of a thread. Top-level messages have parent_message_id IS NULL.
-        // Indexed for fast reply-count and replies-of-parent fetches.
-        // ────────────────────────────────────────────────────────────────
+        // Threaded channel replies: parent_message_id points at the top of a
+        // thread and is NULL for top-level messages.
         "ALTER TABLE channel_messages \
          ADD COLUMN IF NOT EXISTS parent_message_id INT \
          REFERENCES channel_messages(id) ON DELETE CASCADE",
         "CREATE INDEX IF NOT EXISTS idx_channel_messages_parent \
          ON channel_messages (parent_message_id) \
          WHERE parent_message_id IS NOT NULL",
-        // ────────────────────────────────────────────────────────────────
-        // Recovery mode + envelope. Same ALTERs live in init.sql, but
-        // init.sql only runs on a fresh Postgres volume — populated
-        // prod DBs need the self-heal here or /api/me + registration
-        // 500 on the new column reference.
-        // ────────────────────────────────────────────────────────────────
-        // Plan A: collapsed to 'full' only. Any 'basic' / 'password_only'
-        // legacy rows are pinned to 'full' here so the tighter CHECK
-        // installs cleanly; the AuthContext picks them up on next login,
-        // generates a fresh mnemonic, wraps the on-device RSA key and
-        // nulls out private_key_encrypted/_iv so the mnemonic is the
-        // only path back in. See init.sql for the same migration.
+        // Recovery mode is collapsed to 'full' only. Legacy 'basic' /
+        // 'password_only' rows are pinned to 'full' first so the tighter CHECK
+        // installs cleanly; AuthContext then re-wraps those users on next login
+        // so the mnemonic is the only way back in. Mirrors init.sql.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_mode TEXT NOT NULL DEFAULT 'full'",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS private_key_encrypted TEXT",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS private_key_iv TEXT",
@@ -340,16 +297,11 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_recovery_mode_check",
         "ALTER TABLE users ADD CONSTRAINT users_recovery_mode_check \
          CHECK (recovery_mode = 'full')",
-        // Presence: durable "last seen" fallback. Same column lives in
-        // init.sql; mirrored here so already-running deployments pick it up
-        // without a db-reset (the presence snapshot endpoint reads it).
+        // Durable presence fallback, read by the presence snapshot endpoint.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ",
-        // ────────────────────────────────────────────────────────────────
-        // OIDC SSO (multi-tenant). One IdP config row per org;
-        // allowed_domain routes alice@acme.com → Acme's IdP. The
-        // sso_states row binds PKCE + nonce to the in-flight code so a
-        // stolen `code` alone can't be exchanged.
-        // ────────────────────────────────────────────────────────────────
+        // OIDC SSO (multi-tenant). One IdP config row per org; allowed_domain
+        // routes alice@acme.com to Acme's IdP. The sso_states row binds PKCE and
+        // nonce to the in-flight code so a stolen `code` alone can't be exchanged.
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS sso_sub TEXT",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS sso_org_id INTEGER \
          REFERENCES organizations(id) ON DELETE SET NULL",
@@ -370,13 +322,10 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         )",
         "CREATE INDEX IF NOT EXISTS idx_org_sso_configs_domain \
          ON org_sso_configs(allowed_domain)",
-        // ────────────────────────────────────────────────────────────────
-        // Custom-domain ownership. An org claims a domain; ownership is
-        // proven by publishing a DNS TXT challenge. Only a VERIFIED row
-        // lets the org mint `*@domain` member addresses. `verified` is set
-        // by the server after a successful DNS check — never by the client.
-        // UNIQUE(domain) stops two orgs claiming the same domain.
-        // ────────────────────────────────────────────────────────────────
+        // Custom-domain ownership, proven by a DNS TXT challenge. Only a
+        // verified row lets an org mint `*@domain` member addresses, and
+        // `verified` is set by the server after the DNS check, never by the
+        // client. UNIQUE(domain) stops two orgs claiming the same domain.
         "CREATE TABLE IF NOT EXISTS organization_domains (
             id SERIAL PRIMARY KEY,
             organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -415,9 +364,8 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee TEXT NOT NULL DEFAULT ''",
         "CREATE INDEX IF NOT EXISTS idx_tasks_user_priority \
          ON tasks(user_id, priority DESC, created_at DESC)",
-        // Per-user friendly task number (see init.sql). Mirrored here so prod —
-        // where init.sql only runs on a fresh volume — gets the column, a
-        // one-time backfill of existing rows, and the uniqueness guard on boot.
+        // Per-user friendly task number: add the column, backfill existing rows
+        // once, then install the uniqueness guard. Mirrors init.sql.
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_number INTEGER",
         "WITH numbered AS ( \
             SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id) AS rn \
@@ -426,13 +374,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          UPDATE tasks t SET task_number = n.rn FROM numbered n WHERE t.id = n.id",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_task_number \
          ON tasks(user_id, task_number) WHERE task_number IS NOT NULL",
-        // ────────────────────────────────────────────────────────────────
-        // Workspace Documents — a shared store. `organization_id` is NULLABLE:
-        // non-null = that org's shared docs; NULL = the platform-team-wide set
-        // (platform staff have no org). Mirrors infra/postgres/init.sql; the
-        // DROP NOT NULL migrates pre-existing tables that were created with the
-        // old NOT NULL column.
-        // ────────────────────────────────────────────────────────────────
+        // Workspace Documents. `organization_id` is nullable: non-null is that
+        // org's shared docs, NULL is the platform-team-wide set (platform staff
+        // have no org). The DROP NOT NULL migrates tables created before that.
         "CREATE TABLE IF NOT EXISTS org_document_folders (
             id BIGSERIAL PRIMARY KEY,
             organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
@@ -461,15 +405,11 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE org_documents ALTER COLUMN organization_id DROP NOT NULL",
         "CREATE INDEX IF NOT EXISTS idx_org_documents_org_folder \
          ON org_documents(organization_id, folder_id)",
-        // ────────────────────────────────────────────────────────────────
-        // Payroll. Lives next to the Stripe billing projection but is
-        // independent of it — employees aren't always Wayve users
-        // (contractors, hires before account creation) so user_id is
-        // nullable. `payroll_run_items.employee_name` denormalizes the
-        // employee name at run time so a historical run still reads
-        // correctly even if the employee row is later renamed or
-        // terminated.
-        // ────────────────────────────────────────────────────────────────
+        // Payroll, independent of the Stripe billing projection. Employees
+        // aren't always Wayve users (contractors, pre-account hires) so user_id
+        // is nullable, and `payroll_run_items.employee_name` denormalizes the
+        // name at run time so a historical run still reads correctly after the
+        // employee is renamed or terminated.
         "CREATE TABLE IF NOT EXISTS employees (
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -521,17 +461,10 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         )",
         "CREATE INDEX IF NOT EXISTS idx_payroll_run_items_run \
          ON payroll_run_items(payroll_run_id)",
-        // ────────────────────────────────────────────────────────────────
-        // Outbound webhooks. Customers subscribe to platform events; the
-        // dispatcher worker delivers signed JSON envelopes with retry.
-        //
-        // `secret` is opaque high-entropy bytes used as the HMAC-SHA256
-        // key. Stored hex; revealed exactly once at creation.
-        //
-        // `org_wide = true` requires `organization_id` to be set and
-        // delivers events for ALL members of that org, not just the
-        // creator. Mirrors how api_keys work for shared org integrations.
-        // ────────────────────────────────────────────────────────────────
+        // Outbound webhooks: the dispatcher worker delivers signed JSON
+        // envelopes with retry. `secret` is the hex HMAC-SHA256 key, revealed
+        // exactly once at creation. `org_wide = true` requires organization_id
+        // and delivers events for every member of that org, not just the creator.
         "CREATE TABLE IF NOT EXISTS webhook_endpoints (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -553,9 +486,8 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         )",
         "CREATE INDEX IF NOT EXISTS webhook_endpoints_user_idx ON webhook_endpoints(user_id)",
         "CREATE INDEX IF NOT EXISTS webhook_endpoints_org_idx ON webhook_endpoints(organization_id) WHERE organization_id IS NOT NULL",
-        // Delivery queue + audit. `next_attempt_at` drives the dispatcher
-        // poll; `status = pending AND next_attempt_at <= NOW()` is the
-        // worker's pickup predicate. Partial index keeps it cheap.
+        // Delivery queue. `status = pending AND next_attempt_at <= NOW()` is the
+        // dispatcher's pickup predicate; the partial index below keeps it cheap.
         "CREATE TABLE IF NOT EXISTS webhook_deliveries (
             id BIGSERIAL PRIMARY KEY,
             endpoint_id INTEGER NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
@@ -576,11 +508,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          ON webhook_deliveries(next_attempt_at) WHERE status = 'pending'",
         "CREATE INDEX IF NOT EXISTS webhook_deliveries_endpoint_idx \
          ON webhook_deliveries(endpoint_id, created_at DESC)",
-        // ────────────────────────────────────────────────────────────────
-        // Slack integration (enterprise only). One workspace per org; bot
-        // token encrypted at rest. slack_channel_links maps a Slack channel
-        // to a Wayve channel for inbound import + outbound posting.
-        // ────────────────────────────────────────────────────────────────
+        // Slack integration (enterprise only). One workspace per org, bot token
+        // encrypted at rest. slack_channel_links maps a Slack channel to a Wayve
+        // channel for inbound import and outbound posting.
         "CREATE TABLE IF NOT EXISTS slack_connections (
             organization_id INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
             bot_token_iv TEXT NOT NULL,
@@ -605,11 +535,8 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          ON slack_channel_links(organization_id, slack_channel_id)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_slack_link_wayve_channel \
          ON slack_channel_links(wayve_channel_id)",
-        // ────────────────────────────────────────────────────────────────
-        // GitLab integration (per-user, mirrors Jira). Connect a GitLab
-        // instance (self-hosted supported) with a PAT; import assigned issues
-        // into Tasks. tasks gets gitlab_* link columns.
-        // ────────────────────────────────────────────────────────────────
+        // GitLab integration (per-user, mirrors Jira): connect an instance with
+        // a PAT and import assigned issues into Tasks via the gitlab_* columns.
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS gitlab_issue_iid INTEGER",
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS gitlab_project_id INTEGER",
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS gitlab_web_url TEXT",
@@ -625,11 +552,7 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         )",
-        // ────────────────────────────────────────────────────────────────
-        // Jira integration (per-user). Originally only in init.sql, so existing
-        // DBs that pre-date the Jira feature never got these — backfill on every
-        // boot so the connection/import endpoints don't 500 on a missing table.
-        // ────────────────────────────────────────────────────────────────
+        // Jira integration (per-user).
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS jira_issue_key TEXT",
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS jira_base TEXT",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_jira_issue \
@@ -644,30 +567,20 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         )",
-        // ────────────────────────────────────────────────────────────────
-        // Plan catalog columns. The catalog ROWS are the single source of
-        // truth in `billing/catalog.rs` and are upserted by `seed_plan_catalog`
-        // after this static DDL runs. These ALTERs just guarantee the columns
-        // that seed writes (`tier`, plus the rate-limit/quota pair below) exist
-        // on older DBs; idempotent. To change pricing or plans, edit
-        // `billing/catalog.rs` — nothing here.
-        // ────────────────────────────────────────────────────────────────
+        // Plan catalog columns only. The catalog rows are owned by
+        // `billing/catalog.rs` and upserted by `seed_plan_catalog` after this
+        // DDL runs, so change pricing or plans there, not here.
         "ALTER TABLE plans ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'personal'",
-        // Per-plan API rate ceiling + rolling 30-day request budget (-1 =
-        // unlimited); values are written by the catalog seed below.
+        // Per-plan API rate ceiling and rolling 30-day request budget
+        // (-1 = unlimited); values come from the catalog seed.
         "ALTER TABLE plans ADD COLUMN IF NOT EXISTS rate_limit_per_min \
          INTEGER NOT NULL DEFAULT 60",
         "ALTER TABLE plans ADD COLUMN IF NOT EXISTS monthly_quota \
          INTEGER NOT NULL DEFAULT 50000",
-        // ────────────────────────────────────────────────────────────────
-        // SCIM 2.0 provisioning.
-        //
-        // Each organization that wants IdP-driven provisioning mints a
-        // bearer token here. The token's `token_hash` is SHA-256; the raw
-        // value is shown once at creation. `external_id` lives on `users`
-        // (sparse — only IdP-managed users carry one) and is the
-        // SCIM-spec stable identifier the IdP keys on.
-        // ────────────────────────────────────────────────────────────────
+        // SCIM 2.0 provisioning. An org mints a bearer token here; only its
+        // SHA-256 `token_hash` is stored and the raw value is shown once at
+        // creation. `users.external_id` is the SCIM stable identifier the IdP
+        // keys on, and is sparse — only IdP-managed users carry one.
         "CREATE TABLE IF NOT EXISTS scim_tokens (
             id SERIAL PRIMARY KEY,
             organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -683,9 +596,8 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS external_id TEXT",
         "CREATE UNIQUE INDEX IF NOT EXISTS users_external_id_org_idx \
          ON users(organization_id, external_id) WHERE external_id IS NOT NULL",
-        // Plan A: per-user 1 GiB ciphertext quota across emails, chat,
-        // drive, tasks, calendar, notes. Same definition lives in
-        // init.sql; mirrored here for already-running deployments.
+        // Per-user 1 GiB ciphertext quota across emails, chat, drive, tasks,
+        // calendar, and notes.
         "CREATE TABLE IF NOT EXISTS user_storage_usage (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             bytes_used BIGINT NOT NULL DEFAULT 0,
@@ -693,11 +605,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             CONSTRAINT user_storage_usage_nonneg_chk CHECK (bytes_used >= 0 AND bytes_quota >= 0)
         )",
-        // Plan A Phase 3 — secure-send magic-link table. The server
-        // stores only opaque ciphertext + wrapped key + per-message
-        // PBKDF2 salt; it never sees the passphrase the recipient
-        // needs. Same definition lives in init.sql; mirrored here for
-        // already-running deployments.
+        // Secure-send magic links. The server stores only opaque ciphertext, the
+        // wrapped key, and a per-message PBKDF2 salt; it never sees the
+        // passphrase the recipient needs.
         "CREATE TABLE IF NOT EXISTS secure_messages (
             id BIGSERIAL PRIMARY KEY,
             token TEXT NOT NULL UNIQUE,
@@ -717,11 +627,7 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          ON secure_messages(expires_at)",
         "CREATE INDEX IF NOT EXISTS idx_secure_messages_sender \
          ON secure_messages(sender_user_id, created_at DESC)",
-        // ────────────────────────────────────────────────────────────────
-        // Organization Master Key. Schema lives in init.sql; mirrored
-        // here so existing dev/prod DBs pick it up without `just db-reset`.
-        // See organization/keys.rs for the handler set.
-        // ────────────────────────────────────────────────────────────────
+        // Organization Master Key. Handlers live in organization/keys.rs.
         "CREATE TABLE IF NOT EXISTS organization_keys (
             organization_id INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
             public_key TEXT NOT NULL,
@@ -773,10 +679,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         )",
         "CREATE INDEX IF NOT EXISTS idx_org_key_audit_log_org_time \
          ON org_key_audit_log(organization_id, created_at DESC)",
-        // Per-user project (GitHub repo) access. A row grants one user visibility
-        // of one repo (by full_name "owner/name") on the Projects page. Admins /
-        // platform staff are unrestricted and ignore this table. Schema also in
-        // init.sql; mirrored here so existing DBs pick it up without db-reset.
+        // Per-user project (GitHub repo) access: one row grants one user
+        // visibility of one repo on the Projects page. Admins and platform staff
+        // are unrestricted and ignore this table.
         "CREATE TABLE IF NOT EXISTS member_project_access (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -787,8 +692,8 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         )",
         "CREATE INDEX IF NOT EXISTS idx_member_project_access_user \
          ON member_project_access(user_id)",
-        // Wayve-intended access level for the per-repo Access panel ('read' |
-        // 'write'); GitHub's live collaborator permission wins when readable.
+        // Wayve-intended access level for the per-repo Access panel. GitHub's
+        // live collaborator permission wins when it is readable.
         "ALTER TABLE member_project_access ADD COLUMN IF NOT EXISTS access_level TEXT NOT NULL DEFAULT 'read'",
         "ALTER TABLE member_project_access DROP CONSTRAINT IF EXISTS member_project_access_level_check",
         "ALTER TABLE member_project_access ADD CONSTRAINT member_project_access_level_check \
@@ -803,18 +708,16 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         }
     }
 
-    // Seed the plan catalog from the single source of truth
-    // (`billing::catalog::PLAN_CATALOG`) now that the columns above exist.
+    // Must run after the DDL above, which creates the columns it writes.
     if let Err(e) = seed_plan_catalog(pool).await {
         warn!(error = ?e, "plan catalog seed failed");
     }
 }
 
-/// Upsert the canonical plan catalog into the `plans` table. Runs on every boot
-/// so fresh and existing DBs converge to `billing::catalog::PLAN_CATALOG`
-/// without a migration. Only catalog codes are overwritten; operator-defined
-/// plan codes are left untouched. **To change pricing/plans, edit
-/// `billing/catalog.rs`, not this function.**
+/// Upsert `billing::catalog::PLAN_CATALOG` into the `plans` table on every boot,
+/// so fresh and existing DBs converge without a migration. Only catalog codes are
+/// overwritten; operator-defined plan codes are left alone. To change
+/// pricing or plans, edit `billing/catalog.rs`, not this function.
 async fn seed_plan_catalog(pool: &PgPool) -> Result<(), sqlx::Error> {
     for plan in crate::billing::catalog::PLAN_CATALOG {
         let features = serde_json::json!({ "bullets": plan.features });
@@ -865,8 +768,6 @@ pub fn init_telemetry() {
 /// (email schema compat, subject backfill, dev-only Stripe test-price seed).
 #[instrument(target = "startup", skip())]
 pub async fn connect_db_and_migrate(role: RuntimeRole) -> PgPool {
-    // Explicit DATABASE_URL wins; otherwise derived from the POSTGRES_* parts
-    // so the credentials are single-sourced in .env.secrets.
     let db_url = config::database_url();
     let max_db_connections = config::db_max_connections(role);
     info!(max_db_connections, "Database pool size selected");
@@ -874,60 +775,51 @@ pub async fn connect_db_and_migrate(role: RuntimeRole) -> PgPool {
 
     ensure_email_schema(&pool).await;
 
-    // One-time encryption migration for legacy plaintext email subjects.
-    // Idempotent — re-runs only touch rows still missing the envelope.
+    // Encrypts legacy plaintext subjects; re-runs only touch rows still missing
+    // the envelope.
     match email::repo::backfill_subjects(&pool).await {
         Ok(0) => {}
         Ok(n) => info!(target: "startup", encrypted = n, "backfilled legacy email subjects"),
         Err(e) => warn!(target: "startup", error = ?e, "subject backfill failed"),
     }
 
-    // Same migration shape for sender/receiver. Encrypts the plaintext
-    // address columns into the new `*_iv` / `*_encrypted` / `*_hash`
-    // trio. The plaintext columns are NOT cleared in this PR — that
-    // happens in the follow-up PR that drops them entirely.
+    // Same shape for sender/receiver. The plaintext columns are deliberately
+    // left populated; a later change drops them.
     match email::repo::backfill_addresses(&pool).await {
         Ok(0) => {}
         Ok(n) => info!(target: "startup", encrypted = n, "backfilled legacy email addresses"),
         Err(e) => warn!(target: "startup", error = ?e, "address backfill failed"),
     }
 
-    // Dev/test only: backfill plans.stripe_price_id by creating Stripe test
-    // prices for any paid plan that isn't linked yet. Idempotent via Stripe
-    // lookup_key. Skips silently if STRIPE_SECRET_KEY is missing or live.
+    // Dev/test only: creates Stripe test prices for unlinked paid plans.
+    // Silently skips when STRIPE_SECRET_KEY is missing or live.
     billing::ensure_test_prices(&pool).await;
 
     pool
 }
 
-/// Process-wide feature state initialized once at startup, for **every** role
-/// (workers and the API alike). Today that's the global DB pool the IMAP/SMTP
-/// send path reads without a `&PgPool` argument. Call right after the pool is
-/// connected, before `spawn_role_workers`.
+/// Initialize process-wide feature state for every role, workers and API alike.
+/// Today that is the global DB pool that code paths without a `&PgPool` argument
+/// (the IMAP/SMTP send path) read. Must be called after the pool is connected and
+/// before `spawn_role_workers`.
 pub fn init_feature_state(pool: &PgPool) {
-    // Register the process pool so code paths without a `&PgPool` argument
-    // (e.g. the IMAP send path) can reach the DB.
     crate::email::account::init_pool(pool.clone());
 }
 
-/// Spawn background tokio tasks appropriate for the runtime role. The single
-/// place worker/subscriber tasks start, so a new background job is added here
-/// rather than ad-hoc in `main`.
+/// Spawn the background tokio tasks for a runtime role. This is the only place
+/// worker and subscriber tasks start, so add new background jobs here rather
+/// than ad-hoc in `main`.
 ///
-/// * `EmailSyncWorker` / `EmailBodyWorker` block until process exit and never
-///   return; they're modeled as `.await` rather than `spawn` so the binary
-///   exits when the worker stops.
-/// * `All` co-locates every worker alongside the API in one container — used
-///   by dev compose and small deployments.
-/// * `Api` runs only the lightweight webhook dispatcher next to the API; sync
-///   and body workers are deployed separately.
+/// * `EmailSyncWorker` / `EmailBodyWorker` are `.await`ed rather than spawned so
+///   the binary exits when the worker stops.
+/// * `All` co-locates every worker with the API in one container (dev compose
+///   and small deployments).
+/// * `Api` runs only the lightweight webhook dispatcher; sync and body workers
+///   are deployed separately.
 ///
-/// `has_redis` gates the cross-instance chat pub/sub subscriber: it's only
-/// useful on socket-serving roles (`All`/`Api`) and only when Redis is up;
-/// without it senders fall back to local delivery.
+/// The chat pub/sub subscriber and presence sweeper only matter on socket-serving
+/// roles and only with Redis up; without it senders fall back to local delivery.
 pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, cache: &Option<Cache>) {
-    // The chat pub/sub subscriber and the presence sweeper only matter on
-    // socket-serving roles and only when Redis is up.
     let has_redis = cache.is_some();
     match role {
         RuntimeRole::EmailSyncWorker => {
@@ -958,11 +850,9 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, cache: &Option
             spawn_presence_sweeper(pool, cache);
         }
         RuntimeRole::Api => {
-            // The webhook dispatcher is a cheap DB poller; spawning it
-            // here means the API container can deliver subscribed events
-            // without depending on a separate worker container. Safe to
-            // run concurrently with the `All` variant — claim uses
-            // FOR UPDATE SKIP LOCKED.
+            // The dispatcher is a cheap DB poller, so the API container can
+            // deliver events without a separate worker container. Safe to run
+            // concurrently with `All` because claims use FOR UPDATE SKIP LOCKED.
             let webhook_pool = pool.clone();
             tokio::spawn(async move {
                 webhooks::spawn_dispatcher(webhook_pool).await;
@@ -983,13 +873,12 @@ fn spawn_presence_sweeper(pool: &PgPool, cache: &Option<Cache>) {
     }
 }
 
-/// Periodically (and shortly after startup) (re-)arm Gmail `users.watch` for
-/// Google mailboxes whose watch is missing or within 24h of expiry, so new mail
-/// keeps pushing to Pub/Sub. No-op when `GMAIL_PUSH_TOPIC` is unset (the 30s
-/// poll still covers accounts). Runs on the email-sync role and the `All` role.
+/// Re-arm Gmail `users.watch` for mailboxes whose watch is missing or within 24h
+/// of expiry, so new mail keeps pushing to Pub/Sub. No-op when `GMAIL_PUSH_TOPIC`
+/// is unset — the 30s poll still covers those accounts.
 fn spawn_gmail_watch_renewer(pool: PgPool) {
     tokio::spawn(async move {
-        // Warm-up delay so the token/DB paths are ready.
+        // Warm-up delay so the token and DB paths are ready.
         tokio::time::sleep(Duration::from_secs(20)).await;
         loop {
             if crate::config::gmail_push_topic().is_some()
@@ -997,7 +886,7 @@ fn spawn_gmail_watch_renewer(pool: PgPool) {
             {
                 warn!(target: "worker", error = ?e, "gmail watch renewal cycle failed");
             }
-            // Watches live ≤7 days; a 6h cadence renews with comfortable margin.
+            // Watches live at most 7 days; 6h renews with comfortable margin.
             tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
         }
     });
@@ -1042,22 +931,17 @@ async fn renew_gmail_watches(pool: &PgPool) -> crate::prelude::Result<()> {
     Ok(())
 }
 
-/// Retention for the append-only log streams: delete anything older than each
-/// table's configured window, then repeat daily. Keeps the tables bounded.
+/// Prune the append-only log streams daily, bounding `activity_events`
+/// (`ACTIVITY_RETENTION_DAYS`) and `audit_logs` (`AUDIT_RETENTION_DAYS`, both
+/// default 7). The short audit window is a deliberate data-minimization choice:
+/// anything needing longer retention is shipped off via the SIEM forward in
+/// `routes/audit.rs` before it ages out.
 ///
-/// - `activity_events` (`ACTIVITY_RETENTION_DAYS`, default 7) is low-value
-///   telemetry, so a short window is fine.
-/// - `audit_logs` (`AUDIT_RETENTION_DAYS`, default 7) is the security/audit
-///   trail; the window is a deliberate data-minimization choice. Anything
-///   needing longer retention is shipped off via the SIEM export/forward (see
-///   `routes/audit.rs`) before it ages out.
-///
-/// The window is bound as a parameter via `make_interval` (not string-formatted
-/// into the SQL) so the config value can never inject. Each table is pruned
+/// The window is bound as a `make_interval` parameter rather than formatted into
+/// the SQL, so the config value can never inject. Tables are pruned
 /// independently so a failure on one doesn't skip the other.
 fn spawn_log_retention_pruner(pool: PgPool) {
-    // (table, retention window in days). Resolved once at startup; an env change
-    // takes effect on the next restart, like the other config reads.
+    // Resolved once at startup; an env change takes effect on the next restart.
     let tables: [(&str, i32); 2] = [
         ("activity_events", crate::config::activity_retention_days()),
         ("audit_logs", crate::config::audit_retention_days()),
@@ -1090,8 +974,9 @@ fn spawn_chat_pubsub(has_redis: bool) {
     }
 }
 
-/// Connect to Redis (best-effort; the app keeps running with `None` if Redis
-/// is down) and install the RBAC role-context cache layer.
+/// Connect to Redis and install the RBAC role-context cache. Best-effort: Redis
+/// is a cache, not a dependency, so the app keeps running with `None` if it is
+/// down and every read falls back to the DB path.
 pub async fn connect_redis_and_install_cache() -> Option<Cache> {
     let redis_cache = match Cache::connect().await {
         Ok(c) => {
@@ -1104,9 +989,6 @@ pub async fn connect_redis_and_install_cache() -> Option<Cache> {
         }
     };
 
-    // resolve_role_context (called on ~every authenticated request) is served
-    // from cache after the first lookup per user. Falls back to the DB path
-    // when Redis is down.
     rbac_cache::install(redis_cache.clone());
 
     redis_cache
@@ -1125,8 +1007,9 @@ pub fn load_geoip() -> Option<crate::geoip::GeoIp> {
     }
 }
 
-/// Build the CORS layer. Single-origin allowlist read from `FRONTEND_URL`;
-/// supports credentials so the auth cookie survives.
+/// Build the CORS layer. The allowlist is a single origin read from
+/// `FRONTEND_URL`; multi-origin support needs a rework here. Credentials are
+/// enabled so the auth cookie survives.
 pub fn build_cors(frontend_url: &str) -> Cors {
     Cors::default()
         .allowed_origin(frontend_url)

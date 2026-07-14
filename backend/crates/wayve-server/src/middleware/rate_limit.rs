@@ -38,7 +38,7 @@ fn auth_limit_rule(method: &str, path: &str) -> Option<LimitRule> {
             max_requests: 5,
             window_secs: 900,
         }),
-        // Anonymous visit beacon — generous but bounded to deter abuse.
+        // Anonymous visit beacon: generous, but bounded to deter abuse.
         "/api/visits" => Some(LimitRule {
             max_requests: 120,
             window_secs: 60,

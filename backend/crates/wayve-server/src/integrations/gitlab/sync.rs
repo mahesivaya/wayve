@@ -7,8 +7,7 @@ use super::mapping::map_issue;
 use super::models::GitlabConnection;
 
 /// Pull issues assigned to the connected user into their tasks, upserting on
-/// `(user_id, gitlab_project_id, gitlab_issue_iid)` so re-imports update in
-/// place. Returns `(imported, updated)`.
+/// `(user_id, gitlab_project_id, gitlab_issue_iid)` so re-imports update in place.
 pub async fn pull(
     pool: &PgPool,
     user_id: i32,
@@ -23,11 +22,10 @@ pub async fn pull(
         return Ok((0, 0));
     }
 
-    // Batch every issue into ONE multi-row upsert instead of a round-trip per
-    // issue. `(xmax::text = '0')` is true only for a fresh INSERT; an ON
-    // CONFLICT UPDATE stamps xmax with the updating xid — so the per-row flag
-    // distinguishes imported (true) from updated (false). Issues in a list are
-    // unique by (project_id, iid), so no row conflicts twice within the batch.
+    // One multi-row upsert, not a round-trip per issue. `(xmax::text = '0')` is
+    // true only for a fresh INSERT, because an ON CONFLICT UPDATE stamps xmax with
+    // the updating xid, so the per-row flag separates imported from updated. Issues
+    // are unique by (project_id, iid), so no row conflicts twice in the batch.
     let mut qb: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
         "INSERT INTO tasks \
             (user_id, name, description, priority, status, \

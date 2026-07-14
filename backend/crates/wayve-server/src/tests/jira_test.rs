@@ -1,7 +1,7 @@
-// Jira integration end-to-end: connect (with credential encryption at rest),
-// import issues → tasks (idempotent re-import), and push a linked task's status
-// change back to Jira. Jira is mocked via wiremock and `JIRA_API_BASE`; the only
-// crypto involved is the symmetric at-rest token wrap (no chat/email E2E).
+// The Jira integration end to end: connecting with the credential encrypted at
+// rest, importing issues into tasks idempotently, and pushing a linked task's
+// status change back to Jira. Jira is mocked with wiremock via the
+// `JIRA_API_BASE` indirection.
 #[cfg(test)]
 mod tests {
     use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
@@ -52,7 +52,6 @@ mod tests {
     async fn connect_import_and_push() {
         let mock = MockServer::start().await;
 
-        // Credential probe at connect time.
         Mock::given(method("GET"))
             .and(path("/rest/api/3/myself"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -60,13 +59,11 @@ mod tests {
             })))
             .mount(&mock)
             .await;
-        // Issue search for import (enhanced JQL search endpoint).
         Mock::given(method("GET"))
             .and(path("/rest/api/3/search/jql"))
             .respond_with(ResponseTemplate::new(200).set_body_json(search_body()))
             .mount(&mock)
             .await;
-        // Push: summary update + transitions list + transition POST (expected).
         Mock::given(method("PUT"))
             .and(path("/rest/api/3/issue/WAY-1"))
             .respond_with(ResponseTemplate::new(204))
@@ -86,7 +83,8 @@ mod tests {
             .mount(&mock)
             .await;
 
-        // SAFETY: serialized via #[serial] — env mutation can't race other tests.
+        // SAFETY: this mutates process env, so the test is #[serial] (and CI
+        // runs --test-threads=1) to keep it from racing other tests.
         unsafe {
             std::env::set_var("AES_KEY", HEX64_TEST_KEY);
             std::env::set_var("JIRA_API_BASE", mock.uri());
@@ -109,7 +107,6 @@ mod tests {
         )
         .await;
 
-        // --- Connect: token is validated then stored encrypted at rest. ---
         let req = actix_test::TestRequest::put()
             .uri("/integrations/jira/connection")
             .insert_header(("Authorization", bearer.clone()))
@@ -122,7 +119,8 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // The stored token round-trips through decrypt (and base_url is normalized).
+        // The token must be at rest only as ciphertext, and the base URL is
+        // stored normalized.
         let row = sqlx::query(
             "SELECT base_url, api_token_iv, api_token_encrypted
              FROM user_jira_connections WHERE user_id = $1",
@@ -137,7 +135,6 @@ mod tests {
         let enc: String = row.get("api_token_encrypted");
         assert_eq!(decrypt(&iv, &enc).unwrap_or_default(), "s3cr3t-token");
 
-        // --- Import: two issues become two tasks, mapped. ---
         let req = actix_test::TestRequest::post()
             .uri("/integrations/jira/import")
             .insert_header(("Authorization", bearer.clone()))
@@ -147,7 +144,8 @@ mod tests {
         assert_eq!(body["imported"], 2);
         assert_eq!(body["updated"], 0);
 
-        // Re-import the same issues → updated in place, not duplicated.
+        // Re-importing the same issues updates them in place instead of
+        // duplicating them.
         let req = actix_test::TestRequest::post()
             .uri("/integrations/jira/import")
             .insert_header(("Authorization", bearer.clone()))

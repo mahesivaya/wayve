@@ -1,32 +1,9 @@
-//! Organization Master Key handlers.
+//! Organization master key handlers, under `/api/organizations/{org_id}`.
 //!
-//! Six endpoints, all under `/api/organizations/{org_id}`:
-//!
-//! - `POST /keys` — bootstrap the org keypair (owner only). Inserts one
-//!   `organization_keys` row + a `mnemonic`-wrapped row in
-//!   `organization_wrapped_keys` + a `user_pubkey`-wrapped row for the
-//!   founder. All in a single transaction so the org can never be in a
-//!   "pubkey without wraps" state.
-//! - `GET /keys` — return the org pubkey to any member, plus the
-//!   caller's own wrap envelopes if they're a key-holder (admin/owner).
-//!   The mnemonic envelope is only returned to owners on explicit
-//!   `?include_mnemonic=true` (used by `/organization/recovery-key`).
-//! - `GET /members/{user_id}/escrow` — fetch a member's org-wrapped
-//!   private key. Key-holders only. Writes an audit row before returning
-//!   so a refusal further down doesn't drop the trail.
-//! - `POST /key-holders` — existing key-holder uploads the org private
-//!   key re-wrapped for a newly-promoted key-holder. Inserts a
-//!   `user_pubkey` row in `organization_wrapped_keys`.
-//! - `GET /audit/key-access` — read the audit log. Key-holders only.
-//! - `POST /members/{user_id}/reset-password` — atomic update: bcrypt
-//!   the new password into `users.password` AND replace the member's
-//!   `member_login_wrapped_keys` row with the new wrap the caller
-//!   computed in-browser using the org private key. Key-holders only;
-//!   audit-logged.
-//!
-//! The handlers never touch the org PRIVATE key themselves — that lives
-//! only in the caller's browser, behind their mnemonic or pubkey wrap.
-//! The server just shuffles wrapped envelopes around.
+//! The server never sees the org private key. It only stores and hands back
+//! wrapped envelopes; unwrapping happens in the caller's browser behind their
+//! mnemonic or public-key wrap. Bootstrap shows the mnemonic exactly once, so
+//! an owner who skips recording it can never recover member data.
 
 use crate::prelude::*;
 use actix_web::{HttpRequest, HttpResponse, web};
@@ -38,15 +15,11 @@ use wayve_security::rbac::{
     Permission, Role, Scope, require_org_access, require_permission, resolve_role_context,
 };
 
-// ---------------------------------------------------------------------------
-//   Request / response shapes
-// ---------------------------------------------------------------------------
-
 /// `POST /keys` request body.
 #[derive(Debug, Deserialize)]
 pub struct BootstrapKeysRequest {
-    /// SPKI-encoded org public key as a JSON-array-of-bytes string (the
-    /// same wire shape `users.public_key` uses — `Array.from(spkiBytes)`).
+    /// SPKI-encoded org public key as a JSON-array-of-bytes string, the same
+    /// wire shape `users.public_key` uses.
     pub public_key: String,
     pub wrapped_mnemonic: MnemonicWrap,
     pub wrapped_user: UserPubkeyWrap,
@@ -66,10 +39,8 @@ pub struct UserPubkeyWrap {
     pub ct: String,
 }
 
-/// `GET /keys` response. `wrapped_user` is set when the caller holds a
-/// `user_pubkey` row in `organization_wrapped_keys` for this org (i.e.
-/// they're an owner or admin). `wrapped_mnemonic` is set only when the
-/// caller is an owner AND requested `?include_mnemonic=true`.
+/// `GET /keys` response. `wrapped_user` is set only for key-holders, and
+/// `wrapped_mnemonic` only for owners who pass `?include_mnemonic=true`.
 #[derive(Debug, Serialize)]
 pub struct GetKeysResponse {
     pub public_key: String,
@@ -86,9 +57,8 @@ pub struct IncludeMnemonicQuery {
 /// `GET /members/{user_id}/escrow` response.
 #[derive(Debug, Serialize)]
 pub struct MemberEscrowResponse {
-    /// The `WAYVE_SECURE_V1` envelope wrapping the member's PKCS8
-    /// private key under the org pubkey. Caller unwraps with the org
-    /// private key they already hold loaded in-browser.
+    /// `WAYVE_SECURE_V1` envelope wrapping the member's PKCS8 private key
+    /// under the org public key; the caller unwraps it in-browser.
     pub envelope: String,
 }
 
@@ -124,10 +94,6 @@ pub struct AuditLogEntry {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-// ---------------------------------------------------------------------------
-//   Helpers
-// ---------------------------------------------------------------------------
-
 fn client_ip(req: &HttpRequest) -> Option<String> {
     req.connection_info().realip_remote_addr().map(String::from)
 }
@@ -139,9 +105,8 @@ fn user_agent(req: &HttpRequest) -> Option<String> {
         .map(String::from)
 }
 
-/// Public wrapper around `write_audit_row` for sibling modules. Swallows
-/// errors with a warn log — the audit-write should never block the
-/// caller's response if the DB is briefly unavailable.
+/// Audit-row writer for sibling modules. Errors are logged and swallowed so a
+/// briefly unavailable DB cannot block the caller's response.
 #[allow(clippy::too_many_arguments)]
 pub async fn write_impersonation_audit(
     pool: &PgPool,
@@ -167,8 +132,7 @@ pub async fn write_impersonation_audit(
     }
 }
 
-/// Public alias for sibling modules that need to assert the target is a
-/// member of the org before serving impersonation reads.
+/// Assert the target is a member of the org before serving impersonation reads.
 pub async fn ensure_target_member(
     pool: &PgPool,
     organization_id: i32,
@@ -204,9 +168,8 @@ async fn write_audit_row(
     .map(|_| ())
 }
 
-/// Confirm `target_user_id` is a member of `organization_id`. Returns
-/// 404 if not — we'd rather not leak whether the user exists in a
-/// different org.
+/// Confirm `target_user_id` is a member of `organization_id`. Returns 404 rather
+/// than 403 so we don't leak whether the user exists in a different org.
 async fn ensure_member_of(
     pool: &PgPool,
     organization_id: i32,
@@ -225,10 +188,6 @@ async fn ensure_member_of(
     }
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-//   POST /api/organizations/{org_id}/keys   —   bootstrap
-// ---------------------------------------------------------------------------
 
 #[post("/organizations/{org_id}/keys")]
 #[instrument(target = "http", skip(req, pool, body))]
@@ -251,14 +210,11 @@ pub async fn bootstrap_keys(
         Err(resp) => return Ok(resp),
     };
 
-    // Atomic: the three inserts (pubkey, mnemonic wrap, founder pubkey
-    // wrap) must all land together so the org never sits in a state
-    // where a key-holder exists but the canonical mnemonic recovery is
-    // missing — or vice versa.
+    // The pubkey, mnemonic wrap, and founder pubkey wrap must land together, or
+    // the org can end up with a key-holder but no mnemonic recovery path.
     let mut tx = pool.get_ref().begin().await?;
 
-    // Refuse re-bootstrap. If a key already exists, this call is either a
-    // mistake or an attack — either way, deny without modification.
+    // Never re-bootstrap: that would orphan every existing wrap.
     let exists: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM organization_keys WHERE organization_id = $1")
             .bind(organization_id)
@@ -302,8 +258,8 @@ pub async fn bootstrap_keys(
     .execute(&mut *tx)
     .await?;
 
-    // Audit row inside the transaction so a rollback also drops the
-    // audit entry — never log a bootstrap that didn't happen.
+    // Audit row inside the transaction: a rollback must not leave a logged
+    // bootstrap that never happened.
     sqlx::query(
         "INSERT INTO org_key_audit_log
             (organization_id, actor_user_id, actor_role, action, ip, user_agent)
@@ -329,10 +285,6 @@ pub async fn bootstrap_keys(
     Ok(HttpResponse::Created().json(serde_json::json!({ "status": "ok" })))
 }
 
-// ---------------------------------------------------------------------------
-//   GET /api/organizations/{org_id}/keys   —   fetch pubkey + caller's wraps
-// ---------------------------------------------------------------------------
-
 #[get("/organizations/{org_id}/keys")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_keys(
@@ -342,10 +294,8 @@ pub async fn get_keys(
     query: web::Query<IncludeMnemonicQuery>,
 ) -> AppResult {
     let organization_id = path.into_inner();
-    // Any org member can read the pubkey (members need it at provisioning
-    // to escrow their keys, key-holders need it to wrap for new
-    // key-holders). The org-membership check happens implicitly: the
-    // caller's resolved RoleContext.organization_id must match.
+    // Any org member may read the pubkey: they need it to escrow their own key
+    // at provisioning. Membership is enforced by the scope check below.
     let ctx = require_permission(&req, pool.get_ref(), Permission::AppsUse)
         .await
         .map_err(|_| AppError::Unauthorized)?;
@@ -369,7 +319,6 @@ pub async fn get_keys(
     };
     let public_key: String = pub_row.try_get("public_key").unwrap_or_default();
 
-    // Caller's own user_pubkey wrap, if any.
     let user_row = sqlx::query(
         "SELECT iv, ct FROM organization_wrapped_keys
          WHERE organization_id = $1
@@ -412,10 +361,6 @@ pub async fn get_keys(
     }))
 }
 
-// ---------------------------------------------------------------------------
-//   GET /api/organizations/{org_id}/members/{user_id}/escrow
-// ---------------------------------------------------------------------------
-
 #[get("/organizations/{org_id}/members/{user_id}/escrow")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_member_escrow(
@@ -451,8 +396,8 @@ pub async fn get_member_escrow(
     };
     let envelope: String = row.try_get("ct").unwrap_or_default();
 
-    // Audit OUTSIDE a transaction — we want the row to land even if the
-    // body write below somehow fails partway, so reviewers see attempts.
+    // Audit outside a transaction so the row lands even if the response fails:
+    // reviewers must see every attempt to read a member's escrowed key.
     if let Err(e) = write_audit_row(
         pool.get_ref(),
         organization_id,
@@ -470,10 +415,6 @@ pub async fn get_member_escrow(
     Ok(HttpResponse::Ok().json(MemberEscrowResponse { envelope }))
 }
 
-// ---------------------------------------------------------------------------
-//   POST /api/organizations/{org_id}/key-holders
-// ---------------------------------------------------------------------------
-
 #[post("/organizations/{org_id}/key-holders")]
 #[instrument(target = "http", skip(req, pool, body))]
 pub async fn add_key_holder_wrap(
@@ -483,8 +424,8 @@ pub async fn add_key_holder_wrap(
     body: web::Json<AddKeyHolderRequest>,
 ) -> AppResult {
     let organization_id = path.into_inner();
-    // OrgKeysBootstrap is owner-only — promoting a key-holder is a
-    // role-structure change and stays with the trust root.
+    // OrgKeysBootstrap is owner-only: promoting a key-holder is a trust-root
+    // change, not a routine admin action.
     let ctx = match require_org_access(
         &req,
         pool.get_ref(),
@@ -497,10 +438,8 @@ pub async fn add_key_holder_wrap(
         Err(resp) => return Ok(resp),
     };
 
-    // The new holder must already exist in organization_members AND
-    // currently hold a role that's allowed to hold the org master key
-    // (owner / super_admin / admin). The role-update endpoint runs
-    // separately; this handler only adds the cryptographic wrap.
+    // Only owner/super_admin/admin may hold the org master key. Promotion is a
+    // separate endpoint; this handler only adds the cryptographic wrap.
     let new_role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM organization_members
          WHERE organization_id = $1 AND user_id = $2",
@@ -521,9 +460,8 @@ pub async fn add_key_holder_wrap(
         )));
     }
 
-    // Idempotent on (org, holder): UPSERT so calling this twice with a
-    // re-wrap (e.g., the holder rotated their personal RSA key) just
-    // refreshes the row.
+    // Idempotent on (org, holder), so a re-wrap after the holder rotates their
+    // personal RSA key just refreshes the row.
     sqlx::query(
         "INSERT INTO organization_wrapped_keys
             (organization_id, wrap_method, holder_user_id, iv, ct)
@@ -554,10 +492,6 @@ pub async fn add_key_holder_wrap(
 
     Ok(HttpResponse::Created().json(serde_json::json!({ "status": "ok" })))
 }
-
-// ---------------------------------------------------------------------------
-//   GET /api/organizations/{org_id}/audit/key-access
-// ---------------------------------------------------------------------------
 
 #[get("/organizations/{org_id}/audit/key-access")]
 #[instrument(target = "http", skip(req, pool))]
@@ -608,10 +542,9 @@ pub async fn read_audit_log(
     Ok(HttpResponse::Ok().json(entries))
 }
 
-// ---------------------------------------------------------------------------
-//   POST /api/organizations/{org_id}/members/{user_id}/reset-password
-// ---------------------------------------------------------------------------
-
+/// Atomically rehashes the member's password and replaces their
+/// `member_login_wrapped_keys` row with the wrap the caller recomputed
+/// in-browser; both must change together or the member loses their key.
 #[post("/organizations/{org_id}/members/{user_id}/reset-password")]
 #[instrument(target = "http", skip(req, pool, body))]
 pub async fn reset_member_password(
@@ -633,10 +566,9 @@ pub async fn reset_member_password(
         Err(resp) => return Ok(resp),
     };
 
-    // Refuse to reset another key-holder's password via this path — the
-    // org-key-rewrap implications are significant (the new password would
-    // de-facto rotate their access). Owner removal/demotion is a separate
-    // workflow that handles the wrap-table cleanup explicitly.
+    // Never reset another key-holder's password here: it would de-facto rotate
+    // their org-key access. Demotion is a separate workflow that cleans up the
+    // wrap tables explicitly.
     let target_role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM organization_members
          WHERE organization_id = $1 AND user_id = $2",
@@ -691,9 +623,7 @@ pub async fn reset_member_password(
     .await?;
     tx.commit().await?;
 
-    // Reset the actor's cached role context — not strictly necessary
-    // here (role didn't change), but it ensures any cached login state
-    // for the TARGET sees a fresh resolution next request.
+    // Force the target's cached login state to re-resolve on their next request.
     wayve_security::rbac::invalidate_role_context(target_user_id).await;
 
     if let Err(e) = write_audit_row(
@@ -721,21 +651,10 @@ pub async fn reset_member_password(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "ok" })))
 }
 
-// ---------------------------------------------------------------------------
-//   GET /api/organizations/{org_id}/members/{user_id}/notes
-//   ---------------------------------------------------------------------------
-//   Owner / admin reads ALL of a member's notes — returned as the same
-//   encrypted envelopes the member's own /api/notes returns. Caller
-//   decrypts them client-side using the member's private key recovered
-//   via the org master key (see organization/keys.rs:get_member_escrow).
-//
-//   No new "as-member" auth machinery — this endpoint just runs the same
-//   "user_id = $1" query against `notes`, but with the target user_id
-//   chosen by an OrgKeysUseMaster-holding caller. The audit row logs
-//   who read what, so a later review can see if an admin pulled member
-//   data without a legitimate trigger.
-// ---------------------------------------------------------------------------
-
+/// Returns a member's notes as the same encrypted envelopes their own
+/// `/api/notes` returns; the caller decrypts client-side with the member's key
+/// recovered through `get_member_escrow`. Every read is audit-logged so a later
+/// review can spot an admin pulling member data without a legitimate trigger.
 #[get("/organizations/{org_id}/members/{user_id}/notes")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_member_notes(
@@ -758,8 +677,8 @@ pub async fn list_member_notes(
 
     ensure_member_of(pool.get_ref(), organization_id, target_user_id).await?;
 
-    // notes is RLS-enabled; this RBAC-gated recovery reads another member's
-    // rows, so it runs with the bypass GUC.
+    // notes is RLS-enabled and this RBAC-gated recovery reads another member's
+    // rows, so it needs the bypass GUC.
     let mut tx = pool.begin().await?;
     crate::db::apply_rls_bypass(&mut tx).await?;
     let rows = sqlx::query(
@@ -803,15 +722,9 @@ pub async fn list_member_notes(
     Ok(HttpResponse::Ok().json(notes))
 }
 
-// ---------------------------------------------------------------------------
-//   Helpers for other modules (login response, member provisioning)
-// ---------------------------------------------------------------------------
-
-/// Fetch the password-wrapped private-key envelope for a user, if one
-/// exists. Returned to the client at login so org members can unwrap
-/// their PKCS8 with PBKDF2(password). `None` for personal users (who
-/// don't have a `member_login_wrapped_keys` row — they use the mnemonic
-/// recovery path instead).
+/// Fetch a user's password-wrapped private-key envelope, returned at login so
+/// org members can unwrap their PKCS8 with PBKDF2(password). `None` for personal
+/// users, who use the mnemonic recovery path instead.
 pub async fn fetch_login_wrap(
     pool: &PgPool,
     user_id: i32,
@@ -831,11 +744,9 @@ pub async fn fetch_login_wrap(
     }))
 }
 
-/// Fetch an org's public key (SPKI bytes as a JSON-array string) for
-/// the server-side keypair-provisioning path in `routes/user.rs`'s
-/// admin/users handler. Returns `None` if the org has no bootstrapped
-/// key — admin/users will fail provisioning in that case so the owner
-/// is forced to bootstrap before adding members.
+/// Fetch an org's public key for the provisioning path in `routes/user.rs`.
+/// `None` means the org never bootstrapped, and provisioning must fail so the
+/// owner is forced to bootstrap before any member is added.
 pub async fn fetch_org_public_key(
     pool: &PgPool,
     organization_id: i32,
@@ -846,10 +757,8 @@ pub async fn fetch_org_public_key(
         .await
 }
 
-/// Helper for the member-provisioning path. Inserts the org-pubkey wrap
-/// AND the password-derived login wrap atomically with the new user row.
-/// Returning a transaction is awkward; callers compose this with their
-/// own transaction by passing in their pool and we open a short tx here.
+/// Persist a provisioned member's org-pubkey wrap and password-derived login
+/// wrap in one transaction; a member with only one of the two is unrecoverable.
 #[allow(clippy::too_many_arguments)]
 pub async fn persist_provisioned_keys(
     pool: &PgPool,
@@ -861,9 +770,8 @@ pub async fn persist_provisioned_keys(
 ) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
-    // users.public_key already exists for personal users; overwrite for
-    // the org-member case (server is the source of truth, member never
-    // chose the key).
+    // Overwrite any existing pubkey: for org members the server generated the
+    // keypair, so it is the source of truth.
     sqlx::query("UPDATE users SET public_key = $1 WHERE id = $2")
         .bind(public_key_json)
         .bind(user_id)
@@ -878,10 +786,8 @@ pub async fn persist_provisioned_keys(
     )
     .bind(organization_id)
     .bind(user_id)
-    // iv intentionally empty: the WAYVE_SECURE_V1 envelope is
-    // self-describing (it contains its own IV inside the JSON body).
-    // The `iv` column exists for symmetry with login_wrap; we leave it
-    // empty so the wire format consumed by the frontend doesn't change.
+    // iv is intentionally empty: the WAYVE_SECURE_V1 envelope carries its own
+    // IV, and the column exists only for symmetry with login_wrap.
     .bind("")
     .bind(member_escrow_envelope)
     .execute(&mut *tx)
@@ -909,11 +815,8 @@ pub async fn persist_provisioned_keys(
     Ok(())
 }
 
-/// Use the resolve_role_context API to determine whether `user_id`
-/// currently holds the org master key wrap (i.e. has a `user_pubkey`
-/// row in `organization_wrapped_keys` for their org). Used by tests and
-/// the frontend banner that nudges new key-holders to enter the
-/// mnemonic.
+/// Whether `user_id` currently holds an org master key wrap. Drives the
+/// frontend banner nudging new key-holders to enter the mnemonic.
 #[allow(dead_code)]
 pub async fn current_user_holds_key_wrap(pool: &PgPool, user_id: i32) -> Result<bool, sqlx::Error> {
     let ctx = match resolve_role_context(pool, user_id).await {

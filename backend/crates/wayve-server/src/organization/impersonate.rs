@@ -1,33 +1,14 @@
-//! Admin-read-as-member endpoints.
+//! Admin-read-as-member endpoints under
+//! `/api/organizations/{org_id}/members/{user_id}`, for holders of
+//! `org_keys:use_master`.
 //!
-//! Owners / admins (any holder of `org_keys:use_master`) use these to
-//! list a target member's content for the impersonation view. The
-//! returned rows are exactly what the member's own list endpoints
-//! return — opaque ciphertext for the E2E surfaces (notes / emails /
-//! chat / drive), plaintext for the non-E2E surfaces (tasks /
-//! meetings, which are server-readable by design per the original
-//! Plan A scope).
+//! Rows are returned exactly as the member's own list endpoints return them:
+//! opaque ciphertext for the E2E surfaces (notes, emails, chat, drive), which
+//! the caller decrypts in-browser with the recovered member key, and plaintext
+//! for the surfaces that are server-readable by design (tasks, meetings).
 //!
-//! Every call writes a `list_member_*` row to `org_key_audit_log` so
-//! a reviewing owner can see who pulled what.
-//!
-//! Routes (all under `/api/organizations/{org_id}/members/{user_id}`):
-//!
-//!   GET /emails    — emails owned by the member (via email_accounts.user_id
-//!                    OR the Phase-2 recipient_user_id channel). E2E rows
-//!                    carry WAYVE_SECURE_V1 envelopes the caller decrypts
-//!                    in-browser using the recovered member key.
-//!   GET /messages  — direct messages where the member was sender OR
-//!                    receiver. Each row carries a WAYVE_CHAT_E2E_V1
-//!                    envelope with a wrapped key slot for the member.
-//!   GET /channel-messages — channel_messages from channels the member
-//!                    is a member of. Same envelope shape as direct.
-//!   GET /files     — drive_files owned by the member. Each carries a
-//!                    file_path on disk; downloading + decrypting the
-//!                    blob itself is a follow-up (the listing already
-//!                    proves the impersonation worked).
-//!   GET /tasks     — plaintext task rows owned by the member.
-//!   GET /meetings  — plaintext meeting rows owned by the member.
+//! Every call writes a `list_member_*` row to `org_key_audit_log` so a reviewing
+//! owner can see who pulled what.
 
 use crate::prelude::*;
 use actix_web::{HttpRequest, HttpResponse, web};
@@ -38,11 +19,9 @@ use wayve_security::rbac::{Permission, require_org_access};
 
 use crate::organization::keys::{ensure_target_member, write_impersonation_audit};
 
-/// Undo the at-rest server-AES layer on a chat row, returning the inner content:
-/// a `WAYVE_CHAT_E2E_V1` envelope (the caller decrypts it with the recovered
-/// member key) for E2E messages, or legacy plaintext for older rows. A missing
-/// IV or a decrypt failure means the stored value is already plaintext, so we
-/// return it as-is rather than hiding it.
+/// Undo the at-rest server-AES layer on a chat row, yielding either a
+/// `WAYVE_CHAT_E2E_V1` envelope or legacy plaintext. A missing IV or a decrypt
+/// failure means the stored value is already plaintext, so return it as-is.
 fn decrypt_chat_content(enc: Option<String>, iv: Option<String>) -> Option<String> {
     match (enc, iv) {
         (Some(e), Some(i)) => Some(decrypt(&i, &e).unwrap_or(e)),
@@ -50,10 +29,6 @@ fn decrypt_chat_content(enc: Option<String>, iv: Option<String>) -> Option<Strin
         _ => None,
     }
 }
-
-// ---------------------------------------------------------------------------
-//   GET /api/organizations/{org_id}/members/{user_id}/emails
-// ---------------------------------------------------------------------------
 
 #[get("/organizations/{org_id}/members/{user_id}/emails")]
 #[instrument(target = "http", skip(req, pool))]
@@ -76,10 +51,8 @@ pub async fn list_member_emails(
     };
     ensure_target_member(pool.get_ref(), organization_id, target_user_id).await?;
 
-    // Emails owned by the target. Two sources:
-    //   (a) Mailbox emails via the standard email_accounts join.
-    //   (b) Wayve-internal emails (Phase 2 multi-recipient channel)
-    //       addressed to the target via emails.recipient_user_id.
+    // The target owns an email either through their mailbox account or as the
+    // recipient of a Wayve-internal message, so both sources must be unioned.
     let rows = sqlx::query(
         "SELECT e.id, e.subject, e.sender, e.receiver, e.body_encrypted, e.body_iv,
                 e.created_at, COALESCE(e.source, 'imap') AS source
@@ -123,10 +96,6 @@ pub async fn list_member_emails(
     Ok(HttpResponse::Ok().json(items))
 }
 
-// ---------------------------------------------------------------------------
-//   GET /api/organizations/{org_id}/members/{user_id}/messages
-// ---------------------------------------------------------------------------
-
 #[get("/organizations/{org_id}/members/{user_id}/messages")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_member_messages(
@@ -148,9 +117,8 @@ pub async fn list_member_messages(
     };
     ensure_target_member(pool.get_ref(), organization_id, target_user_id).await?;
 
-    // Direct messages where the target was sender OR receiver. Multi-
-    // recipient envelopes have a key slot for the member, so the
-    // recovered key decrypts both directions.
+    // Every envelope carries a key slot for the member, so the recovered key
+    // decrypts messages they sent as well as ones they received.
     let rows = sqlx::query(
         "SELECT id, sender_id, receiver_id, content_encrypted, content_iv,
                 status::text AS status, created_at
@@ -183,8 +151,6 @@ pub async fn list_member_messages(
                 "id": row.try_get::<i32, _>("id").unwrap_or_default(),
                 "sender_id": row.try_get::<Option<i32>, _>("sender_id").ok().flatten(),
                 "receiver_id": row.try_get::<Option<i32>, _>("receiver_id").ok().flatten(),
-                // Storage layer decrypted here; the value is the E2E envelope
-                // (client decrypts with the member key) or legacy plaintext.
                 "content": decrypt_chat_content(enc, iv),
                 "status": row.try_get::<Option<String>, _>("status").ok().flatten(),
                 "created_at": row.try_get::<Option<chrono::NaiveDateTime>, _>("created_at").ok().flatten(),
@@ -194,10 +160,6 @@ pub async fn list_member_messages(
 
     Ok(HttpResponse::Ok().json(items))
 }
-
-// ---------------------------------------------------------------------------
-//   GET /api/organizations/{org_id}/members/{user_id}/channel-messages
-// ---------------------------------------------------------------------------
 
 #[get("/organizations/{org_id}/members/{user_id}/channel-messages")]
 #[instrument(target = "http", skip(req, pool))]
@@ -220,9 +182,8 @@ pub async fn list_member_channel_messages(
     };
     ensure_target_member(pool.get_ref(), organization_id, target_user_id).await?;
 
-    // Channel messages from channels the target is a member of. The
-    // member's key has a slot in every WAYVE_CHAT_E2E_V1 envelope in
-    // those channels (channel members are the recipient set).
+    // Channel members are the envelope recipient set, so the member's key has a
+    // slot in every message of every channel they belong to.
     let rows = sqlx::query(
         "SELECT cm.id, cm.channel_id, cm.sender_id, cm.content_encrypted, cm.content_iv,
                 cm.parent_message_id, cm.created_at,
@@ -269,10 +230,6 @@ pub async fn list_member_channel_messages(
     Ok(HttpResponse::Ok().json(items))
 }
 
-// ---------------------------------------------------------------------------
-//   GET /api/organizations/{org_id}/members/{user_id}/files
-// ---------------------------------------------------------------------------
-
 #[get("/organizations/{org_id}/members/{user_id}/files")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_member_files(
@@ -294,11 +251,8 @@ pub async fn list_member_files(
     };
     ensure_target_member(pool.get_ref(), organization_id, target_user_id).await?;
 
-    // Drive file listing — owner sees the member's files. Decryption
-    // of the actual file body uses the existing WV1 binary format
-    // (frontend/src/crypto/fileEnvelope.ts) with the recovered member
-    // key; downloading the body is a follow-up (the listing already
-    // proves the impersonation crypto works).
+    // Listing only. Decrypting a file body needs the WV1 binary format in
+    // frontend/src/crypto/fileEnvelope.ts plus the recovered member key.
     let rows = sqlx::query(
         "SELECT id, name, file_type, file_path, size, created_at, updated_at
          FROM drive_files
@@ -339,14 +293,8 @@ pub async fn list_member_files(
     Ok(HttpResponse::Ok().json(items))
 }
 
-// ---------------------------------------------------------------------------
-//   GET /api/organizations/{org_id}/members/{user_id}/tasks
-// ---------------------------------------------------------------------------
-//
-//   Tasks are NOT E2E — `name` and `description` are plaintext per the
-//   original Plan A scope decision. The impersonation view shows the
-//   plaintext rows; no client-side decryption needed.
-
+/// Tasks are not E2E: `name` and `description` are plaintext by design, so the
+/// rows are returned as-is with no client-side decryption.
 #[get("/organizations/{org_id}/members/{user_id}/tasks")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_member_tasks(
@@ -408,15 +356,8 @@ pub async fn list_member_tasks(
     Ok(HttpResponse::Ok().json(items))
 }
 
-// ---------------------------------------------------------------------------
-//   GET /api/organizations/{org_id}/members/{user_id}/meetings
-// ---------------------------------------------------------------------------
-//
-//   Meetings keep both plaintext (`title`, `zoom_join_url`) AND the
-//   server-AES-GCM-encrypted shadow columns from the existing scheduler
-//   storage layer. Plaintext is what the user sees in the scheduler UI,
-//   so it's what we return here — no E2E decryption involved.
-
+/// Meetings keep both plaintext columns and server-encrypted shadow columns. The
+/// plaintext is what the scheduler UI shows, so it is what this returns.
 #[get("/organizations/{org_id}/members/{user_id}/meetings")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_member_meetings(
@@ -477,9 +418,8 @@ pub async fn list_member_meetings(
     Ok(HttpResponse::Ok().json(items))
 }
 
-// Suppress unused-warning on warn import — it's used inside the
-// write_impersonation_audit helper that lives in keys.rs but the import
-// in the use-block above is for completeness.
+// Keeps the `warn` import live; the real audit warnings are emitted by
+// write_impersonation_audit over in keys.rs.
 #[allow(dead_code)]
 fn _ensure_warn_imported() {
     warn!(target: "auth", "");

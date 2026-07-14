@@ -21,9 +21,8 @@ use wayve_security::encryption::encrypt;
 pub const OUTLOOK_MAIL_SCOPE: &str =
     "openid profile email offline_access User.Read Mail.Read Mail.ReadWrite Mail.Send";
 
-/// Upper bound on messages pulled in a single sync pass. A first sync grabs
-/// the most recent mail up to this cap; later syncs are incremental (only
-/// messages newer than `last_sync`) and stay well under it.
+/// Upper bound on messages pulled in one sync pass. Only the first sync
+/// approaches it; later syncs are incremental and stay well under.
 const OUTLOOK_SYNC_CAP: usize = 200;
 const OUTLOOK_PAGE_SIZE: usize = 50;
 
@@ -34,8 +33,8 @@ pub struct OutlookCredentials {
     pub redirect_uri: String,
 }
 
-/// Reads the three required `OUTLOOK_*` env vars; `None` if any is missing.
-/// The client secret must only ever live in the gitignored backend env.
+/// Reads the three required `OUTLOOK_*` env vars, returning `None` if any is
+/// missing. The client secret must only ever live in the gitignored backend env.
 pub fn outlook_credentials() -> Option<OutlookCredentials> {
     let outlook = crate::config::outlook_oauth();
     Some(OutlookCredentials {
@@ -139,10 +138,9 @@ struct OutlookMessage {
     body: String,
     has_attachments: bool,
     is_read: bool,
-    // Mirrors Gmail's labelIds shape so `emails.labels` is uniform across
-    // providers: user categories + a synthetic `IMPORTANT` when the message
-    // has `importance == "high"`. Filtered against the sidebar category
-    // folders alongside the Gmail labels.
+    /// Mirrors Gmail's labelIds shape so `emails.labels` is uniform across
+    /// providers: user categories plus a synthetic `IMPORTANT` for
+    /// `importance == "high"`.
     labels: Vec<String>,
 }
 
@@ -173,9 +171,6 @@ fn parse_message(m: &Value) -> Option<OutlookMessage> {
         .unwrap_or_else(|| chrono::Utc::now().naive_utc());
     let body = m["body"]["content"].as_str().unwrap_or("").to_string();
 
-    // Build labels from user categories + a synthetic IMPORTANT for
-    // importance=high so the same filter (`'IMPORTANT' = ANY(labels)`)
-    // works for both Gmail and Outlook rows.
     let mut labels: Vec<String> = m["categories"]
         .as_array()
         .map(|arr| {
@@ -211,10 +206,8 @@ fn first_page_url(last_sync: Option<i64>) -> String {
     let mut url = reqwest::Url::parse(&base).unwrap_or_else(|e| panic!("valid Graph URL: {e}"));
     {
         let mut q = url.query_pairs_mut();
-        // `categories` carries the user's Outlook category strings; `importance`
-        // is "high|normal|low". Both feed `OutlookMessage.labels` so the sidebar
-        // category folders can filter (Important = `importance == "high"`,
-        // Updates/Social = matching `categories`).
+        // `categories` and `importance` are what feed `OutlookMessage.labels`,
+        // which the sidebar category folders filter on.
         q.append_pair(
             "$select",
             "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance",
@@ -244,10 +237,6 @@ fn first_before_page_url(before_timestamp: i64, limit: usize) -> String {
             .format("%Y-%m-%dT%H:%M:%SZ")
             .to_string();
         let mut q = url.query_pairs_mut();
-        // `categories` carries the user's Outlook category strings; `importance`
-        // is "high|normal|low". Both feed `OutlookMessage.labels` so the sidebar
-        // category folders can filter (Important = `importance == "high"`,
-        // Updates/Social = matching `categories`).
         q.append_pair(
             "$select",
             "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance",
@@ -321,7 +310,8 @@ async fn upsert_messages(
     let mut attachment_tasks = FuturesUnordered::new();
 
     for m in messages {
-        // Encrypt the body at rest, exactly like the Gmail body-worker path.
+        // At-rest encryption into the (body_iv, body_encrypted) pair, as the
+        // Gmail body-worker path does.
         let (iv, encrypted) = encrypt(&m.body)?;
         let email_id = crate::email::repo::upsert_one(
             pool,
@@ -340,8 +330,8 @@ async fn upsert_messages(
         )
         .await?;
 
-        // Graph keeps attachments on a sub-resource; pull their metadata in
-        // parallel so the UI can list them and download the bytes on demand.
+        // Graph keeps attachments on a sub-resource, so their metadata needs a
+        // separate fetch; the bytes are downloaded on demand later.
         if m.has_attachments {
             let msg_id = m.id.clone();
             attachment_tasks.push(async move {
@@ -371,10 +361,10 @@ async fn upsert_messages(
     Ok(())
 }
 
-/// Outlook equivalent of `email::sync::refresh_provider_unread_count`. Fetches
-/// the inbox folder's `unreadItemCount` (the authoritative provider total)
-/// and stamps it on `email_accounts.provider_unread_count`. Best-effort:
-/// a failed Graph call logs and returns Ok so the rest of the sync runs.
+/// Outlook equivalent of `email::sync::refresh_provider_unread_count`: stamps
+/// the inbox folder's authoritative `unreadItemCount` onto
+/// `email_accounts.provider_unread_count`. Best-effort — a failed Graph call
+/// logs and returns Ok so the rest of the sync runs.
 pub async fn refresh_outlook_unread_count(
     pool: &PgPool,
     account_id: i32,
@@ -431,9 +421,8 @@ pub async fn sync_outlook_account(
             .send()
             .await?;
 
-        // Surface HTTP failures explicitly: a 401/403 from Graph comes back
-        // with an empty body, which would otherwise fail JSON parsing with a
-        // useless "EOF while parsing" error instead of the real cause.
+        // A 401/403 from Graph has an empty body, which would otherwise surface
+        // as a useless "EOF while parsing" JSON error instead of the real cause.
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
@@ -481,10 +470,6 @@ pub async fn sync_outlook_account(
         warn!(target: "worker", account_id, error = ?err, "refresh_outlook_unread_count failed");
     }
 
-    // Pull recent Junk Email + Drafts so the sidebar Spam/Drafts folders
-    // show real data. Each is stamped with a synthetic label ("SPAM" or
-    // "DRAFT") so the same `'<LABEL>' = ANY(e.labels)` filter that powers
-    // the Gmail case works unchanged for Outlook rows.
     if let Err(err) = sync_outlook_folder_recent(
         pool,
         account_id,
@@ -510,17 +495,15 @@ pub async fn sync_outlook_account(
     Ok(())
 }
 
-// Cap the spam/drafts side-pulls. Spam fills fast and is low-value; drafts
-// are usually a handful. Both are pulled on every sync tick, no pagination.
+// Caps on the spam/drafts side-pulls, which run on every tick without paging.
 const OUTLOOK_SPAM_RECENT_CAP: usize = 50;
 const OUTLOOK_DRAFT_RECENT_CAP: usize = 25;
 
-/// Side-pull from `/me/mailFolders/{folder_id}/messages` for non-inbox
-/// folders (Junk Email, Drafts). The `(folder_id, synthetic_label, cap)`
-/// tuple keeps the function under the project-wide 5-arg cap while
-/// expressing what's actually one logical "folder spec" knob — the caller
-/// always varies all three together. Stamps each row with `synthetic_label`
-/// so the unified `emails.labels` array works for both providers.
+/// Side-pull from `/me/mailFolders/{folder_id}/messages` for the non-inbox
+/// folders (Junk Email, Drafts). Each row is stamped with `synthetic_label`, so
+/// the same `'SPAM' = ANY(e.labels)` filter as Gmail works for Outlook rows.
+/// The `(folder_id, synthetic_label, cap)` tuple is one logical folder spec and
+/// keeps the signature under the project-wide 5-argument cap.
 async fn sync_outlook_folder_recent(
     pool: &PgPool,
     account_id: i32,
@@ -542,9 +525,8 @@ async fn sync_outlook_folder_recent(
         .await?;
     let status = resp.status();
     if !status.is_success() {
-        // 404 happens when the folder doesn't exist on the user's mailbox
-        // — fine for newer Microsoft accounts that lack a legacy Drafts
-        // folder. Treat as no-op; do not propagate.
+        // A 404 means the folder doesn't exist on this mailbox, which is normal
+        // for newer Microsoft accounts with no legacy Drafts folder. No-op.
         let body = resp.text().await.unwrap_or_default();
         warn!(
             target: "worker",
@@ -573,9 +555,6 @@ async fn sync_outlook_folder_recent(
         return Ok(());
     }
 
-    // Stamp the synthetic label so the rows are pickable by the same
-    // `'SPAM' = ANY(e.labels)` / `'DRAFT' = ANY(e.labels)` filter used
-    // for Gmail. Append to whatever categories/importance produced.
     for m in messages.iter_mut() {
         if !m.labels.iter().any(|l| l == synthetic_label) {
             m.labels.push(synthetic_label.to_string());
@@ -586,9 +565,8 @@ async fn sync_outlook_folder_recent(
     Ok(())
 }
 
-/// Pulls one older page for an Outlook mailbox. This mirrors Gmail's
-/// `sync_account_before` path and is triggered when the UI asks for another
-/// page before the oldest currently loaded message.
+/// Pulls one older page for an Outlook mailbox, mirroring Gmail's
+/// `sync_account_before`.
 #[instrument(target = "worker", skip(pool, access_token), fields(account_id))]
 pub async fn sync_outlook_account_before(
     pool: &PgPool,

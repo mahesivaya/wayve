@@ -1,27 +1,14 @@
-// Plan A Phase 3 — Secure-send magic link.
-//
-// The sender's browser encrypts a body with a passphrase the recipient
-// will receive out-of-band (Signal/SMS/in-person). The browser uploads
-// only opaque ciphertext + a PBKDF2-wrapped AES key + per-message salt
-// to this endpoint. The server NEVER sees the passphrase, derives no
-// key, and cannot decrypt at any point. It sends a plain notification
-// email containing only a magic link; the recipient clicks the link,
-// enters the passphrase, and decrypts in their browser.
-//
-// Two endpoints:
-//
-//   POST /api/email/send-secure   — authed sender uploads the ciphertext
-//                                   bundle + recipient address + subject.
-//                                   Server picks a token, picks an
-//                                   expiry, stores the row, fires the
-//                                   notification email.
-//
-//   GET  /api/secure-messages/{token} — public (no auth). Returns the
-//                                   ciphertext + wrapped key + salt +
-//                                   sender email so the public read
-//                                   page can prompt for the passphrase
-//                                   and decrypt client-side. 410 if
-//                                   the row is expired.
+//! Secure-send magic link.
+//!
+//! The sender's browser encrypts the body under a passphrase the recipient gets
+//! out-of-band, and uploads only opaque ciphertext, a PBKDF2-wrapped AES key,
+//! and a per-message salt. The server never sees the passphrase, derives no key,
+//! and cannot decrypt at any point; it emails a magic link, and the recipient
+//! enters the passphrase to decrypt in their browser.
+//!
+//! `POST /api/email/send-secure` takes the bundle from an authed sender and
+//! fires the notification. `GET /api/secure-messages/{token}` is public and
+//! returns the bundle for the read page, or 410 once expired.
 
 use crate::email::sender::send_mail;
 use crate::prelude::*;
@@ -44,10 +31,10 @@ pub struct SendSecureInput {
     pub iv: String,          // base64 12-byte AES-GCM nonce
     pub wrapped_key: String, // base64 wrapped AES key (PBKDF2-derived KEK)
     pub salt: String,        // base64 PBKDF2 salt (per-message random)
-    /// Optional override; defaults to 600,000 to match the recovery
-    /// flow's iteration count. Clamped to a sane minimum server-side.
+    /// Defaults to 600,000, matching the recovery flow, and is clamped to a
+    /// minimum server-side so a client can't request a weak KEK.
     pub pbkdf2_iterations: Option<i32>,
-    /// Optional ttl override in days (server clamps to 1..=30).
+    /// TTL in days; the server clamps to 1..=30.
     pub ttl_days: Option<i64>,
 }
 
@@ -76,7 +63,6 @@ pub async fn send_secure(
         None => return Ok(HttpResponse::Unauthorized().body("Invalid token")),
     };
 
-    // ── Validate the payload ───────────────────────────────────────
     let recipient_email = data.recipient_email.trim();
     let subject = data.subject.trim();
     if recipient_email.is_empty() || !recipient_email.contains('@') {
@@ -102,17 +88,14 @@ pub async fn send_secure(
         .unwrap_or(SECURE_DEFAULT_TTL_DAYS)
         .clamp(1, 30);
 
-    // ── Mint a URL-safe random token ────────────────────────────────
-    // 32 random bytes ⇒ 256 bits, base64url-encoded to ~43 chars. The
-    // UNIQUE constraint on `token` gives us a server-side collision
-    // check even though birthday probability is effectively zero.
+    // The token is the bearer credential for the message, so it is 256 bits of
+    // randomness. The UNIQUE constraint on `token` is a collision backstop.
     let mut token_bytes = [0u8; SECURE_TOKEN_BYTES];
     thread_rng().fill_bytes(&mut token_bytes);
     let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
 
     let expires_at = Utc::now() + Duration::days(ttl_days);
 
-    // ── Look up sender's email so the notification reads naturally ──
     let sender_email: String =
         match sqlx::query_scalar::<_, Option<String>>("SELECT email FROM users WHERE id = $1")
             .bind(user_id)
@@ -145,10 +128,8 @@ pub async fn send_secure(
     .execute(pool.get_ref())
     .await?;
 
-    // ── Fire the notification email. The body carries ONLY the link
-    //    + a brief plain-text explainer — no sensitive content. This
-    //    is the right place to use AWS SES (or whatever SMTP the
-    //    sender config is pointing at).
+    // The notification carries only the link and an explainer. No message
+    // content may go in it — the whole point is that the server can't read it.
     let frontend = crate::config::frontend_url();
     let link = format!("{frontend}/m/{token}");
     let notification_subject = format!("{sender_email} sent you a secure message");
@@ -176,9 +157,9 @@ pub async fn send_secure(
             );
         }
         Err(e) => {
-            // We've already stored the row, so the link works — but
-            // the recipient never got the URL. Surface a 502 so the
-            // sender can retry; the row stays for inspection/cleanup.
+            // The row is already stored, so the link works, but the recipient
+            // never received it. Return the link in the 502 so the sender can
+            // share it manually rather than lose the message.
             error!(
                 target: "gmail",
                 user_id,
@@ -204,10 +185,9 @@ pub async fn send_secure(
 
 #[instrument(target = "http", skip(pool, path))]
 pub async fn get_secure_message(pool: web::Data<PgPool>, path: web::Path<String>) -> AppResult {
-    // This endpoint is INTENTIONALLY public — recipients who aren't
-    // Wayve users come here to fetch the ciphertext bundle. The token
-    // is the bearer credential; possession of the token + the
-    // out-of-band passphrase together unlocks the message.
+    // Deliberately public: recipients are not Wayve users. The token is the
+    // bearer credential, and only token plus out-of-band passphrase unlocks the
+    // message.
     let token = path.into_inner();
     if token.is_empty() || token.len() > 100 {
         return Ok(HttpResponse::NotFound()
@@ -238,15 +218,12 @@ pub async fn get_secure_message(pool: web::Data<PgPool>, path: web::Path<String>
 
     let expires_at: DateTime<Utc> = row.try_get("expires_at")?;
     if Utc::now() >= expires_at {
-        // 410 distinguishes "this used to exist but has expired" from
-        // "we never had this token." Useful for the UI's error copy.
+        // 410, not 404, so the UI can distinguish expired from never-existed.
         return Ok(HttpResponse::Gone()
             .json(serde_json::json!({ "message": "This secure message has expired" })));
     }
 
-    // Stamp opened_at on the first successful fetch. Best-effort —
-    // a write failure here doesn't fail the read because the user
-    // shouldn't be blocked from reading by an audit-trail glitch.
+    // Best-effort: an audit-trail write must not block the recipient's read.
     sqlx::query(
         "UPDATE secure_messages SET opened_at = NOW() \
          WHERE token = $1 AND opened_at IS NULL",
@@ -278,9 +255,8 @@ pub async fn revoke_secure_message(
     pool: web::Data<PgPool>,
     path: web::Path<String>,
 ) -> AppResult {
-    // The sender can revoke before expiry — useful if they realise
-    // they sent it to the wrong address. Gated to the original sender
-    // only so a stranger with the token can't yank the link.
+    // Gated to the original sender, so someone who merely holds the token can't
+    // destroy the message.
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
         None => return Ok(HttpResponse::Unauthorized().body("Invalid token")),

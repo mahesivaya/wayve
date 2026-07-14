@@ -1,7 +1,5 @@
-// Checkout + Customer Portal. Subscriptions are created through Stripe's
-// hosted Checkout; payment-method changes and invoice history are delegated
-// to Stripe's hosted Customer Portal. Both endpoints return a URL for the
-// frontend to redirect to.
+// Checkout and Customer Portal. Payment-method changes and invoice history are
+// delegated to Stripe's hosted portal, so no card data reaches this server.
 
 use super::models::{BillingOwner, CheckoutInput, DefaultPaymentMethodInput};
 use super::provider::{self, CheckoutParams};
@@ -20,7 +18,7 @@ fn frontend_url() -> String {
     crate::config::frontend_url()
 }
 
-/// Fetch the requesting user's email — used as the Stripe customer contact.
+/// The requesting user's email, used as the Stripe customer contact.
 pub(crate) async fn actor_email(
     pool: &PgPool,
     user_id: i32,
@@ -119,7 +117,6 @@ pub async fn create_checkout(
         return Ok(resp);
     }
 
-    // Resolve the requested plan and confirm it is purchasable by this owner.
     let plan = sqlx::query_as::<_, (i32, Option<String>, String)>(
         "SELECT id, stripe_price_id, audience FROM plans WHERE code = $1 AND is_active = true",
     )
@@ -191,11 +188,9 @@ pub async fn create_checkout(
     }
 }
 
-/// In-page subscription creation. Returns a PaymentIntent client_secret
-/// the frontend uses to mount a Payment Element and confirm the charge
-/// without ever redirecting to checkout.stripe.com. The subscription is
-/// created in `incomplete` state; the webhook handler flips it to
-/// `active` after the confirm round-trip succeeds.
+/// In-page subscription creation, avoiding a redirect to checkout.stripe.com.
+/// The subscription starts `incomplete`; only the webhook handler flips it to
+/// `active`, after the client's confirm round-trip succeeds.
 #[post("/billing/subscriptions")]
 #[instrument(target = "http", skip(req, pool, data))]
 pub async fn create_inline_subscription(
@@ -220,7 +215,8 @@ pub async fn create_inline_subscription(
         return Ok(resp);
     }
 
-    // Same plan/price/audience validation as the hosted-checkout path.
+    // The plan, price, and audience validation must match the hosted-checkout
+    // path above.
     let plan = sqlx::query_as::<_, (i32, Option<String>, String)>(
         "SELECT id, stripe_price_id, audience FROM plans WHERE code = $1 AND is_active = true",
     )
@@ -486,10 +482,8 @@ pub async fn set_default_payment_method(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "saved": true })))
 }
 
-/// Return the requesting owner's saved default card (brand + last4 + id), or
-/// `{ "default": null }` when none is on file. Drives the "use my saved card"
-/// radio on the org create form — a Basic user with no card gets `null` and
-/// the UI shows the new-card form directly.
+/// The owner's saved default card, or null when none is on file. Drives the "use
+/// my saved card" option on the org create form.
 #[get("/billing/payment-method/default")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_default_payment_method(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {

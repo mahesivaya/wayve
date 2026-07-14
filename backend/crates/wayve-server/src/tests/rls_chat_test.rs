@@ -1,6 +1,7 @@
-//! RLS isolation tests for chat (phase 2): DM participants + channel
-//! membership. Setup inserts run as the (superuser) test role; assertions drop
-//! to `wayve_app` so the participant policies engage.
+//! RLS isolation for chat: a DM is visible only to its two participants, and a
+//! channel message only to that channel's members. Setup inserts run as the
+//! superuser test role, while assertions drop to `wayve_app` so the policies
+//! actually engage.
 
 #[cfg(test)]
 mod tests {
@@ -48,7 +49,6 @@ mod tests {
         let b = insert_local_user(&pool, &random_email(), "pw").await;
         let c = insert_local_user(&pool, &random_email(), "pw").await;
 
-        // Seed as superuser (bypasses RLS).
         let dm: i32 = sqlx::query_scalar(
             "INSERT INTO messages (sender_id, receiver_id) VALUES ($1, $2) RETURNING id",
         )
@@ -81,7 +81,6 @@ mod tests {
         .await
         .unwrap_or_else(|e| panic!("cm: {e}"));
 
-        // DM: both participants see it; an outsider does not.
         {
             let mut tx = begin_as_user(&pool, a).await;
             assert_eq!(count(&mut tx, DM, dm).await, 1, "A (sender) sees the DM");
@@ -102,7 +101,6 @@ mod tests {
             let _ = tx.rollback().await;
         }
 
-        // Channel message: a member sees it; a non-member does not.
         {
             let mut tx = begin_as_user(&pool, b).await;
             assert_eq!(
@@ -122,7 +120,7 @@ mod tests {
             let _ = tx.rollback().await;
         }
 
-        // Deny-by-default: restricted role, no GUC.
+        // Deny by default: the restricted role with no GUC set at all.
         {
             let mut tx = pool.begin().await.unwrap_or_else(|e| panic!("begin: {e}"));
             sqlx::query("SET LOCAL ROLE wayve_app")
@@ -133,7 +131,6 @@ mod tests {
             let _ = tx.rollback().await;
         }
 
-        // Cleanup (superuser).
         let _ = sqlx::query("DELETE FROM channel_messages WHERE channel_id = $1")
             .bind(ch)
             .execute(&pool)
@@ -156,9 +153,9 @@ mod tests {
             .await;
     }
 
-    /// Attachments on a CHANNEL message are readable by every member of that
-    /// channel — not just the uploader — and by nobody else. The pre-send state
-    /// (uploaded, not yet linked to any message) stays uploader-only.
+    /// An attachment on a channel message is readable by every member of that
+    /// channel and by nobody else, while an upload not yet linked to a message
+    /// stays visible only to its uploader.
     #[tokio::test]
     async fn chat_rls_channel_attachment_membership() {
         let pool = test_pool().await;
@@ -191,8 +188,7 @@ mod tests {
         .await
         .unwrap_or_else(|e| panic!("cm: {e}"));
 
-        // One attachment linked to the channel message, one still unlinked
-        // (the window between upload and send).
+        // The unlinked attachment models the window between upload and send.
         let linked: i64 = sqlx::query_scalar(
             "INSERT INTO chat_attachments
                  (channel_message_id, uploader_id, filename, file_path, file_iv)
@@ -246,7 +242,7 @@ mod tests {
             let _ = tx.rollback().await;
         }
 
-        // Leaving the channel revokes access on the next request.
+        // Leaving the channel must revoke access on the very next request.
         sqlx::query("DELETE FROM channel_members WHERE channel_id = $1 AND user_id = $2")
             .bind(ch)
             .bind(member)
@@ -282,7 +278,6 @@ mod tests {
             "linking one attachment to both a DM and a channel message must violate the CHECK"
         );
 
-        // Cleanup (superuser).
         let _ = sqlx::query("DELETE FROM chat_attachments WHERE id = ANY($1)")
             .bind(&[linked, pending][..])
             .execute(&pool)

@@ -1,8 +1,7 @@
-// Platform-admin billing console handlers. Read-only aggregation across the
-// whole tenant base (BillingRead) plus payroll CRUD (BillingManage). Every
-// route gates on platform scope on top of the permission check — a personal-
-// or org-scope user who happens to hold a billing role for their own tenant
-// must not see other tenants' revenue.
+// Platform-admin billing console: cross-tenant aggregation (BillingRead) plus
+// payroll CRUD (BillingManage). Every route also gates on platform scope, so a
+// personal- or org-scope user holding a billing role for their own tenant can
+// never see another tenant's revenue.
 
 use crate::billing::provider as stripe;
 use crate::prelude::*;
@@ -25,8 +24,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(list_payroll_runs)
         .service(create_payroll_run)
         .service(update_payroll_run_status)
-        // Provider snapshot: canonical /api/platform-billing/provider-snapshot,
-        // legacy /api/platform-billing/stripe/snapshot (vendor-leak).
+        // The /stripe/snapshot path is a legacy alias kept for compatibility.
         .route(
             "/platform-billing/provider-snapshot",
             web::get().to(get_stripe_snapshot),
@@ -48,17 +46,15 @@ async fn gate(
             "message": "Platform scope required"
         })));
     }
-    // Feature gate: the platform owner can restrict which platform roles may use
-    // the Billing console via the feature-access matrix (RBAC is the ceiling;
-    // this can only narrow it further). Runs after the scope check so only
-    // platform callers are evaluated against the platform matrix.
+    // The feature-access matrix can only narrow what RBAC already allows, and it
+    // must run after the scope check so only platform callers are evaluated.
     crate::feature_access::handler::require_feature(req, pool, "billing").await?;
     Ok(ctx)
 }
 
-// SQL fragment: normalise a subscription's interval to a monthly cents amount.
-// Year → /12, week → *52/12, day → *30. Anything else (or NULL) is treated as
-// already-monthly. Used by both the overview MRR and the per-row monthly view.
+// Normalises a subscription's billing interval to monthly cents. Integer
+// division truncates, so MRR is a slight under-estimate for yearly plans.
+// Unknown or NULL intervals are treated as already-monthly.
 const SUB_MONTHLY_EXPR: &str = r#"
     CASE LOWER(COALESCE(p.billing_interval, 'month'))
         WHEN 'year'  THEN p.amount_cents / 12
@@ -68,7 +64,8 @@ const SUB_MONTHLY_EXPR: &str = r#"
     END
 "#;
 
-// SQL fragment: normalise an employee's pay frequency to a monthly cost.
+// Normalises an employee's pay frequency to a monthly cost, with the same
+// integer-truncation caveat as SUB_MONTHLY_EXPR.
 const EMP_MONTHLY_EXPR: &str = r#"
     CASE pay_frequency
         WHEN 'monthly'  THEN base_salary_cents
@@ -78,10 +75,6 @@ const EMP_MONTHLY_EXPR: &str = r#"
         ELSE base_salary_cents
     END
 "#;
-
-// ──────────────────────────────────────────────────────────────────────
-// Overview: totals + revenue
-// ──────────────────────────────────────────────────────────────────────
 
 #[get("/platform-billing/overview")]
 #[instrument(target = "http", skip(req, pool))]
@@ -162,10 +155,6 @@ pub async fn get_overview(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
     })))
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Per-user subscriptions
-// ──────────────────────────────────────────────────────────────────────
-
 #[get("/platform-billing/user-subscriptions")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_user_subscriptions(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -218,10 +207,6 @@ pub async fn list_user_subscriptions(req: HttpRequest, pool: web::Data<PgPool>) 
         .collect();
     Ok(HttpResponse::Ok().json(items))
 }
-
-// ──────────────────────────────────────────────────────────────────────
-// Per-organization subscriptions
-// ──────────────────────────────────────────────────────────────────────
 
 #[get("/platform-billing/organization-subscriptions")]
 #[instrument(target = "http", skip(req, pool))]
@@ -281,10 +266,6 @@ pub async fn list_organization_subscriptions(
     Ok(HttpResponse::Ok().json(items))
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Recent invoices
-// ──────────────────────────────────────────────────────────────────────
-
 #[get("/platform-billing/invoices")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_recent_invoices(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -330,22 +311,14 @@ pub async fn list_recent_invoices(req: HttpRequest, pool: web::Data<PgPool>) -> 
     Ok(HttpResponse::Ok().json(items))
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Billing history — a chronological activity feed across the tenant base:
-// subscription/upgrade events + invoice payments, joined to users/orgs so
-// the dashboard can show (and search) per-user billing activity. Falls back
-// to a small sample set when the projection is empty (e.g. dev with no
-// Stripe) so the page is never blank.
-// ──────────────────────────────────────────────────────────────────────
-
 #[derive(Deserialize)]
 pub struct HistoryQuery {
     pub limit: Option<i64>,
 }
 
-// Shown only when the real projection is empty — illustrative users,
-// upgrades, amounts, dates and payments so the dashboard demonstrates the
-// shape of the data before any Stripe events have flowed.
+// Illustrative rows served only when the billing projection is empty, so the
+// dashboard is never blank in an environment with no Stripe events. Each row is
+// tagged `sample: true` so the UI can label it.
 fn sample_history() -> Vec<Value> {
     let row = |ts: &str,
                event: &str,
@@ -518,10 +491,6 @@ pub async fn list_billing_history(
 
     Ok(HttpResponse::Ok().json(items))
 }
-
-// ──────────────────────────────────────────────────────────────────────
-// Employee CRUD
-// ──────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct EmployeeInput {
@@ -741,9 +710,8 @@ pub async fn delete_employee(
     }
     let id = path.into_inner();
 
-    // ON DELETE RESTRICT on payroll_run_items.employee_id intentionally
-    // blocks deletion once an employee has been paid — terminating someone
-    // is what the `status = 'terminated'` flag is for, not row deletion.
+    // ON DELETE RESTRICT on payroll_run_items.employee_id blocks deletion once an
+    // employee has been paid; terminating someone means setting status instead.
     let result = sqlx::query("DELETE FROM employees WHERE id = $1")
         .bind(id)
         .execute(pool.get_ref())
@@ -761,10 +729,6 @@ pub async fn delete_employee(
         Err(e) => Err(AppError::Db(e)),
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────
-// Payroll runs
-// ──────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct PayrollRunInput {
@@ -857,10 +821,8 @@ pub async fn create_payroll_run(
     }
     let tax_rate = data.tax_rate_pct.unwrap_or(20.0).clamp(0.0, 100.0);
 
-    // Snapshot active employees and their monthly-normalised cost. The same
-    // monthly figure becomes this run's gross — a v1 simplification that
-    // matches a single monthly pay cycle. A future iteration that supports
-    // mid-period hires can prorate from hire_date here.
+    // Each employee's monthly-normalised cost becomes this run's gross, which
+    // assumes a single monthly pay cycle: mid-period hires are not prorated.
     let employees = sqlx::query(&format!(
         r#"
         SELECT id, full_name, {EMP_MONTHLY_EXPR} AS monthly_cost_cents
@@ -966,8 +928,8 @@ pub async fn update_payroll_run_status(
     let next_status = normalize_payroll_status(&data.status)
         .ok_or_else(|| AppError::BadRequest("Unknown payroll status".into()))?;
 
-    // paid_at is stamped on first transition to 'paid'. Re-saving a status
-    // that's already 'paid' is a no-op for paid_at to keep audit history.
+    // paid_at is stamped on the first transition to 'paid' and preserved on
+    // re-save, so the audit history keeps the original payment time.
     let row = sqlx::query(
         r#"
         UPDATE payroll_runs SET
@@ -995,23 +957,10 @@ pub async fn update_payroll_run_status(
     })))
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Live Stripe account snapshot
-// ──────────────────────────────────────────────────────────────────────
-//
-// One endpoint that fans out to four Stripe REST calls in parallel and
-// projects the responses into a stable, compact JSON shape for the
-// platform billing dashboard. Stripe stays the source of truth — nothing
-// is persisted here.
-//
-//  * /v1/balance              — pending + available per currency
-//  * /v1/payouts?limit=10     — most recent transfers to the bank
-//  * /v1/charges?limit=10     — most recent payment attempts
-//  * /v1/balance_transactions — last 30 days, used for gross/net/fees
-//
-// Stripe returns amounts in minor units (cents); we forward them as-is.
-// Missing Stripe configuration (no STRIPE_SECRET_KEY) returns a 503 with
-// `configured: false` so the UI can render a stub instead of an error.
+// Live Stripe account snapshot: fans out to balance, payouts, charges and
+// balance-transaction calls and projects them into a compact shape. Read-only —
+// Stripe stays the source of truth and nothing here is persisted. Amounts are
+// Stripe minor units (cents) and are forwarded as-is.
 
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_stripe_snapshot(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -1019,8 +968,8 @@ pub async fn get_stripe_snapshot(req: HttpRequest, pool: web::Data<PgPool>) -> A
         return Ok(resp);
     }
     if !stripe::is_configured() {
-        // 200 + configured:false so the UI renders a friendly stub instead
-        // of an error banner. The frontend branches on `configured`.
+        // 200 rather than an error: the frontend branches on `configured` to
+        // render a stub.
         return Ok(HttpResponse::Ok().json(serde_json::json!({
             "configured": false,
             "message": "STRIPE_SECRET_KEY not configured for this environment",
@@ -1029,8 +978,8 @@ pub async fn get_stripe_snapshot(req: HttpRequest, pool: web::Data<PgPool>) -> A
 
     let thirty_days_ago = (Utc::now() - chrono::Duration::days(30)).timestamp();
 
-    // The `unwrap` flagged here is inside the `futures::join!` macro expansion,
-    // not our code — scope the disallowed-method allow to this statement.
+    // The flagged `unwrap` is inside the `futures::join!` macro expansion, not
+    // our code.
     #[allow(clippy::disallowed_methods)]
     let (balance_res, payouts_res, charges_res, txns_res) = futures::join!(
         stripe::fetch_balance(),
@@ -1100,8 +1049,6 @@ pub async fn get_stripe_snapshot(req: HttpRequest, pool: web::Data<PgPool>) -> A
         })
         .unwrap_or_default();
 
-    // Aggregate last-30-days totals from the balance_transactions stream.
-    // gross = sum of amounts, fees = sum of fees, net = gross - fees.
     let mut gross_cents: i64 = 0;
     let mut fees_cents: i64 = 0;
     let mut net_cents: i64 = 0;

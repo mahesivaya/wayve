@@ -1,20 +1,10 @@
-//! Email-provider lookup for the "Other" branch of the picker in
-//! [ProviderPicker](../../../frontend/src/emails/ProviderPicker.tsx).
+//! Decides which provider's OAuth to use for an arbitrary email address, for the
+//! "Other" branch of the frontend's ProviderPicker. Detection is two-stage: a
+//! static map of the major consumer domains, then an MX lookup for unknown
+//! domains, which is what catches enterprise customers on their own domain.
 //!
-//! User types an arbitrary email address; we extract the domain and decide
-//! whether we currently support OAuth for it. Two-stage detection:
-//!
-//!   1. **Static map** — the major consumer domains we know map cleanly to
-//!      one provider (gmail.com → Google, outlook.com → Microsoft, …).
-//!   2. **MX lookup** — for unknown domains, ask DNS. A custom-domain
-//!      Google Workspace tenant routes to `*.aspmx.l.google.com.`, a
-//!      Microsoft 365 tenant routes to `*.mail.protection.outlook.com.`.
-//!      This is what catches enterprise customers on their own domain.
-//!
-//! Unsupported domains are **logged** (target = "email", level = warn) and
-//! returned as 400 so the frontend can surface the error and redirect home.
-//! The log line gives ops a feed of unsupported-domain attempts — useful
-//! for deciding which providers to wire up next.
+//! Unsupported domains return 400 and are logged at warn (target = "email"), so
+//! ops get a feed of which providers to wire up next.
 
 use crate::prelude::*;
 use actix_web::{HttpRequest, HttpResponse, web};
@@ -34,27 +24,21 @@ pub struct ProviderLookupRequest {
 
 #[derive(Serialize)]
 pub struct ProviderLookupResponse {
-    /// Frontend dispatches on this to call the existing connect-url endpoint.
-    /// Values match the `ProviderId` union in
-    /// [providers.ts](../../../frontend/src/emails/providers.ts).
+    /// Must stay in sync with the `ProviderId` union in
+    /// frontend/src/emails/providers.ts, which dispatches on this value.
     pub provider: &'static str,
 }
 
-// One resolver per process. hickory has a built-in cache; reusing the
-// resolver lets repeated lookups (e.g. an enterprise re-trying after a typo)
-// hit the cache rather than the network.
+// One resolver per process, so hickory's built-in cache serves repeat lookups
+// (an enterprise retrying after a typo) without hitting the network.
 pub(crate) static RESOLVER: Lazy<TokioResolver> = Lazy::new(|| {
     let mut opts = ResolverOpts::default();
-    // Cap the per-query budget — a slow nameserver should never wedge a
-    // user-facing request. Combined with the outer tokio::time::timeout
-    // we keep the whole MX step under ~3 s in the worst case.
+    // A slow nameserver must never wedge a user-facing request. With the outer
+    // tokio timeout this keeps the whole MX step under ~3s worst case.
     opts.timeout = Duration::from_secs(2);
     opts.attempts = 1;
-    // Prefer the system resolver (`/etc/resolv.conf`); Docker injects one
-    // automatically, so this works in dev and in compose without extra
-    // config. Falls back to a sensible default if reading the system config
-    // fails. The hickory 0.26 API replaced the `TokioAsyncResolver::tokio()`
-    // constructor with the builder-via-config pattern below.
+    // Prefer the system resolver (/etc/resolv.conf), which Docker injects, and
+    // fall back to a default if reading it fails.
     let (cfg, builder_opts) = match hickory_resolver::system_conf::read_system_conf() {
         Ok((cfg, mut sys_opts)) => {
             sys_opts.timeout = opts.timeout;
@@ -65,9 +49,8 @@ pub(crate) static RESOLVER: Lazy<TokioResolver> = Lazy::new(|| {
     };
     let mut builder = Resolver::builder_with_config(cfg, TokioRuntimeProvider::default());
     *builder.options_mut() = builder_opts;
-    // `build()` only fails if the underlying runtime/dns plumbing can't
-    // initialize — at that point the process can't service mail lookups at
-    // all, so panicking here is as well-defined as any startup failure.
+    // `build()` fails only if the runtime/DNS plumbing can't initialize, at
+    // which point the process can't service mail lookups at all.
     builder
         .build()
         .unwrap_or_else(|e| panic!("hickory resolver init failed: {e}"))
@@ -92,7 +75,6 @@ pub async fn provider_lookup(
         }
     };
 
-    // Stage 1: static map. Cheap, covers the long-tail consumer providers.
     if let Some(provider) = provider_for_known_domain(&domain) {
         info!(
             target: "email",
@@ -102,7 +84,6 @@ pub async fn provider_lookup(
         return Ok(HttpResponse::Ok().json(ProviderLookupResponse { provider }));
     }
 
-    // Stage 2: MX lookup. Catches custom-domain Google Workspace / M365.
     if let Some(provider) = mx_provider(&domain).await {
         info!(
             target: "email",
@@ -112,8 +93,7 @@ pub async fn provider_lookup(
         return Ok(HttpResponse::Ok().json(ProviderLookupResponse { provider }));
     }
 
-    // Logged at WARN so it shows up in dev.log without enabling debug, and so
-    // we can grep for trending unsupported domains to prioritize.
+    // Warn, not debug, so unsupported domains show up in dev.log by default.
     warn!(
         target: "email",
         user_id, %domain,
@@ -126,36 +106,30 @@ pub async fn provider_lookup(
     })))
 }
 
-/// Static domain → provider map for the major consumer providers we support.
+/// Static domain-to-provider map for the major consumer providers. Anything else
+/// falls through to the MX lookup or generic IMAP.
 pub(crate) fn provider_for_known_domain(domain: &str) -> Option<&'static str> {
     match domain {
-        // Google consumer + the alias Google still routes for legacy users.
         "gmail.com" | "googlemail.com" => Some("gmail"),
-        // Microsoft consumer family (outlook.com is the modern entry point;
-        // the rest are legacy Hotmail / Windows Live aliases still in use).
+        // outlook.com is the modern entry point; the rest are legacy Hotmail and
+        // Windows Live aliases still in use.
         "outlook.com" | "hotmail.com" | "live.com" | "msn.com" | "outlook.co.uk"
         | "hotmail.co.uk" | "live.co.uk" | "passport.com" => Some("outlook"),
-        // Any other domain isn't statically mapped — callers fall back to an
-        // MX lookup / generic IMAP.
         _ => None,
     }
 }
 
-/// Ask DNS for the domain's MX records and classify by their target.
-/// Returns `None` if the lookup fails (timeout, NXDOMAIN, no MX records) or
-/// if no MX target matches a known provider.
+/// Classifies a domain by its MX records. `None` on lookup failure (timeout,
+/// NXDOMAIN, no MX records) or when no target matches a known provider.
 pub(crate) async fn mx_provider(domain: &str) -> Option<&'static str> {
     let lookup_fut = RESOLVER.mx_lookup(domain);
-    // Belt-and-suspenders: the resolver itself has a timeout, but a flapping
-    // nameserver can still take longer than that worst-case. Cap end-to-end.
+    // The resolver has its own timeout, but a flapping nameserver can still
+    // exceed it, so cap end-to-end.
     let lookup = tokio::time::timeout(Duration::from_secs(3), lookup_fut)
         .await
-        .ok()? // outer timeout
-        .ok()?; // resolver error (NXDOMAIN, etc.)
+        .ok()?
+        .ok()?;
 
-    // 0.26's `Lookup` exposes records via `.answers()` instead of the older
-    // `Lookup::iter()` shortcut. Each record's rdata may be any RR type, so
-    // we filter for `RData::MX` and project to the exchange hostname.
     let targets: Vec<String> = lookup
         .answers()
         .iter()
@@ -170,16 +144,12 @@ pub(crate) async fn mx_provider(domain: &str) -> Option<&'static str> {
     match_mx_targets(&targets)
 }
 
-/// Classify a set of MX record targets to a provider. Pure function (no
-/// network), so unit-testable.
-///
-/// MX `Name::to_ascii()` returns FQDNs with a trailing dot — matching against
-/// `*.aspmx.l.google.com.` rather than `*.aspmx.l.google.com` is intentional.
+/// Classifies MX targets to a provider. `Name::to_ascii()` returns FQDNs with a
+/// trailing dot, so matching `*.aspmx.l.google.com.` rather than
+/// `*.aspmx.l.google.com` is deliberate.
 fn match_mx_targets(targets: &[String]) -> Option<&'static str> {
-    // Google Workspace tenants point at one of:
-    //   aspmx.l.google.com.        (default for new orgs)
-    //   alt1.aspmx.l.google.com.   (etc.)
-    //   <something>.googlemail.com. (rare legacy)
+    // Google Workspace tenants point at aspmx.l.google.com. and its alt1..N
+    // siblings, or rarely at a legacy *.googlemail.com. host.
     let google = targets.iter().any(|t| {
         t.ends_with(".aspmx.l.google.com.")
             || t == "aspmx.l.google.com."
@@ -189,7 +159,7 @@ fn match_mx_targets(targets: &[String]) -> Option<&'static str> {
         return Some("gmail");
     }
 
-    // Microsoft 365 tenants point at `<tenant>-com.mail.protection.outlook.com.`.
+    // Microsoft 365 tenants point at <tenant>-com.mail.protection.outlook.com.
     let microsoft = targets
         .iter()
         .any(|t| t.ends_with(".mail.protection.outlook.com."));
@@ -252,8 +222,6 @@ mod tests {
 
     #[test]
     fn mx_targets_unrelated_return_none() {
-        // Self-hosted, Proton, Fastmail, etc. — we don't support these via
-        // OAuth, so they correctly fall through to the unsupported branch.
         let targets = vec![
             "mail.protonmail.ch.".to_string(),
             "mx.fastmail.com.".to_string(),

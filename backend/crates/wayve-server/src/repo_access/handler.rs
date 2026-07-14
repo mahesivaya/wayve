@@ -1,12 +1,9 @@
-//! Endpoints for the per-repo Access panel:
-//!   GET    /api/repos/{owner}/{repo}/access        → the access grid
-//!   PUT    /api/repos/{owner}/{repo}/access        → add/update one user's access
-//!   DELETE /api/repos/{owner}/{repo}/access?user_id=|login=  → remove access
+//! Endpoints for the per-repo Access panel.
 //!
-//! Access gate (all three): the caller must be able to administer the repo —
-//! an **org** owner/admin (MembersManage) for a repo linked to their org, a
-//! **platform** owner/admin, or a **personal** user for their own linked repo.
-//! Viewing needs MembersRead; mutating needs MembersManage.
+//! Every endpoint requires the caller to be able to administer the repo: an org
+//! owner or admin for a repo linked to their org, a platform owner or admin, or
+//! a personal user for their own linked repo. Viewing needs MembersRead and
+//! mutating needs MembersManage.
 
 use crate::prelude::*;
 use actix_web::{delete, put};
@@ -28,13 +25,14 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
 /// Resolved authorization for a repo-access request.
 struct RepoAdmin {
     user_id: i32,
-    /// Whether the caller may *mutate* access (MembersManage / owns the repo).
+    /// Whether the caller may mutate access, via MembersManage or repo ownership.
     can_manage: bool,
 }
 
-/// Verify the caller may view access for `owner/repo`, and compute whether they
-/// may also manage it. Scoping mirrors `github_proxy::authorize_github_access`
-/// and `workspace::list_projects` so this never widens what a caller can reach.
+/// Verify the caller may view access for `owner/repo` and compute whether they
+/// may also manage it. The scoping must stay in sync with
+/// `github_proxy::authorize_github_access` and `workspace::list_projects` so it
+/// never widens what a caller can reach.
 async fn authorize(
     req: &HttpRequest,
     pool: &PgPool,
@@ -120,8 +118,6 @@ async fn repo_is_personal_project(
     Ok(exists)
 }
 
-// ───────────────────────────── read model ─────────────────────────────
-
 #[derive(Serialize)]
 struct AccessRow {
     /// Wayve user id when the person maps to a connected member; null for a
@@ -129,22 +125,22 @@ struct AccessRow {
     user_id: Option<i32>,
     github_login: Option<String>,
     email: Option<String>,
-    /// read | write | admin — GitHub's live level when they're a collaborator,
-    /// else the Wayve-recorded grant level.
+    /// GitHub's live level when they are a collaborator, else the Wayve-recorded
+    /// grant level. One of read, write, or admin.
     level: String,
-    /// Whether the repo shows in this user's Wayve dashboard (has a grant).
+    /// Whether the repo shows in this user's Wayve dashboard.
     in_dashboard: bool,
-    /// Whether the person maps to a Wayve user (assignable) vs. GitHub-only.
+    /// Whether the person maps to an assignable Wayve user, or is GitHub-only.
     is_member: bool,
-    /// github | wayve | both — where the access comes from.
+    /// Where the access comes from: github, wayve, or both.
     source: String,
 }
 
 #[derive(Serialize)]
 struct AccessResponse {
     repo: String,
-    /// Whether we could read collaborators from GitHub (false → grid shows only
-    /// the Wayve grants + a hint).
+    /// Whether collaborators could be read from GitHub. When false, the grid
+    /// shows only the Wayve grants.
     github_readable: bool,
     can_manage: bool,
     rows: Vec<AccessRow>,
@@ -162,7 +158,7 @@ pub async fn get_access(
     let admin = authorize(&req, pool, &owner, &repo).await?;
     let token = crate::github_proxy::effective_github_token(&req, pool).await;
 
-    // Live GitHub collaborators (best-effort — degrade to Wayve grants alone).
+    // Best-effort: degrade to the Wayve grants alone if GitHub is unreadable.
     let (collabs, github_readable) = match github::list_collaborators(
         &owner,
         &repo,
@@ -177,7 +173,6 @@ pub async fn get_access(
         }
     };
 
-    // Wayve dashboard grants for this repo.
     let full = format!("{owner}/{repo}");
     let grant_rows = sqlx::query(
         "SELECT user_id, access_level FROM member_project_access WHERE repo_full_name = $1",
@@ -193,21 +188,19 @@ pub async fn get_access(
         );
     }
 
-    // Map collaborator logins → Wayve users.
     let logins: Vec<String> = collabs
         .iter()
         .map(|c| c.login.to_ascii_lowercase())
         .collect();
     let login_to_user = users_by_login(pool, &logins).await?;
 
-    // For grant users not covered by a collaborator, resolve email + login.
     let grant_user_ids: Vec<i32> = grant_by_user.keys().copied().collect();
     let user_meta = users_by_id(pool, &grant_user_ids).await?;
 
     let mut rows: Vec<AccessRow> = Vec::new();
     let mut covered_users: HashSet<i32> = HashSet::new();
 
-    // 1. A row per GitHub collaborator (level is GitHub-authoritative).
+    // One row per GitHub collaborator; GitHub is authoritative for the level.
     for c in &collabs {
         let mapped = login_to_user.get(&c.login.to_ascii_lowercase());
         let uid = mapped.map(|m| m.0);
@@ -227,7 +220,6 @@ pub async fn get_access(
         });
     }
 
-    // 2. A row per Wayve grant that isn't already a collaborator above.
     for (uid, level) in &grant_by_user {
         if covered_users.contains(uid) {
             continue;
@@ -309,8 +301,6 @@ async fn users_by_id(
     Ok(map)
 }
 
-// ───────────────────────────── write model ─────────────────────────────
-
 fn default_true() -> bool {
     true
 }
@@ -323,8 +313,8 @@ pub struct SetAccessInput {
     pub github_login: Option<String>,
     /// "read" | "write".
     pub level: String,
-    /// Grant Wayve dashboard visibility (default true). When false, only the
-    /// GitHub collaborator side is touched.
+    /// Grant Wayve dashboard visibility. When false, only the GitHub
+    /// collaborator side is touched.
     #[serde(default = "default_true")]
     pub in_dashboard: bool,
 }
@@ -383,7 +373,6 @@ pub async fn set_access(
         return Err(AppError::bad_request("cannot grant admin from here"));
     }
 
-    // Resolve the target's Wayve user_id and GitHub login (either may be absent).
     let (user_id, login) = resolve_target(pool, body.user_id, body.github_login.as_deref()).await?;
     if user_id.is_none() && login.is_none() {
         return Err(AppError::bad_request("provide user_id or github_login"));
@@ -392,7 +381,7 @@ pub async fn set_access(
     let full = format!("{owner}/{repo}");
     let mut dashboard_updated = false;
 
-    // Wayve dashboard grant (only possible for a known Wayve user).
+    // A dashboard grant is only possible for a known Wayve user.
     if let Some(uid) = user_id {
         if body.in_dashboard {
             sqlx::query(
@@ -419,7 +408,7 @@ pub async fn set_access(
         dashboard_updated = true;
     }
 
-    // Best-effort GitHub collaborator sync (needs an admin token + a login).
+    // Best-effort GitHub sync; it needs both an admin token and a login.
     let token = crate::github_proxy::effective_github_token(&req, pool).await;
     let github_outcome = match &login {
         Some(l) => github::add_collaborator(&owner, &repo, l, level, token.as_deref()).await,
@@ -527,9 +516,8 @@ pub async fn remove_access(
     }))
 }
 
-/// Fill in the missing half of (user_id, login): given a user_id, look up their
-/// GitHub login; given a login, look up their Wayve user. Either side may stay
-/// `None` (unconnected member, or GitHub-only collaborator).
+/// Fill in the missing half of `(user_id, login)`. Either side may stay `None`,
+/// for an unconnected member or a GitHub-only collaborator.
 async fn resolve_target(
     pool: &PgPool,
     user_id: Option<i32>,
@@ -556,14 +544,12 @@ async fn resolve_target(
     Ok((None, None))
 }
 
-// ───────────────────────────── summary ─────────────────────────────
-
 const SUMMARY_MAX: usize = 2000;
 
 #[derive(Serialize)]
 struct SummaryResponse {
     summary: String,
-    /// Whether the caller may edit it (mirrors the access `can_manage` gate).
+    /// Whether the caller may edit it, mirroring the `can_manage` gate.
     can_edit: bool,
 }
 
@@ -572,9 +558,8 @@ pub struct SetSummaryInput {
     pub summary: String,
 }
 
-// GET /api/repos/{owner}/{repo}/summary — the Wayve-local project summary plus
-// whether the caller may edit it. Viewing requires the same access as the
-// repo-access grid; a missing row simply returns an empty summary.
+// Viewing the summary requires the same access as the repo-access grid. A
+// missing row returns an empty summary rather than a 404.
 #[get("/repos/{owner}/{repo}/summary")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_summary(
@@ -599,9 +584,8 @@ pub async fn get_summary(
     }))
 }
 
-// PUT /api/repos/{owner}/{repo}/summary — set the summary. Requires the same
-// manage rights as mutating repo access. Owner/repo are stored lowercased so the
-// primary key stays case-stable.
+// Requires the same manage rights as mutating repo access. Owner and repo are
+// stored lowercased so the primary key stays case-stable.
 #[put("/repos/{owner}/{repo}/summary")]
 #[instrument(target = "http", skip(req, pool, body))]
 pub async fn set_summary(

@@ -1,7 +1,6 @@
-// Dashboard endpoints for managing SCIM tokens. Distinct from the SCIM
-// surface itself (which authenticates with the bearer); this file
-// authenticates with the standard JWT and is gated on `webhooks:manage`
-// (close-enough sibling permission for "manage IdP integrations").
+// Dashboard endpoints for managing SCIM tokens. Unlike the SCIM surface
+// itself, these authenticate with the standard JWT and are gated on
+// `webhooks:manage`, the sibling permission for managing IdP integrations.
 
 use super::tokens::{generate, sha256_hex};
 use crate::prelude::*;
@@ -143,9 +142,6 @@ pub async fn revoke_scim_token(
     if done.rows_affected() == 0 {
         return Err(AppError::NotFound("scim token"));
     }
-    // Burst the hash-lookup. The hash is keyed on raw token; we look up
-    // by id here so the next bearer attempt with the same token sees
-    // revoked_at and is denied.
     let _ = sha256_hex; // keep helper exported for tests
     Ok(HttpResponse::Ok().json(serde_json::json!({ "revoked": true })))
 }

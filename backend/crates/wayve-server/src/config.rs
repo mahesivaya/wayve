@@ -35,17 +35,15 @@ pub fn load_env_files() {
     dotenvy::from_filename_override(format!("backend/.env.{app_env}")).ok();
     dotenvy::from_filename("backend/.env").ok();
 
-    // Centralized secrets — the single source of truth for credentials, keys,
-    // and the DB connection string. Loaded last so it wins over any stale key
-    // left in the config files above. In docker this file is not in the image
-    // (a no-op); containers receive it through the `env_file:` directive.
+    // The single source of truth for credentials, keys, and the DB connection
+    // string. Must load last so it wins over any stale key in the files above.
+    // Absent from docker images; containers get it via the `env_file:` directive.
     dotenvy::from_filename_override(".env.secrets").ok();
 }
 
 pub fn db_max_connections(role: RuntimeRole) -> u32 {
-    // RuntimeRole policy stays here (server concern); the env override
-    // and parse handling live in wayve-db so wayve-server's only DB
-    // logic is the per-role default.
+    // Role policy is a server concern and stays here; the env override and parse
+    // handling live in wayve-db.
     let default = match role {
         RuntimeRole::Api | RuntimeRole::All => 50,
         RuntimeRole::EmailSyncWorker | RuntimeRole::EmailBodyWorker => 5,
@@ -62,28 +60,19 @@ pub fn listen_port() -> u16 {
 
 /// Resolve the Postgres connection string.
 ///
-/// An explicit `DATABASE_URL` always wins — docker-compose, CI, and prod set
-/// it directly. Otherwise it is derived from the `POSTGRES_*` parts, so the
-/// credentials are written exactly once (in `.env.secrets`) rather than also
-/// being duplicated inside a `DATABASE_URL` string. `POSTGRES_HOST` defaults
-/// to `localhost` for a local `cargo run`; docker sets it to `postgres_db`.
+/// An explicit `DATABASE_URL` wins (docker-compose, CI, and prod set it);
+/// otherwise it is derived from the `POSTGRES_*` parts so credentials live
+/// exactly once, in `.env.secrets`. A thin wrapper over wayve-db so the
+/// assembly logic has one home and existing call sites keep working.
 pub fn database_url() -> String {
-    // Forwards to wayve-db so the connection-string assembly lives in
-    // one place. Kept as a wrapper rather than a re-export so existing
-    // `crate::config::database_url` call sites in wayve-server stay
-    // unchanged.
     wayve_db::config::database_url()
 }
 
-// ============================================================
-// Centralized configuration accessors.
-//
-// Every environment-specific value goes through this module (or `external.rs`
-// for external endpoint URLs). Accessors read the process env on each call —
-// env files are layered in by `load_env_files` at startup, and per-call reads
-// keep env-mutating tests working. To add a setting: add an accessor here and
-// an entry in ENVIRONMENTS.md; never call `env::var` elsewhere.
-// ============================================================
+// Every environment-specific value goes through this module, or `external.rs` for
+// external endpoint URLs. Accessors read the process env on each call: env files
+// are layered in by `load_env_files` at startup, and per-call reads keep
+// env-mutating tests working. To add a setting, add an accessor here plus an
+// entry in ENVIRONMENTS.md, and never call `env::var` elsewhere.
 
 /// An env var, trimmed; `None` when unset or blank.
 fn var_opt(key: &str) -> Option<String> {
@@ -117,33 +106,29 @@ pub fn app_environment() -> String {
         .unwrap_or_else(|| "development".to_string())
 }
 
-// ---- URLs ---------------------------------------------------
-
-/// Browser-facing origin of the app — CORS allowlist + OAuth/email links.
+/// Browser-facing origin of the app; the CORS allowlist and OAuth/email links.
 pub fn frontend_url() -> String {
     var_or("FRONTEND_URL", "http://localhost:5173")
 }
 
-/// Public origin of this backend when it differs from `FRONTEND_URL`
-/// (used to build the OAuth redirect URI).
+/// Public origin of this backend when it differs from `FRONTEND_URL`. Used to
+/// build the OAuth redirect URI.
 pub fn backend_url() -> Option<String> {
     var_opt("BACKEND_URL")
 }
 
-/// API base the browser should call; empty ⇒ same-origin. Served via `/api/config`.
+/// API base the browser should call; empty means same-origin. Served via `/api/config`.
 pub fn public_api_url() -> String {
     var_opt("PUBLIC_API_URL").unwrap_or_default()
 }
 
-/// WebSocket base the browser should use; empty ⇒ derived from the page origin.
+/// WebSocket base the browser should use; empty means derive from the page origin.
 pub fn public_ws_url() -> String {
     var_opt("PUBLIC_WS_URL").unwrap_or_default()
 }
 
-// ---- Auth / crypto ------------------------------------------
-
-/// HS256 signing secret. Panics if missing, blank, or the placeholder
-/// `secret` — the app must not run with an insecure JWT secret.
+/// HS256 signing secret. Panics if missing, blank, or the placeholder `secret`:
+/// the app must not run with an insecure JWT secret.
 pub fn jwt_secret() -> String {
     let secret = env::var("JWT_SECRET").unwrap_or_else(|_| {
         panic!("JWT_SECRET missing; refusing to start with an insecure default")
@@ -158,23 +143,19 @@ pub fn jwt_secret() -> String {
     secret
 }
 
-/// AES-256-GCM input key material (Hex64). `None` ⇒ at-rest encryption unusable.
+/// AES-256-GCM input key material (Hex64). `None` makes at-rest encryption
+/// unusable. `aes_hkdf_salt()` and `auth_cookie_secure()` live in
+/// wayve-security::config and are read only from inside that crate.
 pub fn aes_key() -> Option<String> {
     var_opt("AES_KEY")
 }
-
-// `aes_hkdf_salt()` and `auth_cookie_secure()` moved to
-// wayve-security::config — only read from inside that crate now.
-
-// ---- Cache --------------------------------------------------
 
 pub fn redis_url() -> String {
     var_or("REDIS_URL", "redis://redis:6379")
 }
 
-// ---- Geolocation --------------------------------------------
-// Path to an offline MaxMind GeoLite2-City `.mmdb`. Optional: when unset the
-// User Logs "Location" column is simply blank (no geolocation performed).
+/// Path to an offline MaxMind GeoLite2-City `.mmdb`. When unset the User Logs
+/// "Location" column is simply blank.
 pub fn geoip_db_path() -> Option<String> {
     var_opt("GEOIP_DB_PATH")
 }
@@ -191,10 +172,9 @@ pub fn local_json_cache_max_capacity() -> u64 {
         .unwrap_or(10_000)
 }
 
-/// Shared parse+guard for a retention-days env var: a positive integer, else
-/// the default. A non-positive or unparseable value falls back so the daily
-/// pruner (`startup::spawn_log_retention_pruner`) never deletes everything by
-/// accident.
+/// Parse a retention-days env var. A non-positive or unparseable value falls back
+/// to the default so `startup::spawn_log_retention_pruner` can never be tricked
+/// into deleting everything.
 fn retention_days(key: &str, default: i32) -> i32 {
     var_opt(key)
         .and_then(|value| value.parse().ok())
@@ -202,20 +182,16 @@ fn retention_days(key: &str, default: i32) -> i32 {
         .unwrap_or(default)
 }
 
-/// Retention window (days) for the low-value `activity_events` telemetry stream.
-/// Override with `ACTIVITY_RETENTION_DAYS`; defaults to 7.
+/// Retention window in days for the `activity_events` telemetry stream.
 pub fn activity_retention_days() -> i32 {
     retention_days("ACTIVITY_RETENTION_DAYS", 7)
 }
 
-/// Retention window (days) for the `audit_logs` security/audit trail. Override
-/// with `AUDIT_RETENTION_DAYS`; defaults to 7. Longer retention should be served
-/// by the SIEM export/forward (see `routes/audit.rs`), not by raising this alone.
+/// Retention window in days for the `audit_logs` security trail. Longer retention
+/// should be served by the SIEM forward in `routes/audit.rs`, not by raising this.
 pub fn audit_retention_days() -> i32 {
     retention_days("AUDIT_RETENTION_DAYS", 7)
 }
-
-// ---- Observability ------------------------------------------
 
 pub fn tracing_log_max_bytes() -> u64 {
     var_opt("TRACING_LOG_MAX_BYTES")
@@ -241,8 +217,6 @@ pub fn siem() -> SiemConfig {
         webhook_token: var_opt("SIEM_WEBHOOK_TOKEN"),
     }
 }
-
-// ---- SMTP ---------------------------------------------------
 
 pub struct SmtpConfig {
     pub host: String,
@@ -270,20 +244,17 @@ pub fn smtp() -> Result<SmtpConfig, &'static str> {
     })
 }
 
-/// Full Pub/Sub topic resource name for Gmail push
-/// (`projects/<project>/topics/<topic>`). Unset disables `users.watch` — the
-/// 30s poll still covers accounts.
+/// Full Pub/Sub topic resource name for Gmail push. Unset disables `users.watch`;
+/// the 30s poll still covers accounts.
 pub fn gmail_push_topic() -> Option<String> {
     var_opt("GMAIL_PUSH_TOPIC")
 }
 
 /// Shared secret matched against the `?token=` on the Gmail Pub/Sub push
-/// endpoint. Unset accepts any caller (dev only).
+/// endpoint. Unset accepts any caller, so it is dev-only.
 pub fn gmail_push_secret() -> Option<String> {
     var_opt("GMAIL_PUSH_SECRET")
 }
-
-// ---- Stripe (billing) ---------------------------------------
 
 pub struct StripeConfig {
     pub secret_key: Option<String>,
@@ -301,8 +272,6 @@ pub fn stripe() -> StripeConfig {
     }
 }
 
-// ---- AI -----------------------------------------------------
-
 pub fn gemini_api_key() -> Option<String> {
     var_opt("GEMINI_API_KEY")
 }
@@ -311,27 +280,18 @@ pub fn gemini_model() -> String {
     var_or("GEMINI_MODEL", "gemini-2.0-flash")
 }
 
-// ---- Jira ---------------------------------------------------
-
-/// Shared secret for the inbound Jira webhook, supplied to Jira as the
-/// `?token=` query value and verified server-side. Jira Cloud does not sign
-/// webhook payloads, so this token is the only authenticator — when unset the
-/// receiver refuses all deliveries.
+/// Shared secret for the inbound Jira webhook, passed as the `?token=` query
+/// value. Jira Cloud does not sign webhook payloads, so this token is the only
+/// authenticator; when unset the receiver refuses all deliveries.
 pub fn jira_webhook_secret() -> Option<String> {
     var_opt("JIRA_WEBHOOK_SECRET")
 }
 
-// ---- Slack --------------------------------------------------
-
-/// Slack app **signing secret** (Basic Information → App Credentials), used to
-/// verify the HMAC-SHA256 signature on inbound Slack Events API requests
-/// (`X-Slack-Signature: v0=…` over `v0:{timestamp}:{body}`). When unset the
-/// Slack Events receiver refuses all deliveries.
+/// Slack app signing secret, used to verify the HMAC-SHA256 `X-Slack-Signature`
+/// on inbound Events API requests. When unset the receiver refuses all deliveries.
 pub fn slack_signing_secret() -> Option<String> {
     var_opt("SLACK_SIGNING_SECRET")
 }
-
-// ---- Zoom ---------------------------------------------------
 
 pub struct ZoomConfig {
     pub account_id: String,
@@ -347,8 +307,6 @@ pub fn zoom() -> Result<ZoomConfig, &'static str> {
         client_secret: var_opt("ZOOM_CLIENT_SECRET").ok_or("ZOOM_CLIENT_SECRET")?,
     })
 }
-
-// ---- OAuth (Google / Outlook) -------------------------------
 
 pub struct GoogleOAuthConfig {
     pub client_id: Option<String>,
@@ -366,9 +324,9 @@ pub fn google_oauth() -> GoogleOAuthConfig {
     }
 }
 
-/// Per-user GitHub OAuth (personal accounts connect their own GitHub to import
-/// their repos). Distinct from the shared `GITHUB_TOKEN` PAT the proxy falls
-/// back to for public browsing.
+/// Per-user GitHub OAuth: personal accounts connect their own GitHub to import
+/// their repos. Distinct from the shared `GITHUB_TOKEN` PAT the proxy falls back
+/// to for public browsing.
 pub struct GithubOAuthConfig {
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
@@ -400,7 +358,7 @@ pub fn outlook_oauth() -> OutlookOAuthConfig {
 /// Fail-fast check of required configuration; logs which optional integrations
 /// are enabled. Call once at startup, after `load_env_files`.
 pub fn validate() {
-    // Required — `jwt_secret()` panics on a missing/insecure value.
+    // Panics on a missing or insecure value.
     let _ = jwt_secret();
     if aes_key().is_none() {
         panic!("AES_KEY is not set; configure a 64-character Hex64 key");
@@ -412,7 +370,7 @@ pub fn validate() {
         warn!(target: "config", default = %frontend_url(), "FRONTEND_URL not set; using default");
     }
 
-    // Optional integrations — log the surface so misconfig is visible at boot.
+    // Log the optional integration surface so misconfig is visible at boot.
     let feature = |name: &str, enabled: bool| {
         if enabled {
             info!(target: "config", "{name}: enabled");

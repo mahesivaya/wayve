@@ -1,16 +1,15 @@
-//! Inbound Slack Events API receiver — real-time Slack → Wayve message sync,
-//! the counterpart to the on-demand import in `sync::import_all`.
+//! Inbound Slack Events API receiver: real-time Slack to Wayve message sync, the
+//! counterpart to the on-demand import in `sync::import_all`.
 //!
-//! Slack signs every request: `X-Slack-Signature: v0=<hmac_hex>` over the base
-//! string `v0:{timestamp}:{raw_body}`, keyed by the app **signing secret**
-//! (`config::slack_signing_secret`). We verify that — with a 5-minute replay
-//! window — before trusting anything. The route is public (no JWT); it's
-//! machine-to-machine, like the Jira webhook.
+//! The route is public, with no JWT, so the request signature is the only
+//! authentication. Slack signs every request with `X-Slack-Signature: v0=<hmac>`
+//! over `v0:{timestamp}:{raw_body}`, keyed by the app signing secret; that must be
+//! verified, with a replay window, before anything in the payload is trusted.
 //!
-//! A linked Slack channel maps to a Wayve channel via `slack_channel_links`;
-//! only enterprise orgs can create links, so matching one is implicitly
-//! enterprise-gated. Inbound messages are stored server-readable (enterprise
-//! chat is not E2E) and fanned out live to the Wayve channel's members.
+//! A linked Slack channel maps to a Wayve channel via `slack_channel_links`. Only
+//! enterprise orgs can create links, so matching one is implicitly
+//! enterprise-gated, and inbound messages are stored server-readable because
+//! enterprise chat is not E2E.
 
 use crate::cache::Cache;
 use crate::prelude::*;
@@ -25,8 +24,8 @@ use super::models::{SlackEvent, SlackEventEnvelope};
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Reject deliveries whose timestamp is more than this far from now (replay
-/// protection), per Slack's guidance.
+/// Replay window: reject deliveries whose timestamp is further than this from
+/// now, per Slack's guidance.
 const MAX_TIMESTAMP_SKEW_SECS: i64 = 300;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
@@ -41,7 +40,7 @@ pub async fn slack_events(
     cache: web::Data<Option<Cache>>,
     body: web::Bytes,
 ) -> AppResult {
-    // No signing secret configured → we cannot authenticate Slack → refuse.
+    // Without the signing secret we cannot authenticate Slack, so refuse.
     let Some(secret) = crate::config::slack_signing_secret() else {
         warn!(target: "worker", "SLACK_SIGNING_SECRET not set; rejecting Slack event");
         return Ok(HttpResponse::ServiceUnavailable()
@@ -58,14 +57,14 @@ pub async fn slack_events(
         }
     };
 
-    // One-time Events API URL-verification handshake — echo the challenge.
+    // The one-time Events API URL-verification handshake echoes the challenge.
     if envelope.envelope_type == "url_verification" {
         return Ok(HttpResponse::Ok()
             .json(serde_json::json!({ "challenge": envelope.challenge.unwrap_or_default() })));
     }
 
-    // Slack expects a 200 within 3s, so do the work (users.info + DB + fan-out)
-    // out of band and ack immediately.
+    // Slack expects a 200 within 3 seconds, so the work happens out of band and
+    // this acks immediately.
     if envelope.envelope_type == "event_callback"
         && let Some(event) = envelope.event
         && event.event_type == "message"
@@ -90,8 +89,8 @@ async fn apply_event(
     team_id: &str,
     event: SlackEvent,
 ) -> Result<(), AppError> {
-    // Skip non-plain messages and anything our own bot posted (echo-loop guard:
-    // outbound Wayve→Slack posts come back as `bot_id`/`app_id` messages).
+    // Echo-loop guard: our own outbound posts come back as `bot_id`/`app_id`
+    // messages and must not be re-imported.
     if event.subtype.is_some() || event.bot_id.is_some() || event.app_id.is_some() {
         return Ok(());
     }
@@ -99,8 +98,8 @@ async fn apply_event(
         return Ok(());
     };
 
-    // Resolve the linked Wayve channel for (Slack channel, workspace). Only
-    // enterprise orgs have links, so a match is implicitly enterprise-gated.
+    // Only enterprise orgs have links, so matching one is implicitly
+    // enterprise-gated.
     let Some(row) = sqlx::query(
         "SELECT l.wayve_channel_id, l.organization_id, c.connected_by
            FROM slack_channel_links l
@@ -118,8 +117,7 @@ async fn apply_event(
     let org_id: i32 = row.get("organization_id");
     let connected_by: Option<i32> = row.try_get("connected_by").unwrap_or(None);
 
-    // Resolve the author display name + any @mentions in the text via the bot
-    // token (users.info). Best-effort — falls back to raw ids.
+    // Best-effort name resolution through the bot token; falls back to raw ids.
     let (author, text) = match super::handler::load_connection(pool, org_id).await? {
         Some(conn) => {
             let client = SlackClient::new(&conn);
@@ -136,7 +134,7 @@ async fn apply_event(
     };
     let body = format!("[Slack · {author}] {text}");
 
-    // Server-readable storage (enterprise chat is not E2E).
+    // Storage is server-readable, since enterprise chat is not E2E.
     let (iv, enc) = encrypt(&body).map_err(|e| {
         warn!(target: "worker", error = %e, "slack event encrypt failed");
         AppError::Internal("Failed to store Slack message".into())
@@ -159,8 +157,7 @@ async fn apply_event(
 
     info!(target: "worker", org_id, wayve_channel_id, message_id, "slack event stored");
 
-    // Push it to the channel's Wayve members in real time. `content` is the
-    // plaintext body (server-readable), which clients render directly.
+    // `content` is the plaintext body, which clients render directly.
     let payload = serde_json::json!({
         "message_id": message_id,
         "channel_id": wayve_channel_id,
@@ -227,7 +224,7 @@ fn hex_encode(bytes: &[u8]) -> String {
     s
 }
 
-/// Length-aware constant-time byte comparison (mirrors `jira::webhook`).
+/// Length-aware constant-time byte comparison, mirroring `jira::webhook`.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;

@@ -1,8 +1,7 @@
-//! Public runtime configuration for the browser.
-//!
-//! Served unauthenticated so the frontend can fetch its API / WebSocket base
-//! and other public settings at boot — which makes a single frontend build
-//! environment-agnostic (no rebuild to point at a different host).
+//! Public runtime configuration for the browser. Served unauthenticated so the
+//! frontend can fetch its API and WebSocket base at boot, which is what makes a
+//! single frontend build environment-agnostic: no rebuild to point at a
+//! different host.
 
 use crate::config;
 use actix_web::{HttpResponse, Responder, get, web};
@@ -10,9 +9,8 @@ use sqlx::{PgPool, Row};
 
 #[get("/config")]
 pub async fn public_config(pool: web::Data<PgPool>) -> impl Responder {
-    // Platform-wide UI font, chosen by the platform owner and applied to every
-    // client (incl. the pre-login page). Best-effort — a missing table/row just
-    // means the app default. Set via `platform_ui`.
+    // Platform-wide UI font, applied to every client including the pre-login
+    // page. Best-effort: a missing table or row means the app default.
     let font_key: Option<String> =
         sqlx::query("SELECT font_key FROM platform_ui_config WHERE id = 1")
             .fetch_optional(pool.get_ref())
@@ -41,7 +39,6 @@ pub async fn public_config(pool: web::Data<PgPool>) -> impl Responder {
     }))
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(public_config);
 }

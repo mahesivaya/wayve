@@ -1,7 +1,6 @@
-//! Per-user GitLab connection endpoints + on-demand issue import. Gated by
-//! authentication only (per-user, like the Jira integration) — no RBAC
-//! permission, not enterprise-gated. The access token is stored encrypted at
-//! rest via `wayve_security::encryption`.
+//! Per-user GitLab connection endpoints and on-demand issue import. Gated by
+//! authentication only, like the Jira integration: no RBAC permission and no
+//! enterprise gate. The access token is stored encrypted at rest.
 
 use crate::prelude::*;
 use actix_web::{delete, put};
@@ -108,7 +107,7 @@ pub async fn connect(
         ));
     }
 
-    // Validate the credentials before storing them, so a bad token fails fast.
+    // Validating before storing means a bad token fails fast.
     let probe = GitlabConnection {
         base_url: base_url.clone(),
         access_token: token.clone(),

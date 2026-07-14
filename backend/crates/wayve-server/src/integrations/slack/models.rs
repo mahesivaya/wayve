@@ -1,7 +1,7 @@
 use crate::prelude::*;
 
-/// A decrypted Slack connection for an organization, ready for authenticated
-/// calls. Never serialized — it carries the plaintext bot token.
+/// A decrypted Slack connection for an organization. Must never be serialized:
+/// it carries the plaintext bot token.
 pub struct SlackConnection {
     pub organization_id: i32,
     pub bot_token: String,
@@ -28,8 +28,7 @@ pub struct LinkInput {
     pub slack_channel_id: String,
     #[serde(default)]
     pub slack_channel_name: Option<String>,
-    /// Name for the Wayve channel created for this link; defaults to the Slack
-    /// channel name.
+    /// Defaults to the Slack channel name.
     #[serde(default)]
     pub wayve_channel_name: Option<String>,
 }
@@ -43,9 +42,8 @@ pub struct ImportInput {
     pub limit: Option<u32>,
 }
 
-// ---- Slack Web API response shapes (only the fields we read) ----
-// Slack returns HTTP 200 with `"ok": false` + `"error"` on failure, so callers
-// check `ok`, not the HTTP status.
+// Slack Web API response shapes. Slack returns HTTP 200 with `"ok": false` on
+// failure, so callers check `ok`, not the HTTP status.
 
 #[derive(Deserialize)]
 pub struct SlackAuthTest {
@@ -95,8 +93,8 @@ pub struct SlackMessage {
     pub text: String,
     #[serde(default)]
     pub ts: String,
-    /// Present on non-plain messages (joins, bot posts, edits…). We import only
-    /// plain user messages, so a present subtype is skipped.
+    /// Present on non-plain messages such as joins, bot posts, and edits. Only
+    /// plain user messages are imported, so a present subtype is skipped.
     #[serde(default)]
     pub subtype: Option<String>,
 }
@@ -104,7 +102,7 @@ pub struct SlackMessage {
 #[derive(Deserialize)]
 pub struct SlackUserInfo {
     // `ok` is intentionally omitted: on failure `user` is simply absent and the
-    // caller falls back to the raw id, so we read `user` directly.
+    // caller falls back to the raw id.
     #[serde(default)]
     pub user: Option<SlackUser>,
 }
@@ -124,11 +122,9 @@ pub struct SlackPostMessage {
     pub error: Option<String>,
 }
 
-// ---- Slack Events API (inbound webhook) ----
-
-/// The outer envelope Slack POSTs to the Events API request URL. `type` is
-/// `url_verification` (carrying `challenge`) or `event_callback` (carrying
-/// `event` + `team_id`).
+/// The outer envelope Slack POSTs to the Events API request URL. `type` is either
+/// `url_verification`, carrying `challenge`, or `event_callback`, carrying `event`
+/// and `team_id`.
 #[derive(Deserialize)]
 pub struct SlackEventEnvelope {
     #[serde(rename = "type", default)]
@@ -141,9 +137,8 @@ pub struct SlackEventEnvelope {
     pub event: Option<SlackEvent>,
 }
 
-/// The inner `event` object. We act only on `type == "message"`. `bot_id` /
-/// `app_id` mark messages our own bot posted — skip them to avoid an
-/// outbound→inbound echo loop; `subtype` marks joins/edits/etc.
+/// The inner `event` object. `bot_id` and `app_id` mark messages our own bot
+/// posted, which must be skipped to avoid an outbound-to-inbound echo loop.
 #[derive(Deserialize)]
 pub struct SlackEvent {
     #[serde(rename = "type", default)]

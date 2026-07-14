@@ -11,21 +11,21 @@ use tracing::error;
 
 #[derive(Debug)]
 pub enum AppError {
-    /// A database / `sqlx` failure — 500, logged; the client sees a generic
-    /// message so query internals never leak.
+    /// A `sqlx` failure: 500, logged, with a generic client message so query
+    /// internals never leak.
     Db(sqlx::Error),
-    /// An unexpected internal fault — 500, logged. The string is log context,
-    /// never sent to the client.
+    /// An unexpected internal fault: 500, logged. The string is log context and
+    /// is never sent to the client.
     Internal(String),
-    /// The request carried no valid credentials — 401.
+    /// No valid credentials: 401.
     Unauthorized,
-    /// Authenticated, but not allowed to perform this action — 403.
+    /// Authenticated but not allowed: 403.
     // Part of the complete taxonomy; constructed as more modules adopt AppError.
     #[allow(dead_code)]
     Forbidden,
-    /// The addressed resource does not exist — 404; the label names the kind.
+    /// Resource does not exist: 404. The label names the kind.
     NotFound(&'static str),
-    /// The caller's input was rejected — 400; the message is returned as-is.
+    /// Input rejected: 400. The message is returned to the caller as-is.
     // Part of the complete taxonomy; constructed as more modules adopt AppError.
     #[allow(dead_code)]
     BadRequest(String),
@@ -33,22 +33,19 @@ pub enum AppError {
 
 #[allow(dead_code)]
 impl AppError {
-    /// Shorthand for `AppError::BadRequest(msg.into())` — lets handlers say
-    /// `return Err(AppError::bad_request("missing field"))` without the
-    /// explicit `.into()` everywhere.
+    /// Shorthand for `AppError::BadRequest(msg.into())`.
     pub fn bad_request(msg: impl Into<String>) -> Self {
         AppError::BadRequest(msg.into())
     }
 
     /// Shorthand for `AppError::Internal(msg.into())`. The string never reaches
-    /// the client (5xx bodies are generic in `error_response`).
+    /// the client, since `error_response` makes 5xx bodies generic.
     pub fn internal(msg: impl Into<String>) -> Self {
         AppError::Internal(msg.into())
     }
 }
 
-/// Handler return type. `Ok` is the success response; `Err` is rendered by
-/// `AppError`'s [`actix_web::ResponseError`] impl.
+/// Handler return type; `Err` is rendered by `AppError`'s `ResponseError` impl.
 pub type AppResult = Result<HttpResponse, AppError>;
 
 impl std::fmt::Display for AppError {
@@ -105,9 +102,8 @@ impl From<anyhow::Error> for AppError {
     }
 }
 
-// Bridge wayve-security's password error into the app's central error
-// type so handlers can keep using `?` after `hash_password()` /
-// `verify_password()` without explicit map_err calls.
+// Lets handlers use `?` after `hash_password()` / `verify_password()` without an
+// explicit map_err.
 impl From<wayve_security::password::PasswordError> for AppError {
     fn from(e: wayve_security::password::PasswordError) -> Self {
         AppError::Internal(format!("password operation failed: {e}"))

@@ -53,14 +53,10 @@ pub async fn run_body_worker(pool: PgPool) -> ! {
 
 #[instrument(target = "worker", skip(pool))]
 async fn run_iteration(pool: &PgPool) -> Result<usize> {
-    // Pick accounts that have ANY work pending:
-    //   - body_encrypted = '' / IS NULL → headers synced but body never fetched
-    //   - attachments_checked = false  → fetched but the per-attachment save
-    //     either errored or was never attempted (legacy rows where the
-    //     `update_body` SQL stamped this flag prematurely)
-    // The body fetcher already deduplicates work-per-row inside
-    // `run_body_worker_for_account` so picking an account once per tick
-    // covers both axes.
+    // An account has work pending if any of its rows has `body_encrypted = ''`
+    // (headers synced, body never fetched — the contract backed by
+    // idx_emails_pending_body) or `attachments_checked = false` (the attachment
+    // save errored or never ran).
     let accounts = sqlx::query(
         r#"
         SELECT DISTINCT a.id, a.refresh_token
@@ -144,11 +140,9 @@ pub(crate) async fn process_account(
         .execute(pool)
         .await?;
 
-    // Same widened predicate as `run_iteration`: any row where the body is
-    // missing OR where attachments still need verification. Re-fetching a
-    // row that already has a body is cheap (single Gmail metadata call) and
-    // is the only way to back-fill attachments for rows the legacy
-    // update_body logic mistakenly marked checked.
+    // Same predicate as `run_iteration`. Re-fetching a row that already has a
+    // body costs one Gmail call and is the only way to back-fill attachments for
+    // rows that were wrongly marked checked.
     let rows = sqlx::query(
         r#"
         SELECT id, gmail_id
@@ -186,7 +180,8 @@ pub(crate) async fn process_account(
         }));
     }
 
-    // Prime the pump with up to BODY_CONCURRENCY in-flight requests.
+    // Cap in-flight requests at BODY_CONCURRENCY to stay inside Gmail's rate
+    // limit; each completion below refills one slot.
     for row in iter.by_ref().take(BODY_CONCURRENCY) {
         let id: i32 = row.get("id");
         let gmail_id: String = row.get("gmail_id");
@@ -209,10 +204,8 @@ pub(crate) async fn process_account(
                         &fetched.attachments,
                     )
                     .await;
-                    // Only now mark the row as fully checked. If the save
-                    // call swallowed an error, the flag stays false and the
-                    // next worker tick (which now also picks up
-                    // attachments_checked=false rows) will retry.
+                    // Mark checked only after the save returns. If it swallowed
+                    // an error the flag stays false and the next tick retries.
                     if let Err(e) = mark_attachments_checked(pool, fetched.id).await {
                         println!(
                             "body_worker mark_attachments_checked {} failed: {:?}",
@@ -266,21 +259,15 @@ async fn fetch_one(token: &str, account_id: i32, id: i32, gmail_id: &str) -> Res
 
 #[instrument(target = "db", skip(pool, body), fields(email_id = id))]
 async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Result<()> {
-    // Plan A inbound encrypt-on-arrival: prefer wrapping the body to the
-    // owning user's RSA public key so the server never persists a copy
-    // it can decrypt. If the user has no pubkey on file (legacy account
-    // that pre-dates the keypair rollout, OR a SQL-seeded test user)
-    // we fall back to the historical server-AES path so onboarding
-    // isn't blocked by the missing key.
+    // Encrypt on arrival, preferring to wrap the body to the owner's RSA public
+    // key so the server never persists a copy it can decrypt. Two cases fall
+    // back to the server-AES at-rest layer instead: an owner with no public key
+    // on file (a pre-keypair or SQL-seeded account), and an enterprise-tier
+    // owner, whose org opts into server-readable encryption.
     //
-    // Both shapes coexist in the same `body_encrypted` column because
-    // `frontend/src/emails/bodyUtils.ts` checks for the
-    // `WAYVE_SECURE_V1` prefix first and falls through to the API's
-    // server-decrypted shape otherwise.
-    // Also resolve whether the owning user's org is on the enterprise tier.
-    // Enterprise orgs use standard (server-readable) encryption, so inbound
-    // bodies are stored under the server-AES at-rest layer rather than wrapped
-    // to the owner's public key.
+    // Both shapes share the `body_encrypted` column, because
+    // frontend/src/emails/bodyUtils.ts sniffs for the WAYVE_SECURE_V1 prefix and
+    // otherwise falls through to the API's server-decrypted shape.
     let (public_key_json, owner_is_enterprise): (Option<String>, bool) = sqlx::query_as(
         "SELECT
              u.public_key,
@@ -300,8 +287,6 @@ async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Res
     .unwrap_or((None, false));
 
     let spki = if owner_is_enterprise {
-        // Enterprise owner: force server-AES even when a public key exists, so
-        // the row stays server-readable.
         None
     } else {
         public_key_json
@@ -311,21 +296,16 @@ async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Res
 
     let (iv, encrypted) = match spki {
         Some(spki) => {
-            // Envelope is self-contained (it carries its own AES nonce
-            // inside the JSON). The legacy `body_iv` column stays empty
-            // so the frontend's prefix-sniffing decoder doesn't get
-            // confused by a stray IV that doesn't apply.
+            // The envelope carries its own AES nonce, so `body_iv` must stay
+            // empty or the frontend's prefix-sniffing decoder would apply a
+            // stray IV that doesn't belong to it.
             let envelope = encrypt_to_pubkey(body.as_bytes(), &spki)?;
             (String::new(), envelope)
         }
-        None if owner_is_enterprise => {
-            // Standard encryption for the enterprise owner — server-readable.
-            encrypt(body)?
-        }
+        None if owner_is_enterprise => encrypt(body)?,
         None => {
-            // Fallback: AES_KEY at-rest. The user has no public key on
-            // file yet, so we cannot E2E this row. Log a warn-target so
-            // an operator can spot persistent pubkey-missing accounts.
+            // Warn so an operator can spot accounts persistently missing a
+            // public key, which silently downgrades them off E2E.
             tracing::warn!(
                 target: "worker",
                 email_id = id,
@@ -337,12 +317,10 @@ async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Res
         }
     };
 
-    // Note: `attachments_checked` is NOT stamped here. We used to flip it
-    // alongside the body update, but a transient failure inside
-    // `save_email_attachments` then permanently stranded the email with the
-    // checked-flag set and zero attachment rows — never re-fetched, so the
-    // attachments were silently lost. Stamping moved to `mark_attachments_checked`
-    // which only fires after the save returns successfully.
+    // Deliberately does not stamp `attachments_checked`. Flipping it here would
+    // strand an email with the flag set and zero attachment rows whenever
+    // `save_email_attachments` failed, silently losing the attachments forever.
+    // Only `mark_attachments_checked`, after a successful save, may set it.
     sqlx::query("UPDATE emails SET body_encrypted = $1, body_iv = $2 WHERE id = $3")
         .bind(encrypted)
         .bind(iv)
@@ -353,12 +331,10 @@ async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Res
     Ok(())
 }
 
-// `users.public_key` is stored as a JSON array of bytes (the literal
-// output of `Array.from(new Uint8Array(spkiBytes))` in the browser, see
-// `frontend/src/api/Auth.ts::saveUserPublicKey`). Parse that back into
-// the raw SPKI bytes `encrypt_to_pubkey` expects. Returns None on any
-// parse failure so the caller can fall back cleanly — a corrupt pubkey
-// row should not crash the body-worker for the whole user.
+/// `users.public_key` holds a JSON byte array, as written by
+/// `saveUserPublicKey` in frontend/src/api/Auth.ts; this parses it back into the
+/// raw SPKI bytes `encrypt_to_pubkey` wants. `None` on any parse failure, so a
+/// corrupt row makes the caller fall back rather than stalling the worker.
 fn parse_spki_from_json_bytes(json: &str) -> Option<Vec<u8>> {
     serde_json::from_str::<Vec<u8>>(json).ok()
 }

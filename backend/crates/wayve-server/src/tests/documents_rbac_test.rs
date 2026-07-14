@@ -1,19 +1,16 @@
-// RBAC gates on the shared Documents workspace. Mutating actions (create a
-// document, edit its content, rename, delete, upload) require the
-// `documents:manage` permission — owner / super_admin only. Every other member
-// keeps read-only access (list / view / download). These tests drive the real
-// handlers behind `require_docs_manage` / `org_context` through an actix test
-// service and assert the 201/200/403 branches, so a future refactor that drops
-// the gate — letting an ordinary member mutate the workspace — fails here.
+// RBAC gates on the shared Documents workspace. Mutating a document requires
+// `documents:manage`, held only by owner and super_admin; every other member is
+// read-only. These drive the real handlers through an actix test service, so a
+// refactor that drops the gate and lets an ordinary member mutate the workspace
+// fails here.
 #[cfg(test)]
 mod tests {
     use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
     use actix_web::{App, http::StatusCode, test as actix_test, web};
     use sqlx::{PgPool, Row};
 
-    /// Document blobs are encrypted at rest, so the create/edit handlers need
-    /// `AES_KEY`. CI sets it globally; mirror `jwt_for`'s JWT_SECRET fallback so
-    /// the tests are self-sufficient locally too.
+    /// Document blobs are encrypted at rest, so the handlers need `AES_KEY`. CI
+    /// sets it globally; this fallback keeps the tests self-sufficient locally.
     fn ensure_aes_key() {
         unsafe {
             if std::env::var("AES_KEY").is_err() {
@@ -80,8 +77,7 @@ mod tests {
         )
     }
 
-    /// Owner + member in the same org. Returns (org_id, owner_id, owner_email,
-    /// member_id, member_email).
+    /// Returns (org_id, owner_id, owner_email, member_id, member_email).
     async fn org_with_owner_and_member(pool: &PgPool) -> (i32, i32, String, i32, String) {
         let org_id = insert_org(pool, &format!("Docs RBAC {}", random_email())).await;
 
@@ -96,8 +92,7 @@ mod tests {
         (org_id, owner_id, owner_email, member_id, member_email)
     }
 
-    /// A POST /documents/new request builder authored by `user_id`. Call
-    /// `.to_request()` at the use site.
+    /// The caller finishes the builder with `.to_request()`.
     fn create_doc_req(user_id: i32, email: &str, name: &str) -> actix_test::TestRequest {
         actix_test::TestRequest::post()
             .uri("/documents/new")
@@ -119,7 +114,6 @@ mod tests {
         )
         .await;
 
-        // Owner: 201 Created.
         let resp = actix_test::call_service(
             &app,
             create_doc_req(owner_id, &owner_email, "owner-note.md").to_request(),
@@ -130,7 +124,6 @@ mod tests {
         assert_eq!(body["name"], "owner-note.md");
         assert!(body["id"].as_i64().is_some());
 
-        // Member: 403 Forbidden — read-only member cannot author.
         let resp = actix_test::call_service(
             &app,
             create_doc_req(member_id, &member_email, "member-note.md").to_request(),
@@ -143,7 +136,7 @@ mod tests {
 
     #[actix_web::test]
     async fn member_can_list_documents() {
-        // Read access is unchanged: a plain member still sees the workspace.
+        // The manage gate must not cost a plain member their read access.
         ensure_aes_key();
         let pool = test_pool().await;
         let (org_id, owner_id, owner_email, member_id, member_email) =
@@ -156,7 +149,6 @@ mod tests {
         )
         .await;
 
-        // Owner seeds one document.
         let resp = actix_test::call_service(
             &app,
             create_doc_req(owner_id, &owner_email, "shared.md").to_request(),
@@ -164,7 +156,6 @@ mod tests {
         .await;
         assert_eq!(resp.status(), StatusCode::CREATED);
 
-        // Member lists and sees it.
         let req = actix_test::TestRequest::get()
             .uri("/documents")
             .insert_header(bearer(member_id, &member_email))
@@ -200,7 +191,6 @@ mod tests {
         )
         .await;
 
-        // Owner creates the document.
         let resp = actix_test::call_service(
             &app,
             create_doc_req(owner_id, &owner_email, "editable.md").to_request(),
@@ -210,7 +200,6 @@ mod tests {
         let body: serde_json::Value = actix_test::read_body_json(resp).await;
         let doc_id = body["id"].as_i64().expect("doc id");
 
-        // Member: edit content → 403.
         let req = actix_test::TestRequest::put()
             .uri(&format!("/documents/{doc_id}/content"))
             .insert_header(bearer(member_id, &member_email))
@@ -219,7 +208,6 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-        // Member: delete → 403.
         let req = actix_test::TestRequest::delete()
             .uri(&format!("/documents/{doc_id}"))
             .insert_header(bearer(member_id, &member_email))
@@ -227,7 +215,7 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-        // The document is untouched — still present in the DB.
+        // The refused delete must not have removed the row.
         let still_there: i64 =
             sqlx::query("SELECT id FROM org_documents WHERE id = $1 AND organization_id = $2")
                 .bind(doc_id)
@@ -238,7 +226,7 @@ mod tests {
                 .unwrap_or_else(|e| panic!("doc should still exist: {e}"));
         assert_eq!(still_there, doc_id);
 
-        // Owner: edit content → 200, then delete → 200.
+        // The same two calls succeed for the owner.
         let req = actix_test::TestRequest::put()
             .uri(&format!("/documents/{doc_id}/content"))
             .insert_header(bearer(owner_id, &owner_email))

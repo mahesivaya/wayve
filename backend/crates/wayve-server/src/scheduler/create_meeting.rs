@@ -1,8 +1,5 @@
-// Pure validation for the POST /meetings request body. Extracted from
-// `create_meeting` so the input-parsing concern is testable in isolation
-// (no DB, no HTTP, no clock dependency) and the handler stays focused on
-// orchestration: auth, Zoom call, DB transaction, email/webhook fan-out,
-// response shaping.
+// Pure validation for the POST /meetings body, kept apart from `create_meeting`
+// so it is testable without a DB, HTTP, or a clock.
 
 use crate::models::scheduler::CreateMeeting;
 use crate::scheduler::time::minutes_to_time;
@@ -50,8 +47,8 @@ pub fn validate_create_meeting(
         return Err(CreateMeetingValidationError::TitleRequired);
     }
 
-    // Participants are optional. Garbage entries are filtered silently; the
-    // whole request is not rejected.
+    // Participants are optional, and garbage entries are filtered out silently
+    // rather than rejecting the whole request.
     let participants: Vec<String> = raw
         .participants
         .iter()
@@ -68,9 +65,8 @@ pub fn validate_create_meeting(
     let date = NaiveDate::parse_from_str(&raw.date, "%Y-%m-%d")
         .map_err(|_| CreateMeetingValidationError::InvalidDate)?;
 
-    // Default to UTC when the client didn't send a tz or sent garbage — UTC is
-    // a neutral fallback that won't spuriously reject future meetings the way
-    // a hardcoded zone could.
+    // Default to UTC on a missing or unparseable timezone: a neutral fallback
+    // will not spuriously reject a future meeting the way a hardcoded zone can.
     let tz: Tz = raw
         .tz
         .as_deref()

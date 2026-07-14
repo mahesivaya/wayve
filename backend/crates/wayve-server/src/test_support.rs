@@ -16,13 +16,10 @@ pub async fn test_pool() -> PgPool {
         .await
         .unwrap_or_else(|err| panic!("connect to test DB: {err}"));
 
-    // Mirror what main.rs does at boot. init.sql is the canonical schema
-    // for the tables compose loads on first-boot, but tables added later
-    // (scim_tokens, webhook_endpoints, ...) live in ensure_email_schema
-    // and are idempotent. CI ran into "relation does not exist" errors
-    // because the fresh CI Postgres had only init.sql applied; test_pool
-    // now closes that gap so tests are self-sufficient regardless of
-    // whether the DB started fresh or was reused.
+    // Mirror what main.rs does at boot: tables added after init.sql (scim_tokens,
+    // webhook_endpoints, ...) only exist via ensure_email_schema, so a CI Postgres
+    // with only init.sql applied would 'relation does not exist'. Running it here
+    // keeps tests self-sufficient whether the DB is fresh or reused.
     crate::startup::ensure_email_schema(&pool).await;
 
     pool
@@ -74,10 +71,9 @@ pub async fn delete_user(pool: &PgPool, user_id: i32) {
         .await;
 }
 
-/// Mint a test token in the given session mode. Most tests exercise a user's
-/// full DB role, so `jwt_for` defaults to `Admin` (no downscope) — the mode
-/// feature is orthogonal to the RBAC-by-role behavior they assert. Tests that
-/// specifically exercise normal-mode downscoping pass `SessionMode::Normal`.
+/// Mint a test token in the given session mode. `jwt_for` defaults to `Admin`
+/// (no downscope) because most tests assert RBAC-by-role, which is orthogonal to
+/// the mode. Tests exercising normal-mode downscoping pass `SessionMode::Normal`.
 pub fn jwt_for_mode(user_id: i32, email: &str, mode: wayve_security::jwt::SessionMode) -> String {
     unsafe {
         if std::env::var("JWT_SECRET").is_err() {

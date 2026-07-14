@@ -1,10 +1,8 @@
-//! AI provider configuration. The enterprise **owner** selects which AI the
-//! org's assistant runs on (provider + model + their own key/endpoint). Owner-only
-//! AND enterprise-tier (see `require_ai_owner`) — admins/super_admins are
-//! rejected, and every member of the org then uses the owner's choice (resolution
-//! is keyed on the org; members can't change it). The key is validated against the
-//! provider with a live probe, encrypted at rest, and never returned to the
-//! browser. Custom `base_url`s are SSRF-guarded via the MCP guard.
+//! AI provider configuration: the provider, model, and key the org's assistant
+//! runs on. Restricted to owners on the enterprise tier (see `require_ai_owner`);
+//! admins and super_admins are rejected. The key is validated with a live probe
+//! before storing, encrypted at rest, and never returned to the browser. Custom
+//! `base_url`s are SSRF-guarded via the MCP guard.
 
 use crate::prelude::*;
 use actix_web::{delete, put};
@@ -24,10 +22,9 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(put_data_access);
 }
 
-/// Who owns an AI provider config: an enterprise organization, or the platform
-/// team. Each maps to a different storage row (org_ai_configs vs the singleton
-/// platform_ai_config) and a different audience (an org's members vs platform
-/// team members) — the platform config never affects org/enterprise resolution.
+/// Who owns an AI provider config. Each variant maps to a different storage row
+/// (`org_ai_configs` vs the `platform_ai_config` singleton) and a different
+/// audience; the platform config never affects org resolution.
 #[derive(Clone, Copy)]
 pub(crate) enum AiOwner {
     Org(i32),
@@ -49,13 +46,9 @@ impl AiOwner {
     }
 }
 
-/// Resolve the caller as an AI-config owner, or `Forbidden`.
-///
-/// Owner-only (`Role::Owner` — not super_admin/admin). An **organization** owner
-/// must be on the enterprise tier and configures their org's provider. A
-/// **platform** owner configures the platform team's provider (which applies
-/// only to platform team members — never to any org). Personal owners are
-/// rejected (no scope to configure).
+/// Resolve the caller as an AI-config owner, or `Forbidden`. `Role::Owner` only,
+/// never super_admin or admin. An organization owner must additionally be on the
+/// enterprise tier; personal owners have no scope to configure and are rejected.
 pub(crate) async fn require_ai_owner(
     req: &HttpRequest,
     pool: &PgPool,
@@ -81,11 +74,8 @@ pub(crate) async fn require_ai_owner(
     }
 }
 
-// ── Owner-scoped storage helpers ──────────────────────────────────────────
-// Each branches on the owner so the org path keeps hitting org_ai_configs
-// (unchanged) while the platform path hits the platform_ai_config singleton.
-
-/// Read the projected config row for `owner` (same column list for both tables).
+/// Read the projected config row for `owner`. Both tables project the same
+/// columns.
 async fn load_config_row(
     pool: &PgPool,
     owner: AiOwner,
@@ -201,7 +191,7 @@ async fn upsert_config(
     }
 }
 
-/// Delete the config for `owner` (reset to the platform/built-in default).
+/// Delete the config for `owner`, resetting it to the built-in default.
 async fn delete_config_row(pool: &PgPool, owner: AiOwner) -> sqlx::Result<()> {
     match owner {
         AiOwner::Org(org_id) => {
@@ -231,8 +221,8 @@ async fn is_enterprise_org(pool: &PgPool, org_id: i32) -> Result<bool, AppError>
     Ok(enterprise)
 }
 
-/// What the owner can pick — surfaced so the settings page renders the blocks
-/// without hardcoding the catalog.
+/// What the owner can pick. Surfaced so the settings page need not hardcode the
+/// catalog.
 fn provider_catalog() -> Value {
     serde_json::json!([
         { "id": "anthropic", "label": "Claude", "vendor": "Anthropic",
@@ -329,20 +319,17 @@ pub async fn put_config(
             "A base URL is required for an OpenAI-compatible provider",
         ));
     }
-    // SSRF-guard any custom endpoint (reuses the MCP guard: https + public IP).
+    // Any custom endpoint must clear the MCP SSRF guard: https, public IP.
     if let Some(b) = &base_url {
         crate::integrations::mcp::client::validate_server_url(b)
             .await
             .map_err(|_| AppError::bad_request("Base URL must be a public https endpoint"))?;
     }
 
-    // Load the existing row so an omitted key is kept.
     let (cur_iv, cur_enc) = load_key_pair(pool.get_ref(), owner).await?;
 
-    // Resolve what to store + the plaintext key to validate with.
-    // - api_key omitted    -> keep current
-    // - api_key = ""       -> clear (Gemini falls back to the platform key)
-    // - api_key = "sk-…"   -> replace
+    // An omitted api_key keeps the current one; an empty string clears it, which
+    // drops Gemini back to the platform key; anything else replaces it.
     let (store_iv, store_enc, effective_key): (Option<String>, Option<String>, Option<String>) =
         match body.api_key.as_deref() {
             Some(k) if k.trim().is_empty() => (None, None, None),
@@ -365,7 +352,7 @@ pub async fn put_config(
             }
         };
 
-    // The non-Gemini providers must carry their own key.
+    // Every provider but Gemini must carry its own key.
     let validate_key = match effective_key {
         Some(k) => k,
         None if provider.requires_key() => {
@@ -382,7 +369,8 @@ pub async fn put_config(
         .clone()
         .unwrap_or_else(|| provider.default_model().to_string());
 
-    // Validate with a live probe before storing — a bad key/model/endpoint 400s.
+    // A live probe before storing means a bad key, model, or endpoint 400s here
+    // rather than at chat time.
     let probe_ai = ResolvedAi {
         provider,
         api_key: validate_key,
@@ -467,11 +455,10 @@ pub async fn delete_config(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
     Ok(HttpResponse::Ok().json(serde_json::json!({ "configured": false })))
 }
 
-// ── AI data access (platform team only) ────────────────────────────────────
-// Which categories of the user's own Wayve data the platform assistant's native
-// tools may touch. Only the platform owner sees/sets this; it's stored on the
-// `platform_ai_config` singleton and enforced in `native_tools`/`agent`. Org and
-// personal callers are never gated (this endpoint is platform-only).
+// AI data access: which categories of the user's own Wayve data the platform
+// assistant's native tools may touch. Platform-owner only, stored on the
+// `platform_ai_config` singleton and enforced in `native_tools` and `agent`. Org
+// and personal callers are never gated.
 
 #[derive(serde::Deserialize)]
 struct DataAccessPayload {
@@ -479,8 +466,7 @@ struct DataAccessPayload {
     calendar: bool,
 }
 
-/// Require the caller to be the **platform** owner (not an org owner). Reused by
-/// other platform-owner-only endpoints (e.g. `platform_ui`).
+/// Require the caller to be the platform owner, not an org owner.
 pub(crate) async fn require_platform_owner(
     req: &HttpRequest,
     pool: &PgPool,
@@ -503,7 +489,7 @@ pub async fn get_data_access(req: HttpRequest, pool: web::Data<PgPool>) -> AppRe
     )
     .fetch_optional(pool.get_ref())
     .await?;
-    // No configured provider yet → everything is open by default.
+    // With no configured provider, everything is open by default.
     let (email, calendar) = match row {
         Some(r) => (
             r.try_get::<bool, _>("ai_allow_email").unwrap_or(true),
@@ -528,8 +514,8 @@ pub async fn put_data_access(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     require_platform_owner(&req, pool.get_ref(), user_id).await?;
 
-    // UPDATE only — the row is created by the provider config flow, and the
-    // toggles are meaningless without a configured platform provider.
+    // UPDATE only: the row is created by the provider config flow, and the toggles
+    // mean nothing without a configured platform provider.
     let res = sqlx::query(
         "UPDATE platform_ai_config
             SET ai_allow_email = $1, ai_allow_calendar = $2, updated_at = NOW()

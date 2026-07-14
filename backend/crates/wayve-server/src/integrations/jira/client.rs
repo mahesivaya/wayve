@@ -1,9 +1,8 @@
-//! Thin Jira Cloud REST client. Mirrors the GitHub proxy's reqwest usage: the
-//! shared `HTTP_CLIENT`, a per-connection base URL (overridable for tests via
-//! `external::jira_api_base`), and Basic auth from the connection's email + API
-//! token. All upstream failures map to `AppError` (there is no `BadGateway`
-//! variant, so transport/non-2xx render as 500 via `AppError::Internal`;
-//! 401/403 surface as `AppError::Unauthorized`).
+//! Thin Jira Cloud REST client: the shared `HTTP_CLIENT`, a per-connection base
+//! URL (overridable for tests via `external::jira_api_base`), and Basic auth from
+//! the connection's email and API token. There is no `BadGateway` variant, so
+//! transport errors and non-2xx render as 500, while 401 and 403 surface as
+//! `AppError::Unauthorized`.
 
 use crate::email::oauth::HTTP_CLIENT;
 use crate::prelude::*;
@@ -76,7 +75,7 @@ impl JiraClient {
         })
     }
 
-    /// `GET /myself` — validate the credentials. 200 = ok, 401/403 = bad creds.
+    /// Validate the credentials: 401 or 403 means they are bad.
     pub async fn test_connection(&self) -> Result<(), AppError> {
         let url = self.url("/myself");
         let _: Value = self.send_json(HTTP_CLIENT.get(&url)).await?;
@@ -84,10 +83,9 @@ impl JiraClient {
     }
 
     /// Issues matching `jql`, up to `max_results` total. Uses the enhanced-search
-    /// endpoint (`GET /search/jql`) that replaced the removed `/search` for Jira
-    /// Cloud, and follows `nextPageToken` so a broad query returns every match —
-    /// not just the first page (Jira caps a page at 100). A 20-page backstop
-    /// guards against a runaway loop.
+    /// endpoint that replaced the removed `/search` on Jira Cloud, and follows
+    /// `nextPageToken` because Jira caps a page at 100. The 20-page backstop guards
+    /// against a runaway loop.
     pub async fn search(&self, jql: &str, max_results: u32) -> Result<Vec<JiraIssue>, AppError> {
         let url = self.url("/search/jql");
         let mut all: Vec<JiraIssue> = Vec::new();
@@ -113,7 +111,6 @@ impl JiraClient {
             let next = resp.next_page_token.clone();
             all.extend(resp.issues);
 
-            // Stop when Jira reports no further page, or we've hit the cap.
             if next.is_none() || all.len() as u32 >= max_results {
                 break;
             }
@@ -124,15 +121,14 @@ impl JiraClient {
         Ok(all)
     }
 
-    /// `GET /issue/{key}/transitions` — the transitions available from the
-    /// issue's current state.
+    /// The transitions available from the issue's current state.
     pub async fn list_transitions(&self, key: &str) -> Result<Vec<JiraTransition>, AppError> {
         let url = self.url(&format!("/issue/{key}/transitions"));
         let resp: JiraTransitionsResponse = self.send_json(HTTP_CLIENT.get(&url)).await?;
         Ok(resp.transitions)
     }
 
-    /// `POST /issue/{key}/transitions` — move the issue along the given transition.
+    /// Move the issue along the given transition.
     pub async fn transition_issue(&self, key: &str, transition_id: &str) -> Result<(), AppError> {
         let url = self.url(&format!("/issue/{key}/transitions"));
         self.send(
@@ -144,7 +140,7 @@ impl JiraClient {
         Ok(())
     }
 
-    /// `PUT /issue/{key}` — overwrite the issue summary.
+    /// Overwrite the issue summary.
     pub async fn update_summary(&self, key: &str, summary: &str) -> Result<(), AppError> {
         let url = self.url(&format!("/issue/{key}"));
         self.send(

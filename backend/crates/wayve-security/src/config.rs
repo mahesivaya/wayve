@@ -1,10 +1,6 @@
-//! Env-var helpers for the security crate.
-//!
-//! These mirror the corresponding helpers in `wayve-server`'s `config.rs` —
-//! duplicated rather than imported so wayve-security doesn't reach back
-//! into the app crate. Future workspace evolution can collapse both into
-//! a shared `wayve-config` crate; for now the surface is small enough
-//! that duplication is the right trade.
+//! Env-var helpers for the security crate. These deliberately duplicate their
+//! counterparts in `wayve-server`'s `config.rs` so this crate never reaches back
+//! into the app crate.
 
 use std::env;
 
@@ -43,7 +39,8 @@ pub fn aes_key() -> Option<String> {
     var_opt("AES_KEY")
 }
 
-/// Optional HKDF salt; keep stable forever once set.
+/// Optional HKDF salt. Once set it must stay stable forever: changing it makes
+/// every existing HKDF-encrypted row undecryptable.
 pub fn aes_hkdf_salt() -> Option<String> {
     var_opt("AES_HKDF_SALT")
 }

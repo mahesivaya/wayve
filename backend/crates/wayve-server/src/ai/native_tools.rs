@@ -1,16 +1,14 @@
-//! Wayve-native tools exposed to the AI assistant, alongside any external MCP
-//! tools. Unlike MCP tools, these operate on Wayve's own data:
+//! Wayve-native tools exposed to the AI assistant alongside any external MCP
+//! tools. These operate on Wayve's own data.
 //!
-//!   * **Read tools** (`list_email_accounts`, `list_recent_emails`,
-//!     `list_meetings`) execute immediately and return data to the model.
-//!   * **Action tools** (`compose_email`) are DEFERRED — they never perform the
-//!     outward action. They record a `PendingAction` that the browser confirms
-//!     and executes through the existing authenticated endpoint. This keeps
-//!     irreversible/outward actions behind an explicit human click and out of a
-//!     prompt-injectable agent loop.
+//! Read tools execute immediately and return data to the model. Action tools are
+//! deferred: they never perform the outward action, only record a `PendingAction`
+//! the browser confirms and executes through the authenticated endpoint. That
+//! keeps irreversible actions behind a human click and out of a prompt-injectable
+//! agent loop.
 //!
-//! Native tool names carry a reserved prefix (`wayve_`) so they can never
-//! collide with the MCP `c{idx}_` namespacing used in `agent::load_mcp_tools`.
+//! Native tool names carry a reserved `wayve_` prefix so they can never collide
+//! with the MCP `c{idx}_` namespacing in `agent::load_mcp_tools`.
 
 use super::agent::{NeutralTool, PendingAction, ToolUsed};
 use super::provider::DataAccess;
@@ -30,8 +28,8 @@ const LIST_MEETINGS: &str = "wayve_list_meetings";
 /// How many rows the read tools return.
 const READ_LIMIT: usize = 10;
 
-/// Whether a native tool's data category is allowed by `access`. Tools not tied
-/// to a gated category are always allowed.
+/// Whether a native tool's data category is allowed by `access`. A tool not tied
+/// to a gated category is always allowed.
 fn tool_allowed(name: &str, access: DataAccess) -> bool {
     match name {
         COMPOSE_EMAIL | LIST_EMAIL_ACCOUNTS | LIST_RECENT_EMAILS => access.email,
@@ -40,9 +38,8 @@ fn tool_allowed(name: &str, access: DataAccess) -> bool {
     }
 }
 
-/// The native tools declared to the model on a chat, filtered to the data
-/// categories `access` allows. A disabled category's tools are never advertised
-/// to the model (and `dispatch` refuses them too, as defense in depth).
+/// The native tools declared to the model, filtered to the data categories
+/// `access` allows. A disabled category's tools are never advertised.
 pub(crate) fn declarations(access: DataAccess) -> Vec<NeutralTool> {
     let all = vec![
         NeutralTool {
@@ -99,8 +96,7 @@ pub(crate) fn declarations(access: DataAccess) -> Vec<NeutralTool> {
 }
 
 /// Dispatch a native tool. Returns `None` when `name` is not a native tool, so
-/// the caller falls through to the MCP path. The returned tuple matches
-/// `agent::dispatch_tool`'s shape: `(ToolUsed, result value, pending action)`.
+/// the caller falls through to the MCP path.
 pub(crate) async fn dispatch(
     pool: &PgPool,
     user_id: i32,
@@ -111,8 +107,8 @@ pub(crate) async fn dispatch(
     if !name.starts_with(PREFIX) {
         return None;
     }
-    // Defense in depth: a disabled category's tools aren't declared to the model,
-    // but refuse them here too in case one is called regardless.
+    // Defense in depth: a disabled category's tools are never declared, but refuse
+    // them here too in case one is called regardless.
     if !tool_allowed(name, access) {
         return Some((
             None,
@@ -140,9 +136,8 @@ pub(crate) async fn dispatch(
     Some((Some(used), value, pending))
 }
 
-/// Deferred action: validate the draft and emit a `PendingAction`. Never sends —
-/// the browser performs the send through `POST /api/email/send` after the user
-/// confirms.
+/// Validate the draft and emit a `PendingAction`. This must never send: the
+/// browser sends through `POST /api/email/send` once the user confirms.
 fn compose_email(args: &Value) -> (Value, Option<PendingAction>) {
     let to = str_arg(args, "to");
     let subject = str_arg(args, "subject");

@@ -1,24 +1,11 @@
-//! SSO admin endpoints + the public OIDC auth flow (start + callback).
+//! SSO admin endpoints (gated by `sso:manage` plus organization access) and the
+//! public, unauthenticated OIDC start/callback redirect flow.
 //!
-//! Admin surface (gated by `sso:manage` + organization access):
-//!   GET    /api/organizations/{id}/sso/config   — fetch this org's config
-//!   PUT    /api/organizations/{id}/sso/config   — create or replace
-//!   DELETE /api/organizations/{id}/sso/config   — remove
-//!   POST   /api/organizations/{id}/sso/test     — dry-run IdP discovery
-//!
-//! Public surface (no auth — kicks off the redirect dance):
-//!   GET    /api/auth/sso/start?email=...        — 302 to the IdP authorize URL
-//!   GET    /api/auth/sso/callback?code=...&state=...
-//!                                               — exchange + verify + JIT,
-//!                                                 sets the session cookie,
-//!                                                 302s into the app
-//!
-//! JIT provisioning rules (see [resolve_or_provision_user]):
-//!   1. If a user already has `(sso_org_id, sso_sub) = (org, sub)`, sign them in.
-//!   2. Otherwise, if a user with the IdP-returned email exists in the org,
-//!      link them by setting sso_sub + sso_org_id.
-//!   3. Otherwise, create a new `users` row + `organization_members` row
-//!      with role `member`. Requires `email_verified=true` on the id_token.
+//! Just-in-time provisioning rules are implemented in
+//! [`resolve_or_provision_user`]: an existing `(sso_org_id, sso_sub)` identity
+//! signs in; otherwise a user with the IdP-returned email is linked; otherwise a
+//! new `member` is created. The last two require `email_verified` on the
+//! id_token.
 
 use crate::prelude::*;
 use actix_web::{HttpRequest, HttpResponse, delete, get, post, put, web};
@@ -31,10 +18,6 @@ use wayve_security::sso::{
     IdTokenClaims, build_authorize_url, discovery, exchange_code, pkce_challenge_s256,
     random_token, verify_id_token,
 };
-
-// =============================================================
-// Shared DTOs / row types
-// =============================================================
 
 #[derive(Debug, Deserialize)]
 pub struct SsoConfigInput {
@@ -101,12 +84,8 @@ impl SsoConfigRow {
     }
 }
 
-// =============================================================
-// Helpers
-// =============================================================
-
-/// The single redirect URI Wayve uses for every IdP. Customers register
-/// this exact string at their IdP console.
+/// The single redirect URI Wayve uses for every IdP. Customers register this
+/// exact string at their IdP console.
 fn callback_redirect_uri() -> String {
     format!("{}/api/auth/sso/callback", crate::config::frontend_url())
 }
@@ -201,10 +180,6 @@ fn decrypt_secret(row: &SsoConfigRow) -> Result<String, HttpResponse> {
     })
 }
 
-// =============================================================
-// Admin: GET /api/organizations/{id}/sso/config
-// =============================================================
-
 #[get("/organizations/{org_id}/sso/config")]
 #[instrument(target = "auth", skip(req, pool, path))]
 pub async fn get_sso_config(
@@ -228,10 +203,6 @@ pub async fn get_sso_config(
     };
     Ok(HttpResponse::Ok().json(row.into_view()))
 }
-
-// =============================================================
-// Admin: PUT /api/organizations/{id}/sso/config (upsert)
-// =============================================================
 
 #[put("/organizations/{org_id}/sso/config")]
 #[instrument(target = "auth", skip(req, pool, path, body))]
@@ -258,8 +229,8 @@ pub async fn upsert_sso_config(
     let client_id = body.client_id.trim().to_string();
     let domain = normalize_domain(&body.allowed_domain);
 
-    // Encrypt the secret if provided; otherwise keep the existing
-    // ciphertext (PUT acts as a partial update for the secret only).
+    // Omitting the secret keeps the existing ciphertext, so PUT acts as a
+    // partial update for the secret alone.
     let (iv, ciphertext) = match (&body.client_secret, existing.as_ref()) {
         (Some(raw), _) if !raw.trim().is_empty() => encrypt(raw.trim()).map_err(|e| {
             warn!(target: "auth", error = %e, "encrypt failed");
@@ -315,10 +286,6 @@ pub async fn upsert_sso_config(
     Ok(HttpResponse::Ok().json(row.into_view()))
 }
 
-// =============================================================
-// Admin: DELETE /api/organizations/{id}/sso/config
-// =============================================================
-
 #[delete("/organizations/{org_id}/sso/config")]
 #[instrument(target = "auth", skip(req, pool, path))]
 pub async fn delete_sso_config(
@@ -343,10 +310,6 @@ pub async fn delete_sso_config(
     }
     Ok(HttpResponse::NoContent().finish())
 }
-
-// =============================================================
-// Admin: POST /api/organizations/{id}/sso/test
-// =============================================================
 
 #[derive(Serialize)]
 struct SsoTestResult {
@@ -397,10 +360,6 @@ pub async fn test_sso_config(
         redirect_uri: callback_redirect_uri(),
     }))
 }
-
-// =============================================================
-// Public: GET /api/auth/sso/start?email=alice@acme.com
-// =============================================================
 
 #[derive(Deserialize)]
 pub struct SsoStartQuery {
@@ -480,10 +439,6 @@ pub async fn auth_sso_start(pool: web::Data<PgPool>, q: web::Query<SsoStartQuery
         .finish())
 }
 
-// =============================================================
-// Public: GET /api/auth/sso/callback?code=...&state=...
-// =============================================================
-
 #[derive(Deserialize)]
 pub struct SsoCallbackQuery {
     pub code: Option<String>,
@@ -508,9 +463,9 @@ pub async fn auth_sso_callback(
         return Ok(redirect_with_error("sso_error=missing_code"));
     };
 
-    // Consume the state row (DELETE … RETURNING — single-use). If it's
-    // already gone, expired, or never existed, abort. This is the only
-    // thing standing between us and CSRF/replay; treat it as critical.
+    // Single-use consumption of the state row, via DELETE ... RETURNING. This is
+    // the only thing standing between this endpoint and CSRF or replay, so a
+    // state that is already gone, expired, or never existed must abort.
     let row = sqlx::query_as::<_, sso_state_row::Row>(
         "DELETE FROM sso_states
           WHERE state = $1 AND expires_at > NOW()
@@ -566,7 +521,6 @@ pub async fn auth_sso_callback(
         }
     };
 
-    // JIT provisioning happens here.
     let (user_id, email, account_type, is_new) =
         match resolve_or_provision_user(pool.get_ref(), &cfg, &claims).await {
             Ok(t) => t,
@@ -582,12 +536,10 @@ pub async fn auth_sso_callback(
     let token = create_jwt_for_account(user_id, email.clone(), account_type.clone());
     let cookie = auth_cookie(token.clone());
 
-    // Land on the user's account home with the token in the URL fragment.
-    // The AuthContext bootstrap reads `#token=...&sso=true` and hydrates the
-    // session — same mechanism the Google/Outlook OAuth flow uses with
-    // `&signup=true`. Hash never reaches a server, so the token isn't
-    // logged. `return_to` is restricted to absolute in-app paths to block
-    // open-redirect abuse.
+    // The token rides in the URL fragment, which never reaches a server and so
+    // is never logged; the AuthContext bootstrap reads `#token=...&sso=true` to
+    // hydrate the session. `return_to` is restricted to absolute in-app paths to
+    // block open-redirect abuse.
     let return_to = state_row
         .return_to
         .as_deref()
@@ -637,9 +589,9 @@ pub async fn auth_sso_callback(
         .finish())
 }
 
-/// Minimal application/x-www-form-urlencoded encoder for the bits that
-/// land in a URL fragment after the SSO callback. We control the input
-/// (it's our own JWT or a short error code), so this stays small.
+/// Minimal percent-encoder for the values that land in the SSO callback's URL
+/// fragment. The input is always our own JWT or a short error code, so it can
+/// stay this small.
 fn urlencode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for byte in s.as_bytes() {
@@ -660,11 +612,7 @@ fn redirect_with_error(fragment: &str) -> HttpResponse {
         .finish()
 }
 
-// =============================================================
-// JIT provisioning
-// =============================================================
-
-/// Returns `(user_id, email, account_type, is_new)`.
+/// Just-in-time provisioning. Returns `(user_id, email, account_type, is_new)`.
 async fn resolve_or_provision_user(
     pool: &PgPool,
     cfg: &SsoConfigRow,
@@ -680,9 +628,9 @@ async fn resolve_or_provision_user(
         return Err("id_token email is empty".into());
     }
 
-    // Domain guard: prevents alice@evil.com from sneaking into Acme via
-    // Acme's IdP if the IdP allows guest accounts from outside its primary
-    // domain (Google Workspace can do this).
+    // Domain guard: without it, an IdP that allows guest accounts from outside
+    // its primary domain (Google Workspace can) would let alice@evil.com sneak
+    // into Acme through Acme's own IdP.
     let domain = extract_domain(&email).ok_or("invalid email format")?;
     if domain != cfg.allowed_domain {
         return Err(format!(
@@ -691,7 +639,7 @@ async fn resolve_or_provision_user(
         ));
     }
 
-    // 1. Existing SSO identity → sign in.
+    // 1. An existing SSO identity signs in.
     if let Some(row) = sqlx::query_as::<_, IdRow>(
         "SELECT id, account_type FROM users WHERE sso_org_id = $1 AND sso_sub = $2",
     )
@@ -704,7 +652,7 @@ async fn resolve_or_provision_user(
         return Ok((row.id, email, row.account_type, false));
     }
 
-    // 2. Email match within the org → link the SSO identity.
+    // 2. An email match within the org links the SSO identity.
     if let Some(row) =
         sqlx::query_as::<_, IdRow>("SELECT id, account_type FROM users WHERE email = $1")
             .bind(&email)
@@ -712,9 +660,8 @@ async fn resolve_or_provision_user(
             .await
             .map_err(|e| format!("db error: {e}"))?
     {
-        // Require email_verified before linking — without this an attacker
-        // could provision an IdP account claiming any email and silently
-        // take over an existing Wayve user.
+        // Without email_verified, an attacker could provision an IdP account
+        // claiming any email and silently take over an existing Wayve user.
         if !claims.email_verified.unwrap_or(false) {
             return Err("IdP did not assert email_verified=true; refusing link".into());
         }
@@ -731,7 +678,7 @@ async fn resolve_or_provision_user(
         return Ok((row.id, email, row.account_type, false));
     }
 
-    // 3. New user — JIT provisioning. Requires email_verified.
+    // 3. A new user is provisioned, again only against a verified email.
     if !claims.email_verified.unwrap_or(false) {
         return Err("IdP did not assert email_verified=true; refusing to create user".into());
     }
@@ -758,7 +705,7 @@ async fn resolve_or_provision_user(
         "#,
     )
     .bind(&email)
-    .bind(&email) // username defaults to email — same as the existing OAuth flow
+    .bind(&email) // username defaults to email, as in the OAuth flow
     .bind(&display_name)
     .bind(cfg.organization_id)
     .bind(&claims.sub)
@@ -805,7 +752,6 @@ mod sso_state_row {
     }
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(get_sso_config)
         .service(upsert_sso_config)

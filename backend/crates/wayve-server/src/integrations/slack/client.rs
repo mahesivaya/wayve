@@ -1,7 +1,7 @@
-//! Thin Slack Web API client. Mirrors the Jira client: the shared `HTTP_CLIENT`,
-//! a base URL overridable for tests via `external::slack_api_base`, and bot-token
-//! bearer auth. Slack signals failure with HTTP 200 + `"ok": false`, so each
-//! method checks `ok` rather than the HTTP status.
+//! Thin Slack Web API client, mirroring the Jira client: the shared
+//! `HTTP_CLIENT`, a base URL overridable for tests via `external::slack_api_base`,
+//! and bot-token bearer auth. Slack signals failure with HTTP 200 and
+//! `"ok": false`, so every method checks `ok` rather than the HTTP status.
 
 use crate::email::oauth::HTTP_CLIENT;
 use crate::prelude::*;
@@ -79,8 +79,8 @@ impl SlackClient {
         })
     }
 
-    /// `auth.test` — validate the bot token. Returns `(team_name, team_id)`.
-    /// A `false` `ok` means the token is bad → `Unauthorized`.
+    /// Validate the bot token, returning `(team_name, team_id)`. A `false` `ok`
+    /// means the token is bad.
     pub async fn auth_test(&self) -> Result<(Option<String>, Option<String>), AppError> {
         let r: SlackAuthTest = self.get_json("auth.test", &[]).await?;
         if !r.ok {
@@ -90,10 +90,10 @@ impl SlackClient {
         Ok((r.team, r.team_id))
     }
 
-    /// `conversations.list` — the workspace's channels the bot can see. Listing
-    /// **private** channels needs the `groups:read` scope on top of
-    /// `channels:read`; if the bot only has `channels:read`, Slack rejects the
-    /// combined call with `missing_scope`, so we fall back to public channels.
+    /// The workspace channels the bot can see. Listing private channels needs the
+    /// `groups:read` scope on top of `channels:read`, and Slack rejects the
+    /// combined call with `missing_scope` when it is absent, so fall back to
+    /// public channels.
     pub async fn list_channels(&self) -> Result<Vec<SlackChannel>, AppError> {
         match self
             .list_channels_of("public_channel,private_channel")
@@ -118,15 +118,15 @@ impl SlackClient {
         if !r.ok {
             let err = r.error.unwrap_or_default();
             warn!(target: "worker", error = %err, types, "slack conversations.list failed");
-            // Surface the Slack error to the caller (e.g. `missing_scope`,
-            // `invalid_auth`) instead of a generic 500, so it's actionable.
+            // Surfacing the Slack error code rather than a generic 500 is what
+            // makes `missing_scope` and `invalid_auth` actionable for the admin.
             return Err(AppError::bad_request(format!("Slack error: {err}")));
         }
         Ok(r.channels)
     }
 
-    /// `conversations.history` — messages in a channel, newest first. `oldest`
-    /// (a Slack `ts`) bounds the pull so re-imports only fetch new messages.
+    /// Messages in a channel, newest first. `oldest` (a Slack `ts`) bounds the
+    /// pull so re-imports only fetch new messages.
     pub async fn history(
         &self,
         channel: &str,
@@ -150,8 +150,8 @@ impl SlackClient {
         Ok(r.messages)
     }
 
-    /// `users.info` — best-effort display name for a Slack user id. Returns
-    /// `None` on any failure (the caller falls back to the raw id).
+    /// Best-effort display name for a Slack user id. `None` on any failure; the
+    /// caller falls back to the raw id.
     pub async fn user_name(&self, user_id: &str) -> Option<String> {
         let r: SlackUserInfo = self
             .get_json("users.info", &[("user", user_id.to_string())])
@@ -164,10 +164,9 @@ impl SlackClient {
             .filter(|s| !s.is_empty())
     }
 
-    /// Resolve Slack markup in a message to readable text: user mentions
-    /// `<@U…>` / `<@U…|name>` → `@name` (bare ids are looked up via `users.info`),
-    /// channel refs `<#C…|name>` → `#name`, and links `<url|label>` → `label`.
-    /// UTF-8-safe manual scan (no regex dep); leaves plain text untouched.
+    /// Resolve Slack markup in a message to readable text: user mentions, channel
+    /// references, and links. A bare user id needs a `users.info` lookup. The scan
+    /// is manual and UTF-8-safe to avoid a regex dependency.
     pub async fn resolve_mentions(&self, text: &str) -> String {
         let mut out = String::with_capacity(text.len());
         let mut rest = text;
@@ -188,7 +187,6 @@ impl SlackClient {
 
     async fn format_token(&self, inner: &str) -> String {
         if let Some(user) = inner.strip_prefix('@') {
-            // `<@U…|name>` carries the name; `<@U…>` needs a users.info lookup.
             if let Some((_, name)) = user.split_once('|') {
                 return format!("@{name}");
             }
@@ -202,7 +200,6 @@ impl SlackClient {
             let name = channel.split_once('|').map(|(_, n)| n).unwrap_or(channel);
             return format!("#{name}");
         }
-        // Link form `<url|label>` / `<url>`.
         match inner.split_once('|') {
             Some((url, "")) => url.to_string(),
             Some((_, label)) => label.to_string(),
@@ -210,16 +207,14 @@ impl SlackClient {
         }
     }
 
-    /// `chat.postMessage` — post `text` to a Slack channel (outbound bridge).
+    /// Post `text` to a Slack channel, the outbound bridge.
     ///
-    /// When `username` is set, the message is posted under that display name (the
-    /// Wayve sender) instead of the bot's own name, via Slack's per-message
-    /// `username` override. We deliberately omit any `icon_*` override so Slack
-    /// uses its default avatar (the neutral grey silhouette), matching how other
-    /// users appear — not a custom emoji icon. That override needs the
-    /// `chat:write.customize` bot scope; if the workspace hasn't reinstalled with
-    /// it, Slack rejects the call — we detect that and retry once as a plain bot
-    /// post so outbound bridging never silently breaks.
+    /// A `username` posts under the Wayve sender's display name instead of the
+    /// bot's, via Slack's per-message override. No `icon_*` override is sent, so
+    /// Slack uses its default avatar and the message reads like any other user's.
+    /// The override needs the `chat:write.customize` bot scope; a workspace that
+    /// hasn't reinstalled with it has the call rejected, so we retry once as a
+    /// plain bot post rather than let outbound bridging silently break.
     pub async fn post_message(
         &self,
         channel: &str,
@@ -236,8 +231,6 @@ impl SlackClient {
         let r: SlackPostMessage = self.post_form("chat.postMessage", &form).await?;
         if !r.ok {
             let err = r.error.unwrap_or_default();
-            // Workspace lacks chat:write.customize (or it's an older token type) →
-            // retry as a plain bot post so the message still reaches Slack.
             if name.is_some()
                 && matches!(
                     err.as_str(),

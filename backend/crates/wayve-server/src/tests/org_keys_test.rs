@@ -1,25 +1,6 @@
-// Integration tests for the org-master-key endpoints. Each test wires
-// a real handler behind require_permission / require_org_access and
-// proves the bootstrap / escrow / reset paths return the expected
-// codes for the expected callers.
-//
-// Coverage:
-//   * Bootstrap                — owner accepted; non-owner gets 403;
-//                                re-bootstrap rejected with 400;
-//                                bootstrap row inserted into audit log.
-//   * Server-side keypair gen  — POST /admin/users for an org member
-//                                creates rows in member_wrapped_keys
-//                                AND member_login_wrapped_keys AND
-//                                populates users.public_key, all
-//                                without ever returning private-key
-//                                material in the HTTP response.
-//   * Provision-before-bootstrap blocked — admin/users into a missing
-//                                org-keys org returns 400 not 200.
-//   * Escrow read              — owner / admin can fetch a member's
-//                                escrow envelope; member-level role gets
-//                                403; cross-org gets 403.
-//   * Admin password reset     — rewraps login envelope + flips the
-//                                bcrypt hash; old password rejected.
+// Integration tests for the org-master-key endpoints: each test drives a real
+// handler behind require_permission / require_org_access and pins the status
+// code the bootstrap, escrow and reset paths owe each class of caller.
 #[cfg(test)]
 mod tests {
     use crate::organization::keys::{
@@ -31,10 +12,6 @@ mod tests {
     use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
     use actix_web::{App, http::StatusCode, test as actix_test, web};
     use sqlx::PgPool;
-
-    // -----------------------------------------------------------------
-    // Test fixtures
-    // -----------------------------------------------------------------
 
     async fn insert_org(pool: &PgPool, name: &str) -> i32 {
         sqlx::query_scalar::<_, i32>("INSERT INTO organizations (name) VALUES ($1) RETURNING id")
@@ -71,8 +48,8 @@ mod tests {
         .await
         .unwrap_or_else(|e| panic!("set role: {e}"));
 
-        // Invalidate any cached role context so the test's request
-        // resolves the new role on its first lookup.
+        // The role context is cached, so it must be invalidated or the request
+        // under test would resolve the user's stale role.
         wayve_security::rbac::invalidate_role_context(user_id).await;
     }
 
@@ -91,11 +68,10 @@ mod tests {
         }
     }
 
-    /// Bootstrap helper: insert a fake org_keys + organization_wrapped_keys
-    /// pair so escrow / reset tests don't need to re-run a real keypair
-    /// derivation. The wrap payloads are opaque blobs; the tests in this
-    /// module verify endpoint routing, not the crypto closure (covered by
-    /// scripts/org_key_verify.mjs).
+    /// Seeds fake key rows so escrow and reset tests skip a real keypair
+    /// derivation. The wrap payloads are opaque blobs: these tests cover
+    /// endpoint routing and RBAC, not the crypto closure, which is covered by
+    /// scripts/org_key_verify.mjs.
     async fn seed_org_keys(pool: &PgPool, org_id: i32, owner_id: i32) {
         sqlx::query(
             "INSERT INTO organization_keys (organization_id, public_key)
@@ -134,11 +110,7 @@ mod tests {
         .unwrap_or_else(|e| panic!("seed owner wrap: {e}"));
     }
 
-    // -----------------------------------------------------------------
-    // Tests
-    // -----------------------------------------------------------------
-
-    /// Owner can bootstrap; the audit log records who did it.
+    /// An owner can bootstrap, and the audit log records who did it.
     #[actix_web::test]
     #[serial_test::serial]
     async fn bootstrap_owner_accepted_audit_written() {
@@ -185,7 +157,8 @@ mod tests {
         cleanup(&pool, &[owner_id], &[org_id]).await;
     }
 
-    /// Re-bootstrap of an already-keyed org → 400.
+    /// Re-bootstrapping an already-keyed org is rejected, so an existing master
+    /// key can never be overwritten.
     #[actix_web::test]
     #[serial_test::serial]
     async fn bootstrap_second_call_rejected() {
@@ -258,9 +231,8 @@ mod tests {
         cleanup(&pool, &[admin_id], &[org_id]).await;
     }
 
-    /// Owner can read a member's escrow envelope; audit row is written
-    /// AND any subsequent fetch_member_escrow row exists with the
-    /// correct actor + target.
+    /// An owner can read a member's escrow envelope, and the read is recorded
+    /// in the audit log with the correct actor and target.
     #[actix_web::test]
     #[serial_test::serial]
     async fn escrow_fetch_owner_succeeds_audit_written() {
@@ -275,8 +247,6 @@ mod tests {
         let member_id = insert_local_user(&pool, &member_email, "pw").await;
         place_in_org(&pool, member_id, org_id, "member").await;
 
-        // Seed an escrow row for the member directly — endpoint tests
-        // are about routing + RBAC, not the crypto closure.
         sqlx::query(
             "INSERT INTO member_wrapped_keys (organization_id, user_id, iv, ct)
              VALUES ($1, $2, '', 'WAYVE_SECURE_V1\nfake-envelope')
@@ -308,7 +278,6 @@ mod tests {
         let res = actix_test::call_service(&app, req).await;
         assert_eq!(res.status(), StatusCode::OK);
 
-        // Audit row written with actor=owner, target=member.
         let count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM org_key_audit_log
              WHERE organization_id = $1 AND action = 'fetch_member_escrow'
@@ -325,8 +294,8 @@ mod tests {
         cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
 
-    /// member-role caller can NOT fetch any escrow — 403 even for
-    /// rows owned by the SAME org.
+    /// A member-role caller cannot fetch an escrow envelope even for a member
+    /// of their own org.
     #[actix_web::test]
     #[serial_test::serial]
     async fn escrow_fetch_member_role_denied() {
@@ -399,9 +368,9 @@ mod tests {
         cleanup(&pool, &[owner_a, member_b], &[org_a, org_b]).await;
     }
 
-    /// Refusing to reset another key-holder's password via this endpoint
-    /// — it would silently rotate their org-key access alongside their
-    /// password and is its own deliberate workflow.
+    /// Resetting another key-holder's password through this endpoint is
+    /// refused, because it would silently rotate their org-key access along
+    /// with their password.
     #[actix_web::test]
     #[serial_test::serial]
     async fn reset_password_refused_for_other_key_holder() {
@@ -444,9 +413,8 @@ mod tests {
         cleanup(&pool, &[owner_id, admin_id], &[org_id]).await;
     }
 
-    /// add_key_holder_wrap is owner-only AND requires the target to
-    /// already hold an admin/super_admin/owner role row. A request to
-    /// add a wrap for a plain member returns 400.
+    /// A key-holder wrap can only be added for a target who already holds an
+    /// admin, super_admin or owner role, never a plain member.
     #[actix_web::test]
     #[serial_test::serial]
     async fn add_key_holder_for_non_key_role_rejected() {
@@ -484,14 +452,12 @@ mod tests {
         cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
 
-    // NOTE: `provision_org_member_keypair` is exhaustively tested in
-    // `wayve-security/src/encryption.rs::tests::provision_org_member_keypair_double_wrap_roundtrip`.
-    // Pulling the `rsa` crate into wayve-server just to repeat that test
-    // here is dead weight, so it lives in the crate that owns the helper.
+    // `provision_org_member_keypair` is tested in
+    // `wayve-security/src/encryption.rs::tests::provision_org_member_keypair_double_wrap_roundtrip`,
+    // in the crate that owns it, so wayve-server need not depend on `rsa`.
 
-    /// Smoke test: get_keys returns the org pubkey to any member,
-    /// hides wrapped_mnemonic unless include_mnemonic=true AND the
-    /// caller has org_keys:bootstrap.
+    /// The org public key is readable by any member, but the wrapped mnemonic
+    /// is withheld unless the caller holds org_keys:bootstrap.
     #[actix_web::test]
     #[serial_test::serial]
     async fn get_keys_returns_pubkey_to_members_hides_mnemonic_from_admin() {
@@ -510,8 +476,7 @@ mod tests {
         )
         .await;
 
-        // include_mnemonic=true — but admin doesn't have bootstrap, so
-        // the mnemonic envelope MUST be withheld.
+        // Asks for the mnemonic as an admin, who lacks org_keys:bootstrap.
         let req = actix_test::TestRequest::get()
             .uri(&format!(
                 "/api/organizations/{}/keys?include_mnemonic=true",
@@ -532,8 +497,8 @@ mod tests {
         cleanup(&pool, &[admin_id], &[org_id]).await;
     }
 
-    /// list_member_notes denies callers without org_keys:use_master
-    /// (e.g. role='member' even within the same org).
+    /// Listing a member's notes is denied to callers without
+    /// org_keys:use_master, even inside the same org.
     #[actix_web::test]
     #[serial_test::serial]
     async fn list_member_notes_denies_non_key_holder() {
@@ -569,7 +534,7 @@ mod tests {
         cleanup(&pool, &[caller_id, target_id], &[org_id]).await;
     }
 
-    /// read_audit_log denies non-key-holders.
+    /// The key-access audit log is denied to non-key-holders.
     #[actix_web::test]
     #[serial_test::serial]
     async fn read_audit_log_denies_non_key_holder() {
@@ -597,12 +562,8 @@ mod tests {
         cleanup(&pool, &[caller_id], &[org_id]).await;
     }
 
-    // Suppress unused-import warnings when the corresponding tests
-    // expand or shrink over time.
-    // Some imports above are reserved for follow-up tests (provisioning
-    // round-trip via admin_create_user, end-to-end login flow). Keeping
-    // them in the use list so the future tests don't churn the import
-    // block — silenced via this dummy referencer.
+    // Holds imports reserved for follow-up tests so they do not trip the
+    // unused-import warning.
     #[allow(dead_code)]
     fn _reserved_imports() {
         let _ = admin_create_user;

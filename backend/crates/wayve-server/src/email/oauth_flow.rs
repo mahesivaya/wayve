@@ -11,14 +11,10 @@ use wayve_security::jwt::{auth_cookie, create_jwt_for_account};
 use wayve_security::oauth::{consume_state, create_oauth_state};
 use wayve_security::rbac::{self, Role, Scope};
 
-/// Gate the external-mailbox connect flows: only personal accounts and
-/// organization owners may attach a Gmail / Outlook mailbox to their own
-/// user. Other org members work out of shared inboxes (the org-wide
-/// pattern at /settings/inboxes), and platform staff have no reason to
-/// hang a personal mailbox off their admin account.
-///
-/// Returns `Ok(())` when the caller is allowed; `Err(response)` is a
-/// ready-to-return 403/500 otherwise.
+/// Gates the external-mailbox connect flows to personal accounts and
+/// organization owners. Other org members work out of shared inboxes, and
+/// platform staff have no reason to hang a personal mailbox off an admin
+/// account. `Err(response)` is a ready-to-return 403 or 500.
 pub(crate) async fn require_external_mailbox_actor(
     pool: &PgPool,
     user_id: i32,
@@ -206,10 +202,9 @@ pub async fn gmail_login(
             }
         };
 
-        // Same RBAC gate as POST /gmail/connect-url. /gmail/login is the
-        // legacy redirect-based connect flow used by older clients; without
-        // this check an org member could bypass the JSON endpoint and still
-        // hang a personal mailbox off their account via a browser redirect.
+        // /gmail/login is the legacy redirect-based connect flow, so it needs the
+        // same RBAC gate as POST /gmail/connect-url; without it an org member
+        // could bypass the JSON endpoint via a plain browser redirect.
         if let Err(response) = require_external_mailbox_actor(pool.get_ref(), user_id).await {
             return response;
         }
@@ -351,13 +346,10 @@ pub async fn oauth_callback(
     }
 
     let frontend_for_errors = crate::config::frontend_url();
-    // Tracks whether this OAuth round actually CREATED a user row, vs.
-    // logged an existing user in. The signup flow doubles as the sign-in
-    // entry point (the "Sign in with Google" button on /login also hits
-    // `?mode=signup`), so `is_signup=true` is not by itself proof of a
-    // new account. We surface the distinction to the frontend via
-    // `&new=true` so it only triggers fresh-keypair setup when the user
-    // is genuinely new.
+    // Whether this round actually created a user row. The signup flow doubles as
+    // the sign-in entry point, so `is_signup` alone does not prove a new account.
+    // The frontend needs the real distinction (passed as `&new=true`) so it only
+    // generates a fresh keypair for a genuinely new user.
     let mut was_new_user = false;
     if is_signup {
         let existing =
@@ -412,16 +404,14 @@ pub async fn oauth_callback(
         }
     }
 
-    // Cross-user mailbox guard. If this Gmail is already attached to a
-    // *different* Wayve user's account_id, we must not silently attach a second
-    // copy (user A OAuth-connecting user B's Gmail — see
-    // [account::email_owned_by_other_user]).
+    // Cross-user mailbox guard: never silently attach a second copy of a mailbox
+    // already owned by a different Wayve user (see
+    // account::email_owned_by_other_user).
     //
-    // Crucially this must NOT block a *login*: completing Google OAuth proves the
-    // caller owns this Google identity, so when they're signing in (`is_signup`)
-    // and the mailbox happens to belong to a different local user, we still log
-    // them in and just skip re-attaching the conflicting mailbox. The hard
-    // `email_in_use` rejection applies only to the explicit connect flow.
+    // This must not block a login. Completing Google OAuth proves the caller owns
+    // the Google identity, so on sign-in we log them in and merely skip
+    // re-attaching the conflicting mailbox. Only the explicit connect flow gets
+    // the hard `email_in_use` rejection.
     let attach_mailbox = match crate::email::account::email_owned_by_other_user(
         pool.get_ref(),
         email,
@@ -463,8 +453,6 @@ pub async fn oauth_callback(
                 error = %e,
                 "duplicate-account precheck failed; failing open to existing upsert"
             );
-            // Fall through — the upsert will proceed with the existing
-            // duplicate behaviour. We log so an operator can investigate.
             true
         }
     };
@@ -507,8 +495,9 @@ pub async fn oauth_callback(
             }
         });
 
-        // Arm the Gmail watch so new mail pushes to Pub/Sub immediately (best-effort;
-        // the renewal worker re-arms it later; no-op when GMAIL_PUSH_TOPIC is unset).
+        // Arm the Gmail watch so new mail pushes to Pub/Sub immediately.
+        // Best-effort: the renewal worker re-arms it, and this is a no-op when
+        // GMAIL_PUSH_TOPIC is unset.
         let watch_pool = pool.clone();
         let watch_token = access_token.to_string();
         actix_web::rt::spawn(async move {
@@ -578,9 +567,8 @@ pub async fn oauth_callback(
     if is_signup {
         let session_token = create_jwt_for_account(user_id, email.to_string(), account_type);
         response.cookie(auth_cookie(session_token));
-        // App sign-in via Google mints a session here — record the login so it
-        // pairs with the logout audit event (the `else` branch is a mailbox
-        // connect, not an app login, so it's intentionally excluded).
+        // Only this branch mints a session, so only it records a login to pair
+        // with the logout audit event; the `else` branch is a mailbox connect.
         crate::audit::record_action(
             pool.get_ref(),
             &req,

@@ -1,12 +1,7 @@
-//! Tests for the outbound webhook subsystem.
-//!
-//! Covers:
-//!   * `Event::ALL` is in lockstep with `Event::as_str` (no enum drift).
-//!   * `emit()` fans out to subscribed endpoints and skips others.
-//!   * Org-wide endpoints receive events from any member of the org.
-//!   * Disabled endpoints don't receive deliveries.
-//!   * Dispatcher's HMAC signing matches the Stripe-style format
-//!     (`HMAC-SHA256(secret, "{ts}.{body}")`) that we promise customers.
+//! The outbound webhook subsystem: that the event catalog cannot drift from the
+//! enum, that `emit` fans out to exactly the subscribed and enabled endpoints,
+//! and that the HMAC signature keeps the Stripe-style shape customers verify
+//! against.
 
 #[cfg(test)]
 mod tests {
@@ -28,9 +23,8 @@ mod tests {
 
     #[test]
     fn event_str_round_trips_with_all_catalog() {
-        // Every variant's as_str() must be present in Event::ALL so the
-        // public catalog and the producer don't drift. If a new variant is
-        // added without updating Event::ALL, this fails loudly.
+        // Every variant must appear in Event::ALL, so a new variant added without
+        // updating the public catalog fails here instead of going unpublished.
         let strs = [
             Event::TaskCreated.as_str(),
             Event::TaskUpdated.as_str(),
@@ -63,7 +57,6 @@ mod tests {
         let pool = test_pool().await;
         let user_id = insert_local_user(&pool, &random_email(), "pw").await;
 
-        // Two endpoints for the same user: one subscribed, one not.
         let subscribed_id = insert_endpoint(
             &pool,
             user_id,
@@ -184,7 +177,6 @@ mod tests {
     #[serial_test::serial]
     async fn org_wide_endpoint_receives_events_from_any_org_member() {
         let pool = test_pool().await;
-        // Two users in the same org.
         let org_row = sqlx::query("INSERT INTO organizations (name) VALUES ($1) RETURNING id")
             .bind(format!("org-{}", uuid::Uuid::new_v4().simple()))
             .fetch_one(&pool)
@@ -235,9 +227,9 @@ mod tests {
 
     #[test]
     fn signing_matches_stripe_style_hmac_sha256() {
-        // Reproduce dispatcher::sign_body exactly: HMAC-SHA256 of the
-        // string "<timestamp>.<body>" using the endpoint secret. If this
-        // ever drifts, every customer's signature verification breaks.
+        // This reproduces dispatcher::sign_body: HMAC-SHA256 over the string
+        // "<timestamp>.<body>" keyed by the endpoint secret. Drifting from this
+        // shape breaks signature verification for every customer.
         let secret = "whsec_test";
         let timestamp = 1_779_629_510i64;
         let body = br#"{"id":"evt_x","type":"wayve.ping"}"#;
@@ -247,7 +239,6 @@ mod tests {
         mac.update(body);
         let expected = hex(&mac.finalize().into_bytes());
 
-        // Re-compute via a freshly-constructed mac to assert determinism.
         let mut mac2 = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC key from bytes");
         mac2.update(format!("{timestamp}.").as_bytes());
         mac2.update(body);
@@ -256,8 +247,6 @@ mod tests {
         assert_eq!(expected, again, "HMAC must be deterministic");
         assert_eq!(expected.len(), 64, "HMAC-SHA256 hex must be 64 chars");
     }
-
-    // ── helpers ──────────────────────────────────────────────────────
 
     #[allow(clippy::too_many_arguments)]
     async fn insert_endpoint(

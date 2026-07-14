@@ -1,8 +1,8 @@
-//! MCP connection management. Restricted to **platform** owners/admins and
-//! **enterprise**-tier organization owners/admins (the `mcp:manage` permission
-//! plus a tier/scope gate). Personal and business accounts are rejected even
-//! though they "own" their scope — the gate excludes them, which is what keeps
-//! the AI from reading data on those tiers. Auth tokens are encrypted at rest.
+//! MCP connection management, restricted to platform owners and admins and to
+//! enterprise-tier organization owners and admins: the `mcp:manage` permission
+//! plus a scope and tier gate. Rejecting personal and business accounts is what
+//! keeps the AI from reading data on those tiers. Auth tokens are encrypted at
+//! rest.
 
 use crate::prelude::*;
 use actix_web::{delete, put};
@@ -22,18 +22,12 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(delete_connection);
 }
 
-/// Resolve the caller as an MCP owner, or `Forbidden`.
-///
-/// Requires `mcp:manage` (owner / super_admin / admin) AND one of:
-/// - **platform** scope, or
-/// - an **enterprise**-tier organization.
-///
-/// A personal owner holds every permission in their own scope, so the
-/// permission check alone is not enough — the scope/tier match is the real gate.
-/// Resolve an MCP owner from an ALREADY-resolved role context. Split out so the
-/// interactive management endpoints pass a mode-downscoped context (a
-/// normal-mode owner is a `Member`, lacks `McpManage`, and is refused), while
-/// the AI loop passes the DB-truth context.
+/// Resolve an MCP owner from an already-resolved role context, or `Forbidden`.
+/// Requires `mcp:manage` plus either platform scope or an enterprise-tier org: a
+/// personal owner holds every permission in their own scope, so the scope and
+/// tier match, not the permission check, is the real gate. Taking the context as
+/// an argument lets the management endpoints pass a mode-downscoped one while the
+/// AI loop passes DB truth.
 async fn mcp_owner_for_ctx(
     pool: &PgPool,
     ctx: &wayve_security::rbac::RoleContext,
@@ -55,8 +49,8 @@ async fn mcp_owner_for_ctx(
     }
 }
 
-/// Owner gate for the interactive MCP management endpoints — mode-aware, so a
-/// normal-mode owner is refused (they must switch to admin to manage MCP).
+/// Owner gate for the interactive management endpoints. Mode-aware, so a
+/// normal-mode owner is refused and must switch to admin mode.
 async fn require_mcp_owner(
     req: &HttpRequest,
     pool: &PgPool,
@@ -68,10 +62,10 @@ async fn require_mcp_owner(
     mcp_owner_for_ctx(pool, &ctx).await
 }
 
-/// Best-effort owner resolution for the AI loop: `None` (no tools) instead of an
-/// error when the caller isn't an MCP owner, so the basic chat still works for
-/// everyone. Uses the DB-truth role (not mode-downscoped): using your own
-/// configured tools inside AI chat is not an admin action.
+/// Best-effort owner resolution for the AI loop: a non-owner gets `None` and no
+/// tools rather than an error, so basic chat still works. Uses the DB-truth role
+/// rather than the downscoped one, since using your own configured tools inside
+/// AI chat is not an admin action.
 pub(crate) async fn resolve_mcp_owner_opt(pool: &PgPool, user_id: i32) -> Option<McpOwner> {
     let ctx = resolve_role_context(pool, user_id).await.ok()?;
     mcp_owner_for_ctx(pool, &ctx).await.ok()
@@ -90,8 +84,8 @@ async fn is_enterprise_org(pool: &PgPool, org_id: i32) -> Result<bool, AppError>
     Ok(enterprise)
 }
 
-/// Load + decrypt an owner's connections. `enabled_only` is what the AI loop
-/// uses; the management list passes `false`.
+/// Load and decrypt an owner's connections. The AI loop passes `enabled_only`;
+/// the management list passes `false`.
 pub(crate) async fn load_connections(
     pool: &PgPool,
     owner: McpOwner,
@@ -134,9 +128,8 @@ pub(crate) async fn load_connections(
     Ok(out)
 }
 
-/// Run the validating handshake against a server and return `(server_name,
-/// tool_count)`. Surfaces a connection/auth failure as a 400/401 so the admin
-/// can fix it.
+/// Run the validating handshake against a server. A connection or auth failure
+/// surfaces as a 400 or 401 so the admin can fix it.
 async fn validate_server(
     server_url: &str,
     token: Option<&str>,
@@ -215,7 +208,7 @@ pub async fn create_connection(
         ("bearer", token)
     };
 
-    // Validate by handshaking (SSRF-checked inside the client) before storing.
+    // The handshake validates before storing, and is SSRF-checked in the client.
     let (server_name, tool_count) = validate_server(&server_url, token).await?;
 
     let (iv, enc) = match token {
@@ -287,7 +280,7 @@ pub async fn update_connection(
     let id = path.into_inner();
     let (scope, org_id) = owner.as_columns();
 
-    // Load the existing row, scoped to the owner (404 if it isn't theirs).
+    // Scoping the load to the owner means another owner's row 404s.
     let existing = sqlx::query(
         "SELECT label, server_url, auth_type, auth_token_iv, auth_token_encrypted, enabled
            FROM mcp_connections
@@ -319,16 +312,13 @@ pub async fn update_connection(
         .map(str::to_string);
     let enabled = body.enabled;
 
-    // Decide the effective token + whether we must re-validate.
-    // - auth_token omitted          -> keep current
-    // - auth_token = ""             -> clear (auth_type none)
-    // - auth_token = "xoxb-…"       -> replace
+    // An omitted auth_token keeps the current one; an empty string clears it and
+    // drops auth_type to none; anything else replaces it.
     let url_changed = new_url.as_ref().is_some_and(|u| u != &cur_url);
     let token_field = body.auth_token.as_deref();
     let token_changed = token_field.is_some();
     let effective_url = new_url.clone().unwrap_or_else(|| cur_url.clone());
 
-    // Resolve the effective plaintext token for (re)validation.
     let effective_token: Option<String> = match token_field {
         Some(t) if t.trim().is_empty() => None,
         Some(t) => Some(t.trim().to_string()),
@@ -350,7 +340,6 @@ pub async fn update_connection(
         tool_count = Some(count);
     }
 
-    // Recompute the stored token columns + auth_type when the token field was sent.
     let (set_token, new_iv, new_enc, new_auth_type): (
         bool,
         Option<String>,
@@ -415,7 +404,6 @@ pub async fn update_connection(
 
     info!(target: "worker", user_id, id, revalidate, "mcp connection updated");
 
-    // Return the fresh row.
     let row = sqlx::query(
         "SELECT id, label, server_url, enabled, server_name, last_tool_count, last_validated_at
            FROM mcp_connections WHERE id = $1",

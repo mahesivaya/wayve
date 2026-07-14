@@ -1,13 +1,10 @@
-// Chat app logging tests.
+// The chat WebSocket handler must reject an unauthenticated connection before
+// upgrading it, and log that rejection under target "ws" — the target the
+// dev.log filters rely on. These tests capture emitted tracing events and assert
+// both the 401 and the log line.
 //
-// The chat WebSocket handler logs an auth rejection under target "ws" before
-// it ever upgrades the connection. These tests install a thread-local tracing
-// subscriber that captures emitted events, drive the real `chat_ws` handler
-// through an actix test app, and assert BOTH the behavior (401) and that the
-// expected `target = "ws"` warning was logged.
-//
-// No DB/Redis needed: the rejection happens before the pool/cache are touched,
-// so a lazy (never-connected) pool and a `None` cache are sufficient.
+// The rejection happens before the pool or cache is touched, so a lazy pool that
+// never connects and a `None` cache are enough; no database or Redis is needed.
 
 #[cfg(test)]
 mod tests {
@@ -21,8 +18,6 @@ mod tests {
     use tracing_subscriber::Layer;
     use tracing_subscriber::layer::{Context, SubscriberExt};
     use tracing_subscriber::registry::LookupSpan;
-
-    // ---- captured-log plumbing ------------------------------------------------
 
     #[derive(Clone, Default)]
     struct CapturedLogs {
@@ -71,8 +66,8 @@ mod tests {
     }
 
     fn lazy_pool() -> PgPool {
-        // connect_lazy never opens a socket until the pool is used; the auth
-        // rejection path never touches it, so the URL is irrelevant.
+        // The URL is irrelevant: connect_lazy opens no socket until the pool is
+        // used, and the rejection path never uses it.
         PgPool::connect_lazy("postgres://unused:unused@127.0.0.1:5432/unused")
             .unwrap_or_else(|e| panic!("connect_lazy: {e}"))
     }
@@ -111,9 +106,6 @@ mod tests {
         }
     }
 
-    // ---- tests ----------------------------------------------------------------
-
-    // No credentials at all → 401 and a target="ws" rejection warning.
     #[actix_web::test]
     async fn unauthenticated_chat_ws_is_rejected_and_logged() {
         let (status, logs) = call_chat_ws("/ws/chat").await;
@@ -124,8 +116,8 @@ mod tests {
         );
     }
 
-    // A bogus ?token= (fails JWT decode) is also rejected and logged. Decoding
-    // touches the JWT config, which refuses to run without JWT_SECRET.
+    // A bogus `?token=` must be rejected too. It is #[serial] because decoding
+    // reads the JWT config, which needs JWT_SECRET set in process env.
     #[actix_web::test]
     #[serial_test::serial]
     async fn invalid_token_chat_ws_is_rejected_and_logged() {

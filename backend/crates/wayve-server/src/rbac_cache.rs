@@ -1,17 +1,11 @@
 //! Redis-backed implementation of [`wayve_security::rbac::RoleContextCache`].
 //!
-//! `wayve-security` defines the trait; this crate owns the storage. Installing
-//! the cache is a one-shot at startup (`install`), after which every call to
-//! [`wayve_security::rbac::resolve_role_context`] checks the cache before
-//! falling through to the SQL lookup.
-//!
-//! Cache layout:
-//! - Key:   `rbac:ctx:v1:{user_id}`
-//! - Value: JSON `{ "scope": "...", "role": "...", "organization_id": ... }`
-//! - TTL:   [`RBAC_TTL_SECS`] seconds (45)
-//!
-//! The two-layer [`Cache`](crate::cache::Cache) (moka L1 + Redis L2) means
-//! tight loops inside the same process don't even cross the network.
+//! `wayve-security` defines the trait; this crate owns the storage. `install` is
+//! a one-shot at startup, after which every
+//! [`wayve_security::rbac::resolve_role_context`] checks the cache before falling
+//! through to SQL. Entries are keyed `rbac:ctx:v1:{user_id}`. The two-layer
+//! [`Cache`](crate::cache::Cache) (moka L1, Redis L2) keeps tight in-process
+//! loops off the network entirely.
 
 use crate::cache::Cache;
 use async_trait::async_trait;
@@ -19,11 +13,9 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use wayve_security::rbac::{Role, RoleContext, RoleContextCache, Scope, install_cache};
 
-/// 45s sits in the middle of the 30–60s window. Authorization stays
-/// "near-realtime" — fresh after a role change because every mutation
-/// handler in `routes/user.rs` calls
-/// [`wayve_security::rbac::invalidate_role_context`] on commit, and even
-/// without invalidation a stale role is corrected within ~45s.
+/// Authorization stays near-realtime: role mutations in `routes/user.rs` call
+/// [`wayve_security::rbac::invalidate_role_context`] on commit, and this TTL
+/// bounds how long a missed invalidation can serve a stale role.
 const RBAC_TTL_SECS: u64 = 45;
 
 fn key(user_id: i32) -> String {

@@ -1,9 +1,9 @@
-//! Emoji reactions: authorization + toggle semantics.
+//! Authorization and toggle semantics for emoji reactions.
 //!
-//! These drive the real `handle_react` handler (the one the WebSocket calls)
-//! against the database with no cache, so the fan-out degrades to local delivery
-//! and no-ops for users with no live session. What's asserted is what ends up in
-//! `message_reactions` — i.e. whether the actor was allowed to react at all.
+//! These drive the real `handle_react` handler that the WebSocket calls, with no
+//! cache, so fan-out degrades to a no-op for users with no live session. What is
+//! asserted is the resulting `message_reactions` rows, which is what says whether
+//! the actor was allowed to react at all.
 
 #[cfg(test)]
 mod tests {
@@ -24,12 +24,10 @@ mod tests {
         handle_react(pool, &None, actor, f).await;
     }
 
-    // Counts are scoped to the reacting user, not just the message id. `messages`
-    // and `channel_messages` have INDEPENDENT id spaces, so a DM left behind by an
-    // earlier test can share an id with this test's channel message — counting by
-    // id alone would then pick up that unrelated row. Every test seeds fresh users,
-    // so the actor id is unique and makes these counts deterministic against a
-    // database that already holds other tests' data.
+    // Counts must be scoped to the reacting user, not the message id alone.
+    // `messages` and `channel_messages` have independent id spaces, so a DM left
+    // behind by an earlier test can share an id with this test's channel message.
+    // Each test seeds fresh users, so the actor id keeps the count deterministic.
     async fn dm_reaction_count(pool: &PgPool, message_id: i32, user_id: i32) -> i64 {
         sqlx::query_scalar(
             "SELECT count(*) FROM message_reactions WHERE message_id = $1 AND user_id = $2",
@@ -64,8 +62,7 @@ mod tests {
         .unwrap_or_else(|e| panic!("dm: {e}"))
     }
 
-    /// A channel owned by `owner` with `members` joined, plus one message in it.
-    /// Returns the channel message id.
+    /// Returns the id of one message in a fresh channel owned by `owner`.
     async fn seed_channel_message(pool: &PgPool, owner: i32, members: &[i32]) -> i32 {
         let ch: i32 = sqlx::query_scalar(
             "INSERT INTO channels (name, created_by) VALUES ($1, $2) RETURNING id",
@@ -155,16 +152,14 @@ mod tests {
 
     #[tokio::test]
     async fn dm_and_channel_ids_do_not_collide() {
-        // `messages` and `channel_messages` have independent id spaces, so a
-        // reaction must land in the column `is_channel` selects — otherwise a
-        // channel reaction could attach itself to an unrelated DM with the same
-        // numeric id (and be visible to the wrong people).
+        // Because the two id spaces are independent, a reaction must land in the
+        // column `is_channel` selects. Otherwise a channel reaction could attach
+        // to an unrelated DM with the same id and be shown to the wrong people.
         let pool = test_pool().await;
         let owner = insert_local_user(&pool, &random_email(), "pw").await;
         let peer = insert_local_user(&pool, &random_email(), "pw").await;
         let cm = seed_channel_message(&pool, owner, &[owner]).await;
 
-        // A DM the owner can see, which we react to separately.
         let dm = seed_dm(&pool, owner, peer).await;
 
         react(&pool, owner, frame(cm, true, "🔥")).await;
@@ -193,8 +188,8 @@ mod tests {
             "empty is rejected"
         );
 
-        // The length cap is what stops `emoji` from being used to smuggle a
-        // message body past the E2E envelope check on `content`.
+        // The length cap is what stops `emoji` from smuggling a message body past
+        // the E2E envelope check that `content` is subject to.
         let essay = "x".repeat(33);
         react(&pool, b, frame(dm, false, &essay)).await;
         assert_eq!(

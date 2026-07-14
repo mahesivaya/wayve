@@ -11,13 +11,12 @@ use crate::models::callmodel::SignalMessage;
 
 static SESSIONS: Lazy<SessionRegistry<CallSession>> = Lazy::new(SessionRegistry::new);
 
-// Per-connected-user scope metadata, populated at WS connect time so the
-// per-message forwarder can refuse cross-scope signaling without a DB hit.
-// A personal user can only call other personal users; an organization user
-// only same-organization users; a platform user only other platform users.
-// This is the server-side enforcement that backs the directory filter in
-// `routes/user.rs::get_all_users` — without it a malicious client could
-// craft a `call-invite` for any user_id and bypass the UI.
+// Scope metadata captured at connect so the forwarder can refuse cross-scope
+// signaling without a DB hit: personal users reach only personal users,
+// organization users only their own organization, platform users only platform
+// users. This is the server-side enforcement behind the directory filter in
+// `routes/user.rs::get_all_users`; without it a client could craft a
+// `call-invite` for any user_id and bypass the UI.
 #[derive(Clone, Copy)]
 struct CallerScope {
     scope: rbac::Scope,
@@ -42,10 +41,10 @@ fn drop_caller_scope(user_id: i32) {
     guard.remove(&user_id);
 }
 
-// ── Call lifecycle tracking for the audit trail ───────────────────────────
-// The relay is otherwise stateless; we keep just enough per-call state to emit
-// one audit row when a call resolves: connected → completed (with talk-time
-// duration), declined → "failed", canceled/ring-timeout → "not answered".
+// The relay is otherwise stateless. This is the minimum per-call state needed to
+// emit one audit row when a call resolves: connected becomes completed with a
+// talk-time duration, declined becomes failed, and canceled or ring-timeout
+// becomes not answered.
 #[derive(Clone)]
 struct CallInfo {
     caller: i32,
@@ -55,7 +54,7 @@ struct CallInfo {
     started_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-// Keyed by the unordered (min,max) user pair so either party's signal resolves
+// Keyed by the unordered (min, max) user pair so either party's signal resolves
 // the same in-flight call.
 type ActiveCalls = Mutex<HashMap<(i32, i32), CallInfo>>;
 static ACTIVE_CALLS: Lazy<ActiveCalls> = Lazy::new(|| Mutex::new(HashMap::new()));
@@ -64,8 +63,7 @@ fn call_key(a: i32, b: i32) -> (i32, i32) {
     (a.min(b), a.max(b))
 }
 
-// Spawn the audit write off the actor thread. `outcome` is one of
-// "completed" | "rejected" | "missed".
+// Runs the audit write off the actor thread.
 fn record_call_audit(pool: PgPool, info: CallInfo, outcome: &'static str) {
     let duration = info
         .started_at
@@ -108,7 +106,7 @@ fn track_call_lifecycle(pool: &PgPool, me: i32, signal_type: &str, peer: i32, me
         let mut guard = ACTIVE_CALLS.lock().unwrap_or_else(|e| e.into_inner());
         match signal_type {
             "call-invite" => {
-                // `me` is the caller; `peer` the callee. media rides the invite.
+                // `me` is the caller and `peer` the callee.
                 guard.insert(
                     key,
                     CallInfo {
@@ -128,10 +126,9 @@ fn track_call_lifecycle(pool: &PgPool, me: i32, signal_type: &str, peer: i32, me
                 }
                 None
             }
-            // Callee declined → failed.
             "call-reject" => guard.remove(&key).map(|info| (info, "rejected")),
-            // Caller canceled or either side ended. Connected ⇒ completed (with
-            // duration); never connected ⇒ not answered.
+            // A cancel or end resolves as completed if the call ever connected,
+            // and as not answered otherwise.
             "call-cancel" | "call-end" => guard.remove(&key).map(|info| {
                 let outcome = if info.connected {
                     "completed"
@@ -172,8 +169,8 @@ fn finalize_calls_for(pool: &PgPool, user_id: i32) {
     }
 }
 
-// Same-scope = OK. Organization additionally requires the same org_id so
-// users in different organizations can never call each other.
+// Scopes must match, and organization users must also share an org_id, so users
+// in different organizations can never call each other.
 fn can_call_between(from: CallerScope, to: CallerScope) -> bool {
     use rbac::Scope::*;
     match (from.scope, to.scope) {
@@ -251,10 +248,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for CallSession {
                         signal.media.as_deref(),
                     );
 
-                    // Scope gate: even if a malicious client crafts a signal
-                    // for a user_id it shouldn't see in the directory, drop
-                    // it here. The target must be (a) connected to the call
-                    // WS and (b) in a scope the caller can reach.
+                    // Scope gate: the target must be connected to the call socket
+                    // and in a scope the caller can reach, so a crafted signal for
+                    // an unreachable user_id is dropped here.
                     let target_scope = lookup_caller_scope(target);
                     let from_scope = CallerScope {
                         scope: self.scope,
@@ -312,9 +308,10 @@ pub async fn call_ws(
     query: web::Query<HashMap<String, String>>,
     pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, Error> {
-    // Auth: an API key (resolved by ApiKeyMiddleware into the request
-    // extensions) or a cookie/Bearer JWT, with a ?token= query fallback for
-    // older clients.
+    // The user id is always derived from verified credentials — an API key
+    // resolved by ApiKeyMiddleware, a cookie/Bearer JWT, or a ?token= query
+    // fallback that is itself decoded and verified — never from a raw query
+    // value. Preserve that invariant.
     let user_id = match wayve_security::jwt::get_user_id_from_request(&req).or_else(|| {
         query
             .get("token")
@@ -330,9 +327,8 @@ pub async fn call_ws(
         }
     };
 
-    // Resolve scope up-front so signaling can be gated without per-message
-    // DB hits. Fail closed on lookup error — a user that can't be resolved
-    // cannot be safely placed in any scope.
+    // Resolve scope up front so signaling is gated without per-message DB hits.
+    // Fails closed: an unresolvable user cannot be placed in any scope.
     let ctx = match rbac::resolve_role_context(pool.get_ref(), user_id).await {
         Ok(ctx) => ctx,
         Err(e) => {

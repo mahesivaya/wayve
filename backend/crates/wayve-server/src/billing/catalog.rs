@@ -1,18 +1,12 @@
-//! Single source of truth for the plan catalog.
+//! Single source of truth for the plan catalog. Edit this file to change pricing
+//! or plans: `startup::seed_plan_catalog` upserts these rows into `plans` on
+//! every boot, and `billing::entitlements` reads the free tier here.
 //!
-//! **Edit THIS file to change pricing/plans.** Nothing else hardcodes the plan
-//! rows:
-//!   * `startup::seed_plan_catalog` upserts these into the `plans` table on
-//!     every boot (fresh & existing DBs converge — no migration needed), and
-//!   * `billing::entitlements` reads the free tier here for the
-//!     no-subscription baseline.
-//!
-//! The frontend mirrors this list in `frontend/src/billing/planCatalog.ts`
-//! (display copy + marketing prices). Keep the two in sync when adding/removing
-//! a plan or changing limits.
+//! Must stay in sync with `frontend/src/billing/planCatalog.ts`, which mirrors
+//! the list for display.
 
-/// One plan in the catalog. Mirrors the `plans` table columns the seed writes.
-/// `storage_limit_bytes` / `monthly_quota` use `-1` for "unlimited".
+/// One plan in the catalog, mirroring the `plans` columns the seed writes.
+/// `storage_limit_bytes` and `monthly_quota` use `-1` for unlimited.
 pub struct PlanDef {
     pub code: &'static str,
     pub name: &'static str,
@@ -124,10 +118,8 @@ pub const PLAN_CATALOG: &[PlanDef] = &[
     },
 ];
 
-/// The free (no-subscription) baseline plan for an audience — the $0 plan whose
-/// `audience` matches. Used by `entitlements` when an owner has no active
-/// subscription (personal → Free Personal, organization → Free Organization).
-/// Falls back to the first catalog entry (Free Personal) for any other input.
+/// The zero-cost plan for an audience, used as the baseline when an owner has no
+/// active subscription. Unknown audiences fall back to the first catalog entry.
 pub fn free_plan_for(audience: &str) -> &'static PlanDef {
     PLAN_CATALOG
         .iter()

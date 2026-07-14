@@ -1,8 +1,7 @@
-// Slack integration end-to-end: the enterprise gate (non-enterprise → 403),
-// connect (bot token validated via auth.test, encrypted at rest), link a Slack
-// channel to a fresh Wayve channel, and import history into that channel's
-// `channel_messages` as server-readable rows. Slack is mocked via wiremock and
-// `SLACK_API_BASE`.
+// The Slack integration end to end: the enterprise gate, connecting with a
+// validated bot token that is encrypted at rest, linking a Slack channel to a
+// fresh Wayve channel, and importing history into it as server-readable rows.
+// Slack is mocked with wiremock via the `SLACK_API_BASE` indirection.
 #[cfg(test)]
 mod tests {
     use crate::integrations;
@@ -16,8 +15,8 @@ mod tests {
 
     const HEX64_TEST_KEY: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
-    /// Turn a plain local user into the owner of an enterprise-tier org so they
-    /// pass the Slack enterprise gate. Returns the org id.
+    /// Makes the user an owner of an enterprise-tier org, which is what the
+    /// Slack feature gate requires. Returns the org id.
     async fn make_enterprise(pool: &PgPool, user_id: i32) -> i32 {
         let org_id: i32 = sqlx::query_scalar(
             "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
@@ -88,7 +87,6 @@ mod tests {
         )
         .await;
 
-        // A personal (non-enterprise) user cannot reach the Slack feature.
         let req = actix_test::TestRequest::get()
             .uri("/integrations/slack/connection")
             .insert_header(("Authorization", bearer))
@@ -107,7 +105,6 @@ mod tests {
     async fn connect_link_and_import() {
         let mock = MockServer::start().await;
 
-        // Token validation at connect time.
         Mock::given(method("GET"))
             .and(path("/auth.test"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -115,7 +112,7 @@ mod tests {
             })))
             .mount(&mock)
             .await;
-        // Channel history (newest-first, as Slack returns it).
+        // Slack returns history newest-first; the import must store it oldest-first.
         Mock::given(method("GET"))
             .and(path("/conversations.history"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -127,7 +124,6 @@ mod tests {
             })))
             .mount(&mock)
             .await;
-        // Author name lookups.
         Mock::given(method("GET"))
             .and(path("/users.info"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -136,7 +132,8 @@ mod tests {
             .mount(&mock)
             .await;
 
-        // SAFETY: serialized via #[serial] — env mutation can't race other tests.
+        // SAFETY: this mutates process env, so the test is #[serial] (and CI
+        // runs --test-threads=1) to keep it from racing other tests.
         unsafe {
             std::env::set_var("AES_KEY", HEX64_TEST_KEY);
             std::env::set_var("SLACK_API_BASE", mock.uri());
@@ -159,7 +156,7 @@ mod tests {
         )
         .await;
 
-        // --- Connect: token validated via auth.test, stored encrypted. ---
+        // Connecting must leave the bot token encrypted at rest.
         let req = actix_test::TestRequest::put()
             .uri("/integrations/slack/connection")
             .insert_header(("Authorization", bearer.clone()))
@@ -179,7 +176,6 @@ mod tests {
         let enc: String = row.get("bot_token_encrypted");
         assert_eq!(decrypt(&iv, &enc).unwrap_or_default(), "xoxb-test-token");
 
-        // --- Link a Slack channel → a fresh Wayve channel. ---
         let req = actix_test::TestRequest::post()
             .uri("/integrations/slack/links")
             .insert_header(("Authorization", bearer.clone()))
@@ -191,7 +187,6 @@ mod tests {
         let link: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
         let wayve_channel_id = link["wayve_channel_id"].as_i64().expect("wayve_channel_id") as i32;
 
-        // --- Import: both Slack messages land in the Wayve channel. ---
         let req = actix_test::TestRequest::post()
             .uri("/integrations/slack/import")
             .insert_header(("Authorization", bearer.clone()))
@@ -200,7 +195,7 @@ mod tests {
         let body: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
         assert_eq!(body["imported"], 2);
 
-        // Stored server-readable (decryptable by the server) + oldest-first.
+        // Imported rows are server-readable rather than E2E envelopes.
         let rows = sqlx::query(
             "SELECT content_encrypted, content_iv FROM channel_messages
              WHERE channel_id = $1 ORDER BY id ASC",
@@ -215,7 +210,7 @@ mod tests {
         let first = decrypt(&first_iv, &first_enc).unwrap_or_default();
         assert_eq!(first, "[Slack · Alice] first");
 
-        // Re-import is incremental: nothing new past the cursor.
+        // A second import is incremental: nothing past the cursor is re-imported.
         let req = actix_test::TestRequest::post()
             .uri("/integrations/slack/import")
             .insert_header(("Authorization", bearer.clone()))
@@ -231,10 +226,9 @@ mod tests {
         cleanup(&pool, user_id, org_id).await;
     }
 
-    // Outbound bridge posts under the Wayve sender's name: the `username` (and
-    // icon) override must be on the chat.postMessage form so Slack shows who
-    // wrote it instead of the bot. The mock only matches when `username=Alice`
-    // is present, so a missing override would 404 → post_message errors.
+    // A bridged message must carry a `username` override so Slack attributes it
+    // to the Wayve sender rather than the bot. The mock matches only when the
+    // override is present, so dropping it makes the post fail.
     #[actix_web::test]
     #[serial_test::serial]
     async fn outbound_post_includes_sender_name() {
@@ -258,15 +252,13 @@ mod tests {
         unsafe {
             std::env::remove_var("SLACK_API_BASE");
         }
-        // `.expect(1)` is verified on drop.
+        // The `.expect(1)` above is verified on drop.
         drop(mock);
     }
 
-    // Graceful fallback: if the workspace lacks `chat:write.customize`, Slack
-    // rejects the customized post with `missing_scope`; we must retry once as a
-    // plain bot post (no username) so bridging never silently breaks. Two
-    // non-overlapping mocks: the customized body (contains `username=`) →
-    // missing_scope; the exact plain retry body → ok.
+    // A workspace without `chat:write.customize` rejects the customized post
+    // with `missing_scope`, and the client must retry once as a plain bot post
+    // so bridging never silently breaks.
     #[actix_web::test]
     #[serial_test::serial]
     async fn outbound_post_falls_back_without_customize_scope() {
@@ -300,7 +292,8 @@ mod tests {
         unsafe {
             std::env::remove_var("SLACK_API_BASE");
         }
-        // Both `.expect(1)`s verified on drop: customized attempt + plain retry.
+        // Both `.expect(1)`s are verified on drop: one customized attempt, one
+        // plain retry.
         drop(mock);
     }
 }

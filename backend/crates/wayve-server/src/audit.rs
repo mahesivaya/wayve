@@ -1,24 +1,10 @@
 //! Shared building blocks for audit-log inserts.
 //!
-//! Each audit table has its own column shape (e.g. `org_key_audit_log` has
-//! `actor_role + target_user_id`; `api_key_audit_log` has `key_id + outcome`),
-//! so the actual `INSERT` statement stays in the owning module. What IS shared
-//! is the request-derived context: caller IP and User-Agent. Those two
-//! extractions are duplicated in every module that writes an audit row today
-//! (see `organization/keys.rs::{client_ip, user_agent}` for the original).
-//!
-//! This module hoists those helpers so any future audit writer can:
-//! ```ignore
-//! use crate::audit;
-//!
-//! sqlx::query("INSERT INTO some_audit_log (…, ip, user_agent) VALUES (…, $7, $8)")
-//!     .bind(audit::client_ip(&req))
-//!     .bind(audit::user_agent(&req))
-//!     .execute(pool)
-//!     .await?;
-//! ```
-//!
-//! Existing modules are not migrated — they can switch to these on next touch.
+//! Each audit table has its own column shape, so the `INSERT` itself stays in the
+//! owning module. What is shared is the request-derived context — caller IP and
+//! User-Agent — which every audit writer can pull from `audit::client_ip` and
+//! `audit::user_agent`. Existing modules still carry their own copies and can
+//! switch to these on next touch.
 
 use actix_web::{HttpRequest, web};
 use sqlx::PgPool;
@@ -27,9 +13,9 @@ use tracing::warn;
 
 use crate::geoip::{GeoIp, GeoLocation};
 
-/// Geolocate `ip` using the shared GeoIP reader pulled from request app state.
-/// Best-effort: returns the empty location when there's no IP, no reader
-/// configured (`GEOIP_DB_PATH` unset), or the lookup misses.
+/// Geolocate `ip` using the shared GeoIP reader from request app state.
+/// Best-effort: the empty location when there is no IP, no reader configured, or
+/// the lookup misses.
 pub(crate) fn resolve_geo(req: &HttpRequest, ip: Option<&str>) -> GeoLocation {
     let Some(ip) = ip else {
         return GeoLocation::default();
@@ -57,16 +43,12 @@ pub fn user_agent(req: &HttpRequest) -> Option<String> {
         .map(String::from)
 }
 
-// ── General user-action audit log ────────────────────────────────────
-// A security-relevant action a user just took (password change, deletion,
-// export/download, billing change, …). Recorded to the `audit_logs` table
-// for the Security audit page and mirrored to logs/user_actions.log.
-
 const USER_ACTIONS_LOG_DIR: &str = "logs";
 const USER_ACTIONS_LOG_PATH: &str = "logs/user_actions.log";
 
-/// One audit event. Grouped into a struct so `record_action` stays at two
-/// arguments (the surrounding request + the event) rather than a long list.
+/// A security-relevant action a user took (password change, deletion, export,
+/// billing change). Grouped into a struct to keep `record_action` under the
+/// clippy argument threshold.
 pub struct AuditEvent<'a> {
     pub actor_user_id: i32,
     pub action: &'a str,
@@ -75,8 +57,9 @@ pub struct AuditEvent<'a> {
     pub metadata: Option<serde_json::Value>,
 }
 
-/// Record a user action. Best-effort on both sinks: a logging failure is
-/// warned and swallowed so it never blocks the action being audited.
+/// Record a user action to `audit_logs` and `user_actions.log`. Best-effort on
+/// both sinks: a logging failure is warned and swallowed so it never blocks the
+/// action being audited.
 pub async fn record_action(pool: &PgPool, req: &HttpRequest, event: AuditEvent<'_>) {
     let ip = client_ip(req);
     let ua = user_agent(req);
@@ -84,23 +67,16 @@ pub async fn record_action(pool: &PgPool, req: &HttpRequest, event: AuditEvent<'
     record(pool, event, ip, ua, geo).await;
 }
 
-/// Like [`record_action`] but for events with no originating HTTP request —
-/// e.g. the background sync worker recording `email_received`. IP and
-/// User-Agent are recorded as NULL.
+/// Like [`record_action`] but for events with no originating HTTP request, such
+/// as the sync worker recording `email_received`. IP and User-Agent are NULL.
 pub async fn record_action_system(pool: &PgPool, event: AuditEvent<'_>) {
     record(pool, event, None, None, GeoLocation::default()).await;
 }
 
-// ── Billing / financial audit log ────────────────────────────────────
-// Plan changes, entitlement grants and subscription state transitions are a
-// financial + abuse signal. They mostly originate from Stripe webhooks (no
-// HTTP request) and are owned by *either* a user or an organization — so
-// neither [`record_action`] (needs a request) nor [`record_action_system`]
-// (derives the org from a single known user) fits. This writer takes both
-// owner ids explicitly; either may be NULL.
-
-/// One billing audit event. Grouped into a struct so `record_billing` stays
-/// at two arguments (mirrors [`AuditEvent`]).
+/// A plan change, entitlement grant, or subscription transition. These mostly
+/// arrive from Stripe webhooks (no HTTP request) and are owned by either a user
+/// or an organization, so neither [`record_action`] nor [`record_action_system`]
+/// fits: both owner ids are given explicitly and either may be NULL.
 pub struct BillingAuditEvent<'a> {
     pub actor_user_id: Option<i32>,
     pub organization_id: Option<i32>,
@@ -110,11 +86,9 @@ pub struct BillingAuditEvent<'a> {
     pub metadata: Option<serde_json::Value>,
 }
 
-/// Record a billing/financial audit event into `audit_logs` (and mirror it to
-/// `user_actions.log`) so it shows up on the Security / User Logs pages
-/// alongside every other audited action. Best-effort on both sinks — a logging
-/// failure is warned and swallowed so it never blocks (or makes Stripe retry)
-/// the billing state change being audited.
+/// Record a billing audit event so it appears on the Security and User Logs pages
+/// alongside every other audited action. Best-effort on both sinks: a logging
+/// failure must never block the billing state change or make Stripe retry it.
 pub async fn record_billing(pool: &PgPool, event: BillingAuditEvent<'_>) {
     let metadata_text = event.metadata.as_ref().map(|v| v.to_string());
 
@@ -152,13 +126,10 @@ pub async fn record_billing(pool: &PgPool, event: BillingAuditEvent<'_>) {
     .await;
 }
 
-/// Record a FAILED login attempt — the earliest breach signal (credential
-/// stuffing, brute force, password spraying). Unlike [`record_action`], the
-/// actor may be unknown (a login for a non-existent email), so the actor id is
-/// optional and the attempted email + failure `reason` are kept in metadata.
-/// Writes `action = "login_failed"` to `audit_logs` (and mirrors to
-/// `user_actions.log`) so it shows up alongside successful logins on the
-/// Security audit page. Best-effort — never blocks the 401 it accompanies.
+/// Record a failed login attempt, the earliest breach signal for credential
+/// stuffing and password spraying. The actor may be unknown (a login for a
+/// non-existent email), so the actor id is optional and the attempted email plus
+/// failure `reason` go in metadata. Best-effort; never blocks the 401.
 pub async fn record_login_failure(
     pool: &PgPool,
     req: &HttpRequest,
@@ -231,8 +202,7 @@ async fn record(
     ua: Option<String>,
     geo: GeoLocation,
 ) {
-    // The actor's organization at the time of the action — denormalized so
-    // the scoped reads on the Security page don't need a live join.
+    // Denormalized so the scoped reads on the Security page need no live join.
     let organization_id: Option<i32> =
         sqlx::query_scalar("SELECT organization_id FROM users WHERE id = $1")
             .bind(event.actor_user_id)

@@ -1,8 +1,8 @@
 use crate::prelude::*;
 
-/// Who owns a set of MCP connections. The feature is limited to the **platform**
-/// scope and **enterprise**-tier organizations; personal/business accounts never
-/// resolve to an owner (see `handler::require_mcp_owner`).
+/// Who owns a set of MCP connections. Limited to the platform scope and
+/// enterprise-tier organizations; personal and business accounts never resolve to
+/// an owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum McpOwner {
     Organization(i32),
@@ -10,9 +10,9 @@ pub enum McpOwner {
 }
 
 impl McpOwner {
-    /// `(owner_scope, organization_id)` for binding into the polymorphic
-    /// `mcp_connections` rows. Platform rows carry a NULL `organization_id`;
-    /// queries match it with `IS NOT DISTINCT FROM` so NULL compares equal.
+    /// `(owner_scope, organization_id)` for binding into `mcp_connections`.
+    /// Platform rows carry a NULL `organization_id`, so queries must match it with
+    /// `IS NOT DISTINCT FROM` for NULL to compare equal.
     pub fn as_columns(self) -> (&'static str, Option<i32>) {
         match self {
             McpOwner::Organization(id) => ("organization", Some(id)),
@@ -21,9 +21,8 @@ impl McpOwner {
     }
 }
 
-/// A decrypted MCP connection, ready for a handshake / tool call. Never
-/// serialized — it carries the plaintext auth token. Only the fields the agent
-/// loop needs are kept (the management list reads rows directly).
+/// A decrypted MCP connection, ready for a handshake or tool call. Must never be
+/// serialized: it carries the plaintext auth token.
 #[derive(Clone)]
 pub struct McpConnection {
     pub label: String,
@@ -49,8 +48,7 @@ pub struct ConnectInput {
     pub label: String,
     /// The remote MCP server's single Streamable-HTTP endpoint (https).
     pub server_url: String,
-    /// Bearer token for the server, if it needs one. Validated by handshaking
-    /// before storage, then encrypted at rest.
+    /// Bearer token, validated by a handshake before storage and encrypted at rest.
     #[serde(default)]
     pub auth_token: Option<String>,
     /// `bearer` (default) or `none`.
@@ -71,9 +69,8 @@ pub struct UpdateInput {
     pub enabled: Option<bool>,
 }
 
-/// One tool as advertised by an MCP server's `tools/list`. `input_schema` is
-/// full JSON Schema; the agent sanitizes it down to Gemini's accepted subset
-/// before declaring it.
+/// One tool as advertised by an MCP server's `tools/list`. `input_schema` is full
+/// JSON Schema, which the agent sanitizes down to the providers' accepted subset.
 #[derive(Deserialize, Clone)]
 pub struct McpTool {
     pub name: String,

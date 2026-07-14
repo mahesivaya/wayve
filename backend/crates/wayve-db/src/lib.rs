@@ -1,9 +1,6 @@
-// wayve-db: Postgres connection plumbing for the rwayve workspace.
-//
-// Owns the env-driven connection-string assembly and the connect-retry
-// loop. Per-feature queries and table-specific logic stay in the
-// feature module that owns the table; this crate is intentionally
-// narrow.
+// Postgres connection plumbing: env-driven connection-string assembly and the
+// connect-retry loop. Queries and table-specific logic belong in the feature
+// module that owns the table, not here.
 
 pub mod config;
 pub mod pool;

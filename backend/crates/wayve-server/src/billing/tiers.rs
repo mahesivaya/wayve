@@ -1,10 +1,8 @@
-// Tier comparison + per-user quota endpoints.
+// Tier comparison and per-user quota endpoints.
 //
-// `GET /api/billing/tiers` is public (no auth) so the marketing /developers
-// portal can render the comparison table without a session. It serves the
-// rate-limit dimensions only — the price + storage live on /api/billing/plans
-// and the two endpoints are intentionally kept separate so a checkout UI
-// doesn't accidentally couple to the rate-limit columns.
+// `list_tiers` is public so the marketing portal can render the comparison table
+// without a session. It serves rate-limit dimensions only; price and storage stay
+// on the plans endpoint so a checkout UI never couples to the quota columns.
 
 use super::quotas;
 use crate::cache::Cache;
@@ -56,8 +54,8 @@ pub async fn get_quota(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let tier = quotas::effective_for_user(pool.get_ref(), user_id).await;
 
-    // Current month's request count lives in Redis; if Redis is down we
-    // surface NULL rather than a misleading zero.
+    // The month's request count lives in Redis. If Redis is down, report null
+    // rather than a misleading zero.
     let used: Option<i64> = match cache.get_ref().clone() {
         Some(c) => {
             let key = quotas::monthly_quota_key(user_id);

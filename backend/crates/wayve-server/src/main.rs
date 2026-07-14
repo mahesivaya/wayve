@@ -1,6 +1,3 @@
-// ==============================
-// INTERNAL MODULES (declare first)
-// ==============================
 mod activity;
 mod ai;
 mod audit;
@@ -77,15 +74,14 @@ async fn main() -> std::io::Result<()> {
 
     let pool = startup::connect_db_and_migrate(role).await;
     startup::init_feature_state(&pool);
-    // Connect Redis before spawning workers so `spawn_role_workers` can gate the
-    // chat pub/sub subscriber on Redis availability. (Worker-only roles block
-    // forever inside `spawn_role_workers`, so everything below it is API/All.)
+    // Redis must connect before the workers spawn so `spawn_role_workers` can gate
+    // the chat pub/sub subscriber on its availability. Worker-only roles block
+    // forever inside that call, so everything below it runs on the API/All roles.
     let redis_cache = startup::connect_redis_and_install_cache().await;
     startup::spawn_role_workers(role, &pool, &redis_cache).await;
 
-    // Offline IP geolocation for the User Logs page. Best-effort: `None` when
-    // GEOIP_DB_PATH is unset/unreadable. The reader isn't `Clone`, so build the
-    // shared `web::Data` (an `Arc`) once and clone the handle into each worker.
+    // The GeoIP reader isn't `Clone`, so build the shared `web::Data` once and
+    // clone the handle into each worker.
     let geoip_data = web::Data::new(startup::load_geoip());
 
     let frontend_url = crate::config::frontend_url();
@@ -96,8 +92,8 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(TracingLogger::default())
             .wrap(ApiKeyMiddleware)
-            // After ApiKeyMiddleware so an api-key request's principal is already
-            // injected when we resolve the actor for the activity stream.
+            // Must follow ApiKeyMiddleware so an api-key request's principal is
+            // already injected when the activity stream resolves the actor.
             .wrap(ActivityLogMiddleware)
             .wrap(embed::middleware::EmbedMiddleware)
             .wrap(RateLimitMiddleware)

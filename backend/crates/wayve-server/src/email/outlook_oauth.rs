@@ -20,8 +20,8 @@ use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::{auth_cookie, create_jwt_for_account, get_user_id_from_request};
 use wayve_security::oauth::{consume_state, create_oauth_state};
 
-/// OAuth `state` flow tags — distinct from the Google flows (and each other)
-/// so a state minted for one purpose can't be replayed for another.
+/// Flow tags for the OAuth `state`, distinct from the Google flows and from each
+/// other, so a state minted for one purpose can't be replayed for another.
 const OUTLOOK_FLOW_SIGNUP: &str = "outlook_signup";
 const OUTLOOK_FLOW_CONNECT: &str = "outlook_connect";
 
@@ -64,8 +64,8 @@ fn authorize_url(creds: &OutlookCredentials, scope: &str, state: &str) -> String
         .append_pair("redirect_uri", &creds.redirect_uri)
         .append_pair("response_mode", "query")
         .append_pair("scope", scope)
-        // Force the consent screen so newly-added scopes are actually granted
-        // instead of reusing a cached, narrower grant.
+        // Force the consent screen, or Microsoft reuses a cached, narrower grant
+        // and newly-added scopes are never actually granted.
         .append_pair("prompt", "consent")
         .append_pair("state", state);
     url.to_string()

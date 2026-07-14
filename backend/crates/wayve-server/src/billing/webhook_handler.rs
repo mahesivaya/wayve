@@ -1,18 +1,17 @@
-// Stripe webhook receiver. Mounted as a PUBLIC route (no JWT) — it
-// authenticates by verifying the Stripe signature over the raw body, then
-// dedupes on the Stripe event id. Processing is idempotent (upserts), so the
-// dedup row is only written after a successful run: a transient failure
-// returns 500 and Stripe safely retries.
+// Stripe webhook receiver, mounted as a public route: it authenticates by
+// verifying the Stripe signature over the raw body, then dedupes on the event
+// id. Handlers must stay idempotent (upserts only), because the dedup row is
+// written only after a successful run and a transient failure returns 500 so
+// Stripe retries the same event.
 
 use super::entitlements::refresh_entitlements;
 use super::models::BillingOwner;
 use crate::email::profile::invalidate_me_cache;
 use crate::routes::user::invalidate_profile_cache;
 
-/// A plan/limit/status just changed for `owner`; drop the per-user caches that
-/// embed plan info (`/api/me`, `/api/profile`) so the next request returns the
-/// new plan + storage limit instead of a stale (30–60s) cached copy. For an
-/// organization every member's view changes, so invalidate all of them.
+/// Drop the per-user caches that embed plan info, so the next request sees the
+/// new plan and storage limit rather than a stale copy. An organization's plan
+/// change affects every member, so all of them are invalidated.
 async fn invalidate_owner_caches(pool: &PgPool, owner: BillingOwner) {
     match owner {
         BillingOwner::User(uid) => {
@@ -38,11 +37,9 @@ use crate::prelude::*;
 use tokio::io::AsyncWriteExt;
 use tracing::{error, info, instrument, warn};
 
-// Append-only JSON-lines audit trail of billing events (subscription /
-// upgrade / payment), written under the project `logs/` directory next to
-// `access_requests.log`. Best-effort: a logging failure must never break
-// webhook processing (Stripe would otherwise retry a state change that
-// already landed in the DB).
+// Append-only JSON-lines audit trail of billing events. Best-effort: a logging
+// failure must never fail webhook processing, or Stripe would retry a state
+// change that already landed in the DB.
 const BILLING_LOG_DIR: &str = "logs";
 const BILLING_LOG_PATH: &str = "logs/billing_events.log";
 
@@ -105,7 +102,7 @@ pub async fn stripe_webhook(
         return Ok(HttpResponse::BadRequest().body("missing event id"));
     }
 
-    // Idempotency: a previously processed event is acknowledged, not re-run.
+    // A previously processed event is acknowledged, never re-run.
     let already_processed =
         sqlx::query_scalar::<_, i32>("SELECT 1 FROM webhook_events WHERE stripe_event_id = $1")
             .bind(event_id)
@@ -138,7 +135,7 @@ pub async fn stripe_webhook(
         }
     };
 
-    // A transient processing failure returns 500 on purpose so Stripe retries.
+    // 500 on purpose: it is what makes Stripe retry.
     if let Err(e) = result {
         error!(target: "billing", event_type, error = ?e, "webhook processing failed");
         return Ok(HttpResponse::InternalServerError().finish());
@@ -296,19 +293,16 @@ async fn handle_subscription_event(pool: &PgPool, event_type: &str, object: &Val
     .execute(pool)
     .await?;
 
-    // The inline subscribe flow (POST /billing/subscriptions) never inserts a
-    // local row — only hosted checkout does, via checkout.session.completed,
-    // which does not fire for in-page PaymentIntent confirmation. So for inline
-    // subscriptions the very first signal we get is this
-    // customer.subscription.created/updated event. When the UPDATE above
-    // matched nothing, insert the row now, recovering owner + plan from the
-    // metadata we stamped in provider::create_subscription.
+    // The inline subscribe flow inserts no local row, and
+    // checkout.session.completed does not fire for in-page PaymentIntent
+    // confirmation, so this event is the first signal for those subscriptions.
+    // A zero-row UPDATE means we must insert now, recovering owner and plan from
+    // the metadata stamped in provider::create_subscription.
     if updated.rows_affected() == 0 {
-        // Payment-gated org signup: the subscription carries no parseable
-        // client_reference, only `org_pending=<pending_id>`. Once it's paid,
-        // create the organization (idempotent — the client confirm may have
-        // already done it). This is the backstop for "browser closed right
-        // after paying".
+        // A payment-gated org signup carries only `org_pending=<id>`. Creating
+        // the org here is the backstop for a browser closed right after paying;
+        // it must stay idempotent because the client confirm may have already
+        // done it.
         if let Some(pending) = object
             .pointer("/metadata/org_pending")
             .and_then(Value::as_str)
@@ -319,8 +313,6 @@ async fn handle_subscription_event(pool: &PgPool, event_type: &str, object: &Val
                     .await
                     .map_err(|e| anyhow::anyhow!("org finalize from webhook failed: {e}"))?;
             }
-            // Either finalized just now, or not paid yet — nothing else to do
-            // for this subscription on the generic path.
             return Ok(());
         }
 
@@ -370,8 +362,7 @@ async fn handle_subscription_event(pool: &PgPool, event_type: &str, object: &Val
         invalidate_owner_caches(pool, owner).await;
 
         // Stripe ending the subscription is a distinct fact from the user
-        // requesting cancel-at-period-end (audited at the API in
-        // subscriptions.rs); record both under their own action names.
+        // requesting cancel-at-period-end, which subscriptions.rs audits.
         let action = if status == "canceled" {
             "subscription_canceled"
         } else {

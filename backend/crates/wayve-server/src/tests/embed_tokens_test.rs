@@ -1,12 +1,7 @@
-//! Tests for `embed` tokens — short-lived, read-only, origin-pinned JWTs
-//! used to embed Wayve surfaces inside customer iframes.
-//!
-//! Covers:
-//!   * Mint validates origin + scopes; unknown scopes 400.
-//!   * Verify round-trips a freshly-minted token.
-//!   * Verify rejects tokens with the wrong issuer.
-//!   * Verify rejects expired tokens (manually-forged claim).
-//!   * Allowed-scope catalog is read-only — refuses every write scope.
+//! Embed tokens: the short-lived, read-only, origin-pinned JWTs that let a
+//! customer embed Wayve surfaces in an iframe. These pin what minting will
+//! accept and what verification must refuse, including a wrong issuer and an
+//! expired claim.
 
 #[cfg(test)]
 mod tests {
@@ -27,17 +22,15 @@ mod tests {
 
     #[test]
     fn allowed_scopes_are_read_only() {
-        // Every allowed scope must end in ":read" — embed tokens must
-        // never be permitted to mutate state. Adding a write scope to
-        // ALLOWED_SCOPES without changing this rule would silently
-        // weaken the embed contract.
+        // An embed token must never be able to mutate state, so adding a write
+        // scope to the catalog has to fail here rather than silently weaken the
+        // embed contract.
         for scope in ALLOWED_SCOPES {
             assert!(
                 scope.ends_with(":read"),
                 "embed scope {scope} must be a :read scope"
             );
         }
-        // Sanity: catalog isn't accidentally empty.
         assert!(
             !ALLOWED_SCOPES.is_empty(),
             "ALLOWED_SCOPES must not be empty"
@@ -149,8 +142,8 @@ mod tests {
             exp: usize,
             jti: String,
         }
-        // 1 hour in the past — well outside jsonwebtoken's default 60-second
-        // leeway window, so verify() must classify as Expired (not just decode).
+        // An hour in the past, well outside jsonwebtoken's 60-second default
+        // leeway, so the token must be classified as expired.
         let exp = (Utc::now() - ChronoDuration::hours(1)).timestamp() as usize;
         let expired = Expired {
             sub: 1,

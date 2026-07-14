@@ -1,9 +1,8 @@
-// End-to-end RBAC gates. Each test wires up a real handler behind
-// `require_permission` / `require_org_access` and proves the 401/403/200
-// branches by hitting it through an actix test server. The point is to catch a
-// regression at the *gate*, not the matrix — for example, a future refactor
-// that forgot to consult `organization_id` would let an Org member operate on
-// another tenant, and the cross-tenant test below would fail.
+// End-to-end RBAC gates. Each test drives a real handler behind
+// `require_permission` / `require_org_access` through an actix test server.
+// These pin the gate, not the permission matrix: a refactor that stopped
+// consulting `organization_id` would let an org member operate on another
+// tenant, and the cross-tenant test below is what would catch it.
 #[cfg(test)]
 mod tests {
     use crate::routes::user::{list_organization_members, update_organization_member_role};
@@ -81,9 +80,8 @@ mod tests {
 
     #[actix_web::test]
     async fn members_list_blocks_cross_tenant_access() {
-        // The whole point of `require_org_access`: an organization member with
-        // the right permission must still be denied when the org id in the URL
-        // is a tenant they don't belong to. Platform staff bypass that check.
+        // An org member holding the right permission must still be denied when
+        // the org id in the URL belongs to a tenant they are not part of.
         let pool = test_pool().await;
         let org_a = insert_org(&pool, &format!("Tenant A {}", random_email())).await;
         let org_b = insert_org(&pool, &format!("Tenant B {}", random_email())).await;
@@ -99,7 +97,6 @@ mod tests {
         )
         .await;
 
-        // Listing own org: 200.
         let req = actix_test::TestRequest::get()
             .uri(&format!("/organizations/{org_a}/members"))
             .insert_header((
@@ -110,7 +107,7 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // Listing the other tenant: 403 — same permission, wrong scope.
+        // Same permission, wrong tenant.
         let req = actix_test::TestRequest::get()
             .uri(&format!("/organizations/{org_b}/members"))
             .insert_header((
@@ -126,9 +123,8 @@ mod tests {
 
     #[actix_web::test]
     async fn role_change_takes_effect_on_next_request() {
-        // Authorization is computed per-request straight from the DB, so a
-        // role change made after the JWT was minted must be honored
-        // immediately — no waiting for a token refresh.
+        // Authorization is computed per request from the DB, so a role change
+        // made after the JWT was minted takes effect without a token refresh.
         let pool = test_pool().await;
         let org_id = insert_org(&pool, &format!("Effective {}", random_email())).await;
 
@@ -161,9 +157,9 @@ mod tests {
                 .to_request()
         };
 
-        // Mint a token while actor is still a plain member.
+        // This token is minted while the actor is still a plain member, and is
+        // reused verbatim after the promotion below.
         let actor_token = jwt_for(actor_id, &actor_email);
-        // Before promotion: actor lacks roles:assign_limited → 403.
         let req = actix_test::TestRequest::put()
             .uri(&format!("/organizations/{org_id}/members/{target_id}/role"))
             .insert_header(("Authorization", format!("Bearer {actor_token}")))
@@ -172,13 +168,11 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-        // Owner promotes actor to admin (so they hold roles:assign_limited).
+        // Promoting the actor to admin grants roles:assign_limited.
         let resp =
             actix_test::call_service(&app, put((owner_id, &owner_email), actor_id, "admin")).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // The same already-minted token now passes — the gate consulted the DB,
-        // not the JWT claims.
         let req = actix_test::TestRequest::put()
             .uri(&format!("/organizations/{org_id}/members/{target_id}/role"))
             .insert_header(("Authorization", format!("Bearer {actor_token}")))
@@ -192,9 +186,8 @@ mod tests {
 
     #[actix_web::test]
     async fn admin_cannot_assign_or_modify_admin_or_above() {
-        // `roles:assign_limited` (held by admin) must never let the holder
-        // promote anyone to admin/owner or touch an existing one. The matrix
-        // already covers this in the unit tests; this exercises the HTTP path.
+        // `roles:assign_limited`, which admin holds, must never let its holder
+        // promote anyone to admin or owner, nor modify an existing one.
         let pool = test_pool().await;
         let org_id = insert_org(&pool, &format!("Limited {}", random_email())).await;
 
@@ -226,15 +219,13 @@ mod tests {
                 .to_request()
         };
 
-        // Promoting a member to admin is forbidden.
         let resp = actix_test::call_service(&app, put(target_id, "admin")).await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-        // Demoting the owner is forbidden too — admin can't touch superiors.
         let resp = actix_test::call_service(&app, put(owner_id, "member")).await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-        // But admin can re-assign a member within the below-admin band.
+        // Reassignment within the band below admin is still allowed.
         let resp = actix_test::call_service(&app, put(target_id, "support")).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
@@ -243,9 +234,8 @@ mod tests {
 
     #[actix_web::test]
     async fn unknown_role_string_is_rejected_with_400() {
-        // The handler intentionally rejects anything that doesn't round-trip
-        // through `Role::from_str` — so a typo / case variant becomes a clean
-        // 400, not a silent fall-through to Member.
+        // A role string that does not round-trip through `Role::from_str` must
+        // be a clean 400, never a silent fall-through to Member.
         let pool = test_pool().await;
         let org_id = insert_org(&pool, &format!("BadRole {}", random_email())).await;
 
@@ -286,8 +276,8 @@ mod tests {
     #[actix_web::test]
     async fn role_change_is_written_to_audit_log() {
         // A successful role change must leave a `role_change` row in
-        // `audit_logs` — that's what the User Logs / Security dashboard reads.
-        // The row records the actor, the target, and the from → to roles.
+        // `audit_logs` naming the actor, the target and the from and to roles,
+        // because that row is what the Security dashboard reads.
         let pool = test_pool().await;
         let org_id = insert_org(&pool, &format!("Audit {}", random_email())).await;
 
@@ -305,7 +295,6 @@ mod tests {
         )
         .await;
 
-        // Owner promotes the member to support.
         let req = actix_test::TestRequest::put()
             .uri(&format!("/organizations/{org_id}/members/{target_id}/role"))
             .insert_header((
@@ -317,7 +306,6 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // Read the audit row back and verify actor / resource / from → to.
         let row = sqlx::query(
             "SELECT actor_user_id, resource_type, metadata \
              FROM audit_logs \
@@ -343,8 +331,8 @@ mod tests {
         assert_eq!(metadata["to_role"], "support");
         assert_eq!(metadata["scope"], "organization");
 
-        // Tidy the audit residue — its FKs are ON DELETE SET NULL, so without
-        // this it would linger (orphaned) after the users/org are removed.
+        // The audit row must be deleted explicitly: its FKs are ON DELETE SET
+        // NULL, so it would outlive the users and org as an orphan.
         let _ =
             sqlx::query("DELETE FROM audit_logs WHERE action = 'role_change' AND resource_id = $1")
                 .bind(target_id.to_string())

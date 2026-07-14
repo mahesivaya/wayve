@@ -14,8 +14,8 @@ pub mod presence;
 pub mod pubsub;
 pub mod reactions;
 mod websocket;
-// Re-export the realtime fan-out so other features (e.g. the Slack Events
-// webhook) can push a freshly-stored channel message to open clients.
+// Re-exported so other features, such as the Slack Events webhook, can push a
+// freshly stored channel message to open clients.
 pub(crate) use websocket::fan_out_user;
 
 use actix_web::web;

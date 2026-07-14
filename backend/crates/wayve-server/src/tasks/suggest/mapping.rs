@@ -1,9 +1,9 @@
-//! Map a task ("user story") to the repo files it will most likely touch.
+//! Map a task to the repo files it will most likely touch.
 //!
-//! Strategy: keyword-rank the repo tree first (cheap, deterministic), hand the
-//! top slice to the in-app AI to re-rank with real understanding, and fall back
-//! to the keyword order when the AI is unavailable or returns nothing usable.
-//! The AI only ever chooses from the candidate list, so it can't invent paths.
+//! The repo tree is keyword-ranked first, cheaply and deterministically, and the
+//! top slice is handed to the in-app AI to re-rank. The keyword order is the
+//! fallback when the AI is unavailable or returns nothing usable. The AI only
+//! ever chooses from the candidate list, so it cannot invent paths.
 
 use crate::prelude::*;
 use std::collections::HashSet;
@@ -13,8 +13,8 @@ pub const MAX_FILES: usize = 8;
 /// How many keyword-ranked candidates to show the AI (bounds the prompt).
 const AI_CANDIDATE_LIMIT: usize = 120;
 
-/// The outcome of mapping: the chosen files and whether the AI produced them
-/// (vs. the keyword fallback) — surfaced so the endpoint can explain itself.
+/// The chosen files, and whether the AI produced them rather than the keyword
+/// fallback. Surfaced so the endpoint can explain itself.
 pub struct Mapping {
     pub files: Vec<String>,
     pub used_ai: bool,
@@ -56,8 +56,8 @@ fn keyword_ranked(paths: &[String], toks: &[String]) -> Vec<String> {
     scored.into_iter().map(|(_, p)| p.clone()).collect()
 }
 
-/// Map a story to files. Never errors — the worst case is an empty file list
-/// (e.g. a repo with no keyword overlap and no AI configured).
+/// Map a story to files. Never errors; the worst case is an empty list, from a
+/// repo with no keyword overlap and no AI configured.
 pub async fn map_story_to_files(
     pool: &PgPool,
     user_id: i32,
@@ -68,8 +68,8 @@ pub async fn map_story_to_files(
     let toks = tokens(&format!("{summary} {description}"));
     let ranked = keyword_ranked(tree, &toks);
 
-    // Candidate subset the AI ranks over — the keyword hits, or (when nothing
-    // matched) the head of the tree so the AI still has something to work with.
+    // The AI ranks over the keyword hits, or the head of the tree when nothing
+    // matched, so it always has something to work with.
     let candidates: Vec<String> = if ranked.is_empty() {
         tree.iter().take(AI_CANDIDATE_LIMIT).cloned().collect()
     } else {
@@ -92,9 +92,9 @@ pub async fn map_story_to_files(
     }
 }
 
-/// Ask the in-app AI to pick the most relevant files from `candidates`. Returns
-/// `None` when no provider is configured or the call fails — the caller then
-/// uses the keyword fallback.
+/// Ask the in-app AI to pick the most relevant files from `candidates`. `None`
+/// when no provider is configured or the call fails, which sends the caller to
+/// the keyword fallback.
 async fn ai_pick(
     pool: &PgPool,
     user_id: i32,
@@ -118,9 +118,9 @@ async fn ai_pick(
     Some(parse_paths(&reply, candidates))
 }
 
-/// Extract a JSON array of strings from the model reply and keep only paths that
-/// are in the candidate set (guards against hallucinated paths), capped to
-/// [`MAX_FILES`]. Tolerates code fences / surrounding prose.
+/// Extract a JSON array of strings from the model reply, keeping only paths in
+/// the candidate set, which guards against hallucinated paths, and capping at
+/// [`MAX_FILES`]. Tolerates code fences and surrounding prose.
 fn parse_paths(reply: &str, candidates: &[String]) -> Vec<String> {
     let allowed: HashSet<&str> = candidates.iter().map(String::as_str).collect();
     let Some(slice) = json_array_slice(reply) else {
@@ -134,8 +134,8 @@ fn parse_paths(reply: &str, candidates: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// The first `[` … `]` slice of a string, or `None`. Lets us pull the array out
-/// of a reply that wrapped it in ```json fences or explanatory text.
+/// The first `[` … `]` slice of a string, which pulls the array out of a reply
+/// that wrapped it in fences or explanatory text.
 fn json_array_slice(reply: &str) -> Option<&str> {
     let start = reply.find('[')?;
     let end = reply.rfind(']')?;

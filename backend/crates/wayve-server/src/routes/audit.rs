@@ -47,22 +47,21 @@ pub struct UserActionView {
     pub action: String,
     pub resource_type: Option<String>,
     pub resource_id: Option<String>,
-    // Free-form event details (e.g. email from/to/subject for email_sent /
-    // email_received). Org/platform-admin readable per the scoping below.
+    /// Free-form event details, readable by org and platform admins per the
+    /// scoping below.
     pub metadata: Option<serde_json::Value>,
     pub ip: Option<String>,
-    // Coarse geolocation of `ip`, resolved offline at write time (NULL for rows
-    // written before the feature, system events, or unresolvable/private IPs).
+    /// Coarse geolocation of `ip`, resolved offline at write time. NULL for rows
+    /// predating the feature, system events, and private or unresolvable IPs.
     pub country: Option<String>,
     pub region: Option<String>,
     pub city: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
-// GET /api/audit/user-actions — security-relevant user actions (password
-// change, deletion, export/download, billing change, …) from `audit_logs`,
-// scoped like the API-key audit: platform staff see everything, an org
-// auditor sees their org, a personal user sees only their own actions.
+/// Security-relevant user actions from `audit_logs`, scoped like the API-key
+/// audit: platform staff see everything, an org auditor sees their own org, and
+/// a personal user sees only their own actions.
 #[get("/audit/user-actions")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn list_user_actions(
@@ -123,17 +122,16 @@ pub struct UserTimeSpentView {
     pub user_id: i32,
     pub username: Option<String>,
     pub email: String,
-    // Estimated total minutes on the site, summed across sessions.
+    /// Estimated total minutes on the site, summed across sessions.
     pub total_minutes: i64,
     pub session_count: i64,
     pub last_active: Option<DateTime<Utc>>,
 }
 
-// GET /api/audit/user-time-spent — per-user time on site, estimated by
-// sessionizing each user's `activity_events` (a gap > 30 min starts a new
-// session) and summing the first→last span of each session. Platform-owner
-// only. Caveats: `activity_events` is pruned to ~7 days, so this reflects
-// recent engagement; a session with a single event counts as 0 minutes.
+/// Per-user time on site, platform-owner only. Estimated by sessionizing each
+/// user's `activity_events` and summing each session's span. It reflects only
+/// recent engagement, because `activity_events` is pruned to about seven days,
+/// and a single-event session counts as zero minutes.
 #[get("/audit/user-time-spent")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn list_user_time_spent(
@@ -216,10 +214,9 @@ pub struct UserLookupQuery {
     pub limit: Option<i64>,
 }
 
-// GET /api/audit/user-lookup?email=... — the COMPLETE audit trail for one user,
-// resolved by email, across every category (login, email, chat, calendar,
-// drive, notes, tasks), newest first. Owner-gated and scope-checked: a platform
-// owner may inspect anyone; an organization owner only members of their own org.
+/// The complete audit trail for one user, resolved by email, newest first.
+/// Owner-gated: a platform owner may inspect anyone, an organization owner only
+/// members of their own org.
 #[get("/audit/user-lookup")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn lookup_user_actions(
@@ -292,9 +289,9 @@ pub struct ActivityEventView {
     pub created_at: DateTime<Utc>,
 }
 
-// GET /api/audit/user-activity?email=... — the NON-consequential activity
-// stream (page views, clicks, API requests) for one user, newest first. Same
-// owner gate + org-scope check as `lookup_user_actions`; reads activity_events.
+/// The non-consequential activity stream (page views, clicks, API requests) for
+/// one user, newest first. Same owner gate and org-scope check as
+/// `lookup_user_actions`.
 #[get("/audit/user-activity")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn lookup_user_activity(
@@ -360,17 +357,12 @@ pub struct RegistrationTypeQuery {
 pub struct RegistrationTypeView {
     pub id: i32,
     pub email: String,
-    // 'local' (email + password registration), 'google' (Gmail OAuth) or
-    // 'microsoft' (Outlook OAuth) — straight from users.auth_provider.
+    /// `local`, `google`, or `microsoft`, straight from users.auth_provider.
     pub auth_provider: String,
     pub created_at: Option<DateTime<Utc>>,
 }
 
-// GET /api/audit/registration-types — how each user signed up: local password
-// registration vs Gmail (Google OAuth) vs Outlook (Microsoft OAuth), read from
-// users.auth_provider. Owner-gated and scoped like /audit/user-actions
-// (platform sees everyone, an org owner sees their members, a personal user
-// sees only themselves).
+/// How each user signed up. Owner-gated and scoped like `/audit/user-actions`.
 #[get("/audit/registration-types")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn list_registration_types(
@@ -563,12 +555,8 @@ pub async fn list_audit_logs(
     Ok(HttpResponse::Ok().json(rows))
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Audit export — cursor-paginated stream for customer SIEMs that want to
-// pull (not be pushed via the SIEM webhook). Emits JSONL (one row per
-// line) or CSV depending on `format=`. Cursor is `before_id`: callers pull
-// the next page by passing the last `id` of the previous response.
-// ──────────────────────────────────────────────────────────────────────
+// Cursor-paginated audit export, for customer SIEMs that pull rather than being
+// pushed to via the SIEM webhook.
 
 const AUDIT_EXPORT_PAGE: i64 = 1_000;
 const AUDIT_EXPORT_MAX: i64 = 10_000;
@@ -577,8 +565,8 @@ const AUDIT_EXPORT_MAX: i64 = 10_000;
 pub struct AuditExportQuery {
     /// Only include rows created at or after this ISO-8601 timestamp.
     pub since: Option<DateTime<Utc>>,
-    /// Cursor — return rows with id < this value. Pass the last `id` from
-    /// the previous response to get the next page.
+    /// Cursor: returns rows with id below this value. Callers page by passing
+    /// the last `id` of the previous response.
     pub before_id: Option<i64>,
     /// Max rows in this response. Capped at `AUDIT_EXPORT_MAX`.
     pub limit: Option<i64>,
@@ -615,8 +603,8 @@ pub async fn export_audit_logs(
     }
     let is_csv = format == "csv";
 
-    // Scope visibility same as /audit/logs: platform sees all, org sees
-    // its own org, personal sees keys they minted or acted as.
+    // Same scope visibility as /audit/logs: platform sees all, org sees its own
+    // org, personal sees only keys they minted or acted as.
     let rows = match ctx.scope {
         Scope::Platform => {
             sqlx::query_as::<_, AuditLogView>(
@@ -1014,7 +1002,6 @@ fn decrypt_siem_token(row: &SiemSettingsRow) -> Result<Option<String>, AppError>
     }
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(list_audit_logs)
         .service(list_user_actions)

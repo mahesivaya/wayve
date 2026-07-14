@@ -1,13 +1,11 @@
-//! Role-Based Access Control.
+//! Role-Based Access Control: the permission catalog, the role→permission
+//! matrix, and the request-time gates. Roles live in two scopes,
+//! `organization_members.role` and `platform_members.role`; a `personal` account
+//! is implicitly the owner of a workspace of one.
 //!
-//! A fixed permission catalog, a role→permission matrix for the nine roles, and
-//! request-time authorization helpers. Roles live in two scopes —
-//! `organization_members.role` and `platform_members.role`; a `personal`
-//! account is implicitly the owner of a workspace of one.
-//!
-//! Authorization is computed per request straight from the database (see
-//! `resolve_role_context`) and is **never** trusted from the JWT, so a role
-//! change takes effect on the member's next request.
+//! Authorization is computed per request from the database (`resolve_role_context`)
+//! and never trusted from the JWT, so a role change takes effect on the next
+//! request.
 
 use crate::jwt::{SessionMode, get_user_id_from_request, mode_from_request};
 use actix_web::{HttpRequest, HttpResponse};
@@ -36,9 +34,8 @@ impl Scope {
     }
 }
 
-/// The nine roles, most-privileged first. `owner` implies the full permission
-/// catalog; `super_admin` implies everything except the two billing
-/// permissions.
+/// The nine roles, most-privileged first. `owner` holds the full catalog;
+/// `super_admin` holds everything except the two billing permissions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Role {
     Owner,
@@ -79,8 +76,8 @@ impl Role {
         }
     }
 
-    /// Parse a stored role string. An unrecognized value falls back to `Member`
-    /// — the safe least-privilege default for an authenticated user.
+    /// Parse a stored role string. Unrecognized values fall back to `Member`, the
+    /// least-privilege default.
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Role {
         match value {
@@ -96,8 +93,7 @@ impl Role {
         }
     }
 
-    /// Bare human-readable label; call sites prefix it with the scope
-    /// ("Platform owner", "Organization owner", ...).
+    /// Bare label; call sites prefix it with the scope ("Platform owner", ...).
     pub fn label(self) -> &'static str {
         match self {
             Role::Owner => "Owner",
@@ -124,8 +120,8 @@ impl Role {
         }
     }
 
-    /// True when the role ranks strictly below `admin` — the set a
-    /// `roles:assign_limited` holder is allowed to assign or modify.
+    /// True when the role ranks strictly below `admin`: the set a
+    /// `roles:assign_limited` holder may assign or modify.
     pub fn is_below_admin(self) -> bool {
         self.rank() > Role::Admin.rank()
     }
@@ -156,32 +152,26 @@ pub enum Permission {
     TicketsManage,
     SsoManage,
     InboxManage,
-    /// Connect and manage the org's (or the platform's) remote MCP servers,
-    /// which let the AI assistant read the customer's own systems. Granted to
-    /// owner / super_admin / admin; gated further to the enterprise tier and the
-    /// platform scope at the handler. Personal/business accounts never hold the
-    /// effective capability (the tier/scope gate rejects them even as owners).
+    /// Manage the remote MCP servers the AI assistant reads customer systems
+    /// through. Held by owner / super_admin / admin, but handlers gate it further
+    /// to the enterprise tier and platform scope.
     McpManage,
-    /// Select and change the organization's AI provider (which model/endpoint the
-    /// AI assistant runs on) and view its usage/cost governance. Granted to the
-    /// organization **owner only** — not super_admin/admin — and gated further to
-    /// the enterprise tier at the handler. Every member of the org then uses the
-    /// owner's chosen provider; members can never change it.
+    /// Choose the org's AI provider and view its usage/cost governance. Owner
+    /// only, and handler-gated to the enterprise tier. Every member then runs on
+    /// the owner's chosen provider.
     AiManage,
-    /// Bootstrap the org master keypair AND promote a member to a key-holder
-    /// role (admin / owner). Granted to owner only — the canonical recovery
-    /// root must stay single-owner because the mnemonic is a one-time secret.
+    /// Bootstrap the org master keypair and promote members to key-holder roles
+    /// (admin / owner). Owner only: the recovery root must stay single-owner
+    /// because the mnemonic is a one-time secret.
     OrgKeysBootstrap,
-    /// Use the org master key to fetch a member's escrow envelope, decrypt
-    /// their data for offboarding/compliance, or reset their password.
-    /// Granted to owner, super_admin, admin. NOT granted to security — they
-    /// can provision members (via MembersManage) but not access their
-    /// already-existing escrows; that's a separation-of-duties choice.
+    /// Use the org master key to open a member's escrow envelope for
+    /// offboarding, compliance, or a password reset. Owner, super_admin, and
+    /// admin only. Deliberately withheld from security, who may provision members
+    /// via MembersManage but not read their existing escrows.
     OrgKeysUseMaster,
-    /// Create / author, edit content, rename, delete, and upload files in the
-    /// organization's (or platform's) shared Documents workspace. Granted to
-    /// **owner and super_admin only** — every other member gets read-only
-    /// (list / view / download). Not an admin grant.
+    /// Author, edit, rename, delete, and upload in the shared Documents
+    /// workspace. Owner and super_admin only; every other role, admin included,
+    /// gets read-only.
     DocumentsManage,
 }
 
@@ -249,18 +239,11 @@ impl Permission {
     }
 }
 
-// The role→permission matrix. `owner` is the whole catalog; every other role
-// lists its grants explicitly (a `logs:read` holder also gets the limited form,
-// so both are listed — there is no implication logic).
-//
-// One declarative source of truth: adding a permission to a role means editing
-// exactly one Vec below. The map is built lazily on first lookup and held for
-// the lifetime of the process, so `permissions_for` stays O(1) with stable
-// 'static slice references for callers that iterate or expose them upward.
-//
-// `member` and `guest` share the baseline capability bundle; `guest`'s real
-// limitation (visibility scoped to explicitly-shared resources) is a data-layer
-// concern, not a permission.
+// The role→permission matrix, the only place a role's grants are declared. There
+// is no implication logic: every role but `owner` lists each grant explicitly, so
+// a `logs:read` holder must also list `logs:read_limited`. `member` and `guest`
+// share the baseline bundle; guest's real limitation, visibility scoped to
+// explicitly-shared resources, is enforced in the data layer.
 static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Vec<Permission>>> =
     std::sync::LazyLock::new(|| {
         let baseline = vec![AppsUse, ProfileManageSelf];
@@ -290,10 +273,9 @@ static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Ve
                     SsoManage,
                     InboxManage,
                     McpManage,
-                    // super_admin is everything-except-billing, so the master
-                    // key permission is in. Bootstrap is owner-only.
+                    // Everything except billing, so the master key is in; bootstrap
+                    // stays owner-only.
                     OrgKeysUseMaster,
-                    // Documents management is owner + super_admin only.
                     DocumentsManage,
                 ],
             ),
@@ -311,10 +293,9 @@ static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Ve
                     SsoManage,
                     InboxManage,
                     McpManage,
-                    // Admin holds the org master key (re-wrapped under their
-                    // personal pubkey at promotion time) so they can reset
-                    // member passwords and recover member data without
-                    // bothering the owner. Cannot bootstrap or promote.
+                    // Admin holds the org master key, re-wrapped under their own
+                    // pubkey at promotion, so they can reset member passwords and
+                    // recover data. They still cannot bootstrap or promote.
                     OrgKeysUseMaster,
                 ],
             ),
@@ -324,16 +305,11 @@ static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Ve
                     AppsUse,
                     ProfileManageSelf,
                     MembersRead,
-                    // Security can provision new accounts (guest/developer/
-                    // member/support) through the admin "Create user" flow.
-                    // Granting MembersManage also lets them change roles on
-                    // existing members via the same gate; that's intentional —
-                    // owner/super_admin still keep all permissions above it.
+                    // Lets security provision accounts, and intentionally also
+                    // change existing members' roles through the same gate.
                     MembersManage,
-                    // Paired with MembersManage so security can actually act on
-                    // the accounts it provisions — change roles and delete
-                    // users — but only for roles below admin. Without this,
-                    // can_assign_role would return false for every target.
+                    // Required alongside MembersManage, or can_assign_role returns
+                    // false for every target. Caps security at roles below admin.
                     RolesAssignLimited,
                     LogsRead,
                     LogsReadLimited,
@@ -409,8 +385,8 @@ impl RoleContext {
         role_has(self.role, perm)
     }
 
-    /// The role's permissions as `resource:action` strings — what `/api/me`
-    /// and `/profile` hand to the frontend for UI gating.
+    /// The role's permissions as `resource:action` strings, which `/api/me` and
+    /// `/profile` hand to the frontend for UI gating only.
     pub fn permission_strings(&self) -> Vec<String> {
         permissions_for(self.role)
             .iter()
@@ -419,12 +395,9 @@ impl RoleContext {
     }
 }
 
-/// Pluggable cache that sits in front of [`resolve_role_context`].
-///
-/// `wayve-security` doesn't know about Redis or moka — it just calls into
-/// whatever implementation `wayve-server` registers via [`install_cache`]
-/// at startup. When no cache is installed the resolver runs straight
-/// against Postgres on every call (existing behavior).
+/// Pluggable cache in front of [`resolve_role_context`], registered by
+/// `wayve-server` via [`install_cache`]. With no cache installed the resolver
+/// hits Postgres on every call.
 #[async_trait]
 pub trait RoleContextCache: Send + Sync {
     async fn get(&self, user_id: i32) -> Option<RoleContext>;
@@ -434,34 +407,29 @@ pub trait RoleContextCache: Send + Sync {
 
 static CACHE: OnceCell<Box<dyn RoleContextCache>> = OnceCell::new();
 
-/// Register a `RoleContextCache` implementation. Must be called once at
-/// process startup, before any HTTP handlers run. Subsequent calls are
-/// silently dropped — the cache is process-global by design so role
-/// mutations only need to invalidate one key.
+/// Register the cache once at startup, before any handler runs; later calls are
+/// silently dropped. It is process-global by design, so a role mutation only has
+/// to invalidate one key.
 pub fn install_cache(cache: Box<dyn RoleContextCache>) {
     let _ = CACHE.set(cache);
 }
 
-/// Drop the cached `RoleContext` for `user_id`. Call this from every
-/// handler that mutates `organization_members`, `platform_members`, or
-/// `users.account_type`/`users.organization_id` so the next request sees
-/// the new role without waiting for the TTL.
+/// Drop the cached `RoleContext` for `user_id`. Every handler that mutates
+/// `organization_members`, `platform_members`, `users.account_type`, or
+/// `users.organization_id` must call this, or the new role will not take effect
+/// until the TTL expires.
 pub async fn invalidate_role_context(user_id: i32) {
     if let Some(cache) = CACHE.get() {
         cache.invalidate(user_id).await;
     }
 }
 
-/// Resolve a user's scope and role from the database.
+/// Resolve a user's scope and role from the database, served from the cache when
+/// one is installed.
 ///
-/// Mirrors the precedence the app already used: a `platform_admin` account
-/// takes its role from `platform_members`; any account with an
-/// `organization_id` takes its role from `organization_members`; everyone else
-/// is a personal-workspace owner.
-///
-/// When a `RoleContextCache` is installed the lookup is served from cache
-/// on hit (typical case for back-to-back requests in the same session);
-/// on miss we fall through to the SQL below and write the result back.
+/// Precedence: a `platform_admin` account takes its role from `platform_members`;
+/// any account with an `organization_id` takes it from `organization_members`;
+/// everyone else is a personal-workspace owner.
 pub async fn resolve_role_context(pool: &PgPool, user_id: i32) -> Result<RoleContext, sqlx::Error> {
     if let Some(cache) = CACHE.get()
         && let Some(cached) = cache.get(user_id).await
@@ -530,21 +498,13 @@ pub async fn resolve_role_context(pool: &PgPool, user_id: i32) -> Result<RoleCon
     Ok(ctx)
 }
 
-/// Downscope a DB-resolved context according to the request's session mode.
+/// Downscope a DB-resolved context by the request's session mode. `Normal`
+/// demotes the role to `Member` but keeps the scope and `organization_id`, so an
+/// owner becomes an ordinary member of a scope they already belong to and no new
+/// access path opens. Personal scope has no elevated role to shed.
 ///
-/// `Admin` returns the context unchanged. `Normal` demotes the role to `Member`
-/// while **keeping the scope and `organization_id`** — so a normal-mode owner
-/// becomes exactly a normal member of their existing scope (org owner → org
-/// member; platform owner → platform member). That identity already exists and
-/// is handled correctly everywhere in the app, so no new access path opens: a
-/// `Member` holds only the baseline catalog, so every permission- and
-/// owner-gated admin endpoint 403s, while scope-based data (org chat, tasks,
-/// people-picker) still works. Personal scope has no elevated role to shed, so
-/// it is left unchanged.
-///
-/// **Monotonic** — it can only reduce privilege, never grant it — so carrying
-/// the mode in the JWT is safe: the real role always comes from the DB, and
-/// `Admin` merely declines to reduce it.
+/// Monotonic: it can only reduce privilege, never grant it, which is why
+/// carrying the mode in the JWT is safe.
 pub fn downscope_for_mode(ctx: RoleContext, mode: SessionMode) -> RoleContext {
     match mode {
         SessionMode::Admin => ctx,
@@ -556,16 +516,15 @@ pub fn downscope_for_mode(ctx: RoleContext, mode: SessionMode) -> RoleContext {
     }
 }
 
-/// Whether `true_ctx` (a DB-truth context, NOT a downscoped one) is eligible to
-/// enter admin mode: an owner of an organization or platform scope. Personal
-/// owners have nothing to switch into.
+/// Whether `true_ctx` may enter admin mode. It must be a DB-truth context, not a
+/// downscoped one: only an owner of an organization or platform scope qualifies.
 pub fn can_enter_admin(true_ctx: &RoleContext) -> bool {
     true_ctx.role == Role::Owner && true_ctx.scope != Scope::Personal
 }
 
-/// Resolve the caller's *effective* context: the DB-truth role/scope, then
-/// downscoped by the request's session mode. This is the single chokepoint the
-/// gates and `/me` use so a `Normal`-mode owner is genuinely restricted.
+/// Resolve the caller's effective context: DB truth, downscoped by session mode.
+/// The single chokepoint the gates and `/me` use, so a `Normal`-mode owner is
+/// genuinely restricted.
 pub async fn resolve_role_context_moded(
     req: &HttpRequest,
     pool: &PgPool,
@@ -610,10 +569,9 @@ pub async fn require_permission(
     Ok(ctx)
 }
 
-/// Authenticate the request and require the caller be the OWNER of a platform
-/// or organization scope. Stricter than any single permission: even roles that
-/// hold the relevant permission (super_admin, security, …) are rejected, and
-/// personal accounts are excluded. Used to lock the audit views to owners only.
+/// Authenticate the request and require the caller be the owner of a platform or
+/// organization scope. Stricter than any permission check: super_admin, security,
+/// and personal accounts are rejected even when they hold the permission.
 pub async fn require_owner(req: &HttpRequest, pool: &PgPool) -> Result<RoleContext, HttpResponse> {
     let user_id = get_user_id_from_request(req).ok_or_else(|| {
         HttpResponse::Unauthorized()
@@ -676,10 +634,8 @@ pub async fn require_org_access(
 }
 
 /// Whether `actor` may change a member's role from `current_role` to `new_role`.
-///
-/// `roles:manage` holders (owner / super_admin) may make any change.
-/// `roles:assign_limited` holders (admin) may only touch members whose current
-/// role is below admin and may only assign roles below admin.
+/// `roles:manage` holders may make any change; `roles:assign_limited` holders may
+/// only touch members below admin, and only assign roles below admin.
 pub fn can_assign_role(actor: &RoleContext, current_role: Role, new_role: Role) -> bool {
     if actor.has(RolesManage) {
         return true;
@@ -709,7 +665,6 @@ mod tests {
         assert_eq!(c.role, Role::Member);
         assert_eq!(c.scope, Scope::Organization);
         assert_eq!(c.organization_id, Some(1));
-        // A member holds none of the admin permissions the owner did.
         assert!(!c.has(MembersRead));
         assert!(!c.has(BillingManage));
     }
@@ -761,7 +716,6 @@ mod tests {
             scope: Scope::Platform,
             ..ctx(Role::Owner)
         }));
-        // Non-owner roles and personal owners are not eligible.
         assert!(!can_enter_admin(&ctx(Role::Admin)));
         assert!(!can_enter_admin(&ctx(Role::Member)));
         assert!(!can_enter_admin(&RoleContext {
@@ -781,8 +735,6 @@ mod tests {
     #[test]
     fn super_admin_is_owner_minus_billing() {
         for perm in Permission::ALL {
-            // super_admin is everything except billing, the owner-only key
-            // bootstrap, and the owner-only AI provider control.
             let expected = !matches!(
                 perm,
                 BillingManage | BillingRead | OrgKeysBootstrap | AiManage

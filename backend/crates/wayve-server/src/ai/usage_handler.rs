@@ -1,11 +1,8 @@
-//! AI usage & cost governance — owner-only dashboard data. Backed by **real
-//! per-turn metering** from `ai_usage_events` (`sample: false`): totals, a
-//! zero-filled 30-day series, and top-10 breakdowns by model and by member.
-//! Every query is owner-scoped — an org sees only its own rows
-//! (`organization_id = $1`), the platform dashboard sees platform-scope rows
-//! (`organization_id IS NULL`). Budget is a fixed soft cap until a real
-//! budget-config feature ships. Gated (enterprise org owner OR platform owner)
-//! exactly like the config endpoints via `require_ai_owner`.
+//! AI usage and cost governance: owner-only dashboard data, backed by real
+//! per-turn metering from `ai_usage_events`. Every query is owner-scoped, so an
+//! org sees only its own rows and the platform dashboard sees platform-scope rows.
+//! Gated by `require_ai_owner`, like the config endpoints. Budget is a fixed soft
+//! cap until a real budget-config feature ships.
 
 use crate::ai::config_handler::{AiOwner, require_ai_owner};
 use crate::prelude::*;
@@ -25,7 +22,6 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let owner = require_ai_owner(&req, pool.get_ref(), user_id).await?;
 
-    // Label the dashboard with the owner's actual provider/model when configured.
     let row = match owner {
         AiOwner::Org(org_id) => {
             sqlx::query("SELECT provider, model FROM org_ai_configs WHERE organization_id = $1")
@@ -47,16 +43,14 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         .as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("model").ok().flatten());
 
-    // Owner scope for every metering query: an org sees only its own rows; the
-    // platform dashboard sees platform-scope rows (organization_id IS NULL). The
-    // predicate `(($1 IS NULL AND organization_id IS NULL) OR organization_id = $1)`
-    // handles both from a single Option<i32> bind.
+    // Owner scope for every metering query below. The predicate
+    // `(($1 IS NULL AND organization_id IS NULL) OR organization_id = $1)` serves
+    // both the org and the platform dashboard from a single Option<i32> bind.
     let scope: Option<i32> = match owner {
         AiOwner::Org(org_id) => Some(org_id),
         AiOwner::Platform => None,
     };
 
-    // Totals over the last 30 days.
     let totals = sqlx::query(
         "SELECT
            COUNT(*)::bigint                       AS requests,
@@ -74,12 +68,12 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let requests: i64 = totals.get("requests");
     let input_tokens: i64 = totals.get("input_tokens");
     let output_tokens: i64 = totals.get("output_tokens");
-    // Micro-cents summed losslessly, then divided once → fractional cents.
+    // Micro-cents summed losslessly, then divided once into fractional cents.
     let cost_cents: f64 = totals.get::<i64, _>("cost_micro") as f64 / 1_000_000.0;
     let active_users: i64 = totals.get("active_users");
 
-    // 30-day cost/volume series, zero-filled via generate_series so the trend
-    // chart always spans the full window even on quiet days.
+    // generate_series zero-fills the series so the trend chart spans the full
+    // window even on quiet days.
     let daily: Vec<Value> = sqlx::query(
         "SELECT to_char(d.day, 'YYYY-MM-DD')       AS day,
                 COUNT(e.id)::bigint                AS requests,
@@ -108,7 +102,6 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     })
     .collect();
 
-    // Breakdown by model (top 10).
     let by_model: Vec<Value> = sqlx::query(
         "SELECT model,
                 COUNT(*)::bigint                     AS requests,
@@ -133,8 +126,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     })
     .collect();
 
-    // Breakdown by member (top 10). Name falls back first→last, then username,
-    // then email so a row always has a human label.
+    // The name falls back through username to email so a row always has a label.
     let by_member: Vec<Value> = sqlx::query(
         "SELECT COALESCE(
                     NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), ''),
@@ -177,9 +169,6 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
             "active_users": active_users,
         },
         "budget": {
-            // No budget-config feature yet: show real month-to-date spend against
-            // a default soft cap so the progress bar renders. Swap the limit for a
-            // configurable value when budgets ship.
             "monthly_limit_cents": DEFAULT_MONTHLY_LIMIT_CENTS,
             "spent_cents": cost_cents,
             "alert_threshold_pct": 80,
@@ -194,15 +183,13 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
 /// exists. The dashboard renders spend-vs-cap against this.
 const DEFAULT_MONTHLY_LIMIT_CENTS: i64 = 20_000;
 
-/// Authoritative spend from Anthropic's Admin Cost API — the real USD billed by
-/// Anthropic, as opposed to the local per-turn *estimate* the dashboard above
-/// computes. **Platform-owner only**: the Cost API reports the whole Anthropic
-/// account (every workspace), so an org owner must never see it — it would leak
-/// cross-tenant spend. Reads a single server-side `ANTHROPIC_ADMIN_KEY`
-/// (`sk-ant-admin…`); returns `{configured:false}` when unset so the panel
-/// degrades gracefully. Anthropic can only attribute by workspace/model/API key
-/// — never by Wayve member — so this complements, not replaces, the local
-/// per-member view.
+/// Authoritative spend from Anthropic's Admin Cost API, as opposed to the local
+/// per-turn estimate the dashboard above computes. Platform-owner only: the Cost
+/// API reports the whole Anthropic account, so showing it to an org owner would
+/// leak cross-tenant spend. Reads a server-side `ANTHROPIC_ADMIN_KEY` and returns
+/// `{configured:false}` when unset. Anthropic can only attribute by workspace,
+/// model, and API key, never by Wayve member, so this complements rather than
+/// replaces the per-member view.
 #[get("/ai/anthropic-cost")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_anthropic_cost(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -221,8 +208,8 @@ pub async fn get_anthropic_cost(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "configured": false })));
     };
 
-    // Last 30 days, daily buckets (the Cost API's only granularity). `limit=31`
-    // returns every bucket in one page (the default is only 7).
+    // Daily buckets are the Cost API's only granularity, and `limit=31` is needed
+    // to get all 30 days in one page; the default page size is 7.
     let now = chrono::Utc::now();
     let start = now - chrono::Duration::days(30);
     let starting_at = start.format("%Y-%m-%dT%H:%M:%SZ").to_string();
@@ -264,8 +251,8 @@ pub async fn get_anthropic_cost(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
         AppError::internal("cost report parse failed")
     })?;
 
-    // Sum `amount` (cents, as decimal strings) across every bucket/result and
-    // aggregate by model (falling back to cost_type for non-token line items).
+    // `amount` arrives as a decimal string of cents. Non-token line items have no
+    // model, so they are labelled by cost_type instead.
     let mut total_cents = 0.0_f64;
     let mut by_model: HashMap<String, f64> = HashMap::new();
     for bucket in payload["data"].as_array().into_iter().flatten() {
@@ -301,8 +288,8 @@ pub async fn get_anthropic_cost(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
         "currency": "USD",
         "total_cents": total_cents,
         "by_model": by_model,
-        // has_more should never be true at limit=31 for a 30-day window, but
-        // surface it so the UI can flag a partial figure if it ever is.
+        // has_more should never be true at limit=31 over 30 days, but surface it
+        // so the UI can flag a partial figure if it ever is.
         "truncated": payload["has_more"].as_bool().unwrap_or(false),
     })))
 }

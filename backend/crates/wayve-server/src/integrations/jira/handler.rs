@@ -1,7 +1,6 @@
-//! Per-user Jira connection endpoints + on-demand issue import. All gated by
-//! authentication only (per-user, like IMAP email accounts) — no RBAC
-//! permission. The API token is stored encrypted at rest via
-//! `wayve_security::encryption` (the same symmetric scheme as `routes/sso.rs`).
+//! Per-user Jira connection endpoints and on-demand issue import. Gated by
+//! authentication only, like IMAP email accounts, with no RBAC permission. The API
+//! token is stored encrypted at rest.
 
 use crate::prelude::*;
 use actix_web::{delete, put};
@@ -108,7 +107,7 @@ pub async fn connect(
         ));
     }
 
-    // Validate the credentials before storing them, so a bad token fails fast.
+    // Validating before storing means a bad token fails fast.
     let probe = JiraConnection {
         base_url: base_url.clone(),
         email: email.clone(),
