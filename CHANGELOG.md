@@ -3,6 +3,13 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.2.2](https://github.com/mahesivaya/wayve/releases/tag/v7.2.2) - 2026-07-14
+
+### 🧹 Maintenance
+
+- **auth:** Fix stale Register test to match email-verification signup ([#80](https://github.com/mahesivaya/wayve/issues/80))
+- **changelog:** Update for v7.2.1 [skip ci]
+
 ## [7.2.1](https://github.com/mahesivaya/wayve/releases/tag/v7.2.1) - 2026-07-14
 
 ### 🐛 Bug Fixes
