@@ -28,6 +28,7 @@ import {
   clearFontCache,
 } from "../theme/platformFonts";
 import { runtimeConfig } from "../config/runtimeConfig";
+import { clearHomeCache } from "../home/dashboard/useCardData";
 import { logger } from "../utils/logger";
 import { isDesktopApp } from "../utils/desktop";
 import { normalizeAccountType } from "./accountHome";
@@ -576,6 +577,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const onExpired = () => {
       authVersion.current += 1;
       clearAuthToken();
+      // The home snapshots hold this session's mail. sessionStorage outlives the
+      // expiry within the tab, so drop them before anyone else can sign in.
+      clearHomeCache();
       setUser(null);
       setNeedsRecovery(false);
     };
@@ -587,6 +591,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = (reason: "manual" | "idle" = "manual") => {
     authVersion.current += 1;
     clearAuthToken();
+    // Drop the cached home snapshots: they hold this user's inbox subjects and
+    // senders, and sessionStorage survives a logout within the same tab.
+    clearHomeCache();
     // Drop the cached per-user font so the next user starts from the platform
     // default rather than this one's resolved font.
     clearFontCache();

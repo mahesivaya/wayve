@@ -26,6 +26,34 @@ export function saveCached<T>(key: string, value: T) {
 }
 
 /**
+ * Drop every home snapshot. Called on logout and on session expiry.
+ *
+ * These snapshots hold real user content — `personal.emails` carries inbox
+ * subjects and senders — and sessionStorage outlives a logout within the same
+ * tab. Without this, signing in as a second user paints the first user's mail on
+ * /home until their own fetch lands.
+ *
+ * Sweeps by prefix so it also catches keys written elsewhere under
+ * `rwayve.home.` (PersonalDashboard's `recentlyRead`), and so a snapshot added
+ * later is covered without anyone remembering to update this list.
+ */
+export function clearHomeCache(): void {
+  try {
+    // Enumerate via length/key(i) rather than Object.keys: that is the API every
+    // Storage implementation honors, and removal shifts the indices, so collect
+    // the matches first and delete afterwards.
+    const stale: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith(CACHE_PREFIX)) stale.push(key);
+    }
+    for (const key of stale) sessionStorage.removeItem(key);
+  } catch {
+    // ignore — private mode / quota
+  }
+}
+
+/**
  * Generic per-card fetch hook: seeds state from sessionStorage for instant
  * paint, fires the fetch on mount, writes back on success. Each card uses one
  * of these so the slow cards never block the fast ones.
