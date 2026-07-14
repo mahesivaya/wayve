@@ -39,7 +39,6 @@ async fn issue_verification_code_and_email(
     user_id: i32,
     email: &str,
 ) -> std::result::Result<(), AppError> {
-    // Keep only the newest code valid.
     sqlx::query(
         "UPDATE email_verification_tokens SET used_at = NOW() \
          WHERE user_id = $1 AND used_at IS NULL",
@@ -85,9 +84,8 @@ pub async fn register(
             .json(serde_json::json!({ "message": "Passwords do not match" })));
     }
 
-    // Every new signup lands on 'full'. A client still sending a legacy
-    // recovery_mode is coerced rather than rejected: their intent is unchanged
-    // and the DB constraint rejects anything else anyway.
+    // Every new signup lands on 'full'. A legacy recovery_mode from an old client
+    // is coerced rather than rejected, since the intent is unchanged.
     if let Some(requested) = data.recovery_mode.as_deref()
         && requested != "full"
     {
@@ -99,9 +97,9 @@ pub async fn register(
     }
     let recovery_mode = "full";
 
-    // Normalize so casing or whitespace cannot create a duplicate account, or
-    // worse an account that login (which lowercases the identifier) can never
-    // match. Must stay in sync with login and admin_create_user.
+    // Normalizing prevents a duplicate account, or one that login (which lowercases
+    // the identifier) could never match. Must stay in sync with login and
+    // admin_create_user.
     let email = data.email.trim().to_lowercase();
     if email.is_empty() {
         return Ok(
@@ -125,8 +123,7 @@ pub async fn register(
         Ok(row) => {
             let user_id: i32 = row.get("id");
             info!(target: "auth", user_id, email = %email, provider = "local", "user registered (pending email verification)");
-            // No auto-login: the account stays unverified and login is blocked
-            // until the emailed code is entered.
+            // No auto-login: login stays blocked until the emailed code is entered.
             crate::audit::record_action(
                 pool.get_ref(),
                 &req,
@@ -180,9 +177,8 @@ pub(crate) async fn login(
 ) -> AppResult {
     info!(target: "auth", "login attempt");
 
-    // Either the email or the username works as the identifier: the derived
-    // username of an admin-created user is globally unique too. Normalizing
-    // means a stray space or different casing does not read as bad credentials.
+    // Email or username both work as the identifier, and normalizing keeps stray
+    // spacing or casing from reading as bad credentials.
     let identifier = data.email.trim().to_lowercase();
     let user = sqlx::query_as::<_, User>(
         "SELECT id, email, password, account_type, password_valid_until \
@@ -195,9 +191,9 @@ pub(crate) async fn login(
     let user = match user {
         Some(user) => user,
         None => {
-            // Burn the same bcrypt cost as a real verify so the unknown-email
-            // path does not return faster than a wrong-password path and become
-            // a timing oracle. The result is intentionally discarded.
+            // Burn the same bcrypt cost as a real verify, so the unknown-email path
+            // does not return faster than a wrong-password one and become a timing
+            // oracle.
             let _ = verify_password(&data.password, DUMMY_PASSWORD_HASH).await;
             warn!("Invalid login attempt: {}", data.email);
             crate::audit::record_login_failure(
@@ -249,10 +245,9 @@ pub(crate) async fn login(
         }));
     }
 
-    // Short-lived accounts (guests) carry a hard expiry on the password itself,
-    // so a successful bcrypt verify is not sufficient on its own. The response
-    // stays the generic "Invalid credentials" so it does not leak whether an
-    // account exists but has expired.
+    // Guest accounts carry a hard expiry on the password itself, so a bcrypt verify
+    // alone is not sufficient. The generic "Invalid credentials" avoids leaking that
+    // an account exists but has expired.
     if let Some(valid_until) = user.password_valid_until
         && chrono::Utc::now() > valid_until
     {
@@ -276,8 +271,7 @@ pub(crate) async fn login(
     }
 
     // Local password accounts must confirm their email before the first login.
-    // OAuth, SCIM, and pre-existing accounts default to `email_verified = true`,
-    // so they are unaffected.
+    // OAuth, SCIM, and pre-existing accounts default to `email_verified = true`.
     let (auth_provider, email_verified): (String, bool) =
         sqlx::query_as("SELECT auth_provider, email_verified FROM users WHERE id = $1")
             .bind(user.id)
@@ -312,8 +306,7 @@ pub(crate) async fn login(
         },
     )
     .await;
-    // Clamp `exp` so the JWT never outlives the account's hard expiry. For
-    // non-expiring accounts the standard TTL applies.
+    // Clamp `exp` so the JWT never outlives the account's hard expiry.
     let token = create_jwt_for_account_with_max_exp(
         user.id,
         user.email.clone(),
@@ -321,10 +314,9 @@ pub(crate) async fn login(
         user.password_valid_until,
     );
 
-    // Org members get their password-wrapped private key in the login response
-    // so the browser can unwrap it on a fresh device, where IndexedDB has no
-    // cached key. Personal users have no member_login_wrapped_keys row and stay
-    // on the mnemonic recovery path.
+    // Org members get their password-wrapped private key in the login response so
+    // a fresh device with an empty IndexedDB can unwrap it. Personal users have no
+    // member_login_wrapped_keys row and stay on the mnemonic recovery path.
     let login_wrap = match organization::keys::fetch_login_wrap(pool.get_ref(), user.id).await {
         Ok(Some(wrap)) => Some(MemberLoginWrap {
             iv: wrap.iv,
@@ -379,11 +371,10 @@ pub struct SessionModeInput {
 /// Switch the caller's interactive session between `normal` and `admin`.
 ///
 /// Eligibility is checked against the true DB role, never the moded one: only an
-/// organization or platform owner may enter admin. The new token is returned
-/// both as the auth cookie (surviving a hard refresh) and as JSON `token` (for
-/// the SPA's Bearer header). Entering admin only lifts the downscope; real
-/// permissions still come from the DB on every request, so this can never
-/// escalate beyond the caller's role.
+/// organization or platform owner may enter admin. Entering admin only lifts the
+/// downscope — real permissions are still computed from the DB per request, so this
+/// can never escalate beyond the caller's role. The new token comes back both as the
+/// auth cookie (surviving a hard refresh) and as JSON `token` for the Bearer header.
 #[post("/session/mode")]
 #[instrument(target = "auth", skip(req, pool, data))]
 pub async fn switch_session_mode(
@@ -592,20 +583,16 @@ pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>
 }
 
 // Password reset via the 6-word recovery phrase, with no email round-trip. The
-// server proves the phrase by AES-GCM-decrypting the user's wrapped envelope
-// with the PBKDF2-derived key: a passing auth tag can only mean the mnemonic is
-// right. The response carries the envelope back so the same page can unlock the
-// user's E2E keys without the phrase being typed twice.
+// phrase is proven by AES-GCM-decrypting the user's wrapped envelope with the
+// PBKDF2-derived key: a passing auth tag can only mean the mnemonic is right.
 //
-// Hazard: each request runs a deliberately expensive 600,000-iteration PBKDF2,
-// so this must stay rate-limited (nginx, or a per-email throttle table) or it
-// becomes a free DoS surface.
+// Hazard: each request runs a deliberately expensive 600,000-iteration PBKDF2, so it
+// must stay rate-limited (nginx, or a per-email throttle table) or it is a free DoS.
 #[derive(Deserialize)]
 pub struct RecoverWithMnemonicInput {
     pub email: String,
     /// Base64 of the 9-byte BIP-39 entropy the frontend derives from the phrase.
-    /// The words themselves never cross the network, which also spares the
-    /// server the 2048-word BIP-39 list.
+    /// The words themselves never cross the network.
     pub mnemonic_entropy: String,
     pub new_password: String,
 }
@@ -632,8 +619,8 @@ pub async fn recover_with_mnemonic(
             .json(serde_json::json!({ "message": "Password must be at least 6 characters" })));
     }
 
-    // Either the user or the envelope being missing yields the same generic 400,
-    // so probing for emails and for accounts-without-recovery are alike.
+    // A missing user and a missing envelope both yield the same generic 400, so
+    // neither emails nor accounts-without-recovery can be probed for.
     let row = sqlx::query(
         "SELECT u.id, u.recovery_mode, w.v, w.iv, w.ct, w.pub_key \
          FROM users u \
@@ -687,8 +674,6 @@ pub async fn recover_with_mnemonic(
     let mut key_bytes = [0u8; 32];
     pbkdf2::pbkdf2_hmac::<sha2::Sha256>(&entropy, PBKDF2_SALT, PBKDF2_ITERATIONS, &mut key_bytes);
 
-    // An auth-tag mismatch means a wrong mnemonic: no other failure mode
-    // produces a successful decrypt under a wrong key.
     let iv = match B64.decode(&iv_b64) {
         Ok(v) if v.len() == 12 => v,
         _ => {
@@ -719,7 +704,7 @@ pub async fn recover_with_mnemonic(
             .json(serde_json::json!({ "message": "Invalid email or recovery phrase" })));
     }
 
-    // The wrapped envelope is intentionally left untouched: the phrase keeps
+    // The wrapped envelope is deliberately left untouched: the phrase keeps
     // wrapping the same private key, so existing E2E data stays unlockable.
     let hashed = hash_password(&data.new_password).await?;
     sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
@@ -730,7 +715,7 @@ pub async fn recover_with_mnemonic(
 
     info!(target: "auth", user_id, recovery_mode = %recovery_mode, "recover-with-mnemonic: password reset via recovery phrase");
 
-    // The envelope is always returned so the SPA can unlock E2E keys client-side
+    // The envelope always comes back so the SPA can unlock E2E keys client-side
     // without the user typing the mnemonic a second time.
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "user_id": user_id,
@@ -754,8 +739,8 @@ pub struct RegisterBusinessInput {
 }
 
 /// Direct business signup: mint the owner as `organization_admin` and create the
-/// organization in one step. Public, and no payment is taken here. Everything
-/// runs in one transaction, so an org-name clash rolls back the new user too.
+/// organization in one step. Public, and no payment is taken. It runs in one
+/// transaction, so an org-name clash rolls back the new user too.
 #[post("/register-business")]
 #[instrument(target = "auth", skip(req, pool, data), fields(email = %data.email))]
 pub async fn register_business(
@@ -788,8 +773,8 @@ pub async fn register_business(
 
     let mut tx = pool.begin().await?;
 
-    // Created unverified: the owner must enter the emailed code before login
-    // works, exactly as in a personal signup.
+    // Created unverified: as in a personal signup, the owner must enter the emailed
+    // code before login works.
     let user_row = sqlx::query(
         "INSERT INTO users (username, email, password, auth_provider, account_type, recovery_mode, email_verified) \
          VALUES ($1, $2, $3, 'local', 'personal', 'full', false) RETURNING id",
@@ -824,8 +809,6 @@ pub async fn register_business(
 
     tx.commit().await?;
 
-    // No auto-login: the owner account stays unverified, and login is blocked,
-    // until they enter the emailed code.
     crate::audit::record_action(
         pool.get_ref(),
         &req,
@@ -861,9 +844,9 @@ pub async fn register_business(
     }
 }
 
-/// Verify a 6-digit code against the user's newest active one. Wrong codes
-/// increment `attempts` and are burned after `MAX_VERIFY_ATTEMPTS`. A bad email,
-/// wrong code, expired code, and used code all collapse to a generic 400.
+/// Verify a 6-digit code against the user's newest active one. Wrong codes increment
+/// `attempts` and burn after `MAX_VERIFY_ATTEMPTS`. A bad email, wrong code, expired
+/// code, and used code all collapse to a generic 400.
 #[post("/verify-email")]
 #[instrument(target = "auth", skip(pool, data), fields(email = %data.email))]
 pub async fn verify_email(pool: web::Data<PgPool>, data: web::Json<VerifyEmailInput>) -> AppResult {

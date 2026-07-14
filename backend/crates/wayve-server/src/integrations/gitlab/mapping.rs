@@ -13,7 +13,6 @@ pub struct MappedFields {
     pub priority: i16,
 }
 
-/// Map a GitLab issue to the Wayve task columns.
 pub fn map_issue(issue: &GitlabIssue) -> MappedFields {
     let title = issue.title.trim();
     let name = if title.is_empty() {
@@ -29,8 +28,7 @@ pub fn map_issue(issue: &GitlabIssue) -> MappedFields {
     }
 }
 
-/// Map a GitLab issue's state and labels to a Wayve task status. A closed issue is
-/// done; an open one is refined by common workflow labels, else `to_do`.
+/// A closed issue is done; an open one is refined by common workflow labels.
 pub fn gitlab_state_to_wayve(state: &str, labels: &[String]) -> &'static str {
     if state.eq_ignore_ascii_case("closed") {
         return "done";
@@ -45,8 +43,8 @@ pub fn gitlab_state_to_wayve(state: &str, labels: &[String]) -> &'static str {
     }
 }
 
-/// Best-effort priority on Wayve's 1..=5 scale, from labels. GitLab has no native
-/// priority field, so this sniffs common conventions and defaults to 3, Medium.
+/// GitLab has no native priority field, so this sniffs common label conventions
+/// onto Wayve's 1..=5 scale and defaults to 3, Medium.
 pub fn gitlab_priority_from_labels(labels: &[String]) -> i16 {
     let has = |needle: &str| labels.iter().any(|l| l.to_lowercase().contains(needle));
     if has("critical") || has("highest") || has("urgent") {

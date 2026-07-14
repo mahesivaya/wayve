@@ -1,8 +1,7 @@
-//! Access requests for locked resources. A request is routed to a support team
-//! by the requester's scope: personal and platform users to the platform support
-//! team, an organization member to their own organization's team. Staff holding
-//! `tickets:manage` review the queue and approve or deny; approval returns the
-//! locked `data` to the requester.
+//! Access requests for locked resources, routed to a support team by the
+//! requester's scope: personal and platform users to the platform team, an
+//! organization member to their own. Staff holding `tickets:manage` approve or
+//! deny; approval returns the locked `data` to the requester.
 
 use crate::prelude::*;
 use actix_web::patch;
@@ -15,10 +14,9 @@ use wayve_security::rbac::{self, Permission, Scope};
 const DEFAULT_RESOURCE: &str = "test_access";
 const ALLOWED_DECISIONS: &[&str] = &["approved", "denied"];
 
-// Append-only audit log of every access-request event, one JSON object per line
-// so `/history` can read it back and scope each line to the caller's support
-// team. The path is relative to the backend's WORKDIR, where `logs/` is
-// bind-mounted to the repo-root `logs/`.
+// Append-only audit log, one JSON object per line so `/history` can read it back
+// and scope each line to the caller's support team. The path is relative to the
+// backend's WORKDIR, where `logs/` is bind-mounted to the repo-root `logs/`.
 const ACCESS_LOG_DIR: &str = "logs";
 const ACCESS_LOG_PATH: &str = "logs/access_requests.log";
 
@@ -57,8 +55,8 @@ async fn append_event(event: serde_json::Value) {
     }
 }
 
-// Sample payload revealed once a `test_access` request is approved. A real
-// resource would fetch the actual protected content here.
+// Sample payload revealed once a `test_access` request is approved; a real
+// resource would fetch its actual protected content.
 const TEST_ACCESS_SECRET: &str = "🔓 Unlocked: this is the protected sample dataset for the Test Access page. \
      Quarterly figures, internal notes, and the confidential roadmap would live here.";
 
@@ -182,8 +180,8 @@ pub async fn create_access_request(
         "access request submitted"
     );
 
-    // A fresh insert has created_at == updated_at; an upsert bumped updated_at,
-    // so it is an explanation edit.
+    // A fresh insert has created_at == updated_at; an upsert bumped updated_at, so
+    // it is an explanation edit.
     let event = if row.created_at == row.updated_at {
         "requested"
     } else {

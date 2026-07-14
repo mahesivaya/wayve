@@ -1,10 +1,8 @@
 // The chat WebSocket handler must reject an unauthenticated connection before
 // upgrading it, and log that rejection under target "ws" — the target the
 // dev.log filters rely on. These tests capture emitted tracing events and assert
-// both the 401 and the log line.
-//
-// The rejection happens before the pool or cache is touched, so a lazy pool that
-// never connects and a `None` cache are enough; no database or Redis is needed.
+// both the 401 and the log line. The rejection happens before the pool or cache
+// is touched, so a lazy pool and a `None` cache suffice: no database, no Redis.
 
 #[cfg(test)]
 mod tests {

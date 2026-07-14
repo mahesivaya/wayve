@@ -346,10 +346,9 @@ pub async fn oauth_callback(
     }
 
     let frontend_for_errors = crate::config::frontend_url();
-    // Whether this round actually created a user row. The signup flow doubles as
-    // the sign-in entry point, so `is_signup` alone does not prove a new account.
-    // The frontend needs the real distinction (passed as `&new=true`) so it only
-    // generates a fresh keypair for a genuinely new user.
+    // The signup flow doubles as the sign-in entry point, so `is_signup` alone
+    // does not prove a new account. The frontend needs the real distinction,
+    // passed as `&new=true`, to generate a keypair only for a genuinely new user.
     let mut was_new_user = false;
     if is_signup {
         let existing =
@@ -404,14 +403,11 @@ pub async fn oauth_callback(
         }
     }
 
-    // Cross-user mailbox guard: never silently attach a second copy of a mailbox
-    // already owned by a different Wayve user (see
-    // account::email_owned_by_other_user).
-    //
-    // This must not block a login. Completing Google OAuth proves the caller owns
-    // the Google identity, so on sign-in we log them in and merely skip
-    // re-attaching the conflicting mailbox. Only the explicit connect flow gets
-    // the hard `email_in_use` rejection.
+    // Cross-user mailbox guard: never attach a second copy of a mailbox already
+    // owned by a different Wayve user. It must not block a login, though —
+    // completing OAuth proves the caller owns the Google identity — so sign-in
+    // logs them in and skips the conflicting mailbox, and only the explicit
+    // connect flow gets the hard `email_in_use` rejection.
     let attach_mailbox = match crate::email::account::email_owned_by_other_user(
         pool.get_ref(),
         email,

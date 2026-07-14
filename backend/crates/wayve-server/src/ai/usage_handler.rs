@@ -1,8 +1,7 @@
-//! AI usage and cost governance: owner-only dashboard data, backed by real
-//! per-turn metering from `ai_usage_events`. Every query is owner-scoped, so an
-//! org sees only its own rows and the platform dashboard sees platform-scope rows.
-//! Gated by `require_ai_owner`, like the config endpoints. Budget is a fixed soft
-//! cap until a real budget-config feature ships.
+//! AI usage and cost governance, backed by per-turn metering from
+//! `ai_usage_events`. Every query is owner-scoped, so an org sees only its own
+//! rows and the platform dashboard sees platform-scope rows. Gated by
+//! `require_ai_owner`, like the config endpoints.
 
 use crate::ai::config_handler::{AiOwner, require_ai_owner};
 use crate::prelude::*;
@@ -43,9 +42,8 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         .as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("model").ok().flatten());
 
-    // Owner scope for every metering query below. The predicate
-    // `(($1 IS NULL AND organization_id IS NULL) OR organization_id = $1)` serves
-    // both the org and the platform dashboard from a single Option<i32> bind.
+    // The `($1 IS NULL AND organization_id IS NULL) OR organization_id = $1`
+    // predicate below serves both dashboards from a single Option<i32> bind.
     let scope: Option<i32> = match owner {
         AiOwner::Org(org_id) => Some(org_id),
         AiOwner::Platform => None,
@@ -72,8 +70,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let cost_cents: f64 = totals.get::<i64, _>("cost_micro") as f64 / 1_000_000.0;
     let active_users: i64 = totals.get("active_users");
 
-    // generate_series zero-fills the series so the trend chart spans the full
-    // window even on quiet days.
+    // generate_series zero-fills so the trend chart spans the full window.
     let daily: Vec<Value> = sqlx::query(
         "SELECT to_char(d.day, 'YYYY-MM-DD')       AS day,
                 COUNT(e.id)::bigint                AS requests,
@@ -179,17 +176,13 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     })))
 }
 
-/// Placeholder monthly budget cap (cents) until a real budget-config feature
-/// exists. The dashboard renders spend-vs-cap against this.
+/// Placeholder monthly cap (cents) until a real budget-config feature exists.
 const DEFAULT_MONTHLY_LIMIT_CENTS: i64 = 20_000;
 
-/// Authoritative spend from Anthropic's Admin Cost API, as opposed to the local
-/// per-turn estimate the dashboard above computes. Platform-owner only: the Cost
-/// API reports the whole Anthropic account, so showing it to an org owner would
-/// leak cross-tenant spend. Reads a server-side `ANTHROPIC_ADMIN_KEY` and returns
-/// `{configured:false}` when unset. Anthropic can only attribute by workspace,
-/// model, and API key, never by Wayve member, so this complements rather than
-/// replaces the per-member view.
+/// Authoritative spend from Anthropic's Admin Cost API. Platform-owner only: the
+/// Cost API reports the whole Anthropic account, so showing it to an org owner
+/// would leak cross-tenant spend. Anthropic attributes only by workspace, model,
+/// and API key, so this complements rather than replaces the per-member view.
 #[get("/ai/anthropic-cost")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_anthropic_cost(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {

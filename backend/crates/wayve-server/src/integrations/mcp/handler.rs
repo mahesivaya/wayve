@@ -1,8 +1,6 @@
-//! MCP connection management, restricted to platform owners and admins and to
-//! enterprise-tier organization owners and admins: the `mcp:manage` permission
-//! plus a scope and tier gate. Rejecting personal and business accounts is what
-//! keeps the AI from reading data on those tiers. Auth tokens are encrypted at
-//! rest.
+//! MCP connection management, gated on the `mcp:manage` permission plus a scope and
+//! tier check. Rejecting personal and business accounts is what keeps the AI from
+//! reading data on those tiers. Auth tokens are encrypted at rest.
 
 use crate::prelude::*;
 use actix_web::{delete, put};
@@ -22,12 +20,11 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(delete_connection);
 }
 
-/// Resolve an MCP owner from an already-resolved role context, or `Forbidden`.
 /// Requires `mcp:manage` plus either platform scope or an enterprise-tier org: a
-/// personal owner holds every permission in their own scope, so the scope and
-/// tier match, not the permission check, is the real gate. Taking the context as
-/// an argument lets the management endpoints pass a mode-downscoped one while the
-/// AI loop passes DB truth.
+/// personal owner holds every permission in their own scope, so the scope and tier
+/// match, not the permission check, is the real gate. Taking the context as an
+/// argument lets the management endpoints pass a mode-downscoped one while the AI
+/// loop passes DB truth.
 async fn mcp_owner_for_ctx(
     pool: &PgPool,
     ctx: &wayve_security::rbac::RoleContext,
@@ -62,10 +59,9 @@ async fn require_mcp_owner(
     mcp_owner_for_ctx(pool, &ctx).await
 }
 
-/// Best-effort owner resolution for the AI loop: a non-owner gets `None` and no
-/// tools rather than an error, so basic chat still works. Uses the DB-truth role
-/// rather than the downscoped one, since using your own configured tools inside
-/// AI chat is not an admin action.
+/// For the AI loop: a non-owner gets `None` and no tools rather than an error, so
+/// basic chat still works. Uses the DB-truth role rather than the downscoped one,
+/// since using your own tools inside AI chat is not an admin action.
 pub(crate) async fn resolve_mcp_owner_opt(pool: &PgPool, user_id: i32) -> Option<McpOwner> {
     let ctx = resolve_role_context(pool, user_id).await.ok()?;
     mcp_owner_for_ctx(pool, &ctx).await.ok()
@@ -84,8 +80,7 @@ async fn is_enterprise_org(pool: &PgPool, org_id: i32) -> Result<bool, AppError>
     Ok(enterprise)
 }
 
-/// Load and decrypt an owner's connections. The AI loop passes `enabled_only`;
-/// the management list passes `false`.
+/// The AI loop passes `enabled_only`; the management list passes `false`.
 pub(crate) async fn load_connections(
     pool: &PgPool,
     owner: McpOwner,
@@ -128,8 +123,7 @@ pub(crate) async fn load_connections(
     Ok(out)
 }
 
-/// Run the validating handshake against a server. A connection or auth failure
-/// surfaces as a 400 or 401 so the admin can fix it.
+/// A connection or auth failure surfaces as a 400 or 401 so the admin can fix it.
 async fn validate_server(
     server_url: &str,
     token: Option<&str>,

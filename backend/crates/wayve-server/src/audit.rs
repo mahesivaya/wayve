@@ -3,8 +3,7 @@
 //! Each audit table has its own column shape, so the `INSERT` itself stays in the
 //! owning module. What is shared is the request-derived context — caller IP and
 //! User-Agent — which every audit writer can pull from `audit::client_ip` and
-//! `audit::user_agent`. Existing modules still carry their own copies and can
-//! switch to these on next touch.
+//! `audit::user_agent`.
 
 use actix_web::{HttpRequest, web};
 use sqlx::PgPool;
@@ -126,8 +125,7 @@ pub async fn record_billing(pool: &PgPool, event: BillingAuditEvent<'_>) {
     .await;
 }
 
-/// Record a failed login attempt, the earliest breach signal for credential
-/// stuffing and password spraying. The actor may be unknown (a login for a
+/// Record a failed login attempt. The actor may be unknown (a login for a
 /// non-existent email), so the actor id is optional and the attempted email plus
 /// failure `reason` go in metadata. Best-effort; never blocks the 401.
 pub async fn record_login_failure(

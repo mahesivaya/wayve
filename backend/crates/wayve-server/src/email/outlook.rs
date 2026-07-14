@@ -1,10 +1,9 @@
-//! Microsoft Graph engine — credentials, token exchange/refresh, mailbox sync,
-//! and send. The Outlook counterpart to Google's `oauth.rs` + `sync.rs`.
+//! Microsoft Graph engine: credentials, token exchange and refresh, mailbox
+//! sync, and send. The Outlook counterpart to Google's `oauth.rs` and `sync.rs`.
 //!
 //! Graph's message-list endpoint returns the body inline, so unlike the Gmail
-//! path there is no separate body-worker step: `sync_outlook_account` inserts
-//! fully-populated, encrypted rows in a single pass. Attachment *metadata* is
-//! pulled during sync; the bytes are fetched on demand by the download route.
+//! path there is no separate body-worker step. Attachment metadata is pulled
+//! during sync; the bytes are fetched on demand by the download route.
 
 use crate::prelude::*;
 
@@ -84,7 +83,6 @@ fn parse_token_response(res: Value) -> Result<OutlookTokens> {
     })
 }
 
-/// Exchanges an authorization `code` for tokens.
 pub async fn exchange_code(
     creds: &OutlookCredentials,
     code: &str,
@@ -107,7 +105,7 @@ pub async fn exchange_code(
     parse_token_response(res)
 }
 
-/// Refreshes an access token. Microsoft may also rotate the refresh token.
+/// Microsoft may rotate the refresh token here, so persist what comes back.
 pub async fn refresh_outlook_token(
     creds: &OutlookCredentials,
     refresh_token: &str,
@@ -361,10 +359,9 @@ async fn upsert_messages(
     Ok(())
 }
 
-/// Outlook equivalent of `email::sync::refresh_provider_unread_count`: stamps
-/// the inbox folder's authoritative `unreadItemCount` onto
-/// `email_accounts.provider_unread_count`. Best-effort — a failed Graph call
-/// logs and returns Ok so the rest of the sync runs.
+/// Outlook equivalent of `email::sync::refresh_provider_unread_count`. Stamps
+/// the inbox folder's `unreadItemCount` onto `provider_unread_count`.
+/// Best-effort: a failed Graph call logs and returns Ok so the sync continues.
 pub async fn refresh_outlook_unread_count(
     pool: &PgPool,
     account_id: i32,
@@ -499,11 +496,10 @@ pub async fn sync_outlook_account(
 const OUTLOOK_SPAM_RECENT_CAP: usize = 50;
 const OUTLOOK_DRAFT_RECENT_CAP: usize = 25;
 
-/// Side-pull from `/me/mailFolders/{folder_id}/messages` for the non-inbox
-/// folders (Junk Email, Drafts). Each row is stamped with `synthetic_label`, so
-/// the same `'SPAM' = ANY(e.labels)` filter as Gmail works for Outlook rows.
-/// The `(folder_id, synthetic_label, cap)` tuple is one logical folder spec and
-/// keeps the signature under the project-wide 5-argument cap.
+/// Side-pull for the non-inbox folders (Junk Email, Drafts). Each row is stamped
+/// with `synthetic_label`, so the same `'SPAM' = ANY(e.labels)` filter as Gmail
+/// works for Outlook rows. The `(folder_id, synthetic_label, cap)` tuple is one
+/// folder spec, keeping the signature under the project-wide 5-argument cap.
 async fn sync_outlook_folder_recent(
     pool: &PgPool,
     account_id: i32,
@@ -687,7 +683,6 @@ pub async fn send_outlook_mail(
     }
 }
 
-/// Fetches one attachment's bytes from Graph. Returns `(content_type, bytes)`.
 pub async fn fetch_outlook_attachment_bytes(
     access_token: &str,
     message_id: &str,

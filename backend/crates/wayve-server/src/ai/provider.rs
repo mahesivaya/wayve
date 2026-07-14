@@ -1,9 +1,8 @@
-//! Per-organization AI provider resolution.
-//!
-//! The provider is chosen by the enterprise owner and stored (encrypted) in
-//! `org_ai_configs`. Resolution is keyed on the caller's organization with no
-//! per-user override, so every member uses the owner's choice. Callers outside a
-//! configured org fall back to the platform default (Gemini from env).
+//! Per-organization AI provider resolution. The provider is chosen by the
+//! enterprise owner and stored (encrypted) in `org_ai_configs`. Resolution is keyed
+//! on the caller's organization with no per-user override, so every member uses the
+//! owner's choice. Callers outside a configured org fall back to the platform
+//! default (Gemini from env).
 
 use crate::prelude::*;
 use wayve_security::encryption::decrypt;
@@ -52,8 +51,8 @@ impl AiProvider {
 }
 
 /// Which categories of the user's own Wayve data the assistant's native tools may
-/// touch. Configured by the platform owner on `platform_ai_config`; defaults to
-/// fully open, which is what org, personal, and env-fallback callers get.
+/// touch. Defaults to fully open, which is what org, personal, and env-fallback
+/// callers get.
 #[derive(Debug, Clone, Copy)]
 pub struct DataAccess {
     pub email: bool,
@@ -69,8 +68,7 @@ impl Default for DataAccess {
     }
 }
 
-/// A fully-resolved provider config, ready to call. Carries the plaintext key —
-/// never serialized.
+/// Carries the plaintext API key, so it must never be serialized.
 #[derive(Clone)]
 pub struct ResolvedAi {
     pub provider: AiProvider,
@@ -85,10 +83,9 @@ pub struct ResolvedAi {
     pub data_access: DataAccess,
 }
 
-/// Resolve the AI provider for `user_id`, in order: the caller's org's enabled
-/// `org_ai_configs` row; else `platform_ai_config`, but only for platform team
-/// members; else the platform default (Gemini from `GEMINI_API_KEY`). `Ok(None)`
-/// means no provider is configured anywhere.
+/// Resolution order: the caller's org's enabled `org_ai_configs` row; else
+/// `platform_ai_config`, but only for platform members; else the platform default
+/// (Gemini from `GEMINI_API_KEY`). `Ok(None)` means none is configured anywhere.
 pub async fn resolve_ai_for_user(
     pool: &PgPool,
     user_id: i32,
@@ -137,8 +134,7 @@ pub async fn resolve_ai_for_user(
     }))
 }
 
-/// Build a [`ResolvedAi`] from an org or platform config row. Decrypts the stored
-/// key, or falls back to the platform Gemini env key when the row stored none.
+/// Falls back to the platform Gemini env key when the row stored no key.
 fn resolved_from_row(row: &sqlx::postgres::PgRow) -> Result<ResolvedAi, AppError> {
     let provider =
         AiProvider::parse(&row.get::<String, _>("provider")).unwrap_or(AiProvider::Gemini);

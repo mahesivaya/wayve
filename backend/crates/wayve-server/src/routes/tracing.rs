@@ -1,9 +1,6 @@
-// Platform-owner-only tracing overview. Reads the tail of the JSON-lines
-// tracing log (logs/tracing.log — the same stream the tracing layer writes)
-// and aggregates it into a small shape the in-app dashboard charts: log
-// volume over time by level, level totals, busiest targets, slowest spans,
-// and the most recent entries. The file can be tens of MB, so we only read
-// the last few MB rather than the whole thing.
+// Platform-owner-only tracing overview. Aggregates the JSON-lines tracing log
+// (logs/tracing.log, the same stream the tracing layer writes) into the shape the
+// in-app dashboard charts. The file can reach tens of MB, so only the tail is read.
 
 use crate::prelude::*;
 use chrono::{DateTime, Timelike, Utc};
@@ -13,8 +10,7 @@ use tracing::instrument;
 use wayve_security::rbac::{self, Permission, Role, Scope};
 
 const TRACING_LOG_PATH: &str = "logs/tracing.log";
-// How much of the tail to read. ~3 MB is several thousand recent lines —
-// plenty for a live "what's happening now" view without loading the archive.
+// Several thousand recent lines: enough for a live view, without the archive.
 const TAIL_BYTES: u64 = 3_000_000;
 const MAX_TIMELINE_BUCKETS: usize = 120;
 const TOP_TARGETS: usize = 12;
@@ -26,8 +22,8 @@ pub struct TracingQuery {
     pub level: Option<String>,
 }
 
-// Read up to `max_bytes` from the end of the file, dropping the first
-// (likely partial) line. Missing file → empty string (no events yet).
+// Reads `max_bytes` from the end of the file, dropping the first (likely partial)
+// line. A missing file means no events yet, not an error.
 async fn read_tail(path: &str, max_bytes: u64) -> String {
     let Ok(mut file) = tokio::fs::File::open(path).await else {
         return String::new();
@@ -144,7 +140,6 @@ pub async fn tracing_overview(
             *targets.entry(target.to_string()).or_default() += 1;
         }
 
-        // Per-minute bucket keyed by the truncated timestamp.
         if let Ok(dt) = ts.parse::<DateTime<Utc>>() {
             let key = dt
                 .with_second(0)
@@ -161,7 +156,6 @@ pub async fn tracing_overview(
             }
         }
 
-        // Span timing for the "slowest" table.
         if let Some(busy) = v
             .get("fields")
             .and_then(|f| f.get("time.busy"))
@@ -186,7 +180,6 @@ pub async fn tracing_overview(
         }));
     }
 
-    // Timeline: last N minute-buckets, oldest → newest.
     let timeline: Vec<Value> = buckets
         .iter()
         .rev()
@@ -206,7 +199,6 @@ pub async fn tracing_overview(
         })
         .collect();
 
-    // Top targets by volume.
     let mut target_rows: Vec<(String, u64)> = targets.into_iter().collect();
     target_rows.sort_by_key(|r| std::cmp::Reverse(r.1));
     let top_targets: Vec<Value> = target_rows
@@ -215,7 +207,6 @@ pub async fn tracing_overview(
         .map(|(target, count)| serde_json::json!({ "target": target, "count": count }))
         .collect();
 
-    // Slowest spans, descending by busy time.
     slowest.sort_by(|a, b| {
         let av = a.get("busy_ms").and_then(Value::as_f64).unwrap_or(0.0);
         let bv = b.get("busy_ms").and_then(Value::as_f64).unwrap_or(0.0);
@@ -223,7 +214,6 @@ pub async fn tracing_overview(
     });
     slowest.truncate(SLOWEST_N);
 
-    // Most recent entries, newest first.
     let recent_len = recent.len();
     let recent: Vec<Value> = recent
         .into_iter()
@@ -241,7 +231,6 @@ pub async fn tracing_overview(
     })))
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(tracing_overview);
 }

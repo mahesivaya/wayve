@@ -1,14 +1,10 @@
 //! Authenticated reverse proxy for `api.github.com`, mounted at `/api/github/`.
 //!
-//! The repo dashboard fires many calls per page load. Calling GitHub straight
-//! from the browser burns the anonymous 60-req/hr per-IP limit in a few
-//! refreshes, and a PAT embedded in the JS bundle would leak to every visitor.
-//! So the proxy forwards with the server-held `GITHUB_TOKEN` (5000/hr, and the
-//! token never crosses the browser boundary), caches GETs in-process for
-//! `CACHE_TTL_SECS`, and mirrors the upstream status and body so the frontend's
-//! existing error handling works unchanged.
-//!
-//! `GITHUB_TOKEN` is optional; without it requests are forwarded anonymously.
+//! Calling GitHub straight from the browser burns the anonymous 60-req/hr per-IP
+//! limit in a few refreshes, and a PAT in the JS bundle would leak to every
+//! visitor. So the proxy forwards with the server-held `GITHUB_TOKEN`, caches GETs
+//! in-process for `CACHE_TTL_SECS`, and mirrors the upstream status and body
+//! verbatim. `GITHUB_TOKEN` is optional; without it requests go anonymously.
 
 use crate::cache::TtlCache;
 use crate::email::oauth::HTTP_CLIENT;
@@ -46,9 +42,8 @@ fn cache_key(path: &str, query: &str) -> String {
 }
 
 /// Map a `?media=...` opt-in to the GitHub `Accept` header for the raw
-/// representation. Used by the frontend's commits-diff fallback when GitHub's
-/// JSON commit detail omits `files[].patch` for a large file. Unknown values
-/// fall through to JSON.
+/// representation, used by the frontend's commits-diff fallback when GitHub's
+/// JSON commit detail omits `files[].patch`. Unknown values fall through to JSON.
 fn parse_media_override(query: &str) -> Option<&'static str> {
     for pair in query.split('&') {
         let Some((key, value)) = pair.split_once('=') else {
@@ -83,10 +78,9 @@ fn token() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-/// The GitHub token to act as for a request. Personal-scope callers who have
-/// connected their own GitHub act as themselves; everyone else (unconnected
-/// personal users, and all organization and platform callers) uses the shared
-/// server PAT. This is the single branch point for the per-user feature.
+/// The GitHub token to act as for a request. Personal-scope callers who connected
+/// their own GitHub act as themselves; everyone else uses the shared server PAT.
+/// The single branch point for the per-user feature.
 pub(crate) async fn effective_github_token(req: &HttpRequest, pool: &PgPool) -> Option<String> {
     if let Some(user_id) = get_user_id_from_request(req)
         && let Ok(ctx) = resolve_role_context_moded(req, pool, user_id).await
@@ -98,9 +92,8 @@ pub(crate) async fn effective_github_token(req: &HttpRequest, pool: &PgPool) -> 
     token()
 }
 
-/// Fetch the repo objects `bearer` can see. Backs `/api/projects/visible`, which
-/// builds and per-user filters the Projects page list. `Err(())` on a transport
-/// or upstream failure so the caller can 502.
+/// Fetch the repo objects `bearer` can see. `Err(())` on a transport or upstream
+/// failure so the caller can 502.
 pub async fn list_repos(bearer: Option<&str>) -> Result<Vec<serde_json::Value>, ()> {
     let api_base = crate::external::github_api_base();
     let url = format!(
@@ -125,9 +118,9 @@ pub async fn list_repos(bearer: Option<&str>) -> Result<Vec<serde_json::Value>, 
         .map_err(|_| ())
 }
 
-/// Extract `(owner, repo)` from a `repos/{owner}/{repo}[/...]` proxy tail.
-/// `None` for any other shape, so the per-caller allowlist only ever applies to
-/// the `repos/...` surface and other tails are rejected for restricted callers.
+/// Extract `(owner, repo)` from a `repos/{owner}/{repo}[/...]` proxy tail. `None`
+/// for any other shape, so the per-caller allowlist only applies to the
+/// `repos/...` surface and other tails are rejected for restricted callers.
 fn parse_repos_tail(tail: &str) -> Option<(String, String)> {
     let mut segs = tail.split('/');
     if segs.next()? != "repos" {
@@ -142,18 +135,16 @@ fn parse_repos_tail(tail: &str) -> Option<(String, String)> {
 }
 
 /// Whether a proxy tail targets the pull-request surface: `.../pulls[/...]` plus
-/// `.../issues/{n}/comments`, where GitHub serves a PR's conversation comments
-/// (the only way the dashboard uses `issues`). PRs are owner-only in every
-/// scope, and this is the predicate for that gate.
+/// `.../issues/{n}/comments`, where GitHub serves a PR's conversation comments.
+/// PRs are owner-only in every scope, and this is the predicate for that gate.
 fn is_pr_path(tail: &str) -> bool {
     let segs: Vec<&str> = tail.split('/').collect();
     segs.len() >= 4 && segs[0] == "repos" && (segs[3] == "pulls" || segs[3] == "issues")
 }
 
-/// Roles that see every project in their scope and are never restricted by
-/// per-member grants. Every other role reaches only the repos granted to it in
-/// `member_project_access`. Must stay identical to the arm in `visible_projects`
-/// so the list and the 403 gate agree.
+/// Roles that see every project in their scope; every other role reaches only the
+/// repos granted to it in `member_project_access`. Must stay in sync with the arm
+/// in `visible_projects` so the list and the 403 gate agree.
 fn is_project_admin(role: Role) -> bool {
     matches!(role, Role::Owner | Role::SuperAdmin | Role::Admin)
 }
@@ -176,8 +167,8 @@ async fn member_has_repo_grant(pool: &PgPool, user_id: i32, owner: &str, repo: &
 }
 
 /// Run the per-caller authorization chain against a proxy `tail`, returning
-/// `Err(resp)` with the exact 401/403/500 to send verbatim on denial. Shared by
-/// the read proxy and the PR write endpoints so the scope, repo-allowlist, and
+/// `Err(resp)` with the exact 401/403/500 to send on denial. Shared by the read
+/// proxy and the PR write endpoints so the scope, repo-allowlist, and
 /// owner-only-PR gates can't drift between read and write.
 async fn authorize_github_access(
     req: &HttpRequest,
@@ -205,8 +196,7 @@ async fn authorize_github_access(
 
     match ctx.scope {
         Scope::Platform => {
-            // The platform owner can restrict which roles may use the Code Repo
-            // viewer at all. Mirrors the org gate below.
+            // The platform owner can disable the Code Repo viewer per role.
             match crate::feature_access::handler::is_allowed_platform(
                 pool,
                 "code_repo",
@@ -228,8 +218,8 @@ async fn authorize_github_access(
                     return Err(HttpResponse::InternalServerError().finish());
                 }
             }
-            // A restricted platform role only reaches granted repos. Applies to
-            // repo tails only; `/user/repos` and other lists are unaffected.
+            // Restricted roles reach only granted repos. Repo tails only, so
+            // `/user/repos` and other lists are unaffected.
             if !is_project_admin(ctx.role)
                 && let Some((owner, repo)) = parse_repos_tail(tail)
                 && !member_has_repo_grant(pool, user_id, &owner, &repo).await
@@ -246,7 +236,7 @@ async fn authorize_github_access(
                 return Err(HttpResponse::Forbidden().finish());
             };
             // The repo must be linked to one of this user's own projects. GitHub
-            // owner/repo are case-insensitive, hence LOWER().
+            // owner/repo names are case-insensitive, hence LOWER().
             let linked = sqlx::query_scalar::<_, bool>(
                 "SELECT EXISTS(SELECT 1 FROM projects
                   WHERE user_id = $1 AND organization_id IS NULL
@@ -270,8 +260,8 @@ async fn authorize_github_access(
             let Some(org_id) = ctx.organization_id else {
                 return Err(HttpResponse::Forbidden().finish());
             };
-            // The org owner can restrict which roles may use the Code Repo viewer
-            // at all, separately from the per-repo allowlist below.
+            // The org owner can disable the Code Repo viewer per role, separately
+            // from the per-repo allowlist below.
             match crate::feature_access::handler::is_allowed(
                 pool,
                 org_id,
@@ -297,8 +287,8 @@ async fn authorize_github_access(
             let Some((owner, repo)) = parse_repos_tail(tail) else {
                 return Err(HttpResponse::Forbidden().finish());
             };
-            // Any member of the org may read a repo linked to one of the org's
-            // projects; owner-only linking is enforced at link time.
+            // Any member may read a repo linked to an org project; owner-only
+            // linking is enforced at link time.
             let linked = sqlx::query_scalar::<_, bool>(
                 "SELECT EXISTS(SELECT 1 FROM projects
                   WHERE organization_id = $1 AND user_id IS NULL
@@ -317,8 +307,7 @@ async fn authorize_github_access(
                     "message": "You don't have access to this repository"
                 })));
             }
-            // Restricted org roles only reach granted repos; project admins see
-            // every org project.
+            // Restricted org roles only reach granted repos.
             if !is_project_admin(ctx.role)
                 && !member_has_repo_grant(pool, user_id, &owner, &repo).await
             {
@@ -331,9 +320,8 @@ async fn authorize_github_access(
         }
     }
 
-    // Pull requests are owner-only in every scope. Layered on top of the
-    // per-scope checks above, so a non-owner who can otherwise read the repo
-    // still can't touch its PRs.
+    // Pull requests are owner-only in every scope, layered on top of the per-scope
+    // checks above: a non-owner who can read the repo still can't touch its PRs.
     if is_pr_path(tail) && ctx.role != Role::Owner {
         warn!(target: "auth", user_id, role = ctx.role.as_str(),
               "github proxy denied: pull requests are owner-only");
@@ -365,8 +353,8 @@ pub async fn github_proxy(
         query.to_string()
     };
 
-    // Cache the JSON branch only. Diff/patch responses are far larger and rarely
-    // re-fetched, so caching them would evict hot JSON from the bounded LRU.
+    // JSON only: diff/patch responses are large and rarely re-fetched, so caching
+    // them would evict hot JSON from the bounded LRU.
     let cache_enabled = media_override.is_none();
     let key = cache_key(&tail, query);
 
@@ -415,8 +403,7 @@ pub async fn github_proxy(
     };
 
     let status = response.status().as_u16();
-    // Echo the upstream Content-Type so the diff/patch branch isn't mislabeled
-    // as JSON.
+    // Echo the upstream Content-Type so diff/patch isn't mislabeled as JSON.
     let upstream_content_type = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
@@ -477,9 +464,8 @@ struct ApproveInput {
     body: Option<String>,
 }
 
-/// Build the GitHub review payload: always an `APPROVE` event, plus an optional
-/// non-blank message. An empty or malformed payload degrades to event-only so a
-/// missing JSON body can't fail the approval.
+/// Build the GitHub review payload. An empty or malformed payload degrades to
+/// event-only so a missing JSON body can't fail the approval.
 fn build_approve_review(payload: &[u8]) -> serde_json::Value {
     let mut review = serde_json::json!({ "event": "APPROVE" });
     if let Some(message) = serde_json::from_slice::<ApproveInput>(payload)
@@ -513,11 +499,9 @@ fn build_merge_body(payload: &[u8]) -> serde_json::Value {
     serde_json::json!({ "merge_method": method })
 }
 
-/// Owner-only: submit an `APPROVE` review for a pull request.
-///
-/// Requires a token with `Pull requests: write`, and GitHub rejects approving
-/// your own PR. Those upstream 403/422 errors are mirrored back verbatim so the
-/// UI can surface GitHub's message.
+/// Owner-only: submit an `APPROVE` review for a pull request. Requires a token
+/// with `Pull requests: write`, and GitHub rejects approving your own PR; those
+/// upstream 403/422 errors are mirrored back verbatim.
 #[post("/github/repos/{owner}/{repo}/pulls/{number}/approve")]
 #[instrument(target = "http", skip(req, pool, payload))]
 pub async fn approve_pull_request(
@@ -527,8 +511,7 @@ pub async fn approve_pull_request(
     payload: web::Bytes,
 ) -> impl Responder {
     let (owner, repo, number) = path.into_inner();
-    // Canonical PR tail, so the shared gate applies the repo allowlist and the
-    // owner-only PR check before any write reaches GitHub.
+    // Canonical PR tail, so the shared gate runs before any write reaches GitHub.
     let tail = format!("repos/{owner}/{repo}/pulls/{number}");
     if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
         return resp;
@@ -566,7 +549,6 @@ pub async fn approve_pull_request(
         }
     };
 
-    // Mirror GitHub's status and body so the UI surfaces upstream errors verbatim.
     let status = response.status().as_u16();
     let body = match response.bytes().await {
         Ok(b) => b.to_vec(),
@@ -587,10 +569,9 @@ pub async fn approve_pull_request(
     .body(body)
 }
 
-/// Owner-only: merge a pull request with the chosen `merge_method`.
-///
-/// Requires a token with write access. GitHub's errors (405 not mergeable, 409
-/// head-modified, 422) are mirrored back verbatim.
+/// Owner-only: merge a pull request with the chosen `merge_method`. Requires a
+/// token with write access; GitHub's errors (405 not mergeable, 409 head-modified,
+/// 422) are mirrored back verbatim.
 #[put("/github/repos/{owner}/{repo}/pulls/{number}/merge")]
 #[instrument(target = "http", skip(req, pool, payload))]
 pub async fn merge_pull_request(
@@ -600,8 +581,7 @@ pub async fn merge_pull_request(
     payload: web::Bytes,
 ) -> impl Responder {
     let (owner, repo, number) = path.into_inner();
-    // Canonical PR tail, so the shared gate applies the repo allowlist and the
-    // owner-only PR check before any write reaches GitHub.
+    // Canonical PR tail, so the shared gate runs before any write reaches GitHub.
     let tail = format!("repos/{owner}/{repo}/pulls/{number}");
     if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
         return resp;
@@ -639,7 +619,6 @@ pub async fn merge_pull_request(
         }
     };
 
-    // Mirror GitHub's status and body so the UI surfaces upstream errors verbatim.
     let status = response.status().as_u16();
     let body = match response.bytes().await {
         Ok(b) => b.to_vec(),
@@ -667,11 +646,9 @@ struct CommitCommentInput {
     body: Option<String>,
 }
 
-/// Post a conversation comment on a commit.
-///
-/// The comment is attributed to the shared token's GitHub account, not the
-/// individual app user; per-user attribution would need per-user OAuth. Requires
-/// a token with write access; GitHub's 403/422 errors are mirrored back.
+/// Post a conversation comment on a commit. The comment is attributed to the
+/// shared token's GitHub account, not the individual app user; per-user
+/// attribution would need per-user OAuth.
 #[post("/github/repos/{owner}/{repo}/commits/{sha}/comments")]
 #[instrument(target = "http", skip(req, pool, payload))]
 pub async fn create_commit_comment(
@@ -749,8 +726,7 @@ pub async fn create_commit_comment(
 
 /// The Projects page data for the current user. Project admins are unrestricted;
 /// other members see only the repos granted to them in `member_project_access`.
-/// Filtered server-side so a restricted member can't bypass a client filter by
-/// hitting the proxy directly.
+/// Filtered server-side so a restricted member can't bypass a client filter.
 #[get("/projects/visible")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> HttpResponse {
@@ -781,8 +757,7 @@ pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> Http
     let unrestricted = match ctx.as_ref() {
         Some(c) => match c.scope {
             Scope::Platform | Scope::Organization => is_project_admin(c.role),
-            // Connected personal accounts, per the guard above, are not managed
-            // by this feature.
+            // Connected personal accounts are not managed by this feature.
             Scope::Personal => true,
         },
         // Fail open to "see all" rather than hiding everything on a lookup error.
@@ -832,13 +807,9 @@ pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> Http
     }))
 }
 
-/// List the repositories the "Import all repositories" button can pull in, as
-/// `{ connected: bool, repos: [...] }`.
-///
-/// - Personal: the caller's own token and repos, or `connected: false` with an
-///   empty list when unconnected. Never falls back to the shared token's repos.
-/// - Organization: shared token, public repos only.
-/// - Platform: shared token, all repos.
+/// List the repositories the "Import all repositories" button can pull in.
+/// Personal callers use their own token and never fall back to the shared token's
+/// repos; organization callers get public repos only, platform callers get all.
 #[get("/github-importable-repos")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn github_importable_repos(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
@@ -922,7 +893,6 @@ mod tests {
 
     #[test]
     fn approve_review_ignores_blank_or_malformed_body() {
-        // Blank message → omitted; malformed JSON → still a valid approve.
         assert!(
             build_approve_review(br#"{"body":"   "}"#)
                 .get("body")
@@ -955,7 +925,6 @@ mod tests {
             build_merge_body(br#"{"merge_method":"squash"}"#)["merge_method"],
             "squash"
         );
-        // Case-insensitive normalisation.
         assert_eq!(
             build_merge_body(br#"{"merge_method":"REBASE"}"#)["merge_method"],
             "rebase"
@@ -964,7 +933,6 @@ mod tests {
 
     #[test]
     fn merge_body_rejects_unknown_method() {
-        // An unknown/garbage method falls back to a merge commit, never forwarded.
         assert_eq!(
             build_merge_body(br#"{"merge_method":"yolo"}"#)["merge_method"],
             "merge"

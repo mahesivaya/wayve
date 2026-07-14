@@ -69,9 +69,8 @@ impl GitlabClient {
         Ok(())
     }
 
-    /// Issues assigned to the authenticated user, up to `max_results`. GitLab caps
-    /// a page at 100, so this follows page-number pagination, with a 20-page
-    /// backstop against a runaway loop.
+    /// GitLab caps a page at 100, so this follows page-number pagination, with a
+    /// 20-page backstop against a runaway loop.
     pub async fn list_assigned_issues(
         &self,
         state: &str,

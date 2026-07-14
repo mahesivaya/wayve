@@ -107,7 +107,6 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // Same permission, wrong tenant.
         let req = actix_test::TestRequest::get()
             .uri(&format!("/organizations/{org_b}/members"))
             .insert_header((

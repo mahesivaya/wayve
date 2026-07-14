@@ -1,11 +1,6 @@
-//! Slack and Wayve message sync.
-//!
-//! Inbound, a linked Slack channel's history is written into the mapped Wayve
-//! channel. Slack is enterprise-only and enterprise chat is not E2E, so messages
-//! are stored under the server-AES at-rest layer and render directly.
-//!
-//! Outbound is a best-effort bridge that posts a Wayve channel message to the
-//! linked Slack channel and never fails its caller.
+//! Slack and Wayve message sync. Slack is enterprise-only and enterprise chat is
+//! not E2E, so imported messages are stored under the server-AES at-rest layer and
+//! render directly. The outbound bridge is best-effort and never fails its caller.
 
 use crate::prelude::*;
 use sqlx::Row;
@@ -22,9 +17,8 @@ struct LinkRow {
     last_imported_ts: Option<String>,
 }
 
-/// Import recent messages for every linked channel of `conn`'s org, or just
-/// `only_channel`. Imported messages are attributed to `importer_user_id` and
-/// prefixed with their Slack author so the origin is clear.
+/// Imported messages are attributed to `importer_user_id` and prefixed with their
+/// Slack author so the origin is clear.
 pub async fn import_all(
     pool: &PgPool,
     conn: &SlackConnection,
@@ -143,9 +137,8 @@ pub async fn import_all(
     Ok((total_imported, channels_touched))
 }
 
-/// Post `text` to the Slack channel linked to `wayve_channel_id`, under the Wayve
-/// author's name rather than the bot's. Best-effort: logs and swallows errors so
-/// it never fails its caller.
+/// Posts under the Wayve author's name rather than the bot's. Best-effort: logs
+/// and swallows errors so it never fails its caller.
 pub async fn push_to_slack_if_linked(
     pool: &PgPool,
     wayve_channel_id: i32,

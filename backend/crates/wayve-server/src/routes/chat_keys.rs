@@ -80,16 +80,16 @@ pub async fn provision_chat_keys(
             skipped += 1;
             continue;
         };
-        // Only provision accounts that actually use the supplied password,
-        // so we never write a wrap the member can't unwrap.
+        // Only accounts actually on the supplied password are provisioned, so no
+        // member is ever given a wrap they cannot unwrap.
         let matches = verify_password(&password, hashed).await.unwrap_or(false);
         if !matches {
             skipped += 1;
             continue;
         }
 
-        // RSA-2048 keygen is CPU-heavy and holds the plaintext key — keep it
-        // off the async executor on a blocking thread.
+        // RSA-2048 keygen is CPU-heavy and holds the plaintext key, so it stays off
+        // the async executor.
         let pw = password.clone();
         let provisioned_keys = match tokio::task::spawn_blocking(move || {
             provision_org_owner_keypair(&pw)
@@ -155,7 +155,6 @@ pub async fn provision_chat_keys(
     })))
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(provision_chat_keys);
 }

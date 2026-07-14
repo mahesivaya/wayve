@@ -188,8 +188,8 @@ mod tests {
 
         let mock = MockServer::start().await;
         // One mock serves both callers of GET /repos/octocat/Hello-World: the
-        // link-time validation, which needs a public repo with a canonical
-        // owner and name, and the proxy fetch, which just forwards the body.
+        // link-time validation, which needs a public repo with a canonical owner
+        // and name, and the proxy fetch, which just forwards the body.
         Mock::given(method("GET"))
             .and(path("/repos/octocat/Hello-World"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -199,8 +199,7 @@ mod tests {
             })))
             .mount(&mock)
             .await;
-        // SAFETY: this mutates process env, so the test is #[serial] (and CI
-        // runs --test-threads=1) to keep it from racing other tests.
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
         unsafe {
             std::env::set_var("GITHUB_API_BASE", mock.uri());
         }
@@ -297,8 +296,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
             .mount(&mock)
             .await;
-        // SAFETY: this mutates process env, so the test is #[serial] (and CI
-        // runs --test-threads=1) to keep it from racing other tests.
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
         unsafe {
             std::env::set_var("GITHUB_API_BASE", mock.uri());
         }
@@ -322,7 +320,6 @@ mod tests {
         )
         .await;
 
-        // Puts the repo on the org allowlist.
         let req = actix_test::TestRequest::patch()
             .uri(&format!("/projects/{project_id}/repo"))
             .insert_header((

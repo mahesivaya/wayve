@@ -1,10 +1,9 @@
 //! The platform Billing console must honor the platform-scope `billing`
 //! feature-access matrix, not just the RBAC permission. A platform owner can
 //! remove a role from the Billing feature even though that role still holds
-//! `billing:read`, and the console must then refuse it.
-//!
-//! The feature gate denies before the overview query runs, so these tests do not
-//! depend on the runtime-created `employees` and `payroll_runs` tables.
+//! `billing:read`, and the console must then refuse it. The feature gate denies
+//! before the overview query runs, so these tests do not depend on the
+//! runtime-created `employees` and `payroll_runs` tables.
 
 #[cfg(test)]
 mod tests {

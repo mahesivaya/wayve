@@ -1,11 +1,9 @@
-//! Wayve-native tools exposed to the AI assistant alongside any external MCP
-//! tools. These operate on Wayve's own data.
+//! Wayve-native tools exposed to the AI assistant alongside any external MCP tools.
 //!
-//! Read tools execute immediately and return data to the model. Action tools are
-//! deferred: they never perform the outward action, only record a `PendingAction`
-//! the browser confirms and executes through the authenticated endpoint. That
-//! keeps irreversible actions behind a human click and out of a prompt-injectable
-//! agent loop.
+//! Read tools execute immediately. Action tools are deferred: they never perform
+//! the outward action, only record a `PendingAction` the browser confirms and
+//! executes through the authenticated endpoint, which keeps irreversible actions
+//! behind a human click and out of a prompt-injectable agent loop.
 //!
 //! Native tool names carry a reserved `wayve_` prefix so they can never collide
 //! with the MCP `c{idx}_` namespacing in `agent::load_mcp_tools`.
@@ -28,8 +26,7 @@ const LIST_MEETINGS: &str = "wayve_list_meetings";
 /// How many rows the read tools return.
 const READ_LIMIT: usize = 10;
 
-/// Whether a native tool's data category is allowed by `access`. A tool not tied
-/// to a gated category is always allowed.
+/// A tool not tied to a gated data category is always allowed.
 fn tool_allowed(name: &str, access: DataAccess) -> bool {
     match name {
         COMPOSE_EMAIL | LIST_EMAIL_ACCOUNTS | LIST_RECENT_EMAILS => access.email,
@@ -38,8 +35,7 @@ fn tool_allowed(name: &str, access: DataAccess) -> bool {
     }
 }
 
-/// The native tools declared to the model, filtered to the data categories
-/// `access` allows. A disabled category's tools are never advertised.
+/// A disabled category's tools are never advertised to the model.
 pub(crate) fn declarations(access: DataAccess) -> Vec<NeutralTool> {
     let all = vec![
         NeutralTool {
@@ -136,8 +132,8 @@ pub(crate) async fn dispatch(
     Some((Some(used), value, pending))
 }
 
-/// Validate the draft and emit a `PendingAction`. This must never send: the
-/// browser sends through `POST /api/email/send` once the user confirms.
+/// This must never send: the browser sends through `POST /api/email/send` once the
+/// user confirms.
 fn compose_email(args: &Value) -> (Value, Option<PendingAction>) {
     let to = str_arg(args, "to");
     let subject = str_arg(args, "subject");
@@ -260,7 +256,6 @@ async fn list_meetings(pool: &PgPool, user_id: i32) -> Value {
     }
 }
 
-/// Trim a string argument, defaulting to empty when absent or non-string.
 fn str_arg(args: &Value, key: &str) -> String {
     args.get(key)
         .and_then(|v| v.as_str())
@@ -269,8 +264,7 @@ fn str_arg(args: &Value, key: &str) -> String {
         .to_string()
 }
 
-/// Decrypt a `(*_encrypted, *_iv)` column pair (AES-256-GCM at rest); `None` when
-/// either half is missing/empty or decryption fails.
+/// Decrypt a `(*_encrypted, *_iv)` column pair; `None` on any failure.
 fn decrypt_field(row: &sqlx::postgres::PgRow, enc_col: &str, iv_col: &str) -> Option<String> {
     let enc: Option<String> = row.try_get(enc_col).ok().flatten();
     let iv: Option<String> = row.try_get(iv_col).ok().flatten();

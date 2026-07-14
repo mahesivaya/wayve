@@ -1,10 +1,8 @@
-//! Email provider dispatch. Sync, send, mark-read, and token refresh have the
-//! same shape across mail backends but completely different wire formats, so
-//! they are split across four narrow traits — TokenRefresher, MailSync,
-//! MailSender, MailRead — with `MailProviderClient` as the umbrella the registry
-//! returns.
+//! Email provider dispatch. Sync, send, mark-read, and token refresh share a
+//! shape across mail backends but not a wire format, so each is its own narrow
+//! trait under the `MailProviderClient` umbrella that the registry returns.
 //!
-//! Adding a provider means: a `MailProvider` variant with its
+//! Adding a provider means a `MailProvider` variant with its
 //! `from_db`/`as_db`/`display_name` arms, a `<Provider>MailClient` implementing
 //! all five traits, and one arm in `mail_provider_client`. Handlers call through
 //! the enum shims at the bottom of this file and need no edits.
@@ -116,8 +114,8 @@ pub trait MailRead: Send + Sync {
 
 /// Umbrella trait the registry returns.
 pub trait MailProviderClient: TokenRefresher + MailSync + MailSender + MailRead {
-    /// Exposed so callers can branch or log on the underlying provider (metrics,
-    /// per-provider retry policy). Nothing reads it yet.
+    /// Exposed so callers can branch or log on the underlying provider, for
+    /// metrics or a per-provider retry policy. Nothing reads it yet.
     #[allow(dead_code)]
     fn provider(&self) -> MailProvider;
 }
@@ -322,13 +320,11 @@ impl MailProviderClient for OutlookMailClient {
 
 /// Generic IMAP/SMTP client.
 ///
-/// The worker pipeline loads `refresh_token`, calls `refresh_token(..)` to mint
-/// an access token, and passes that string to sync/send/mark_read. IMAP has
-/// neither token — only an app password — so `TokenRefresher` decrypts the
-/// stored password and returns the plaintext in the `access_token` slot, which
-/// downstream calls treat as the IMAP/SMTP credential.
-/// `refresh_and_persist_email_token` therefore skips the DB write for IMAP, so
-/// the plaintext password never lands in the `access_token` column.
+/// IMAP has no OAuth tokens, only an app password, so `TokenRefresher` decrypts
+/// the stored password and returns it in the `access_token` slot that the rest
+/// of the worker pipeline passes around. `refresh_and_persist_email_token`
+/// therefore skips the DB write for IMAP, keeping the plaintext password out of
+/// the `access_token` column.
 pub struct ImapMailClient {}
 
 struct ImapRow {

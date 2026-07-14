@@ -1,8 +1,7 @@
 use crate::prelude::*;
 
-/// Who owns a set of MCP connections. Limited to the platform scope and
-/// enterprise-tier organizations; personal and business accounts never resolve to
-/// an owner.
+/// Limited to the platform scope and enterprise-tier organizations; personal and
+/// business accounts never resolve to an owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum McpOwner {
     Organization(i32),

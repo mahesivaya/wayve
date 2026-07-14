@@ -463,9 +463,9 @@ pub async fn auth_sso_callback(
         return Ok(redirect_with_error("sso_error=missing_code"));
     };
 
-    // Single-use consumption of the state row, via DELETE ... RETURNING. This is
-    // the only thing standing between this endpoint and CSRF or replay, so a
-    // state that is already gone, expired, or never existed must abort.
+    // DELETE ... RETURNING makes the state row single-use. It is the only thing
+    // standing between this endpoint and CSRF or replay, so a state that is gone,
+    // expired, or never existed must abort.
     let row = sqlx::query_as::<_, sso_state_row::Row>(
         "DELETE FROM sso_states
           WHERE state = $1 AND expires_at > NOW()
@@ -536,10 +536,10 @@ pub async fn auth_sso_callback(
     let token = create_jwt_for_account(user_id, email.clone(), account_type.clone());
     let cookie = auth_cookie(token.clone());
 
-    // The token rides in the URL fragment, which never reaches a server and so
-    // is never logged; the AuthContext bootstrap reads `#token=...&sso=true` to
-    // hydrate the session. `return_to` is restricted to absolute in-app paths to
-    // block open-redirect abuse.
+    // The token rides in the URL fragment, which never reaches a server and so is
+    // never logged; the AuthContext bootstrap reads `#token=...&sso=true` to hydrate
+    // the session. `return_to` is restricted to absolute in-app paths, which blocks
+    // open-redirect abuse.
     let return_to = state_row
         .return_to
         .as_deref()
@@ -590,8 +590,7 @@ pub async fn auth_sso_callback(
 }
 
 /// Minimal percent-encoder for the values that land in the SSO callback's URL
-/// fragment. The input is always our own JWT or a short error code, so it can
-/// stay this small.
+/// fragment. The input is always our own JWT or a short error code.
 fn urlencode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for byte in s.as_bytes() {
@@ -628,9 +627,9 @@ async fn resolve_or_provision_user(
         return Err("id_token email is empty".into());
     }
 
-    // Domain guard: without it, an IdP that allows guest accounts from outside
-    // its primary domain (Google Workspace can) would let alice@evil.com sneak
-    // into Acme through Acme's own IdP.
+    // Without this domain guard, an IdP that allows guest accounts outside its
+    // primary domain (Google Workspace can) would let alice@evil.com into Acme
+    // through Acme's own IdP.
     let domain = extract_domain(&email).ok_or("invalid email format")?;
     if domain != cfg.allowed_domain {
         return Err(format!(
@@ -639,7 +638,6 @@ async fn resolve_or_provision_user(
         ));
     }
 
-    // 1. An existing SSO identity signs in.
     if let Some(row) = sqlx::query_as::<_, IdRow>(
         "SELECT id, account_type FROM users WHERE sso_org_id = $1 AND sso_sub = $2",
     )
@@ -652,7 +650,6 @@ async fn resolve_or_provision_user(
         return Ok((row.id, email, row.account_type, false));
     }
 
-    // 2. An email match within the org links the SSO identity.
     if let Some(row) =
         sqlx::query_as::<_, IdRow>("SELECT id, account_type FROM users WHERE email = $1")
             .bind(&email)
@@ -678,7 +675,7 @@ async fn resolve_or_provision_user(
         return Ok((row.id, email, row.account_type, false));
     }
 
-    // 3. A new user is provisioned, again only against a verified email.
+    // Provisioning a new user, again only against a verified email.
     if !claims.email_verified.unwrap_or(false) {
         return Err("IdP did not assert email_verified=true; refusing to create user".into());
     }

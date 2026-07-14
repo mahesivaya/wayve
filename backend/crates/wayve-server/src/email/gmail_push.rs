@@ -1,15 +1,11 @@
 //! Gmail instant new-mail via `users.watch` → standard Cloud Pub/Sub.
 //!
 //! `start_watch` arms a watch so new INBOX mail publishes to our Pub/Sub topic;
-//! `gmail_push_endpoint` receives the push and runs a lightweight forward sync
-//! (`MailProvider::sync` — the same `after:last_sync` delta the 30s poll uses)
-//! so the mail lands within ~1-2s, then nudges the owner's browser over the
-//! chat WebSocket so the list refreshes without waiting for the poll. The 30s
-//! poll stays as the fallback for missed pushes / lapsed watches.
-//!
-//! We reuse the existing forward sync rather than re-implementing fetch/store
-//! via `history.list`. `gmail_history_id` is still recorded from the watch
-//! response (reserved for a future precise-history path).
+//! `gmail_push_endpoint` receives the push and runs the same `after:last_sync`
+//! forward sync the 30s poll uses, then nudges the owner's browser over the chat
+//! WebSocket. The poll remains the fallback for missed pushes and lapsed
+//! watches. `gmail_history_id` is recorded from the watch response but unused;
+//! it is reserved for a future `history.list` path.
 
 use crate::cache::Cache;
 use crate::email::account;
@@ -86,14 +82,11 @@ pub async fn sync_on_push(pool: &PgPool, cache: &Option<Cache>, email: &str) -> 
     acct.provider
         .sync(pool, acct.id, &token.access_token, acct.last_sync)
         .await?;
-    // Best-effort browser nudge (the poll is the fallback). The email page's
-    // WS listener keys on this `type`.
+    // Best-effort nudge; the email page's WS listener keys on this `type`.
     let payload = serde_json::json!({ "type": "email:new", "account_id": acct.id }).to_string();
     crate::chat::fan_out_user(cache, acct.user_id, payload).await;
     Ok(())
 }
-
-// ── Pub/Sub push receiver ───────────────────────────────────────────────
 
 #[derive(serde::Deserialize)]
 pub struct PushQuery {
@@ -147,7 +140,6 @@ pub async fn gmail_push_endpoint(
         Err(_) => return HttpResponse::BadRequest().finish(),
     };
 
-    // Process async; ACK now.
     let pool = pool.get_ref().clone();
     let cache = cache.get_ref().clone();
     tokio::spawn(async move {

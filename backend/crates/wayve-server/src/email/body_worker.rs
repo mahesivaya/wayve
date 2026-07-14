@@ -53,10 +53,9 @@ pub async fn run_body_worker(pool: PgPool) -> ! {
 
 #[instrument(target = "worker", skip(pool))]
 async fn run_iteration(pool: &PgPool) -> Result<usize> {
-    // An account has work pending if any of its rows has `body_encrypted = ''`
-    // (headers synced, body never fetched — the contract backed by
-    // idx_emails_pending_body) or `attachments_checked = false` (the attachment
-    // save errored or never ran).
+    // A row is pending when `body_encrypted = ''` (headers synced, body never
+    // fetched — the contract backed by idx_emails_pending_body) or when
+    // `attachments_checked = false` (the attachment save errored or never ran).
     let accounts = sqlx::query(
         r#"
         SELECT DISTINCT a.id, a.refresh_token
@@ -259,15 +258,12 @@ async fn fetch_one(token: &str, account_id: i32, id: i32, gmail_id: &str) -> Res
 
 #[instrument(target = "db", skip(pool, body), fields(email_id = id))]
 async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Result<()> {
-    // Encrypt on arrival, preferring to wrap the body to the owner's RSA public
-    // key so the server never persists a copy it can decrypt. Two cases fall
-    // back to the server-AES at-rest layer instead: an owner with no public key
-    // on file (a pre-keypair or SQL-seeded account), and an enterprise-tier
-    // owner, whose org opts into server-readable encryption.
-    //
-    // Both shapes share the `body_encrypted` column, because
-    // frontend/src/emails/bodyUtils.ts sniffs for the WAYVE_SECURE_V1 prefix and
-    // otherwise falls through to the API's server-decrypted shape.
+    // Encrypt on arrival, wrapping the body to the owner's RSA public key so the
+    // server never persists a copy it can decrypt. Two cases fall back to the
+    // server-AES at-rest layer: an owner with no public key on file, and an
+    // enterprise-tier owner whose org opts into server-readable encryption. Both
+    // shapes share the `body_encrypted` column, because
+    // frontend/src/emails/bodyUtils.ts sniffs for the WAYVE_SECURE_V1 prefix.
     let (public_key_json, owner_is_enterprise): (Option<String>, bool) = sqlx::query_as(
         "SELECT
              u.public_key,
@@ -297,15 +293,14 @@ async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Res
     let (iv, encrypted) = match spki {
         Some(spki) => {
             // The envelope carries its own AES nonce, so `body_iv` must stay
-            // empty or the frontend's prefix-sniffing decoder would apply a
-            // stray IV that doesn't belong to it.
+            // empty or the frontend's decoder would apply a stray IV.
             let envelope = encrypt_to_pubkey(body.as_bytes(), &spki)?;
             (String::new(), envelope)
         }
         None if owner_is_enterprise => encrypt(body)?,
         None => {
-            // Warn so an operator can spot accounts persistently missing a
-            // public key, which silently downgrades them off E2E.
+            // Warn: a persistently missing public key silently downgrades the
+            // account off E2E, and an operator needs to see that.
             tracing::warn!(
                 target: "worker",
                 email_id = id,
@@ -317,10 +312,10 @@ async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Res
         }
     };
 
-    // Deliberately does not stamp `attachments_checked`. Flipping it here would
+    // Deliberately does not stamp `attachments_checked`. Setting it here would
     // strand an email with the flag set and zero attachment rows whenever
-    // `save_email_attachments` failed, silently losing the attachments forever.
-    // Only `mark_attachments_checked`, after a successful save, may set it.
+    // `save_email_attachments` failed, losing the attachments for good. Only
+    // `mark_attachments_checked`, after a successful save, may set it.
     sqlx::query("UPDATE emails SET body_encrypted = $1, body_iv = $2 WHERE id = $3")
         .bind(encrypted)
         .bind(iv)

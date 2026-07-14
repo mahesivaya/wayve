@@ -1,10 +1,9 @@
-//! Single source of truth for every read/write against the `emails` table.
-//! Handlers and the sync/outlook workers pass typed structs in and out; the
-//! repo owns SELECT projections, INSERT shapes, and at-rest crypto, so adding
-//! or encrypting a column is a one-file change.
+//! Single source of truth for every read/write against the `emails` table. It
+//! owns SELECT projections, INSERT shapes, and at-rest crypto, so adding or
+//! encrypting a column is a one-file change.
 //!
-//! Body encryption stays in `body_handlers` — that path also refetches from
-//! Gmail when the local row is empty, which would drag a Gmail client
+//! Body encryption stays in `body_handlers`, because that path also refetches
+//! from Gmail when the local row is empty and would drag a Gmail client
 //! dependency in here. The repo exposes the raw `body_iv` / `body_encrypted` /
 //! `attachments_checked` columns for it.
 
@@ -13,10 +12,10 @@ use sqlx::postgres::PgRow;
 use sqlx::{PgPool, QueryBuilder, Row};
 use std::collections::HashMap;
 
-// Subject/address crypto seam (at-rest AES-256-GCM, same envelope as body_*).
-// Reads prefer the encrypted pair and fall back to the legacy plaintext column
-// for rows that predate the backfill. Writes always set the plaintext subject
-// column to NULL, so a stale plaintext can't outlive a write touching the row.
+// Subject/address crypto seam, AES-256-GCM at rest in the same envelope as
+// body_*. Reads prefer the encrypted pair and fall back to the legacy plaintext
+// column on pre-backfill rows. Writes null the plaintext subject column, so a
+// stale plaintext can't outlive a write that touches the row.
 
 /// Encrypts a subject for storage as `(subject_iv, subject_encrypted)`.
 fn encrypt_subject_for_storage(subject: &str) -> (String, String) {
@@ -43,9 +42,9 @@ fn read_subject(row: &PgRow) -> Option<String> {
 }
 
 /// Encrypts an email address for storage as `(iv, ciphertext, hash)`. The hash
-/// is a keyed HMAC of the normalized (trimmed, lowercased) address and is the
-/// only way to compare addresses for equality, since the ciphertext is
-/// randomized. Empty input returns three empty strings, stored as NULLs.
+/// is a keyed HMAC of the trimmed, lowercased address and is the only way to
+/// compare addresses for equality, since the ciphertext is randomized. Empty
+/// input returns three empty strings, stored as NULLs.
 fn encrypt_address_for_storage(addr: &str) -> (String, String, String) {
     if addr.is_empty() {
         return (String::new(), String::new(), String::new());
@@ -86,9 +85,8 @@ fn read_receiver(row: &PgRow) -> Option<String> {
     row.try_get::<Option<String>, _>("receiver").ok().flatten()
 }
 
-/// One row in the inbox/folder list. Shared-inbox fields collapse to
-/// `is_shared = false` / `None` for a personal mailbox, where the LEFT JOINs
-/// don't match.
+/// One row in the inbox/folder list. The shared-inbox fields collapse to
+/// `is_shared = false` and `None` for a personal mailbox, whose LEFT JOINs miss.
 pub struct EmailListRow {
     pub id: i32,
     pub gmail_id: String,
@@ -122,11 +120,10 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
     // Fetch page_size + 1 so the caller can compute `has_more` without a COUNT.
     let query_limit = (filters.page_size + 1) as i64;
 
-    // `email_accounts` is a LEFT JOIN so Wayve-to-Wayve rows (`source =
-    // 'wayve'`, NULL account_id, owner in recipient_user_id) still come back.
-    // The tenant boundary is the WHERE clause: a row belongs to the caller via
-    // their email_account, via shared-inbox membership, or via being a
-    // Wayve-to-Wayve delivery addressed to them.
+    // The LEFT JOIN on `email_accounts` keeps Wayve-to-Wayve rows (NULL
+    // account_id) in the result. The tenant boundary is the WHERE clause: a row
+    // belongs to the caller via their email_account, via shared-inbox
+    // membership, or via being a Wayve-to-Wayve delivery addressed to them.
     let mut qb = QueryBuilder::new(
         r#"
         SELECT e.id, e.gmail_id, e.subject, e.subject_iv, e.subject_encrypted,
@@ -187,8 +184,6 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
             // with explicit INBOX/SENT labels instead. Route those by label and
             // keep the heuristic as a fallback for label-less provider rows.
             "inbox" => {
-                // Gmail's INBOX label is authoritative, so self-sent mail
-                // (SENT + INBOX) still shows here. SPAM/DRAFT/TRASH stay out.
                 qb.push(
                     " AND (\
                        (e.source = 'wayve' AND 'INBOX' = ANY(e.labels)) \
@@ -228,11 +223,10 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
             "trash" => {
                 qb.push(" AND 'TRASH' = ANY(e.labels) ");
             }
-            // "GitHub" is a virtual, sender-based folder, not a Gmail label:
-            // every GitHub notification comes from notifications@github.com, so
-            // matching the sender domain cross-cuts accounts and folders like a
-            // saved `from:github.com` search. Relies on the plaintext `sender`
-            // column, which sync still populates (only `subject` is nulled).
+            // "GitHub" is a virtual, sender-based folder rather than a Gmail
+            // label, so it cross-cuts accounts like a saved `from:github.com`
+            // search. It relies on the plaintext `sender` column, which sync
+            // still populates; only `subject` is nulled.
             "github" => {
                 qb.push(" AND lower(coalesce(e.sender, '')) LIKE '%github.com%' ");
             }
@@ -246,10 +240,10 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        // Subject is encrypted at rest, so `LIKE` can only match the legacy
+        // Subject is encrypted at rest, so `LIKE` only matches the legacy
         // plaintext column on not-yet-backfilled rows. Once backfill completes
-        // the subject clause is a no-op and subject search must happen
-        // client-side on the decrypted page.
+        // the subject clause is a no-op and subject search must move
+        // client-side, onto the decrypted page.
         let pattern = format!("%{}%", search.to_lowercase());
         qb.push(" AND (lower(coalesce(e.subject, '')) LIKE ");
         qb.push_bind(pattern.clone());
@@ -273,12 +267,11 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
     qb.push(" ORDER BY e.created_at DESC, e.id DESC LIMIT ");
     qb.push_bind(query_limit);
 
-    // `emails` is RLS-enabled: run the read under the restricted role with the
-    // caller's GUC so the owner / wayve-recipient / shared-member policy
-    // engages as defense in depth behind the WHERE clause above. Inlined rather
-    // than calling db::apply_rls_user because this fn returns sqlx::Result.
-    // Both session statements go in one simple-query round-trip; user_id is an
-    // i32, so there is no injection surface.
+    // `emails` is RLS-enabled, so the read runs under the restricted role with
+    // the caller's GUC and the row policy engages as defense in depth behind the
+    // WHERE clause. Inlined rather than calling db::apply_rls_user because this
+    // fn returns sqlx::Result. `user_id` is an i32, so there is no injection
+    // surface in the formatted statement below.
     let mut tx = pool.begin().await?;
     let uid = filters.user_id;
     sqlx::raw_sql(&format!(
@@ -538,11 +531,10 @@ pub async fn upsert_batch(
     }
     query.pop();
     // ON CONFLICT nulls the legacy `subject` so re-syncing an already-backfilled
-    // row can't re-leak plaintext. `is_read` is deliberately monotonic
-    // (`emails.is_read OR EXCLUDED.is_read`): sync re-fetches the last hour every
-    // tick and the mark-read push to Gmail lags, so a plain assignment would flip
-    // just-opened mail back to unread. Trade-off: mail re-marked unread in Gmail
-    // stays read here.
+    // row can't re-leak plaintext. `is_read` is deliberately monotonic: sync
+    // re-fetches the last hour every tick and the mark-read push to Gmail lags,
+    // so a plain assignment would flip just-opened mail back to unread. The
+    // trade-off is that mail re-marked unread in Gmail stays read here.
     query.push_str(
         " ON CONFLICT (account_id, gmail_id) DO UPDATE SET \
          sender = EXCLUDED.sender, \

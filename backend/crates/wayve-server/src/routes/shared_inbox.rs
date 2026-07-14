@@ -405,7 +405,6 @@ pub async fn update_email_state(
     }
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(list_shared_inboxes)
         .service(create_shared_inbox)

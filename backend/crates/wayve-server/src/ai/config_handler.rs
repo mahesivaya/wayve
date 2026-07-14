@@ -1,8 +1,7 @@
-//! AI provider configuration: the provider, model, and key the org's assistant
-//! runs on. Restricted to owners on the enterprise tier (see `require_ai_owner`);
-//! admins and super_admins are rejected. The key is validated with a live probe
-//! before storing, encrypted at rest, and never returned to the browser. Custom
-//! `base_url`s are SSRF-guarded via the MCP guard.
+//! AI provider configuration. Restricted to owners on the enterprise tier (see
+//! `require_ai_owner`); admins and super_admins are rejected. The key is validated
+//! with a live probe before storing, encrypted at rest, and never returned to the
+//! browser. Custom `base_url`s are SSRF-guarded via the MCP guard.
 
 use crate::prelude::*;
 use actix_web::{delete, put};
@@ -22,9 +21,9 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(put_data_access);
 }
 
-/// Who owns an AI provider config. Each variant maps to a different storage row
-/// (`org_ai_configs` vs the `platform_ai_config` singleton) and a different
-/// audience; the platform config never affects org resolution.
+/// Each variant maps to a different storage row (`org_ai_configs` vs the
+/// `platform_ai_config` singleton); the platform config never affects org
+/// resolution.
 #[derive(Clone, Copy)]
 pub(crate) enum AiOwner {
     Org(i32),
@@ -46,9 +45,8 @@ impl AiOwner {
     }
 }
 
-/// Resolve the caller as an AI-config owner, or `Forbidden`. `Role::Owner` only,
-/// never super_admin or admin. An organization owner must additionally be on the
-/// enterprise tier; personal owners have no scope to configure and are rejected.
+/// `Role::Owner` only, never super_admin or admin. An organization owner must
+/// additionally be on the enterprise tier; personal owners are rejected.
 pub(crate) async fn require_ai_owner(
     req: &HttpRequest,
     pool: &PgPool,
@@ -74,8 +72,7 @@ pub(crate) async fn require_ai_owner(
     }
 }
 
-/// Read the projected config row for `owner`. Both tables project the same
-/// columns.
+/// Both owner tables project the same columns.
 async fn load_config_row(
     pool: &PgPool,
     owner: AiOwner,
@@ -127,7 +124,6 @@ async fn load_key_pair(
     ))
 }
 
-/// Upsert the config for `owner`.
 #[allow(clippy::too_many_arguments)]
 async fn upsert_config(
     pool: &PgPool,
@@ -221,8 +217,7 @@ async fn is_enterprise_org(pool: &PgPool, org_id: i32) -> Result<bool, AppError>
     Ok(enterprise)
 }
 
-/// What the owner can pick. Surfaced so the settings page need not hardcode the
-/// catalog.
+/// Surfaced so the settings page need not hardcode the catalog.
 fn provider_catalog() -> Value {
     serde_json::json!([
         { "id": "anthropic", "label": "Claude", "vendor": "Anthropic",
@@ -455,10 +450,9 @@ pub async fn delete_config(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
     Ok(HttpResponse::Ok().json(serde_json::json!({ "configured": false })))
 }
 
-// AI data access: which categories of the user's own Wayve data the platform
-// assistant's native tools may touch. Platform-owner only, stored on the
-// `platform_ai_config` singleton and enforced in `native_tools` and `agent`. Org
-// and personal callers are never gated.
+// Data access controls which categories of the user's own Wayve data the platform
+// assistant's native tools may touch. Platform-owner only; enforced in
+// `native_tools` and `agent`. Org and personal callers are never gated.
 
 #[derive(serde::Deserialize)]
 struct DataAccessPayload {
@@ -466,7 +460,6 @@ struct DataAccessPayload {
     calendar: bool,
 }
 
-/// Require the caller to be the platform owner, not an org owner.
 pub(crate) async fn require_platform_owner(
     req: &HttpRequest,
     pool: &PgPool,

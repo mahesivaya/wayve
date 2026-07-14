@@ -1,9 +1,7 @@
-//! Authorization and toggle semantics for emoji reactions.
-//!
-//! These drive the real `handle_react` handler that the WebSocket calls, with no
-//! cache, so fan-out degrades to a no-op for users with no live session. What is
-//! asserted is the resulting `message_reactions` rows, which is what says whether
-//! the actor was allowed to react at all.
+//! Authorization and toggle semantics for emoji reactions. These drive the real
+//! `handle_react` handler the WebSocket calls, with no cache, so fan-out is a
+//! no-op. The assertions are on the resulting `message_reactions` rows, which is
+//! what says whether the actor was allowed to react at all.
 
 #[cfg(test)]
 mod tests {
@@ -24,10 +22,10 @@ mod tests {
         handle_react(pool, &None, actor, f).await;
     }
 
-    // Counts must be scoped to the reacting user, not the message id alone.
-    // `messages` and `channel_messages` have independent id spaces, so a DM left
-    // behind by an earlier test can share an id with this test's channel message.
-    // Each test seeds fresh users, so the actor id keeps the count deterministic.
+    // Counts must be scoped to the reacting user, not the message id alone:
+    // `messages` and `channel_messages` have independent id spaces, so a DM from
+    // an earlier test can share an id with this test's channel message. Each test
+    // seeds fresh users, so the actor id keeps the count deterministic.
     async fn dm_reaction_count(pool: &PgPool, message_id: i32, user_id: i32) -> i64 {
         sqlx::query_scalar(
             "SELECT count(*) FROM message_reactions WHERE message_id = $1 AND user_id = $2",

@@ -3,7 +3,7 @@
 //! `with_tx` wraps `pool.begin()` / `tx.commit()` in a closure-based call. The
 //! closure takes ownership of the `Transaction` and returns `(tx, value)` on
 //! success so the wrapper can commit; on any `?` failure the `Transaction` drops
-//! and sqlx rolls it back. Existing handlers are not migrated; use this in new code.
+//! and sqlx rolls it back.
 //!
 //! ```ignore
 //! let id = db::with_tx(&pool, |mut tx| async move {
@@ -32,20 +32,17 @@ where
 
 // Row-Level Security session context.
 //
-// RLS policies filter on Postgres GUCs naming the caller: `app.user_id` is the
-// row owner, `app.bypass = 'on'` marks privileged, already-authorized
-// cross-tenant work (platform aggregates, member recovery, org teardown,
-// workers). Both are transaction-local, so they auto-reset on COMMIT/ROLLBACK
-// and a pooled connection can never leak one request's context into the next.
+// RLS policies filter on Postgres GUCs naming the caller: `app.user_id` is the row
+// owner, `app.bypass = 'on'` marks privileged, already-authorized cross-tenant work
+// (platform aggregates, member recovery, org teardown, workers). Both are
+// transaction-local, so a pooled connection can never leak one request's context
+// into the next.
 //
-// The connecting role (wayve_user / rwayve) is a SUPERUSER and bypasses RLS
-// unconditionally. A user-scoped transaction therefore sets the GUC and then
-// `SET LOCAL ROLE wayve_app`, a restricted non-superuser role, or the policy
-// never engages. Privileged paths stay superuser and read/write everything.
-//
-// Policies are deny-by-default, so every access path to an RLS-enabled table must
-// run inside one of the helpers below; a missed path is a visible 0-rows bug, not
-// a cross-tenant leak.
+// The connecting role is a SUPERUSER and bypasses RLS unconditionally, so a
+// user-scoped transaction must also `SET LOCAL ROLE wayve_app` (restricted,
+// non-superuser) or the policy never engages. Policies are deny-by-default, so
+// every access path to an RLS-enabled table must run inside one of the helpers
+// below; a missed path is a visible 0-rows bug, not a cross-tenant leak.
 
 /// Scope an existing transaction to one user: set `app.user_id` then drop to the
 /// restricted `wayve_app` role (see infra/postgres/init.sql) so the RLS policy
@@ -57,7 +54,7 @@ pub async fn apply_rls_user(
     // One simple-query round-trip for both statements: this is the hottest
     // authenticated path, and `set_config` (needs a bind) can't be combined with
     // `SET LOCAL ROLE` (can't be parameterized) under the extended protocol.
-    // Inlining `user_id` is safe because an `i32` is decimal digits only.
+    // Inlining `user_id` cannot inject because an `i32` is decimal digits only.
     let sql =
         format!("SELECT set_config('app.user_id', '{user_id}', true); SET LOCAL ROLE wayve_app;");
     sqlx::raw_sql(&sql).execute(&mut **tx).await?;
@@ -88,8 +85,7 @@ where
 }
 
 /// Begin a privileged cross-tenant transaction, run the closure, and commit. Only
-/// for paths that have done their own authorization. Most call sites use the
-/// inline `apply_rls_bypass` instead; this is kept for symmetry.
+/// for paths that have done their own authorization.
 #[allow(dead_code)]
 pub async fn with_rls_bypass_tx<R, F, Fut>(pool: &PgPool, f: F) -> Result<R, AppError>
 where

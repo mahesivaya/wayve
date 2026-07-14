@@ -2,12 +2,6 @@
 //! table the User Logs / Security dashboard reads. Plan changes, entitlement
 //! grants and subscription cancellations are a financial + abuse signal, so
 //! they must be auditable.
-//!
-//! Covers:
-//!   * `refresh_entitlements` writes an `entitlement_grant` row when an active
-//!     plan is granted.
-//!   * A second refresh that changes nothing does NOT add a duplicate row
-//!     (per-renewal webhooks must not spam the audit log).
 
 #[cfg(test)]
 mod tests {

@@ -1,15 +1,12 @@
 //! Per-user GitHub OAuth for personal accounts.
 //!
-//! Lets a personal user connect their own GitHub so the proxy can act as them,
-//! importing their own public and private repos, instead of using the shared
-//! `GITHUB_TOKEN` PAT. Mirrors the Gmail OAuth flow in `email/oauth_flow.rs`:
-//! `wayve_security::oauth` for CSRF state, and the access token stored encrypted
-//! at rest. The token is never returned to the browser and is used server-side
-//! for Personal-scope callers only.
+//! Lets a personal user connect their own GitHub so the proxy can act as them
+//! instead of using the shared `GITHUB_TOKEN` PAT. Mirrors the Gmail OAuth flow
+//! in `email/oauth_flow.rs`. The token is stored encrypted at rest, never
+//! returned to the browser, and used server-side for Personal-scope callers only.
 //!
 //! Routes live under `/api/github-oauth/*`, deliberately not `/api/github/*`,
-//! where the greedy `GET /api/github/{tail}` proxy would swallow them. The
-//! callback is root-mounted at `/github/oauth/callback`, like Gmail's.
+//! where the greedy `GET /api/github/{tail}` proxy would swallow them.
 
 use crate::email::oauth::HTTP_CLIENT;
 use crate::prelude::*;
@@ -34,8 +31,7 @@ fn github_client() -> Option<(String, String)> {
     }
 }
 
-/// Callback URL GitHub redirects back to. Must match the OAuth App's registered
-/// callback exactly.
+/// Must match the OAuth App's registered callback exactly.
 fn github_redirect_uri() -> String {
     if let Some(uri) = crate::config::github_oauth().redirect_uri {
         return uri;
@@ -109,9 +105,8 @@ pub struct CallbackQuery {
     pub error: Option<String>,
 }
 
-/// Root-mounted and public: GitHub redirects here with the auth code. Exchanges
-/// it for a token, stores it encrypted, and bounces back to the app with
-/// `#connected=true` or `#github_error=…`.
+/// Root-mounted and public: GitHub redirects here with the auth code, and the app
+/// bounces back with `#connected=true` or `#github_error=…`.
 #[get("/github/oauth/callback")]
 #[instrument(target = "http", skip(pool, query))]
 pub async fn github_oauth_callback(

@@ -1,7 +1,6 @@
-//! Role/access helpers shared across the `user` route submodules.
-//!
-//! These are also consumed by other feature modules (email/profile, billing),
-//! so they are re-exported from `routes::user` via `pub use shared::*`.
+//! Role/access helpers shared across the `user` route submodules. Other feature
+//! modules (email/profile, billing) consume them too, so they are re-exported from
+//! `routes::user` via `pub use shared::*`.
 
 use crate::cache::TtlCache;
 use crate::prelude::*;
@@ -33,10 +32,9 @@ pub fn normalized_account_type(value: &str) -> &str {
     }
 }
 
-/// Organization name as shown to the current user.
-///
-/// Personal accounts do not belong to an organization, but the UI displays the
-/// email address in that slot so account headers stay consistent.
+/// Organization name as shown to the current user. Personal accounts have no
+/// organization, so the email address fills that slot to keep account headers
+/// consistent.
 pub fn display_organization_name(
     account_type: &str,
     email: &str,
@@ -102,9 +100,9 @@ pub(super) fn role_label(role: &str, account_type: &str) -> &'static str {
     }
 }
 
-/// Resolve a user's effective role and display label, downscoped by the
-/// request's session mode, so that a normal-mode owner resolves as a `member`.
-/// Admin billing gates rely on this to refuse a normal-mode owner.
+/// Resolve a user's effective role and display label, downscoped by the request's
+/// session mode, so a normal-mode owner resolves as a `member`. The admin billing
+/// gates rely on this.
 pub async fn effective_role_for_request(
     req: &HttpRequest,
     pool: &PgPool,
@@ -136,23 +134,22 @@ fn effective_role_label(scope: Scope, role: Role) -> String {
     }
 }
 
-/// A user's resolved access — role, scope, and the permission strings the
-/// frontend uses to gate UI. Returned by `/api/me` and `/profile`.
+/// A user's resolved access: role, scope, and the permission strings the frontend
+/// gates UI on. Returned by `/api/me` and `/profile`.
 pub struct EffectiveAccess {
     pub role: String,
     pub role_label: String,
     pub scope: String,
     pub permissions: Vec<String>,
-    /// True only for the single first owner of an organization or the platform:
-    /// the earliest-joined `owner` membership row. This gates owner-only,
-    /// single-person affordances (such as connecting the scope's own OAuth
-    /// mailbox) to one person rather than everyone holding the `owner` role.
-    /// Always false for personal scope.
+    /// True only for the earliest-joined `owner` membership row of an organization or
+    /// the platform, which gates single-person affordances (such as connecting the
+    /// scope's own OAuth mailbox) to one person rather than to every `owner`. Always
+    /// false for personal scope.
     pub is_primary_owner: bool,
 }
 
 /// The user's current plan, embedded in the `/api/me` and `/api/profile`
-/// responses. The frontend renders the tier badge from `code` and `name` and
+/// responses. The frontend renders the tier badge from `code` and `name`, and
 /// decides from them whether to show the Upgrade CTA.
 #[derive(serde::Serialize, sqlx::FromRow)]
 pub struct CurrentPlan {
@@ -160,23 +157,22 @@ pub struct CurrentPlan {
     pub name: String,
     pub audience: String,
     /// Sub-tier within the audience, mirroring `plans.tier`; the synthetic "not
-    /// subscribed" org row carries `none`. This is what lets the UI distinguish
-    /// Business from Enterprise.
+    /// subscribed" org row carries `none`. This is what lets the UI tell Business
+    /// from Enterprise.
     pub tier: String,
     pub amount_cents: i64,
 }
 
 /// Resolve the user's current tier. An org member inherits the org's active
-/// subscription; otherwise a personal account resolves to its own active
-/// subscription, else the free `basic_user` tier.
+/// subscription; a personal account resolves to its own, else `basic_user`.
 pub async fn current_plan_for_user(
     pool: &PgPool,
     user_id: i32,
     organization_id: Option<i32>,
 ) -> Result<CurrentPlan, sqlx::Error> {
-    // The org subscription is authoritative whenever the user belongs to an org.
-    // A user who later joined an org may still carry a leftover personal
-    // subscription, and that must not shadow the org plan.
+    // The org subscription wins whenever the user belongs to an org: a user who
+    // joined later may still carry a leftover personal subscription, and that must
+    // not shadow the org plan.
     if let Some(org_id) = organization_id {
         if let Some(plan) = sqlx::query_as::<_, CurrentPlan>(
             r#"
@@ -232,9 +228,8 @@ pub async fn current_plan_for_user(
     .await
 }
 
-/// True only for the first owner of a privileged scope: the earliest-joined
-/// `owner` membership row, tie-broken by lowest user id. Personal scope is never
-/// a primary owner.
+/// True only for the first owner of a privileged scope: the earliest-joined `owner`
+/// membership row, tie-broken by lowest user id. Personal scope never qualifies.
 async fn is_primary_scope_owner(
     pool: &PgPool,
     ctx: &rbac::RoleContext,
@@ -272,11 +267,10 @@ async fn is_primary_scope_owner(
     Ok(first_owner == Some(ctx.user_id))
 }
 
-/// The DB-truth role and scope, downscoped by the request's session mode.
-/// Returns the effective access the frontend gates on, whether the caller may
-/// enter admin mode (computed from the true role, so the switcher still shows
-/// while downscoped), and the current mode. Used by `/me` and `/profile` so a
-/// normal-mode owner is reported as restricted.
+/// The DB-truth role and scope, downscoped by the request's session mode: the
+/// effective access the frontend gates on, whether the caller may enter admin
+/// mode (computed from the true role, so the switcher still shows while
+/// downscoped), and the current mode. Used by `/me` and `/profile`.
 pub async fn effective_access_for_request(
     req: &HttpRequest,
     pool: &PgPool,

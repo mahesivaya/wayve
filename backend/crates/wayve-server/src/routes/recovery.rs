@@ -50,8 +50,7 @@ struct WrappedKeyRow {
 pub async fn get_wrapped_key(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    // Having no envelope is a normal state for a logged-in user, not an error:
-    // it is what triggers the seed-setup modal.
+    // No envelope is a normal state, not an error: it triggers the seed-setup modal.
     let row = sqlx::query_as::<_, WrappedKeyRow>(
         "SELECT v, iv, pub_key, ct, updated_at FROM user_wrapped_keys WHERE user_id = $1",
     )
@@ -81,8 +80,8 @@ pub async fn put_wrapped_key(
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    // A correct envelope is 1-2 KB, so anything far larger is a bug or an
-    // attempt to fill our disks.
+    // A correct envelope is 1-2 KB, so anything far larger is a bug or an attempt
+    // to fill the disk.
     const MAX_FIELD_LEN: usize = 64 * 1024;
     if body.iv.len() > MAX_FIELD_LEN
         || body.public.len() > MAX_FIELD_LEN
@@ -119,11 +118,10 @@ pub async fn put_wrapped_key(
     Ok(HttpResponse::NoContent().finish())
 }
 
-/// The password-derived login wrap, in the same `member_login_wrapped_keys`
-/// table org members use. It is the auto-unlock-on-a-new-browser path: `login`
-/// returns the wrap, the SPA re-derives PBKDF2 from the typed password, unwraps,
-/// and writes the key to IndexedDB, so no mnemonic prompt is needed. The
-/// mnemonic wrap above serves only the forgot-password path.
+/// The password-derived login wrap, in the same `member_login_wrapped_keys` table
+/// org members use. This is the auto-unlock-on-a-new-browser path: `login` returns
+/// the wrap and the SPA re-derives PBKDF2 from the typed password to unwrap it
+/// into IndexedDB. The mnemonic wrap above serves only the forgot-password path.
 #[derive(Deserialize)]
 pub struct PutLoginWrapInput {
     pub iv: String,
@@ -197,12 +195,11 @@ pub async fn delete_wrapped_key(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
     Ok(HttpResponse::NoContent().finish())
 }
 
-// Legacy basic-key endpoints, for migration only. Users previously on 'basic'
-// may still have a server-held encrypted PKCS8 envelope in
-// `users.private_key_encrypted/_iv`. GET serves it so the SPA can recover the
-// private key on a fresh device, re-wrap it under a new mnemonic, and PUT that
-// to /me/wrapped-key; the SPA then DELETEs here, which nulls the legacy columns
-// and makes the mnemonic the only path back in. PUT is permanently 410 Gone.
+// Legacy basic-key endpoints, for migration only. Users previously on 'basic' may
+// still have a server-held encrypted PKCS8 envelope in
+// `users.private_key_encrypted/_iv`. GET serves it so the SPA can re-wrap the key
+// under a new mnemonic and PUT that to /me/wrapped-key, then DELETE here to null
+// the legacy columns. PUT is permanently 410 Gone.
 
 #[derive(Deserialize)]
 pub struct PutBasicKeyInput {

@@ -65,7 +65,8 @@ mod tests {
         )
         .await;
 
-        // --- No secret configured → 503, regardless of the token. ---
+        // With no secret configured the endpoint must fail closed rather than
+        // accept any token.
         // SAFETY: serialized via #[serial] — env mutation can't race other tests.
         unsafe {
             std::env::remove_var("JIRA_WEBHOOK_SECRET");
@@ -77,7 +78,6 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        // --- Secret set, wrong token → 401. ---
         unsafe {
             std::env::set_var("JIRA_WEBHOOK_SECRET", SECRET);
         }
@@ -96,7 +96,7 @@ mod tests {
             .unwrap_or_default();
         assert_eq!(status, "to_do");
 
-        // --- Valid token → task synced from the payload. ---
+        // Only a delivery carrying the configured token may sync the task.
         let req = actix_test::TestRequest::post()
             .uri(&format!("/webhooks/fluxze_webhook?token={SECRET}"))
             .set_json(updated_payload())

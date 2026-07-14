@@ -1,15 +1,12 @@
-//! `POST /api/email/accounts/{id}/rehydrate` re-fetches metadata from the
-//! provider for every row the account owns and overwrites the stored
-//! subject/sender/receiver/labels.
+//! Manual repair path: re-fetches provider metadata for every row an account
+//! owns and overwrites the stored subject, sender, receiver, and labels. An
+//! early sync wrote placeholder subjects for some accounts, and the forward sync
+//! only rewrites a row when a new copy of the message arrives, so it can never
+//! fix them on its own.
 //!
-//! This is a manual repair path: an early sync wrote placeholder subjects for
-//! some accounts, and the forward sync only rewrites a row when a new copy of
-//! the message arrives, so it can never fix them on its own.
-//!
-//! Owner-only, Google-only. Concurrency is capped at 10 in-flight
-//! `messages.get` calls: Gmail allows 250 quota units/user/sec and each metadata
-//! fetch costs 5, so this stays well under the ceiling and leaves room for the
-//! other workers.
+//! Owner-only and Google-only. Concurrency is capped at 10 in-flight
+//! `messages.get` calls: Gmail allows 250 quota units per user per second and
+//! each metadata fetch costs 5, leaving headroom for the other workers.
 
 use crate::email::account::{EmailAccount, load_email_account_for_user};
 use crate::email::provider::{MailProvider, refresh_and_persist_email_token};

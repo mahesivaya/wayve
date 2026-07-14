@@ -3,10 +3,9 @@
 //! Best-effort, like the Redis cache: the reader loads once at startup and is
 //! shared read-only as `web::Data<Option<GeoIp>>`. When `GEOIP_DB_PATH` is unset
 //! or unreadable, state holds `None`, every lookup degrades to an empty
-//! [`GeoLocation`], and the User Logs "Location" column just stays blank.
-//!
-//! The `.mmdb` is license-restricted and large, so it is not committed; it is
-//! mounted into the container and pointed at by `GEOIP_DB_PATH`.
+//! [`GeoLocation`], and the User Logs "Location" column just stays blank. The
+//! `.mmdb` is license-restricted and large, so it is not committed; it is mounted
+//! into the container and pointed at by `GEOIP_DB_PATH`.
 
 use std::net::IpAddr;
 
@@ -50,8 +49,6 @@ impl GeoIp {
         let Ok(addr) = ip.parse::<IpAddr>() else {
             return GeoLocation::default();
         };
-        // A miss is `Ok(None)` and a malformed database is `Err`; both degrade to
-        // the empty location.
         let Ok(found) = self.reader.lookup(addr) else {
             return GeoLocation::default();
         };

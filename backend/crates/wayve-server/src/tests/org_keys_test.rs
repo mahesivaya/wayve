@@ -69,9 +69,8 @@ mod tests {
     }
 
     /// Seeds fake key rows so escrow and reset tests skip a real keypair
-    /// derivation. The wrap payloads are opaque blobs: these tests cover
-    /// endpoint routing and RBAC, not the crypto closure, which is covered by
-    /// scripts/org_key_verify.mjs.
+    /// derivation. The wrap payloads are opaque blobs: these tests cover endpoint
+    /// routing and RBAC, not the crypto closure (see scripts/org_key_verify.mjs).
     async fn seed_org_keys(pool: &PgPool, org_id: i32, owner_id: i32) {
         sqlx::query(
             "INSERT INTO organization_keys (organization_id, public_key)
@@ -476,7 +475,6 @@ mod tests {
         )
         .await;
 
-        // Asks for the mnemonic as an admin, who lacks org_keys:bootstrap.
         let req = actix_test::TestRequest::get()
             .uri(&format!(
                 "/api/organizations/{}/keys?include_mnemonic=true",

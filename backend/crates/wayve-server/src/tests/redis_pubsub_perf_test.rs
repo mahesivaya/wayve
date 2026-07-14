@@ -1,10 +1,8 @@
 // Performance and correctness of the Redis pub/sub fan-out behind realtime chat.
 // These exercise `Cache::publish` against the `ws:user:{id}` channel contract
-// that the `chat::pubsub` subscriber depends on.
-//
-// Each test skips itself when Redis is unreachable, so a local run without
-// REDIS_URL passes rather than fails. CI supplies a Redis service, so they run
-// for real there.
+// that the `chat::pubsub` subscriber depends on. Each test skips itself when
+// Redis is unreachable, so a local run without REDIS_URL passes rather than
+// fails; CI supplies a Redis service, so they run for real there.
 
 #[cfg(test)]
 mod tests {
@@ -105,8 +103,6 @@ mod tests {
         let rate = N as f64 / elapsed.as_secs_f64();
         eprintln!("published {N} msgs in {elapsed:?} ({per_msg:?}/msg, {rate:.0} msg/s)");
 
-        // The ceiling is generous on purpose: it should only catch a gross
-        // regression such as a blocking call on every publish.
         assert!(
             elapsed < Duration::from_secs(10),
             "publishing {N} messages took too long: {elapsed:?}"

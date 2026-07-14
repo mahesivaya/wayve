@@ -60,9 +60,8 @@ pub async fn pull(
     Ok((imported, updated))
 }
 
-/// Push a task's summary and status back to its linked Jira issue. Best-effort:
-/// any failure is logged and swallowed, so a Jira outage never fails a Wayve task
-/// edit.
+/// Best-effort: any failure is logged and swallowed, so a Jira outage never fails
+/// a Wayve task edit.
 pub async fn push_task_if_linked(pool: &PgPool, user_id: i32, task: &Task) {
     let Some(key) = task.jira_issue_key.as_deref() else {
         return;

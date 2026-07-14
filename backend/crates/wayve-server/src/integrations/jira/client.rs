@@ -82,10 +82,9 @@ impl JiraClient {
         Ok(())
     }
 
-    /// Issues matching `jql`, up to `max_results` total. Uses the enhanced-search
-    /// endpoint that replaced the removed `/search` on Jira Cloud, and follows
-    /// `nextPageToken` because Jira caps a page at 100. The 20-page backstop guards
-    /// against a runaway loop.
+    /// Uses the enhanced-search endpoint that replaced the removed `/search` on
+    /// Jira Cloud, and follows `nextPageToken` because Jira caps a page at 100. The
+    /// 20-page backstop guards against a runaway loop.
     pub async fn search(&self, jql: &str, max_results: u32) -> Result<Vec<JiraIssue>, AppError> {
         let url = self.url("/search/jql");
         let mut all: Vec<JiraIssue> = Vec::new();
@@ -121,14 +120,12 @@ impl JiraClient {
         Ok(all)
     }
 
-    /// The transitions available from the issue's current state.
     pub async fn list_transitions(&self, key: &str) -> Result<Vec<JiraTransition>, AppError> {
         let url = self.url(&format!("/issue/{key}/transitions"));
         let resp: JiraTransitionsResponse = self.send_json(HTTP_CLIENT.get(&url)).await?;
         Ok(resp.transitions)
     }
 
-    /// Move the issue along the given transition.
     pub async fn transition_issue(&self, key: &str, transition_id: &str) -> Result<(), AppError> {
         let url = self.url(&format!("/issue/{key}/transitions"));
         self.send(
@@ -140,7 +137,6 @@ impl JiraClient {
         Ok(())
     }
 
-    /// Overwrite the issue summary.
     pub async fn update_summary(&self, key: &str, summary: &str) -> Result<(), AppError> {
         let url = self.url(&format!("/issue/{key}"));
         self.send(

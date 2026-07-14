@@ -12,11 +12,9 @@ use crate::models::callmodel::SignalMessage;
 static SESSIONS: Lazy<SessionRegistry<CallSession>> = Lazy::new(SessionRegistry::new);
 
 // Scope metadata captured at connect so the forwarder can refuse cross-scope
-// signaling without a DB hit: personal users reach only personal users,
-// organization users only their own organization, platform users only platform
-// users. This is the server-side enforcement behind the directory filter in
-// `routes/user.rs::get_all_users`; without it a client could craft a
-// `call-invite` for any user_id and bypass the UI.
+// signaling without a DB hit. This is the server-side enforcement behind the
+// directory filter in `routes/user.rs::get_all_users`; without it a client could
+// craft a `call-invite` for any user_id and bypass the UI.
 #[derive(Clone, Copy)]
 struct CallerScope {
     scope: rbac::Scope,
@@ -42,9 +40,7 @@ fn drop_caller_scope(user_id: i32) {
 }
 
 // The relay is otherwise stateless. This is the minimum per-call state needed to
-// emit one audit row when a call resolves: connected becomes completed with a
-// talk-time duration, declined becomes failed, and canceled or ring-timeout
-// becomes not answered.
+// emit one audit row, with talk-time duration, when a call resolves.
 #[derive(Clone)]
 struct CallInfo {
     caller: i32,
@@ -63,7 +59,6 @@ fn call_key(a: i32, b: i32) -> (i32, i32) {
     (a.min(b), a.max(b))
 }
 
-// Runs the audit write off the actor thread.
 fn record_call_audit(pool: PgPool, info: CallInfo, outcome: &'static str) {
     let duration = info
         .started_at
@@ -99,14 +94,12 @@ fn record_call_audit(pool: PgPool, info: CallInfo, outcome: &'static str) {
     });
 }
 
-// Advance call state on each signaling message and emit audit on resolution.
 fn track_call_lifecycle(pool: &PgPool, me: i32, signal_type: &str, peer: i32, media: Option<&str>) {
     let key = call_key(me, peer);
     let resolved = {
         let mut guard = ACTIVE_CALLS.lock().unwrap_or_else(|e| e.into_inner());
         match signal_type {
             "call-invite" => {
-                // `me` is the caller and `peer` the callee.
                 guard.insert(
                     key,
                     CallInfo {
@@ -127,8 +120,6 @@ fn track_call_lifecycle(pool: &PgPool, me: i32, signal_type: &str, peer: i32, me
                 None
             }
             "call-reject" => guard.remove(&key).map(|info| (info, "rejected")),
-            // A cancel or end resolves as completed if the call ever connected,
-            // and as not answered otherwise.
             "call-cancel" | "call-end" => guard.remove(&key).map(|info| {
                 let outcome = if info.connected {
                     "completed"
@@ -248,9 +239,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for CallSession {
                         signal.media.as_deref(),
                     );
 
-                    // Scope gate: the target must be connected to the call socket
-                    // and in a scope the caller can reach, so a crafted signal for
-                    // an unreachable user_id is dropped here.
+                    // The target must be connected and in a scope the caller can
+                    // reach, so a crafted signal for any other user_id is dropped.
                     let target_scope = lookup_caller_scope(target);
                     let from_scope = CallerScope {
                         scope: self.scope,
@@ -308,10 +298,8 @@ pub async fn call_ws(
     query: web::Query<HashMap<String, String>>,
     pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, Error> {
-    // The user id is always derived from verified credentials — an API key
-    // resolved by ApiKeyMiddleware, a cookie/Bearer JWT, or a ?token= query
-    // fallback that is itself decoded and verified — never from a raw query
-    // value. Preserve that invariant.
+    // Invariant: user_id comes from verified credentials only. The ?token=
+    // fallback is decoded and verified, never trusted as a raw query value.
     let user_id = match wayve_security::jwt::get_user_id_from_request(&req).or_else(|| {
         query
             .get("token")

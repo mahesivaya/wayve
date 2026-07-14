@@ -1,17 +1,13 @@
-//! Minimal MCP (Model Context Protocol) client over the Streamable-HTTP
-//! transport, the only transport usable from a hosted backend. It speaks JSON-RPC
-//! 2.0 to a single endpoint: `initialize`, `notifications/initialized`,
-//! `tools/list`, `tools/call`.
+//! Minimal MCP (Model Context Protocol) client over the Streamable-HTTP transport,
+//! the only transport usable from a hosted backend. It speaks JSON-RPC 2.0 to a
+//! single endpoint.
 //!
-//! It uses its own HTTP client rather than the shared one for two reasons. First,
-//! SSRF: the server URL is admin-supplied and fetched from inside the VPC, so
-//! every call revalidates that it is https and resolves to a publicly routable IP
-//! (the EC2 metadata endpoint 169.254.169.254 is the load-bearing block). Second,
-//! redirects are disabled so a 302 cannot bounce past that guard.
-//!
-//! Residual risk: DNS rebinding between our `lookup_host` and reqwest's own
-//! resolution. Revalidating on every request shrinks the window; pinning the
-//! connection to the validated IP is a later hardening.
+//! It uses its own HTTP client for SSRF reasons: the server URL is admin-supplied
+//! and fetched from inside the VPC, so every call revalidates that it is https and
+//! resolves to a publicly routable IP (the EC2 metadata endpoint 169.254.169.254 is
+//! the load-bearing block), and redirects are disabled so a 302 cannot bounce past
+//! that guard. Residual risk is DNS rebinding between our `lookup_host` and
+//! reqwest's own resolution; revalidating on every request shrinks the window.
 
 use crate::prelude::*;
 use reqwest::Url;
@@ -37,8 +33,8 @@ static MCP_HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
         .unwrap()
 });
 
-/// True when `ip` points back into private or internal space and must be refused.
-/// `is_link_local` (169.254.0.0/16) covers the cloud metadata endpoint.
+/// True when `ip` is private or internal and must be refused. `is_link_local`
+/// (169.254.0.0/16) covers the cloud metadata endpoint.
 fn is_blocked_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
@@ -66,9 +62,8 @@ fn is_blocked_ip(ip: IpAddr) -> bool {
     }
 }
 
-/// Validate an MCP server URL against SSRF: require https and ensure every
-/// address it resolves to is publicly routable. Bypassed only by the test-only
-/// `MCP_ALLOW_PRIVATE_HOSTS` flag (see `external::mcp_allow_private_hosts`).
+/// SSRF gate: require https and ensure every address the host resolves to is
+/// publicly routable. Bypassed only by the test-only `MCP_ALLOW_PRIVATE_HOSTS`.
 pub async fn validate_server_url(url: &str) -> Result<(), AppError> {
     // Parse first, so even a bypassed test URL must be well-formed.
     let parsed = Url::parse(url).map_err(|_| AppError::bad_request("Invalid MCP server URL"))?;
@@ -167,8 +162,7 @@ impl McpClient {
         }
     }
 
-    /// A JSON-RPC request (has an `id`). Returns the `result` value, mapping a
-    /// JSON-RPC `error` to a 400.
+    /// A JSON-RPC request (has an `id`). A JSON-RPC `error` maps to a 400.
     async fn rpc(&self, id: i64, method: &str, params: Value) -> Result<Value, AppError> {
         validate_server_url(&self.url).await?;
         let body = serde_json::json!({
@@ -297,9 +291,8 @@ impl McpClient {
     }
 }
 
-/// Extract the JSON-RPC envelope from an SSE body, which a Streamable-HTTP server
-/// may answer with. The payload is the last `data:` event that parses as JSON; one
-/// event's data may span several `data:` lines, joined by newlines.
+/// A Streamable-HTTP server may answer with SSE. The payload is the last `data:`
+/// event that parses as JSON; one event's data may span several `data:` lines.
 fn parse_sse_json(raw: &str) -> Result<Value, AppError> {
     let mut last: Option<Value> = None;
     let mut buf = String::new();

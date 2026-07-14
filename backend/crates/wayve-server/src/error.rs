@@ -33,13 +33,12 @@ pub enum AppError {
 
 #[allow(dead_code)]
 impl AppError {
-    /// Shorthand for `AppError::BadRequest(msg.into())`.
     pub fn bad_request(msg: impl Into<String>) -> Self {
         AppError::BadRequest(msg.into())
     }
 
-    /// Shorthand for `AppError::Internal(msg.into())`. The string never reaches
-    /// the client, since `error_response` makes 5xx bodies generic.
+    /// The string never reaches the client, since `error_response` makes 5xx
+    /// bodies generic.
     pub fn internal(msg: impl Into<String>) -> Self {
         AppError::Internal(msg.into())
     }
@@ -75,7 +74,6 @@ impl actix_web::ResponseError for AppError {
     }
 
     fn error_response(&self) -> HttpResponse {
-        // Log server-side faults once, here, instead of at every call site.
         match self {
             AppError::Db(e) => error!(target: "db", error = ?e, "request failed"),
             AppError::Internal(msg) => error!(target: "http", error = %msg, "request failed"),
@@ -102,8 +100,6 @@ impl From<anyhow::Error> for AppError {
     }
 }
 
-// Lets handlers use `?` after `hash_password()` / `verify_password()` without an
-// explicit map_err.
 impl From<wayve_security::password::PasswordError> for AppError {
     fn from(e: wayve_security::password::PasswordError) -> Self {
         AppError::Internal(format!("password operation failed: {e}"))

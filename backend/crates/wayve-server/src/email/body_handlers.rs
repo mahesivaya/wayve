@@ -36,10 +36,9 @@ pub async fn get_email_by_id(
         None => return Ok(HttpResponse::NotFound().body("Email not found")),
     };
 
-    // Skip AES-GCM + HKDF on repeat opens. Plaintext lives only in this
-    // process-local moka LRU (capacity-bounded, 5min TTL); it never touches
-    // disk. On miss we decrypt once and write back, matching what
-    // `get_email_body` already does for the body-only endpoint.
+    // Skips AES-GCM and HKDF on repeat opens. The plaintext lives only in this
+    // process-local moka LRU, capacity-bounded with a 5 minute TTL, and never
+    // touches disk.
     let body = if let Some(cached) = EMAIL_BODY_CACHE.get(&cache_key).await {
         cached
     } else if detail.body_encrypted.is_empty() || detail.body_iv.is_empty() {
@@ -131,17 +130,15 @@ pub async fn get_email_body(
     let body_iv: String = row.get("body_iv");
     let attachments_checked: Option<bool> = row.get("attachments_checked");
 
-    // Account-less / Wayve-native messages have no Gmail account to refetch
-    // from — their body is authored locally and stored at send time. Serve it
-    // straight from storage instead of falling through to the Gmail refresh
-    // path, which would 404 on the missing account / synthetic gmail_id.
+    // Wayve-native messages are authored locally and have no Gmail account to
+    // refetch from, so they are served straight from storage. The Gmail refresh
+    // path below would 404 on their missing account and synthetic gmail_id.
     let source: Option<String> = row.try_get("source").ok().flatten();
     let account_id_opt: Option<i32> = row.try_get("account_id").ok().flatten();
     if account_id_opt.is_none() || source.as_deref() == Some("wayve") {
-        // Wayve-native rows store the raw client envelope (WAYVE_SECURE_V1…)
-        // with NO backend-AES layer, so body_iv is empty — return it verbatim
-        // for the browser to decrypt. Only apply the storage-at-rest decrypt
-        // when an iv is actually present.
+        // These rows store the raw client envelope with no backend-AES layer, so
+        // an empty body_iv means the envelope is returned verbatim for the
+        // browser to decrypt. Only decrypt at rest when an iv is present.
         let body = if body_encrypted.is_empty() {
             String::new()
         } else if body_iv.is_empty() {
@@ -155,9 +152,9 @@ pub async fn get_email_body(
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
     }
 
-    // If a decryptable body is already stored, hold onto it as a fallback so a
-    // failed live Gmail refetch (e.g. an OAuth refresh token invalidated by a
-    // client rotation) still serves the body instead of a hard 502.
+    // Keep any decryptable stored body as a fallback, so a failed live Gmail
+    // refetch (an OAuth refresh token invalidated by a client rotation, say)
+    // still serves the body instead of a hard 502.
     let mut stored_body: Option<String> = None;
     if !body_encrypted.is_empty() && !body_iv.is_empty() {
         match decrypt(&body_iv, &body_encrypted) {

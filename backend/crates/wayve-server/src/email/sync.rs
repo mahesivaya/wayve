@@ -174,9 +174,8 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         }
     }
 
-    // Import Google Calendar events on the same cadence as email so the
-    // Scheduler stays current, reusing the token refreshed above. Best-effort
-    // and idempotent: import_upcoming_events upserts on (user_id, google_event_id).
+    // Calendar rides the email cadence, reusing the token refreshed above.
+    // Idempotent: import_upcoming_events upserts on (user_id, google_event_id).
     if account.provider == crate::email::provider::MailProvider::Google {
         match crate::scheduler::google_calendar::import_upcoming_events(
             pool,
@@ -195,8 +194,8 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         }
     }
 
-    // Fresh mail landed, so drop the /api/profile and /api/me caches rather
-    // than let the Storage & Usage panel wait out their 30s/60s TTLs.
+    // Fresh mail landed, so drop the profile caches rather than let the Storage
+    // and Usage panel wait out their 30s/60s TTLs.
     crate::routes::user::invalidate_profile_cache(account.user_id).await;
     crate::email::profile::invalidate_me_cache(account.user_id).await;
 }
@@ -247,7 +246,6 @@ pub async fn sync_due_accounts(
         let Ok((account_id, pre)) = h.await else {
             continue;
         };
-        // Re-read last_message_at to see whether new mail landed this tick.
         let post: Option<NaiveDateTime> =
             sqlx::query_scalar("SELECT last_message_at FROM email_accounts WHERE id = $1")
                 .bind(account_id)
@@ -255,8 +253,8 @@ pub async fn sync_due_accounts(
                 .await
                 .unwrap_or(pre);
 
-        // If the freshness stamp advanced, reset to the hot interval so the next
-        // pickup is fast; otherwise step up the ladder by absolute age.
+        // An advanced freshness stamp resets to the hot interval so the next
+        // pickup is fast; otherwise the ladder steps up by absolute age.
         let new_mail_landed = match (pre, post) {
             (Some(p), Some(q)) => q > p,
             (None, Some(_)) => true,
@@ -790,10 +788,10 @@ pub async fn sync_account_recent(
         .execute(pool)
         .await?;
 
-    // This is the first-sync path, run right after a Gmail account connects (see
-    // oauth_flow::oauth_callback). Stamping the provider unread count and
-    // pulling the label folders here means the sidebar is accurate immediately
-    // rather than only reflecting the recent page until the first full sync.
+    // This is the first-sync path, run right after a Gmail account connects.
+    // Stamping the unread count and pulling the label folders here makes the
+    // sidebar accurate immediately, rather than only reflecting the recent page
+    // until the first full sync.
     if let Err(err) = refresh_provider_unread_count(pool, account_id, token).await {
         warn!(target: "worker", account_id, error = ?err, "refresh_provider_unread_count failed");
     }
@@ -902,8 +900,7 @@ where
         .collect();
     let returned = upsert_batch(pool, account_id, &insert_batch).await?;
 
-    // Webhook fan-out. The account's owner can't change mid-tick, so resolve it
-    // once per batch.
+    // The account's owner can't change mid-tick, so resolve it once per batch.
     let owner_row = sqlx::query(
         "SELECT user_id, email, provider, (SELECT organization_id FROM users WHERE id = ea.user_id) AS organization_id
            FROM email_accounts ea WHERE id = $1",
@@ -943,8 +940,8 @@ where
             .await;
 
             // Background sync has no HttpRequest, so the system variant records
-            // NULL IP/UA. from/to/subject land in admin-readable metadata by
-            // design.
+            // NULL IP and user agent. from/to/subject land in admin-readable
+            // metadata by design.
             crate::audit::record_action_system(
                 pool,
                 crate::audit::AuditEvent {

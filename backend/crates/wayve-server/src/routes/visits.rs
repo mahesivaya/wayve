@@ -56,8 +56,8 @@ fn truncate(value: &str, max: usize) -> String {
     }
 }
 
-// POST /api/visits — record a public-site page open. Anonymous allowed;
-// best-effort (a failed write never fails the visitor's request).
+// Anonymous visitors are allowed, and the write is best-effort: a failure never
+// fails the visitor's request.
 #[post("/visits")]
 #[instrument(target = "http", skip(req, pool, body))]
 pub async fn ingest_page_visit(
@@ -68,15 +68,13 @@ pub async fn ingest_page_visit(
     let trimmed = body.path.trim();
     let path = if trimmed.is_empty() { "/" } else { trimmed };
 
-    // Best-effort identity — NULL for anonymous visitors.
     let user_id = get_user_id_from_request(&req);
-    // IP + user-agent are read server-side (X-Forwarded-For aware), never
+    // IP and user-agent are read server-side (X-Forwarded-For aware) and never
     // trusted from the client body.
     let ip = crate::audit::client_ip(&req);
     let user_agent = crate::audit::user_agent(&req).map(|v| truncate(&v, UA_MAX));
-    // Resolve coarse geolocation offline (same path as audit logs) so the
-    // Visitors page can show a Location column. Best-effort: NULL when there's
-    // no IP / no GeoIP reader / the lookup misses.
+    // Geolocation is resolved offline, as for audit logs. NULL when there is no
+    // IP, no GeoIP reader, or the lookup misses.
     let geo = crate::audit::resolve_geo(&req, ip.as_deref());
 
     if let Err(e) = sqlx::query(
@@ -102,7 +100,6 @@ pub async fn ingest_page_visit(
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "ok": true })))
 }
 
-// GET /api/platform/visits — platform-admin list of recent site visits.
 #[get("/platform/visits")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn list_page_visits(
@@ -147,7 +144,6 @@ pub async fn list_page_visits(
     Ok(HttpResponse::Ok().json(rows))
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(ingest_page_visit).service(list_page_visits);
 }

@@ -132,8 +132,7 @@ mod tests {
             .mount(&mock)
             .await;
 
-        // SAFETY: this mutates process env, so the test is #[serial] (and CI
-        // runs --test-threads=1) to keep it from racing other tests.
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
         unsafe {
             std::env::set_var("AES_KEY", HEX64_TEST_KEY);
             std::env::set_var("SLACK_API_BASE", mock.uri());
@@ -292,8 +291,7 @@ mod tests {
         unsafe {
             std::env::remove_var("SLACK_API_BASE");
         }
-        // Both `.expect(1)`s are verified on drop: one customized attempt, one
-        // plain retry.
+        // Both `.expect(1)`s are verified on drop: one customized attempt, one retry.
         drop(mock);
     }
 }

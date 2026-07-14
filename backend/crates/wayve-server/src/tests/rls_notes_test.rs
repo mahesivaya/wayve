@@ -1,10 +1,8 @@
 //! Row-Level Security isolation for the `notes` table: a user reads and writes
 //! only their own notes, a connection with no GUC set sees nothing at all, and
 //! only `app.bypass` sees everything. The policy lives in infra/postgres/init.sql,
-//! which the test database must have applied.
-//!
-//! Every assertion pins specific note ids, so these hold against a shared test
-//! database that already contains other rows.
+//! which the test database must have applied. Every assertion pins specific note
+//! ids, so these hold against a shared test database that has other rows in it.
 
 #[cfg(test)]
 mod tests {

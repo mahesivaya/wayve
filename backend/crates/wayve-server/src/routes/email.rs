@@ -70,20 +70,19 @@ pub async fn get_emails(
         page_size,
     };
 
-    // DB-first: block on the provider only when the local cache is genuinely
-    // exhausted, because a synchronous Gmail/Outlook sync on every "load more"
-    // click costs seconds of latency even when the DB already has the rows.
+    // DB-first: the provider is only blocked on when the local cache is exhausted,
+    // because a synchronous sync on every "load more" click costs seconds of
+    // latency even when the DB already holds the rows.
     let mut rows = repo::list(pool.get_ref(), filters.clone()).await?;
 
     if let Some(before_ms) = query.before {
         let account_id = query.account_id;
-        // sync_older_page expects Unix seconds; the wire format is milliseconds
-        // for sub-second precision on the DB keyset cursor.
+        // sync_older_page expects Unix seconds; the wire format is milliseconds, for
+        // sub-second precision on the DB keyset cursor.
         let before_secs = before_ms / 1000;
 
         if rows.len() > page_size {
-            // A full page is available locally, so refill the cache in the
-            // background and keep the next click fast.
+            // A full page is available locally, so refill in the background.
             let pool_clone = pool.get_ref().clone();
             tokio::spawn(async move {
                 if let Err(e) =
@@ -94,8 +93,8 @@ pub async fn get_emails(
                 }
             });
         } else {
-            // Cache exhausted: pay the provider round-trip inline so the next
-            // page can be returned instead of an empty response.
+            // Cache exhausted, so pay the provider round-trip inline rather than
+            // return an empty page.
             if let Err(e) = sync_older_page(
                 pool.get_ref(),
                 user_id,
@@ -181,7 +180,7 @@ pub async fn delete_email(
         }
     };
 
-    // Captured before the row is gone; recorded at each success path below.
+    // Captured before the row is gone, for the audit record on each success path.
     let del_subject: Option<String> = row.try_get("subject").ok().flatten();
     let del_sender: Option<String> = row.try_get("sender").ok().flatten();
     let del_receiver: Option<String> = row.try_get("receiver").ok().flatten();
@@ -194,9 +193,9 @@ pub async fn delete_email(
         "provider": del_provider,
     });
 
-    // Fluxze-native messages have no provider copy to delete remotely: their
-    // synthetic gmail_id is not a real Gmail or Graph id. Only this user's local
-    // row is dropped, since each recipient and the sender's Sent copy is its own.
+    // Fluxze-native messages have no provider copy to delete: their synthetic
+    // gmail_id is not a real Gmail or Graph id. Only this user's local row is
+    // dropped, since each recipient and the sender's Sent copy is its own row.
     let source: Option<String> = row.try_get("source").ok().flatten();
     let account_id_opt: Option<i32> = row.try_get("account_id").ok().flatten();
     if account_id_opt.is_none() || source.as_deref() == Some("wayve") {
@@ -266,17 +265,16 @@ pub async fn delete_email(
         HTTP_CLIENT.delete(url).bearer_auth(&token).send().await
     } else {
         // Trash, not permanent delete: `messages.delete` needs the full
-        // `https://mail.google.com/` scope, which we do not request, so it 403s
-        // and the row silently resurrects on the next sync. `messages.trash`
-        // works with our `gmail.modify` scope and moves the message out of INBOX.
+        // `https://mail.google.com/` scope, which we do not request, so it 403s and the
+        // row resurrects on the next sync. `messages.trash` works under `gmail.modify`.
         let url = format!(
             "{}/gmail/v1/users/me/messages/{}/trash",
             crate::external::gmail_api_base(),
             gmail_id
         );
-        // The empty JSON object is load-bearing: `messages.trash` is a bodyless
-        // POST, reqwest omits Content-Length for an empty body, and Google's
-        // frontend 411s on a POST without one. The endpoint ignores the body.
+        // The empty JSON object is load-bearing: `messages.trash` is a bodyless POST,
+        // reqwest omits Content-Length for an empty body, and Google's frontend 411s
+        // without one. The endpoint itself ignores the body.
         HTTP_CLIENT
             .post(url)
             .bearer_auth(&token)
@@ -357,12 +355,10 @@ pub async fn get_all_email_attachments(req: HttpRequest, pool: web::Data<PgPool>
 
 /// Unread inbox count across the caller's accounts, powering the nav badge.
 ///
-/// Must stay in sync with the per-account `unread_count` in `email::account`:
-/// prefer the provider's authoritative `provider_unread_count` (INBOX label
-/// only), falling back to a local COUNT that excludes SPAM, DRAFT, and self-sent
-/// mail for the window before the first sync. Summing per account is what makes
-/// this badge equal the email page's "All Accounts" badge rather than counting
-/// every folder.
+/// Must stay in sync with the per-account `unread_count` in `email::account`: prefer
+/// the provider's authoritative `provider_unread_count` (INBOX only), falling back to
+/// a local COUNT that excludes SPAM, DRAFT, and self-sent mail before the first sync.
+/// Summing per account is what makes this badge equal the "All Accounts" badge.
 #[get("/emails/unread-count")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_unread_count(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -397,10 +393,10 @@ pub async fn get_unread_count(req: HttpRequest, pool: web::Data<PgPool>) -> AppR
 
 /// Persist the read state the frontend already flipped optimistically.
 ///
-/// Wayve's own `emails.is_read` is canonical and drives the UI, so it is written
-/// first; the provider push then runs fire-and-forget. A failed push is logged
-/// but does not fail the request: the worst case is Wayve and the provider's web
-/// UI disagreeing until the next sync, which beats a refresh wiping the update.
+/// `emails.is_read` is canonical and drives the UI, so it is written first and the
+/// provider push runs fire-and-forget. A failed push is logged but does not fail the
+/// request: at worst Wayve and the provider's web UI disagree until the next sync,
+/// which beats a refresh wiping the update.
 #[actix_web::post("/emails/{id}/read")]
 #[instrument(target = "http", skip(req, pool, path))]
 pub async fn mark_email_read(
@@ -411,9 +407,9 @@ pub async fn mark_email_read(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let email_id = path.id;
 
-    // The join through email_accounts.user_id is the authorization gate: a user
-    // may only mark their own emails read. RETURNING picks up the provider
-    // message id and refresh token in the same query, sparing a round-trip.
+    // The join through email_accounts.user_id is the authorization gate: a user may
+    // only mark their own emails read. RETURNING picks up the provider message id
+    // and refresh token in the same query.
     let updated = sqlx::query(
         r#"
         UPDATE emails AS e
@@ -436,9 +432,8 @@ pub async fn mark_email_read(
         let provider_message_id: String = row.get("gmail_id");
         let account_id: i32 = row.get("account_id");
 
-        // Records the first open of this message. email_attachments is joined so
-        // the security activity view can show any files that rode along; they are
-        // populated by read time even though the body worker fetches them later.
+        // email_attachments is joined so the security activity view can show the
+        // files that rode along; they are populated by read time.
         let subject: Option<String> = row.try_get("subject").ok();
         let sender: Option<String> = row.try_get("sender").ok();
         let receiver: Option<String> = row.try_get("receiver").ok();
@@ -472,8 +467,8 @@ pub async fn mark_email_read(
         .await;
 
         // Decrement optimistically so the sidebar badge matches the user's action
-        // without waiting for the next sync. GREATEST clamps at zero in case the
-        // cached count is stale and would otherwise go negative.
+        // without waiting for the next sync. GREATEST clamps at zero, since a stale
+        // cached count could otherwise go negative.
         sqlx::query(
             "UPDATE email_accounts \
              SET provider_unread_count = GREATEST(COALESCE(provider_unread_count, 0) - 1, 0) \
@@ -495,9 +490,8 @@ pub async fn mark_email_read(
             .filter(|value| !value.is_empty())
             .map(str::to_string)
         {
-            // Detached from the request: the token refresh and HTTPS round-trip
-            // take hundreds of milliseconds, and the client already considers
-            // this done.
+            // Detached from the request: the token refresh and HTTPS round-trip cost
+            // hundreds of milliseconds, and the client already considers this done.
             let pool_clone = pool.get_ref().clone();
             tokio::spawn(async move {
                 push_read_state_to_provider(
@@ -524,9 +518,8 @@ pub async fn mark_email_read(
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": true })));
     }
 
-    // No row from RETURNING means either the email is not owned by this user (a
-    // 404) or it was already read (a no-op success: the state is already in
-    // sync, so no provider push is needed).
+    // No row from RETURNING means the email is either not owned by this user (404)
+    // or already read, in which case no provider push is needed.
     let owns: Option<i32> = sqlx::query_scalar(
         "SELECT e.id FROM emails e JOIN email_accounts a ON e.account_id = a.id \
          WHERE e.id = $1 AND a.user_id = $2",

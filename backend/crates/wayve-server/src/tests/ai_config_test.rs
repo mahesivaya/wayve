@@ -154,7 +154,6 @@ mod tests {
             StatusCode::FORBIDDEN
         );
 
-        // The org has an owner, but only that owner may reach the config.
         let owner_email = random_email();
         let owner = insert_local_user(&pool, &owner_email, "password123").await;
         let org_id = make_enterprise(&pool, owner).await;
@@ -191,8 +190,7 @@ mod tests {
     async fn owner_put_get_delete_key_encrypted() {
         let mock = MockServer::start().await;
         mount_anthropic_ok(&mock).await;
-        // SAFETY: this mutates process env, so the test is #[serial] (and CI
-        // runs --test-threads=1) to keep it from racing other tests.
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
         unsafe {
             std::env::set_var("AES_KEY", HEX64_TEST_KEY);
             std::env::set_var("ANTHROPIC_API_BASE", mock.uri());
@@ -357,7 +355,7 @@ mod tests {
         )
         .await;
 
-        // A base_url pointing at the link-local metadata endpoint.
+        // The link-local cloud metadata endpoint is the canonical SSRF target.
         let req = actix_test::TestRequest::put()
             .uri("/ai/config")
             .insert_header(("Authorization", bearer))

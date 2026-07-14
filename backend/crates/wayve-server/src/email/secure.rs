@@ -4,11 +4,8 @@
 //! out-of-band, and uploads only opaque ciphertext, a PBKDF2-wrapped AES key,
 //! and a per-message salt. The server never sees the passphrase, derives no key,
 //! and cannot decrypt at any point; it emails a magic link, and the recipient
-//! enters the passphrase to decrypt in their browser.
-//!
-//! `POST /api/email/send-secure` takes the bundle from an authed sender and
-//! fires the notification. `GET /api/secure-messages/{token}` is public and
-//! returns the bundle for the read page, or 410 once expired.
+//! enters the passphrase to decrypt in their browser. The fetch route is public
+//! and returns 410 once the message expires.
 
 use crate::email::sender::send_mail;
 use crate::prelude::*;

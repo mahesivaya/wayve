@@ -155,7 +155,6 @@ mod tests {
         assert_eq!(body["imported"], 0);
         assert_eq!(body["updated"], 2);
 
-        // List tasks: exactly two, with the mapped status/priority + Jira link.
         let req = actix_test::TestRequest::get()
             .uri("/tasks")
             .insert_header(("Authorization", bearer.clone()))
@@ -172,7 +171,7 @@ mod tests {
         assert_eq!(way1["jira_base"], "https://acme.atlassian.net");
         let task_id = way1["id"].as_i64().expect("task id") as i32;
 
-        // --- Push: editing the linked task to "done" transitions the Jira issue. ---
+        // Editing a linked task to "done" must push a transition back to Jira.
         let req = actix_test::TestRequest::put()
             .uri(&format!("/tasks/{task_id}"))
             .insert_header(("Authorization", bearer.clone()))

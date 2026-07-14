@@ -25,8 +25,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(import);
 }
 
-/// Resolve the caller's org id, requiring the enterprise tier. `Forbidden` when
-/// they have no org or it isn't enterprise.
+/// `Forbidden` when the caller has no org or it isn't on the enterprise tier.
 async fn enterprise_org(pool: &PgPool, user_id: i32) -> Result<i32, AppError> {
     let Some(row) = sqlx::query(
         "SELECT u.organization_id AS org_id,
@@ -51,7 +50,6 @@ async fn enterprise_org(pool: &PgPool, user_id: i32) -> Result<i32, AppError> {
     }
 }
 
-/// Load + decrypt an org's Slack connection, if any.
 pub(crate) async fn load_connection(
     pool: &PgPool,
     org_id: i32,

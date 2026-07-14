@@ -44,7 +44,6 @@ fn validate_attachment_limits(attachments: &[EmailAttachmentInput]) -> Result<()
     Ok(())
 }
 
-/// Decodes the base64 attachments, sanitising names and defaulting the MIME type.
 fn decode_attachments(
     attachments: &[EmailAttachmentInput],
 ) -> Result<Vec<crate::email::sender::OutgoingAttachment>, String> {
@@ -93,7 +92,6 @@ pub async fn send(
 
     info!(target: "gmail", user_id, account_id = data.account_id, "send email request");
 
-    // The owner, or a shared-inbox member with can_reply, may send.
     let account =
         match load_email_account_for_send(pool.get_ref(), data.account_id, user_id).await? {
             Some(account) => account,
@@ -109,9 +107,9 @@ pub async fn send(
         }
     };
 
-    // Dev-only shortcut. A sentinel `fake-*` refresh token is only ever inserted
-    // by seed scripts, and no real provider token starts with `fake-`, so it
-    // safely routes the compose loop through Mailpit instead of real OAuth.
+    // Dev-only shortcut through Mailpit. Only seed scripts insert a `fake-*`
+    // refresh token and no real provider token starts with `fake-`, so this
+    // sentinel cannot misroute a production send.
     if refresh_token.starts_with("fake-") {
         info!(
             target: "gmail",
@@ -233,11 +231,10 @@ pub async fn send(
 }
 
 // Wayve-to-Wayve native channel. The browser builds a multi-recipient
-// WAYVE_SECURE_V1 envelope (one RSA-OAEP-wrapped AES key per recipient pubkey,
-// plus one for the sender's own Sent copy) and POSTs it here. No SMTP is
-// involved: one `emails` row per recipient is inserted with source='wayve' and
-// no account_id, so the message appears at the next list-emails fetch. The
-// server stores only the opaque envelope and can never decrypt the body. The
+// WAYVE_SECURE_V1 envelope, one RSA-OAEP-wrapped AES key per recipient plus one
+// for the sender's own Sent copy, and POSTs it here. No SMTP is involved: one
+// `emails` row per recipient is inserted with source='wayve' and no account_id.
+// The server stores only the opaque envelope and can never decrypt the body. The
 // subject stays plaintext for inbox previews, the same trade-off as inbound.
 
 #[derive(serde::Deserialize)]
@@ -481,7 +478,6 @@ pub(super) async fn send_via_gmail(
     }
 }
 
-/// Sends from a connected Outlook mailbox through Graph `sendMail`.
 pub(super) async fn send_via_outlook(
     access_token: &str,
     account_id: i32,

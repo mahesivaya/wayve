@@ -1,15 +1,13 @@
-//! Inbound Slack Events API receiver: real-time Slack to Wayve message sync, the
-//! counterpart to the on-demand import in `sync::import_all`.
+//! Inbound Slack Events API receiver, the real-time counterpart to the on-demand
+//! import in `sync::import_all`.
 //!
 //! The route is public, with no JWT, so the request signature is the only
 //! authentication. Slack signs every request with `X-Slack-Signature: v0=<hmac>`
 //! over `v0:{timestamp}:{raw_body}`, keyed by the app signing secret; that must be
 //! verified, with a replay window, before anything in the payload is trusted.
 //!
-//! A linked Slack channel maps to a Wayve channel via `slack_channel_links`. Only
-//! enterprise orgs can create links, so matching one is implicitly
-//! enterprise-gated, and inbound messages are stored server-readable because
-//! enterprise chat is not E2E.
+//! Only enterprise orgs can link a Slack channel to a Wayve one, so matching a
+//! `slack_channel_links` row is implicitly enterprise-gated.
 
 use crate::cache::Cache;
 use crate::prelude::*;
@@ -24,8 +22,7 @@ use super::models::{SlackEvent, SlackEventEnvelope};
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Replay window: reject deliveries whose timestamp is further than this from
-/// now, per Slack's guidance.
+/// Replay window, per Slack's guidance.
 const MAX_TIMESTAMP_SKEW_SECS: i64 = 300;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
@@ -82,7 +79,6 @@ pub async fn slack_events(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "ok": true })))
 }
 
-/// Store a Slack message in its linked Wayve channel and fan it out live.
 async fn apply_event(
     pool: &PgPool,
     cache: &Option<Cache>,
@@ -98,8 +94,6 @@ async fn apply_event(
         return Ok(());
     };
 
-    // Only enterprise orgs have links, so matching one is implicitly
-    // enterprise-gated.
     let Some(row) = sqlx::query(
         "SELECT l.wayve_channel_id, l.organization_id, c.connected_by
            FROM slack_channel_links l
@@ -181,8 +175,8 @@ async fn apply_event(
     Ok(())
 }
 
-/// Verify Slack's `X-Slack-Signature` over `v0:{timestamp}:{body}` with the
-/// signing secret, plus a replay window on the timestamp.
+/// Verifies `X-Slack-Signature` over `v0:{timestamp}:{body}` with the signing
+/// secret, plus a replay window on the timestamp.
 fn verify_signature(headers: &HeaderMap, body: &[u8], secret: &str) -> Result<(), AppError> {
     let timestamp = header_value(headers, "x-slack-request-timestamp")
         .ok_or_else(|| AppError::bad_request("missing Slack timestamp"))?;

@@ -189,9 +189,9 @@ pub async fn update_organization_member_role(
 
     tx.commit().await?;
 
-    // Authorization is recomputed from the DB on every request, so busting these
-    // caches is what makes the new role take effect on the target's next request
-    // rather than after the cache TTL.
+    // Authorization is recomputed from the DB per request, so busting these caches
+    // is what makes the new role take effect on the target's next request rather
+    // than after the cache TTL.
     invalidate_me_cache(target_user_id).await;
     invalidate_profile_cache(target_user_id).await;
     rbac::invalidate_role_context(target_user_id).await;
@@ -369,10 +369,10 @@ pub async fn update_platform_member_role(
     })))
 }
 
-/// Load the profile and per-service storage breakdown behind the member detail
-/// page. Callers MUST authorize membership first: this helper does no access
-/// control of its own. It runs with the RLS bypass GUC because it sums storage
-/// across RLS-enabled tables for an arbitrary user.
+/// Load the profile and storage breakdown behind the member detail page. Callers
+/// MUST authorize membership first: this helper does no access control of its own,
+/// and it runs with the RLS bypass GUC because it sums storage across RLS-enabled
+/// tables for an arbitrary user.
 async fn load_member_detail(
     pool: &PgPool,
     user_id: i32,
@@ -499,8 +499,8 @@ pub async fn organization_member_detail(
     }
 }
 
-/// The repos a platform member has been granted access to, gated to platform
-/// staff holding `MembersRead`.
+/// The repos a platform member has been granted, for platform staff holding
+/// `MembersRead`.
 #[get("/platform/members/{user_id}/projects")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn platform_member_projects(
@@ -533,8 +533,8 @@ pub struct SetMemberProjectsInput {
 }
 
 /// Replace a platform member's granted repo set. Gated on `MembersManage` in
-/// platform scope, and the target must already be a platform member. Audited as
-/// a privilege change, like a role change.
+/// platform scope; the target must already be a platform member. Audited as a
+/// privilege change.
 #[put("/platform/members/{user_id}/projects")]
 #[instrument(target = "http", skip(req, pool, data))]
 pub async fn set_platform_member_projects(
@@ -554,8 +554,7 @@ pub async fn set_platform_member_projects(
     }
     let target_user_id = path.into_inner();
 
-    // Grants are only ever made to actual platform members, never to arbitrary
-    // personal users.
+    // Grants only ever go to actual platform members, never arbitrary users.
     let is_staff: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM platform_members WHERE user_id = $1)")
             .bind(target_user_id)
@@ -747,12 +746,10 @@ pub async fn set_organization_member_projects(
 }
 
 /// Detail for one member of the platform team. Gated to platform scope, and the
-/// target must have a `platform_members` row, so arbitrary personal users are
-/// never exposed.
-///
-/// The path segment is an identifier, not an id: the canonical URL uses the
-/// member's `username`, but a bare integer is still accepted as the raw user id
-/// so legacy links and username-less members keep working.
+/// target must have a `platform_members` row, so arbitrary personal users are never
+/// exposed. The path segment is an identifier, not an id: the canonical URL uses
+/// `username`, but a bare integer is still accepted as the raw user id so legacy
+/// links and username-less members keep working.
 #[get("/platform/members/{ident}")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn platform_member_detail(

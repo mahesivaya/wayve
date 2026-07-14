@@ -13,15 +13,12 @@ pub struct ChatTurn {
 
 #[derive(Deserialize)]
 pub struct ChatRequest {
-    /// Full conversation history, latest user message last. The caller owns
-    /// ordering and trimming for token limits.
+    /// Latest user message last. The caller owns ordering and token-limit trimming.
     pub messages: Vec<ChatTurn>,
 }
 
-/// The assistant. The provider is resolved per request from the caller's
-/// organization; keys stay server-side and never reach the browser. An MCP owner
-/// with connected servers additionally gets those servers' tools declared and a
-/// bounded tool-call loop.
+/// The provider is resolved per request from the caller's organization; keys stay
+/// server-side and never reach the browser.
 #[post("/ai/chat")]
 #[instrument(target = "ai", skip(req, pool, data), fields(turns = data.messages.len()))]
 pub async fn ai_chat(
@@ -63,10 +60,9 @@ pub async fn ai_chat(
 
     let result = crate::ai::agent::run(pool.get_ref(), user_id, msgs, &ai).await?;
 
-    // Usage metering for the owner-only dashboard. Best-effort: a metering failure
-    // must never fail the chat. The owner scope mirrors provider resolution, so an
-    // org with its own enabled config owns its members' usage and everyone else
-    // falls to platform scope (organization_id NULL).
+    // Metering is best-effort: a failure here must never fail the chat. The owner
+    // scope mirrors provider resolution, so an org with its own enabled config owns
+    // its members' usage and everyone else falls to platform scope.
     let owner_org: Option<i32> = sqlx::query_scalar(
         "SELECT u.organization_id FROM users u
            JOIN org_ai_configs c ON c.organization_id = u.organization_id
@@ -109,9 +105,8 @@ pub async fn ai_chat(
     })))
 }
 
-/// The resolved provider and model the caller's assistant runs on, so the UI can
-/// label itself truthfully. Returns only the provider id and model, never the API
-/// key, which is what makes it safe for every authenticated user.
+/// Returns only the provider id and model, never the API key, which is what makes
+/// it safe for every authenticated user.
 #[get("/ai/provider")]
 #[instrument(target = "ai", skip(req, pool))]
 pub async fn get_ai_provider(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {

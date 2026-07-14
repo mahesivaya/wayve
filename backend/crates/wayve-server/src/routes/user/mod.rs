@@ -59,8 +59,8 @@ mod auth_regression_tests {
         use crate::test_support::test_pool;
         let pool = test_pool().await;
 
-        // 1. Setup: Create an organization with a UUID-suffixed name so
-        // repeated test runs don't trip the orgs.name UNIQUE constraint.
+        // The org name is UUID-suffixed so repeated runs don't trip the
+        // organizations.name UNIQUE constraint.
         let unique = uuid::Uuid::new_v4().simple().to_string();
         let org_id: i32 =
             sqlx::query_scalar("INSERT INTO organizations (name) VALUES ($1) RETURNING id")
@@ -69,8 +69,7 @@ mod auth_regression_tests {
                 .await
                 .unwrap();
 
-        // 2. Generate Key. raw_key must also be UUID-tagged so the
-        // api_keys.key_hash UNIQUE constraint doesn't reject re-runs.
+        // raw_key is UUID-tagged for the same reason: api_keys.key_hash is UNIQUE.
         let raw_key = format!("wv_sk_test_secret_{unique}");
         let key_hash = hash_api_key(&raw_key);
 
@@ -83,7 +82,6 @@ mod auth_regression_tests {
             .await
             .unwrap();
 
-        // 3. Test Validation Helper
         let req = actix_test::TestRequest::default()
             .insert_header(("X-API-KEY", raw_key.as_str()))
             .to_http_request();
@@ -91,7 +89,6 @@ mod auth_regression_tests {
         let validated_org_id = validate_api_key(&req, &pool).await;
         assert_eq!(validated_org_id, Some(org_id));
 
-        // 4. Test Validation with wrong key
         let req_bad = actix_test::TestRequest::default()
             .insert_header(("X-API-KEY", "wrong_key"))
             .to_http_request();
@@ -100,9 +97,8 @@ mod auth_regression_tests {
         assert!(validated_bad.is_none());
     }
 
-    // Import the actix test module under an alias — a bare `test` import
-    // shadows the built-in `#[test]` attribute (it would resolve to
-    // `#[actix_web::test]` and reject the sync unit test above).
+    // The actix test module is aliased because a bare `test` import shadows the
+    // built-in `#[test]` attribute and would reject the sync unit test above.
     use actix_web::{App, http::StatusCode, test as actix_test, web};
     use sqlx::postgres::PgPoolOptions;
 
@@ -239,9 +235,8 @@ mod auth_regression_tests {
     }
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
-/// Handlers are defined in the submodules below and re-exported via the globs
-/// above, so they resolve by bare name here.
+/// Handlers live in the submodules and are re-exported via the globs above, so
+/// they resolve by bare name here.
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(change_password)
         .service(admin_list_organizations)

@@ -192,7 +192,6 @@ pub async fn create_meeting(
         },
     )
     .await;
-    // One "invitation received" row per invitee that has an account.
     let invited_user_ids: Vec<i32> = sqlx::query_scalar(
         "SELECT user_id FROM meeting_participants WHERE meeting_id = $1 AND user_id IS NOT NULL",
     )
@@ -464,7 +463,6 @@ pub async fn update_meeting(
     .execute(&mut *tx)
     .await?;
 
-    // The participant list is replaced wholesale on every update.
     sqlx::query(
         r#"
         DELETE FROM meeting_participants mp

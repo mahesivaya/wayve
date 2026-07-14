@@ -33,8 +33,7 @@ pub async fn get_user_by_email(
     pool: web::Data<PgPool>,
     query: web::Query<UserLookupQuery>,
 ) -> AppResult {
-    // Require a valid JWT — this endpoint exposes user ids and public keys,
-    // so it must not be reachable anonymously.
+    // This endpoint exposes user ids and public keys, so it must never be anonymous.
     if get_user_id_from_request(&req).is_none() {
         return Ok(HttpResponse::Unauthorized().finish());
     }
@@ -86,8 +85,8 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
         return Ok(HttpResponse::Ok().json(cached));
     }
 
-    // notes is RLS-enabled; this reads the caller's own storage breakdown, so
-    // it runs in a user-scoped transaction (`app.user_id`).
+    // Reading the caller's own storage breakdown touches RLS-enabled `notes`, so it
+    // runs in a user-scoped transaction (`app.user_id`).
     let mut tx = pool.begin().await?;
     crate::db::apply_rls_user(&mut tx, user_id).await?;
     let result = sqlx::query(
@@ -109,8 +108,8 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
     .bind(user_id)
     .fetch_optional(&mut *tx)
     .await;
-    // Read-only tx: commit succeeds when the query did, otherwise the error is
-    // carried in `result` and handled by the match below.
+    // Read-only tx, so a failed commit is ignorable: the real error is carried in
+    // `result` and handled below.
     tx.commit().await.ok();
 
     match result {
@@ -163,9 +162,8 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 }
             };
 
-            // Same lookup as /api/me — falls back to basic_user when no
-            // subscription exists. /api/profile is heavier than /api/me but
-            // both pages want the tier badge, so we include it in both.
+            // Same lookup as /api/me, which falls back to basic_user when no
+            // subscription exists. Both pages want the tier badge.
             let current_plan =
                 match current_plan_for_user(pool.get_ref(), id, organization_id).await {
                     Ok(plan) => Some(plan),
@@ -175,11 +173,9 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                     }
                 };
 
-            // Real plan storage limit from entitlements (1 GiB free, 10 GiB
-            // advance, -1 = unlimited for org/enterprise) instead of a hardcoded
-            // value. On a transient owner-resolution error, fall back to -1
-            // (the client treats <= 0 as unlimited) so a DB hiccup never shows a
-            // false "storage full" alert.
+            // The storage limit comes from entitlements (-1 means unlimited). On a
+            // transient owner-resolution error, fall back to -1, which the client
+            // reads as unlimited, so a DB hiccup never shows a false "storage full".
             let memory_limit_bytes = match resolve_owner(pool.get_ref(), id).await {
                 Ok(owner) => {
                     effective_entitlements(pool.get_ref(), owner)
@@ -233,10 +229,9 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
 /// Max accepted avatar upload (2 MB). Avatars are small; this caps disk abuse.
 const MAX_AVATAR_BYTES: usize = 2 * 1024 * 1024;
 
-/// Detect the image type from its magic bytes (NOT the filename) and return the
-/// canonical extension. Returns None for anything that isn't PNG/JPEG/WebP — in
-/// particular SVG/HTML are rejected, so a disguised file can't become stored XSS
-/// when the image is later served inline.
+/// Detect the image type from its magic bytes, never the filename. Anything that
+/// is not PNG/JPEG/WebP returns None; SVG and HTML in particular are rejected, so
+/// a disguised file cannot become stored XSS when served inline.
 fn detect_image_ext(bytes: &[u8]) -> Option<&'static str> {
     if bytes.len() >= 8 && bytes[..8] == [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
         Some("png")
@@ -380,7 +375,6 @@ pub async fn delete_avatar(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
-    // Best-effort delete the file on disk, then clear the column.
     let existing: Option<String> =
         sqlx::query_scalar::<_, Option<String>>("SELECT avatar_path FROM users WHERE id = $1")
             .bind(user_id)
@@ -450,11 +444,10 @@ pub async fn change_password(
             .json(serde_json::json!({ "message": "This account has no password to change" })));
     }
 
-    // Org members have a server-stored member_login_wrapped_keys row
-    // keyed by PBKDF2(old_password). If we update the bcrypt hash but
-    // leave that row alone, the member is locked out at next login —
-    // their browser will try to unwrap their PKCS8 with the new password
-    // and AES-GCM auth-tag-fail. Require the frontend to send the
+    // An org member's member_login_wrapped_keys row is keyed by
+    // PBKDF2(old_password). Updating the bcrypt hash without re-wrapping it locks
+    // the member out at next login, when their browser AES-GCM-auth-tag-fails
+    // unwrapping the PKCS8 under the new password. So the frontend must send the
     // pre-computed new wrap whenever such a row exists.
     let needs_wrap_rotation: bool = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*)::BIGINT FROM member_login_wrapped_keys WHERE user_id = $1",
@@ -571,10 +564,9 @@ pub async fn get_all_users(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
-    // Scope the directory to the caller's own world so the chat people-picker
-    // never leaks accounts across tenants: a platform account sees only
-    // platform accounts, an organization account sees only same-org accounts,
-    // and a personal account sees only other personal accounts.
+    // Scoping the directory to the caller's own tenant is what keeps the chat
+    // people-picker from leaking accounts across tenants: platform sees platform,
+    // an org sees its own members, and a personal account sees only personal ones.
     let ctx = rbac::resolve_role_context(pool.get_ref(), user_id).await?;
 
     let rows = sqlx::query(

@@ -102,7 +102,6 @@ impl Cache {
     /// Add or update a member's score in a sorted set. Presence stores
     /// `user_id -> last-heartbeat unix seconds` in `presence:online`, making
     /// online-ness a cross-instance freshness check rather than per-process state.
-    /// Best-effort: a Redis blip skips a refresh and the sweeper reaps it as stale.
     #[instrument(target = "cache", skip(self), fields(key, member, score))]
     pub async fn zadd(&self, key: &str, member: &str, score: i64) {
         let mut conn = self.conn.clone();
@@ -154,9 +153,8 @@ impl Cache {
     }
 
     /// Atomically increment a counter. Presence keeps one per user counting live
-    /// chat sockets, so a user flips offline the instant their last socket closes
-    /// rather than at the next staleness sweep. Best-effort: a Redis blip returns
-    /// 0 and the sweeper still backstops.
+    /// chat sockets, so a user flips offline the instant their last socket closes.
+    /// Best-effort: a Redis blip returns 0 and the sweeper still backstops.
     #[instrument(target = "cache", skip(self), fields(key))]
     pub async fn incr(&self, key: &str) -> i64 {
         let mut conn = self.conn.clone();

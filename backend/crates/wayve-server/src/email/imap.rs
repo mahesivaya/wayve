@@ -1,13 +1,9 @@
-//! Generic IMAP (read) + SMTP (send) connector for arbitrary custom-domain
-//! mailboxes — any provider that isn't wired up as a first-class OAuth
-//! integration. The user supplies a host/port + an app password; we verify it
-//! with a real IMAP LOGIN, store the password encrypted-at-rest (AES-256-GCM,
-//! `<iv>.<cipher>`) in `email_accounts.refresh_token`, and persist the
-//! connection settings in the `imap_*`/`smtp_*`/`mail_security` columns.
-//!
-//! Built directly on the workspace crates: `async-imap` (read) over
-//! `tokio-rustls` (implicit TLS), `lettre` (SMTP send), `mail-parser` (MIME).
-//! Self-contained — does not depend on any other provider module.
+//! Generic IMAP (read) and SMTP (send) connector for custom-domain mailboxes,
+//! meaning any provider without a first-class OAuth integration. The user
+//! supplies a host, port, and app password; it is verified with a real IMAP
+//! LOGIN and stored encrypted at rest (AES-256-GCM, `<iv>.<cipher>`) in
+//! `email_accounts.refresh_token`, with the connection settings in the
+//! `imap_*`/`smtp_*`/`mail_security` columns.
 
 use crate::email::repo::{InsertEmail, upsert_one};
 use crate::models::email_request::SendEmailRequest;

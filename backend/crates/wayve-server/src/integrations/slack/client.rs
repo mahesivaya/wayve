@@ -79,8 +79,7 @@ impl SlackClient {
         })
     }
 
-    /// Validate the bot token, returning `(team_name, team_id)`. A `false` `ok`
-    /// means the token is bad.
+    /// Returns `(team_name, team_id)`. A `false` `ok` means the token is bad.
     pub async fn auth_test(&self) -> Result<(Option<String>, Option<String>), AppError> {
         let r: SlackAuthTest = self.get_json("auth.test", &[]).await?;
         if !r.ok {
@@ -90,10 +89,9 @@ impl SlackClient {
         Ok((r.team, r.team_id))
     }
 
-    /// The workspace channels the bot can see. Listing private channels needs the
-    /// `groups:read` scope on top of `channels:read`, and Slack rejects the
-    /// combined call with `missing_scope` when it is absent, so fall back to
-    /// public channels.
+    /// Listing private channels needs `groups:read` on top of `channels:read`, and
+    /// Slack rejects the combined call with `missing_scope` when it is absent, so
+    /// fall back to public channels.
     pub async fn list_channels(&self) -> Result<Vec<SlackChannel>, AppError> {
         match self
             .list_channels_of("public_channel,private_channel")
@@ -125,8 +123,8 @@ impl SlackClient {
         Ok(r.channels)
     }
 
-    /// Messages in a channel, newest first. `oldest` (a Slack `ts`) bounds the
-    /// pull so re-imports only fetch new messages.
+    /// Newest first. `oldest` (a Slack `ts`) bounds the pull so re-imports only
+    /// fetch new messages.
     pub async fn history(
         &self,
         channel: &str,
@@ -150,8 +148,7 @@ impl SlackClient {
         Ok(r.messages)
     }
 
-    /// Best-effort display name for a Slack user id. `None` on any failure; the
-    /// caller falls back to the raw id.
+    /// `None` on any failure; the caller falls back to the raw id.
     pub async fn user_name(&self, user_id: &str) -> Option<String> {
         let r: SlackUserInfo = self
             .get_json("users.info", &[("user", user_id.to_string())])
@@ -164,9 +161,9 @@ impl SlackClient {
             .filter(|s| !s.is_empty())
     }
 
-    /// Resolve Slack markup in a message to readable text: user mentions, channel
-    /// references, and links. A bare user id needs a `users.info` lookup. The scan
-    /// is manual and UTF-8-safe to avoid a regex dependency.
+    /// Resolve Slack markup (mentions, channel references, links) to readable text.
+    /// A bare user id needs a `users.info` lookup. The scan is manual and UTF-8-safe
+    /// to avoid a regex dependency.
     pub async fn resolve_mentions(&self, text: &str) -> String {
         let mut out = String::with_capacity(text.len());
         let mut rest = text;
@@ -207,14 +204,11 @@ impl SlackClient {
         }
     }
 
-    /// Post `text` to a Slack channel, the outbound bridge.
-    ///
     /// A `username` posts under the Wayve sender's display name instead of the
-    /// bot's, via Slack's per-message override. No `icon_*` override is sent, so
-    /// Slack uses its default avatar and the message reads like any other user's.
-    /// The override needs the `chat:write.customize` bot scope; a workspace that
-    /// hasn't reinstalled with it has the call rejected, so we retry once as a
-    /// plain bot post rather than let outbound bridging silently break.
+    /// bot's, via Slack's per-message override. That override needs the
+    /// `chat:write.customize` bot scope; a workspace that hasn't reinstalled with
+    /// it has the call rejected, so we retry once as a plain bot post rather than
+    /// let outbound bridging silently break.
     pub async fn post_message(
         &self,
         channel: &str,

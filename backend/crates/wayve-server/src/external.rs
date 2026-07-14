@@ -35,18 +35,17 @@ pub fn gmail_api_base() -> String {
     std::env::var("GMAIL_API_BASE").unwrap_or_else(|_| "https://gmail.googleapis.com".to_string())
 }
 
-/// Root for GitHub REST calls.
 pub fn github_api_base() -> String {
     std::env::var("GITHUB_API_BASE").unwrap_or_else(|_| "https://api.github.com".to_string())
 }
 
-/// GitHub OAuth authorize endpoint, the browser redirect target.
+/// The browser redirect target for the GitHub OAuth consent screen.
 pub fn github_oauth_authorize_url() -> String {
     std::env::var("GITHUB_OAUTH_AUTHORIZE_URL")
         .unwrap_or_else(|_| "https://github.com/login/oauth/authorize".to_string())
 }
 
-/// GitHub OAuth token-exchange endpoint (server-to-server).
+/// Server-to-server token exchange; never called from the browser.
 pub fn github_oauth_token_url() -> String {
     std::env::var("GITHUB_OAUTH_TOKEN_URL")
         .unwrap_or_else(|_| "https://github.com/login/oauth/access_token".to_string())
@@ -59,7 +58,6 @@ pub fn jira_api_base(connection_base: &str) -> String {
         .unwrap_or_else(|_| connection_base.trim_end_matches('/').to_string())
 }
 
-/// Root for Slack Web API calls.
 pub fn slack_api_base() -> String {
     std::env::var("SLACK_API_BASE").unwrap_or_else(|_| "https://slack.com/api".to_string())
 }
@@ -112,9 +110,8 @@ pub fn google_calendar_url() -> String {
 
 /// Test-only escape hatch for the MCP client's SSRF guard, which otherwise
 /// rejects non-https URLs and any host resolving to a private, link-local, or
-/// loopback address (see `integrations::mcp::client`). Tests need it because
-/// their wiremock server is on `127.0.0.1`. Never set this in a deployed
-/// environment.
+/// loopback address (see `integrations::mcp::client`). Never set this in a
+/// deployed environment.
 pub fn mcp_allow_private_hosts() -> bool {
     matches!(
         std::env::var("MCP_ALLOW_PRIVATE_HOSTS").as_deref(),

@@ -1,10 +1,8 @@
 // The email-confirmation gate on admin-provisioned accounts: creating an
 // account requires a 6-digit code mailed to the address, so a mistyped address
-// cannot yield a dead but loginable account.
-//
-// The gate is the security-critical part, so most tests seed
-// `admin_create_verifications` directly and need no SMTP. The one test that
-// proves the mail actually goes out drives the real send path, and skips itself
+// cannot yield a dead but loginable account. Most tests seed
+// `admin_create_verifications` directly and need no SMTP; the one test that
+// proves the mail actually goes out drives the real send path and skips itself
 // when MAILPIT_API is unset (CI sets it; see .github/workflows/smoke.yml).
 #[cfg(test)]
 mod tests {
@@ -294,8 +292,7 @@ mod tests {
             return;
         };
         let smtp_port = std::env::var("MAILPIT_SMTP_PORT").unwrap_or_else(|_| "1025".to_string());
-        // SAFETY: env mutation is safe here because the test is #[serial] and CI
-        // runs --test-threads=1.
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
         unsafe {
             std::env::set_var("SMTP_HOST", &smtp_host);
             std::env::set_var("SMTP_PORT", &smtp_port);

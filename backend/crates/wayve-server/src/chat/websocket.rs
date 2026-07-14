@@ -319,11 +319,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         return;
                     }
 
-                    // The server must never see chat plaintext. Only enterprise
-                    // senders may send it; everyone else must supply an E2E
-                    // envelope and their plaintext is rejected. The server-AES
-                    // layer below wraps whatever arrives for storage at rest and
-                    // is not the confidentiality boundary.
+                    // The server must never see chat plaintext: only enterprise
+                    // senders may send it, everyone else must supply an E2E
+                    // envelope. The server-AES layer below wraps whatever arrives
+                    // for storage at rest and is not the confidentiality boundary.
                     if !uses_standard && !content.starts_with(CHAT_E2E_PREFIX) {
                         error!(
                             target: "ws",
@@ -412,10 +411,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 let message_id: i32 = row.get("id");
 
                                 // An attachment targets a channel_message_id or a
-                                // message_id, never both: DMs and channel
-                                // messages are separate tables with separate id
-                                // spaces. Scoped to unlinked rows this sender
-                                // uploaded.
+                                // message_id, never both: DMs and channel messages
+                                // are separate tables with separate id spaces.
                                 if !attachment_ids.is_empty() {
                                     let _ = sqlx::query(
                                         "UPDATE chat_attachments SET channel_message_id = $1 \
@@ -489,8 +486,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     })
                                     .to_string();
 
-                                    // Concurrent so latency does not scale with
-                                    // channel size.
                                     let recipients: Vec<i32> =
                                         members.into_iter().filter(|&m| m != sender_id).collect();
                                     let payload = msg_json.clone();
@@ -650,12 +645,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                         chrono::Utc,
                                     );
 
-                                // Best-effort and gated on local presence; a
-                                // cross-instance answer needs a shared presence
-                                // registry. The status must ride on this same echo
-                                // frame as the server-assigned message_id: a
-                                // separate status_update can race the sender's
-                                // optimistic reconciliation and be dropped.
+                                // Best-effort and gated on local presence. The
+                                // status must ride on this same echo frame as the
+                                // server-assigned message_id: a separate
+                                // status_update can race the sender's optimistic
+                                // reconciliation and be dropped.
                                 let delivered = SESSIONS.addr(receiver_id).is_some();
                                 let status = if delivered { "delivered" } else { "sent" };
 

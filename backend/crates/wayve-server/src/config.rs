@@ -58,20 +58,16 @@ pub fn listen_port() -> u16 {
         .unwrap_or(8080)
 }
 
-/// Resolve the Postgres connection string.
-///
-/// An explicit `DATABASE_URL` wins (docker-compose, CI, and prod set it);
-/// otherwise it is derived from the `POSTGRES_*` parts so credentials live
-/// exactly once, in `.env.secrets`. A thin wrapper over wayve-db so the
-/// assembly logic has one home and existing call sites keep working.
+/// Resolve the Postgres connection string. An explicit `DATABASE_URL` wins
+/// (docker-compose, CI, and prod set it); otherwise it is derived from the
+/// `POSTGRES_*` parts so credentials live exactly once, in `.env.secrets`.
 pub fn database_url() -> String {
     wayve_db::config::database_url()
 }
 
 // Every environment-specific value goes through this module, or `external.rs` for
-// external endpoint URLs. Accessors read the process env on each call: env files
-// are layered in by `load_env_files` at startup, and per-call reads keep
-// env-mutating tests working. To add a setting, add an accessor here plus an
+// external endpoint URLs. Accessors read the process env on each call so that
+// env-mutating tests keep working. To add a setting, add an accessor here plus an
 // entry in ENVIRONMENTS.md, and never call `env::var` elsewhere.
 
 /// An env var, trimmed; `None` when unset or blank.
@@ -87,19 +83,16 @@ fn var_or(key: &str, default: &str) -> String {
     var_opt(key).unwrap_or_else(|| default.to_string())
 }
 
-/// Recipient (and calendar organizer) for "Book a demo" notifications.
-/// Override with `DEMO_NOTIFY_EMAIL`; defaults to the founder's inbox.
+/// Recipient and calendar organizer for "Book a demo" notifications.
 pub fn demo_notify_email() -> String {
     var_or("DEMO_NOTIFY_EMAIL", "maheshiv199@gmail.com")
 }
 
 /// Recipient for "new pull request opened" notifications.
-/// Override with `GITHUB_PR_NOTIFY_EMAIL`; defaults to the founder's inbox.
 pub fn github_pr_notify_email() -> String {
     var_or("GITHUB_PR_NOTIFY_EMAIL", "maheshiv199@gmail.com")
 }
 
-/// The active environment name (`development` / `production` / ...).
 pub fn app_environment() -> String {
     var_opt("RWAYVE_ENV")
         .or_else(|| var_opt("ENV"))
@@ -144,8 +137,8 @@ pub fn jwt_secret() -> String {
 }
 
 /// AES-256-GCM input key material (Hex64). `None` makes at-rest encryption
-/// unusable. `aes_hkdf_salt()` and `auth_cookie_secure()` live in
-/// wayve-security::config and are read only from inside that crate.
+/// unusable. `aes_hkdf_salt()` lives in wayve-security::config and is read only
+/// from inside that crate.
 pub fn aes_key() -> Option<String> {
     var_opt("AES_KEY")
 }
@@ -172,9 +165,8 @@ pub fn local_json_cache_max_capacity() -> u64 {
         .unwrap_or(10_000)
 }
 
-/// Parse a retention-days env var. A non-positive or unparseable value falls back
-/// to the default so `startup::spawn_log_retention_pruner` can never be tricked
-/// into deleting everything.
+/// A non-positive or unparseable value falls back to the default so
+/// `startup::spawn_log_retention_pruner` can't be tricked into deleting everything.
 fn retention_days(key: &str, default: i32) -> i32 {
     var_opt(key)
         .and_then(|value| value.parse().ok())
@@ -182,7 +174,6 @@ fn retention_days(key: &str, default: i32) -> i32 {
         .unwrap_or(default)
 }
 
-/// Retention window in days for the `activity_events` telemetry stream.
 pub fn activity_retention_days() -> i32 {
     retention_days("ACTIVITY_RETENTION_DAYS", 7)
 }
@@ -358,7 +349,6 @@ pub fn outlook_oauth() -> OutlookOAuthConfig {
 /// Fail-fast check of required configuration; logs which optional integrations
 /// are enabled. Call once at startup, after `load_env_files`.
 pub fn validate() {
-    // Panics on a missing or insecure value.
     let _ = jwt_secret();
     if aes_key().is_none() {
         panic!("AES_KEY is not set; configure a 64-character Hex64 key");

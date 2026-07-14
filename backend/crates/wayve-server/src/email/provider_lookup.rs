@@ -29,16 +29,15 @@ pub struct ProviderLookupResponse {
     pub provider: &'static str,
 }
 
-// One resolver per process, so hickory's built-in cache serves repeat lookups
-// (an enterprise retrying after a typo) without hitting the network.
+// One resolver per process, so hickory's cache serves repeat lookups without
+// hitting the network.
 pub(crate) static RESOLVER: Lazy<TokioResolver> = Lazy::new(|| {
     let mut opts = ResolverOpts::default();
     // A slow nameserver must never wedge a user-facing request. With the outer
-    // tokio timeout this keeps the whole MX step under ~3s worst case.
+    // tokio timeout this keeps the whole MX step under roughly 3s worst case.
     opts.timeout = Duration::from_secs(2);
     opts.attempts = 1;
-    // Prefer the system resolver (/etc/resolv.conf), which Docker injects, and
-    // fall back to a default if reading it fails.
+    // Prefer the system resolver, which Docker injects into /etc/resolv.conf.
     let (cfg, builder_opts) = match hickory_resolver::system_conf::read_system_conf() {
         Ok((cfg, mut sys_opts)) => {
             sys_opts.timeout = opts.timeout;
@@ -49,8 +48,8 @@ pub(crate) static RESOLVER: Lazy<TokioResolver> = Lazy::new(|| {
     };
     let mut builder = Resolver::builder_with_config(cfg, TokioRuntimeProvider::default());
     *builder.options_mut() = builder_opts;
-    // `build()` fails only if the runtime/DNS plumbing can't initialize, at
-    // which point the process can't service mail lookups at all.
+    // `build()` fails only if the DNS plumbing can't initialize, at which point
+    // the process cannot service mail lookups at all.
     builder
         .build()
         .unwrap_or_else(|e| panic!("hickory resolver init failed: {e}"))
@@ -111,8 +110,8 @@ pub async fn provider_lookup(
 pub(crate) fn provider_for_known_domain(domain: &str) -> Option<&'static str> {
     match domain {
         "gmail.com" | "googlemail.com" => Some("gmail"),
-        // outlook.com is the modern entry point; the rest are legacy Hotmail and
-        // Windows Live aliases still in use.
+        // The non-outlook.com domains are legacy Hotmail and Windows Live
+        // aliases, still in use and still routed to Microsoft.
         "outlook.com" | "hotmail.com" | "live.com" | "msn.com" | "outlook.co.uk"
         | "hotmail.co.uk" | "live.co.uk" | "passport.com" => Some("outlook"),
         _ => None,

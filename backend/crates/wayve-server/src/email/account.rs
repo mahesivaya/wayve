@@ -11,9 +11,9 @@ const EMAIL_ACCOUNT_CACHE_MAX_CAPACITY: u64 = 10_000;
 const USER_ACCOUNT_LIST_CACHE_TTL_SECS: u64 = 60;
 const USER_ACCOUNT_LIST_CACHE_MAX_CAPACITY: u64 = 10_000;
 
-// Process-global pool, so code paths with no `&PgPool` in scope — the IMAP
-// `MailSender` impl, whose signature is fixed across providers — can still load
-// connection settings from the DB.
+// Process-global pool, so code paths with no `&PgPool` in scope can still load
+// connection settings. The IMAP `MailSender` impl needs this: its signature is
+// fixed across providers and carries no pool.
 static GLOBAL_POOL: std::sync::OnceLock<PgPool> = std::sync::OnceLock::new();
 
 /// Call once during startup.
@@ -208,13 +208,11 @@ pub async fn load_user_email_accounts_for_older_sync(
 
 #[instrument(target = "db", skip(pool), fields(user_id))]
 pub async fn load_account_summaries_for_user(pool: &PgPool, user_id: i32) -> Result<Vec<Account>> {
-    // Returns owner mailboxes and shared inboxes the caller belongs to.
-    // `provider_unread_count` is authoritative and refreshed every sync tick;
-    // the local COUNT is only a fallback so the badge isn't blank between
-    // account-add and first sync, and for shared inboxes whose provider count
-    // isn't refreshed per member. That fallback excludes SPAM and DRAFT to match
-    // what Gmail's labels.get reports for INBOX, and excludes self-sent mail so
-    // outbound messages left marked unread can't inflate the count.
+    // `provider_unread_count` is authoritative and refreshed every sync tick.
+    // The local COUNT is only a fallback, for the window between account-add and
+    // first sync and for shared inboxes whose provider count isn't refreshed per
+    // member. It excludes SPAM and DRAFT to match what Gmail's labels.get reports
+    // for INBOX, and self-sent mail, which would otherwise inflate the badge.
     let accounts = sqlx::query_as::<_, Account>(
         r#"
         SELECT

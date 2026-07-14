@@ -77,7 +77,6 @@ mod tests {
         )
     }
 
-    /// Returns (org_id, owner_id, owner_email, member_id, member_email).
     async fn org_with_owner_and_member(pool: &PgPool) -> (i32, i32, String, i32, String) {
         let org_id = insert_org(pool, &format!("Docs RBAC {}", random_email())).await;
 
@@ -92,7 +91,6 @@ mod tests {
         (org_id, owner_id, owner_email, member_id, member_email)
     }
 
-    /// The caller finishes the builder with `.to_request()`.
     fn create_doc_req(user_id: i32, email: &str, name: &str) -> actix_test::TestRequest {
         actix_test::TestRequest::post()
             .uri("/documents/new")
@@ -226,7 +224,6 @@ mod tests {
                 .unwrap_or_else(|e| panic!("doc should still exist: {e}"));
         assert_eq!(still_there, doc_id);
 
-        // The same two calls succeed for the owner.
         let req = actix_test::TestRequest::put()
             .uri(&format!("/documents/{doc_id}/content"))
             .insert_header(bearer(owner_id, &owner_email))

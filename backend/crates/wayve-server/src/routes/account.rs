@@ -102,7 +102,6 @@ pub async fn delete_account(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(get_accounts)
         .service(update_account_display_name)

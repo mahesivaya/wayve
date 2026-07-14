@@ -2,9 +2,6 @@
 //! registers their own remote MCP server, and the AI assistant then discovers and
 //! calls that server's tools. Fluxze only ever speaks MCP to a server the customer
 //! runs and controls; it never connects to their data store directly.
-//!
-//! `client` is the SSRF-guarded JSON-RPC client, `handler` the CRUD and the owner
-//! and tier gate, `models` the shared types.
 
 pub mod client;
 pub mod handler;

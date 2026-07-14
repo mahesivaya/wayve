@@ -163,7 +163,6 @@ mod tests {
         let member = insert_local_user(&pool, &random_email(), "pw").await;
         let outsider = insert_local_user(&pool, &random_email(), "pw").await;
 
-        // Seed as superuser (bypasses RLS).
         let ch: i32 = sqlx::query_scalar(
             "INSERT INTO channels (name, created_by) VALUES ($1, $2) RETURNING id",
         )

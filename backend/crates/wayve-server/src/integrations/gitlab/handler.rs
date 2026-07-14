@@ -23,7 +23,6 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(import_issues);
 }
 
-/// Load + decrypt the caller's GitLab connection, if any.
 pub(crate) async fn load_connection(
     pool: &PgPool,
     user_id: i32,

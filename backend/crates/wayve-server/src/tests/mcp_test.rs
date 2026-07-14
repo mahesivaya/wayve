@@ -118,8 +118,8 @@ mod tests {
         let mock = MockServer::start().await;
         mount_mcp_server(&mock).await;
 
-        // SAFETY: this mutates process env, so the test is #[serial] (and CI runs
-        // --test-threads=1). The flag lets the loopback mock past the SSRF guard.
+        // SAFETY: env mutation is serialized by #[serial]; CI also runs
+        // --test-threads=1. The flag lets the loopback mock past the SSRF guard.
         unsafe {
             std::env::set_var("MCP_ALLOW_PRIVATE_HOSTS", "1");
         }
@@ -186,7 +186,6 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-        // The same user, once an enterprise owner, may connect.
         let org_id = make_enterprise(&pool, user_id).await;
         let req = actix_test::TestRequest::post()
             .uri("/integrations/mcp/connections")
