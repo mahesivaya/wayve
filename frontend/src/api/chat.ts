@@ -100,8 +100,8 @@ export type ChatMessage = {
   // in the broadcast so the sender's UI can match the server-assigned
   // `message_id` to its optimistic local copy without re-fetching.
   client_id?: string | null;
-  // Ids of uploaded chat_attachments to link to this message (DMs only). Sent
-  // with the WS frame; not present on history rows.
+  // Ids of uploaded chat_attachments to link to this message (DM or channel).
+  // Sent with the WS frame; not present on history rows.
   attachment_ids?: number[];
   // Populated client-side after decryption: the attachment descriptors parsed
   // from the envelope, the raw envelope (to lazily unwrap the AES key for e2e
