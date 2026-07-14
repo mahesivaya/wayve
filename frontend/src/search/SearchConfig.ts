@@ -1,5 +1,9 @@
 export const SEARCH_LABELS: Record<string, string> = {
   "/home": "home",
+  // The two admin dashboards search their console/app tiles, so name that
+  // rather than falling back to the generic "this page".
+  "/organization/home": "apps and settings",
+  "/platform/home": "apps and settings",
   "/emails": "all emails",
   "/emails/attachments": "email files",
   "/chat": "users and messages",

@@ -2,6 +2,8 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
+import { useGlobalSearch } from "../search/SearchContext";
+import { matchesTileSearch } from "../search/tileSearch";
 import {
   getSupportSummary,
   getUsersSummary,
@@ -49,6 +51,9 @@ type ConsoleCard = {
 export default function PlatformAdminHome() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  // The header search box lives in `Layout`; the query reaches us through the
+  // search context.
+  const { searchQuery, normalizedSearchQuery } = useGlobalSearch();
   const canManageMembers = hasPermission(user, "members:manage");
   const canManageApiKeys = hasPermission(user, "api_keys:manage");
   const canReadMembers = hasPermission(user, "members:read");
@@ -398,9 +403,15 @@ export default function PlatformAdminHome() {
   // Anything not named here (Analytics, Security, SCIM, …) flows into
   // trailing rows of up to three. Hidden (no-permission) cards drop out
   // and empty rows are skipped, so non-owner roles still get a tidy grid.
-  const byKey = new Map(
-    consoles.filter((c) => c.visible).map((c) => [c.key, c])
+  // RBAC decides which cards exist; the header search box then narrows that
+  // set. Filtering here — before the rows are laid out — keeps the explicit
+  // row grouping and the "empty rows are skipped" behaviour working for a
+  // search result as well.
+  const permitted = consoles.filter((c) => c.visible);
+  const matched = permitted.filter((c) =>
+    matchesTileSearch(normalizedSearchQuery, c.label, c.description)
   );
+  const byKey = new Map(matched.map((c) => [c.key, c]));
   const ROW_KEYS: string[][] = [
     ["users", "business", "enterprise"],
     ["billing", "plans"],
@@ -412,12 +423,13 @@ export default function PlatformAdminHome() {
     keys.map((k) => byKey.get(k)).filter((c): c is ConsoleCard => Boolean(c))
   ).filter((row) => row.length > 0);
 
-  const remaining = consoles.filter((c) => c.visible && !namedKeys.has(c.key));
+  const remaining = matched.filter((c) => !namedKeys.has(c.key));
   for (let i = 0; i < remaining.length; i += 3) {
     rows.push(remaining.slice(i, i + 3));
   }
 
-  const hasAnyConsole = rows.length > 0;
+  const hasAnyConsole = permitted.length > 0;
+  const noSearchMatches = hasAnyConsole && rows.length === 0;
 
   // Enter / Space keyboard activation so the article behaves like a
   // button for screen-reader + keyboard users. `event.preventDefault`
@@ -449,7 +461,15 @@ export default function PlatformAdminHome() {
         </div>
       </section>
 
-      {hasAnyConsole && (
+      {noSearchMatches && (
+        <section className="platform-admin-panel u-panel">
+          <p className="platform-admin-empty">
+            Nothing here matches “{searchQuery.trim()}”.
+          </p>
+        </section>
+      )}
+
+      {hasAnyConsole && !noSearchMatches && (
         <section className="platform-admin-panel u-panel">
           <div className="platform-console-rows">
             {rows.map((row, rowIdx) => (

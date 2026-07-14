@@ -126,6 +126,29 @@
   margin-bottom: 0;
 }
 
+/* AI ask-box — the landing surface for an org member, above the tiles. The
+   platform home does the same thing with inline styles; this is the same
+   arrangement expressed in CSS. The fixed height keeps the tiles visible
+   below it instead of pushing them off the fold. */
+.organization-admin-home .org-ai-panel {
+  margin-bottom: 20px;
+}
+
+.org-ai-chat {
+  height: 560px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+/* Shorter viewports: don't let a 560px box eat the whole screen. */
+@media (max-height: 800px) {
+  .org-ai-chat {
+    height: 420px;
+  }
+}
+
 .org-home-tiles {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
