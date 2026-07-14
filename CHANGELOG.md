@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.2.0](https://github.com/mahesivaya/wayve/releases/tag/v7.2.0) - 2026-07-14
+
+### 🚀 Features
+
+- **organization:** Lead the org home with the AI ask-box ([#77](https://github.com/mahesivaya/wayve/issues/77))
+- **chat:** Support file attachments on channel messages ([#76](https://github.com/mahesivaya/wayve/issues/76))
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v7.1.1 [skip ci]
+
 ## [7.1.1](https://github.com/mahesivaya/wayve/releases/tag/v7.1.1) - 2026-07-14
 
 ### 🚀 Features
