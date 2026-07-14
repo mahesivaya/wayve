@@ -3,6 +3,62 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.1.1](https://github.com/mahesivaya/wayve/releases/tag/v7.1.1) - 2026-07-14
+
+### 🚀 Features
+
+- **pricing:** Simplify public pricing and route signup through plan selection ([#74](https://github.com/mahesivaya/wayve/issues/74))
+- **integrations:** Restrict the Integrations page to personal accounts and owners
+- **home:** Remove the Linux build from the download menu
+- **home:** Drop the Enterprise card from the who-it's-for grid
+- **home:** Remove the Linux build from the download menu
+- **home:** Drop the Enterprise card from the who-it's-for grid
+- **auth:** Confirm the email with a code before an admin creates an account
+- **chat:** Emoji reactions on messages
+- **chat:** Emoji picker in the message composer
+- **tasks:** Copy tasks as a plain #<n> share snippet
+- **chat:** Distinct online/offline styling and instant offline on logout
+- **auth:** Expand left sidebar on every login
+- **integrations:** Add Gmail OAuth connect card
+- **chat:** Show user online/offline presence
+- **projects:** Members list + editable wayve-local summary on detail page
+- **projects:** Project detail page instead of jumping to the code repo
+- **tasks:** Consolidate status, priority & date filters into one popover
+- **tasks:** Filter tasks by created date (after / before / between)
+- **chat:** Clickable task links that open in a split pane
+- **tasks:** Shareable task links, inline priority, project-prefixed keys
+- **sidebar:** Keep Code Repo permanently in the sidebar
+- **ai:** Drop the provider name from the AI Chat empty-state hint
+- **integrations:** Set up Jira + GitHub inline on the Integrations page; drop mailbox tiles
+- **sidebar:** Rename Workspace 'Documents' to 'Library'; open Workspace to all org/platform members
+- **chat:** Remove the separate 'Unread' block at the top of the sidebar
+
+### 🐛 Bug Fixes
+
+- **documents:** Remove duplicate "Documents" title above the page heading ([#75](https://github.com/mahesivaya/wayve/issues/75))
+- **chat:** Keep DMed people in the Users directory
+- **tasks:** Open chat task links directly, no split pane
+- **tasks:** Open a chat task link focused on that task with working detail view
+- **security:** Don't leak the shared PAT's repos to unconnected personal users
+- **header:** Hide global search on mobile to prevent sidebar-toggle overlap
+- **home:** Hide AI Chat header on platform admin home
+
+### 🧹 Maintenance
+
+- **db:** Migration for admin_create_verifications
+- **db:** Prod migration for chat reactions + admin-create verification
+- **chat:** Scope reaction counts to the acting user
+- **chat:** Simplify channel settings form
+- **changelog:** Update for v7.1.0 [skip ci]
+
+### Other Changes
+
+- **observability:** Use ? operator in tracing busy-time parser
+- **integrations:** Prettier-format gmail files
+- **sidebar:** Mark-only brand when collapsed, tighter collapse toggle, smaller logo
+- **chat:** Prettier-format presence files
+- **tasks:** Pin the read-only priority badge to the card top-right
+
 ## [7.1.0](https://github.com/mahesivaya/wayve/releases/tag/v7.1.0) - 2026-07-10
 
 ### 🚀 Features
