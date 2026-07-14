@@ -21,8 +21,8 @@ type Props = {
   // People the current user can @-mention in this conversation (channel members
   // or the DM peer). Empty/omitted disables the mention picker.
   mentionCandidates?: MentionCandidate[];
-  // Attachments (DMs only). When `allowAttachments` is false the paperclip is
-  // hidden and pending files aren't shown.
+  // Attachments (direct messages and channels). When `allowAttachments` is
+  // false the paperclip is hidden and pending files aren't shown.
   allowAttachments?: boolean;
   pendingFiles?: File[];
   onPickFiles?: (files: File[]) => void;

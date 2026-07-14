@@ -114,7 +114,8 @@ export default function Chat() {
   // invisible to a user who's just trying to send. Declared early so the
   // conversation-change block below can reset it.
   const [composeError, setComposeError] = useState("");
-  // Pending file attachments for the next DM send, + an in-flight upload flag.
+  // Pending file attachments for the next send (DM or channel), + an in-flight
+  // upload flag.
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   if (lastResetFor !== selectedConversation) {
@@ -122,6 +123,9 @@ export default function Chat() {
     setActiveThread(null);
     setThreadReplies([]);
     setComposeError("");
+    // Drop files staged for the conversation we just left — otherwise a file
+    // picked for a DM would follow the user into a channel and get posted to
+    // everyone in it.
     setPendingFiles([]);
   }
 
@@ -657,8 +661,7 @@ export default function Chat() {
     if (!wsRef.current || !user || !selectedConversation) return;
     const plaintext = input.trim();
     const isDm = selectedConversation.type === "user";
-    // Attachments are DM-only for now.
-    const files = isDm ? pendingFiles : [];
+    const files = pendingFiles;
     if (!plaintext && files.length === 0) return;
     if (wsRef.current.readyState !== WebSocket.OPEN) {
       logger.warn("Chat socket not ready; message send skipped", {
@@ -1038,7 +1041,7 @@ export default function Chat() {
               mentionCandidates={mentionCandidates}
               error={composeError}
               onDismissError={() => setComposeError("")}
-              allowAttachments={selectedConversation?.type === "user"}
+              allowAttachments={!!selectedConversation}
               pendingFiles={pendingFiles}
               uploading={uploadingFiles}
               onPickFiles={(files) =>

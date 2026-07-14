@@ -1,16 +1,18 @@
-//! Direct-message file attachments.
+//! Chat file attachments, for both direct messages and channel messages.
 //!
 //! Upload (`POST /api/chat/attachments`) stores one file under `./uploads`,
 //! always wrapped in the server at-rest AES layer. When the client marks the
 //! upload `e2e=true` the bytes it sends are ALREADY a client-side ciphertext
-//! (decryptable only by the DM participants), so the at-rest layer double-wraps
-//! something the server can't read; when `e2e=false` the at-rest layer is the
-//! only encryption. The row starts with `message_id = NULL`; it's linked to a
-//! message when the WS send arrives (see `chat::websocket`).
+//! (decryptable only by the conversation's participants), so the at-rest layer
+//! double-wraps something the server can't read; when `e2e=false` the at-rest
+//! layer is the only encryption. Upload is conversation-agnostic: the row
+//! starts unlinked (both target columns NULL) and the WS send links it to
+//! either a DM (`message_id`) or a channel message (`channel_message_id`) —
+//! see `chat::websocket`.
 //!
 //! Download (`GET /api/chat/attachments/{id}/download`) is gated to the
 //! uploader (before the message is sent) or, once linked, the DM's sender /
-//! receiver — so only the two participants can fetch it.
+//! receiver or a current member of the message's channel.
 
 use crate::prelude::*;
 use actix_multipart::Multipart;
@@ -160,16 +162,26 @@ pub async fn download_chat_attachment(
     let attachment_id = path.into_inner();
 
     // Authorize: the uploader (e.g. before the message is sent), or — once the
-    // attachment is linked to a message — that DM's sender or receiver.
+    // attachment is linked to a message — that DM's sender/receiver, or any
+    // current member of the channel the message was posted in. Membership is
+    // re-checked here on every download, so removing someone from a channel
+    // also cuts off their access to its attachments.
     let row = sqlx::query(
         r#"
         SELECT a.filename, a.mime_type, a.file_path, a.file_iv
           FROM chat_attachments a
           LEFT JOIN messages m ON m.id = a.message_id
+          LEFT JOIN channel_messages cm ON cm.id = a.channel_message_id
          WHERE a.id = $1
            AND ( a.uploader_id = $2
                  OR m.sender_id = $2
-                 OR m.receiver_id = $2 )
+                 OR m.receiver_id = $2
+                 OR EXISTS (
+                        SELECT 1
+                          FROM channel_members me
+                         WHERE me.channel_id = cm.channel_id
+                           AND me.user_id = $2
+                    ) )
         "#,
     )
     .bind(attachment_id)

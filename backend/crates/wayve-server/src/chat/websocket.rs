@@ -457,9 +457,28 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 .fetch_one(&pool)
                                 .await?;
 
+                                let message_id: i32 = row.get("id");
+
+                                // Link any uploaded attachments to this channel
+                                // message. Scoped to rows this sender uploaded
+                                // and not yet linked, so a client can't attach
+                                // someone else's file.
+                                if !attachment_ids.is_empty() {
+                                    let _ = sqlx::query(
+                                        "UPDATE chat_attachments SET channel_message_id = $1 \
+                                         WHERE id = ANY($2) AND uploader_id = $3 \
+                                           AND message_id IS NULL \
+                                           AND channel_message_id IS NULL",
+                                    )
+                                    .bind(message_id)
+                                    .bind(&attachment_ids)
+                                    .bind(sender_id)
+                                    .execute(&pool)
+                                    .await;
+                                }
+
                                 // The member list and the webhook owner lookup
                                 // are independent — run them concurrently.
-                                let message_id: i32 = row.get("id");
                                 let members_fut = sqlx::query_scalar::<_, i32>(
                                     "SELECT user_id FROM channel_members WHERE channel_id = $1",
                                 )
@@ -641,7 +660,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         if !attachment_ids.is_empty() {
                             let _ = sqlx::query(
                                 "UPDATE chat_attachments SET message_id = $1 \
-                                 WHERE id = ANY($2) AND uploader_id = $3 AND message_id IS NULL",
+                                 WHERE id = ANY($2) AND uploader_id = $3 \
+                                   AND message_id IS NULL \
+                                   AND channel_message_id IS NULL",
                             )
                             .bind(message_id)
                             .bind(&attachment_ids)

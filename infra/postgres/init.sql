@@ -756,12 +756,19 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- File attachments on direct messages. The blob is always encrypted at rest
--- with the server key (file_iv + on-disk ciphertext). When `e2e` is true the
--- stored bytes are ALSO a client-side ciphertext (decryptable only by the DM
--- participants), so the server can't read the file; when false the at-rest
--- layer is the only encryption. `message_id` is NULL between upload and send,
--- then set to link the attachment to its message.
+-- File attachments on chat messages (direct messages AND channel messages).
+-- The blob is always encrypted at rest with the server key (file_iv + on-disk
+-- ciphertext). When `e2e` is true the stored bytes are ALSO a client-side
+-- ciphertext (decryptable only by the conversation's participants), so the
+-- server can't read the file; when false the at-rest layer is the only
+-- encryption.
+--
+-- DMs (`messages`) and channel messages (`channel_messages`) are separate
+-- tables with separate id spaces, so — as with `message_reactions` — an
+-- attachment points at exactly one of them via `message_id` XOR
+-- `channel_message_id` (see the constraint added below `channel_messages`,
+-- which must exist before the FK can be declared). BOTH are NULL between
+-- upload and send; the send path sets exactly one to link the attachment.
 CREATE TABLE IF NOT EXISTS chat_attachments (
     id BIGSERIAL PRIMARY KEY,
     message_id INT REFERENCES messages(id) ON DELETE CASCADE,
@@ -828,6 +835,23 @@ CREATE TABLE IF NOT EXISTS channel_messages (
     parent_message_id INT REFERENCES channel_messages(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Channel target for chat_attachments (declared here because chat_attachments
+-- is created above channel_messages, so the FK can't be inline). An attachment
+-- links to at most one message: a DM (message_id) or a channel message
+-- (channel_message_id). Both NULL is the legal pre-send state, so this is "at
+-- most one" rather than the strict XOR used by message_reactions.
+ALTER TABLE chat_attachments
+    ADD COLUMN IF NOT EXISTS channel_message_id INT
+    REFERENCES channel_messages(id) ON DELETE CASCADE;
+
+ALTER TABLE chat_attachments DROP CONSTRAINT IF EXISTS chat_attachments_one_target;
+ALTER TABLE chat_attachments
+    ADD CONSTRAINT chat_attachments_one_target
+    CHECK (message_id IS NULL OR channel_message_id IS NULL);
+
+CREATE INDEX IF NOT EXISTS idx_chat_attachments_channel_message
+    ON chat_attachments (channel_message_id);
 
 -- Emoji reactions on a chat message. DMs (`messages`) and channel messages
 -- (`channel_messages`) are separate tables with separate id spaces, so a
@@ -2319,13 +2343,24 @@ CREATE POLICY channel_join_requests_rls ON channel_join_requests
     WITH CHECK (current_setting('app.bypass', true) = 'on'
            OR user_id = nullif(current_setting('app.user_id', true), '')::int);
 
+-- An attachment is visible to the uploader (which also covers the window
+-- between upload and send, when both target columns are still NULL) and to
+-- whoever can see the message it hangs off. Like the reactions policy below,
+-- the EXISTS subqueries lean on the policies above: under `wayve_app`,
+-- `messages` only yields rows where the caller is sender/receiver and
+-- `channel_messages` only yields rows in channels the caller belongs to — so an
+-- attachment on a DM or channel the caller isn't part of matches no branch, and
+-- a user removed from a channel loses access to its attachments on the next
+-- request. Writes stay self-only: you may only insert/modify rows you uploaded.
 ALTER TABLE chat_attachments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_attachments FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS chat_attachments_rls ON chat_attachments;
 CREATE POLICY chat_attachments_rls ON chat_attachments
     USING (current_setting('app.bypass', true) = 'on'
            OR uploader_id = nullif(current_setting('app.user_id', true), '')::int
-           OR EXISTS (SELECT 1 FROM messages m WHERE m.id = chat_attachments.message_id))
+           OR EXISTS (SELECT 1 FROM messages m WHERE m.id = chat_attachments.message_id)
+           OR EXISTS (SELECT 1 FROM channel_messages cm
+                       WHERE cm.id = chat_attachments.channel_message_id))
     WITH CHECK (current_setting('app.bypass', true) = 'on'
            OR uploader_id = nullif(current_setting('app.user_id', true), '')::int);
 
