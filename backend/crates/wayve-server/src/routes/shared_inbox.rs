@@ -1,16 +1,6 @@
-//! HTTP surface for shared inboxes.
-//!
-//! Admin endpoints (require `inbox:manage` permission + organization access):
-//!   GET    /api/shared-inboxes                              — list inboxes in scope
-//!   POST   /api/shared-inboxes                              — mark an email_account as shared
-//!   PATCH  /api/shared-inboxes/{id}                         — rename / re-scope
-//!   DELETE /api/shared-inboxes/{id}                         — un-share
-//!   GET    /api/shared-inboxes/{id}/members                 — list members
-//!   POST   /api/shared-inboxes/{id}/members                 — add a member
-//!   DELETE /api/shared-inboxes/{id}/members/{user_id}       — remove a member
-//!
-//! Workflow endpoint (require account access — owner or shared member):
-//!   PATCH  /api/shared-inboxes/emails/{email_id}/state      — change status / assignee
+//! HTTP surface for shared inboxes. The admin endpoints require the
+//! `inbox:manage` permission plus access to the organization; the workflow
+//! endpoint requires only account access, as an owner or a shared member.
 
 use crate::email::shared_inbox::{InboxMember, StatusUpdate, can_access_account, upsert_state};
 use crate::prelude::*;
@@ -19,10 +9,6 @@ use chrono::{DateTime, Utc};
 use tracing::{info, instrument};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::rbac::{self, Permission, Scope};
-
-// =============================================================
-// Shared DTOs
-// =============================================================
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct SharedInboxView {
@@ -40,9 +26,8 @@ pub struct SharedInboxView {
 pub struct ShareInput {
     pub account_id: i32,
     pub label: Option<String>,
-    /// Org scope. Required for organization admins (they must scope to
-    /// their own org); platform admins may set NULL to publish a
-    /// platform-level inbox.
+    /// Required for organization admins, who must scope to their own org.
+    /// Platform admins may leave it NULL to publish a platform-level inbox.
     pub organization_id: Option<i32>,
 }
 
@@ -65,13 +50,9 @@ fn default_can_reply() -> bool {
     true
 }
 
-// =============================================================
-// Admin helpers
-// =============================================================
-
-/// Enforce: caller has `inbox:manage` AND can act on `organization_id`.
-/// Platform staff may operate on any org or on NULL (platform-level).
-/// Organization staff may operate only on their own org.
+/// Require `inbox:manage` and the right to act on `organization_id`. Platform
+/// staff may operate on any org or on NULL (platform-level); organization staff
+/// only on their own org.
 async fn require_scope_for_org(
     req: &HttpRequest,
     pool: &PgPool,
@@ -102,10 +83,6 @@ async fn load_account(pool: &PgPool, account_id: i32) -> sqlx::Result<Option<Sha
     .fetch_optional(pool)
     .await
 }
-
-// =============================================================
-// GET /api/shared-inboxes
-// =============================================================
 
 #[get("/shared-inboxes")]
 #[instrument(target = "auth", skip(req, pool))]
@@ -143,10 +120,6 @@ pub async fn list_shared_inboxes(req: HttpRequest, pool: web::Data<PgPool>) -> A
     };
     Ok(HttpResponse::Ok().json(rows))
 }
-
-// =============================================================
-// POST /api/shared-inboxes — mark an account as shared
-// =============================================================
 
 #[post("/shared-inboxes")]
 #[instrument(target = "auth", skip(req, pool, body))]
@@ -195,10 +168,6 @@ pub async fn create_shared_inbox(
     Ok(HttpResponse::Ok().json(updated))
 }
 
-// =============================================================
-// PATCH /api/shared-inboxes/{id} — rename / toggle enable
-// =============================================================
-
 #[patch("/shared-inboxes/{id}")]
 #[instrument(target = "auth", skip(req, pool, path, body))]
 pub async fn update_shared_inbox(
@@ -237,10 +206,7 @@ pub async fn update_shared_inbox(
     Ok(HttpResponse::Ok().json(updated))
 }
 
-// =============================================================
-// DELETE /api/shared-inboxes/{id} — un-share (members removed via cascade)
-// =============================================================
-
+/// Un-share an inbox. Its members go with it, via cascade.
 #[delete("/shared-inboxes/{id}")]
 #[instrument(target = "auth", skip(req, pool, path))]
 pub async fn delete_shared_inbox(
@@ -277,10 +243,6 @@ pub async fn delete_shared_inbox(
 
     Ok(HttpResponse::NoContent().finish())
 }
-
-// =============================================================
-// Members
-// =============================================================
 
 #[get("/shared-inboxes/{id}/members")]
 #[instrument(target = "auth", skip(req, pool, path))]
@@ -336,9 +298,9 @@ pub async fn add_inbox_member(
         Err(resp) => return Ok(resp),
     };
 
-    // Verify the target user exists and (for org-scoped inboxes) belongs
-    // to the same org. Platform-level inboxes have no org-membership
-    // requirement — platform staff are eligible by default.
+    // For an org-scoped inbox the target must belong to the same org.
+    // Platform-level inboxes have no such requirement: platform staff are
+    // eligible by default.
     let row: Option<(Option<i32>,)> =
         sqlx::query_as("SELECT organization_id FROM users WHERE id = $1")
             .bind(body.user_id)
@@ -405,10 +367,6 @@ pub async fn remove_inbox_member(
     Ok(HttpResponse::NoContent().finish())
 }
 
-// =============================================================
-// Workflow: status / assignee update on a single email
-// =============================================================
-
 #[patch("/shared-inboxes/emails/{email_id}/state")]
 #[instrument(target = "auth", skip(req, pool, path, body))]
 pub async fn update_email_state(
@@ -420,9 +378,8 @@ pub async fn update_email_state(
     let email_id = path.into_inner();
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    // Look up the account this email belongs to + verify the caller has
-    // *any* access (owner or member). Anyone who can read can also patch
-    // workflow state; that's how every help-desk tool I've seen works.
+    // Any access to the account (owner or member) is enough: whoever can read an
+    // email can also patch its workflow state, as in other help-desk tools.
     let row: Option<(i32,)> = sqlx::query_as("SELECT account_id FROM emails WHERE id = $1")
         .bind(email_id)
         .fetch_optional(pool.get_ref())
@@ -448,7 +405,6 @@ pub async fn update_email_state(
     }
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(list_shared_inboxes)
         .service(create_shared_inbox)

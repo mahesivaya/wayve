@@ -1,12 +1,12 @@
-//! Per-repo access management: for one repo, show who can access it and at what
-//! level, and let an admin add/remove members.
+//! Per-repo access management: who can access a repo, at what level, and the
+//! admin controls to add or remove members.
 //!
-//! **Hybrid model** — GitHub is authoritative for the read/write *level* (read
-//! live from the collaborator API); Wayve's `member_project_access` controls
-//! whether the repo shows in a member's Code Repo dashboard. Adding a member
-//! grants Wayve visibility and best-effort-syncs a GitHub collaborator (when our
-//! token has admin on the repo). See docs/architecture/ai-task-assignment.md's
-//! sibling design and `github_proxy` for the enforcement side.
+//! The model is hybrid. GitHub is authoritative for the read/write level, read
+//! live from the collaborator API, while Wayve's `member_project_access` decides
+//! whether the repo appears in a member's Code Repo dashboard. Adding a member
+//! grants Wayve visibility and best-effort-syncs a GitHub collaborator, which
+//! only succeeds when our token has admin on the repo. `github_proxy` is the
+//! enforcement side.
 
 pub mod github;
 pub mod handler;

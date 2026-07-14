@@ -10,9 +10,8 @@ const newReqId = (): string => {
   return Math.random().toString(36).slice(2, 10);
 };
 
-// Re-export from authContextValue so call sites can keep importing
-// `RecoveryMode` from a single place. The canonical union is the one
-// kept in sync with the backend CHECK constraint on `users.recovery_mode`.
+// Re-exported so call sites import `RecoveryMode` from one place. The canonical
+// union tracks the backend CHECK constraint on `users.recovery_mode`.
 export type { RecoveryMode } from "../auth/authContextValue";
 import type { RecoveryMode as _RecoveryMode } from "../auth/authContextValue";
 
@@ -54,8 +53,7 @@ export async function register(
   }
 }
 
-// Direct business signup — creates the owner account + organization in one
-// step and returns { token, account_type: "organization_admin" }.
+// Creates the owner account and the organization in one step.
 export async function registerBusiness(input: {
   organization_name: string;
   username: string;
@@ -122,7 +120,6 @@ export async function resetPassword(token: string, newPassword: string) {
   return res.json();
 }
 
-// Confirm the 6-digit email-verification code sent to `email`.
 export async function verifyEmail(email: string, code: string) {
   const res = await apiFetch(`/api/verify-email`, {
     auth: false,
@@ -132,8 +129,8 @@ export async function verifyEmail(email: string, code: string) {
   return res.json();
 }
 
-// Re-send the verification link. Always resolves (generic 200) regardless of
-// whether the address exists / is already verified.
+// Always resolves with a generic 200, so it cannot be used to probe for
+// accounts.
 export async function resendVerification(email: string) {
   const res = await apiFetch(`/api/resend-verification`, {
     auth: false,
@@ -143,17 +140,13 @@ export async function resendVerification(email: string) {
   return res.json();
 }
 
-// Mnemonic-based password reset for users who lost their password but kept
-// their 24-word recovery phrase. The phrase itself never crosses the wire;
-// the frontend converts it to 32-byte entropy first (see crypto/mnemonic.ts
-// :: mnemonicToEntropy). Backend verifies by attempting AES-GCM decrypt of
-// the user's stored envelope and only mutates the password if that
-// succeeds.
+// Password reset via the 24-word recovery phrase. The phrase never crosses the
+// wire: the frontend converts it to entropy first (crypto/mnemonic.ts), and the
+// backend verifies by attempting an AES-GCM decrypt of the stored envelope.
 //
-// For "full" accounts the response includes the envelope so the same page
-// can also unlock E2E keys client-side. For "password_only" accounts
-// `wrapped_envelope` is null — the server never held the user's real
-// private key, so no client-side restore is possible.
+// "full" accounts get the envelope back so the same page can unlock E2E keys.
+// For "password_only" accounts it is null: the server never held the private
+// key, so no client-side restore is possible.
 export type RecoverWithMnemonicResponse = {
   user_id: number;
   recovery_mode?: _RecoveryMode;

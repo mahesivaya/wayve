@@ -1,26 +1,22 @@
 import { apiFetchJson } from "./client";
 
-// One row in a repo's access grid. `user_id` is set only for connected members
-// (assignable in Wayve); GitHub-only collaborators have `user_id: null`.
+// One row in a repo's access grid. `user_id` is set only for connected members;
+// GitHub-only collaborators have a null one and `is_member: false`.
 export type RepoAccessRow = {
   user_id: number | null;
   github_login: string | null;
   email: string | null;
-  // read | write | admin — GitHub's live level for a collaborator, else the
-  // Wayve-recorded grant level.
+  // GitHub's live level for a collaborator, else the Wayve-recorded grant.
   level: "read" | "write" | "admin";
-  // Whether the repo shows in this user's Wayve dashboard.
   in_dashboard: boolean;
-  // Whether the person maps to a Wayve user (vs. a GitHub-only collaborator).
   is_member: boolean;
-  // github | wayve | both
   source: "github" | "wayve" | "both";
 };
 
 export type RepoAccessResponse = {
   repo: string;
-  // False when we couldn't read collaborators from GitHub (grid shows only
-  // Wayve grants + a hint).
+  // False when collaborators could not be read from GitHub, in which case the
+  // grid shows only Wayve grants.
   github_readable: boolean;
   can_manage: boolean;
   rows: RepoAccessRow[];
@@ -28,7 +24,6 @@ export type RepoAccessResponse = {
 
 export type RepoAccessMutation = {
   dashboard_updated: boolean;
-  // synced | forbidden | failed | skipped
   github_outcome: "synced" | "forbidden" | "failed" | "skipped";
   note?: string;
 };
@@ -39,14 +34,12 @@ const repoPath = (owner: string, repo: string) =>
 const summaryPath = (owner: string, repo: string) =>
   `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/summary`;
 
-// The Wayve-local project summary for a repo + whether the caller may edit it.
 export type RepoSummary = { summary: string; can_edit: boolean };
 
 export const getRepoSummary = async (owner: string, repo: string) =>
   apiFetchJson<RepoSummary>(summaryPath(owner, repo));
 
-// Save the summary (requires manage rights server-side). Returns the stored
-// value + can_edit.
+// Requires manage rights server-side.
 export const setRepoSummary = async (
   owner: string,
   repo: string,
@@ -60,9 +53,8 @@ export const setRepoSummary = async (
 export const getRepoAccess = async (owner: string, repo: string) =>
   apiFetchJson<RepoAccessResponse>(repoPath(owner, repo));
 
-// Add/update a user's access. Provide `user_id` (a Wayve member) and/or
-// `github_login` (for a GitHub-only collaborator). `in_dashboard` controls Wayve
-// dashboard visibility (default true server-side).
+// Identify the target by `user_id` for a Wayve member, by `github_login` for a
+// GitHub-only collaborator, or by both. `in_dashboard` defaults to true.
 export const setRepoAccess = async (
   owner: string,
   repo: string,
@@ -78,8 +70,7 @@ export const setRepoAccess = async (
     body: JSON.stringify(payload),
   });
 
-// Remove access for a user (by Wayve `user_id`) or a GitHub-only collaborator
-// (by `login`).
+// Target a Wayve member by `user_id` or a GitHub-only collaborator by `login`.
 export const removeRepoAccess = async (
   owner: string,
   repo: string,

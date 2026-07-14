@@ -5,8 +5,7 @@ pub struct QueryParams {
     pub user1: i32,
     pub user2: i32,
     // Reconnect resync: when set, return messages with id > since_id in
-    // chronological order (the backfill of anything missed while the socket
-    // was down) instead of the default "latest 50".
+    // chronological order instead of the default latest 50.
     pub since_id: Option<i32>,
 }
 

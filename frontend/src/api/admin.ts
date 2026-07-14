@@ -17,15 +17,14 @@ export type AdminOrganization = {
   storage_used_bytes?: number;
   created_at?: string | null;
   admin?: AdminCreatedUser | null;
-  // The org's active-subscription plan code + tier. "none" / null when the org
-  // has no active subscription. Drives the Business vs Enterprise page split.
+  // From the org's active subscription; "none" or null when it has none. Drives
+  // the Business vs Enterprise page split.
   plan_code?: string | null;
   tier?: string | null;
 };
 
-// The organization admin to provision alongside the new organization. The
-// caller supplies the full login email, built from the admin handle and the
-// organization slug as <adminHandle>@<org-slug>.com.
+// The admin to provision alongside the new organization. The caller supplies
+// the full login email, built as <adminHandle>@<org-slug>.com.
 export type CreateOrganizationInput = {
   name: string;
   adminUsername: string;
@@ -70,10 +69,9 @@ export async function createAdminOrganization(
   return data;
 }
 
-// Provision a new ENTERPRISE organization + its owner account in one call. Same
-// endpoint as createAdminOrganization, with `tier: "enterprise"` so the backend
-// also attaches an active enterprise subscription (the org is enterprise-tier
-// immediately — the gate for Slack / MCP / standard-encryption features).
+// Same endpoint as createAdminOrganization, but `tier: "enterprise"` also
+// attaches an active enterprise subscription, so the org immediately clears the
+// gate on Slack, MCP, and standard-encryption features.
 export async function createEnterpriseOrganization(
   input: CreateOrganizationInput
 ): Promise<AdminOrganization> {
@@ -98,8 +96,8 @@ export async function createEnterpriseOrganization(
   return data;
 }
 
-// A stored API key as shown in the admin UI. `key_preview` is redacted; the
-// raw key is returned only once, by generateOrganizationApiKey.
+// `key_preview` is redacted. The raw key is returned exactly once, by
+// generateOrganizationApiKey, and is unrecoverable afterwards.
 export type ApiKey = {
   id: number;
   name: string;
@@ -174,11 +172,9 @@ export type DeletedMyOrganization = {
   account_type: string;
 };
 
-// Tear down the caller's organization and revert them to a personal
-// account. The backend deletes every invitee account in the org, drops
-// the org row (cascades members, entitlements, billing rows), and flips
-// the owner back to account_type='personal'. Refuses with 409 if an
-// active Stripe subscription exists — cancel from /billing first.
+// Tears down the org, deletes every invitee account, and reverts the caller to
+// a personal account. Refuses with 409 while an active Stripe subscription
+// exists, which must be cancelled from /billing first.
 export async function deleteMyOrganization(): Promise<DeletedMyOrganization> {
   const res = await apiFetch("/api/organizations/me", {
     method: "DELETE",
@@ -200,9 +196,8 @@ export type UpdatedOrganization = {
   slug: string | null;
 };
 
-// Rename the caller's organization. Owner-only on the backend; the slug is
-// re-derived server-side from the new name. 409 if another org already uses
-// the name.
+// Owner-only. The slug is re-derived server-side from the new name, and a 409
+// comes back if another org already uses it.
 export async function updateMyOrganization(
   name: string
 ): Promise<UpdatedOrganization> {
@@ -221,9 +216,8 @@ export async function updateMyOrganization(
   return data;
 }
 
-// Permanently delete the caller's OWN account and all data cascading from it.
-// Refuses with 409 if the caller still owns an organization (delete it first)
-// or has an active Stripe subscription (cancel from /billing first).
+// Refuses with 409 while the caller still owns an organization or has an active
+// Stripe subscription; both must be torn down first.
 export async function deleteMyAccount(): Promise<void> {
   const res = await apiFetch("/api/me", {
     method: "DELETE",
@@ -242,14 +236,13 @@ export type SentCreateCode = {
   expires_in_minutes: number;
 };
 
-// Step 1 of admin account creation: mail a 6-digit code that proves someone can
-// receive mail for the new account. No user is created by this call.
+// Step 1: mail a 6-digit code proving someone can receive mail for the new
+// account. No user is created, and the code is never returned — the admin reads
+// it from the inbox and types it back.
 //
-// `deliveryEmail` is where the code is actually sent, and defaults server-side
-// to `accountEmail`. They differ for org accounts, whose login address sits on a
-// synthetic <user>@<org-slug>.com domain with no real inbox — the code goes to
-// the person's reachable mailbox instead. The code is never returned here; it
-// comes back from the admin, who reads it out of that inbox.
+// `deliveryEmail` defaults to `accountEmail`. They differ for org accounts,
+// whose login address is on a synthetic <user>@<org-slug>.com domain with no
+// real inbox, so the code goes to a reachable mailbox instead.
 export async function sendAdminCreateCode(
   accountEmail: string,
   deliveryEmail?: string
@@ -272,11 +265,9 @@ export async function sendAdminCreateCode(
   return data;
 }
 
-// Step 2: creates a user as the calling admin. `email` is the full login
-// address; the caller builds it from a handle and the organization domain (or
-// wayve.com for personal accounts). `verificationCode` is the code mailed by
-// sendAdminCreateCode — the backend rejects the call without a valid one, so
-// this always follows a send.
+// Step 2, always preceded by sendAdminCreateCode: the backend rejects this
+// without the code that call mailed. `email` is the full login address, built
+// from a handle plus the org domain, or wayve.com for personal accounts.
 export async function createAdminUser(
   username: string,
   email: string,

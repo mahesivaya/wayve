@@ -10,8 +10,7 @@ use super::mapping::{map_issue_fields, wayve_status_to_jira_category};
 use super::models::JiraConnection;
 
 /// Pull issues matching `jql` into the user's tasks, upserting on
-/// `(user_id, jira_issue_key)` so re-imports update in place. Returns
-/// `(imported, updated)`.
+/// `(user_id, jira_issue_key)` so re-imports update in place.
 pub async fn pull(
     pool: &PgPool,
     user_id: i32,
@@ -26,11 +25,10 @@ pub async fn pull(
         return Ok((0, 0));
     }
 
-    // Batch every issue into ONE multi-row upsert instead of a round-trip per
-    // issue. `(xmax::text = '0')` is true only for a fresh INSERT; an ON
-    // CONFLICT UPDATE stamps xmax with the updating xid — so the per-row flag
-    // distinguishes imported (true) from updated (false). Search results are
-    // unique by key, so no row conflicts twice within the batch.
+    // One multi-row upsert, not a round-trip per issue. `(xmax::text = '0')` is
+    // true only for a fresh INSERT, because an ON CONFLICT UPDATE stamps xmax with
+    // the updating xid, so the per-row flag separates imported from updated.
+    // Search results are unique by key, so no row conflicts twice in the batch.
     let mut qb: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
         "INSERT INTO tasks \
             (user_id, name, description, priority, status, jira_issue_key, jira_base) ",
@@ -62,10 +60,8 @@ pub async fn pull(
     Ok((imported, updated))
 }
 
-/// Push a task's summary + status back to its linked Jira issue. No-op unless
-/// the task has a `jira_issue_key` and the user has an enabled connection.
-/// **Best-effort**: any failure is logged and swallowed so a Jira outage never
-/// fails a Wayve task edit.
+/// Best-effort: any failure is logged and swallowed, so a Jira outage never fails
+/// a Wayve task edit.
 pub async fn push_task_if_linked(pool: &PgPool, user_id: i32, task: &Task) {
     let Some(key) = task.jira_issue_key.as_deref() else {
         return;
@@ -86,8 +82,8 @@ async fn push_inner(pool: &PgPool, user_id: i32, key: &str, task: &Task) -> Resu
 
     client.update_summary(key, &task.name).await?;
 
-    // Move the issue to a status whose category matches the Wayve status. If the
-    // Jira workflow allows no such transition from the current state, skip it.
+    // If the Jira workflow allows no transition to a matching status category from
+    // the current state, skip the move rather than fail.
     let target = wayve_status_to_jira_category(&task.status);
     let transitions = client.list_transitions(key).await?;
     if let Some(t) = transitions.iter().find(|t| {

@@ -39,9 +39,8 @@ import {
   type UserType,
 } from "./authContextValue";
 
-// Plan A collapsed RecoveryMode to just "full"; the helper still exists
-// so older /api/me payloads from a partially-migrated deployment can be
-// normalized in one place.
+// Only one RecoveryMode ("full") exists now; this collapses any older
+// /api/me payload from a partially-migrated deployment onto it.
 const normalizeRecoveryMode = (_value: unknown): RecoveryMode => "full";
 
 const log = logger.scope("auth");
@@ -50,8 +49,8 @@ async function publishPublicKey(publicKey: ArrayBuffer) {
   await saveUserPublicKey(publicKey);
 }
 
-// PBKDF2 settings — match the org-member login-wrap (encryption.rs
-// ORG_MEMBER_PBKDF2_ITERATIONS). Browser-CSPRNG salt + nonce.
+// Must stay equal to the backend's org-member login-wrap iteration count
+// (ORG_MEMBER_PBKDF2_ITERATIONS in encryption.rs) or wraps won't unwrap.
 const LOGIN_WRAP_PBKDF2_ITERATIONS = 600_000;
 
 function bytesToB64(bytes: Uint8Array): string {
@@ -60,10 +59,10 @@ function bytesToB64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Wrap the user's freshly-generated PKCS8 private key under
-// PBKDF2(password) and PUT to /api/me/login-wrap. Lets the same user
-// auto-unlock on any new browser by re-deriving the AES key from their
-// typed password — no mnemonic prompt unless they forget the password.
+// Wrap the user's PKCS8 private key under PBKDF2(password) and PUT it to
+// /api/me/login-wrap, so the same user auto-unlocks on a new browser by
+// re-deriving the AES key from their typed password. Without this they
+// would need the 24-word mnemonic on every new device.
 async function uploadPasswordLoginWrap(
   privateKey: CryptoKey,
   password: string
@@ -99,8 +98,8 @@ async function uploadPasswordLoginWrap(
     pkcs8.slice().buffer
   );
 
-  // Zero the plaintext PKCS8 bytes we copied into JS memory. Best-effort
-  // — JS can't guarantee a fresh allocation didn't already snapshot it.
+  // Zero the plaintext PKCS8 bytes. Best-effort only: JS cannot guarantee
+  // the runtime did not already copy the buffer elsewhere.
   pkcs8.fill(0);
 
   await apiFetch("/api/me/login-wrap", {
@@ -117,11 +116,9 @@ async function uploadPasswordLoginWrap(
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const authVersion = useRef(0);
 
-  // Captured once at AuthProvider mount. resolveBootToken cleans the URL
-  // hash as a side effect, so the `signup`/`sso&new=true` markers are
-  // gone by the time the bootstrap useEffect runs. Stashing the parsed
-  // result in state lets both the optimistic-user initializer and the
-  // effect see the same snapshot.
+  // Captured once at mount: resolveBootToken clears the URL hash as a side
+  // effect, so the `signup` / `sso&new=true` markers are already gone by the
+  // time the bootstrap effect runs.
   const [boot] = useState(resolveBootToken);
 
   // Optimistic init: trust a non-expired JWT immediately so the app renders
@@ -148,40 +145,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [initializing, setInitializing] = useState(() => !getAuthToken());
 
-  // ============================================================
-  // Recovery seed orchestration
-  // ============================================================
-  // When `pendingMnemonic` is set, the modal is rendered at the bottom of
-  // the provider. `pendingWrapJob` is the closure the modal calls after
-  // the user has verified the words — wrapping the private key + uploading
-  // the envelope happens THEN, so a user who never confirms doesn't end
-  // up with a recovery copy they don't know exists.
+  // Setting `pendingMnemonic` renders the seed modal. `pendingWrapJob` is the
+  // closure that modal calls only after the user confirms they wrote the words
+  // down; wrapping the private key and uploading the envelope happen THEN, so a
+  // user who abandons the modal never gets a recovery copy they don't know about.
   const [pendingMnemonic, setPendingMnemonic] = useState<string | null>(null);
   const [pendingWrapJob, setPendingWrapJob] = useState<
     (() => Promise<void>) | null
   >(null);
-  // Track the user's recovery_mode at modal-open time so the seed-modal
-  // copy can adapt (full = "restore on a new device too"; password_only
-  // = "this resets a forgotten password only").
   const [pendingRecoveryMode, setPendingRecoveryMode] =
     useState<RecoveryMode>("full");
   const [wrapBusy, setWrapBusy] = useState(false);
   const [wrapError, setWrapError] = useState<string | null>(null);
-  // True when a "full"-mode user logs in on a device without local
-  // encryption keys. Blocks the UI behind RecoverPromptModal until they
-  // enter their 24-word recovery phrase (the one shown once at register).
+  // True when a user logs in on a device with no local encryption keys. Blocks
+  // the UI behind RecoverPromptModal until they enter the 24-word phrase that
+  // was shown to them exactly once at registration.
   const [needsRecovery, setNeedsRecovery] = useState(false);
 
-  // No `needsRestore` banner here anymore. On a "new device" (no local
-  // key, server envelope present) the user can navigate to /recover on
-  // their own — auto-nagging caused too many false positives in dev
-  // (port switching) and confused real users. Lazy restore wins.
-
-  // Import a PKCS8 RSA-OAEP private key blob and derive the matching
-  // SPKI public key. WebCrypto can't extract a public CryptoKey from a
-  // private one directly, but exporting → re-importing the JWK form
-  // yields a usable encrypt key. Returns the SPKI bytes (what
-  // savePublicKey + publishPublicKey expect downstream).
+  // WebCrypto cannot extract a public CryptoKey from a private one, but
+  // exporting the private key to JWK and re-importing the public half of it
+  // yields a usable encrypt key. Returns the SPKI bytes that savePublicKey and
+  // publishPublicKey expect.
   const importPkcs8AndDerivePublicSpki = async (
     pkcs8: ArrayBuffer
   ): Promise<{ privateKey: CryptoKey; publicKeyBytes: ArrayBuffer }> => {
@@ -214,48 +198,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { privateKey, publicKeyBytes };
   };
 
-  // Plan A encryption bootstrap. Exactly one mode ('full') exists, so
-  // there's no branching on `recovery_mode` — only on what state the
-  // current device/server is in:
+  // Encryption bootstrap. Branches only on what state this device and the
+  // server are in:
   //
-  //   1. Local IndexedDB already has the keypair  → publish the public
-  //      key and return; nothing else to do.
-  //
-  //   2. No local key, but the server has a wrapped envelope on file
-  //      → another device set this user up. Show RecoverPromptModal so
-  //      the user pastes their 24 words; that flow imports the keys.
-  //
-  //   3. No local key, no wrapped envelope on file, BUT the server has
-  //      a legacy `basic-key` PKCS8 envelope  → this is a pre-Plan-A
-  //      'basic' user logging in after the migration. Pull the PKCS8,
-  //      import it, generate a brand-new mnemonic, prep a wrap+delete
-  //      closure, and show the seed modal. Once the user confirms,
-  //      the wrap uploads and the legacy basic-key blob is DELETEd —
-  //      the mnemonic becomes the only path back in.
-  //
-  //   4. None of the above  → fresh signup (or a SQL-seeded account
-  //      that never finished setup). Generate a new keypair, generate
-  //      a mnemonic, prep a wrap closure, and show the seed modal.
+  //   1. The keypair is already in local IndexedDB: republish the public key.
+  //   2. No local key but a wrapped envelope is on the server: another device
+  //      set this user up, so prompt for the 24 words rather than regenerate.
+  //   3. No local key and no envelope, but a legacy server-held `basic-key`
+  //      PKCS8 blob exists: migrate it onto a fresh mnemonic wrap.
+  //   4. Nothing anywhere: fresh signup, so generate a keypair and a mnemonic.
   const setupEncryption = async (
     userId: number,
     _recoveryMode: RecoveryMode,
     email: string,
     isFreshRegistration: boolean,
-    // Just-typed password, used once to derive the PBKDF2 login-wrap and
-    // upload it. Lives only on this stack frame; not stored.
+    // Used once to derive the PBKDF2 login-wrap. Lives only on this stack
+    // frame; never stored or logged.
     plaintextPassword?: string
   ) => {
     try {
-      // Ask the browser to keep the keystore from being evicted, so the cached
-      // keypair survives a hard refresh and we don't re-prompt for the 24-word
-      // mnemonic. Fire-and-forget — must never block encryption setup.
+      // Ask the browser not to evict the keystore, so the cached keypair
+      // survives a hard refresh and we don't re-prompt for the mnemonic.
+      // Fire-and-forget; it must never block encryption setup.
       void requestPersistentStorage();
 
-      // (1) Local key already on this device. A fresh registration
-      // still wants brand-new keys, even if IndexedDB has stale
-      // entries from a prior dev session — short-circuiting here
-      // would skip the seed modal and leave the user with keys that
-      // don't match the server's new wrapped envelope.
+      // (1) A fresh registration wants brand-new keys even if IndexedDB holds
+      // stale entries from a prior session. Short-circuiting here would skip
+      // the seed modal and leave the user with keys that don't match the
+      // server's new wrapped envelope.
       if (!isFreshRegistration) {
         const existingKey = await loadPrivateKey(userId, email);
         const existingPublicKey = await loadPublicKey(userId, email);
@@ -269,9 +239,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // (2) Server-side wrapped envelope already exists. We must NOT
-      // regenerate or the original mnemonic would be orphaned. Defer
-      // to RecoverPromptModal so the user enters their 24 words.
+      // (2) A wrapped envelope already exists server-side. We must NOT
+      // regenerate, or the user's original mnemonic would be orphaned and the
+      // data it protects unrecoverable.
       if (!isFreshRegistration) {
         const serverWrapped = await fetchWrappedKey();
         if (serverWrapped) {
@@ -281,12 +251,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // (3) Migration: legacy 'basic' user whose RSA private key still
-      // lives on the server as `users.private_key_encrypted`. Pull it
-      // once, wrap it under a fresh mnemonic, upload the envelope, and
-      // schedule the basic-key DELETE so the mnemonic becomes the only
-      // recovery path. The user MUST save the 24 words — there is no
-      // second chance.
+      // (3) Legacy user whose RSA private key still lives on the server as
+      // `users.private_key_encrypted`. Pull it once, wrap it under a fresh
+      // mnemonic, then delete the server copy so the mnemonic becomes the only
+      // recovery path. The user must save the 24 words; there is no second chance.
       if (!isFreshRegistration) {
         const legacyPkcs8 = await fetchBasicKey().catch((err) => {
           log.warn("legacy basic-key fetch failed", err);
@@ -311,11 +279,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               entropy
             );
             await uploadWrappedKey(envelope);
-            // Once the wrap is on file, drop the legacy server-held
-            // PKCS8 envelope so the mnemonic is the only path back in.
-            // Failure to delete is non-fatal — the wrap is already
-            // uploaded; we just log and move on, and a future login
-            // can retry the DELETE.
+            // Only once the wrap is on file, drop the legacy server-held PKCS8
+            // envelope. A failed delete is non-fatal: the wrap is already
+            // uploaded and a future login retries the DELETE.
             try {
               await deleteBasicKey();
               log.info("migration: legacy basic-key DELETEd from server");
@@ -337,8 +303,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // (4) Truly fresh setup — either a brand-new signup or a SQL-
-      // seeded account on its first login with no envelope anywhere.
+      // (4) Fresh setup: a brand-new signup, or a seeded account on its first
+      // login with no envelope anywhere.
       log.info("generating new RSA key pair");
 
       const keyPair = await crypto.subtle.generateKey(
@@ -362,14 +328,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await publishPublicKey(publicKey);
 
-      // Password-derived login wrap: lets the user sign in from a new
-      // browser without being prompted for the 24-word phrase. The wrap
-      // is AES-256-GCM(PBKDF2-SHA256-600k(password)) over the PKCS8
-      // bytes of the private key, PUT to /api/me/login-wrap. The
-      // mnemonic recovery path (below) stays in place as the
-      // forgot-password fallback. If `plaintextPassword` is missing
-      // (legacy callers, SSO without password), we skip silently and
-      // the user keeps the mnemonic-only flow.
+      // Password-derived login wrap: AES-256-GCM(PBKDF2-SHA256-600k(password))
+      // over the private key's PKCS8 bytes, so the user can sign in from a new
+      // browser without the 24-word phrase. The mnemonic path below remains the
+      // forgot-password fallback. When there is no password (SSO, legacy
+      // callers) we skip silently and the user keeps the mnemonic-only flow.
       if (plaintextPassword) {
         try {
           await uploadPasswordLoginWrap(keyPair.privateKey, plaintextPassword);
@@ -379,10 +342,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // The mnemonic is generated in the browser; only the user
-      // ever sees it. The wrap closure runs AFTER the user confirms
-      // they've saved the 24 words — a user who closes the modal
-      // never uploads a recovery envelope.
+      // The mnemonic is generated in the browser and only the user ever sees it.
+      // The wrap closure runs only after they confirm they saved the 24 words.
       const mnemonic = await generateMnemonic();
       const wrapJob = async () => {
         const entropy = await mnemonicToEntropy(mnemonic);
@@ -429,8 +390,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const token = getAuthToken();
 
-    // Validate in the background. AbortController makes StrictMode's
-    // double-mount in dev clean up the first request instead of racing.
+    // AbortController makes StrictMode's dev double-mount cancel the first
+    // request instead of racing it.
     const ctrl = new AbortController();
 
     void (async () => {
@@ -444,9 +405,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           log.warn("/api/me rejected stored token; clearing session");
           clearAuthToken();
           setUser(null);
-          // No hard redirect: ProtectedRoute already sends unauthenticated
-          // users away from protected pages, and public pages (/login,
-          // /register, /reset-password, ...) must stay rendered.
+          // No hard redirect: ProtectedRoute already sends unauthenticated users
+          // away from protected pages, and public pages must stay rendered.
           return;
         }
 
@@ -477,8 +437,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           theme_json: data.theme_json ?? null,
           chat_encrypt_files: data.chat_encrypt_files ?? true,
         };
-        // Only patch state if the server sees a different user — avoids a
-        // pointless re-render when the optimistic claims already matched.
+        // Only patch state if the server sees a different user, so the
+        // optimistic claims don't trigger a pointless re-render.
         setUser((prev) =>
           prev &&
           prev.id === nextUser.id &&
@@ -495,22 +455,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           (prev.username ?? null) === (nextUser.username ?? null) &&
           prev.recovery_mode === nextUser.recovery_mode &&
           (prev.theme_json ?? null) === (nextUser.theme_json ?? null) &&
-          // Plan changes (upgrade / downgrade / new subscription) need to
-          // trigger a re-render so the tier badge + Upgrade affordance
-          // refresh. Comparing the `code` is enough — other plan fields
-          // only change when `code` does.
+          // A plan change must re-render so the tier badge and Upgrade
+          // affordance refresh. Comparing `code` suffices: the other plan
+          // fields only change when it does.
           (prev.current_plan?.code ?? null) ===
             (nextUser.current_plan?.code ?? null)
             ? prev
             : nextUser
         );
 
-        // Bootstrap effect normally runs for already-signed-in users on
-        // every page load, so isFreshRegistration is false. The exception
-        // is a Google/SSO landing where the URL hash carried `signup=true`
-        // (or `sso=true&new=true`) — those users skip Register.tsx
-        // entirely and would otherwise be asked for a 24-word phrase they
-        // were never given.
+        // This effect normally runs for already-signed-in users, so
+        // isFreshRegistration is false. The exception is a Google/SSO landing
+        // whose URL hash carried `signup=true`: those users skip Register.tsx
+        // and would otherwise be asked for a phrase they were never given.
         setupEncryption(
           nextUser.id,
           nextUser.recovery_mode ?? "full",
@@ -526,10 +483,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
 
     return () => ctrl.abort();
-    // `setupEncryption` is intentionally omitted from the dep array: it's
-    // defined in the component body (not memoized) and we want this effect
-    // to run once on mount only. Adding it would re-run the entire auth
-    // bootstrap on every render.
+    // `setupEncryption` is deliberately omitted from the deps: it is unmemoized,
+    // so listing it would re-run the whole auth bootstrap on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -537,24 +492,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     token: string,
     accountType?: string,
     isFreshRegistration = false,
-    // Just-typed plaintext password, forwarded from the login/register form.
-    // We use it once inside `setupEncryption` to compute a PBKDF2 wrap of
-    // the freshly-generated personal RSA private key, so the user's next
-    // login from a new browser can auto-unlock without prompting for the
-    // 24-word mnemonic. Never persisted, never logged.
+    // Forwarded from the login/register form and used once in `setupEncryption`
+    // to compute the PBKDF2 login-wrap of the new RSA private key. Never
+    // persisted, never logged.
     plaintextPassword?: string
   ) => {
     authVersion.current += 1;
     setAuthToken(token);
-    // On every login, start with the left sidebar expanded for all users
-    // (personal / organization / platform). `Layout` reads this key on mount;
-    // "0" = expanded. Mid-session collapse still works and persists until the
-    // next login. Best-effort — private mode / disabled storage just no-ops
-    // (the layout default is expanded anyway).
+    // Start every session with the sidebar expanded ("0"); Layout reads this on
+    // mount. Best-effort: private mode just no-ops, and expanded is the default.
     try {
       localStorage.setItem("rwayve.sidebar.collapsed", "0");
     } catch {
-      // storage unavailable — ignore; Layout falls back to expanded.
+      // Storage unavailable; Layout falls back to expanded.
     }
     setInitializing(false);
 
@@ -578,10 +528,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         organization_slug: null,
         organization_name: null,
       });
-      // The AuthProvider /api/me effect only runs once at mount, so a fresh
-      // login needs its own profile fetch to learn the org slug/name that
-      // drive organization routing AND the recovery_mode that decides
-      // which envelope shape setupEncryption uploads.
+      // The mount-time /api/me effect has already run by now, so a fresh login
+      // needs its own profile fetch to learn the org slug/name that drive
+      // organization routing.
       getMe(token)
         .then(async (res) => {
           if (!res.ok) return;
@@ -620,9 +569,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Soft session-expiry: the API client dispatches `rwayve:session-expired`
-  // on a 401 (instead of hard-reloading to /login). Drop the user locally so
-  // ProtectedRoute does an in-app redirect — no full-page "blink".
+  // Soft session-expiry: the API client dispatches `rwayve:session-expired` on a
+  // 401 rather than hard-reloading. Dropping the user locally lets ProtectedRoute
+  // redirect in-app, with no full-page blink.
   useEffect(() => {
     const onExpired = () => {
       authVersion.current += 1;
@@ -638,16 +587,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = (reason: "manual" | "idle" = "manual") => {
     authVersion.current += 1;
     clearAuthToken();
-    // Drop the cached per-user font so the login page / next user starts from
-    // the platform default rather than this user's resolved font.
+    // Drop the cached per-user font so the next user starts from the platform
+    // default rather than this one's resolved font.
     clearFontCache();
-    // Explicit logout = "I'm leaving this machine": wipe the cached E2E keys so
-    // the private key doesn't linger in IndexedDB on a shared device. NOT done
-    // on session-expiry (that keeps the key so re-login stays prompt-free).
+    // An explicit logout means "I am leaving this machine", so wipe the cached
+    // E2E keys and don't leave the private key in IndexedDB on a shared device.
+    // Session-expiry deliberately does NOT do this, so re-login stays
+    // prompt-free.
     void clearKeys();
     setNeedsRecovery(false);
-    // Idle timeout: leave a breadcrumb so the login screen can explain why the
-    // session ended.
     if (reason === "idle") {
       try {
         sessionStorage.setItem("wayve-logout-reason", "idle");
@@ -655,21 +603,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         /* ignore */
       }
     }
-    // Intentionally do NOT setUser(null) here. Nulling the user synchronously
-    // re-renders the current (protected) route, which ProtectedRoute then
-    // bounces to /login — a visible flash before the hard nav below lands on
-    // "/". The hard reload to "/" resets all in-memory state anyway, and the
-    // token is already cleared, so keeping `user` in place for the brief
-    // logout-POST wait keeps the current page on screen instead of flashing
-    // the login page. (Cookie clearing still happens via the awaited POST.)
-    // Wait for the /api/logout response (which carries the cookie-clear
-    // Set-Cookie) before navigating. The previous fire-and-forget shape
-    // could hard-nav while the POST was still in flight; the browser
-    // then aborted the request and never honored the Set-Cookie, so the
-    // auth cookie kept living and re-authenticated the user on the next
-    // page load. A 2-second cap means a slow/dead backend can't hang
-    // the UI — the local state is already cleared, so we land on
-    // /login either way.
+    // Deliberately no setUser(null): that would re-render the protected route
+    // and flash ProtectedRoute's /login bounce before the hard nav below lands.
+    // The token is already cleared and the reload resets in-memory state anyway.
+    //
+    // Navigating must wait for the /api/logout response, which carries the
+    // cookie-clearing Set-Cookie: aborting it mid-flight leaves a stale auth
+    // cookie that re-authenticates the user on the next page load. The 2s cap
+    // stops a dead backend from hanging the UI.
     const logoutDone = logoutRequest().catch((err) =>
       log.error("logout request failed", err)
     );
@@ -677,24 +618,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.setTimeout(resolve, 2000)
     );
     void Promise.race([logoutDone, timeout]).finally(() => {
-      // Hard-nav so the user lands on a public page and all in-memory state is
-      // reset. This runs only after the logout POST has either completed or hit
-      // the 2s safety cap. In the desktop shell there is no marketing landing
-      // page (the window opens straight to /login), so send the user back to
-      // /login there; the browser keeps landing on the public "/" home. An idle
-      // timeout also goes straight to /login (with the reason breadcrumb above).
+      // Hard-nav so all in-memory state is reset. The desktop shell has no
+      // marketing landing page, so it goes to /login; the browser lands on the
+      // public home. An idle timeout also goes straight to /login.
       window.location.href =
         reason === "idle" || isDesktopApp() ? "/login" : "/";
     });
   };
 
-  // Auto sign-out after 15 minutes of inactivity (shared across tabs). Only
-  // armed while logged in; `logout("idle")` flags the reason for the login page.
+  // Auto sign-out after 15 minutes of inactivity, shared across tabs.
   useIdleLogout(!!user, () => logout("idle"));
 
-  // Apply the caller's resolved app font (their own > org > platform default)
-  // once the session is known, and cache it for a no-flash next boot. Logged
-  // out → fall back to the platform/default font from /api/config.
+  // Apply the caller's resolved font (own > org > platform default) once the
+  // session is known, and cache it so the next boot doesn't flash.
   useEffect(() => {
     let cancelled = false;
     if (user) {
@@ -714,9 +650,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.email]);
 
-  // Re-fetch /api/me and overwrite the cached user. Used after server-side
-  // mutations that change the caller's scope/permissions (e.g. a personal
-  // user self-promoting to organization_admin via POST /api/organizations).
+  // Used after server-side mutations that change the caller's scope or
+  // permissions, such as a personal user self-promoting to organization_admin.
   const refresh = async () => {
     const token = getAuthToken();
     if (!token) return;
@@ -747,11 +682,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // Switch the interactive session between normal and admin. The server mints a
-  // fresh token carrying the new mode (and sets the auth cookie for hard
-  // refresh); we swap the in-memory token and re-fetch /api/me so scope,
-  // permissions and mode all update. Throws if the server refuses (e.g. a
-  // non-owner requesting admin).
+  // The server mints a fresh token carrying the new mode; we swap the in-memory
+  // token and re-fetch /api/me so scope, permissions and mode all update. Throws
+  // if the server refuses, for example a non-owner requesting admin.
   const switchMode = async (target: "normal" | "admin") => {
     const res = await apiFetch("/api/session/mode", {
       method: "POST",

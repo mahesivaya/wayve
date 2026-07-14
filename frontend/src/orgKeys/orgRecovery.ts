@@ -1,15 +1,9 @@
-// Mnemonic-based recovery of the org master key. Used at two distinct
-// moments:
+// Mnemonic-based recovery of the org master key, used both when an owner arrives
+// on a fresh device and when they re-bootstrap the personal-pubkey wrap after
+// rotating their personal RSA key.
 //
-//  1. Owner on a fresh device — `/organization/recovery-key` prompts for
-//     the 24 words, unwraps the mnemonic envelope, caches the org
-//     private key in IndexedDB, optionally re-wraps under the owner's
-//     personal pubkey so future sessions on this device auto-load.
-//  2. Owner re-bootstrap of personal-pubkey wrap — same logic, just
-//     called after they rotate their personal RSA key.
-//
-// The mnemonic itself never leaves the browser. The unwrap result (the
-// org private key) is stored in `wayve_org_keys` IndexedDB only.
+// The mnemonic never leaves the browser, and the unwrapped org private key is
+// stored only in IndexedDB.
 
 import { mnemonicToEntropy } from "../crypto/mnemonic";
 import { loadPublicKey } from "../crypto/keyStore";
@@ -18,10 +12,9 @@ import { saveOrgPrivateKey } from "./orgKeyStore";
 import { unwrapPkcs8WithPbkdf2, wrapPkcs8ToRsaPubkey } from "./envelopeCodec";
 
 export type UnwrapResult = {
-  // Imported as RSA-OAEP-decrypt — usable for unwrapping member escrows.
+  // Decrypt-only, and therefore able to unwrap member escrows.
   privateKey: CryptoKey;
-  // Returned to callers who want to immediately re-wrap (e.g. add a key-
-  // holder); skip if you only need the private key for one decrypt.
+  // Only needed by callers that immediately re-wrap, such as adding a key holder.
   pkcs8: ArrayBuffer;
 };
 
@@ -56,12 +49,10 @@ export async function unwrapOrgKeyWithMnemonic(
     ["decrypt"]
   );
 
-  // Cache for the session and future sessions on this device.
   await saveOrgPrivateKey(orgId, callerUserId, privateKey);
 
-  // If the caller doesn't already have a user_pubkey wrap (e.g., first
-  // recovery on this device), publish one for next time so they don't
-  // have to re-enter the mnemonic every session.
+  // Publish a user_pubkey wrap if the caller has none, so they aren't asked for
+  // the mnemonic again on every session.
   try {
     const current = await getOrgKeys(orgId);
     if (!current.wrapped_user) {
@@ -72,18 +63,15 @@ export async function unwrapOrgKeyWithMnemonic(
       }
     }
   } catch {
-    // Non-fatal: the user can still use the org key this session even if
-    // we couldn't publish a wrap. They'll just be prompted for the
-    // mnemonic again next time on this device.
+    // Non-fatal: the org key still works this session. The user is simply asked
+    // for the mnemonic again next time on this device.
   }
 
   return { privateKey, pkcs8 };
 }
 
-// Same shape as above but with the source being the caller's existing
-// user_pubkey wrap rather than the mnemonic. Used at session start by
-// owners + admins who already have the org key wrapped under their
-// personal pubkey (auto-load path).
+// The auto-load path: same result as above, but sourced from the caller's
+// existing user_pubkey wrap instead of the mnemonic.
 export async function unwrapOrgKeyWithUserPubkey(
   orgId: number,
   callerUserId: number,

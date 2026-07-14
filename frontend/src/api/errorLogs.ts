@@ -55,11 +55,10 @@ export const listErrorLogs = (filters: ErrorLogFilters = {}) => {
   );
 };
 
-// ── Ingest side ──────────────────────────────────────────────────────
-// Called by window error handlers and the apiFetch wrapper. Uses raw
-// fetch (not apiFetch) to avoid recursion when a 5xx triggers another
-// reporting call — and to keep the post fire-and-forget when the user
-// is logged out or has a bad token.
+// The ingest side, called by window error handlers and the apiFetch wrapper. It
+// uses raw fetch rather than apiFetch so that a 5xx cannot recurse into another
+// reporting call, and so the post stays fire-and-forget for a logged-out user
+// or a bad token.
 
 export type ClientErrorReport = {
   message: string;
@@ -96,8 +95,8 @@ function sessionId(): string {
   }
 }
 
-// Throttle identical messages so a tight error loop doesn't flood the
-// table. Key by message + status_code; one report per 5 seconds per key.
+// Throttle identical messages, keyed by message and status code, so a tight
+// error loop cannot flood the table.
 const recentReports = new Map<string, number>();
 const THROTTLE_MS = 5_000;
 
@@ -119,9 +118,9 @@ export function reportClientError(report: ClientErrorReport): void {
   };
 
   const token = getAuthToken();
-  // Fire-and-forget. We deliberately swallow any error here: if logging
-  // itself is broken, falling into a console.error is enough — anything
-  // louder would mask the original problem the user just hit.
+  // Failures are swallowed on purpose: if logging itself is broken, a console
+  // warning is enough, and anything louder would mask the original problem the
+  // user just hit.
   void fetch(`${getApiBase()}/api/error-logs`, {
     method: "POST",
     credentials: "include",
@@ -132,7 +131,7 @@ export function reportClientError(report: ClientErrorReport): void {
     body: JSON.stringify(body),
     keepalive: true,
   }).catch((err) => {
-    // Last-ditch console log only — don't recurse into reportClientError.
+    // Console only. Never recurse into reportClientError from here.
     if (typeof console !== "undefined") {
       console.warn("[error-log] failed to send report", err);
     }

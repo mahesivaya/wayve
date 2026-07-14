@@ -12,13 +12,11 @@ function publicKeyId(userId?: number | null) {
   return userId ? `publicKey:${userId}` : LEGACY_PUBLIC_KEY_ID;
 }
 
-// Email-keyed aliases. Used as a fallback when the user's `userId` has
-// shifted out from under us — e.g., the local Postgres got reset in
-// development and the same email got a new `users.id`, or a future
-// account-merge moves an email to a different id. Without this fallback,
-// the userId-keyed entry from the previous session is orphaned and
-// setupEncryption thinks it's a brand-new device, which re-shows the
-// "Save your recovery phrase" modal on every login.
+// Email-keyed aliases, used as a fallback when the user's `userId` shifts out
+// from under us: a dev Postgres reset that hands the same email a new
+// `users.id`, or an account merge. Without them the userId-keyed entry is
+// orphaned, setupEncryption concludes this is a brand-new device, and the
+// "Save your recovery phrase" modal reappears on every login.
 function privateKeyEmailId(email?: string | null) {
   return email ? `privateKey:email:${email.toLowerCase()}` : null;
 }
@@ -65,27 +63,25 @@ function getOne(db: IDBDatabase, key: string): Promise<unknown> {
   });
 }
 
-// Ask the browser to mark this origin's storage as *persistent* so the cached
-// keypair in `wayve_keys` is NOT auto-evicted (Safari/iOS ~7-day cycle, Chrome
-// under storage pressure, "clear on close" modes). Without this, an evicted
-// keystore forces the 24-word recovery prompt on the next hard refresh.
-// Idempotent and failure-safe — returns false on unsupported / non-secure
-// contexts; never throws and must never block encryption setup.
+// Mark this origin's storage persistent so the cached keypair is not
+// auto-evicted by Safari's roughly weekly cycle, Chrome under storage pressure,
+// or a "clear on close" mode. An evicted keystore forces the 24-word recovery
+// prompt on the next hard refresh. Idempotent, never throws, and must never
+// block encryption setup.
 export async function requestPersistentStorage(): Promise<boolean> {
   try {
     if (!navigator.storage?.persist) return false;
-    if (await navigator.storage.persisted()) return true; // already granted
+    if (await navigator.storage.persisted()) return true;
     return await navigator.storage.persist();
   } catch {
     return false;
   }
 }
 
-// 🧹 Wipe every cached key (private + public, all userId/email slots) from
-// IndexedDB. Called on EXPLICIT logout — "I'm leaving this machine" — so the
-// E2E private key doesn't linger on a shared device. Deliberately NOT called
-// on session-expiry (token timeout keeps the key so re-login stays smooth).
-// Failure-safe: a wipe error must not block logout.
+// Wipe every cached key from IndexedDB, across all userId and email slots.
+// Called on EXPLICIT logout, so the private key doesn't linger on a shared
+// device, and deliberately NOT on session expiry, which keeps the key so
+// re-login stays smooth. A wipe error must not block logout.
 export async function clearKeys(): Promise<void> {
   try {
     const db = await openDB();
@@ -96,12 +92,12 @@ export async function clearKeys(): Promise<void> {
       tx.onerror = () => reject(tx.error);
     });
   } catch {
-    // best-effort
+    // Best-effort.
   }
 }
 
-// 🔐 Save private key under both the userId-keyed slot and (if provided) an
-// email-keyed alias so we can recover from userId churn.
+// Saved under both the userId slot and, when available, the email alias, so a
+// userId change doesn't orphan the key.
 export async function savePrivateKey(
   key: CryptoKey,
   userId?: number | null,
@@ -117,7 +113,7 @@ export async function savePrivateKey(
   return putAll(db, entries);
 }
 
-// 🔐 Save public key bytes (same dual-keying rationale as savePrivateKey).
+// Dual-keyed for the same reason as savePrivateKey.
 export async function savePublicKey(
   publicKey: ArrayBuffer,
   userId?: number | null,
@@ -145,10 +141,9 @@ async function importPrivateKey(pkcs8: ArrayBuffer): Promise<CryptoKey> {
   );
 }
 
-// 🔓 Load private key. Tries userId first; falls back to the email alias
-// if provided. On an email-alias hit, also writes the bytes back under
-// the current userId so subsequent userId-only lookups (from chat / emails
-// / file decrypt paths) succeed without needing to pass email everywhere.
+// Tries the userId slot first, then the email alias. An alias hit is written
+// back under the current userId, so later userId-only lookups from the chat,
+// email and file decrypt paths succeed without threading email through them.
 export async function loadPrivateKey(
   userId?: number | null,
   email?: string | null
@@ -167,15 +162,13 @@ export async function loadPrivateKey(
   const fallback = await getOne(db, emailKey);
   if (!fallback) return null;
 
-  // Re-key under the current userId so future lookups don't pay the
-  // fallback cost. Fire-and-forget; correctness doesn't depend on it
-  // landing before the next lookup.
+  // Re-key under the current userId so future lookups skip the fallback.
+  // Fire-and-forget: correctness doesn't depend on it landing first.
   putAll(db, [[primaryKey, fallback]]).catch(() => {});
   return importPrivateKey(fallback as ArrayBuffer);
 }
 
-// 🔓 Load saved public key bytes. Same userId-then-email fallback as
-// loadPrivateKey.
+// Same userId-then-email fallback as loadPrivateKey.
 export async function loadPublicKey(
   userId?: number | null,
   email?: string | null

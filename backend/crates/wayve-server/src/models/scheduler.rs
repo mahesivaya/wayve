@@ -1,6 +1,5 @@
 use crate::prelude::*;
 
-// ================= MODEL =================
 #[derive(Clone, Serialize, FromRow)]
 pub struct Meeting {
     pub id: i32,
@@ -13,7 +12,6 @@ pub struct Meeting {
     pub source: String,
 }
 
-// ================= INPUT =================
 #[derive(Deserialize)]
 pub struct CreateMeeting {
     pub title: String,
@@ -21,7 +19,7 @@ pub struct CreateMeeting {
     pub start: i32,
     pub end: i32,
     pub participants: Vec<String>,
-    /// IANA timezone of the client (e.g. "Asia/Kolkata"). Used to interpret
-    /// `date` + `start` as a wall-clock time in that zone for the past check.
+    /// The client's IANA timezone, used to read `date` and `start` as wall-clock
+    /// time in that zone when checking whether the meeting is in the past.
     pub tz: Option<String>,
 }

@@ -1,8 +1,7 @@
-// 🚧 Tracing subscriber wiring is temporarily disabled to shrink the
-// release-build memory footprint. `init_logger` is now a no-op so existing
-// `tracing::info!/warn!/error!` calls stay valid (they emit nothing without a
-// subscriber, which is the intent for this temporary state). The original
-// implementation is preserved below in a block comment for easy restore.
+// Tracing subscriber wiring is disabled to shrink the release-build memory
+// footprint. `init_logger` is a no-op, so `tracing::info!/warn!/error!` calls
+// still compile but emit nothing without a subscriber. The original
+// implementation is kept in the block comment below for easy restore.
 // pub fn init_logger() {}
 
 /*

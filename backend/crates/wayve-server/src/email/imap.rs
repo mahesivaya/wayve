@@ -1,13 +1,9 @@
-//! Generic IMAP (read) + SMTP (send) connector for arbitrary custom-domain
-//! mailboxes — any provider that isn't wired up as a first-class OAuth
-//! integration. The user supplies a host/port + an app password; we verify it
-//! with a real IMAP LOGIN, store the password encrypted-at-rest (AES-256-GCM,
-//! `<iv>.<cipher>`) in `email_accounts.refresh_token`, and persist the
-//! connection settings in the `imap_*`/`smtp_*`/`mail_security` columns.
-//!
-//! Built directly on the workspace crates: `async-imap` (read) over
-//! `tokio-rustls` (implicit TLS), `lettre` (SMTP send), `mail-parser` (MIME).
-//! Self-contained — does not depend on any other provider module.
+//! Generic IMAP (read) and SMTP (send) connector for custom-domain mailboxes,
+//! meaning any provider without a first-class OAuth integration. The user
+//! supplies a host, port, and app password; it is verified with a real IMAP
+//! LOGIN and stored encrypted at rest (AES-256-GCM, `<iv>.<cipher>`) in
+//! `email_accounts.refresh_token`, with the connection settings in the
+//! `imap_*`/`smtp_*`/`mail_security` columns.
 
 use crate::email::repo::{InsertEmail, upsert_one};
 use crate::models::email_request::SendEmailRequest;
@@ -56,10 +52,8 @@ impl MailSecurity {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Credential storage (encrypt the app password into `<iv>.<cipher>`)
-// ─────────────────────────────────────────────────────────────────────
-
+/// Encrypts the app password at rest into the `<iv>.<cipher>` blob stored in
+/// `email_accounts.refresh_token`.
 pub fn encode_secret(password: &str) -> anyhow::Result<String> {
     let (iv, cipher) = encrypt(password)?;
     Ok(format!("{iv}.{cipher}"))
@@ -71,10 +65,6 @@ pub fn decode_secret(stored: &str) -> anyhow::Result<String> {
         .ok_or_else(|| anyhow!("imap credential blob missing IV separator"))?;
     decrypt(iv, cipher).map_err(|e| anyhow!("imap credential decrypt failed: {e}"))
 }
-
-// ─────────────────────────────────────────────────────────────────────
-// TLS + IMAP connection
-// ─────────────────────────────────────────────────────────────────────
 
 static RUSTLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
     let mut roots = RootCertStore::empty();
@@ -88,9 +78,9 @@ static RUSTLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
 
 type ImapSession = async_imap::Session<tokio_rustls::client::TlsStream<TcpStream>>;
 
-/// Open an implicit-TLS IMAP connection and run LOGIN. (STARTTLS-on-143 is a
-/// future enhancement; autodiscovery defaults every provider to 993 implicit
-/// TLS, which all the common hosts support.)
+/// Opens an implicit-TLS connection and runs LOGIN. STARTTLS on 143 is not
+/// supported: autodiscovery defaults every provider to 993 implicit TLS, which
+/// all the common hosts accept.
 async fn connect_and_login(
     host: &str,
     port: u16,
@@ -119,8 +109,7 @@ async fn connect_and_login(
     Ok(session)
 }
 
-/// Verify credentials with a real IMAP LOGIN (no persistence). Used by both
-/// the test-login endpoint and the connect endpoint.
+/// Verifies credentials with a real IMAP LOGIN, persisting nothing.
 pub async fn verify_credentials(
     host: &str,
     port: u16,
@@ -132,12 +121,8 @@ pub async fn verify_credentials(
     Ok(())
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Sync — fetch the most recent SYNC_BATCH INBOX messages and upsert them.
-// ─────────────────────────────────────────────────────────────────────
-
-/// One fetched message, drained from the IMAP stream before any DB await so
-/// the stream's mutable borrow of the session is released first.
+/// One fetched message, drained from the IMAP stream before any DB await so the
+/// stream's mutable borrow of the session is released first.
 struct FetchedMessage {
     uid: u32,
     raw: Vec<u8>,
@@ -169,7 +154,8 @@ pub async fn sync_imap_account(
     let start = total.saturating_sub(SYNC_BATCH - 1).max(1);
     let range = format!("{start}:{total}");
 
-    // Drain the fetch stream first (it borrows the session), then do DB work.
+    // The fetch stream borrows the session, so it must be fully drained before
+    // any DB await.
     let mut messages: Vec<FetchedMessage> = Vec::new();
     {
         let mut stream = timeout(
@@ -231,10 +217,9 @@ async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> 
         .unwrap_or_default();
     let (body_iv, body_ct) = encrypt(&body_text).context("encrypt imap body")?;
 
-    // A malformed / junk IMAP message — no parseable `From`, or a broken/epoch
-    // `INTERNALDATE` — is a strong spam signal. Route it to Spam so it stays out
-    // of the Inbox instead of surfacing as "Unknown / (No Subject)" or a 1970
-    // date. Real mail always has a From and a sane date.
+    // Real mail always has a From and a sane date, so a missing From or an epoch
+    // INTERNALDATE is a strong spam signal. Route those to Spam rather than let
+    // them surface in the Inbox as "Unknown / (No Subject)" dated 1970.
     use chrono::Datelike;
     let bad_date = msg
         .internal_date
@@ -247,8 +232,7 @@ async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> 
         Vec::new()
     };
 
-    // Never store an epoch/pre-2000 date verbatim (it renders as "Dec 31 1969");
-    // fall back to now for a broken or missing INTERNALDATE.
+    // A pre-2000 date would render as "Dec 31 1969", so fall back to now.
     let created_at = msg
         .internal_date
         .map(|d| d.naive_utc())
@@ -264,18 +248,14 @@ async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> 
         created_at,
         is_read: msg.seen,
         labels: &labels,
-        // We already have the full RFC822 in hand, so store the body inline
-        // and mark attachments as checked (no second body_worker pass needed).
+        // The full RFC822 is already in hand, so the body goes in inline and no
+        // body_worker pass is needed.
         body: Some((&body_iv, &body_ct)),
         attachments_checked: true,
     };
     upsert_one(pool, account_id, &row).await?;
     Ok(())
 }
-
-// ─────────────────────────────────────────────────────────────────────
-// Send via SMTP (lettre)
-// ─────────────────────────────────────────────────────────────────────
 
 #[allow(clippy::too_many_arguments)]
 pub async fn send_via_imap(

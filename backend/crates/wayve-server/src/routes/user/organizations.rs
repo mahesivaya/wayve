@@ -20,12 +20,8 @@ use wayve_security::rbac::{self, Permission, Role, Scope};
 
 #[derive(Deserialize)]
 pub struct AdminCreateUserInput {
-    // Both username and password are now optional. When the caller is using
-    // the simple "Create user" admin flow (provide an email + role), we
-    // derive `username` from the email's local-part and generate a strong
-    // random `password` on the server. The plaintext is returned to the
-    // admin exactly once in the response so they can share it with the new
-    // user out-of-band.
+    /// Omitted for the email-only admin flow: derived from the email local-part,
+    /// with a server-generated password returned once as `temp_password`.
     #[serde(default)]
     pub username: Option<String>,
     pub email: String,
@@ -33,16 +29,12 @@ pub struct AdminCreateUserInput {
     pub password: Option<String>,
     pub account_type: Option<String>,
     pub organization_name: Option<String>,
-    // Optional role override. When omitted, the existing
-    // `default_role_for_account_type` rules apply (owner for admin scopes,
-    // member for organization). The DB CHECK constraint on
-    // organization_members.role / platform_members.role is the final filter
-    // for invalid strings.
+    /// Role override. The DB CHECK constraint on the members tables is the final
+    /// filter for invalid strings.
     #[serde(default)]
     pub role: Option<String>,
-    // The 6-digit code mailed by `/admin/users/send-code`, proving someone can
-    // actually receive mail for this account. Required — an absent or wrong
-    // code is rejected before anything is written.
+    /// The 6-digit code mailed by `/admin/users/send-code`. An absent or wrong
+    /// code is rejected before anything is written.
     #[serde(default)]
     pub verification_code: Option<String>,
 }
@@ -55,17 +47,14 @@ pub struct CreateOrganizationInput {
     pub admin_username: Option<String>,
     pub admin_email: Option<String>,
     pub admin_password: Option<String>,
-    /// Optional plan tier to provision immediately. When `"enterprise"`, an active
-    /// enterprise subscription is attached in the same transaction so the org is
-    /// enterprise-tier at once (enterprise is not E2E, so the owner can sign in
-    /// and use it right away).
+    /// `"enterprise"` attaches an active enterprise subscription in the same
+    /// transaction so the org is enterprise-tier at once.
     #[serde(default)]
     pub tier: Option<String>,
 }
 
-/// Require the caller to be platform-scope staff holding `members:manage` — the
-/// gate for platform-only actions such as provisioning organizations. Platform
-/// `owner`, `super_admin`, and `admin` qualify. Returns the caller's user id.
+/// Require platform-scope staff holding `members:manage`, the gate for
+/// platform-only actions such as provisioning organizations.
 async fn require_platform_admin(req: &HttpRequest, pool: &PgPool) -> Result<i32, HttpResponse> {
     let ctx = rbac::require_permission(req, pool, Permission::MembersManage).await?;
     if ctx.scope != Scope::Platform {
@@ -94,8 +83,8 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
         Err(response) => return Ok(response),
     }
 
-    // notes is RLS-enabled; this platform-staff query SUMs storage (incl. notes)
-    // across all orgs, so it runs with the bypass GUC.
+    // This platform-staff query SUMs storage across all orgs, so it needs the RLS
+    // bypass GUC for the RLS-enabled `notes`.
     let mut tx = pool.begin().await?;
     crate::db::apply_rls_bypass(&mut tx).await?;
     let rows = sqlx::query(
@@ -159,8 +148,8 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
                 row.try_get("created_at").unwrap_or(None);
             let admin: Option<serde_json::Value> = row.get("admin");
             let plan_code: Option<String> = row.try_get("plan_code").unwrap_or(None);
-            // Orgs without an active subscription have no tier → "none", so the
-            // Business page (tier != enterprise) still shows them.
+            // No active subscription means no tier, so "none" keeps the org
+            // visible on the Business page, which filters tier != enterprise.
             let tier: String = row
                 .try_get::<Option<String>, _>("tier")
                 .unwrap_or(None)
@@ -202,8 +191,6 @@ pub async fn admin_create_organization(
             .json(serde_json::json!({ "message": "Organization name is required" })));
     }
 
-    // The organization admin block is optional, but if any field is supplied the
-    // whole set (username, email, password) must be present.
     let admin_username = data
         .admin_username
         .as_deref()
@@ -247,10 +234,8 @@ pub async fn admin_create_organization(
 
     let mut tx = pool.begin().await?;
 
-    // The slug is derived from the name at insert time (same expression as the
-    // init.sql backfill) so runtime-created orgs are never left slug-less.
-    // On a name conflict it heals a missing slug but never overwrites one,
-    // keeping existing slugs stable.
+    // The slug expression must stay in sync with the init.sql backfill. A name
+    // conflict heals a missing slug but never overwrites one, so slugs are stable.
     let org_row = match sqlx::query(
         r#"
         INSERT INTO organizations (name, slug)
@@ -284,15 +269,9 @@ pub async fn admin_create_organization(
     if let Some((username, email, password)) = organization_admin {
         let hashed = hash_password(&password).await?;
 
-        // Generate the owner's personal RSA-2048 keypair server-side
-        // BEFORE we touch the tx. Same security-boundary discipline as
-        // org-member provisioning: the plaintext private key only exists
-        // inside this blocking task, gets wrapped under PBKDF2(password)
-        // before the task returns, and is zeroed in encryption.rs. No
-        // org-escrow wrap because the org has no master key yet — the
-        // owner will bootstrap that from their browser on first login,
-        // and the wrap-under-owner-pubkey step there works because we
-        // store the SPKI in users.public_key below.
+        // The plaintext private key never leaves this blocking task: it is wrapped
+        // under PBKDF2(password) and zeroed before it returns. There is no org-escrow
+        // wrap yet — the owner bootstraps the org master key on first login.
         let password_for_gen = password.clone();
         let provisioned = tokio::task::spawn_blocking(move || {
             wayve_security::encryption::provision_org_owner_keypair(&password_for_gen)
@@ -327,7 +306,7 @@ pub async fn admin_create_organization(
                     "id": id,
                     "username": username,
                     "email": email,
-                    "account_type": account_type, // Use the enum directly
+                    "account_type": account_type,
                     "organization_id": org_id
                 });
 
@@ -344,10 +323,8 @@ pub async fn admin_create_organization(
                 .execute(&mut *tx)
                 .await?;
 
-                // Password-wrapped private key — owner unwraps on first
-                // login using the same flow org members already use
-                // (login response carries `login_wrap`, frontend derives
-                // PBKDF2(password) and decrypts into IndexedDB).
+                // The login response carries this `login_wrap`, and the frontend
+                // derives PBKDF2(password) to unwrap it into IndexedDB.
                 sqlx::query(
                     "INSERT INTO member_login_wrapped_keys (user_id, iv, ct, salt, iterations)
                      VALUES ($1, $2, $3, $4, $5)
@@ -377,8 +354,6 @@ pub async fn admin_create_organization(
         }
     }
 
-    // Optionally make the org enterprise-tier immediately by attaching an active
-    // enterprise subscription in the same transaction as the org + owner.
     let make_enterprise = data.tier.as_deref() == Some("enterprise");
     if make_enterprise {
         let plan_id: Option<i32> =
@@ -401,8 +376,7 @@ pub async fn admin_create_organization(
 
     tx.commit().await?;
 
-    // Materialize entitlements from the new subscription (post-commit so the
-    // refresh sees the committed row). Best-effort: a failure is logged, not fatal.
+    // Post-commit so the refresh sees the committed subscription row. Best-effort.
     if make_enterprise
         && let Err(e) =
             refresh_entitlements(pool.get_ref(), BillingOwner::Organization(organization_id)).await
@@ -422,18 +396,15 @@ pub async fn admin_create_organization(
     })))
 }
 
-// Starter entitlement headroom seeded at org creation so a brand-new org can
-// add up to 100 members before its subscription's seat_limit is materialized
-// by refresh_entitlements(). The basic_user free baseline grants only one
-// seat, which would block the owner from inviting anybody.
+// Starter headroom seeded at org creation, so a new org can add members before
+// refresh_entitlements() materializes its subscription's seat_limit. The basic_user
+// baseline grants one seat, which would block the owner from inviting anybody.
 const STARTER_SEAT_LIMIT: i32 = 100;
 const STARTER_STORAGE_BYTES: i64 = 1_073_741_824; // 1 GiB
 
-/// The core org-creation side effects, in the caller's transaction: insert the
-/// `organizations` row, promote the user to `organization_admin` + owner
-/// member, and seed the starter entitlement. Used by the business-registration
-/// path (`register_business`). Returns the new org id, or `Ok(None)` on a name
-/// conflict so the caller can surface a 409 and roll back.
+/// Insert the `organizations` row, promote the user to `organization_admin` + owner
+/// member, and seed the starter entitlement, all in the caller's transaction.
+/// Returns `Ok(None)` on a name conflict so the caller can 409 and roll back.
 pub(crate) async fn create_org_for_user(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     user_id: i32,
@@ -516,9 +487,8 @@ pub(crate) async fn create_org_for_user(
 
 /// Create the organization for a *paid* pending signup. Idempotent and
 /// concurrency-safe (FOR UPDATE on the pending row), so the client confirm and
-/// the Stripe webhook can both call it. Returns the org id, or `Ok(None)` on a
-/// name conflict (the caller surfaces a 409). Callers MUST have verified the
-/// subscription is paid first.
+/// the Stripe webhook can both call it. Returns `Ok(None)` on a name conflict.
+/// Callers MUST have verified the subscription is paid first.
 pub(crate) async fn finalize_org_signup_inner(
     pool: &PgPool,
     pending_id: i32,
@@ -579,9 +549,8 @@ pub(crate) async fn finalize_org_signup_inner(
     {
         Some(id) => id,
         None => {
-            // Name taken between intent and finalize. Mark failed; the
-            // caller turns this into a 409 and the charge can be refunded
-            // out of band.
+            // Name taken between intent and finalize. The caller turns this into
+            // a 409 and the charge is refunded out of band.
             sqlx::query("UPDATE pending_org_signups SET status = 'failed' WHERE id = $1")
                 .bind(pending_id)
                 .execute(&mut *tx)
@@ -640,7 +609,6 @@ pub(crate) async fn finalize_org_signup_inner(
 
     tx.commit().await?;
 
-    // Materialize the paid entitlement from the org plan + drop stale caches.
     refresh_entitlements(pool, BillingOwner::Organization(org_id))
         .await
         .map_err(|e| AppError::Internal(format!("entitlement refresh failed: {e}")))?;
@@ -651,15 +619,10 @@ pub(crate) async fn finalize_org_signup_inner(
     Ok(Some(org_id))
 }
 
-/// Self-serve org teardown. The org owner deletes the organization, all of
-/// the invitee accounts they provisioned, and reverts themselves to a
-/// personal account. Used by the /organizations/new "revert to personal"
-/// affordance — every artifact created in the setup flow goes away in one
-/// transaction.
-///
-/// Refuses when an active subscription exists so we never leave a zombie
-/// Stripe customer charging the user after the local org disappears. The
-/// owner must cancel from /billing first in that case.
+/// Self-serve org teardown: in one transaction, the owner deletes the organization
+/// and every invitee account they provisioned, and reverts to personal. Refuses
+/// while an active subscription exists, so no zombie Stripe customer keeps charging
+/// a user whose org no longer exists locally.
 #[delete("/organizations/me")]
 #[instrument(target = "auth", skip(req, pool))]
 pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -671,9 +634,9 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
         }
     };
 
-    // Resolve scope + role from the DB. Only an organization owner may
-    // tear down their own organization — and only in admin mode (a
-    // normal-mode owner is downscoped to a member and refused here).
+    // Scope and role are computed from the DB per request, never trusted from the
+    // JWT, so a role change takes effect on the next request. Only an org owner in
+    // admin mode may tear down the org; a normal-mode owner is downscoped to member.
     let ctx = match rbac::resolve_role_context_moded(&req, pool.get_ref(), user_id).await {
         Ok(ctx) => ctx,
         Err(sqlx::Error::RowNotFound) => {
@@ -701,13 +664,10 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
         }
     };
 
-    // If there's an active/trialing Stripe subscription, the owner must
-    // first express cancel intent (cancel_at_period_end) on the Billing
-    // page — we don't silently kill billing on org delete. Once they have,
-    // we cancel it *immediately* in Stripe here: the local subscription row
-    // is about to be cascade-deleted, so leaving the Stripe subscription
-    // running to period end would orphan a charge against a customer with
-    // no local record.
+    // Deleting never silently kills billing: the owner must already have set
+    // cancel_at_period_end on the Billing page. Given that, cancel in Stripe
+    // immediately — the local row is about to be cascade-deleted, and running to
+    // period end would orphan the charge.
     let active_sub: Option<(i32, Option<String>, bool)> = sqlx::query_as(
         r#"
         SELECT id, stripe_subscription_id, cancel_at_period_end
@@ -737,10 +697,8 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
         }
     }
 
-    // Snapshot invitee user ids (everyone in the org except the owner).
-    // Once we drop the organization the FK ON DELETE SET NULL on
-    // users.organization_id would null them out, so we'd lose the ability
-    // to identify the cohort to delete.
+    // Snapshot the invitees first: ON DELETE SET NULL on users.organization_id
+    // would null them out, losing the cohort to delete.
     let invitee_ids: Vec<i32> =
         sqlx::query_scalar("SELECT id FROM users WHERE organization_id = $1 AND id <> $2")
             .bind(organization_id)
@@ -749,12 +707,10 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
             .await?;
 
     let mut tx = pool.begin().await?;
-    // notes is RLS-enabled; this authorized teardown removes other users' rows.
+    // This authorized teardown removes other users' RLS-enabled rows.
     crate::db::apply_rls_bypass(&mut tx).await?;
 
-    // Notes has user_id with no FK constraint (see init.sql:469), so it
-    // doesn't ride the cascade on `users`. Wipe it explicitly for every
-    // invitee being deleted before the cascade runs.
+    // notes.user_id has no FK, so it does not ride the cascade on `users`.
     if !invitee_ids.is_empty() {
         sqlx::query("DELETE FROM notes WHERE user_id = ANY($1)")
             .bind(&invitee_ids)
@@ -767,10 +723,8 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
             .await?;
     }
 
-    // Revert the owner to a personal account. The organizations DELETE
-    // below would null out organization_id via FK ON DELETE SET NULL, but
-    // we also need to flip account_type back to 'personal' so they leave
-    // the org-admin RBAC scope.
+    // ON DELETE SET NULL clears organization_id, but account_type must also flip
+    // back to 'personal' so the owner leaves the org-admin RBAC scope.
     sqlx::query(
         r#"
         UPDATE users
@@ -783,11 +737,8 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
     .execute(&mut *tx)
     .await?;
 
-    // Hard-code the reverted owner onto the personal "Most Advance" plan:
-    // cancel any prior active personal subscriptions, then grant a local
-    // Most Advance subscription (no Stripe id — a comped grant). Both
-    // `current_plan_for_user` and `effective_entitlements` resolve live from
-    // this active row, so the user lands on Most Advance (50 GB) immediately.
+    // The reverted owner lands on a comped personal "Most Advance" grant with no
+    // Stripe id, which `current_plan_for_user` resolves live from this active row.
     sqlx::query(
         "UPDATE subscriptions SET status = 'canceled', updated_at = NOW() \
          WHERE user_id = $1 AND status IN ('active', 'trialing')",
@@ -803,10 +754,8 @@ pub async fn delete_my_organization(req: HttpRequest, pool: web::Data<PgPool>) -
     .execute(&mut *tx)
     .await?;
 
-    // Cascades clean up organization_members, entitlements,
-    // billing_customers, subscriptions, drive_shares, siem_webhook_configs,
-    // shared inboxes, etc. — every table that referenced organizations.id
-    // is declared ON DELETE CASCADE in init.sql.
+    // Every table referencing organizations.id is ON DELETE CASCADE in init.sql, so
+    // members, entitlements, billing, shares and shared inboxes go with it.
     let deleted = sqlx::query("DELETE FROM organizations WHERE id = $1")
         .bind(organization_id)
         .execute(&mut *tx)
@@ -847,11 +796,9 @@ pub struct UpdateOrganizationInput {
     pub name: String,
 }
 
-/// `PATCH /organizations/me` — rename the caller's organization. Owner-only,
-/// mirroring the gate on [`delete_my_organization`]. The slug is re-derived
-/// from the new name with the same expression used at creation. The org name
-/// is denormalized into every member's `/api/me` + profile payloads, so those
-/// caches are busted for the whole org on success.
+/// Rename the caller's organization. Owner-only, mirroring the gate on
+/// [`delete_my_organization`]. The name is denormalized into every member's
+/// `/api/me` and profile payloads, so those caches are busted org-wide.
 #[patch("/organizations/me")]
 #[instrument(target = "auth", skip(req, pool, data))]
 pub async fn update_my_organization(
@@ -867,8 +814,8 @@ pub async fn update_my_organization(
         }
     };
 
-    // Mode-aware: updating org settings is an admin action, refused for a
-    // normal-mode owner (downscoped to member).
+    // Renaming is an admin action, so a normal-mode owner (downscoped to member)
+    // is refused.
     let ctx = match rbac::resolve_role_context_moded(&req, pool.get_ref(), user_id).await {
         Ok(ctx) => ctx,
         Err(sqlx::Error::RowNotFound) => {
@@ -901,9 +848,8 @@ pub async fn update_my_organization(
             .json(serde_json::json!({ "message": "Organization name is too long" })));
     }
 
-    // Re-derive the slug from the new name with the same expression used at
-    // creation (see create_my_organization). A unique violation on name/slug
-    // means another organization already uses it.
+    // Same slug expression as at creation; a unique violation means another
+    // organization already holds the name or slug.
     let updated = match sqlx::query(
         r#"
         UPDATE organizations
@@ -935,8 +881,6 @@ pub async fn update_my_organization(
     let new_name: String = row.get("name");
     let new_slug: Option<String> = row.get("slug");
 
-    // The org name is denormalized into every member's /api/me + profile
-    // payloads — bust those caches for the whole org.
     let member_ids: Vec<i32> =
         sqlx::query_scalar("SELECT id FROM users WHERE organization_id = $1")
             .bind(organization_id)
@@ -956,15 +900,10 @@ pub async fn update_my_organization(
     })))
 }
 
-/// `DELETE /me` — self-service account deletion. The caller permanently
-/// deletes their OWN account and everything that cascades from `users.id`.
-///
-/// Guards mirror the organization teardown:
-///   - An organization OWNER must delete the organization first — their user
-///     row is the org's anchor (members, shared inboxes, billing all hang off
-///     it). See `delete_my_organization`.
-///   - An active / trialing subscription must be cancelled on /billing first
-///     so we never orphan live Stripe charges.
+/// Permanently delete the caller's own account and everything that cascades from
+/// `users.id`. An organization owner must delete the organization first, because
+/// their user row anchors its members, shared inboxes, and billing. An active or
+/// trialing subscription must be cancelled first so no Stripe charge is orphaned.
 #[delete("/me")]
 #[instrument(target = "auth", skip(req, pool))]
 pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -985,10 +924,8 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
         Err(e) => return Err(AppError::Db(e)),
     };
 
-    // Self-service account deletion is personal-accounts only. Business
-    // (organization) and platform team members can't delete their own account
-    // — an owner/admin must remove them. An org owner deletes the whole org
-    // first (which reverts them to a personal account), then can self-delete.
+    // Personal accounts only: team members must be removed by an owner or admin, and
+    // an org owner deletes the org first, which reverts them to personal.
     match ctx.scope {
         Scope::Personal => {}
         Scope::Organization if ctx.role == Role::Owner => {
@@ -1020,15 +957,14 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
         })));
     }
 
-    // Capture the email for the audit trail. `audit_logs.actor_user_id` is
-    // ON DELETE SET NULL, so once the row is gone the deletion event would be
-    // anonymized — the email in metadata is what keeps it attributable.
+    // `audit_logs.actor_user_id` is ON DELETE SET NULL, so the email in metadata is
+    // the only thing keeping this event attributable afterwards.
     let email: Option<String> = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
         .bind(user_id)
         .fetch_optional(pool.get_ref())
         .await?;
 
-    // Record BEFORE the delete: record_action reads users.organization_id and
+    // Must run before the delete: record_action reads users.organization_id and
     // inserts actor_user_id, both of which need the row to still exist.
     crate::audit::record_action(
         pool.get_ref(),
@@ -1044,16 +980,12 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
     .await;
 
     let mut tx = pool.begin().await?;
-    // notes is RLS-enabled; this authorized account deletion removes the
-    // caller's own rows.
     crate::db::apply_rls_bypass(&mut tx).await?;
-    // `notes.user_id` has no FK (see init.sql), so it doesn't ride the cascade
-    // on `users`. Wipe it explicitly before the user row goes.
+    // notes.user_id has no FK, so it does not ride the cascade on `users`.
     sqlx::query("DELETE FROM notes WHERE user_id = $1")
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
-    // Everything else referencing users.id is ON DELETE CASCADE / SET NULL.
     let deleted = sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(user_id)
         .execute(&mut *tx)
@@ -1078,10 +1010,10 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
 pub struct AdminSendCreateCodeInput {
     /// The login address the account will be created with.
     pub account_email: String,
-    /// Where to actually mail the code. Defaults to `account_email`. They differ
-    /// for org accounts, which sit on synthetic `<user>@<org-slug>.com` domains
-    /// with no real inbox — the code goes to the person's reachable mailbox
-    /// while the account keeps the org address as its login identity.
+    /// Where to mail the code; defaults to `account_email`. The two differ for org
+    /// accounts on synthetic `<user>@<org-slug>.com` domains with no real inbox: the
+    /// code goes to a reachable mailbox while the account keeps the org address as
+    /// its login identity.
     #[serde(default)]
     pub delivery_email: Option<String>,
 }
@@ -1093,10 +1025,9 @@ fn normalize_email(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
-/// Mail a 6-digit code that `admin_create_user` will require before it mints the
-/// account. Nothing is written to `users` here — the code is the proof that the
-/// address is real and reachable, so a typo fails now instead of silently
-/// creating an account nobody can log into.
+/// Mail the 6-digit code that `admin_create_user` requires. Nothing is written to
+/// `users` here: the code proves the address reachable, so a typo fails now rather
+/// than creating an account nobody can log into.
 #[post("/admin/users/send-code")]
 #[instrument(target = "auth", skip(req, pool, data), fields(account_email = %data.account_email))]
 pub async fn admin_send_create_code(
@@ -1104,8 +1035,8 @@ pub async fn admin_send_create_code(
     pool: web::Data<PgPool>,
     data: web::Json<AdminSendCreateCodeInput>,
 ) -> AppResult {
-    // Same gate as admin_create_user — if you may not create the account, you
-    // may not make us send mail on its behalf either.
+    // Same gate as admin_create_user: whoever may not create the account may not
+    // make the server send mail on its behalf either.
     let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersManage).await
     {
         Ok(ctx) => ctx,
@@ -1126,8 +1057,6 @@ pub async fn admin_send_create_code(
             .json(serde_json::json!({ "message": "A valid email address is required" })));
     }
 
-    // Fail on an already-taken address now, rather than after the admin has
-    // gone and fetched a code.
     let taken: Option<i32> = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
         .bind(&account_email)
         .fetch_optional(pool.get_ref())
@@ -1157,7 +1086,7 @@ pub async fn admin_send_create_code(
         })));
     }
 
-    // Only the newest code stays valid — mirrors issue_verification_code_and_email.
+    // Only the newest code stays valid, mirroring issue_verification_code_and_email.
     sqlx::query(
         "UPDATE admin_create_verifications SET used_at = NOW() \
          WHERE requested_by = $1 AND account_email = $2 AND used_at IS NULL",
@@ -1212,10 +1141,9 @@ pub async fn admin_send_create_code(
     })))
 }
 
-/// Consume the code the admin was mailed by `admin_send_create_code`. Runs
-/// before any mutation in `admin_create_user`, so a bad code leaves no partial
-/// org / seat / keypair state behind. `Ok(())` means the code was valid and has
-/// been burned; `Err(resp)` is the response to return to the admin.
+/// Consume the code mailed by `admin_send_create_code`. Must run before any mutation
+/// in `admin_create_user`, so a bad code leaves no partial org, seat, or keypair
+/// state. `Err(resp)` is the response to return to the admin.
 async fn consume_create_code(
     pool: &PgPool,
     admin_id: i32,
@@ -1295,7 +1223,6 @@ async fn consume_create_code(
         })));
     }
 
-    // Single-use: burn it the moment it matches.
     sqlx::query("UPDATE admin_create_verifications SET used_at = NOW() WHERE id = $1")
         .bind(id)
         .execute(pool)
@@ -1316,9 +1243,8 @@ pub async fn admin_create_user(
     pool: web::Data<PgPool>,
     data: web::Json<AdminCreateUserInput>,
 ) -> AppResult {
-    // Creating accounts requires `members:manage` — held by org and platform
-    // owner / super_admin / admin. This replaces the old account_type check, so
-    // an organization `admin` (not just `organization_admin`) can add members.
+    // Gated on `members:manage` rather than account_type, which is what lets an
+    // organization `admin` — not just an owner — add members.
     let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersManage).await
     {
         Ok(ctx) => ctx,
@@ -1327,9 +1253,6 @@ pub async fn admin_create_user(
     let admin_id = ctx.user_id;
 
     let email = data.email.trim().to_lowercase();
-    // Username defaults to the email local-part so admins can create a user
-    // with just an email. Existing callers that still send `username` keep
-    // working.
     let username_owned = data
         .username
         .as_deref()
@@ -1370,10 +1293,9 @@ pub async fn admin_create_user(
         );
     }
 
-    // Email confirmation gate. Deliberately the FIRST thing after input
-    // validation: everything below this line mutates (organizations upsert,
-    // seat accounting, RSA keypair provisioning, the users insert), so a
-    // missing/wrong/expired code must fail here to leave no partial state.
+    // Everything below this line mutates (organizations upsert, seat accounting,
+    // keypair provisioning, the users insert), so a bad code must fail here and
+    // leave no partial state.
     if let Err(response) = consume_create_code(
         pool.get_ref(),
         admin_id,
@@ -1385,10 +1307,8 @@ pub async fn admin_create_user(
         return Ok(response);
     }
 
-    // Decide the working password before hashing:
-    //   - If the admin supplied a non-empty value, use it (minimum 6 chars).
-    //   - Otherwise, generate a 16-char alphanumeric temp password and
-    //     return it in the response so the admin can share it once.
+    // Without a supplied password, generate a temp one and return it in the
+    // response so the admin can share it once.
     let supplied_password = data
         .password
         .as_deref()
@@ -1471,12 +1391,8 @@ pub async fn admin_create_user(
         }
     }
 
-    // Domain gate: an org member may only be minted on a domain the
-    // organization has VERIFIED it owns. Default-deny — gmail.com, usa.com,
-    // a typo, or any domain the org doesn't control is rejected, because it
-    // can never appear as a verified row in organization_domains. Founders
-    // (organization_admin) and personal users are exempt: they bootstrap the
-    // org / verify the domain before any members can be created on it.
+    // Domain gate for org members. Founders (organization_admin) and personal
+    // users are exempt: they bootstrap the org before members exist.
     if account_type == "organization"
         && let Some(org_id) = organization_id
     {
@@ -1487,16 +1403,9 @@ pub async fn admin_create_user(
                     .json(serde_json::json!({ "message": "Invalid email address" })));
             }
         };
-        // Escape hatch: a platform owner can flip `allow_unverified_email_domains`
-        // per org (on /platform/domains), which lets that org mint addresses on
-        // ANY domain — public providers included — bypassing the public-provider
-        // check below. Off by default.
-        //
-        // NOTE: domain-OWNERSHIP verification is intentionally NOT enforced at
-        // account creation. An org can create accounts on any (non-public)
-        // domain without first verifying it; the verification feature still
-        // exists (organization_domains + the domain pages) but no longer gates
-        // creation.
+        // Domain *ownership* is deliberately not verified: an org may create
+        // accounts on any non-public domain. A platform owner can set
+        // `allow_unverified_email_domains` to also permit public-provider domains.
         let allow_unverified: bool = sqlx::query_scalar::<_, bool>(
             "SELECT allow_unverified_email_domains FROM organizations WHERE id = $1",
         )
@@ -1512,12 +1421,9 @@ pub async fn admin_create_user(
         }
     }
 
-    // Pre-check: org members (account_type = 'organization', NOT founders)
-    // need a bootstrapped org master key so the server can escrow their
-    // keypair at provisioning time. Fail loud and early if the org has
-    // no key yet — better than creating a user that can't crypto.
-    // Founders (organization_admin) and personal users don't need this
-    // and follow the client-side mnemonic path.
+    // Org members need a bootstrapped org master key so the server can escrow their
+    // keypair; failing early beats creating a user who cannot do crypto. Founders and
+    // personal users take the client-side mnemonic path and are exempt.
     let needs_provisioned_keypair = account_type == "organization" && organization_id.is_some();
     let org_pubkey_spki: Option<Vec<u8>> = if needs_provisioned_keypair {
         let org_id = organization_id.expect("checked is_some above");
@@ -1542,9 +1448,8 @@ pub async fn admin_create_user(
 
     let hashed = hash_password(&plaintext_password).await?;
 
-    // `email_verified` is stated rather than left to the column default: the
-    // address was just proven reachable by the code above, so the new user can
-    // log in immediately without tripping the unverified-login gate.
+    // `email_verified` is true because the code proved the address reachable, so
+    // the new user can log in without tripping the unverified-login gate.
     let result = sqlx::query(
         r#"
         INSERT INTO users (username, email, password, auth_provider, account_type, email_verified)
@@ -1578,14 +1483,9 @@ pub async fn admin_create_user(
             let email: String = row.get("email");
             let account_type: String = row.get("account_type");
             let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
-            // Role precedence: explicit input -> account-type default. The DB
-            // CHECK constraints on platform_members / organization_members
-            // reject anything outside the 9-role catalog, so a bad string
-            // from a misbehaving client surfaces as a 500 below rather than
-            // a silent default. That's intentional — the frontend dropdown
-            // is restricted to the 4 roles we expose for this flow
-            // (guest/developer/member/support) and only legitimate misuse
-            // would land here.
+            // The members-table CHECK constraints reject anything outside the 9-role
+            // catalog, so a bad string surfaces as a 500 rather than a silent default.
+            // The frontend dropdown offers only guest/developer/member/support.
             let role_owned = data
                 .role
                 .as_deref()
@@ -1627,13 +1527,9 @@ pub async fn admin_create_user(
                 .await?;
             }
 
-            // Server-side keypair generation for org members. The keypair
-            // never leaves this process unwrapped — it gets wrapped twice
-            // (once under the org pubkey for owner-recovery, once under
-            // PBKDF2(password) for the member's own login) inside the
-            // blocking task, and the plaintext is zeroed before the task
-            // returns. RSA-2048 keygen is ~50-200ms, so spawn_blocking to
-            // keep the Tokio runtime responsive.
+            // The member keypair never leaves this process unwrapped: the blocking
+            // task wraps it under the org pubkey (owner recovery) and PBKDF2(password)
+            // (member login), then zeroes the plaintext. Keygen needs spawn_blocking.
             if let (Some(spki), Some(org_id)) = (org_pubkey_spki, organization_id) {
                 let password_for_gen = plaintext_password.clone();
                 let provisioned = tokio::task::spawn_blocking(move || {
@@ -1668,9 +1564,8 @@ pub async fn admin_create_user(
             }
 
             info!(target: "auth", admin_id, user_id = id, "admin created user");
-            // `temp_password` is only present when the server generated it.
-            // Existing callers that supplied a password get the same response
-            // they did before, just without the plaintext echoed back.
+            // `temp_password` is present only when the server generated it; a
+            // supplied password is never echoed back.
             let mut body = serde_json::json!({
                 "id": id,
                 "username": username,
@@ -1703,24 +1598,11 @@ fn generate_temp_password() -> String {
         .collect()
 }
 
-// Hard-delete a user account. Almost every related table has ON DELETE
-// CASCADE on its user_id FK, so the single DELETE on `users` cleans up
-// memberships, messages, files, billing customers, etc. The `notes` table
-// has a `user_id` column but no FK constraint (init.sql:469), so it gets
-// an explicit DELETE first to avoid orphan rows after the cascade.
-//
-// Authorization:
-//   * Gate: `members:manage` (owner, super_admin, admin, security via the
-//     RBAC change in this same PR).
-//   * Role-level: actor must be able to assign the target's role
-//     (`can_assign_role`). Without this an admin/security could delete the
-//     org owner, which would be a privilege escalation.
-//   * Scope: org-scoped actors can only delete users in their own org;
-//     platform-scoped actors can delete anyone subject to the role check.
-//   * Self-delete blocked — an admin removing themselves mid-session is
-//     almost always a mistake, and the JWT remains valid until expiry so
-//     they would lock themselves out of their own session.
-//   * Last-owner: cannot delete the sole owner of an org/platform.
+/// Hard-delete a user account. Gated on `members:manage` and additionally on
+/// `can_assign_role` for the target's role: without that check an admin or security
+/// member could delete the org owner, a privilege escalation. Self-delete is blocked
+/// because the actor's JWT stays valid until expiry and would strand them
+/// mid-session.
 #[delete("/admin/users/{id}")]
 #[instrument(target = "auth", skip(req, pool))]
 pub async fn admin_delete_user(
@@ -1740,8 +1622,6 @@ pub async fn admin_delete_user(
             .json(serde_json::json!({ "message": "You cannot delete your own account" })));
     }
 
-    // Resolve the target's effective role + scope so we can apply the same
-    // assign-role gate that the role-change endpoint uses.
     let target_ctx = match rbac::resolve_role_context(pool.get_ref(), target_user_id).await {
         Ok(target_ctx) => target_ctx,
         Err(sqlx::Error::RowNotFound) => {
@@ -1752,9 +1632,8 @@ pub async fn admin_delete_user(
         Err(e) => return Err(AppError::Db(e)),
     };
 
-    // Scope boundary: org admins cannot reach across orgs or into the
-    // platform tenant. Platform admins are unconstrained by scope (but
-    // still constrained by the role check below).
+    // Org admins cannot reach across orgs or into the platform tenant, and get a
+    // 404 rather than a 403 so they cannot probe for users outside their org.
     match ctx.scope {
         Scope::Organization => {
             if target_ctx.scope != Scope::Organization
@@ -1773,18 +1652,14 @@ pub async fn admin_delete_user(
         }
     }
 
-    // Role check: same predicate as role assignment. RolesManage holders
-    // can delete anyone; RolesAssignLimited can only delete users whose
-    // current role is below admin.
+    // Same predicate as role assignment: RolesManage holders can delete anyone,
+    // RolesAssignLimited only users whose current role is below admin.
     if !rbac::can_assign_role(&ctx, target_ctx.role, target_ctx.role) {
         return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "message": "Your role cannot manage that account"
         })));
     }
 
-    // An owner account cannot be removed through member management. Return a
-    // clear 403 instead of the previous 500 (the old last-owner guard ran an
-    // illegal `COUNT(*) … FOR UPDATE`, which only fired for owner targets).
     if target_ctx.role == Role::Owner {
         return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "message": "An owner cannot delete another owner"
@@ -1792,13 +1667,9 @@ pub async fn admin_delete_user(
     }
 
     let mut tx = pool.begin().await?;
-    // notes is RLS-enabled; this authorized admin deletion removes the target
-    // user's rows.
     crate::db::apply_rls_bypass(&mut tx).await?;
 
-    // Notes has user_id but no FK (see init.sql:469) — clean explicitly so
-    // it doesn't leave orphan rows after the users-row cascade. Every other
-    // user-owned table has ON DELETE CASCADE on its FK.
+    // notes.user_id has no FK, so it does not ride the cascade on `users`.
     sqlx::query("DELETE FROM notes WHERE user_id = $1")
         .bind(target_user_id)
         .execute(&mut *tx)

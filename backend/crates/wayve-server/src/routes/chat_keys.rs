@@ -1,23 +1,12 @@
-// Backfill chat E2E keypairs for members that don't have one.
-//
-// Chat is end-to-end encrypted: to message someone you encrypt to their RSA
-// public key, and they decrypt with a private key restored on login. Accounts
-// created by SQL seed (or any import) never ran the client-side key setup, so
-// their `users.public_key` is NULL and chatting with them errors with
-// "<email> has no chat encryption key".
-//
-// This platform-owner-only endpoint provisions a keypair for every such member
-// whose password matches the one supplied: it server-generates the keypair
-// (same path as org-member provisioning — `provision_org_owner_keypair`, which
-// wraps the private key under PBKDF2(password) and zeroizes the plaintext),
-// stores the public key, and writes a `member_login_wrapped_keys` row so the
-// member's private key is restored automatically on their next browser login
-// (auth.rs returns the wrap; Login.tsx unwraps it). The directory scoping is
-// unchanged — platform members see platform members, org members see their own
-// org — so this only fills in the missing keys.
-//
-// Password match is enforced per user (bcrypt verify), so an account using a
-// different password is skipped rather than given a wrap it can't open.
+//! Backfill chat E2E keypairs for members that lack one. Accounts created by SQL
+//! seed or import never ran the client-side key setup, so `users.public_key` is
+//! NULL and chatting with them fails.
+//!
+//! This platform-owner-only endpoint provisions the keypair server-side by the
+//! same path as org-member provisioning, and writes a `member_login_wrapped_keys`
+//! row so the private key is restored on the member's next login. A per-user
+//! bcrypt verify against the supplied password is required, so an account on a
+//! different password is skipped rather than given a wrap it cannot open.
 
 use crate::prelude::*;
 use tracing::{info, instrument, warn};
@@ -25,8 +14,8 @@ use wayve_security::encryption::provision_org_owner_keypair;
 use wayve_security::password::verify_password;
 use wayve_security::rbac::{self, Permission, Role, Scope};
 
-// Default seed password (scripts/seed_rbac_users.sh uses "Mahesh"). The caller
-// can override per request for a different shared password.
+// Must match the password scripts/seed_rbac_users.sh seeds with. The caller can
+// override it per request for a different shared password.
 const DEFAULT_SEED_PASSWORD: &str = "Mahesh";
 
 #[derive(Deserialize)]
@@ -48,7 +37,7 @@ pub async fn provision_chat_keys(
     pool: web::Data<PgPool>,
     body: web::Json<ProvisionInput>,
 ) -> AppResult {
-    // Platform owner only — this mints keypairs for other users.
+    // Platform owner only, because this mints keypairs for other users.
     let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::MembersManage).await
     {
         Ok(ctx) => ctx,
@@ -68,8 +57,8 @@ pub async fn provision_chat_keys(
         .unwrap_or(DEFAULT_SEED_PASSWORD)
         .to_string();
 
-    // Every member missing a usable public key, that still has a local password
-    // to verify against (OAuth-only accounts have none and are skipped).
+    // OAuth-only accounts have no local password to verify against, so they are
+    // excluded here.
     let candidates = sqlx::query_as::<_, Candidate>(
         r#"
         SELECT id, email, password
@@ -91,16 +80,16 @@ pub async fn provision_chat_keys(
             skipped += 1;
             continue;
         };
-        // Only provision accounts that actually use the supplied password,
-        // so we never write a wrap the member can't unwrap.
+        // Only accounts actually on the supplied password are provisioned, so no
+        // member is ever given a wrap they cannot unwrap.
         let matches = verify_password(&password, hashed).await.unwrap_or(false);
         if !matches {
             skipped += 1;
             continue;
         }
 
-        // RSA-2048 keygen is CPU-heavy and holds the plaintext key — keep it
-        // off the async executor on a blocking thread.
+        // RSA-2048 keygen is CPU-heavy and holds the plaintext key, so it stays off
+        // the async executor.
         let pw = password.clone();
         let provisioned_keys = match tokio::task::spawn_blocking(move || {
             provision_org_owner_keypair(&pw)
@@ -166,7 +155,6 @@ pub async fn provision_chat_keys(
     })))
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(provision_chat_keys);
 }

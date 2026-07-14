@@ -6,11 +6,8 @@ pub struct Account {
     email: String,
     display_name: Option<String>,
     unread_count: i64,
-    // Shared-inbox surface. `is_shared` lights up the chip in the
-    // sidebar; `shared_label` is the friendly name ("Support"); and
-    // `is_owner` distinguishes mailboxes the user themselves connected
-    // from ones they're a member of (controls "Disconnect" visibility,
-    // etc.).
+    // Shared-inbox fields. `is_owner` separates mailboxes the user connected
+    // themselves from ones they are only a member of, which gates Disconnect.
     #[serde(default)]
     is_shared: bool,
     #[serde(default)]

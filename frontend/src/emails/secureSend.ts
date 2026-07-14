@@ -1,21 +1,9 @@
-// Plan A Phase 3 — Secure-send magic link crypto helpers.
-//
-// All the heavy lifting happens in the browser. The sender's
-// passphrase NEVER touches the wire — it's used to derive a wrapping
-// key locally, with a per-message random salt that travels with the
-// ciphertext. The server stores opaque ciphertext + wrapped key +
-// salt; the recipient repeats the derivation with the passphrase
-// shared out-of-band to decrypt.
-//
-// Crypto:
-//   * KDF:      PBKDF2-HMAC-SHA256, 600,000 iters (same as recovery)
-//   * KEK:      32 bytes derived from PBKDF2(passphrase, salt)
-//   * DEK:      32 random bytes per message
-//   * Body seal: AES-256-GCM(DEK, iv, body)
-//   * Wrap:     AES-256-GCM(KEK, fixed-zero-iv, DEK)
-//                 — KEK is derived freshly per-message so a fixed
-//                   nonce is safe (PBKDF2(passphrase, salt) is unique
-//                   per send because salt is random)
+// Secure-send magic-link crypto. Everything happens in the browser: the
+// passphrase never touches the wire. A random per-message DEK seals the body
+// with AES-256-GCM; that DEK is wrapped under a KEK derived from
+// PBKDF2-HMAC-SHA256(passphrase, random salt, 600k iters). The server only ever
+// sees ciphertext, wrapped key, and salt. The recipient repeats the derivation
+// with the passphrase shared out-of-band.
 
 const PBKDF2_ITERATIONS = 600_000;
 const PBKDF2_SALT_BYTES = 16;
@@ -44,9 +32,7 @@ async function deriveWrappingKey(
   salt: Uint8Array,
   iterations: number
 ): Promise<CryptoKey> {
-  // Import the raw passphrase bytes as PBKDF2 input material, then
-  // derive an AES-GCM key. `false` makes the derived key
-  // non-extractable so a buggy caller can't accidentally log the KEK.
+  // Non-extractable (`false`) so a buggy caller can't log the KEK.
   const baseKey = await crypto.subtle.importKey(
     "raw",
     enc.encode(passphrase),
@@ -72,43 +58,36 @@ export type SecureSendBundle = {
 };
 
 /**
- * Build a secure-send bundle from a plaintext body and a passphrase
- * the user will share with the recipient out-of-band. Returns the
- * four pieces to POST to /api/email/send-secure verbatim.
+ * Seals a body under a passphrase the sender shares out-of-band. The result is
+ * POSTed to /api/email/send-secure verbatim.
  */
 export async function sealSecureMessage(
   plaintextBody: string,
   passphrase: string
 ): Promise<SecureSendBundle> {
   if (passphrase.length < 6) {
-    // PBKDF2 alone can't rescue a one-character passphrase. Forcing
-    // a minimum here is the cheapest UX defence against accidental
-    // empty/weak inputs.
+    // PBKDF2 can't rescue a one-character passphrase.
     throw new Error("Passphrase must be at least 6 characters");
   }
 
-  // 1. Per-message random salt — same passphrase produces a different
-  //    KEK every send, so two messages to the same recipient with the
-  //    same passphrase have unrelated ciphertexts.
+  // The salt is per-message, so the same passphrase yields a different KEK on
+  // every send and two messages never share a ciphertext.
   const salt = crypto.getRandomValues(new Uint8Array(PBKDF2_SALT_BYTES));
 
-  // 2. Fresh DEK + nonce for the body.
   const dek = crypto.getRandomValues(new Uint8Array(AES_KEY_BYTES));
   const bodyIv = crypto.getRandomValues(new Uint8Array(AES_IV_BYTES));
 
-  // 3. Derive KEK from passphrase + salt; wrap the DEK with it. We use
-  //    a fixed zero nonce for the wrap because the KEK is unique per
-  //    message (different salt → different KEK), so the (KEK, fixed
-  //    nonce) pair is also unique.
+  // The wrap uses an all-zero nonce, which is safe only because the KEK is
+  // unique per message (random salt → different KEK), so the (key, nonce) pair
+  // is never reused.
   const kek = await deriveWrappingKey(passphrase, salt, PBKDF2_ITERATIONS);
-  const wrapIv = new Uint8Array(AES_IV_BYTES); // all-zero, see above
+  const wrapIv = new Uint8Array(AES_IV_BYTES);
   const wrappedDek = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: wrapIv.slice().buffer },
     kek,
     dek.slice().buffer
   );
 
-  // 4. Encrypt the body with the DEK + body nonce. Standard AES-GCM.
   const dekCryptoKey = await crypto.subtle.importKey(
     "raw",
     dek.slice().buffer,
@@ -145,10 +124,9 @@ export type ServerSecureMessage = {
 };
 
 /**
- * Reverse of `sealSecureMessage`. Given a server response and the
- * recipient's passphrase, recover the plaintext body. Throws on auth
- * tag failure (wrong passphrase / corrupted ciphertext) — call sites
- * should surface the message verbatim to the user.
+ * Reverse of `sealSecureMessage`. Throws on an auth-tag failure (wrong
+ * passphrase or corrupted ciphertext); call sites should show the message
+ * verbatim to the user.
  */
 export async function openSecureMessage(
   envelope: ServerSecureMessage,
@@ -159,10 +137,8 @@ export async function openSecureMessage(
   const bodyIv = base64ToBytes(envelope.iv);
   const ciphertext = base64ToBytes(envelope.ciphertext);
 
-  // Repeat the sender's derivation with the same salt + iteration
-  // count. If the passphrase is wrong, this still produces *a* key —
-  // just not the right one — so the AES-GCM auth tag verification
-  // below is what actually catches the mismatch.
+  // A wrong passphrase still derives a key here, just not the right one. The
+  // AES-GCM auth tag below is what actually catches the mismatch.
   const kek = await deriveWrappingKey(
     passphrase,
     salt,
@@ -200,9 +176,8 @@ export async function openSecureMessage(
     );
     return dec.decode(plaintextBytes);
   } catch {
-    // Should be impossible if the wrap step succeeded — but a tampered
-    // ciphertext could still fail here. Surface a clean message rather
-    // than the underlying DOMException.
+    // Unreachable unless the ciphertext was tampered with, since the wrap step
+    // already succeeded. Surface a clean message, not a raw DOMException.
     throw new Error(
       "Message body failed to decrypt — the ciphertext may be corrupted."
     );

@@ -1,17 +1,9 @@
-// Centralized error logging.
-//
-// Two write paths:
-//   1. `POST /api/error-logs` — the browser posts JS errors, unhandled
-//      rejections, and failed-API-call summaries here. Intentionally
-//      auth-optional so we still capture errors that happen before login
-//      or with a bad/expired token (the most useful failure modes). When
-//      a valid bearer is present we attribute the log to that user.
-//   2. `log_server_error` — call from any backend handler to record an
-//      internal fault for the dashboard. Best-effort; never bubbles up.
-//
-// One read path:
-//   * `GET /api/platform/error-logs` — gated by `logs:read` AND platform
-//     scope. Paginated list with simple filters (source, severity, q).
+// Centralized error logging. The browser posts JS errors, unhandled rejections,
+// and failed-API-call summaries to `POST /api/error-logs`, which is deliberately
+// auth-optional so errors before login or under a bad token — the most useful
+// failure modes — are still captured; a valid bearer attributes the log to its
+// user. Backend handlers call `log_server_error` instead. Reads go through
+// `GET /api/platform/error-logs`, gated on `logs:read` plus platform scope.
 
 use crate::prelude::*;
 use chrono::{DateTime, Utc};
@@ -88,8 +80,7 @@ pub async fn ingest_client_error(
         return Err(AppError::BadRequest("message is required".into()));
     }
 
-    // Best-effort identity. The endpoint accepts unauthenticated posts so
-    // we still catch errors that happen before login or with a bad token.
+    // Best-effort identity: unauthenticated posts are accepted.
     let user_id = get_user_id_from_request(&req);
     let severity = normalize_severity(body.severity.as_deref());
 
@@ -115,17 +106,16 @@ pub async fn ingest_client_error(
     .execute(pool.get_ref())
     .await
     {
-        // Never fail the client over a broken log write — the user's
-        // actual workflow already failed once; double-fail is worse.
+        // Never fail the client over a broken log write: their real workflow has
+        // already failed once, and failing twice is worse.
         warn!(target: "http", error = ?e, "error_logs insert failed");
     }
 
     Ok(HttpResponse::Accepted().json(serde_json::json!({ "ok": true })))
 }
 
-/// Server-side helper. Call from handlers that want a fault to show up on
-/// the platform logs dashboard. Best-effort — failures are logged but
-/// never returned, so the caller's normal error path is unchanged.
+/// Record a backend fault on the platform logs dashboard. Best-effort: failures
+/// are logged but never returned, so the caller's error path is unchanged.
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
 pub async fn log_server_error(
@@ -234,8 +224,8 @@ pub async fn list_error_logs(
     .fetch_all(pool.get_ref())
     .await?;
 
-    // Quick aggregate stats so the dashboard can render a header strip
-    // without a second round-trip.
+    // Aggregate stats travel with the list so the dashboard's header strip costs
+    // no second round-trip.
     let stats = sqlx::query(
         r#"
         SELECT
@@ -265,7 +255,6 @@ pub async fn list_error_logs(
     })))
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(ingest_client_error).service(list_error_logs);
 }

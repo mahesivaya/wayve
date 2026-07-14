@@ -15,16 +15,13 @@ import { applyRuntimeClass } from "./utils/desktop";
 
 installDevLog();
 installErrorReporter();
-// Tag <html> with is-desktop/is-web (+ data-platform) so stylesheets can fork
-// between the Electron shell and the browser with pure CSS.
+// Tags <html> with is-desktop/is-web (+ data-platform) so stylesheets can fork
+// between the Electron shell and the browser in pure CSS.
 applyRuntimeClass();
 
-// Resolve runtime config (API/WS base + platform font) before rendering so the
-// first request uses the right origin and the app paints in the right font (no
-// flash). A returning signed-in user has their resolved font cached locally;
-// otherwise fall back to the platform default from /api/config. AuthContext
-// refreshes the per-user resolved font once the session is known.
-// `loadRuntimeConfig` never rejects, so the app always boots.
+// Runtime config (API/WS base + platform font) must resolve before the first
+// render so the first request uses the right origin and the app paints without
+// a font flash. `loadRuntimeConfig` never rejects, so the app always boots.
 void loadRuntimeConfig().finally(() => {
   const cached = cachedFontKey();
   applyPlatformFont(cached !== null ? cached : runtimeConfig().fontKey);

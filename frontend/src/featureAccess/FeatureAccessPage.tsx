@@ -13,12 +13,11 @@ function roleLabel(role: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-// Owner-only page: a matrix of gateable features (rows) × roles (columns).
-// Tick the roles allowed to use each feature, then Save. The owner column is
-// always on and disabled — an owner can't lock themselves out (backend enforces
-// this too). Access changes take effect on the member's next request. Works for
-// both organization and platform owners; the backend serves/saves the matrix
-// for whichever scope the caller belongs to.
+// Owner-only matrix of gateable features against roles. The owner column is
+// always on and disabled so an owner cannot lock themselves out, which the
+// backend enforces too. The backend serves and saves the matrix for whichever
+// scope the caller belongs to, and changes take effect on the member's next
+// request.
 export default function FeatureAccessPage() {
   const { user } = useAuth();
   const isOwner =

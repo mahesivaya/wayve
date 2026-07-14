@@ -1,6 +1,6 @@
-//! Pure GitLab ↔ Wayve field mappings. No DB or network, so they are unit-tested
-//! in place. GitLab issues have no built-in status workflow or priority, so
-//! these are best-effort heuristics (state + common label conventions) isolated
+//! Pure GitLab and Wayve field mappings. No DB or network, so they are unit-tested
+//! in place. GitLab issues have no built-in status workflow or priority, so these
+//! are best-effort heuristics over state and common label conventions, isolated
 //! here for easy tuning.
 
 use super::models::GitlabIssue;
@@ -13,7 +13,6 @@ pub struct MappedFields {
     pub priority: i16,
 }
 
-/// Map a GitLab issue to the Wayve task columns.
 pub fn map_issue(issue: &GitlabIssue) -> MappedFields {
     let title = issue.title.trim();
     let name = if title.is_empty() {
@@ -29,9 +28,7 @@ pub fn map_issue(issue: &GitlabIssue) -> MappedFields {
     }
 }
 
-/// Map a GitLab issue `state` (+ labels) to a Wayve task status. `closed` →
-/// `done`; an open issue is refined by common workflow labels (review /
-/// in-progress), else `to_do`.
+/// A closed issue is done; an open one is refined by common workflow labels.
 pub fn gitlab_state_to_wayve(state: &str, labels: &[String]) -> &'static str {
     if state.eq_ignore_ascii_case("closed") {
         return "done";
@@ -46,8 +43,8 @@ pub fn gitlab_state_to_wayve(state: &str, labels: &[String]) -> &'static str {
     }
 }
 
-/// Best-effort priority (1..=5, 5 = highest) from labels. GitLab has no native
-/// priority field, so we sniff common conventions; default 3 (Medium).
+/// GitLab has no native priority field, so this sniffs common label conventions
+/// onto Wayve's 1..=5 scale and defaults to 3, Medium.
 pub fn gitlab_priority_from_labels(labels: &[String]) -> i16 {
     let has = |needle: &str| labels.iter().any(|l| l.to_lowercase().contains(needle));
     if has("critical") || has("highest") || has("urgent") {

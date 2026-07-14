@@ -11,8 +11,8 @@ import MembersRolesPanel from "./MembersRolesPanel";
 import "./admin-ui.css";
 import "./organizationAdmin.css";
 
-// Roles an org admin can assign at creation time (below owner / super_admin,
-// which are promoted via the per-member role change instead).
+// Owner and super_admin are deliberately absent: they are reached through the
+// per-member role change, not at creation time.
 const CREATE_ROLE_OPTIONS: Role[] = [
   "member",
   "guest",
@@ -30,8 +30,7 @@ export default function OrganizationMembers() {
   const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("member");
-  // Email defaults to <handle>@<org-domain> but is editable; once the admin
-  // types in it, we stop auto-syncing it from the handle.
+  // Email is derived from the handle until the admin edits it directly.
   const [email, setEmail] = useState("");
   const [emailEdited, setEmailEdited] = useState(false);
   const [createdUsers, setCreatedUsers] = useState<AdminCreatedUser[]>([]);
@@ -39,13 +38,11 @@ export default function OrganizationMembers() {
   const [createSuccess, setCreateSuccess] = useState("");
   const [creating, setCreating] = useState(false);
 
-  // Where the verification code is mailed. Defaults to the account email, but
-  // stays editable: an org account's login address is on the synthetic org
-  // domain (<user>@<slug>.com), which has no inbox, so the code has to go to
-  // the person's real mailbox instead.
+  // Where the verification code is mailed. It must stay editable because an org
+  // login address sits on the synthetic org domain (<user>@<slug>.com), which
+  // has no inbox, so the code has to reach the person's real mailbox.
   const [deliveryEmail, setDeliveryEmail] = useState("");
   const [deliveryEdited, setDeliveryEdited] = useState(false);
-  // Set once a code has been mailed — flips the form from step 1 to step 2.
   const [codeSentTo, setCodeSentTo] = useState("");
   const [code, setCode] = useState("");
   const [sending, setSending] = useState(false);

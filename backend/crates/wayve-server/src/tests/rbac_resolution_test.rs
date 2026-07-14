@@ -1,8 +1,7 @@
-// Resolve a user's scope+role straight from the DB. These tests cover the
-// authority — `rbac::resolve_role_context` — that every authorization gate in
-// the app consults on every request. A regression here would silently affect
-// 9 roles × 3 scopes worth of access decisions, so the matrix is asserted
-// against fresh rows rather than mocked.
+// `rbac::resolve_role_context` is the authority every authorization gate in the
+// app consults on every request, so a regression here would silently change nine
+// roles' worth of access decisions across three scopes. These tests resolve
+// against fresh database rows rather than a mock.
 #[cfg(test)]
 mod tests {
     use crate::test_support::{insert_local_user, random_email, test_pool};
@@ -77,7 +76,7 @@ mod tests {
         assert_eq!(ctx.scope, Scope::Personal);
         assert_eq!(ctx.role, Role::Owner);
         assert_eq!(ctx.organization_id, None);
-        // Owner gets the full permission catalog.
+        // Owner holds the entire permission catalog.
         assert!(ctx.has(Permission::OrgDelete));
         assert!(ctx.has(Permission::BillingManage));
 
@@ -98,10 +97,9 @@ mod tests {
         assert_eq!(ctx.organization_id, Some(org_id));
         assert!(ctx.has(Permission::AuditRead));
         assert!(ctx.has(Permission::SecurityManage));
-        // Security must not back-door into billing.
-        // (NB: Security DOES now hold MembersManage by design — see the
-        // rationale comment on P_SECURITY in rbac.rs::permissions_for.
-        // That permission lets security provision the accounts it manages.)
+        // Security must not be a back door into billing. It does hold
+        // MembersManage by design, so that it can provision the accounts it
+        // manages; see the rationale on P_SECURITY in rbac.rs::permissions_for.
         assert!(!ctx.has(Permission::BillingManage));
 
         cleanup_user(&pool, user_id).await;
@@ -110,9 +108,8 @@ mod tests {
 
     #[actix_web::test]
     async fn organization_account_without_membership_row_defaults_to_member() {
-        // An `organization` user with no row in organization_members must fall
-        // back to Member (least-privilege), not to Owner or whatever the last
-        // call to `Role::from_str` returns.
+        // An `organization` user with no membership row must fall back to Member,
+        // the least-privilege role, and never to something more powerful.
         let pool = test_pool().await;
         let org_id = insert_org(&pool, &format!("RBAC Default {}", random_email())).await;
         let user_id = insert_local_user(&pool, &random_email(), "password123").await;
@@ -130,9 +127,8 @@ mod tests {
 
     #[actix_web::test]
     async fn organization_admin_account_without_role_defaults_to_owner() {
-        // An `organization_admin` account that hasn't been written into
-        // organization_members yet must still resolve to Owner — otherwise
-        // brand-new orgs lose their admin until a backfill runs.
+        // An `organization_admin` with no membership row yet must still resolve
+        // to Owner, or a brand-new org would have no admin until a backfill ran.
         let pool = test_pool().await;
         let org_id = insert_org(&pool, &format!("RBAC OrgAdmin {}", random_email())).await;
         let user_id = insert_local_user(&pool, &random_email(), "password123").await;
@@ -161,7 +157,7 @@ mod tests {
         let ctx = resolve_role_context(&pool, user_id).await.unwrap();
         assert_eq!(ctx.scope, Scope::Platform);
         assert_eq!(ctx.role, Role::SuperAdmin);
-        // super_admin is owner-minus-billing.
+        // super_admin is owner minus billing.
         assert!(ctx.has(Permission::MembersManage));
         assert!(ctx.has(Permission::OrgDelete));
         assert!(!ctx.has(Permission::BillingManage));
@@ -176,12 +172,10 @@ mod tests {
 
     #[actix_web::test]
     async fn unknown_role_string_falls_back_to_member() {
-        // RBAC must never let an exotic DB role unlock everything by accident —
-        // the matrix is the source of truth, and an unrecognized string is
-        // demoted to the baseline.
+        // An unrecognized role string in the database must be demoted to the
+        // baseline role, never allowed to unlock anything by accident.
         assert_eq!(Role::from_str("badger"), Role::Member);
         assert_eq!(Role::from_str(""), Role::Member);
-        // And of course the canonical tokens still round-trip.
         for role in Role::ALL {
             assert_eq!(Role::from_str(role.as_str()), role);
         }

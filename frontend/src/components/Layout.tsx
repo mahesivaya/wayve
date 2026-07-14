@@ -89,26 +89,13 @@ function appKeyFromPath(pathname: string): AppKey {
   return match?.key ?? "home";
 }
 
-// `children` is optional. When omitted (the default usage via
-// `<Route element={<Layout />}>`), the matched child route renders through
-// `<Outlet />`. When provided, callers can wrap arbitrary content in the
-// same chrome — used by the Pricing page which lives outside the routing
-// tree's ProtectedRoute branch but still wants the standard header/sidebar
-// for signed-in visitors.
-// Persist the split layout across Layout unmounts. Some routes
-// (/pricing, /enterprise, /support, /services/:slug, /organization,
-// /forgot-password, /reset-password, /recover-with-mnemonic) live
-// OUTSIDE the Layout wrapper in App.tsx — visiting them unmounts the
-// whole Layout component, which would otherwise reset the split to
-// closed. Round-tripping through localStorage keeps the split intact
-// when the user returns to a Layout-wrapped route.
+// Several routes (/pricing, /support, /organization, …) render outside the
+// Layout wrapper, so navigating to them unmounts Layout. Persisting the split
+// keeps it intact on return.
 const SPLIT_STORAGE_KEY = "rwayve.layout.split";
 
-// Opt-in apps a personal account can add to its sidebar via the "+" button.
-// Each entry shows as a checkbox card in the add-app picker; checking it drops
-// the app into the sidebar. `path` is the real route (only Code Repo has one
-// today — the rest are placeholder/coming-soon cards with fake icons). Add
-// future personal integrations here and they appear in the picker automatically.
+// Opt-in apps a personal account can add to its sidebar. Entries without a
+// `path` are placeholders that route to the Coming Soon page.
 const PERSONAL_APPS_STORAGE_KEY = "rwayve.layout.personalApps";
 const ADDABLE_PERSONAL_APPS: {
   key: string;
@@ -116,8 +103,7 @@ const ADDABLE_PERSONAL_APPS: {
   icon: ReactNode;
   path?: string;
 }[] = [
-  // Code Repo is a permanent sidebar item (see Layout render), not an opt-in
-  // app anymore — so it's intentionally absent from this add-app catalog.
+  // Code Repo is a permanent sidebar item, so it is absent here by design.
   { key: "canvas", label: "Canvas", icon: <CanvasIcon size={22} /> },
   { key: "forms", label: "Forms", icon: <FormsIcon size={22} /> },
   {
@@ -134,10 +120,8 @@ const ADDABLE_PERSONAL_APPS: {
   { key: "assistant", label: "Assistant", icon: <AssistantIcon size={22} /> },
 ];
 
-// Sample Teams shown in the sidebar for UI testing when the org has none of
-// its own yet. Negative ids so they can never collide with a real backend row.
-// Used only as a display fallback — the real fetched list (when non-empty)
-// always wins. Remove once real data exists.
+// Display-only fallback when the org has no teams yet. Negative ids so they can
+// never collide with a real backend row.
 const SAMPLE_TEAMS: Team[] = [
   {
     id: -1,
@@ -185,44 +169,33 @@ function loadPersistedSplit(): PersistedSplit {
   }
 }
 
-// Sidebar section expand/collapse persisted at MODULE scope. `/docs*` pages
-// render their own <Layout> (DocsShell's OuterShell), a different React
-// instance from the app's layout-route Layout — so navigating to a Developers
-// link (→ /docs) would otherwise mount a fresh Layout with every section
-// collapsed, snapping shut the group the user just clicked from. Persisting
-// here keeps sections open across that instance swap and ordinary navigation.
-// Module-level (not localStorage) so a full page reload still starts collapsed,
-// matching the intended default.
+// Section expand state must live at module scope: `/docs*` pages mount their own
+// <Layout> instance (DocsShell), so per-instance state would snap every section
+// shut on navigation there. Not localStorage, so a full reload still starts
+// collapsed.
 const persistedSidebarSections: Record<string, boolean> = {};
 
-// A single declarative model for the collapsible sidebar groups, so the six
-// near-identical `<div className="sidebar-section">…</div>` blocks collapse
-// into one render loop. Simple sections supply `links`; interactive ones
-// (Workspace, Teams) supply a custom `body`.
+// Simple sections supply `links`; interactive ones (Workspace, Teams) supply a
+// custom `body`.
 type SidebarLinkDef = {
-  path: string; // navigation target (the <Link to=>)
+  path: string;
   label: string;
   icon: ReactNode;
   visible?: boolean; // default true
   active?: boolean; // explicit active override (e.g. always-inactive links)
-  activeWhen?: string; // pathname to match for active (defaults to `path`);
-  // used when `path` carries a query string the pathname won't equal.
+  activeWhen?: string; // pathname to match when `path` carries a query string
 };
 type SidebarSectionDef = {
   key: string; // expand-state key (also the React key)
   label: string;
   visible: boolean;
-  icon?: ReactNode; // shown next to the section label (esp. useful in the icon rail)
+  icon?: ReactNode;
   collapsible?: boolean; // default true; false = plain label, always shown
   onAdd?: () => void;
   links?: SidebarLinkDef[];
   body?: ReactNode; // escape hatch for interactive sections
 };
 
-// One keyed store for every collapsible sidebar group, replacing what used to
-// be a separate useState per section. Seeded from (and synced back to) the
-// module-level record above, so open sections survive the Layout instance swap
-// and reset on a full reload.
 function useSidebarSections() {
   const [state, setState] = useState<Record<string, boolean>>(() => ({
     ...persistedSidebarSections,
@@ -246,16 +219,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  // Live unread badge for the Emails nav item. Fed by /api/emails/unread-count
-  // (idx_emails_unread partial index) — index-only scan even on huge inboxes.
-  // Gated on `user` so it doesn't fire while the session is still loading.
+  // Gated on `user` so the badge fetches don't fire while the session is loading.
   const emailsUnreadCount = useEmailsUnreadCount(Boolean(user));
   const chatUnreadCount = useChatUnreadCount(Boolean(user));
 
-  // ── Non-consequential activity telemetry ──────────────────────────────
-  // Record a page view on each route change (deduped against the last path)
-  // and a click on every button/link. Fire-and-forget; recorded only when
-  // logged in. Surfaced per-user on the User Audit page.
+  // Activity telemetry: a page view per route change and a click on every
+  // button/link. Fire-and-forget; surfaced per-user on the User Audit page.
   const lastPathRef = useRef<string>("");
   useEffect(() => {
     if (!user) return;
@@ -293,8 +262,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     return () => document.removeEventListener("click", handler, true);
   }, [user]);
 
-  // Three-pane state management. Lazy init reads any persisted split
-  // from a previous visit; the effect below mirrors changes back.
   const [middleView, setMiddleView] = useState<AppKey | null>(
     () => loadPersistedSplit().middleView
   );
@@ -302,18 +269,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     () => loadPersistedSplit().rightView
   );
 
-  // Decides whether the next header-link click navigates or changes the duplicate pane.
+  // Decides whether the next nav-link click navigates or retargets the pane.
   const [splitTarget, setSplitTarget] = useState<"left" | "right">(
     () => loadPersistedSplit().splitTarget
   );
 
-  // Focus target for a programmatically-opened pane app (e.g. a chat message's
-  // task link opening the Tasks pane on a specific task). Not persisted — it's
-  // a one-shot hand-off consumed by the pane on mount.
+  // One-shot focus hand-off for a programmatically-opened pane app (e.g. a chat
+  // message's task link). Consumed by the pane on mount, so it is not persisted.
   const [paneTarget, setPaneTarget] = useState<SplitTarget | null>(null);
 
-  // Open a split app in the right pane, optionally focusing a target (task id).
-  // Used by nested components via SplitControlContext.
   const openApp = useCallback(
     (app: AppKey, opts?: { taskId?: number }) => {
       setRightView(app);
@@ -323,8 +287,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     []
   );
 
-  // Close the right pane (and drop any pending focus target). Given to pane
-  // apps so an in-pane "close" gesture can dismiss the whole pane.
   const closeApp = useCallback(() => {
     setRightView(null);
     setSplitTarget("left");
@@ -343,14 +305,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         JSON.stringify({ middleView, rightView, splitTarget })
       );
     } catch {
-      // Storage quota / private mode — silently ignore, split just
-      // won't persist across reloads for this session.
+      // Storage quota / private mode — the split just won't persist.
     }
   }, [middleView, rightView, splitTarget]);
 
-  // Personal accounts have no Workspace section, so the optional apps (right
-  // now just the Code Repo viewer) are opt-in via a "+" button under the main
-  // nav. The chosen keys persist per-browser in localStorage.
+  // Personal accounts have no Workspace section, so extra apps are opt-in via a
+  // "+" under the main nav. The chosen keys persist per-browser.
   const [personalApps, setPersonalApps] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem(PERSONAL_APPS_STORAGE_KEY);
@@ -364,8 +324,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   });
   const [addAppOpen, setAddAppOpen] = useState(false);
 
-  // Check / uncheck an app in the picker — adds it to (or removes it from) the
-  // sidebar live and persists the choice.
   const togglePersonalApp = useCallback((key: string) => {
     setPersonalApps((prev) => {
       const next = prev.includes(key)
@@ -380,12 +338,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     });
   }, []);
 
-  // On narrow viewports the header nav collapses behind a hamburger toggle.
   const [navOpen, setNavOpen] = useState(false);
 
-  // Track whether we're in the ≤768px "overlay" band (sidebar is an
-  // off-canvas panel) vs. wider screens (permanent rail). Kept reactive so
-  // the toggle button's arrow direction always reflects the real state.
+  // At or below 768px the sidebar is an off-canvas overlay; above it, a
+  // permanent rail.
   const [isNarrow, setIsNarrow] = useState<boolean>(
     () =>
       typeof window !== "undefined" &&
@@ -400,22 +356,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  // "Report a bug" overlay — opened from the red header icon, also reachable
-  // from the profile menu's "Help & Report issue" item.
   const [supportOpen, setSupportOpen] = useState(false);
-  // Collapsible sidebar groups. Each starts open when the user is already on a
-  // route inside it (so the active item is visible); otherwise collapsed.
-  // Collapsible sidebar groups always start collapsed on mount/reload — they
-  // no longer auto-expand from the current URL. The user opens what they want.
-  // One keyed store for every collapsible group (logs/workspace/projects/
-  // teams/platform/developers). `sections.isOpen(key)` / `.toggle(key)` /
-  // `.setOpen(key, bool)`.
   const sections = useSidebarSections();
-  // Teams are org-scoped and fetched from the backend. Creation is
-  // org-owner-only (the control is hidden otherwise; the backend enforces it
-  // regardless).
+  // Team creation is org-owner-only. The control is hidden otherwise, but the
+  // backend enforces it regardless.
   const [teams, setTeams] = useState<Team[]>([]);
-  // Inline "new team" row (opened by the section "+" button).
   const [creatingTeam, setCreatingTeam] = useState(false);
   const [teamCreateDraft, setTeamCreateDraft] = useState("");
   const [billingAllowed, setBillingAllowed] = useState(true);
@@ -435,8 +380,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const userScope = user?.scope;
   const userRole = user?.effective_role;
   useEffect(() => {
-    // Personal accounts keep the default (allowed) and never query — only org
-    // and platform members have a per-scope feature-access matrix to honor.
+    // Only org and platform members have a feature-access matrix; personal
+    // accounts keep the default (allowed).
     if (userScope !== "organization" && userScope !== "platform") return;
     let cancelled = false;
     void getFeatureAccess()
@@ -467,8 +412,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       .then((created) => setTeams((prev) => [created, ...prev]))
       .catch(() => {});
   };
-  // Desktop sidebar can be collapsed to an icon-only rail. Persisted so the
-  // user's preference survives reloads.
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem("rwayve.sidebar.collapsed") === "1";
@@ -488,7 +431,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     }
   }, [sidebarCollapsed]);
 
-  // Drag-resizable nav sidebar width (when expanded, on non-overlay screens).
   const sidebarRef = useRef<HTMLElement | null>(null);
   const { width: sidebarWidth, startResize: startSidebarResize } =
     useResizableWidth({
@@ -498,13 +440,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       max: 360,
     });
 
-  // Split-pane weights — proportional sizes (flex-grow values) for the
-  // left/center/right panes. Stored as numbers because flex-grow is just a
-  // ratio; each pane gets `flex-grow: weight` and they share the content
-  // area in proportion. Default 1 each so an opening split lands at 50/50
-  // (two panes) or ~33% each (three panes). The user drags the handle
-  // between two panes to adjust their relative weights — the others stay
-  // unchanged so the unaffected pane doesn't jump while you're resizing.
+  // Pane sizes are flex-grow ratios, so a new split lands at 50/50 (two panes)
+  // or ~33% each (three).
   type PaneKey = "left" | "center" | "right";
   type PaneWeights = Record<PaneKey, number>;
   const PANE_WEIGHTS_STORAGE_KEY = "rwayve.layout.paneWeights";
@@ -544,10 +481,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Returns a pointerdown handler that resizes the boundary between two
-  // adjacent panes. Other panes' weights are held fixed so dragging one
-  // boundary never shifts an untouched pane. Drag captures pointer events
-  // on `document` so the gesture survives leaving the handle's hitbox.
+  // Resizes the boundary between two adjacent panes. Other panes' weights are
+  // held fixed so dragging one boundary never shifts an untouched pane. The drag
+  // listens on `document` so it survives leaving the handle's hitbox.
   const handlePaneResize = useCallback(
     (leftKey: PaneKey, rightKey: PaneKey) =>
       (e: React.PointerEvent<HTMLDivElement>) => {
@@ -630,8 +566,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     setSplitTarget("left");
   }
 
-  // When the split is open, sidebar clicks target the right pane instead
-  // of navigating the URL. When closed, the link behaves normally.
+  // With the split open, sidebar clicks retarget the right pane instead of
+  // navigating; when closed the link behaves normally.
   const renderSidebarItem = useCallback(
     (
       path: string,
@@ -696,10 +632,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     </Link>
   );
 
-  // Clickable header for a collapsible sidebar group (Workspace, Platform,
-  // Logs, Developers). Renders the label + a chevron that rotates with state.
-  // `onAdd`, when supplied, renders a "+" button right after the chevron — used
-  // to let an org owner create a new project / team from the section header.
+  // `onAdd`, when supplied, renders a "+" after the chevron so an org owner can
+  // create a team inline.
   const renderSectionToggle = (
     label: string,
     expanded: boolean,
@@ -752,13 +686,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   }
 
   const authedUser = user;
-  // Platform-wide billing console: aggregates revenue, customer subscriptions
-  // and payroll across the whole platform. Distinct from the per-tenant
-  // [/billing](../billing/Billing.tsx) self-service view; staff-only.
   // A switchable owner only sees admin nav in admin mode. The downscoped /me
-  // already flips scope/role/permissions in normal mode, but ANDing this into
-  // the section flags prevents an admin-nav flash during optimistic (pre-/me)
-  // login state. A non-switchable user (regular member/personal) is unaffected.
+  // already flips scope/role/permissions in normal mode; ANDing this into the
+  // section flags also prevents an admin-nav flash during optimistic (pre-/me)
+  // login state.
   const adminMode = user.mode !== "normal" || !user.can_switch_admin;
   const canAccessPlatformBilling =
     user.scope === "platform" &&
@@ -776,27 +707,20 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     user.scope === "platform" && hasPermission(user, "members:read");
   const canAccessPlatformAnalytics =
     user.scope === "platform" && hasPermission(user, "members:read");
-  // Domain administration is restricted to the platform OWNER specifically
-  // (not all platform staff) — mirrors the backend require_platform_owner gate.
+  // Domain administration is the platform owner's alone, not all platform staff
+  // — mirrors the backend require_platform_owner gate.
   const isPlatformOwner =
     adminMode &&
     user.scope === "platform" &&
     user.effective_role === "owner";
-  // Organization owners get a Domains shortcut to their own org's custom-domain
-  // administration. (Nav only — backend domain endpoints stay platform-owner
-  // gated for now, so the link targets their org via ?org=<id>.)
   const isOrgOwner =
     adminMode &&
     user.scope === "organization" &&
     user.effective_role === "owner";
-  // Custom-domain verification is a business / enterprise capability — hide the
-  // Domains shortcut for lower org tiers (startups / none).
+  // Custom-domain verification is a business / enterprise capability.
   const orgTier = user.current_plan?.tier;
   const canManageDomains =
     isOrgOwner && (orgTier === "business" || orgTier === "enterprise");
-  // Pricing is hidden from roles that don't manage plans/billing (org +
-  // platform scope) — only owner / super_admin / billing keep it. Shared with
-  // the /pricing route guard so the URL can't bypass the hidden nav link.
   const currentPlanCode = authedUser.current_plan?.code ?? "basic_user";
   const isBasicPersonalUser =
     authedUser.account_type === "personal" &&
@@ -805,12 +729,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     user.scope !== "organization";
 
   function goToUpgrade() {
-    // The Upgrade nudge is rendered only for `isBasicPersonalUser`, so we
-    // always land on /billing — the page that actually lists the plan grid
-    // (with Subscribe/Switch CTAs) plus the "Create organization" surface
-    // for personal users who want team-tier plans. /pricing redirects
-    // personal users to /settings via RedirectIfPersonal, so it would be a
-    // dead end here.
+    // Must target /billing, not /pricing: RedirectIfPersonal bounces personal
+    // users off /pricing, and this nudge only renders for personal users.
     const params = new URLSearchParams({
       account: authedUser.account_type,
       plan: currentPlanCode,
@@ -833,9 +753,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       canAccessPlatformAnalytics ||
       isPlatformOwner);
 
-  // The "Workspace" group is available to every organization member (all tiers,
-  // including enterprise) and every platform member; personal accounts have no
-  // workspace. Backend RBAC still gates access to the individual pages.
+  // Every org and platform member sees Workspace; personal accounts have none.
+  // Backend RBAC still gates the individual pages.
   const hasWorkspaceSection =
     user.scope === "platform" || user.scope === "organization";
 
@@ -853,11 +772,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </Fragment>
       ));
 
-  // Renders one collapsible group from the registry. Non-collapsible groups
-  // (Organization) show a plain label with links directly underneath (no
-  // `.sidebar-subitems` wrapper, matching the prior markup). Collapsible groups
-  // render the toggle, then — when open or in the icon rail — the custom `body`
-  // or the mapped `links`.
+  // Non-collapsible groups (Organization) show a plain label with links directly
+  // underneath, deliberately without the `.sidebar-subitems` wrapper.
   const renderSection = (s: SidebarSectionDef) => {
     if (!s.visible) return null;
     if (s.collapsible === false) {
@@ -893,8 +809,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     );
   };
 
-  // Fall back to sample rows so the Teams section isn't empty during testing;
-  // real fetched data always takes precedence.
   const displayTeams = teams.length ? teams : SAMPLE_TEAMS;
 
   const sectionDefs: SidebarSectionDef[] = [
@@ -905,8 +819,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       icon: <WorkspaceIcon size={16} />,
       body: (
         <div className="sidebar-subitems">
-          {/* Compact sub-item style (matches the project rows) so it
-              doesn't tower over its Workspace neighbors. */}
           <Link
             to="/documents"
             title="Library"
@@ -952,11 +864,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       key: "teams",
       label: "Teams",
       icon: <TeamsIcon size={16} />,
-      // Teams are organization-scoped; personal accounts have no org, so the
-      // section would only ever read "No teams yet". Hide it for them.
+      // Teams are org-scoped, so the section would always be empty for personal
+      // accounts.
       visible: user.account_type !== "personal",
-      // Org owners create teams in their org; the platform owner creates
-      // platform-level teams. Both get the "+".
       onAdd:
         (isOrgOwner || isPlatformOwner) && !sidebarCollapsed
           ? () => {
@@ -1074,8 +984,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           label: "API reference",
           icon: <ApiRefIcon size={16} />,
         },
-        // Libraries + SDK both land on the Developer overview; Libraries is
-        // never shown as active (preserves prior behavior), SDK is.
+        // Libraries and SDK share a route; only SDK is ever marked active.
         {
           path: "/docs/developers",
           label: "Libraries",
@@ -1125,31 +1034,22 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     },
   ];
 
-  // Desktop shell (Electron): only the profile/account menu relocates — to the
-  // bottom of the sidebar, above Settings. Every other header action
-  // (notifications, report, upgrade, split) stays in the header in both
-  // runtimes. `headerActions` is that always-in-header cluster (no ProfileMenu).
+  // In the desktop shell only the ProfileMenu relocates, to the bottom of the
+  // sidebar. `headerActions` is the cluster that stays in the header in both
+  // runtimes.
   const desktop = isDesktopApp();
   const headerActions = (
     <>
-      {/* Persistent indicator that the owner is elevated into the admin
-        console. Only shows in admin mode (the ProfileMenu carries the
-        enter/exit control). */}
       {user.mode === "admin" && user.can_switch_admin && (
         <span className="admin-mode-badge" title="You are in admin mode">
           🛡️ Admin mode
         </span>
       )}
-      {/* Unread notifications (emails + chat). Sits left of the Report
-        icon; badge count mirrors the sidebar Emails/Chat badges. */}
       <NotificationBell
         emailUnread={emailsUnreadCount}
         chatUnread={chatUnreadCount}
       />
 
-      {/* Bug-report shortcut. Always visible to signed-in users so issues can
-        be filed from anywhere. Same overlay as ProfileMenu's "Help & Report
-        issue". */}
       <button
         type="button"
         className="header-bug-btn"
@@ -1160,9 +1060,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         <BugReportIcon className="header-bug-icon" />
       </button>
 
-      {/* Upgrade nudge — the single most clickable monetization surface for
-        free personal accounts. Desktop shell moves it into the Settings page
-        (see the Upgrade card there); the browser keeps it in the header. */}
+      {/* The desktop shell surfaces Upgrade on the Settings page instead. */}
       {!desktop && isBasicPersonalUser && (
         <button
           type="button"
@@ -1196,25 +1094,19 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     <SplitControlContext.Provider value={splitControl}>
     <div className="app">
       <SearchProvider>
-        {/* 🔝 HEADER — brand + inline search + global actions. App
-          navigation lives in the left sidebar. */}
         <div className="header">
           <div className="header-brand">
             <div className="logo" onClick={() => navigate("/")}>
-              {/* Desktop shell uses a smaller mark. The wordmark follows the
-                sidebar in both runtimes: shown when the sidebar is expanded,
-                hidden (mark only) when it's collapsed to the icon rail. The
-                narrow off-canvas overlay has no collapsed rail, so the wordmark
-                always shows there. */}
+              {/* The wordmark hides when the sidebar collapses to the icon rail.
+                The narrow overlay has no collapsed rail, so it always shows. */}
               <BrandLogo className="logo-mark" size={desktop ? 24 : 26} />
               {!(sidebarCollapsed && !isNarrow) && (
                 <span className="logo-word">{BRAND_NAME}</span>
               )}
             </div>
-            {/* Header toggle is the mobile hamburger ONLY. On wide screens the
-              show/hide control lives on the sidebar divider (see
-              .sidebar-divider-toggle below); there's no persistent divider in
-              the ≤768px off-canvas overlay, so the header button stays for it. */}
+            {/* This toggle is the mobile hamburger only. On wide screens the
+              show/hide control lives on the sidebar itself; the overlay has no
+              persistent divider to host it, so it needs the header button. */}
             {isNarrow && (
               <button
                 type="button"
@@ -1229,11 +1121,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   viewBox="0 0 24 24"
                   aria-hidden="true"
                 >
-                  {/* Panel frame for context */}
                   <rect x="3" y="5" width="18" height="14" rx="2.2" />
                   <line x1="9" y1="5" x2="9" y2="19" />
-                  {/* Arrow points the way the panel will move on click:
-                    open → left chevron (will hide); closed → right (show). */}
+                  {/* The arrow points the way the panel will move on click. */}
                   {navOpen ? (
                     <polyline points="15 9 12 12 15 15" />
                   ) : (
@@ -1244,13 +1134,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             )}
           </div>
 
+          {/* Emails, Notes and Chat own their own in-page search, so the header
+            search is suppressed there to avoid two competing search inputs. */}
           {!location.pathname.startsWith("/emails") &&
             !location.pathname.startsWith("/notes") &&
             !location.pathname.startsWith("/chat") && <SearchBar />}
 
-          {/* Global actions stay in the header in both runtimes. The profile
-            menu is the one exception: the desktop shell renders it at the
-            bottom of the sidebar instead (see .sidebar-profile below). */}
           <div className="actions">
             {headerActions}
             {!desktop && <ProfileMenu />}
@@ -1259,9 +1148,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
         <StorageLimitBanner onUpgrade={goToUpgrade} />
 
-        {/* 🔥 BODY */}
         <div className="body">
-          {/* PRIMARY SIDEBAR — every app nav surface lives here. */}
           <nav
             ref={sidebarRef}
             className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`.trim()}
@@ -1272,10 +1159,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             }
             aria-label="Primary navigation"
           >
-            {/* Wide-screen show/hide control — a small chevron pinned at the top
-              of the panel, above Home. Stays put whether expanded or collapsed
-              to the icon rail. The ≤768px overlay uses the header hamburger
-              instead, so this is desktop-only. */}
+            {/* Desktop-only show/hide control. The narrow overlay uses the
+              header hamburger instead. */}
             {!isNarrow && (
               <div className="sidebar-collapse-row">
                 <button
@@ -1293,9 +1178,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                     viewBox="0 0 24 24"
                     aria-hidden="true"
                   >
-                    {/* Same panel-frame glyph the header toggle used. The arrow
-                      points the way the panel will move on click:
-                      expanded → left (will hide); collapsed → right (will show). */}
+                    {/* The arrow points the way the panel will move on click. */}
                     <rect x="3" y="5" width="18" height="14" rx="2.2" />
                     <line x1="9" y1="5" x2="9" y2="19" />
                     {sidebarCollapsed ? (
@@ -1349,11 +1232,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 "Tasks",
                 <TasksIcon size={18} />
               )}
-              {/* AI Chat has no sidebar item anymore — it's the Home page for
-                every user (see Home.tsx). Reach it via Home. */}
-              {/* Code Repo — a PERMANENT nav item for personal accounts (no
-                  longer opt-in). Workspace users get it inside the Workspace
-                  section below, so this is personal-only to avoid duplicating. */}
+              {/* Code Repo is personal-only here; workspace users get it inside
+                the Workspace section, so listing it for both would duplicate. */}
               {user.account_type === "personal" &&
                 renderSidebarItem(
                   "/github",
@@ -1361,8 +1241,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "Code Repo",
                   <GitLogoIcon size={18} />
                 )}
-              {/* Personal accounts: opt-in apps they've added (in catalog
-                  order), plus a "+" that opens a checkbox picker. */}
               {user.account_type === "personal" && (
                 <>
                   {ADDABLE_PERSONAL_APPS.filter((a) =>
@@ -1376,9 +1254,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                         a.icon
                       )
                     ) : (
-                      // Placeholder app — not yet wired to a real route, so it
-                      // navigates to the shared Coming Soon page (carrying its
-                      // label so the page names the feature).
+                      // Placeholder app: no real route yet, so it lands on the
+                      // shared Coming Soon page carrying its label.
                       <button
                         key={a.key}
                         type="button"
@@ -1397,7 +1274,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                       </button>
                     )
                   )}
-                  {/* Keep the "+" while at least one app isn't added yet. */}
                   {ADDABLE_PERSONAL_APPS.some(
                     (a) => !personalApps.includes(a.key)
                   ) && (
@@ -1435,14 +1311,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
             <div className="sidebar-spacer" />
 
-            {/* Settings pinned to the very bottom of the sidebar, below the
-              flex spacer so it stays anchored regardless of how many nav
-              groups are present above it. */}
+            {/* Sits below the flex spacer so it stays pinned to the bottom
+              regardless of how many nav groups render above it. */}
             <div className="sidebar-section sidebar-section-bottom">
-              {/* Desktop shell: a profile button (avatar + username) REPLACES
-                the Settings link. Clicking it opens the full Settings page
-                (plain navigation — no split). The browser keeps the plain
-                Settings link (its ProfileMenu lives in the header). */}
+              {/* In the desktop shell a profile button replaces the Settings
+                link, since that runtime has no header ProfileMenu. */}
               {desktop ? (
                 <button
                   type="button"
@@ -1475,8 +1348,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             </div>
           </nav>
 
-          {/* Drag the nav sidebar wider/narrower (hidden when collapsed to the
-            icon rail or in the narrow off-canvas overlay). */}
+          {/* Resizing is meaningless in the icon rail or the narrow overlay. */}
           {!sidebarCollapsed && !isNarrow && (
             <ResizeHandle
               onPointerDown={startSidebarResize}
@@ -1493,7 +1365,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             />
           )}
 
-          {/* MAIN CONTENT */}
           <div className={`content`} ref={contentRef}>
             <div
               className={`split-pane left ${splitOpen && splitTarget === "left" ? "active-target" : ""}`}
@@ -1532,9 +1403,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               )}
             </div>
 
-            {/* Resize handle between left and (middle or right) — only when
-              split open. Dragging adjusts the boundary between the two
-              panes the handle sits between. */}
             {splitOpen && (
               <div
                 className="split-resize-handle"
@@ -1578,8 +1446,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               </div>
             )}
 
-            {/* Second handle only when all three panes are visible — sits
-              between center and right. */}
+            {/* Second handle only exists when all three panes are visible. */}
             {middleView && rightView && (
               <div
                 className="split-resize-handle"
@@ -1630,8 +1497,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
       {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
 
-      {/* Personal-account app picker: a grid of checkbox cards. Checking a
-          card drops the app into the sidebar live; unchecking removes it. */}
       <Modal
         isOpen={addAppOpen}
         onClose={() => setAddAppOpen(false)}

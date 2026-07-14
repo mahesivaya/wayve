@@ -1,26 +1,11 @@
-// Email provider dispatch.
-//
-// The codebase talks to multiple mail backends (Gmail today, Microsoft Graph
-// today, more later). Every operation we perform — sync, send, mark-read,
-// refresh token — has roughly the same shape across providers but a
-// completely different wire format. This module is where that polymorphism
-// lives.
-//
-// Operations are split across four narrow traits — TokenRefresher, MailSync,
-// MailSender, MailRead — so callers and tests can depend on just the slice
-// they use. `MailProviderClient` is the umbrella supertrait the registry
-// returns; per-provider structs implement all four small traits plus the
-// umbrella, and existing call sites that go through the umbrella keep working.
-//
-// Adding a new provider touches three places:
-//   1. Add the variant + matching `from_db`/`as_db`/`display_name` arms on
-//      `MailProvider` below.
-//   2. Add a `<Provider>MailClient` with impls for TokenRefresher / MailSync /
-//      MailSender / MailRead / MailProviderClient.
-//   3. Add one arm in `mail_provider_client(..)`.
-// No edits needed in `routes/email.rs`, `sync.rs`, or anywhere a handler
-// calls `provider.sync(..)` / `provider.send(..)` — those go through the
-// enum shims at the bottom of this file.
+//! Email provider dispatch. Sync, send, mark-read, and token refresh share a
+//! shape across mail backends but not a wire format, so each is its own narrow
+//! trait under the `MailProviderClient` umbrella that the registry returns.
+//!
+//! Adding a provider means a `MailProvider` variant with its
+//! `from_db`/`as_db`/`display_name` arms, a `<Provider>MailClient` implementing
+//! all five traits, and one arm in `mail_provider_client`. Handlers call through
+//! the enum shims at the bottom of this file and need no edits.
 
 use crate::email::account::invalidate_email_account_cache;
 use crate::email::imap::{
@@ -39,19 +24,16 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::instrument;
 
-// ============================================================================
-// Discriminator stored in `email_accounts.provider`. Pure-data methods stay
-// on the enum; everything that does I/O is on the trait.
-// ============================================================================
+/// Discriminator stored in `email_accounts.provider`. Pure-data methods stay on
+/// the enum; everything that does I/O is on the traits.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailProvider {
     Google,
     Microsoft,
-    /// Generic IMAP (read) + SMTP (send) for any custom-domain mailbox not on
-    /// Google/Microsoft. We don't hold an OAuth refresh token — the encrypted
-    /// app password lives in `email_accounts.refresh_token`; the
-    /// host/port/security live in the `imap_*`/`smtp_*`/`mail_security`
-    /// columns, loaded by account_id.
+    /// IMAP (read) plus SMTP (send) for custom-domain mailboxes. There is no
+    /// OAuth refresh token: the encrypted app password lives in
+    /// `email_accounts.refresh_token` and the connection settings in the
+    /// `imap_*` / `smtp_*` / `mail_security` columns, loaded by account_id.
     Imap,
 }
 
@@ -76,7 +58,7 @@ impl MailProvider {
         self == Self::Microsoft
     }
 
-    /// Human-readable label used in user-facing error messages.
+    /// Label used in user-facing error messages.
     pub fn display_name(self) -> &'static str {
         match self {
             Self::Google => "Gmail",
@@ -86,10 +68,6 @@ impl MailProvider {
     }
 }
 
-// ============================================================================
-// Narrow traits — one capability each. Callers and tests depend on just the
-// slice they use.
-// ============================================================================
 #[async_trait]
 pub trait TokenRefresher: Send + Sync {
     async fn refresh_token(&self, refresh_token: &str) -> Result<RefreshedEmailToken>;
@@ -134,22 +112,16 @@ pub trait MailRead: Send + Sync {
     async fn mark_read(&self, access_token: &str, provider_message_id: &str) -> Result<()>;
 }
 
-// Umbrella the registry returns. Existing call sites that hold an
-// `Arc<dyn MailProviderClient>` keep working — supertrait method dispatch
-// resolves `.sync(..)`, `.send(..)`, etc. through the narrow traits.
+/// Umbrella trait the registry returns.
 pub trait MailProviderClient: TokenRefresher + MailSync + MailSender + MailRead {
-    // Implementations expose their `MailProvider` so callers can use the
-    // client polymorphically and still log/branch on the underlying provider
-    // (e.g. when adding metrics, request-id correlation, or per-provider
-    // retry policy). Currently nothing reads it.
+    /// Exposed so callers can branch or log on the underlying provider, for
+    /// metrics or a per-provider retry policy. Nothing reads it yet.
     #[allow(dead_code)]
     fn provider(&self) -> MailProvider;
 }
 
-// ============================================================================
-// Registry: turn a stored provider value into the right client.
-// `None` means the provider's OAuth is not configured on this instance.
-// ============================================================================
+/// Resolves a stored provider value to its client. `None` means that provider's
+/// OAuth is not configured on this instance.
 pub fn mail_provider_client(provider: MailProvider) -> Option<Arc<dyn MailProviderClient>> {
     match provider {
         MailProvider::Google => google_oauth_client()
@@ -157,7 +129,7 @@ pub fn mail_provider_client(provider: MailProvider) -> Option<Arc<dyn MailProvid
             .map(|oauth| Arc::new(GoogleMailClient { oauth }) as Arc<dyn MailProviderClient>),
         MailProvider::Microsoft => outlook_credentials()
             .map(|creds| Arc::new(OutlookMailClient { creds }) as Arc<dyn MailProviderClient>),
-        // IMAP has no central credential — the per-account app password +
+        // IMAP has no central credential; the per-account app password and
         // connection settings are loaded from the DB row on demand.
         MailProvider::Imap => Some(Arc::new(ImapMailClient {}) as Arc<dyn MailProviderClient>),
     }
@@ -168,9 +140,6 @@ fn require_client(provider: MailProvider) -> Result<Arc<dyn MailProviderClient>>
         .ok_or_else(|| anyhow::anyhow!("{} OAuth is not configured", provider.display_name()))
 }
 
-// ============================================================================
-// Google implementation.
-// ============================================================================
 pub struct GoogleMailClient {
     pub oauth: GoogleOAuthClient,
 }
@@ -186,9 +155,8 @@ impl TokenRefresher for GoogleMailClient {
         .await?;
         Ok(RefreshedEmailToken {
             access_token,
-            // Google rotates refresh tokens lazily and the refresh endpoint
-            // doesn't return a new one in the normal case, so callers keep
-            // the existing DB value.
+            // Google's refresh endpoint doesn't normally return a rotated
+            // refresh token, so callers keep the existing DB value.
             refresh_token: None,
         })
     }
@@ -235,7 +203,7 @@ impl MailSender for GoogleMailClient {
 #[async_trait]
 impl MailRead for GoogleMailClient {
     async fn mark_read(&self, access_token: &str, provider_message_id: &str) -> Result<()> {
-        // Gmail uses labels: removing `UNREAD` flips the read flag.
+        // Gmail has no read flag: removing the UNREAD label is the read marker.
         let url = format!(
             "{}/gmail/v1/users/me/messages/{}/modify",
             crate::external::gmail_api_base(),
@@ -262,9 +230,6 @@ impl MailProviderClient for GoogleMailClient {
     }
 }
 
-// ============================================================================
-// Microsoft (Outlook / Graph) implementation.
-// ============================================================================
 pub struct OutlookMailClient {
     pub creds: OutlookCredentials,
 }
@@ -275,8 +240,8 @@ impl TokenRefresher for OutlookMailClient {
         let tokens = refresh_outlook_token(&self.creds, refresh_token, OUTLOOK_MAIL_SCOPE).await?;
         Ok(RefreshedEmailToken {
             access_token: tokens.access_token,
-            // Graph sometimes returns a rotated refresh token; pass it through
-            // so `persist_refreshed_token` writes it back to the DB.
+            // Graph sometimes rotates the refresh token; pass it through so
+            // persist_refreshed_token writes it back.
             refresh_token: tokens.refresh_token,
         })
     }
@@ -323,8 +288,8 @@ impl MailSender for OutlookMailClient {
 #[async_trait]
 impl MailRead for OutlookMailClient {
     async fn mark_read(&self, access_token: &str, provider_message_id: &str) -> Result<()> {
-        // Graph: PATCH the message with isRead=true. `path_segments_mut`
-        // safely URL-encodes the message id (which contains `/` and `+`).
+        // `path_segments_mut` URL-encodes the Graph message id, which contains
+        // `/` and `+`.
         let mut url = reqwest::Url::parse(&format!(
             "{}/v1.0/me/messages",
             crate::external::microsoft_graph_base()
@@ -353,23 +318,13 @@ impl MailProviderClient for OutlookMailClient {
     }
 }
 
-// ============================================================================
-// Generic IMAP/SMTP implementation.
-// ============================================================================
-//
-// Worker-pipeline shoehorn: the pipeline is
-//   1) load `email_accounts.refresh_token`
-//   2) call `refresh_token(...)` to mint an access_token
-//   3) hand that string into `sync(..)`, `send(..)`, `mark_read(..)`
-// For OAuth providers `refresh_token` is the long-lived refresh token and
-// `access_token` a short-lived bearer. IMAP has neither — just the app
-// password — so `TokenRefresher` decodes the stored ciphertext and returns the
-// *plaintext password* in the `access_token` slot; downstream calls treat that
-// string as the IMAP/SMTP credential. Host/port/security aren't in the enum
-// variant — each method loads them from the account row by id.
-// `refresh_and_persist_email_token` skips the DB write for IMAP (see helper
-// below) so the plaintext never lands back in `access_token`.
-
+/// Generic IMAP/SMTP client.
+///
+/// IMAP has no OAuth tokens, only an app password, so `TokenRefresher` decrypts
+/// the stored password and returns it in the `access_token` slot that the rest
+/// of the worker pipeline passes around. `refresh_and_persist_email_token`
+/// therefore skips the DB write for IMAP, keeping the plaintext password out of
+/// the `access_token` column.
 pub struct ImapMailClient {}
 
 struct ImapRow {
@@ -423,7 +378,7 @@ impl MailSync for ImapMailClient {
         access_token: &str,
         _last_sync: Option<i64>,
     ) -> Result<()> {
-        // `access_token` is the decrypted app password (see shoehorn above).
+        // `access_token` is the decrypted app password (see ImapMailClient).
         let r = load_imap_row(pool, account_id).await?;
         sync_imap_account(
             pool,
@@ -444,8 +399,8 @@ impl MailSync for ImapMailClient {
         _before_timestamp: i64,
         _limit: usize,
     ) -> Result<()> {
-        // Historical backfill for IMAP is a separate, future feature; the
-        // forward sync already pulls the most recent batch each tick.
+        // No historical backfill for IMAP yet; the forward sync pulls the most
+        // recent batch each tick.
         Ok(())
     }
 }
@@ -482,8 +437,8 @@ impl MailSender for ImapMailClient {
 #[async_trait]
 impl MailRead for ImapMailClient {
     async fn mark_read(&self, _access_token: &str, _provider_message_id: &str) -> Result<()> {
-        // Best-effort no-op: the next sync tick re-reads INBOX \Seen flags and
-        // reconciles is_read.
+        // No-op: the next sync tick re-reads INBOX \Seen flags and reconciles
+        // is_read.
         Ok(())
     }
 }
@@ -494,11 +449,8 @@ impl MailProviderClient for ImapMailClient {
     }
 }
 
-// ============================================================================
-// Enum shims — kept so existing call sites (`account.provider.sync(..)`,
-// `provider.mark_read(..)`, etc.) keep working. Each shim resolves the
-// trait impl through the registry and forwards.
-// ============================================================================
+// Enum shims: each resolves the trait impl through the registry and forwards,
+// so call sites can stay on `account.provider.sync(..)`.
 impl MailProvider {
     pub async fn sync(
         self,
@@ -554,12 +506,8 @@ impl MailProvider {
     }
 }
 
-// ============================================================================
-// OAuth client wrappers + helpers.
-// `GoogleOAuthClient` and `OutlookCredentials` are the credential rows; the
-// `MailProviderClient` impls above hold one of these and use them to mint a
-// fresh access token before each call.
-// ============================================================================
+// OAuth credentials. Each MailProviderClient above holds one of these and uses
+// it to mint a fresh access token before every call.
 #[derive(Clone)]
 pub struct GoogleOAuthClient {
     pub client_id: String,
@@ -634,11 +582,9 @@ pub async fn refresh_and_persist_email_token(
     refresh_token: &str,
 ) -> Result<RefreshedEmailToken> {
     let token = refresh_email_token(provider, refresh_token).await?;
-    // IMAP's "refresh token" is the encrypted app password and the "access
-    // token" we computed is its plaintext form. Persisting would overwrite
-    // `access_token` with the plaintext password — wrong on every axis. Skip
-    // the write; the password lives only in the already-stored encrypted
-    // `refresh_token`.
+    // For IMAP the "access token" is the plaintext app password, so persisting
+    // it would write a plaintext credential into `access_token`. Skip the write:
+    // the password already lives encrypted in `refresh_token`.
     if !matches!(provider, MailProvider::Imap) {
         persist_refreshed_token(pool, account_id, &token).await?;
     }

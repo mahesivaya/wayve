@@ -1,8 +1,6 @@
-// "Enter the recovery key on a fresh device" page. Owners use this when
-// their browser has no cached org private key (auto-load failed because
-// they have no `user_pubkey` wrap on this device yet, or they cleared
-// IndexedDB). After entering the mnemonic the key is cached in IndexedDB
-// AND a `user_pubkey` wrap is published so next session auto-loads.
+// Owners land here on a device with no cached org private key. Entering the
+// mnemonic both caches the key in IndexedDB and publishes a `user_pubkey` wrap,
+// so the next session auto-loads it.
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";

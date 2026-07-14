@@ -3,28 +3,22 @@ import type { RefObject } from "react";
 import { EMOJI_CATEGORIES, searchEmojis } from "../emoji";
 
 type Props = {
-  /** Called with the chosen glyph (e.g. "🎉"). The picker does not close itself. */
+  /** Called with the chosen glyph. The picker does not close itself. */
   onSelect: (char: string) => void;
   onClose: () => void;
   /**
-   * The wrapper that holds both this popover and the button that opens it.
-   * Clicks anywhere inside it are "inside" — otherwise a click on the open
-   * button would dismiss the picker here and immediately reopen it in the
-   * button's own handler.
+   * The wrapper holding both this popover and the button that opens it. It must cover
+   * the button too, or a click on it would dismiss the picker here and immediately
+   * reopen it in the button's own handler.
    */
   anchorRef: RefObject<HTMLElement | null>;
 };
 
-// The composer's emoji popover: a search box over a categorized grid. Rendered
-// only while open, so the whole thing (including its document-level dismiss
-// listener) unmounts when closed.
 export default function EmojiPicker({ onSelect, onClose, anchorRef }: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
 
-  // Dismiss on a click anywhere outside the anchor. `mousedown` (not `click`)
-  // so the picker is gone before the click lands, matching the mention menu's
-  // mousedown convention elsewhere in the composer.
+  // `mousedown` rather than `click`, so the picker is gone before the click lands.
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (!anchorRef.current?.contains(e.target as Node)) onClose();
@@ -52,8 +46,8 @@ export default function EmojiPicker({ onSelect, onClose, anchorRef }: Props) {
       <input
         className="chat-emoji-search"
         type="search"
-        // The picker is opened by an explicit click, so taking focus here is
-        // what the user asked for — they can type to filter straight away.
+        // The picker only opens on an explicit click, so stealing focus to filter is
+        // what the user asked for.
         autoFocus
         placeholder="Search emoji"
         aria-label="Search emoji"

@@ -1,13 +1,8 @@
-// Webhook delivery worker.
-//
-// Polls `webhook_deliveries` for ready rows (`status = 'pending' AND
-// next_attempt_at <= NOW()`), POSTs the envelope to the endpoint with an
-// HMAC-SHA256 signature, and either marks the row delivered or schedules
-// the next retry.
-//
-// Retry policy is the hardcoded `RETRY_SCHEDULE` array. Endpoints that
-// accumulate too many consecutive failures are auto-disabled — the customer
-// must re-enable them from the dashboard once their endpoint is healthy.
+// Webhook delivery worker. Polls `webhook_deliveries` for ready rows, POSTs the
+// envelope with an HMAC-SHA256 signature, and either marks the row delivered or
+// schedules the next retry per `RETRY_SCHEDULE`. An endpoint that accumulates
+// too many consecutive failures is auto-disabled and must be re-enabled from the
+// dashboard.
 
 use crate::prelude::*;
 use chrono::{Duration as ChronoDuration, Utc};
@@ -18,10 +13,9 @@ use tracing::{error, info, instrument, warn};
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Backoff between attempts. The first attempt fires immediately when
-/// `emit()` inserts the row with `next_attempt_at = NOW()`. After that
-/// we space retries to ride out brief outages without spamming a broken
-/// endpoint.
+/// Backoff between attempts. The first attempt fires immediately, because
+/// `emit()` inserts the row with `next_attempt_at = NOW()`; later retries are
+/// spaced to ride out brief outages without hammering a broken endpoint.
 const RETRY_SCHEDULE_MINUTES: &[i64] = &[1, 5];
 
 /// Auto-disable after this many consecutive failed deliveries.
@@ -33,14 +27,13 @@ const POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// Per-delivery HTTP request timeout.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Spawn the delivery worker. Returns immediately; the loop runs forever
-/// inside a tokio task.
+/// Spawn the delivery worker. Returns immediately; the loop runs forever in a
+/// tokio task.
 pub async fn spawn_dispatcher(pool: PgPool) {
     let client = match reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
-        // Defence-in-depth: limit redirects so a misconfigured endpoint
-        // can't make us follow into someone else's network. A correct
-        // webhook receiver should never 3xx.
+        // A correct webhook receiver never 3xxes, and following redirects would
+        // let a misconfigured endpoint pull us into someone else's network.
         .redirect(reqwest::redirect::Policy::none())
         .build()
     {
@@ -61,9 +54,8 @@ pub async fn spawn_dispatcher(pool: PgPool) {
 
 #[instrument(target = "webhook", skip(pool, client))]
 async fn run_iteration(pool: &PgPool, client: &reqwest::Client) -> Result<()> {
-    // Claim up to 25 deliveries per tick. `FOR UPDATE SKIP LOCKED`
-    // means we can safely run multiple dispatchers concurrently in the
-    // future without double-sending — for now there's only one.
+    // `FOR UPDATE SKIP LOCKED` lets several dispatchers run concurrently without
+    // double-sending, though only one runs today.
     let rows = sqlx::query(
         r#"
         WITH claimed AS (
@@ -90,9 +82,8 @@ async fn run_iteration(pool: &PgPool, client: &reqwest::Client) -> Result<()> {
         return Ok(());
     }
 
-    // Batch-load every claimed delivery's endpoint in ONE query instead of a
-    // SELECT per delivery. Freshness is per-tick — an endpoint edited between
-    // ticks is re-read on the next tick.
+    // Batch-load every claimed delivery's endpoint in one query. Freshness is
+    // per-tick: an endpoint edited mid-tick is re-read on the next one.
     let endpoint_ids: Vec<i32> = rows
         .iter()
         .map(|r| r.get::<i32, _>("endpoint_id"))
@@ -119,8 +110,7 @@ async fn run_iteration(pool: &PgPool, client: &reqwest::Client) -> Result<()> {
         let payload: serde_json::Value = row.get("payload");
         let attempt_count: i32 = row.get("attempt_count");
 
-        // Endpoint state was batch-loaded for this tick (one query, not one
-        // per delivery). A missing entry means the endpoint was deleted.
+        // A missing entry means the endpoint was deleted.
         let Some((url, secret, enabled)) = endpoints.get(&endpoint_id) else {
             mark_abandoned(pool, delivery_id, 0, "endpoint deleted").await;
             continue;
@@ -202,8 +192,8 @@ async fn deliver(pool: &PgPool, client: &reqwest::Client, job: DeliveryJob<'_>) 
                 )
                 .await;
             } else if status.is_client_error() && status.as_u16() != 408 && status.as_u16() != 429 {
-                // 4xx (other than rate-limit / timeout) means the receiver
-                // is rejecting the request shape — retrying won't help.
+                // A 4xx other than rate-limit or timeout means the receiver is
+                // rejecting the request shape, so retrying cannot help.
                 mark_abandoned_with_response(
                     pool,
                     job.delivery_id,
@@ -240,9 +230,9 @@ async fn deliver(pool: &PgPool, client: &reqwest::Client, job: DeliveryJob<'_>) 
 }
 
 fn sign_body(secret: &str, timestamp: i64, body: &[u8]) -> String {
-    // Stripe-style: HMAC-SHA256 over `<timestamp>.<body>` using the
-    // endpoint's secret. Receivers verify by recomputing and comparing in
-    // constant time; the timestamp also lets them reject replayed requests.
+    // Stripe-style HMAC-SHA256 over `<timestamp>.<body>` with the endpoint's
+    // secret. Receivers recompare in constant time, and the timestamp lets them
+    // reject replayed requests.
     let mut mac = match HmacSha256::new_from_slice(secret.as_bytes()) {
         Ok(m) => m,
         Err(_) => return String::new(),
@@ -330,9 +320,9 @@ async fn schedule_retry_or_abandon(
     status: Option<u16>,
     excerpt: &str,
 ) {
-    // `attempt_count` was already incremented to N for the just-completed
-    // attempt; we look up the (N)th index in the schedule to find the next
-    // delay. If we've exhausted the schedule, abandon.
+    // `attempt_count` was already incremented for the just-completed attempt, so
+    // index into the schedule to find the next delay. An exhausted schedule
+    // abandons the delivery.
     let index = (attempt_count as usize).saturating_sub(1);
     if let Some(&delay_min) = RETRY_SCHEDULE_MINUTES.get(index) {
         let next_at = Utc::now() + ChronoDuration::minutes(delay_min);

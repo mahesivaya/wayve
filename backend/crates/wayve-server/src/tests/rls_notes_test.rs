@@ -1,22 +1,16 @@
-//! Row-Level Security isolation tests for the `notes` table (phase 2 pilot).
-//!
-//! Proves the FORCE-RLS `notes_rls` policy (see infra/postgres/init.sql):
-//!   * a user (`app.user_id`) sees ONLY their own notes
-//!   * cross-user UPDATE / DELETE affect 0 rows
-//!   * a connection with NO GUC sees 0 rows (deny-by-default)
-//!   * `app.bypass = 'on'` sees everything
-//!   * WITH CHECK rejects inserting a row owned by another user
-//!
-//! Requires the test DB to have init.sql applied (notes RLS enabled). The test
-//! pins specific note ids in every assertion, so it is independent of any other
-//! rows in a shared test database.
+//! Row-Level Security isolation for the `notes` table: a user reads and writes
+//! only their own notes, a connection with no GUC set sees nothing at all, and
+//! only `app.bypass` sees everything. The policy lives in infra/postgres/init.sql,
+//! which the test database must have applied. Every assertion pins specific note
+//! ids, so these hold against a shared test database that has other rows in it.
 
 #[cfg(test)]
 mod tests {
     use crate::test_support::{insert_local_user, random_email, test_pool};
     use sqlx::{PgPool, Postgres, Transaction};
 
-    /// Insert a note for `user_id` using the bypass GUC (test setup), return id.
+    /// Seeds a note through the bypass GUC, since setup must not be subject to
+    /// the policy under test. Returns the note id.
     async fn seed_note(pool: &PgPool, user_id: i32, body: &str) -> i32 {
         let mut tx = pool.begin().await.unwrap_or_else(|e| panic!("begin: {e}"));
         sqlx::query("SELECT set_config('app.bypass', 'on', true)")
@@ -34,8 +28,8 @@ mod tests {
         id
     }
 
-    /// Begin a transaction scoped to `app.user_id = user_id`, dropped into the
-    /// restricted role so RLS engages (mirrors db::apply_rls_user).
+    /// Begins a transaction scoped to `app.user_id` in the restricted role, so
+    /// that RLS engages exactly as it does in `db::apply_rls_user`.
     async fn begin_as_user(pool: &PgPool, user_id: i32) -> Transaction<'_, Postgres> {
         let mut tx = pool.begin().await.unwrap_or_else(|e| panic!("begin: {e}"));
         sqlx::query("SELECT set_config('app.user_id', $1, true)")
@@ -50,7 +44,7 @@ mod tests {
         tx
     }
 
-    /// Begin a transaction in the restricted role with no GUC set (or bypass).
+    /// Begins a transaction in the restricted role with no GUC set at all.
     async fn begin_restricted(pool: &PgPool) -> Transaction<'_, Postgres> {
         let mut tx = pool.begin().await.unwrap_or_else(|e| panic!("begin: {e}"));
         sqlx::query("SET LOCAL ROLE wayve_app")
@@ -88,7 +82,6 @@ mod tests {
         let note_b = seed_note(&pool, user_b, "B's note").await;
         let ids = [note_a, note_b];
 
-        // 1. As user A: among the two seeded notes, sees only their own.
         {
             let mut tx = begin_as_user(&pool, user_a).await;
             let visible: Vec<i32> =
@@ -101,7 +94,6 @@ mod tests {
             let _ = tx.rollback().await;
         }
 
-        // 2. As user A: cross-user UPDATE and DELETE affect zero rows.
         {
             let mut tx = begin_as_user(&pool, user_a).await;
             let updated = sqlx::query("UPDATE notes SET content = 'hax' WHERE id = $1")
@@ -121,7 +113,6 @@ mod tests {
             let _ = tx.rollback().await;
         }
 
-        // 3. Restricted role, no GUC set: deny-by-default — sees neither note.
         {
             let mut tx = begin_restricted(&pool).await;
             let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notes WHERE id = ANY($1)")
@@ -136,7 +127,6 @@ mod tests {
             let _ = tx.rollback().await;
         }
 
-        // 4. Restricted role with bypass GUC: the policy's bypass clause sees both.
         {
             let mut tx = begin_restricted(&pool).await;
             sqlx::query("SELECT set_config('app.bypass', 'on', true)")
@@ -152,7 +142,6 @@ mod tests {
             let _ = tx.rollback().await;
         }
 
-        // 5. WITH CHECK: as user A, inserting a row owned by B is rejected.
         {
             let mut tx = begin_as_user(&pool, user_a).await;
             let res = sqlx::query("INSERT INTO notes (user_id, content) VALUES ($1, 'spoof')")

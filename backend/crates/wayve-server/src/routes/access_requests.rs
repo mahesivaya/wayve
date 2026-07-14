@@ -1,12 +1,7 @@
-// Access requests for locked resources (the Test Access page is the first one).
-//
-// A user clicks "Request access"; the request is routed to a support team by
-// the requester's scope: personal/platform users → the platform support team,
-// an organization member → that organization's support team. Staff with the
-// `tickets:manage` permission (the `support` role, plus owner/admin/super_admin)
-// review the queue and approve or deny. Once approved, the locked `data` is
-// returned to the requester. Both sides attach free-text explanations
-// (`request_note` from the requester, `decision_note` from support).
+//! Access requests for locked resources, routed to a support team by the
+//! requester's scope: personal and platform users to the platform team, an
+//! organization member to their own. Staff holding `tickets:manage` approve or
+//! deny; approval returns the locked `data` to the requester.
 
 use crate::prelude::*;
 use actix_web::patch;
@@ -19,18 +14,13 @@ use wayve_security::rbac::{self, Permission, Scope};
 const DEFAULT_RESOURCE: &str = "test_access";
 const ALLOWED_DECISIONS: &[&str] = &["approved", "denied"];
 
-// Append-only audit log of every access-request event (requested / updated /
-// approved / denied). Written under the project's `logs/` directory — the
-// backend runs at WORKDIR /app and `logs/` is bind-mounted to the repo-root
-// `logs/`, alongside the other rolling logs. One JSON object per line so the
-// support history dashboard can read + filter it back. The `/history` endpoint
-// scopes each line to the caller's support team via `target_scope` /
-// `organization_id`.
+// Append-only audit log, one JSON object per line so `/history` can read it back
+// and scope each line to the caller's support team. The path is relative to the
+// backend's WORKDIR, where `logs/` is bind-mounted to the repo-root `logs/`.
 const ACCESS_LOG_DIR: &str = "logs";
 const ACCESS_LOG_PATH: &str = "logs/access_requests.log";
 
-// Look up a user's email for human-readable log lines. Best-effort: a missing
-// row (deleted user) just logs as null rather than failing the request.
+/// Best-effort: a deleted user logs as null rather than failing the request.
 async fn email_of(pool: &PgPool, user_id: i32) -> Option<String> {
     sqlx::query_scalar::<_, String>("SELECT email FROM users WHERE id = $1")
         .bind(user_id)
@@ -40,8 +30,7 @@ async fn email_of(pool: &PgPool, user_id: i32) -> Option<String> {
         .flatten()
 }
 
-// Append one event as a JSON line. Best-effort: logging must never break the
-// request, so failures are warned and swallowed.
+/// Best-effort: logging must never break the request, so failures are swallowed.
 async fn append_event(event: serde_json::Value) {
     let line = match serde_json::to_string(&event) {
         Ok(s) => s,
@@ -66,8 +55,8 @@ async fn append_event(event: serde_json::Value) {
     }
 }
 
-// Sample payload revealed once a request for `test_access` is approved. A real
-// resource would fetch the actual protected content here.
+// Sample payload revealed once a `test_access` request is approved; a real
+// resource would fetch its actual protected content.
 const TEST_ACCESS_SECRET: &str = "🔓 Unlocked: this is the protected sample dataset for the Test Access page. \
      Quarterly figures, internal notes, and the confidential roadmap would live here.";
 
@@ -143,8 +132,8 @@ fn clean_note(value: &Option<String>) -> Option<String> {
         .map(str::to_string)
 }
 
-// POST /access-requests — create a pending request routed by the caller's
-// scope, or (if an active request already exists) update its explanation.
+/// Create a pending request routed by the caller's scope, or update the
+/// explanation on an already-active request.
 #[post("/access-requests")]
 #[instrument(target = "http", skip(req, pool, body))]
 pub async fn create_access_request(
@@ -160,8 +149,6 @@ pub async fn create_access_request(
     let resource = clean_resource(&body.resource);
     let note = clean_note(&body.note);
 
-    // Personal and platform users are handled by the platform support team;
-    // organization members by their own organization's support team.
     let (target_scope, organization_id) = match ctx.scope {
         Scope::Organization => ("organization", ctx.organization_id),
         _ => ("platform", None),
@@ -193,8 +180,8 @@ pub async fn create_access_request(
         "access request submitted"
     );
 
-    // A fresh insert has created_at == updated_at; an upsert that touched an
-    // existing active request bumped updated_at, so it's an explanation edit.
+    // A fresh insert has created_at == updated_at; an upsert bumped updated_at, so
+    // it is an explanation edit.
     let event = if row.created_at == row.updated_at {
         "requested"
     } else {
@@ -217,8 +204,8 @@ pub async fn create_access_request(
     Ok(HttpResponse::Ok().json(row))
 }
 
-// GET /access-requests/me?resource=test_access — the caller's current status
-// for a resource, plus the unlocked `data` only when approved.
+/// The caller's current status for a resource. The unlocked `data` is present
+/// only once the request is approved.
 #[get("/access-requests/me")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn my_access_status(
@@ -269,9 +256,8 @@ pub async fn my_access_status(
     })))
 }
 
-// GET /access-requests/admin?status= — the support queue for the caller's
-// team. Platform staff see platform-targeted requests; an org staffer sees
-// only their own organization's requests.
+/// The support queue for the caller's own team: platform staff see
+/// platform-targeted requests, an org staffer only their own organization's.
 #[get("/access-requests/admin")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn admin_list_access_requests(
@@ -292,8 +278,8 @@ pub async fn admin_list_access_requests(
         .filter(|s| !s.is_empty())
         .map(str::to_string);
 
-    // Personal scope has no support queue (even though an owner technically
-    // holds the permission) — return an empty list rather than leaking rows.
+    // A personal owner technically holds the permission but has no support queue,
+    // so return an empty list rather than leaking rows.
     let (scope_str, org_id) = match ctx.scope {
         Scope::Platform => ("platform", None),
         Scope::Organization => ("organization", ctx.organization_id),
@@ -335,8 +321,8 @@ pub async fn admin_list_access_requests(
     Ok(HttpResponse::Ok().json(rows))
 }
 
-// PATCH /access-requests/admin/{id} — approve or deny a request in the
-// caller's queue, attaching a decision note.
+/// Approve or deny a request. The UPDATE's scope clause confines the caller to
+/// their own queue, and a request outside it 404s rather than 403s.
 #[patch("/access-requests/admin/{id}")]
 #[instrument(target = "http", skip(req, pool, path, body))]
 pub async fn admin_decide_access_request(
@@ -424,10 +410,8 @@ pub struct HistoryQuery {
     pub limit: Option<usize>,
 }
 
-// GET /access-requests/history?limit= — the support team's audit history,
-// read back from the JSON-lines log file and scoped to the caller's team
-// (platform staff see platform-targeted events; an org staffer sees only
-// their own org's). Most recent first.
+/// The support team's audit history, read back from the JSON-lines log and
+/// scoped to the caller's own team. Most recent first.
 #[get("/access-requests/history")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn access_request_history(
@@ -442,14 +426,14 @@ pub async fn access_request_history(
     };
     let limit = query.limit.unwrap_or(200).min(1000);
 
-    // Personal scope holds the permission (owner-implies-all) but has no team.
+    // A personal owner holds the permission but has no team.
     let (scope_str, org_id) = match ctx.scope {
         Scope::Platform => ("platform", None),
         Scope::Organization => ("organization", ctx.organization_id),
         Scope::Personal => return Ok(HttpResponse::Ok().json(Vec::<Value>::new())),
     };
 
-    // Missing file (no events yet) is not an error — return an empty history.
+    // A missing file means no events yet, not an error.
     let contents = tokio::fs::read_to_string(ACCESS_LOG_PATH)
         .await
         .unwrap_or_default();
@@ -463,14 +447,12 @@ pub async fn access_request_history(
         })
         .collect();
 
-    // Newest first, capped to `limit`.
     entries.reverse();
     entries.truncate(limit);
 
     Ok(HttpResponse::Ok().json(entries))
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(create_access_request)
         .service(my_access_status)

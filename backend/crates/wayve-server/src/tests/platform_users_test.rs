@@ -100,7 +100,6 @@ mod tests {
         )
         .await;
 
-        // Unauthenticated → 401.
         let req = actix_test::TestRequest::get()
             .uri("/platform-team/users")
             .to_request();
@@ -109,7 +108,8 @@ mod tests {
             StatusCode::UNAUTHORIZED
         );
 
-        // Org owner has members:read but NOT platform scope → 403.
+        // An org owner holds members:read but not platform scope, so the platform
+        // console must still refuse them.
         let org_token = jwt_for(org_id_user, "ignored@example.com");
         for uri in ["/platform-team/users-summary", "/platform-team/users"] {
             let req = actix_test::TestRequest::get()
@@ -134,7 +134,6 @@ mod tests {
 
         let personal_email = random_email();
         let personal_id = insert_local_user(&pool, &personal_email, "password123").await;
-        // Personal users default to account_type='personal' on insert.
 
         let (org_user_id, org_id) = make_org_owner(&pool, &random_email()).await;
 
@@ -173,7 +172,6 @@ mod tests {
                 .to_request()
         };
 
-        // Search for the personal user → exactly one row, with correct storage.
         let resp: serde_json::Value = actix_test::call_and_read_body_json(
             &app,
             get(format!("/platform-team/users?q={personal_email}")),

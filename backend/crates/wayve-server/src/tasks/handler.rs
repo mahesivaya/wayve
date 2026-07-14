@@ -66,12 +66,11 @@ pub async fn list_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
     Ok(HttpResponse::Ok().json(rows.into_iter().map(task_from_row).collect::<Vec<_>>()))
 }
 
-/// Users the caller can assign tasks to: everyone in their organization (org
-/// scope) or every platform staff member (platform scope). Unlike the RBAC
-/// `/members` endpoints this is open to *any* member of the scope — assigning a
-/// task is a baseline capability, so it must not require `members:read` (which
-/// regular members/guests/developers lack). Personal accounts have no team and
-/// get an empty list. Returns `[{ user_id, email, username }]`, email-sorted.
+/// Users the caller can assign tasks to: their whole organization, or every
+/// platform staff member. Unlike the RBAC `/members` endpoints this is open to
+/// any member of the scope, because assigning a task is a baseline capability
+/// and must not require `members:read`, which regular members, guests, and
+/// developers lack. Personal accounts have no team and get an empty list.
 #[get("/tasks/assignable-users")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn assignable_users(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -138,9 +137,9 @@ pub async fn create_task(
     let assignee_id = data.assignee_id;
     let project_id = data.project_id;
 
-    // task_number is the next per-user sequence value (MAX+1, starting at 1).
-    // Computed inline off the same $1 so a single statement assigns it; imported
-    // tasks (Jira/GitLab) never take this path and stay un-numbered.
+    // task_number is the next per-user sequence value, computed inline off the
+    // same $1 so one statement assigns it. Imported Jira and GitLab tasks never
+    // take this path and stay un-numbered.
     let row = sqlx::query(
         "INSERT INTO tasks (user_id, name, description, priority, status, assigned_by, assignee,
                             assignee_id, project_id, task_number)
@@ -219,7 +218,6 @@ pub async fn update_task(
     let assignee_id = data.assignee_id;
     let project_id = data.project_id;
 
-    // Capture the prior status so we can record "every status change".
     let old_status: Option<String> =
         sqlx::query_scalar("SELECT status FROM tasks WHERE id = $1 AND user_id = $2")
             .bind(id)
@@ -227,8 +225,8 @@ pub async fn update_task(
             .fetch_optional(pool.get_ref())
             .await?;
 
-    // Owner-scoped UPDATE — returns 404 if the row belongs to another user,
-    // so we never leak the existence of an id outside this user's scope.
+    // The owner-scoped UPDATE 404s on another user's row, so the existence of an
+    // id outside this user's scope never leaks.
     let row = sqlx::query(
         "UPDATE tasks
          SET name = $1, description = $2, priority = $3, status = $4,
@@ -296,9 +294,8 @@ pub async fn update_task(
     )
     .await;
 
-    // Best-effort: mirror the change to a linked Jira issue. No-op unless the
-    // task carries a `jira_issue_key` and the user has an enabled connection;
-    // any failure is logged and swallowed so a Jira outage never fails the edit.
+    // Best-effort mirror to a linked Jira issue. Failures are swallowed so a
+    // Jira outage never fails the edit.
     crate::integrations::jira::sync::push_task_if_linked(pool.get_ref(), user_id, &task).await;
 
     Ok(HttpResponse::Ok().json(task))

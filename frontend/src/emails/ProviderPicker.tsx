@@ -1,13 +1,8 @@
-// Modal picker for adding a mailbox. Flows:
-//
-//   1. User clicks Gmail/Outlook  → onSelect fires immediately, parent
-//      kicks off the existing OAuth redirect.
-//   2. User clicks "Other"        → inline email form; on submit we
-//      autodiscover the domain. If it's on Google/Microsoft we dispatch the
-//      OAuth flow; otherwise we open the IMAP form pre-filled with the
-//      guessed host/port for the user to test + connect.
-//   3. IMAP form                  → password + (editable) server settings,
-//      a "Test connection" check, then "Connect" (any custom-domain mailbox).
+// Modal picker for adding a mailbox. Gmail and Outlook fire `onSelect`
+// immediately and the parent runs the OAuth redirect. "Other" takes an address
+// and autodiscovers the domain: a Google- or Microsoft-hosted domain is routed
+// back through OAuth, anything else opens the IMAP form pre-filled with the
+// guessed host and port for the user to test and connect.
 
 import { useEffect, useRef, useState } from "react";
 import {

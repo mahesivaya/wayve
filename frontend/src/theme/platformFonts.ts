@@ -1,20 +1,14 @@
-// The platform-wide UI font catalog — the single source of truth for the font
-// dropdown (settings) AND the runtime application at boot. The backend stores
-// only a short `font_key` (validated against this same allowlist); the mapping
-// to an actual CSS stack lives here.
-//
-// A choice overrides the `--sans` and `--heading` tokens (defined in index.css)
-// for the whole app. `--mono` is deliberately left alone so code, API keys and
-// token readouts stay monospaced. Every option renders with no extra font
-// assets: Inter + IBM Plex Sans are already loaded by the <link> in index.html;
-// the rest are system stacks.
+// The UI font catalog: the allowlist the backend validates its stored `font_key`
+// against, and the key→CSS-stack mapping. A choice overrides `--sans` and
+// `--heading`; `--mono` is deliberately left alone so code, API keys and token
+// readouts stay monospaced. No option needs extra font assets — Inter and IBM
+// Plex Sans are already loaded in index.html and the rest are system stacks.
 
 export type FontKey = "system" | "inter" | "ibm-plex" | "serif" | "mono";
 
 export type FontOption = {
   key: FontKey;
   label: string;
-  // The CSS font-family stack applied to `--sans` and `--heading`.
   stack: string;
 };
 
@@ -40,16 +34,14 @@ export const FONT_OPTIONS: FontOption[] = [
 
 export const DEFAULT_FONT_KEY: FontKey = "system";
 
-// Normalize an arbitrary/unknown/null value to a known key (unknown → default).
 export function normalizeFontKey(key: string | null | undefined): FontKey {
   const match = FONT_OPTIONS.find((o) => o.key === key);
   return match ? match.key : DEFAULT_FONT_KEY;
 }
 
-// Cache of the caller's resolved font, so a returning signed-in user paints in
-// their font at boot (before /api/ui/font resolves) with no flash. Empty string
-// = an explicit "no override" (system default); absent (null) = unknown, so fall
-// back to the platform/default font from /api/config.
+// Caches the resolved font so a returning user paints in it at boot, before
+// /api/ui/font resolves, with no flash. Empty string means an explicit "no
+// override"; null means unknown, so fall back to the platform default.
 export const FONT_CACHE_KEY = "wayve-font";
 
 export function cachedFontKey(): string | null {
@@ -76,12 +68,8 @@ export function clearFontCache(): void {
   }
 }
 
-// Apply (or clear) the app font on the document root. Called at boot with the
-// cached/platform value and optimistically from the settings page on change.
-//
-// `system`/null/unknown → remove the overrides so the app falls back to the
-// index.css defaults (index.css stays the single default source). Any other key
-// → set `--sans` and `--heading` to its stack. `--mono` is never touched.
+// The default key removes the overrides rather than writing a stack, so
+// index.css remains the single source of the default font.
 export function applyPlatformFont(key: string | null | undefined): void {
   const root = document.documentElement;
   const resolved = normalizeFontKey(key);

@@ -1,11 +1,12 @@
 //! API key authentication middleware.
 //!
-//! Activates only when a request carries an `X-API-KEY` header — normal
-//! JWT/cookie requests pass straight through untouched. For an API-key request
-//! it validates the key, enforces the route's required scope and the key's
-//! per-key rate limit, injects an `ApiKeyPrincipal` into the request extensions
-//! (so `get_user_id_from_request` and every handler see the acting user), and
-//! records the outcome in the API-key audit log.
+//! This is a no-op unless the request carries an `X-API-KEY` header: JWT and
+//! cookie requests pass straight through. For an API-key request it validates
+//! the key, enforces the route's `required_scope(method, path)` and the key's
+//! rate limit, records the outcome in the audit log, and injects an
+//! `ApiKeyPrincipal` into the request extensions. `get_user_id_from_request`
+//! returns that principal, so a key authenticates as its designated `user_id`
+//! and every handler works unchanged.
 
 use crate::cache::Cache;
 use actix_web::{
@@ -84,7 +85,7 @@ where
     }
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        // Fast path: no API key header → behave as if this middleware is absent.
+        // No API key header: behave as if this middleware were absent.
         let raw_key = req
             .headers()
             .get(API_KEY_HEADER)
@@ -117,7 +118,6 @@ where
                 .realip_remote_addr()
                 .map(|value| value.to_string());
 
-            // Builds an audit row for this request; only the outcome varies.
             let make_entry = |api_key_id: Option<i32>,
                               user_id: Option<i32>,
                               status_code: i32,
@@ -131,7 +131,6 @@ where
                 ip: ip.clone(),
             };
 
-            // 1. Validate the key itself.
             let resolved = match resolve_api_key(&pool, &raw_key).await {
                 Ok(key) => key,
                 Err(failure) => {
@@ -147,7 +146,7 @@ where
                 }
             };
 
-            // 2. The route must be in scope for this key.
+            // The route's required scope must be satisfied by this key.
             let in_scope = required_scope(&method, &path)
                 .map(|scope| scope_satisfied(&resolved.scopes, scope))
                 .unwrap_or(false);
@@ -166,15 +165,11 @@ where
                 ));
             }
 
-            // 3. Rate limit + monthly quota. Both fail open if Redis is
-            //    unavailable — availability beats strictness for the data
-            //    API. The *effective* rate limit is the MIN of the key's own
-            //    cap and the plan-tier cap, so issuing a key with
-            //    `rate_limit_per_min = 6000` on a Free plan still caps at
-            //    the plan's 60/min — the operator can't accidentally give
-            //    away the farm. The monthly quota aggregates across every
-            //    key belonging to the same user, so spreading load across
-            //    multiple keys does not bypass the plan budget.
+            // Rate limit and monthly quota both fail open when Redis is down.
+            // The effective rate limit is the minimum of the key's own cap and
+            // the plan-tier cap, so an over-generous key cannot exceed the plan.
+            // The monthly quota aggregates across all of the user's keys, so
+            // spreading load over several keys does not bypass the budget.
             if let Some(cache_data) = req.app_data::<web::Data<Option<Cache>>>()
                 && let Some(cache) = cache_data.get_ref().clone()
             {
@@ -204,7 +199,7 @@ where
                     }
                 }
 
-                // Monthly quota. -1 = unlimited (enterprise).
+                // A negative quota means unlimited (enterprise).
                 if tier.monthly_quota >= 0 {
                     let q_key = crate::billing::quotas::monthly_quota_key(resolved.user_id);
                     let ttl = crate::billing::quotas::monthly_quota_ttl_secs();
@@ -235,8 +230,8 @@ where
                 }
             }
 
-            // 4. Inject the acting principal so handlers authenticate as the
-            //    key's user.
+            // Inject the acting principal so handlers authenticate as the
+            // key's user.
             let key_id = resolved.id;
             let user_id = resolved.user_id;
             req.extensions_mut().insert(ApiKeyPrincipal {
@@ -246,7 +241,6 @@ where
                 scopes: resolved.scopes,
             });
 
-            // 5. Run the handler, then record the outcome.
             let res = srv.call(req).await?;
             let status = i32::from(res.status().as_u16());
             audit(

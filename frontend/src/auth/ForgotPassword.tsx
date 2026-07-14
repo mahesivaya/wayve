@@ -1,12 +1,9 @@
 import { Link } from "react-router-dom";
 import "./login.css";
 
-// Plan A: email-link password reset is retired. The 24-word recovery
-// phrase is the only path back into an account whose password is
-// forgotten. This page used to host an email-link request form; it's
-// now an information screen that funnels every visitor to
-// /recover-with-mnemonic. The route is kept so existing bookmarks and
-// in-app links don't 404 — they just land on the right next step.
+// There is no email-link password reset: the 24-word recovery phrase is the only
+// way back into an account. This page exists purely to funnel visitors to
+// /recover-with-mnemonic, and the route is kept so old bookmarks don't 404.
 export default function ForgotPassword() {
   return (
     <div className="login-page">

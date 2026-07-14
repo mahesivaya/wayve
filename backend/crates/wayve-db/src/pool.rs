@@ -1,25 +1,12 @@
-// Pool connect with retries.
-//
-// Mirrors the dot-counter loop the binary used to embed in `main.rs`:
-// log the first failure verbosely, then compact subsequent identical
-// failures at power-of-two attempt counts so dev.log stays readable
-// during a long Postgres outage.
-
 use std::time::Duration;
 
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tracing::{info, warn};
 
-/// Connect to Postgres, retrying forever with a 2-second backoff until
-/// the pool comes up. Returns the live `PgPool` once a connection
-/// succeeds.
-///
-/// Logging policy:
-///   - first failure: verbose, includes the sqlx error
-///   - subsequent failures: compact summary at attempt counts that are
-///     powers of two (1, 2, 4, 8, 16, …)
-///   - success: a single info line, with the retry count if any
+/// Connect to Postgres, retrying forever with a 2-second backoff. Only the first
+/// failure logs verbosely; later ones log at power-of-two attempt counts, which
+/// keeps dev.log readable through a long outage.
 pub async fn connect_with_retries(url: &str, max_connections: u32) -> PgPool {
     let mut attempts: u32 = 0;
     loop {

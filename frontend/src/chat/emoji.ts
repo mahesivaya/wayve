@@ -1,12 +1,7 @@
-// The emoji catalog behind the composer's picker.
-//
-// Deliberately a hand-curated list rather than a dependency: a full emoji
-// package ships megabytes of data (every skin-tone and ZWJ variant, plus the
-// sprite sheets) to solve a problem we don't have. These are the glyphs people
-// actually reach for in a work chat, and the whole file costs a few KB.
-//
-// Emoji are plain Unicode, so one typed into a message rides inside the E2E
-// envelope like any other text — nothing here touches crypto or the backend.
+// The emoji catalog behind the composer's picker. Hand-curated rather than a
+// dependency: a full emoji package ships megabytes of variants and sprite sheets to
+// solve a problem we don't have, while this costs a few KB. Emoji are plain Unicode,
+// so one typed into a message rides inside the E2E envelope like any other text.
 
 export type EmojiCategory = {
   id: string;
@@ -326,12 +321,10 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
 ];
 
-/** Every emoji across all categories, in category order. */
 export const ALL_EMOJIS: Emoji[] = EMOJI_CATEGORIES.flatMap((c) => c.emojis);
 
-// Match on the name and the extra keywords, so "ship" finds 🚀 and 📦 even
-// though neither is named "ship". A blank query means "no filter" — the caller
-// shows the full categorized list instead of a flat search result.
+// Matches names and keywords, so "ship" finds 🚀 and 📦 even though neither is named
+// that. A blank query returns nothing: the caller shows the categorized list instead.
 export function searchEmojis(query: string): Emoji[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];

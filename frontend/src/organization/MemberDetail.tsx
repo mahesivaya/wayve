@@ -20,16 +20,14 @@ import "./admin-ui.css";
 import "./platformAdmin.css";
 import "./memberDetail.css";
 
-// Human labels for the auth_provider discriminator on the users table.
+// Keys match the auth_provider discriminator on the users table.
 const AUTH_LABELS: Record<string, string> = {
   local: "Email & password",
   google: "Google",
   sso: "SSO (Google Workspace)",
 };
 
-// Per-service storage rows, in the order shown. Keys match the `storage`
-// object returned by the detail endpoint. The dot color mirrors Workspace's
-// per-app coloring so the breakdown scans at a glance.
+// Keys must match the `storage` object returned by the detail endpoint.
 const STORAGE_SERVICES: {
   key: keyof Detail["storage"];
   label: string;
@@ -67,7 +65,6 @@ function CloudIcon() {
   );
 }
 
-// Editable per-user project (repo) access, shown on the platform member page.
 // Non-admin platform members only see the repos granted here on their Projects
 // page; admins are unrestricted. Read-only for viewers without members:manage.
 function ProjectsAccessCard({
@@ -247,8 +244,7 @@ export default function MemberDetail({ scope }: Props) {
 
   useEffect(() => {
     if (!id) return;
-    // Org detail is authorized against the caller's own org; without an org id
-    // there's nothing to query.
+    // Org detail is authorized against the caller's own org.
     if (scope === "organization" && orgId == null) {
       setLoading(false);
       setError("You are not part of an organization.");
@@ -260,8 +256,8 @@ export default function MemberDetail({ scope }: Props) {
     setAvatarFailed(false);
     const request =
       scope === "platform"
-        ? // `id` here is the member's username (canonical) or numeric id
-          // (legacy) — the platform endpoint resolves either.
+        ? // `id` is a username (canonical) or a numeric id (legacy); the
+          // platform endpoint resolves either.
           getPlatformMemberDetail(id)
         : getOrganizationMemberDetail(orgId as number, Number(id));
     request
@@ -289,7 +285,6 @@ export default function MemberDetail({ scope }: Props) {
     : member?.organization_role
       ? member.organization_name ?? "Organization"
       : null;
-  // Left card's "unit" row: org name for org members, "Platform" for staff.
   const unitLabel = scope === "platform" ? "Scope" : "Organization";
   const unitValue =
     scope === "platform" ? "Platform" : (member?.organization_name ?? "—");

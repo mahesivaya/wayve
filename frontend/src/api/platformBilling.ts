@@ -61,9 +61,8 @@ export type PlatformInvoiceRow = {
   organization_name: string | null;
 };
 
-// A single billing activity event for the History timeline. `sample` is true
-// for the illustrative fallback rows the backend returns when no real billing
-// data exists yet.
+// `sample` is true for the illustrative fallback rows the backend returns when
+// no real billing data exists yet.
 export type BillingHistoryRow = {
   ts: string | null;
   event: "payment" | "subscribed" | "upgraded" | string;
@@ -133,8 +132,6 @@ export type PayrollRunInput = {
   tax_rate_pct?: number;
 };
 
-// ---- HTTP --------------------------------------------------------------
-
 export const getPlatformBillingOverview = () =>
   apiFetchJson<PlatformBillingOverview>("/api/platform-billing/overview");
 
@@ -192,11 +189,9 @@ export const updatePayrollRunStatus = (
     { method: "PATCH", body: JSON.stringify({ status }) }
   );
 
-// ── Live Stripe account snapshot ─────────────────────────────────────
-// Calls Stripe's REST API directly server-side (balance, payouts,
-// charges, balance_transactions) and projects the responses into a
-// small, stable JSON shape. Returns `configured: false` when the
-// environment has no STRIPE_SECRET_KEY (so the UI can render a stub).
+// A live Stripe account snapshot: the backend calls Stripe's REST API and
+// projects the responses into this stable shape. It reports `configured: false`
+// when the environment has no STRIPE_SECRET_KEY, so the UI renders a stub.
 
 export type StripeBalanceAmount = {
   amount: number;

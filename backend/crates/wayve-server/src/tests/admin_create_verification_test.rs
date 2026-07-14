@@ -1,15 +1,9 @@
-// Email-confirmation gate on admin-provisioned accounts.
-//
-// `POST /admin/users` used to mint an account for any address the admin typed,
-// with no proof anyone could receive mail there — a typo silently produced a
-// dead, loginable account. It now requires a 6-digit code mailed by
-// `POST /admin/users/send-code`.
-//
-// The gate is the security-critical part, so most tests seed
-// `admin_create_verifications` directly and exercise `admin_create_user`; they
-// need no SMTP. The one test that proves the mail actually goes out drives the
-// real send path and skips when Mailpit isn't configured (see MAILPIT_API in
-// .github/workflows/smoke.yml).
+// The email-confirmation gate on admin-provisioned accounts: creating an
+// account requires a 6-digit code mailed to the address, so a mistyped address
+// cannot yield a dead but loginable account. Most tests seed
+// `admin_create_verifications` directly and need no SMTP; the one test that
+// proves the mail actually goes out drives the real send path and skips itself
+// when MAILPIT_API is unset (CI sets it; see .github/workflows/smoke.yml).
 #[cfg(test)]
 mod tests {
     use crate::routes::user::{admin_create_user, admin_send_create_code};
@@ -35,8 +29,8 @@ mod tests {
         id
     }
 
-    /// Seed a code as if `/admin/users/send-code` had mailed it. `age_minutes`
-    /// back-dates `expires_at` so an expired code can be simulated without
+    /// Seeds a code as if it had been mailed. A negative `expires_in_minutes`
+    /// back-dates `expires_at`, so an expired code can be simulated without
     /// waiting out the 15-minute TTL.
     async fn seed_code(
         pool: &PgPool,
@@ -94,7 +88,6 @@ mod tests {
             .await;
     }
 
-    /// POST /admin/users as `admin_id`, with an optional verification code.
     async fn create_user_request(
         pool: &PgPool,
         admin_id: i32,
@@ -183,7 +176,7 @@ mod tests {
         let admin_email = random_email();
         let admin_id = make_platform_owner(&pool, &admin_email).await;
         let new_email = random_email();
-        // Already expired: TTL one minute in the past.
+        // The negative TTL puts expiry one minute in the past.
         seed_code(&pool, admin_id, &new_email, "123456", -1).await;
 
         let status =
@@ -205,14 +198,14 @@ mod tests {
         let admin_id = make_platform_owner(&pool, &admin_email).await;
         let new_email = random_email();
         let code_id = seed_code(&pool, admin_id, &new_email, "123456", 15).await;
-        // Park it at the attempt ceiling (MAX_VERIFY_ATTEMPTS = 5).
+        // Five is the attempt ceiling (MAX_VERIFY_ATTEMPTS), so even the correct
+        // code below must now be refused.
         sqlx::query("UPDATE admin_create_verifications SET attempts = 5 WHERE id = $1")
             .bind(code_id)
             .execute(&pool)
             .await
             .unwrap_or_else(|e| panic!("set attempts: {e}"));
 
-        // Even the CORRECT code is refused once the ceiling is hit.
         let status =
             create_user_request(&pool, admin_id, &admin_email, &new_email, Some("123456")).await;
 
@@ -257,7 +250,7 @@ mod tests {
             "the address was just proven — the user must not hit the unverified-login gate"
         );
 
-        // The code is burned on use: replaying it cannot mint a second account.
+        // The code is burned on use, so replaying it mints no second account.
         let second_email = random_email();
         let status =
             create_user_request(&pool, admin_id, &admin_email, &second_email, Some("424242")).await;
@@ -276,10 +269,10 @@ mod tests {
         let admin_b = make_platform_owner(&pool, &admin_b_email).await;
         let new_email = random_email();
 
-        // Admin A requested the code...
+        // Admin A requests the code, so admin B cannot spend it even knowing
+        // the digits.
         seed_code(&pool, admin_a, &new_email, "555555", 15).await;
 
-        // ...so admin B cannot spend it, even knowing the digits.
         let status =
             create_user_request(&pool, admin_b, &admin_b_email, &new_email, Some("555555")).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "other admin's code → 400");
@@ -289,9 +282,8 @@ mod tests {
         cleanup(&pool, admin_b, &[]).await;
     }
 
-    // Drives the real send path (SMTP → Mailpit) and the duplicate-email guard.
-    // Skips when Mailpit isn't configured, mirroring the other mail-dependent
-    // tests. Mutates process env, hence #[serial].
+    // Drives the real SMTP send path against Mailpit, so it skips itself when
+    // Mailpit is unconfigured. It is #[serial] because it mutates process env.
     #[actix_web::test]
     #[serial_test::serial]
     async fn send_code_mails_a_code_and_refuses_an_existing_email() {
@@ -300,7 +292,7 @@ mod tests {
             return;
         };
         let smtp_port = std::env::var("MAILPIT_SMTP_PORT").unwrap_or_else(|_| "1025".to_string());
-        // SAFETY: tests that touch env run serially (CI also uses --test-threads=1).
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
         unsafe {
             std::env::set_var("SMTP_HOST", &smtp_host);
             std::env::set_var("SMTP_PORT", &smtp_port);
@@ -359,8 +351,8 @@ mod tests {
             "the code goes to the delivery address, not the account address"
         );
 
-        // An address that already has an account is refused up front, before
-        // the admin goes and fetches a code.
+        // An address that already has an account is refused before any code is
+        // mailed.
         let resp = actix_test::call_service(
             &app,
             send(admin_email.clone(), admin_email.clone(), token.clone()),

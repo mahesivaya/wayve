@@ -1,12 +1,7 @@
-// Custom slider that matches the macro UI's two slider styles:
-//   • "ticks"     — segmented track with regular tick marks (Saturation,
-//                   Contrast, Depth)
-//   • "gradient"  — solid color gradient track (Chroma)
-// Both render a small filled square as the handle, like the screenshot.
-//
-// Native <input type="range"> is hard to style consistently across
-// Chromium/Firefox/Safari, so this is a custom div-based slider with pointer
-// capture for drag.
+// A div-based slider rather than <input type="range">, which cannot be styled
+// consistently across browsers. Keyboard support is therefore hand-rolled: the
+// role, aria-value* attributes and arrow-key handler below are what make it
+// accessible, so they must stay.
 
 import { useCallback, useRef } from "react";
 
@@ -17,9 +12,6 @@ interface Props {
   step?: number;
   onChange: (v: number) => void;
   variant: "ticks" | "gradient";
-  // Optional CSS background applied to the track (used by the gradient
-  // variant — passed through as a custom property so the rule can be
-  // expressed inline without losing the variant base styling).
   trackBackground?: string;
   ariaLabel: string;
 }

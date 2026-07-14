@@ -1,12 +1,11 @@
-//! Non-consequential activity stream: page views, UI clicks and every
+//! Non-consequential activity stream: page views, UI clicks, and every
 //! authenticated API request.
 //!
-//! Deliberately separate from `audit.rs` / `audit_logs`: this is high-volume,
-//! low-value telemetry, so it goes in its own `activity_events` table, is
-//! written fire-and-forget (never blocking a request), and is pruned to the
-//! last 7 days by a background task (see `startup.rs`). Scope is enforced at
-//! read time (the User Audit page is owner-gated), so there is no per-request
-//! organization lookup here.
+//! Deliberately separate from `audit.rs`: this is high-volume, low-value
+//! telemetry, so it gets its own `activity_events` table, is written
+//! fire-and-forget so it never blocks a request, and is pruned by the background
+//! task in `startup.rs`. Scope is enforced at read time (the User Audit page is
+//! owner-gated), so there is no per-request organization lookup here.
 
 use crate::prelude::*;
 use tracing::warn;
@@ -44,8 +43,7 @@ pub async fn record(
     }
 }
 
-/// Fire-and-forget variant: spawns the insert so the caller (request handler or
-/// middleware) never awaits the DB write.
+/// Spawns the insert so the calling handler or middleware never awaits the write.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_record(
     pool: PgPool,

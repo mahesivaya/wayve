@@ -5,17 +5,16 @@ use std::time::Instant;
 use tokio::time::{Duration, sleep};
 use tracing::{Instrument, error, info, warn};
 
-// Worker tick = the shortest interval in the adaptive ladder. Each
-// cycle, sync_due_accounts filters this down to accounts whose
-// per-account schedule says they're due. Quiet accounts stay deferred
-// across many ticks; hot ones get picked up every tick.
+// The shortest interval in the adaptive ladder. Every tick, sync_due_accounts
+// narrows this to the accounts their per-account schedule says are due, so quiet
+// accounts stay deferred across many ticks while hot ones run every tick. Errors
+// back off exponentially to MAX_ERROR_BACKOFF so a broken provider can't hammer.
 const WORKER_TICK: Duration = Duration::from_secs(30);
 const MAX_ERROR_BACKOFF: Duration = Duration::from_secs(300);
 
 pub async fn run_sync_worker(pool: PgPool) -> ! {
-    // Per-account `next_sync_at` schedule. Lives in process memory —
-    // restarts re-sync every account once (empty map == "due now"),
-    // which is the right startup behavior anyway.
+    // In-memory, so a restart re-syncs every account once (an empty map means
+    // "due now"), which is the behavior we want at startup anyway.
     let mut schedule: HashMap<i32, Instant> = HashMap::new();
     let mut error_backoff = WORKER_TICK;
     info!("Sync worker started (adaptive backoff: 30s/60s/5min/30min)");

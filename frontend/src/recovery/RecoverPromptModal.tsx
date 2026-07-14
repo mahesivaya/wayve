@@ -1,14 +1,10 @@
-// Blocking modal asking the user to enter their 24-word recovery phrase
-// so we can unwrap the server-stored envelope and restore the local
-// keypair. Used when AuthContext detects local IndexedDB keys are
-// missing (new device / cleared browser storage) for a "full" recovery-
-// mode user. Distinct from RecoverPage (the standalone /recover route)
-// — this is opened automatically right after login so the user can't
-// accidentally try to use encrypted features without keys.
+// Blocking modal that unwraps the server-stored envelope from the user's 24-word
+// phrase to restore the local keypair. AuthContext opens it right after login
+// when IndexedDB has no keys, so encrypted features are never used keyless.
 //
-// "password_only" accounts can't restore via this flow (server only
-// holds a throwaway credential, not the real private key), so
-// AuthContext suppresses the modal for those.
+// "password_only" accounts cannot restore this way — the server holds only a
+// throwaway credential, not the real private key — so AuthContext suppresses the
+// modal for them.
 
 import { FormEvent, useState } from "react";
 import {

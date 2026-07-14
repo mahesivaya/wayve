@@ -137,7 +137,6 @@ mod tests {
         )
         .await;
 
-        // 1. url_verification → echo the challenge.
         let body = r#"{"type":"url_verification","challenge":"chal-123"}"#;
         let ts = now_ts();
         let req = actix_test::TestRequest::post()
@@ -150,7 +149,8 @@ mod tests {
         let resp: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
         assert_eq!(resp["challenge"], "chal-123");
 
-        // 2. A real message event → stored server-readable in the linked channel.
+        // A real message event lands in the linked channel, server-readable
+        // rather than as an E2E envelope.
         let body = r#"{"type":"event_callback","team_id":"T1","event":{"type":"message","channel":"C1","user":"U1","text":"hello from slack"}}"#;
         let ts = now_ts();
         let req = actix_test::TestRequest::post()
@@ -189,7 +189,8 @@ mod tests {
         );
         assert_eq!(count_messages(&pool, channel_id).await, 1);
 
-        // 3. A bot message (echo of our own outbound post) → skipped, no new row.
+        // A bot message is the echo of our own outbound post and must be skipped,
+        // or bridging would loop.
         let body = r#"{"type":"event_callback","team_id":"T1","event":{"type":"message","channel":"C1","bot_id":"B1","text":"echo"}}"#;
         let ts = now_ts();
         let req = actix_test::TestRequest::post()
@@ -206,7 +207,6 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert_eq!(count_messages(&pool, channel_id).await, 1);
 
-        // 4. A tampered signature → 401.
         let req = actix_test::TestRequest::post()
             .uri("/webhooks/slack_events")
             .insert_header(("x-slack-request-timestamp", now_ts()))

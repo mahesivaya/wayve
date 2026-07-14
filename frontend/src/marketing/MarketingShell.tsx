@@ -6,10 +6,8 @@ import { useAuth } from "../auth/useAuth";
 import "../home/home.css";
 import "./marketing.css";
 
-// Shared chrome for public marketing pages (Enterprise, Support).
-// Mirrors the localhost public Home header (brand + nav links +
-// Login/Register) so the marketing surface feels like one site.
-// Logged-in visitors see Home/Logout instead of Login/Register.
+// Shared chrome for public marketing pages. Logged-in visitors see Home/Logout
+// instead of Login/Register.
 export default function MarketingShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();

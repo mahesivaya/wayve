@@ -1,14 +1,14 @@
 import { apiFetch, apiFetchJson } from "./client";
 
-// Organization-scoped projects + teams shown in the app sidebar. Listing is
-// available to any org member; creation/rename is org-owner-only (enforced by
-// the backend require_owner gate — the UI just hides the controls otherwise).
+// Organization-scoped projects and teams. Any org member may list them, but
+// creating and renaming is owner-only, enforced by the backend require_owner
+// gate; the UI merely hides the controls.
 
 export type Project = {
   id: number;
   name: string;
-  // Optional linked public GitHub repo. Set by personal accounts on their own
-  // projects, or by an org owner on the organization's projects.
+  // The optional linked public GitHub repo, set by a personal account on its
+  // own projects or by an org owner on the organization's.
   github_owner?: string | null;
   github_repo?: string | null;
 };
@@ -36,10 +36,8 @@ export const createProject = async (name: string, repoUrl?: string) => {
   return res.json() as Promise<Project>;
 };
 
-// Link (or replace) the public GitHub repo on a project — a personal account's
-// own project, or (owner-only) an organization's project. The server validates
-// the URL points at a real, public repo and surfaces a clear 400 message
-// ("Only public repositories can be added", etc.) on failure.
+// The server validates that the URL points at a real, public repo, and its 400
+// message is user-facing, so callers surface it verbatim.
 export const linkProjectRepo = async (id: number, repoUrl: string) => {
   const res = await apiFetch(`/api/projects/${id}/repo`, {
     method: "PATCH",

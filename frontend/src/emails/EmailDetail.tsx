@@ -23,11 +23,9 @@ interface EmailDetailProps {
   filesLoading: boolean;
   filesError: string | null;
   normalizedSearchQuery: string;
-  // Sync context for the Files view. The flat "No attached files found"
-  // empty state was misleading — a freshly connected account starts with
-  // 0 synced emails, so users couldn't tell "no attachments exist" apart
-  // from "sync hasn't finished yet". These counts let the Files panel
-  // craft an honest message and decide whether to keep polling.
+  // Sync context for the Files view. A freshly connected account has 0 synced
+  // emails, so without these counts the panel can't tell "no attachments exist"
+  // apart from "sync hasn't finished", and can't decide whether to keep polling.
   inboxAccountCount: number;
   inboxEmailCount: number;
   inboxUncheckedCount: number;
@@ -58,8 +56,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const [forwardBody, setForwardBody] = useState("");
   const [forwardSending, setForwardSending] = useState(false);
   const [forwardError, setForwardError] = useState<string | null>(null);
-  // Standard-mailbox attachments for reply / forward (not E2E — these always
-  // send via the connected mailbox).
+  // Reply and forward attachments always send via the connected mailbox, so
+  // they are standard-mailbox only and never E2E.
   const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
   const replyFileRef = useRef<HTMLInputElement>(null);
   const [forwardAttachments, setForwardAttachments] = useState<File[]>([]);
@@ -67,9 +65,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const [reconnecting, setReconnecting] = useState(false);
   const [reconnectError, setReconnectError] = useState<string | null>(null);
 
-  // The body fetch failed because the Gmail account's refresh token is dead.
-  // Hand off to the same per-account OAuth flow the Integrations page uses; on
-  // success Google redirects back and the body loads with a fresh token.
+  // Recovery when the body fetch failed on a dead Gmail refresh token. Hands off
+  // to the same per-account OAuth flow the Integrations page uses; Google
+  // redirects back and the body loads with a fresh token.
   const handleReconnectGmail = async () => {
     setReconnecting(true);
     setReconnectError(null);
@@ -83,10 +81,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   };
 
-  // Local mirror of the shared-inbox workflow state so the UI updates
-  // optimistically without waiting for a refetch of the whole list.
-  // Seeded from the email row when it's a shared-inbox message; the
-  // backend's PATCH response replaces this on each change.
+  // Local mirror of the shared-inbox workflow state, so the UI updates without
+  // refetching the whole list. The backend's PATCH response replaces it.
   const [inboxState, setInboxState] = useState<InboxState | null>(null);
   const [stateSaving, setStateSaving] = useState(false);
   const [stateError, setStateError] = useState<string | null>(null);
@@ -161,11 +157,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   }, [files, normalizedSearchQuery]);
 
   if (viewMode === "files") {
-    // Distinguish the empty/loading states so users understand whether
-    // the inbox is still importing vs. genuinely contains no attachments.
-    // Counts come from useEmailInbox; `inboxUncheckedCount` is the number
-    // of emails whose bodies (and therefore attachments) have not yet
-    // been processed by the body worker.
+    // `inboxUncheckedCount` counts emails whose bodies, and therefore
+    // attachments, the body worker has not processed yet. It separates "still
+    // importing" from "genuinely no attachments".
     const hasNoAccounts = inboxAccountCount === 0;
     const inboxStillImporting =
       !hasNoAccounts && (inboxEmailCount === 0 || inboxUncheckedCount > 0);
@@ -410,8 +404,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   };
 
-  // Reusable attach field for the reply/forward composers: hidden file input,
-  // an "Attach" button, and removable chips. 20 MB total cap (matches backend).
+  // Shared by the reply and forward composers. The 20 MB total cap matches the
+  // backend's limit.
   const renderAttachField = (
     files: File[],
     setFiles: React.Dispatch<React.SetStateAction<File[]>>,
@@ -579,9 +573,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         );
       })()}
 
-      {/* Shared-inbox workflow controls. The bar only renders when this
-          email belongs to a shared account; for personal mail it's
-          invisible and the rest of the detail view is unchanged. */}
+      {/* Shared-inbox workflow controls. Invisible for personal mail. */}
       {selectedEmail.is_shared && inboxState && (
         <div
           className="inbox-workflow-bar"
@@ -825,8 +817,8 @@ function splitSender(value?: string | null): { name: string; email: string } {
   return { name: "", email: raw };
 }
 
-// Gmail-style date: same-day shows time only ("3:42 PM"), this year shows
-// month+day ("May 23"), older shows full date.
+// Gmail-style: time only for today, month and day within this year, otherwise
+// the full date.
 function formatEmailDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -858,9 +850,8 @@ function formatEmailDate(iso: string | null | undefined): string {
   });
 }
 
-// Full date + time for the opened-email header — unlike the compact
-// `formatEmailDate` (used in the list), the reading view always shows the
-// complete received date AND time, e.g. "Wed, Jun 4, 2026, 11:24 AM".
+// The reading view always shows the complete received date and time, unlike the
+// compact `formatEmailDate` used in the list.
 function formatEmailDateTime(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -876,8 +867,8 @@ function formatEmailDateTime(iso: string | null | undefined): string {
   });
 }
 
-// Stable hash → palette for sender avatars. Same sender always gets the
-// same color so the inbox reads consistently across emails.
+// Hashed rather than random, so a sender keeps the same avatar color across
+// emails and sessions.
 const AVATAR_PALETTE = [
   "#d7b29c",
   "#7c9eb2",

@@ -74,7 +74,6 @@ pub async fn import_upcoming_events(
             None => continue,
         };
 
-        // Skip cancelled events.
         if ev.get("status").and_then(|v| v.as_str()) == Some("cancelled") {
             continue;
         }
@@ -85,7 +84,7 @@ pub async fn import_upcoming_events(
             .unwrap_or("(No title)")
             .to_string();
 
-        // Only timed events (skip all-day for now).
+        // Only timed events; all-day events have no `dateTime` and are skipped.
         let start_str = ev
             .get("start")
             .and_then(|s| s.get("dateTime"))
@@ -110,8 +109,8 @@ pub async fn import_upcoming_events(
 
         let date = start_dt.date_naive();
         let start_time = start_dt.time();
-        // Clip end to same day if event spans midnight, so it fits the
-        // (date, start_time, end_time) shape the table expects.
+        // An event spanning midnight is clipped to the same day, because the
+        // table stores (date, start_time, end_time).
         let end_time = if end_dt.date_naive() == date {
             end_dt.time()
         } else {

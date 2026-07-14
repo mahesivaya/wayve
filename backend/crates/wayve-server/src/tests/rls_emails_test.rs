@@ -62,7 +62,6 @@ mod tests {
         .await
         .unwrap_or_else(|e| panic!("email2: {e}"));
 
-        // A: sees own mailbox email, NOT B's wayve mail.
         {
             let mut tx = begin_as_user(&pool, a).await;
             assert_eq!(
@@ -77,7 +76,6 @@ mod tests {
             );
             let _ = tx.rollback().await;
         }
-        // B: sees their wayve mail, NOT A's mailbox email (not shared yet).
         {
             let mut tx = begin_as_user(&pool, b).await;
             assert_eq!(
@@ -92,7 +90,7 @@ mod tests {
             );
             let _ = tx.rollback().await;
         }
-        // Share A's mailbox with B → B now sees the mailbox email.
+        // Sharing A's mailbox with B must grant B access to it on the next request.
         sqlx::query("INSERT INTO shared_inbox_members (account_id, user_id) VALUES ($1, $2)")
             .bind(acct)
             .bind(b)
@@ -119,7 +117,6 @@ mod tests {
             let _ = tx.rollback().await;
         }
 
-        // Cleanup (superuser).
         let _ = sqlx::query("DELETE FROM emails WHERE gmail_id = ANY($1)")
             .bind(&[g_owner, g_wayve][..])
             .execute(&pool)

@@ -48,9 +48,7 @@ const priorityLabel = (priority: TaskPriority) => {
   return "Lowest";
 };
 
-// Render a task's creation timestamp as a localized date + time, e.g.
-// "Jun 17, 2026, 3:42 PM". Returns "" when the field is missing or unparseable
-// so the UI simply omits the line.
+// Returns "" for a missing or unparseable timestamp so the UI omits the line.
 const formatCreatedAt = (value: string | null | undefined): string => {
   if (!value) return "";
   const date = new Date(value);
@@ -81,8 +79,7 @@ const sortTasks = (list: Task[]) =>
   [...list].sort(
     (a, b) =>
       b.priority - a.priority ||
-      // Within a priority group, oldest first so a newly created task
-      // appears at the bottom of its group.
+      // Oldest first within a priority group, so a new task lands at the bottom.
       new Date(a.created_at ?? 0).getTime() -
         new Date(b.created_at ?? 0).getTime()
   );
@@ -94,11 +91,9 @@ const STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
   { value: "done", label: "Done" },
 ];
 
-// A free-text input backed by a live-filtered dropdown of organization /
-// platform users. Typing narrows the list by email OR username; picking a row
-// fills the email. Still accepts a hand-typed value (e.g. an external email or
-// a member the list hasn't loaded), so it degrades to a plain input when the
-// user list is empty or failed to load.
+// A free-text input backed by a live-filtered dropdown of org/platform users.
+// A hand-typed value is still accepted, so this degrades to a plain input when
+// the user list is empty or failed to load.
 function UserAutocomplete({
   id,
   value,
@@ -191,7 +186,7 @@ function UserAutocomplete({
               aria-selected={i === activeIdx}
               className={`task-assignee-option${i === activeIdx ? " active" : ""}`}
               onMouseDown={(event) => {
-                // mousedown (not click) so we beat the input's blur/outside
+                // mousedown, not click, so this beats the input's blur/outside
                 // handler and the selection still registers.
                 event.preventDefault();
                 select(u);
@@ -217,13 +212,9 @@ function UserAutocomplete({
   );
 }
 
-// A small "copy task link" control shown on every task card. Copies a plain
-// share snippet (`#42 Task name`) to the clipboard so the task can be pasted
-// into chat and reopened from the linked reference. Stays a compact icon — the
-// "Copy link" hint rides the native cursor tooltip (title) — and on a successful
-// copy swaps to a green check and pops a small "Copied!" text confirmation
-// above the button. `stopPropagation` keeps a click from also toggling the
-// card's expand/edit handler.
+// Copies a share snippet (`#42 Task name`) so the task can be pasted into chat
+// and reopened from the linked reference. `stopPropagation` keeps the click
+// from also toggling the card's expand/edit handler.
 function CopyLinkButton({
   copied,
   onCopy,
@@ -268,7 +259,6 @@ function CopyLinkButton({
           strokeLinejoin="round"
           aria-hidden="true"
         >
-          {/* Classic "copy" glyph — two overlapping dog-eared pages. */}
           <path d="M2.5 6.5V13.5H9.5V8.5L7.5 6.5Z" />
           <path d="M7.5 6.5V8.5H9.5" />
           <path d="M5.5 6.5V3.5H10.5L12.5 5.5V10.5H9.5" />
@@ -284,8 +274,8 @@ function CopyLinkButton({
   );
 }
 
-// The friendly task-key pill (e.g. "way12" — project prefix + task number, or
-// "#12" when project-less). Renders nothing when there's no key.
+// The task-key pill ("way12", or "#12" when project-less). Renders nothing when
+// there's no key.
 function TaskKeyBadge({ value }: { value: string | null }) {
   if (!value) return null;
   return (
@@ -300,59 +290,50 @@ export default function Tasks() {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
   const isPersonal = user?.scope === "personal";
-  // In a split pane the Tasks page collapses to a single column (Create button
-  // → list) and clicking a task expands it inline (accordion) instead of
-  // opening the edit modal.
+  // In a split pane the page collapses to one column and clicking a task
+  // expands it inline instead of opening the edit modal.
   const inSplitPane = useInSplitPane();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  // True while the open details modal was launched from a `?task=` deep link
-  // (i.e. a chat task link). Closing such a task returns the user to Messages
-  // rather than dropping them on the full task list.
+  // Closing a task that was opened from a `?task=` chat link returns the user
+  // to Messages rather than dropping them on the full task list.
   const openedFromDeepLink = useRef(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  // Id of the task whose share-link was just copied, so its copy button can
-  // briefly show a ✓. Cleared after a short delay.
   const [copiedTaskId, setCopiedTaskId] = useState<number | null>(null);
-  // Last `?task=<id>` value we auto-opened. Guards the deep-link open so closing
-  // the task doesn't reopen it (param unchanged), while still letting a *new*
-  // task link (param changed) open its task — e.g. clicking a second pasted
-  // task link while already on this page.
+  // Last deep-link value auto-opened. Guards against reopening the task when it
+  // is closed (param unchanged) while still honoring a newly clicked task link.
   const deepLinkApplied = useRef<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  // Org/platform users available for the Assigned by / Assignee pickers.
-  // Personal accounts have no team, so we skip the fetch for them.
+  // Users for the Assigned by / Assignee pickers. Personal accounts have no
+  // team, so the fetch is skipped for them.
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const [creating, setCreating] = useState(false);
   const [view, setView] = useState<"list" | "grid">(() => {
     const saved = window.localStorage.getItem("wayve.tasks.view");
     return saved === "grid" ? "grid" : "list";
   });
-  // "tasks" = the default list/grid layout; "jira" = a kanban board with one
-  // column per status (To Do / In Progress / In Review / Done), cards dragged
-  // between columns to change status.
+  // "tasks" is the default list/grid layout; "jira" is a kanban board with one
+  // column per status, where dragging a card between columns changes its status.
   const [mode, setMode] = useState<"tasks" | "jira">(() => {
     const saved = window.localStorage.getItem("wayve.tasks.mode");
     return saved === "jira" ? "jira" : "tasks";
   });
-  // Quick status filter (All / To Do / In Progress / In Review / Done). Applies
-  // to the list and board so you can focus on one status at a time.
+  // The status, priority and date filters combine, and apply to both the list
+  // and the board.
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
-  // Quick priority filter (All / P5…P1). Combined with the status filter.
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">(
     "all"
   );
-  // Date-created filter. `after`/`before` use one bound; `between` uses both.
-  // Empty date inputs leave that bound open, so the filter is a no-op until a
-  // date is chosen. Bounds are inclusive (whole days, in local time).
+  // `after`/`before` use one bound, `between` uses both. An empty date input
+  // leaves that bound open, so the filter is a no-op until a date is chosen.
+  // Bounds are inclusive whole days, in local time.
   const [dateMode, setDateMode] = useState<
     "any" | "after" | "before" | "between"
   >("any");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  // Status, priority and date filters live together in one "Filters" popover.
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
   const activeFilterCount =
@@ -366,8 +347,7 @@ export default function Tasks() {
     setDateFrom("");
     setDateTo("");
   };
-  // Status column currently being hovered during a drag, for the drop-target
-  // highlight.
+  // Column hovered during a drag, for the drop-target highlight.
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
 
   // Close the Filters popover on outside click or Escape.
@@ -407,12 +387,11 @@ export default function Tasks() {
   const [status, setStatus] = useState<TaskStatus>("to_do");
   const [assignedBy, setAssignedBy] = useState("");
   const [assignee, setAssignee] = useState("");
-  // Chosen assignee's user id (kept in sync when a real member is picked); the
-  // project the task is created on, and the loaded project list for the dropdown.
+  // `assigneeId` is set only when a real member is picked, not for a hand-typed
+  // email.
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
   const [projectId, setProjectId] = useState<number | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  // Assignee suggestions from the project's code history.
   const [suggestions, setSuggestions] = useState<AssigneeSuggestion[] | null>(
     null
   );
@@ -422,11 +401,9 @@ export default function Tasks() {
   const [createAnother, setCreateAnother] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  // Files chosen in the modal but not yet uploaded. Held locally so creation
-  // can persist them once we have the new task id, and so they survive
-  // re-renders before submit. Reset by closeForm/resetForm.
+  // Files chosen in the modal but not yet uploaded. Held locally so creation can
+  // persist them once the new task id exists.
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
-  // Server-side attachments for the task currently being edited.
   const [existingAttachments, setExistingAttachments] = useState<
     TaskAttachment[]
   >([]);
@@ -456,9 +433,8 @@ export default function Tasks() {
     }
   }, []);
 
-  // Deferred to a microtask so the effect body doesn't synchronously call
-  // setState — the React 19 "set-state-in-effect" rule flags the direct
-  // pattern as cascading-render risk. Same wrapper as `AuditSecurity.tsx`.
+  // The load is deferred to a timeout so the effect body doesn't synchronously
+  // call setState, which React 19 flags as a cascading-render risk.
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadTasks();
@@ -466,8 +442,6 @@ export default function Tasks() {
     return () => window.clearTimeout(timer);
   }, [loadTasks]);
 
-  // Load the assignable-users list once for non-personal accounts. Failure is
-  // non-fatal — the assignee fields simply behave as plain text inputs.
   useEffect(() => {
     if (isPersonal) return;
     let alive = true;
@@ -476,16 +450,15 @@ export default function Tasks() {
         if (alive) setAssignableUsers(list);
       })
       .catch(() => {
-        // Non-fatal: leave the list empty so the pickers fall back to text.
+        // Non-fatal: the pickers fall back to plain text inputs.
       });
     return () => {
       alive = false;
     };
   }, [isPersonal]);
 
-  // Load the caller's projects for the create-task dropdown. The selected
-  // project links the task to a repo, which drives assignee suggestions.
-  // Failure is non-fatal — the dropdown simply shows no options.
+  // The selected project links the task to a repo, which drives the assignee
+  // suggestions.
   useEffect(() => {
     let alive = true;
     getProjects()
@@ -506,7 +479,7 @@ export default function Tasks() {
     setSuggestLoading(false);
   };
 
-  // Ask the backend to rank assignees from the selected project's code history.
+  // The backend ranks assignees from the selected project's code history.
   const loadSuggestions = async () => {
     if (projectId === null) return;
     setSuggestLoading(true);
@@ -532,8 +505,8 @@ export default function Tasks() {
     }
   };
 
-  // Choose a suggested person. Connected members become the real assignee (with
-  // an id); reference-only contributors fill the free-text field with no id.
+  // Connected members become the real assignee, with an id. Reference-only
+  // contributors only fill the free-text field.
   const pickSuggestion = (s: AssigneeSuggestion) => {
     if (s.user_id !== null) {
       setAssignee(s.email ?? s.display);
@@ -549,8 +522,8 @@ export default function Tasks() {
     setDescription("");
     setPriority(3);
     setStatus("to_do");
-    // New tasks are attributed to their creator: default "assigned by" to the
-    // current user (personal accounts leave it unset — implicitly self-owned).
+    // New tasks are attributed to their creator. Personal accounts leave this
+    // unset, since the task is implicitly self-owned.
     setAssignedBy(isPersonal ? "" : (user?.email ?? ""));
     setAssignee("");
     setAssigneeId(null);
@@ -567,8 +540,6 @@ export default function Tasks() {
     resetForm();
     setCreateAnother(false);
     setCreating(false);
-    // A task opened from a chat link (via a `?task=` deep link) returns the user
-    // to Messages on close, rather than leaving them on the full task list.
     if (openedFromDeepLink.current) {
       openedFromDeepLink.current = false;
       navigate("/chat");
@@ -582,8 +553,8 @@ export default function Tasks() {
   };
 
   const openEdit = (task: Task) => {
-    // A normal open (card / Edit button) is not a deep-link open; the deep-link
-    // effect re-sets this flag after it calls openEdit.
+    // A normal open is not a deep-link open. The deep-link effect re-sets this
+    // flag after it calls openEdit.
     openedFromDeepLink.current = false;
     setEditingId(task.id);
     setTaskName(task.name);
@@ -618,11 +589,9 @@ export default function Tasks() {
     });
   };
 
-  // Honor a ?task=<id> or ?ref=<n> deep link once tasks have loaded: open the
-  // target task's details (the edit modal). `task` is the database id (legacy
-  // URLs); `ref` is the friendly #<n> from a copied task snippet (task_number,
-  // falling back to id). Re-runs when the param changes so a freshly-clicked
-  // task link opens, but skips a value we've already opened so closing the task
+  // Open the target task once tasks have loaded. `task` is the database id, used
+  // by legacy URLs; `ref` is the #<n> from a copied task snippet (task_number,
+  // falling back to id). An already-opened value is skipped so closing the task
   // doesn't reopen it.
   useEffect(() => {
     if (loading) return;
@@ -640,8 +609,7 @@ export default function Tasks() {
           tasks.find((t) => t.id === n);
     if (!target) return;
     deepLinkApplied.current = rawKey;
-    // Deferred to a microtask so the effect body doesn't synchronously call
-    // setState (same React 19 cascading-render guard as loadTasks above).
+    // Deferred for the same React 19 cascading-render reason as loadTasks above.
     const timer = window.setTimeout(() => {
       openEdit(target);
       openedFromDeepLink.current = true;
@@ -655,7 +623,7 @@ export default function Tasks() {
     const next = Array.from(list);
     if (next.length === 0) return;
     setPendingAttachments((prev) => [...prev, ...next]);
-    // Reset input so the same filename can be picked again after removal.
+    // Reset the input so the same filename can be picked again after removal.
     event.target.value = "";
   };
 
@@ -696,8 +664,8 @@ export default function Tasks() {
 
   const changeStatus = async (task: Task, nextStatus: TaskStatus) => {
     if (task.status === nextStatus) return;
-    // Optimistic flip — visual cost of a request-then-update lag is jarring
-    // when the user toggles status repeatedly. We roll back on failure.
+    // Flip optimistically and roll back on failure: request-then-update lag is
+    // jarring when the user toggles status repeatedly.
     const prev = tasks;
     setTasks((current) =>
       sortTasks(
@@ -736,13 +704,9 @@ export default function Tasks() {
     }
   };
 
-  // Inline priority change from a card's top-right selector. Optimistic like
-  // changeStatus (and re-sorts, since the list is priority-ordered), rolling
-  // back on failure.
-  // Human-friendly task key for the card badge: the task's project name, first
-  // three letters, followed by the per-user task number (e.g. project "wayve"
-  // → "way12"). Falls back to a plain "#12" when the task has no resolvable
-  // project so imported/project-less tasks still show an identifier.
+  // The card badge key is the project name's first three letters plus the
+  // per-user task number ("wayve" + 12 → "way12"), falling back to "#12" when
+  // the task has no resolvable project.
   const taskKey = (task: Task): string | null => {
     if (task.task_number == null) return null;
     const name = projects.find((p) => p.id === task.project_id)?.name ?? "";
@@ -782,8 +746,8 @@ export default function Tasks() {
     );
   }, [normalizedSearchQuery, tasks]);
 
-  // True if a task's created date passes the date-created filter. Empty bounds
-  // are treated as open; "after"/"before" ignore the unused bound.
+  // Empty bounds are treated as open, and "after"/"before" ignore the unused
+  // bound.
   const inDateRange = useCallback(
     (t: Task) => {
       if (dateMode === "any") return true;
@@ -800,8 +764,6 @@ export default function Tasks() {
     [dateMode, dateFrom, dateTo]
   );
 
-  // Search-filtered tasks, further narrowed to the selected status, priority,
-  // and date-created range.
   const filteredTasks = useMemo(
     () =>
       visibleTasks.filter(
@@ -890,8 +852,8 @@ export default function Tasks() {
         try {
           await uploadTaskAttachments(targetTaskId, pendingAttachments);
         } catch (err) {
-          // Task is already saved — surface the attachment failure but
-          // keep the modal open so the user can retry the upload.
+          // The task is already saved, so keep the modal open and let the user
+          // retry just the upload.
           setError(
             err instanceof Error
               ? `Task saved, but attachment upload failed: ${err.message}`
@@ -1219,10 +1181,9 @@ export default function Tasks() {
                 />
               </label>
 
-              {/* Task assignment (Assignee / Assign to me) is a team feature —
-                  only business (organization) accounts see it. Personal accounts
-                  are single-user, so it's hidden for them. "Assigned by" is not
-                  shown: a task is always attributed to its creator. */}
+              {/* Assignment is a team feature, so only organization accounts see
+                  it. "Assigned by" is never shown, since a task is always
+                  attributed to its creator. */}
               {!isPersonal && (
                 <>
                   <div className="task-form-field">
@@ -1271,8 +1232,6 @@ export default function Tasks() {
                     )}
                   </div>
 
-                  {/* Assignee suggestions from the project's code history —
-                      available once a project is selected. */}
                   {projectId !== null && (
                     <div className="task-suggest">
                       <button

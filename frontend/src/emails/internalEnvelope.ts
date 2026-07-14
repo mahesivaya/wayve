@@ -1,17 +1,10 @@
-// Plan A Phase 2 — Wayve-to-Wayve email envelope.
-//
-// Multi-recipient `WAYVE_SECURE_V1` envelope produced entirely in the
-// sender's browser and POSTed to /api/email/send-internal as opaque
-// ciphertext. The server stores it verbatim in `emails.body_encrypted`
-// for every recipient (and the sender's Sent copy). Wire shape mirrors
-// the chat E2E envelope (`WAYVE_CHAT_E2E_V1` in
-// frontend/src/chat/e2ee.ts) with two differences:
-//
-//   * outer prefix is `WAYVE_SECURE_V1` so bodyUtils.ts already
-//     recognises it as a wayve-encrypted email body;
-//   * inner `type` is `wayve_encrypted_multi` to disambiguate from the
-//     single-recipient `wayve_encrypted` shape that Phase 1's inbound
-//     encrypt-on-arrival path emits.
+// Wayve-to-Wayve email envelope, built in the sender's browser and POSTed to
+// /api/email/send-internal as opaque ciphertext. The server stores it verbatim
+// in `emails.body_encrypted` under its own at-rest layer, so this format must
+// stay in sync with the Rust encryption module and with bodyUtils.ts, which
+// recognises the `WAYVE_SECURE_V1` prefix. The inner `type` is
+// `wayve_encrypted_multi` to distinguish it from the single-recipient
+// `wayve_encrypted` shape emitted by the inbound encrypt-on-arrival path.
 //
 //   WAYVE_SECURE_V1
 //   { "type": "wayve_encrypted_multi",
@@ -51,16 +44,10 @@ const importRecipientPublicKey = (bytes: number[] | ArrayBuffer | Uint8Array) =>
   );
 
 /**
- * Build a multi-recipient envelope around `plaintextBody`. Every entry
- * in `recipients` gets an RSA-OAEP-wrapped copy of the same fresh AES
- * key indexed by their user_id. Include the sender in `recipients` if
- * the sender should be able to decrypt their own Sent copy — the
- * caller is responsible for that decision; this helper does not
- * silently inject anyone.
- *
- * Throws on an empty recipient list (a meaningless envelope), or if
- * any public key fails to import (caller should pre-validate keys
- * before reaching this function).
+ * Every entry in `recipients` gets an RSA-OAEP-wrapped copy of the same fresh
+ * AES key, indexed by user_id. The caller must include the sender if the
+ * sender's own Sent copy should stay decryptable; this helper injects no one.
+ * Throws on an empty recipient list or an unimportable public key.
  */
 export async function buildInternalEnvelope(
   plaintextBody: string,
@@ -72,9 +59,8 @@ export async function buildInternalEnvelope(
     );
   }
 
-  // Fresh AES-256-GCM key for THIS message only — never reused. The
-  // wrapping keys are RSA per-recipient, but the bulk encryption is a
-  // single AES-GCM seal so the message body only inflates once.
+  // One fresh AES key per message, never reused. Wrapping is per-recipient RSA,
+  // but the bulk seal is a single AES-GCM pass so the body inflates only once.
   const aesKey = await crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
     true,

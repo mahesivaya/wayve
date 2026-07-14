@@ -1,12 +1,11 @@
 //! Assignee suggestion: given a task on a project, rank the people who have
-//! worked in the files the task will likely touch.
+//! worked in the files the task will likely touch. The pipeline resolves the
+//! project's repo, maps the story to files, attributes per-file commit authors,
+//! scores them by recency, and matches GitHub logins back to Wayve users. See
+//! docs/architecture/ai-task-assignment.md.
 //!
-//! Pipeline (see docs/architecture/ai-task-assignment.md):
-//!   project → repo → file tree → [map story→files] → per-file commit authors
-//!   → recency-weighted scores → match GitHub logins to Wayve users.
-//!
-//! Read-only and idempotent — it never assigns the task; the caller saves the
-//! chosen assignee via the normal task update.
+//! Read-only and idempotent: it never assigns the task. The caller saves the
+//! chosen assignee through the normal task update.
 
 pub mod github;
 pub mod mapping;
@@ -40,8 +39,8 @@ struct Candidate {
     /// Best display label: member email, else GitHub login, else commit name.
     display: String,
     email: Option<String>,
-    /// True when this person can't be assigned (no linked Wayve account) — the
-    /// UI shows them as a reference name only.
+    /// True when the person has no linked Wayve account and so cannot be
+    /// assigned; the UI shows them as a reference name only.
     is_reference_only: bool,
     expertise_score: f64,
     commits: u32,
@@ -52,13 +51,13 @@ struct Candidate {
 
 #[derive(Serialize)]
 struct SuggestResponse {
-    /// Whether the AI produced the file mapping (vs. the keyword fallback).
+    /// Whether the AI produced the file mapping, rather than the keyword fallback.
     used_ai: bool,
-    /// The files the task was mapped to (what the ranking is based on).
+    /// The files the task was mapped to, which the ranking is based on.
     files: Vec<String>,
     candidates: Vec<Candidate>,
-    /// Set when we can't suggest (e.g. project not linked to a repo) so the UI
-    /// can explain the empty list.
+    /// Set when no suggestion is possible, such as a project not linked to a
+    /// repo, so the UI can explain the empty list.
     #[serde(skip_serializing_if = "Option::is_none")]
     note: Option<String>,
 }
@@ -75,9 +74,8 @@ async fn project_repo(
     project_id: i32,
 ) -> Result<Option<(String, String)>, AppError> {
     let ctx = resolve_role_context(pool, user_id).await?;
-    // Scope the lookup exactly like GET /api/projects so a caller can only
-    // resolve a project in their own org (or their own personal projects);
-    // platform staff are unrestricted and may resolve any project.
+    // Scope the lookup exactly like GET /api/projects, so a caller resolves only
+    // their own org's or personal projects. Platform staff are unrestricted.
     let row = match ctx.scope {
         Scope::Organization => {
             let org_id = ctx.organization_id.ok_or(AppError::NotFound("project"))?;
@@ -117,9 +115,9 @@ async fn project_repo(
     }
 }
 
-/// user_ids the caller may assign to (their org's members, or platform staff).
-/// A matched GitHub author is only "assignable" if their Wayve id is in here —
-/// otherwise they're a reference name, even if they've connected GitHub.
+/// The user_ids the caller may assign to. A matched GitHub author is assignable
+/// only if their Wayve id is in here; otherwise they are a reference name, even
+/// if they have connected GitHub.
 async fn assignable_ids(
     pool: &PgPool,
     user_id: i32,
@@ -145,8 +143,8 @@ async fn assignable_ids(
     Ok(rows.iter().map(|r| r.get::<i32, _>("id")).collect())
 }
 
-/// Map lowercased GitHub logins to their connected Wayve user (id, email,
-/// username). Only self-connected users appear in `github_accounts`.
+/// Map lowercased GitHub logins to their connected Wayve user. Only
+/// self-connected users appear in `github_accounts`.
 async fn logins_to_users(
     pool: &PgPool,
     logins: &[String],
@@ -204,7 +202,6 @@ pub async fn suggest_assignee(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let pool = pool.get_ref();
 
-    // 1. Resolve the project's repo (access-scoped).
     let Some((owner, repo)) = project_repo(pool, user_id, body.project_id).await? else {
         return Ok(HttpResponse::Ok().json(SuggestResponse {
             used_ai: false,
@@ -214,10 +211,8 @@ pub async fn suggest_assignee(
         }));
     };
 
-    // 2. Effective GitHub token for this caller (their own, or the shared PAT).
     let token = crate::github_proxy::effective_github_token(&req, pool).await;
 
-    // 3. Repo file tree → map the story to likely files.
     let tree = match github::repo_file_paths(&owner, &repo, token.as_deref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -241,7 +236,6 @@ pub async fn suggest_assignee(
         }));
     }
 
-    // 4. Per-file commit authors (bounded — files is capped at MAX_FILES).
     let fetches = mapping.files.iter().map(|path| {
         let owner = owner.clone();
         let repo = repo.clone();
@@ -256,10 +250,8 @@ pub async fn suggest_assignee(
         }
     }
 
-    // 5. Score + rank authors.
     let ranked = scoring::rank_authors(&all_commits);
 
-    // 6. Match logins → Wayve users, gate assignability to the caller's scope.
     let logins: Vec<String> = ranked
         .iter()
         .filter_map(|a| a.login.as_ref().map(|l| l.to_ascii_lowercase()))

@@ -12,9 +12,9 @@ mod tests {
     };
     use crate::models::email_request::SendEmailRequest;
 
-    // Stub that implements ONLY MailSender. The whole point of the ISP split:
-    // a caller that just needs to send mail should not be forced to define
-    // sync/sync_before/mark_read/refresh_token.
+    // Implements only MailSender. This is the point of the interface-segregation
+    // split: a caller that only sends mail must not be forced to define
+    // sync, sync_before, mark_read and refresh_token.
     struct SendOnlyStub;
 
     #[async_trait]
@@ -42,10 +42,9 @@ mod tests {
         takes_sender(&stub);
     }
 
-    // Real provider clients satisfy each narrow trait individually — the
-    // umbrella `MailProviderClient` is just `TokenRefresher + MailSync +
-    // MailSender + MailRead`. These assertions are compile-time only;
-    // if the supertrait bounds drift, the test won't compile.
+    // The real provider clients must satisfy each narrow trait individually.
+    // These checks are compile-time only: if the supertrait bounds on the
+    // umbrella `MailProviderClient` drift, this stops compiling.
     #[test]
     fn google_client_implements_each_narrow_trait() {
         let g = GoogleMailClient {
@@ -75,17 +74,11 @@ mod tests {
         takes_read(&o);
     }
 
-    // Compile-time proof that `Arc<dyn MailProviderClient>` is still callable
-    // through each narrow trait via supertrait method dispatch (the existing
-    // call sites in routes/sync code rely on this).
+    // `Arc<dyn MailProviderClient>` must stay callable through each narrow trait
+    // by supertrait dispatch, which the routes and sync call sites rely on.
     #[test]
     fn umbrella_arc_remains_usable() {
-        fn _assert_send_via_umbrella(_c: Arc<dyn MailProviderClient>) {
-            // We don't call .send/.sync here (no runtime fixtures); the goal
-            // is purely that the trait object compiles with the supertrait
-            // constraints intact.
-        }
-        // Stub of the umbrella for compile-time exercise.
+        fn _assert_send_via_umbrella(_c: Arc<dyn MailProviderClient>) {}
         struct FullStub;
 
         #[async_trait]

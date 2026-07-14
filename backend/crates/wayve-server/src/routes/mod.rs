@@ -17,11 +17,9 @@ pub mod tracing;
 pub mod user;
 pub mod visits;
 
-/// Aggregator for the cross-cutting "core platform" routes (auth, user/org
-/// management, account, audit, SSO, recovery, support, …). Each domain owns its
-/// own `routes()` in its submodule, so adding an endpoint means editing only
-/// that submodule — this fn just delegates. Mounted under `/api` from
-/// `routing.rs`, the single route-wiring hub.
+/// Aggregator for the cross-cutting core-platform routes, mounted under `/api`
+/// from `routing.rs`. Each domain owns its own `routes()` in its submodule, so a
+/// new endpoint touches only that submodule.
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     health::routes(cfg);
     config::routes(cfg);

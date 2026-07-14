@@ -1,11 +1,10 @@
-//! Server-side GitHub reads for the assignee-suggestion feature: a repo's file
-//! list (to ground the story→files mapping) and per-file commit authors (to
-//! attribute expertise). Every call goes through the shared `HTTP_CLIENT` with
-//! the caller's effective token (`github_proxy::effective_github_token`).
+//! Server-side GitHub reads for assignee suggestion: a repo's file list, which
+//! grounds the story-to-files mapping, and per-file commit authors, which
+//! attribute expertise. Calls use the caller's effective token from
+//! `github_proxy::effective_github_token`.
 //!
-//! Both the tree and per-path commit lookups are cached in-process (TTL) keyed
-//! by repo/path, because a suggestion fans out one `commits?path=` call per
-//! candidate file and GitHub rate-limits aggressively.
+//! Both lookups are cached in-process with a TTL, because one suggestion fans
+//! out a `commits?path=` call per candidate file and GitHub rate-limits hard.
 
 use crate::email::oauth::HTTP_CLIENT;
 use crate::prelude::*;
@@ -16,8 +15,8 @@ use tracing::warn;
 use crate::cache::TtlCache;
 
 const GH_TIMEOUT: Duration = Duration::from_secs(20);
-/// Cap on how many file paths we keep from a repo tree, so a huge monorepo
-/// can't blow up the AI prompt or the fan-out. Paths beyond this are dropped.
+/// Cap on file paths kept from a repo tree, so a huge monorepo cannot blow up
+/// the AI prompt or the fan-out. Paths beyond this are dropped.
 pub const MAX_TREE_PATHS: usize = 1500;
 /// Commits fetched per file when attributing authorship (newest first).
 const COMMITS_PER_FILE: u32 = 30;
@@ -33,9 +32,9 @@ static COMMITS_CACHE: Lazy<TtlCache<String, Vec<FileCommit>>> =
 /// One past change to a file: who made it and when.
 #[derive(Clone, Debug)]
 pub struct FileCommit {
-    /// GitHub login of the author (null on some commits — e.g. unlinked email).
+    /// GitHub login of the author. Absent on commits from an unlinked email.
     pub login: Option<String>,
-    /// Commit author display name — the fallback label when `login` is absent.
+    /// Commit author display name, the fallback label when `login` is absent.
     pub name: Option<String>,
     pub date: Option<DateTime<Utc>>,
 }
@@ -72,7 +71,7 @@ async fn github_get(
     })
 }
 
-/// The repo's default branch (e.g. "main"); defaults to "main" if absent.
+/// The repo's default branch, falling back to "main".
 async fn default_branch(
     base: &str,
     owner: &str,

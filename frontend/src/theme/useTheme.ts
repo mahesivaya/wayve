@@ -1,11 +1,7 @@
-// Dark-mode hook. Two states only:
-//   "dark"  — the navy default for every visitor (OS preference ignored)
-//   "light" — user has explicitly chosen light and we set
-//             data-theme="light" on <html>
-//
-// The pre-paint script in index.html sets data-theme="dark" or "light"
-// before React mounts to avoid any flash. This hook keeps the attribute
-// in sync as the user toggles and writes the choice to localStorage.
+// Dark is the default for every visitor; the OS preference is deliberately
+// ignored. A pre-paint script in index.html sets data-theme before React mounts
+// to avoid a flash, and this hook keeps that attribute in sync as the user
+// toggles.
 
 import { useCallback, useState } from "react";
 
@@ -33,8 +29,7 @@ export function useTheme() {
   const setTheme = useCallback((next: ThemeChoice) => {
     setChoiceState(next);
     try {
-      // Dark is the default (no key stored); only persist an explicit
-      // light override.
+      // Only an explicit light override is persisted; dark stores no key.
       if (next === "dark") localStorage.removeItem(STORAGE_KEY);
       else localStorage.setItem(STORAGE_KEY, next);
     } catch {
@@ -47,8 +42,7 @@ export function useTheme() {
     setTheme(choice === "dark" ? "light" : "dark");
   }, [choice, setTheme]);
 
-  // `resolved` is kept for backward compatibility with the toggle button,
-  // which reads `resolved` to decide which icon (sun/moon) to render.
-  // With OS preference ignored, resolved === choice.
+  // `resolved` exists for the toggle button, which reads it to pick the sun or
+  // moon icon. It equals `choice` because the OS preference is ignored.
   return { choice, resolved: choice, setTheme, toggle };
 }

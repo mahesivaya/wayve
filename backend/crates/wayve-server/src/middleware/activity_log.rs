@@ -1,8 +1,7 @@
-//! Records every authenticated API request into the `activity_events` stream
-//! (the "non-consequential" audit). Unauthenticated traffic (health checks,
-//! login, static assets), CORS preflight, and the activity ingest endpoint
-//! itself are skipped. The DB write is fire-and-forget so request latency is
-//! unaffected.
+//! Records every authenticated API request into the `activity_events` stream,
+//! the non-consequential audit. Unauthenticated traffic, CORS preflight, and
+//! the activity ingest endpoint itself are skipped. The write is
+//! fire-and-forget, so request latency is unaffected.
 
 use actix_web::{
     Error,
@@ -58,8 +57,8 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let srv = self.service.clone();
 
-        // Resolve request facts up front (all cheap, no DB hit). user_id comes
-        // from the JWT/cookie or an api-key principal already injected upstream.
+        // user_id comes from the JWT/cookie or an api-key principal already
+        // injected upstream.
         let method = req.method().clone();
         let path = req.path().to_string();
         let user_id = get_user_id_from_request(req.request());
@@ -68,8 +67,8 @@ where
             .app_data::<web::Data<PgPool>>()
             .map(|p| p.get_ref().clone());
 
-        // Only record attributable, non-preflight requests; never the ingest
-        // path (would record itself on every page view / click).
+        // Never record the ingest path itself; it would log itself on every
+        // page view and click.
         let skip = method == Method::OPTIONS
             || path.starts_with("/api/activity")
             || user_id.is_none()

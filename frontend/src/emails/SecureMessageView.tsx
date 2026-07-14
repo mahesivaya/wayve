@@ -1,14 +1,8 @@
-// Plan A Phase 3 — Secure-send magic-link reader page.
-//
-// Public route at /m/:token. Anyone with the link can land here; the
-// passphrase is what actually unlocks the message. The page fetches
-// the ciphertext bundle from /api/secure-messages/{token} (no auth
-// required), prompts for the passphrase, derives the KEK via PBKDF2,
-// unwraps the DEK, decrypts the body, and renders the plaintext.
-//
-// At no point does the passphrase leave the browser. Wrong passphrase
-// surfaces as a clear "couldn't unlock" error from the AES-GCM auth
-// tag failure path in openSecureMessage().
+// Secure-send magic-link reader, a public route at /m/:token. Anyone with the
+// link can land here, so the passphrase is what actually unlocks the message.
+// The ciphertext bundle is fetched unauthenticated and decrypted entirely in
+// the browser; the passphrase never leaves it. A wrong passphrase surfaces as
+// the "couldn't unlock" error from openSecureMessage's auth-tag failure path.
 
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -73,10 +67,9 @@ export default function SecureMessageView() {
     try {
       const plaintext = await openSecureMessage(state.envelope, passphrase);
       setBody(plaintext);
-      // Wipe the passphrase from state once decryption succeeded —
-      // leaving it in React state would let any later XSS / dev-tool
-      // session read it. Plaintext stays in state because the user is
-      // actively reading it.
+      // SECURITY: wipe the passphrase once decryption succeeds. Leaving it in
+      // React state would let a later XSS or dev-tools session read it. The
+      // plaintext stays because the user is actively reading it.
       setPassphrase("");
     } catch (err) {
       setError(

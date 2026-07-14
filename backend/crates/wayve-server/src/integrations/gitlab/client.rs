@@ -1,7 +1,7 @@
-//! Thin GitLab REST client. Mirrors the Jira client: the shared `HTTP_CLIENT`,
-//! a per-connection base URL (overridable for tests via
-//! `external::gitlab_api_base`), and PAT auth via the `PRIVATE-TOKEN` header.
-//! 401/403 surface as `AppError::Unauthorized`; other non-2xx as `Internal`.
+//! Thin GitLab REST client, mirroring the Jira client: the shared `HTTP_CLIENT`, a
+//! per-connection base URL (overridable for tests via `external::gitlab_api_base`),
+//! and PAT auth via the `PRIVATE-TOKEN` header. 401 and 403 surface as
+//! `AppError::Unauthorized`, other non-2xx as `Internal`.
 
 use crate::email::oauth::HTTP_CLIENT;
 use crate::prelude::*;
@@ -63,15 +63,14 @@ impl GitlabClient {
         })
     }
 
-    /// `GET /user` — validate the token. 200 = ok, 401/403 = bad token.
+    /// Validate the token: 401 or 403 means it is bad.
     pub async fn test_connection(&self) -> Result<(), AppError> {
         let _: Value = self.send_json(HTTP_CLIENT.get(self.url("/user"))).await?;
         Ok(())
     }
 
-    /// Issues assigned to the authenticated user, up to `max_results`. Follows
-    /// page-number pagination (GitLab caps a page at 100); a 20-page backstop
-    /// guards against a runaway loop.
+    /// GitLab caps a page at 100, so this follows page-number pagination, with a
+    /// 20-page backstop against a runaway loop.
     pub async fn list_assigned_issues(
         &self,
         state: &str,
@@ -99,7 +98,7 @@ impl GitlabClient {
             let got = page_issues.len();
             all.extend(page_issues);
 
-            // A short page (or empty) means there is nothing more to fetch.
+            // A short or empty page means there is nothing more to fetch.
             if got < 100 || all.len() as u32 >= max_results {
                 break;
             }

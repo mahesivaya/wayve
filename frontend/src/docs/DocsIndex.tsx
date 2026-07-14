@@ -11,17 +11,13 @@ import { listDocs, type DocSummary } from "../api/docs";
 import "./docsIndex.css";
 
 /**
- * Landing page at /docs. Search-first: type to filter across all
- * sections at once. Otherwise it shows the manifest grouped by
- * category, with a "Guides" section that's populated dynamically
- * from the backend's `/api/docs` catalog so a new markdown file
- * pinned in the backend shows up without a frontend rebuild.
+ * Landing page at /docs. The "Guides" section is populated from the backend's
+ * `/api/docs` catalog, so a new markdown doc appears without a frontend rebuild.
  */
 export default function DocsIndex() {
   const [query, setQuery] = useState("");
-  // The backend catalog only carries the markdown-backed docs
-  // (currently just `price-tier`). If the API is unreachable we just
-  // fall back to the static manifest — docs index stays usable.
+  // If the API is unreachable the page falls back to the static manifest and
+  // stays usable.
   const [backendDocs, setBackendDocs] = useState<DocSummary[]>([]);
   const [backendError, setBackendError] = useState<string | null>(null);
 
@@ -42,9 +38,8 @@ export default function DocsIndex() {
 
   const normalizedQuery = query.trim().toLowerCase();
 
-  // Treat the backend catalog as additional "guide" entries. We can't
-  // know their full URL list at build time so we synthesize an entry
-  // here from each `DocSummary`.
+  // Backend catalog entries become additional "guide" entries, synthesized here
+  // because their URLs aren't known at build time.
   const dynamicGuides: DocEntry[] = useMemo(
     () =>
       backendDocs.map((d) => ({
@@ -81,11 +76,6 @@ export default function DocsIndex() {
           place. Use the search below or browse by category.
         </p>
 
-        {/* Big search input on the hub. Mirrors the sidebar's filter
-            but with prominence; both update the same UI on the next
-            render — the sidebar's state and this one are
-            intentionally independent since the sidebar persists
-            across navigation while this is page-local. */}
         <form
           role="search"
           className="docs-index-search"
@@ -102,9 +92,8 @@ export default function DocsIndex() {
         </form>
       </header>
 
-      {/* Search results override the category grouping — if the user
-          is typing, we collapse everything into one flat list so they
-          see how many hits the query produced. */}
+      {/* While searching, results collapse into one flat list instead of the
+          category grouping. */}
       {normalizedQuery && (
         <section className="docs-index-results">
           <h2>

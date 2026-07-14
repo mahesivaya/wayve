@@ -1,15 +1,10 @@
 //! UI settings — the app-wide font, resolved per scope.
 //!
-//! Three levels, each storing a short allowlisted `font_key` (never raw CSS):
-//!   * **user**     — `users.ui_font_key`         (any signed-in user, for themselves)
-//!   * **org**      — `organizations.ui_font_key` (an org owner, for all members)
-//!   * **platform** — `platform_ui_config.font_key` (the platform owner, default)
-//!
-//! The font a client actually applies is `resolve_font_key`: user's own > their
-//! org's > platform default > NULL (the app default). The platform value is also
-//! served unauthenticated via `GET /api/config` (see `routes::config`) as the
-//! pre-login / fallback font; authenticated clients call `GET /api/ui/font` to
-//! get their fully-resolved font and each level's value for the editor. The
+//! Three levels store a short allowlisted `font_key`, never raw CSS:
+//! `users.ui_font_key`, `organizations.ui_font_key`, and
+//! `platform_ui_config.font_key`. `resolve_font_key` picks the user's own, then
+//! their org's, then the platform default, then NULL. The platform value is also
+//! served unauthenticated via `GET /api/config` as the pre-login font. The
 //! frontend maps a key to a CSS stack (`theme/platformFonts.ts`).
 
 use crate::ai::config_handler::require_platform_owner;
@@ -78,8 +73,7 @@ async fn require_org_owner(
     }
 }
 
-// ── Resolved font + per-level breakdown (any signed-in user) ────────────────
-
+/// The caller's resolved font plus each level's raw value, for the editor.
 #[get("/ui/font")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_font(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -131,7 +125,7 @@ pub async fn get_font(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     })))
 }
 
-/// PUT /api/ui/font/me — set (or clear) the caller's OWN font.
+/// Set or clear the caller's own font override.
 #[put("/ui/font/me")]
 #[instrument(target = "http", skip(req, pool, body))]
 pub async fn put_my_font(
@@ -153,8 +147,8 @@ pub async fn put_my_font(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "user": font_key, "resolved": resolved })))
 }
 
-/// PUT /api/ui/font/org — set (or clear) the font for the caller's organization
-/// (org **owner** only). Applies to every member without their own override.
+/// Set or clear the org-wide font. Org owner only; applies to every member
+/// without their own override.
 #[put("/ui/font/org")]
 #[instrument(target = "http", skip(req, pool, body))]
 pub async fn put_org_font(
@@ -190,8 +184,7 @@ pub async fn put_org_font(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "org": font_key, "resolved": resolved })))
 }
 
-// ── Platform default (platform owner only) ──────────────────────────────────
-
+/// The platform-wide default font. Platform owner only.
 #[get("/platform/ui-config")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_ui_config(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {

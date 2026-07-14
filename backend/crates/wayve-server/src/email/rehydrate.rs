@@ -1,21 +1,12 @@
-//! `POST /api/email/accounts/{id}/rehydrate` — for every row this
-//! account owns in `emails`, re-fetch the message metadata from the
-//! provider (Gmail today; Outlook is stubbed) and overwrite the
-//! stored subject/sender/receiver/labels with the fresh values.
+//! Manual repair path: re-fetches provider metadata for every row an account
+//! owns and overwrites the stored subject, sender, receiver, and labels. An
+//! early sync wrote placeholder subjects for some accounts, and the forward sync
+//! only rewrites a row when a new copy of the message arrives, so it can never
+//! fix them on its own.
 //!
-//! Why this exists: the initial IMAP-style sync for some accounts wrote
-//! placeholder strings instead of real subjects (every row in the
-//! affected account has an 8-character subject ciphertext, suggesting
-//! the same short stub on every email). The forward sync only updates
-//! a row if a new copy of the message comes in; it won't rewrite
-//! already-stored rows on its own. This endpoint is the manual repair
-//! path the user runs once per affected account.
-//!
-//! Caller must be the account owner. Provider must be Google. Rate-
-//! limited to 10 concurrent `messages.get` requests so we don't blow
-//! Gmail's 250-quota-units/user/sec ceiling (each metadata fetch costs
-//! 5 units = 50 calls/sec effective; we cap below that to leave room
-//! for other workers).
+//! Owner-only and Google-only. Concurrency is capped at 10 in-flight
+//! `messages.get` calls: Gmail allows 250 quota units per user per second and
+//! each metadata fetch costs 5, leaving headroom for the other workers.
 
 use crate::email::account::{EmailAccount, load_email_account_for_user};
 use crate::email::provider::{MailProvider, refresh_and_persist_email_token};
@@ -42,18 +33,14 @@ pub async fn rehydrate_account(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let account_id = path.into_inner();
 
-    // Ownership check — the loader returns Err if the account isn't
-    // owned by the caller; we surface that as 404 to avoid leaking
-    // which account ids exist.
+    // A non-owned account is a 404, not a 403, so account ids don't leak.
     let account: EmailAccount =
         match load_email_account_for_user(pool.get_ref(), account_id, user_id).await? {
             Some(a) => a,
             None => return Err(AppError::NotFound("email account")),
         };
 
-    // Gmail-only for v1. Outlook + IMAP have their own metadata fetch
-    // shapes; add similar paths there when those accounts also need
-    // repair.
+    // Outlook and IMAP have different metadata shapes and need their own paths.
     if !matches!(account.provider, MailProvider::Google) {
         return Ok(HttpResponse::NotImplemented().json(serde_json::json!({
             "message": "Rehydrate is currently Gmail-only. Open a ticket if you need this for Outlook or IMAP accounts.",
@@ -81,10 +68,8 @@ pub async fn rehydrate_account(
         ))
     })?;
 
-    // Pull the gmail_id of every row we already have. We don't bother
-    // filtering "looks like a stub" here — the user explicitly asked
-    // for all subjects to be re-imported and the operation is
-    // idempotent.
+    // Every row is re-fetched rather than guessing which look like stubs; the
+    // operation is idempotent.
     let rows = sqlx::query("SELECT gmail_id FROM emails WHERE account_id = $1")
         .bind(account.id)
         .fetch_all(pool.get_ref())
@@ -156,10 +141,8 @@ pub async fn rehydrate_account(
     })))
 }
 
-/// Fetches one message's metadata and updates the matching `emails`
-/// row. Returns `Ok(true)` if the row was updated, `Ok(false)` if the
-/// message was missing upstream, `Err` if the fetch or DB write
-/// failed.
+/// Updates one `emails` row from freshly fetched metadata. `Ok(false)` means the
+/// message no longer exists upstream.
 async fn rehydrate_one(
     pool: &PgPool,
     account_id: i32,
@@ -169,8 +152,7 @@ async fn rehydrate_one(
     let header = match fetch_headers_only(access_token, gmail_id).await {
         Ok(h) => h,
         Err(e) => {
-            // 404 from Gmail = message no longer exists upstream
-            // (deleted in Gmail since we last synced). Treat as no-op.
+            // A 404 means the message was deleted in Gmail since the last sync.
             let msg = format!("{e:?}");
             if msg.contains("404") || msg.to_lowercase().contains("not found") {
                 return Ok(false);
@@ -181,9 +163,8 @@ async fn rehydrate_one(
 
     let (_msg_id, sender, receiver, subject, _gmail_ts, is_read, labels) = header;
 
-    // Encrypt the fresh subject. Empty subject → empty envelope (NULL-
-    // ish from the read path's perspective; the UI shows "(No
-    // Subject)" by convention).
+    // An empty subject stores an empty envelope, which the read path treats as
+    // NULL and the UI renders as "(No Subject)".
     let (subject_iv, subject_encrypted) = if subject.is_empty() {
         (String::new(), String::new())
     } else {
@@ -193,7 +174,7 @@ async fn rehydrate_one(
         }
     };
 
-    // Address columns — same envelope shape as repo.rs::encrypt_address_for_storage.
+    // Must stay in sync with repo.rs::encrypt_address_for_storage.
     let encrypt_addr = |addr: &str| -> (String, String, String) {
         if addr.is_empty() {
             return (String::new(), String::new(), String::new());

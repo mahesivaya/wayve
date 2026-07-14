@@ -36,9 +36,8 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(crate::routes::email::download_email_attachment)
         .service(handler::get_email_body)
         .service(handler::get_email_by_id)
-        // Send: canonical POST /api/emails, legacy POST /api/send. The raised
-        // JSON limit allows base64 attachments (the `web::Json` default is 2 MB);
-        // the handler enforces the real 20 MB total-attachment cap.
+        // The raised JSON limit allows base64 attachments (the `web::Json`
+        // default is 2 MB); the handler enforces the real 20 MB total cap.
         .service(
             web::resource("/emails")
                 .app_data(web::JsonConfig::default().limit(28 * 1024 * 1024))
@@ -49,21 +48,19 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
                 .app_data(web::JsonConfig::default().limit(28 * 1024 * 1024))
                 .route(web::post().to(handler::send)),
         )
-        // Internal send: canonical POST /api/emails/internal, legacy POST /api/email/send-internal.
+        // Each canonical route below keeps a legacy alias for compatibility.
         .route("/emails/internal", web::post().to(handler::send_internal))
         .route(
             "/email/send-internal",
             web::post().to(handler::send_internal),
         )
-        // Secure (encrypted) send: canonical POST /api/emails/secure, legacy POST /api/email/send-secure.
         .route("/emails/secure", web::post().to(secure::send_secure))
         .route("/email/send-secure", web::post().to(secure::send_secure))
-        // Secure message fetch (public via JWT-less token): /api/secure-messages/{token}.
+        // Secure message fetch is public: the token is the bearer credential.
         .route(
             "/secure-messages/{token}",
             web::get().to(secure::get_secure_message),
         )
-        // Revoke secure message: canonical DELETE /api/emails/secure/{token}, legacy DELETE /api/email/send-secure/{token}.
         .route(
             "/emails/secure/{token}",
             web::delete().to(secure::revoke_secure_message),
@@ -72,8 +69,6 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
             "/email/send-secure/{token}",
             web::delete().to(secure::revoke_secure_message),
         )
-        // Provider OAuth URL: canonical POST /api/email-providers/{provider}/connect,
-        // legacy provider-specific paths kept for compatibility.
         .route(
             "/email-providers/gmail/connect",
             web::post().to(handler::gmail_connect_url),
@@ -90,8 +85,6 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
             "/outlook/connect-url",
             web::post().to(outlook_oauth::outlook_connect_url),
         )
-        // Generic IMAP/SMTP (any custom-domain mailbox): autodiscover settings,
-        // verify credentials without persisting, then connect.
         .route(
             "/email-providers/imap/autodiscover",
             web::post().to(imap_routes::imap_autodiscover),
@@ -104,8 +97,6 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
             "/email-providers/imap/connect",
             web::post().to(imap_routes::imap_connect),
         )
-        // Provider auto-detect from email domain: canonical POST /api/email-providers/lookup,
-        // legacy POST /api/email/provider-lookup.
         .route(
             "/email-providers/lookup",
             web::post().to(provider_lookup::provider_lookup),
@@ -133,8 +124,8 @@ pub fn public_routes(cfg: &mut web::ServiceConfig) {
             "/oauth/outlook/callback",
             web::get().to(outlook_oauth::outlook_callback),
         )
-        // Standard Cloud Pub/Sub push for Gmail `users.watch` (public; verified
-        // by the shared `?token=` secret inside the handler).
+        // Cloud Pub/Sub push for Gmail `users.watch`. Public: the handler
+        // verifies the shared `?token=` secret itself.
         .route(
             "/gmail/push",
             web::post().to(gmail_push::gmail_push_endpoint),

@@ -1,17 +1,10 @@
-// Per-customer rate-limit tiers.
+// Per-customer rate-limit tiers, read by the API-key middleware through a short
+// cache so the request hot path stays off Postgres.
 //
-// The `plans` table now carries two extra columns: `rate_limit_per_min` and
-// `monthly_quota`. The API-key middleware reads both per request through a
-// short Moka cache (60s TTL), so the request hot path doesn't hit Postgres
-// just to learn how strict to be.
-//
-// Enforcement rules:
-//   1. The per-request rate limit is `MIN(key.rate_limit_per_min, plan.rate_limit_per_min)`
-//      — a customer can issue keys with looser caps than their plan allows,
-//      but the plan cap always wins.
-//   2. The monthly quota counts every request across every key the user owns.
-//      One key can't bypass the customer-wide quota by being spread across
-//      siblings. -1 in the plan means unlimited.
+// Two invariants: the effective rate limit is the MIN of the key's and the
+// plan's, so a key can never be looser than the plan allows; and the monthly
+// quota counts requests across every key the user owns, so work cannot be spread
+// across sibling keys to evade it. A plan quota of -1 means unlimited.
 
 use crate::prelude::*;
 use crate::routes::user::current_plan_for_user;
@@ -31,9 +24,8 @@ pub struct EffectiveQuota {
 const EFFECTIVE_QUOTA_TTL_SECS: u64 = 60;
 const EFFECTIVE_QUOTA_CAPACITY: u64 = 50_000;
 
-/// Per-user resolved quota. 60s TTL is short enough that an upgrade /
-/// downgrade reflects in real-world time, long enough to keep this off the
-/// hot path of every request.
+/// Per-user resolved quota. The TTL is a trade-off: short enough that an upgrade
+/// or downgrade takes effect promptly, long enough to stay off the hot path.
 static EFFECTIVE_QUOTA_CACHE: Lazy<MokaCache<i32, EffectiveQuota>> = Lazy::new(|| {
     MokaCache::builder()
         .max_capacity(EFFECTIVE_QUOTA_CAPACITY)
@@ -41,9 +33,9 @@ static EFFECTIVE_QUOTA_CACHE: Lazy<MokaCache<i32, EffectiveQuota>> = Lazy::new(|
         .build()
 });
 
-/// The fallback every new account gets before any subscription resolves.
-/// Mirrors the `basic_user` plan row in init.sql so a Redis-cold start does
-/// not accidentally hand out unlimited access.
+/// Fallback tier used before any subscription resolves. Must stay in sync with
+/// the `basic_user` plan row in init.sql, and must never be unlimited: it is what
+/// a cold start hands out.
 pub fn free_tier() -> EffectiveQuota {
     EffectiveQuota {
         plan_code: "basic_user".to_string(),
@@ -68,9 +60,8 @@ pub async fn effective_for_user(pool: &PgPool, user_id: i32) -> EffectiveQuota {
             .flatten()
             .flatten();
 
-    // Use the existing plan-resolution helper so this matches every other
-    // place that needs to know the user's plan (entitlements, the /billing
-    // page, etc.). Returns (code, name).
+    // Reuse the shared plan-resolution helper so quotas agree with entitlements
+    // and the billing page.
     let resolved = current_plan_for_user(pool, user_id, organization_id)
         .await
         .ok();
@@ -106,24 +97,23 @@ pub async fn effective_for_user(pool: &PgPool, user_id: i32) -> EffectiveQuota {
     tier
 }
 
-/// Drop a cached tier for a user. Called whenever a subscription event
-/// updates that user's effective plan (webhook handler, /billing/cancel).
+/// Must be called whenever a subscription event changes a user's effective plan.
 #[allow(dead_code)]
 pub async fn invalidate(user_id: i32) {
     EFFECTIVE_QUOTA_CACHE.invalidate(&user_id).await;
 }
 
-/// Compute the Redis key used to count this calendar month's API requests
-/// for `user_id`. Calendar month is used (not rolling 30d) so customers can
-/// reason about resets the same way Stripe presents their invoice cycle.
+/// Redis key counting this calendar month's API requests. Quotas reset on the
+/// calendar month, not a rolling 30 days, to match how Stripe presents the
+/// invoice cycle.
 pub fn monthly_quota_key(user_id: i32) -> String {
     let now = chrono::Utc::now();
     format!("apikey_quota:{}:{}", user_id, now.format("%Y-%m"))
 }
 
-/// Convert "month" → seconds-to-live for the counter so abandoned keys
-/// rotate out cleanly. We use a 32-day TTL (always longer than the
-/// containing calendar month) so the next month's counter starts fresh.
+/// TTL for the monthly counter. Must exceed the longest calendar month so the
+/// counter survives its own month, and stay short enough that next month starts
+/// fresh.
 pub fn monthly_quota_ttl_secs() -> u64 {
     32 * 86_400
 }

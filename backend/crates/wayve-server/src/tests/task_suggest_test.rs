@@ -14,7 +14,6 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn mount_github(mock: &MockServer, owner: &str, repo: &str) {
-        // Repo detail → default branch.
         Mock::given(method("GET"))
             .and(path(format!("/repos/{owner}/{repo}")))
             .respond_with(
@@ -109,7 +108,6 @@ mod tests {
             "expected the email file, got {body}"
         );
 
-        // Ranked: alice (3 recent commits) before bob (1 old commit).
         let candidates = body["candidates"]
             .as_array()
             .unwrap_or_else(|| panic!("candidates not an array: {body}"));
@@ -125,7 +123,6 @@ mod tests {
                 > candidates[1]["expertise_score"].as_f64().unwrap_or(0.0)
         );
 
-        // Cleanup.
         let _ = sqlx::query("DELETE FROM projects WHERE id = $1")
             .bind(project_id)
             .execute(&pool)

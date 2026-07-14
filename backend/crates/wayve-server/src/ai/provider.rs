@@ -1,11 +1,8 @@
-//! Per-organization AI provider resolution.
-//!
-//! The AI assistant runs on a provider chosen by the enterprise **owner** and
-//! stored (encrypted) in `org_ai_configs`. Every member of that org uses the
-//! owner's choice — resolution is keyed on the caller's organization, with no
-//! per-user override. When the org has no config (or the caller isn't in an org),
-//! we fall back to the platform default (Gemini from env), so personal/business
-//! users and un-configured orgs behave exactly as before.
+//! Per-organization AI provider resolution. The provider is chosen by the
+//! enterprise owner and stored (encrypted) in `org_ai_configs`. Resolution is keyed
+//! on the caller's organization with no per-user override, so every member uses the
+//! owner's choice. Callers outside a configured org fall back to the platform
+//! default (Gemini from env).
 
 use crate::prelude::*;
 use wayve_security::encryption::decrypt;
@@ -15,8 +12,7 @@ use wayve_security::encryption::decrypt;
 pub enum AiProvider {
     Gemini,
     Anthropic,
-    /// Any OpenAI-compatible Chat Completions endpoint (OpenAI, Azure OpenAI, an
-    /// AWS Bedrock gateway, an internal LiteLLM proxy, …) addressed by `base_url`.
+    /// Any OpenAI-compatible Chat Completions endpoint, addressed by `base_url`.
     OpenAiCompatible,
 }
 
@@ -54,11 +50,9 @@ impl AiProvider {
     }
 }
 
-/// Which categories of the user's own Wayve data the assistant's native tools
-/// may touch. Only categories that have native tools today are represented
-/// (email, calendar); the toggle is configured by the platform owner and stored
-/// on `platform_ai_config`. Defaults to fully-open so org/personal callers and
-/// the env fallback behave exactly as before.
+/// Which categories of the user's own Wayve data the assistant's native tools may
+/// touch. Defaults to fully open, which is what org, personal, and env-fallback
+/// callers get.
 #[derive(Debug, Clone, Copy)]
 pub struct DataAccess {
     pub email: bool,
@@ -74,8 +68,7 @@ impl Default for DataAccess {
     }
 }
 
-/// A fully-resolved provider config, ready to call. Carries the plaintext key —
-/// never serialized.
+/// Carries the plaintext API key, so it must never be serialized.
 #[derive(Clone)]
 pub struct ResolvedAi {
     pub provider: AiProvider,
@@ -87,28 +80,18 @@ pub struct ResolvedAi {
     /// When true a provider error is surfaced to the user instead of silently
     /// falling back. Always true for an org-configured provider.
     pub fail_closed: bool,
-    /// Which data categories the native tools may access. Populated from the
-    /// platform config; open for org/personal/env-fallback resolution.
     pub data_access: DataAccess,
 }
 
-/// Resolve the AI provider for `user_id`, in order:
-/// 1. the caller's org has an enabled `org_ai_configs` row → use it (binds every
-///    member of the org to the owner's choice);
-/// 2. the caller is a **platform team member** and the platform owner configured
-///    `platform_ai_config` → use it (scoped strictly to platform members — this
-///    never touches org/personal resolution above);
-/// 3. otherwise the platform default (Gemini from `GEMINI_API_KEY`).
-///
-/// `Ok(None)` means no provider is configured anywhere — the caller should return
-/// "AI not configured".
+/// Resolution order: the caller's org's enabled `org_ai_configs` row; else
+/// `platform_ai_config`, but only for platform members; else the platform default
+/// (Gemini from `GEMINI_API_KEY`). `Ok(None)` means none is configured anywhere.
 pub async fn resolve_ai_for_user(
     pool: &PgPool,
     user_id: i32,
 ) -> Result<Option<ResolvedAi>, AppError> {
-    // 1. Org config. One round-trip joining the caller to their org's config;
-    //    members and the owner resolve identically. Platform/personal users have
-    //    organization_id NULL, so this never matches for them.
+    // Platform and personal users have organization_id NULL, so this never
+    // matches for them.
     let row = sqlx::query(
         "SELECT c.provider, c.base_url, c.model, c.api_key_iv, c.api_key_encrypted, c.fail_closed
            FROM users u
@@ -122,9 +105,7 @@ pub async fn resolve_ai_for_user(
         return Ok(Some(resolved_from_row(&row)?));
     }
 
-    // 2. Platform-team config. Only platform members read the platform owner's
-    //    choice; orgs/personal users never reach here (their resolution ended
-    //    above or falls through to the env default below).
+    // Only platform members may read the platform owner's choice.
     let is_platform_member: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM platform_members WHERE user_id = $1)")
             .bind(user_id)
@@ -143,7 +124,6 @@ pub async fn resolve_ai_for_user(
         }
     }
 
-    // 3. Platform default — Gemini from env; `None` when unset.
     Ok(crate::config::gemini_api_key().map(|api_key| ResolvedAi {
         provider: AiProvider::Gemini,
         api_key,
@@ -154,17 +134,15 @@ pub async fn resolve_ai_for_user(
     }))
 }
 
-/// Build a [`ResolvedAi`] from a config row (org or platform — both project the
-/// same columns). Decrypts the stored key, or falls back to the platform Gemini
-/// env key when the row stored none (only valid for Gemini).
+/// Falls back to the platform Gemini env key when the row stored no key.
 fn resolved_from_row(row: &sqlx::postgres::PgRow) -> Result<ResolvedAi, AppError> {
     let provider =
         AiProvider::parse(&row.get::<String, _>("provider")).unwrap_or(AiProvider::Gemini);
     let base_url: Option<String> = row.try_get("base_url").ok().flatten();
     let model: Option<String> = row.try_get("model").ok().flatten();
     let fail_closed: bool = row.try_get("fail_closed").unwrap_or(true);
-    // Only the platform row projects these columns; org rows don't, so a missing
-    // column falls back to fully-open (the org path is never gated).
+    // Only the platform row projects these columns, so a missing column falls back
+    // to fully open: the org path is never gated.
     let data_access = DataAccess {
         email: row.try_get("ai_allow_email").unwrap_or(true),
         calendar: row.try_get("ai_allow_calendar").unwrap_or(true),
@@ -175,7 +153,7 @@ fn resolved_from_row(row: &sqlx::postgres::PgRow) -> Result<ResolvedAi, AppError
     let api_key = match (iv, enc) {
         (Some(iv), Some(enc)) => decrypt(&iv, &enc)
             .map_err(|e| AppError::Internal(format!("Failed to read AI credentials: {e}")))?,
-        // No stored key — only valid for Gemini, which may use the platform key.
+        // Only Gemini may run without a stored key, on the platform env key.
         _ => match (provider, crate::config::gemini_api_key()) {
             (AiProvider::Gemini, Some(key)) => key,
             _ => {

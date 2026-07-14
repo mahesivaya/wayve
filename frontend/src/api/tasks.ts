@@ -8,9 +8,8 @@ export type TaskStatus = "to_do" | "in_progress" | "in_review" | "done";
 
 export type Task = {
   id: number;
-  // Friendly per-user task number (task #1, #2, … within your own list),
-  // assigned at creation. Null for imported tasks, which show their external
-  // key badge (Jira/GitLab) instead.
+  // Friendly per-user task number, assigned at creation. Null for imported
+  // tasks, which show their external Jira or GitLab key badge instead.
   task_number?: number | null;
   name: string;
   description: string;
@@ -18,18 +17,16 @@ export type Task = {
   status: TaskStatus;
   assigned_by: string;
   assignee: string;
-  // Real assigned user (null when only the free-text `assignee`/a reference
-  // name is set) and the project the task belongs to.
+  // The real assigned user, null when only the free-text `assignee` or a
+  // reference name is set.
   assignee_id?: number | null;
   project_id?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
-  // Set only on tasks imported from Jira; the UI shows a deep-link badge to
-  // `${jira_base}/browse/${jira_issue_key}`. Null for non-Jira tasks.
+  // Set only on tasks imported from Jira or GitLab, and null otherwise. The UI
+  // turns each pair into a deep-link badge.
   jira_issue_key?: string | null;
   jira_base?: string | null;
-  // Set only on tasks imported from GitLab; the UI shows a deep-link badge to
-  // `gitlab_web_url`. Null for non-GitLab tasks.
   gitlab_issue_iid?: number | null;
   gitlab_web_url?: string | null;
 };
@@ -39,22 +36,18 @@ export type SaveTaskPayload = {
   description: string;
   priority: TaskPriority;
   status: TaskStatus;
-  // Personal accounts leave these unset — a task is implicitly owned by its
-  // creator. Only business/platform scopes assign a task to someone else, so
-  // their UI supplies both fields.
+  // Personal accounts leave these unset, since a task is implicitly owned by its
+  // creator. Only business and platform scopes assign to someone else.
   assigned_by?: string;
   assignee?: string;
-  // The chosen assignee's user id (from a suggestion or the assignable list),
-  // and the project the task is created on (set from the form's dropdown).
   assignee_id?: number | null;
   project_id?: number | null;
 };
 
 export const getTasks = async () => apiFetchJson<Task[]>("/api/tasks");
 
-// A project the current account owns/belongs to, for the create-task dropdown.
-// `github_owner`/`github_repo` are set only when the project is linked to a
-// public repo — required for the assignee-suggestion feature to work.
+// `github_owner` and `github_repo` are set only when the project is linked to a
+// public repo, which assignee suggestion requires to work at all.
 export type Project = {
   id: number;
   name: string;
@@ -65,9 +58,9 @@ export type Project = {
 export const getProjects = async () =>
   apiFetchJson<Project[]>("/api/projects");
 
-// A suggested assignee, ranked by how much/how recently they've worked in the
-// files the task is likely to touch. `user_id` is set only for connected
-// members (assignable); `is_reference_only` contributors have no Wayve account.
+// Ranked by how much and how recently the person worked in the files the task is
+// likely to touch. `user_id` is set only for assignable members;
+// `is_reference_only` contributors have no Wayve account.
 export type AssigneeSuggestion = {
   user_id: number | null;
   github_login: string | null;
@@ -98,10 +91,9 @@ export const suggestAssignee = async (payload: {
     body: JSON.stringify(payload),
   });
 
-// A user the current account can assign tasks to (everyone in the caller's
-// organization, or every platform staff member). Open to any member of the
-// scope — assigning is a baseline capability, so this does NOT require the
-// `members:read` permission that the RBAC `/members` endpoints demand.
+// Everyone in the caller's organization, or every platform staff member.
+// Assigning is a baseline capability, so unlike the RBAC `/members` endpoints
+// this is open to any member of the scope and needs no `members:read`.
 export type AssignableUser = {
   user_id: number;
   email: string;

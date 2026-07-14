@@ -16,9 +16,8 @@ pub async fn get_messages(
     cache: web::Data<Option<Cache>>,
     query: web::Query<QueryParams>,
 ) -> AppResult {
-    // Auth: require a valid JWT and confirm the caller is one of the two
-    // participants. Without this, any caller could read any conversation by
-    // supplying arbitrary user1/user2 ids.
+    // The caller must be one of the two participants; user ids are guessable, so
+    // without this check any conversation could be read by id.
     let caller_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     if caller_id != query.user1 && caller_id != query.user2 {
@@ -32,8 +31,8 @@ pub async fn get_messages(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    // messages is RLS-enabled; run the DM history read + mark-read under the
-    // restricted role with the caller's GUC so the participant policy engages.
+    // `messages` is RLS-enabled, so the read and mark-read run under the
+    // restricted role with the caller's GUC to engage the participant policy.
     let mut tx = pool.begin().await?;
     sqlx::query("SELECT set_config('app.user_id', $1, true)")
         .bind(caller_id.to_string())
@@ -43,10 +42,9 @@ pub async fn get_messages(
         .execute(&mut *tx)
         .await?;
 
-    // Reconnect resync: when `since_id` is set, return everything newer than
-    // that id (chronological), so a client that briefly dropped can backfill
-    // exactly the messages it missed instead of just re-fetching the latest 50.
-    // Capped to bound the response. Otherwise fall back to "latest 50".
+    // Reconnect resync: with `since_id` set, return everything newer than that id
+    // in chronological order, capped, so a client that dropped its socket
+    // backfills exactly what it missed. Otherwise return the latest 50.
     let rows = if let Some(since_id) = query.since_id {
         sqlx::query(
             r#"
@@ -65,9 +63,8 @@ pub async fn get_messages(
         .fetch_all(&mut *tx)
         .await?
     } else {
-        // Two ordered scans (each index-served by idx_messages_conversation /
-        // idx_messages_reverse) merged via UNION ALL, then a final 50-row cap.
-        // Faster than a single OR-predicate which forces a bitmap scan + sort.
+        // Two index-served ordered scans merged with UNION ALL beat a single
+        // OR-predicate, which forces a bitmap scan and a sort.
         sqlx::query(
             r#"
             SELECT id, sender_id, receiver_id, content_encrypted, content_iv, status::TEXT AS status, created_at
@@ -98,9 +95,8 @@ pub async fn get_messages(
         .await?
     };
 
-    // Mark everything the caller (user1) received from user2 as read, and
-    // notify the sender (user2) live so their bubbles flip to the blue
-    // double-check without waiting for their next history fetch.
+    // Mark what the caller received from the other party as read and push a
+    // receipt so their ticks flip without waiting for their next history fetch.
     let read_ids: Vec<(i32,)> = sqlx::query_as(
         r#"
         UPDATE messages
@@ -127,6 +123,9 @@ pub async fn get_messages(
         super::websocket::fan_out_user(cache.get_ref(), query.user2, payload).await;
     }
 
+    // `decrypt` strips only the storage-at-rest layer. What comes back is the
+    // client E2E envelope, which the browser decrypts; the server never holds
+    // chat plaintext.
     let mut messages: Vec<Message> = rows
         .into_iter()
         .map(|row| {
@@ -159,13 +158,12 @@ pub async fn get_messages(
         })
         .collect();
 
-    // The default ("latest 50") query returns rows newest-first; flip to
-    // chronological for the client. The since_id query already selects ASC.
+    // The latest-50 query returns rows newest-first; the since_id query is
+    // already ascending.
     if query.since_id.is_none() {
         messages.reverse();
     }
 
-    // One query for the whole page, then hand each message its own group.
     let ids: Vec<i32> = messages.iter().filter_map(|m| m.message_id).collect();
     let mut by_message = super::reactions::grouped_for_messages(pool.get_ref(), &ids, false).await;
     for msg in messages.iter_mut() {
@@ -177,12 +175,9 @@ pub async fn get_messages(
     Ok(HttpResponse::Ok().json(messages))
 }
 
-/// `GET /chat/conversations` — per-DM-conversation summary for the caller:
-/// the other participant's id, the timestamp of the latest message (for
-/// recency ordering), and how many messages from them are still unread. Plus
-/// a `total_unread` across all conversations. Content stays E2E-encrypted —
-/// this returns only counts + timestamps, never message text. One grouped
-/// scan over `messages` (DM-only table), served by the conversation indexes.
+/// `GET /chat/conversations` — one row per DM partner with the latest-message
+/// timestamp, their unread count, and a `total_unread`. Returns counts and
+/// timestamps only, never message text, so content stays E2E-encrypted.
 #[instrument(target = "http", skip(req, pool))]
 pub async fn get_conversation_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;

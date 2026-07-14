@@ -16,12 +16,9 @@ use tracing::{debug, error, info, instrument, warn};
 
 const CHAT_E2E_PREFIX: &str = "WAYVE_CHAT_E2E_V1\n";
 
-// Server-driven heartbeat. We ping every HEARTBEAT_INTERVAL so the connection
-// never idles out at an intermediary (nginx closes idle WS after its
-// proxy_read_timeout) and so we can detect a dead/half-open client: if we
-// haven't heard ANY frame (the browser auto-pongs our pings) within
-// CLIENT_TIMEOUT, we drop the socket. Keep HEARTBEAT_INTERVAL well under both
-// CLIENT_TIMEOUT and the nginx /ws proxy_read_timeout (3600s).
+// The ping keeps intermediaries from idling the socket out, and a client silent
+// past CLIENT_TIMEOUT is dropped as dead. HEARTBEAT_INTERVAL must stay well under
+// both CLIENT_TIMEOUT and the nginx /ws proxy_read_timeout (3600s).
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(25);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -31,51 +28,41 @@ static SESSIONS: Lazy<SessionRegistry<ChatSession>> = Lazy::new(SessionRegistry:
 #[rtype(result = "()")]
 pub struct WsMessage(pub String);
 
-/// Redis pub/sub channel a user's realtime frames are published on. The global
-/// subscriber (see `chat::pubsub`) PSUBSCRIBEs `ws:user:*` and delivers each
-/// message to that user's local session, so chat works across many backend
-/// instances — not just the one that received the send.
+/// Redis pub/sub channel for a user's realtime frames. `chat::pubsub` PSUBSCRIBEs
+/// `ws:user:*`, which is what makes chat work across backend instances.
 pub fn user_channel(user_id: i32) -> String {
     format!("ws:user:{user_id}")
 }
 
-/// Deliver a payload to a user's session **on this instance** (no-op if they're
-/// not connected here). Called both by the local fast-path and by the pub/sub
-/// subscriber.
+/// Deliver a payload to a user's session on this instance, if they have one.
 pub fn deliver_local(user_id: i32, payload: String) {
     if let Some(addr) = SESSIONS.addr(user_id) {
         addr.do_send(WsMessage(payload));
     }
 }
 
-/// Whether this user holds a live chat socket **on this instance**. The
-/// single-instance (Redis-down) presence source of truth; see
-/// [`crate::chat::presence`].
+/// Whether this user holds a live chat socket on this instance. The presence
+/// source of truth when Redis is unavailable; see [`crate::chat::presence`].
 pub fn is_online_local(user_id: i32) -> bool {
     SESSIONS.addr(user_id).is_some()
 }
 
-/// Fan a realtime frame out to a user. When Redis is available we PUBLISH so the
-/// instance holding their socket (possibly a different one) delivers it; if the
-/// publish fails we fall back to local delivery so single-instance / Redis-down
-/// setups keep working. Exactly one delivery path runs, so no duplicates.
+/// Fan a realtime frame out to a user. With Redis we PUBLISH, so whichever
+/// instance holds their socket delivers it; if the publish fails we fall back to
+/// local delivery. Exactly one path runs, so a frame is never duplicated.
 pub async fn fan_out_user(cache: &Option<Cache>, user_id: i32, payload: String) {
     let published = match cache {
         Some(c) => c.publish(&user_channel(user_id), &payload).await,
         None => false,
     };
-    // If we couldn't publish (no Redis, or it's momentarily down) deliver to the
-    // local session directly so single-instance setups keep working.
     if !published {
         deliver_local(user_id, payload);
     }
 }
 
-/// Mark every direct message addressed to `receiver_id` that is still `sent`
-/// as `delivered`, and notify each distinct sender so their bubble advances
-/// ✓ → ✓✓. Called when the receiver's socket connects, which covers the case
-/// the inline send-time delivered misses: the recipient was offline when the
-/// message was sent and only comes online later.
+/// Flip every direct message still `sent` for `receiver_id` to `delivered` and
+/// notify each sender. Covers the case the send-time check misses: the recipient
+/// was offline then and only connects now.
 async fn mark_delivered_on_connect(pool: &PgPool, cache: &Option<Cache>, receiver_id: i32) {
     let rows = sqlx::query_as::<_, (i32, i32)>(
         r#"
@@ -108,23 +95,18 @@ async fn mark_delivered_on_connect(pool: &PgPool, cache: &Option<Cache>, receive
     }
 }
 
-// ================= CHAT SESSION =================
-
 pub struct ChatSession {
     pub pool: PgPool,
     pub user_id: i32,
     pub cache: Option<Cache>,
-    // Resolved once at connect: true when this sender's org is on the enterprise
-    // tier and therefore uses standard (server-readable) encryption, so the
-    // backend accepts plaintext from them instead of requiring an E2E envelope.
-    // A tier change takes effect on the next reconnect.
+    // Enterprise senders use standard, server-readable encryption, so plaintext
+    // is accepted from them instead of an E2E envelope. Resolved once at connect,
+    // so a tier change applies on the next reconnect.
     pub uses_standard_encryption: bool,
-    // Resolved once at connect: this sender's display name (username, else email)
-    // so channel broadcasts carry a human "who sent it" label without a per-row
-    // user lookup. (Historical reads resolve it in the SELECT.)
+    // Resolved once at connect so channel broadcasts carry a sender label without
+    // a per-row user lookup.
     pub sender_name: String,
-    // Last time we received any frame from the client (including the automatic
-    // pong to our heartbeat ping). Drives dead-client detection.
+    // Drives dead-client detection.
     pub last_seen: Instant,
 }
 
@@ -136,9 +118,8 @@ pub async fn chat_ws(
     cache: web::Data<Option<Cache>>,
     query: web::Query<WsAuthQuery>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    // Auth: an API key (resolved by ApiKeyMiddleware into the request
-    // extensions) or a cookie/Bearer JWT, with a ?token= query fallback for
-    // older clients.
+    // Invariant: user_id comes from verified credentials only. The ?token=
+    // fallback is decoded and verified, never trusted as a raw query value.
     let user_id = match wayve_security::jwt::get_user_id_from_request(&req).or_else(|| {
         query
             .token
@@ -154,13 +135,10 @@ pub async fn chat_ws(
         }
     };
 
-    // Resolve the sender's encryption mode once, here, where we can still await.
-    // Enterprise-tier orgs use standard server-readable encryption, so we accept
-    // plaintext from them; everyone else must send an E2E envelope.
+    // Resolved here because the actor cannot await.
     let uses_standard_encryption =
         crate::encryption_policy::uses_standard_encryption(pool.get_ref(), user_id).await;
 
-    // Resolve the sender's display name once, for channel broadcasts.
     let sender_name: String =
         sqlx::query_scalar("SELECT COALESCE(NULLIF(username, ''), email) FROM users WHERE id = $1")
             .bind(user_id)
@@ -184,8 +162,6 @@ pub async fn chat_ws(
     )
 }
 
-// ================= ACTOR =================
-
 impl Actor for ChatSession {
     type Context = ws::WebsocketContext<Self>;
 
@@ -194,10 +170,6 @@ impl Actor for ChatSession {
         SESSIONS.register(self.user_id, ctx.address());
         self.last_seen = Instant::now();
 
-        // Flip any messages addressed to this user that are still `sent` to
-        // `delivered` now that they're online, and notify the senders. Also
-        // mark them online for presence (Redis freshness or local registry)
-        // and announce it to their contacts.
         let pool = self.pool.clone();
         let cache = self.cache.clone();
         let me = self.user_id;
@@ -206,10 +178,8 @@ impl Actor for ChatSession {
             crate::chat::presence::on_connect(&cache, &pool, me).await;
         });
 
-        // Heartbeat: ping the client on an interval, and reap the socket if the
-        // client has gone silent past CLIENT_TIMEOUT (the browser auto-pongs,
-        // which refreshes `last_seen`). Each beat also refreshes the presence
-        // freshness score so the user stays online.
+        // Each beat also refreshes the presence freshness score, which is what
+        // keeps the user showing as online.
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.last_seen) > CLIENT_TIMEOUT {
                 warn!(
@@ -232,8 +202,8 @@ impl Actor for ChatSession {
 
     fn stopped(&mut self, _: &mut Self::Context) {
         info!("Chat WS disconnected: user_id={}", self.user_id);
-        // Drop the local session first so presence sees the accurate
-        // remaining-tabs state before deciding whether to announce offline.
+        // Unregister first so presence sees the accurate remaining-tabs state
+        // before deciding whether to announce this user offline.
         SESSIONS.unregister(self.user_id);
 
         let pool = self.pool.clone();
@@ -245,8 +215,6 @@ impl Actor for ChatSession {
     }
 }
 
-// ================= RECEIVE WS =================
-
 impl Handler<WsMessage> for ChatSession {
     type Result = ();
 
@@ -255,12 +223,9 @@ impl Handler<WsMessage> for ChatSession {
     }
 }
 
-// ================= MAIN WS LOGIC =================
-
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        // Any valid frame (text, the auto-pong to our heartbeat, ping, …) means
-        // the client is alive — refresh the heartbeat clock.
+        // Any valid frame proves the client is alive.
         if msg.is_ok() {
             self.last_seen = Instant::now();
         }
@@ -268,13 +233,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
             Ok(ws::Message::Text(text)) => {
                 debug!(target: "ws", user_id = self.user_id, len = text.len(), "chat msg in");
 
-                // ================= REACTION =================
-                // Reaction frames are the only ones carrying a `type` field, so
-                // this parse fails for every ordinary message/read-receipt frame
-                // and falls through to the ChatMessage path below. The emoji is
-                // NOT routed through ChatMessage.content — that field is held to
-                // the E2E-envelope check, which a bare emoji would (correctly)
-                // fail.
+                // Only reaction frames carry a `type` field, so this parse fails
+                // for other frames and falls through. The emoji must not ride on
+                // ChatMessage.content, which is held to the E2E-envelope check.
                 if let Ok(frame) = serde_json::from_str::<super::reactions::ReactionFrame>(&text)
                     && frame.r#type == "react"
                 {
@@ -290,7 +251,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                 let parsed: Result<ChatMessage, _> = serde_json::from_str(&text);
 
                 if let Ok(data) = parsed {
-                    // ================= READ RECEIPT =================
                     if matches!(data.status, Some(MessageStatus::Read)) {
                         let pool = self.pool.clone();
                         let cache = self.cache.clone();
@@ -300,12 +260,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         };
 
                         actix::spawn(async move {
-                            // Mark everything `other` sent to `reader` as read,
-                            // returning the affected ids so we can notify the
-                            // sender per message. The sender's client keys
-                            // status updates on `message_id`, so the receipt MUST
-                            // carry it (a sender_id/receiver_id-only payload was
-                            // silently ignored — read ticks never went blue live).
+                            // The sender's client keys status updates on
+                            // `message_id`, so each receipt must name one.
                             let read_ids: Vec<(i32,)> = sqlx::query_as(
                                 r#"
                                 UPDATE messages
@@ -340,8 +296,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         return;
                     }
 
-                    // ================= NORMAL MESSAGE =================
-
                     let pool = self.pool.clone();
                     let cache = self.cache.clone();
                     let sender_id = self.user_id;
@@ -353,9 +307,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                     let content = data.content.clone();
                     let attachment_ids = data.attachment_ids.clone();
 
-                    // Threads are channel-only. A DM with parent_message_id set
-                    // is malformed — drop it rather than silently storing the
-                    // reference on a DM row (which has no such column).
+                    // Threads are channel-only: the `messages` (DM) table has no
+                    // parent column, so a DM carrying one is malformed.
                     if parent_message_id.is_some() && channel_id.is_none() {
                         warn!(
                             target: "ws",
@@ -366,11 +319,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         return;
                     }
 
-                    // Non-enterprise senders MUST send an E2E envelope — plaintext
-                    // is rejected, preserving end-to-end. Enterprise-tier senders
-                    // use standard encryption, so their plaintext is accepted and
-                    // protected only by the server-AES at-rest layer below (which
-                    // the server can read).
+                    // The server must never see chat plaintext: only enterprise
+                    // senders may send it, everyone else must supply an E2E
+                    // envelope. The server-AES layer below wraps whatever arrives
+                    // for storage at rest and is not the confidentiality boundary.
                     if !uses_standard && !content.starts_with(CHAT_E2E_PREFIX) {
                         error!(
                             target: "ws",
@@ -415,9 +367,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     return Err(sqlx::Error::RowNotFound);
                                 }
 
-                                // Parent must (a) exist, (b) live in this same
-                                // channel, and (c) itself be top-level — flat
-                                // threads, no thread-of-thread nesting.
+                                // The parent must exist in this same channel and
+                                // be top-level: threads are flat, never nested.
                                 if let Some(parent_id) = parent_message_id {
                                     let parent_ok = sqlx::query_scalar::<_, bool>(
                                         r#"
@@ -459,10 +410,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
 
                                 let message_id: i32 = row.get("id");
 
-                                // Link any uploaded attachments to this channel
-                                // message. Scoped to rows this sender uploaded
-                                // and not yet linked, so a client can't attach
-                                // someone else's file.
+                                // An attachment targets a channel_message_id or a
+                                // message_id, never both: DMs and channel messages
+                                // are separate tables with separate id spaces.
                                 if !attachment_ids.is_empty() {
                                     let _ = sqlx::query(
                                         "UPDATE chat_attachments SET channel_message_id = $1 \
@@ -477,8 +427,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     .await;
                                 }
 
-                                // The member list and the webhook owner lookup
-                                // are independent — run them concurrently.
                                 let members_fut = sqlx::query_scalar::<_, i32>(
                                     "SELECT user_id FROM channel_members WHERE channel_id = $1",
                                 )
@@ -489,9 +437,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 let (members, owner) = tokio::join!(members_fut, owner_fut);
                                 let members = members?;
 
-                                // Webhook fan-out. Metadata only — the
-                                // content envelope is end-to-end encrypted
-                                // and the server cannot reveal it.
+                                // Metadata only: the server has no plaintext to
+                                // emit.
                                 crate::webhooks::emit(
                                     &pool,
                                     owner,
@@ -511,10 +458,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         };
 
                         let cache_for_fanout = cache.clone();
-                        // For the best-effort outbound Slack bridge below.
                         let pool_for_slack = pool.clone();
                         let content_for_slack = content.clone();
-                        // "Who sent it" label for the broadcast (resolved at connect).
                         let sender_name = self.sender_name.clone();
                         ctx.spawn(actix::fut::wrap_future(fut).map(
                             move |res, _act, ctx: &mut WebsocketContext<Self>| {
@@ -541,15 +486,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     })
                                     .to_string();
 
-                                    // Fan out to every other member via Redis
-                                    // (or local fallback) in one background task.
                                     let recipients: Vec<i32> =
                                         members.into_iter().filter(|&m| m != sender_id).collect();
                                     let payload = msg_json.clone();
                                     actix_web::rt::spawn(async move {
-                                        // Notify all recipients concurrently
-                                        // rather than serially, so latency
-                                        // doesn't scale with channel size.
                                         futures::future::join_all(
                                             recipients.into_iter().map(|member_id| {
                                                 let cache = cache_for_fanout.clone();
@@ -562,17 +502,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                         .await;
                                     });
 
-                                    // Outbound Slack bridge: if this channel is
-                                    // linked to a Slack channel, post the message
-                                    // there. Gated on `uses_standard` so only
-                                    // plaintext (enterprise, server-readable)
-                                    // content is forwarded — never an E2E
-                                    // envelope. Best-effort: never blocks chat.
+                                    // Gated on `uses_standard` so an E2E envelope
+                                    // is never forwarded to Slack.
                                     if uses_standard {
                                         let pool_slack = pool_for_slack.clone();
                                         let text = content_for_slack.clone();
-                                        // Post under the Wayve author so Slack
-                                        // shows who wrote it, not the bot name.
                                         let author = sender_name.clone();
                                         actix_web::rt::spawn(async move {
                                             crate::integrations::slack::sync::push_to_slack_if_linked(
@@ -598,11 +532,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                     };
 
                     let fut = async move {
-                        // Tenant isolation: a direct message may cross between
-                        // two accounts only when they share a scope — same
-                        // platform, same organization, or both personal. The
-                        // people-picker is already scoped, but user ids are
-                        // guessable, so the boundary is enforced here too.
+                        // Tenant isolation: a DM is allowed only between accounts
+                        // sharing a scope. User ids are guessable, so the boundary
+                        // cannot live in the people-picker alone.
                         let same_scope = sqlx::query_scalar::<_, bool>(
                             r#"
                             SELECT COALESCE(
@@ -654,9 +586,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
 
                         let message_id: i32 = row.get("id");
 
-                        // Link any uploaded attachments to this message. Scoped
-                        // to rows this sender uploaded and not yet linked, so a
-                        // client can't attach someone else's file.
+                        // The DM side of the attachment XOR: message_id is set and
+                        // channel_message_id stays null.
                         if !attachment_ids.is_empty() {
                             let _ = sqlx::query(
                                 "UPDATE chat_attachments SET message_id = $1 \
@@ -671,13 +602,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                             .await;
                         }
 
-                        // If the recipient is connected right now, the message
-                        // is delivered the instant it's stored — persist that
-                        // so it survives a history refetch (the live
-                        // status_update event is sent from the continuation
-                        // below). Covers the recipient-online-at-send case; the
-                        // recipient-comes-online-later case is handled by
-                        // mark_delivered_on_connect.
+                        // Persist `delivered` for a connected recipient so it
+                        // survives a history refetch. The offline case is handled
+                        // by mark_delivered_on_connect.
                         if SESSIONS.addr(receiver_id).is_some() {
                             let _ = sqlx::query(
                                 "UPDATE messages SET status = 'delivered' \
@@ -688,8 +615,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                             .await;
                         }
 
-                        // Webhook fan-out. Metadata only — content stays
-                        // end-to-end encrypted.
+                        // Metadata only: content stays end-to-end encrypted.
                         let owner =
                             crate::webhooks::handler::owner_for_user(&pool, sender_id).await;
                         crate::webhooks::emit(
@@ -719,20 +645,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                         chrono::Utc,
                                     );
 
-                                // 🔥 DELIVERED — best-effort, gated on LOCAL
-                                // presence. Accurate on a single instance; a
-                                // cross-instance "delivered" would need a shared
-                                // presence registry (future work). The DB row was
-                                // already flipped to 'delivered' inside the async
-                                // block above when the recipient was present.
-                                //
-                                // The delivered status rides on the SAME echo
-                                // frame that carries the server-assigned
-                                // message_id, so the sender's client applies it
-                                // atomically while reconciling its optimistic
-                                // bubble — no separate status_update that could
-                                // race ahead of that reconciliation and be
-                                // dropped (the "delivered only after reload" bug).
+                                // Best-effort and gated on local presence. The
+                                // status must ride on this same echo frame as the
+                                // server-assigned message_id: a separate
+                                // status_update can race the sender's optimistic
+                                // reconciliation and be dropped.
                                 let delivered = SESSIONS.addr(receiver_id).is_some();
                                 let status = if delivered { "delivered" } else { "sent" };
 
@@ -747,21 +664,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 })
                                 .to_string();
 
-                                // SEND TO RECEIVER — via Redis fan-out (or local
-                                // fallback), so it reaches them on whichever
-                                // instance holds their socket.
                                 let cache_for_fanout = cache.clone();
                                 let payload = msg_json.clone();
                                 actix_web::rt::spawn(async move {
                                     fan_out_user(&cache_for_fanout, receiver_id, payload).await;
                                 });
 
-                                // SEND BACK TO SENDER (echo carries the delivered
-                                // status above, so the tick advances live).
                                 ctx.text(msg_json);
 
-                                // BUST CACHE for this conversation so the next
-                                // history fetch sees the new message immediately.
+                                // So the next history fetch sees this message.
                                 if let Some(c) = cache.clone() {
                                     let key = chat_history_key(sender_id, receiver_id);
                                     actix_web::rt::spawn(async move {
@@ -775,7 +686,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
             }
 
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
-            // Pong to our heartbeat — liveness already recorded above.
             Ok(ws::Message::Pong(_)) => {}
             Ok(ws::Message::Close(_)) => ctx.stop(),
             _ => {}

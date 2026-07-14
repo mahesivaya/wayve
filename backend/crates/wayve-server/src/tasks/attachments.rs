@@ -84,13 +84,11 @@ pub async fn upload_attachments(
             .ok_or_else(|| actix_web::error::ErrorBadRequest("Missing filename"))?;
         let filename = raw_filename.replace(['/', '\\'], "");
 
-        // The on-disk blob is named purely from a UUID — never the user's
-        // filename. The original name lives in the DB `name` column and is
-        // what the download handler serves. Keeping the filename out of the
-        // path avoids path-injection and dodges storage filesystems that
-        // reject characters ext4 allows (e.g. the virtiofs host mount used
-        // in dev rejects the U+202F / colon in macOS screenshot names,
-        // which surfaced as a 500 "File create error").
+        // The on-disk blob is named from a UUID, never the user's filename; the
+        // original name lives in the `name` column and is what the download
+        // handler serves. This avoids path injection and dodges filesystems that
+        // reject characters ext4 allows, such as the dev virtiofs mount choking
+        // on the colon in macOS screenshot names.
         let file_id = Uuid::new_v4().to_string();
         let filepath = format!("{}/task_{}_{}", upload_dir, task_id, file_id);
 
@@ -257,8 +255,8 @@ pub async fn delete_attachment(
     };
 
     let file_path: String = row.get("file_path");
-    // Best-effort blob cleanup. Leaving a stale file behind is harmless;
-    // the row is already gone so it cannot be re-fetched.
+    // Best-effort blob cleanup: the row is already gone, so a stale file cannot
+    // be re-fetched.
     if let Err(e) = fs::remove_file(&file_path).await {
         error!(target: "http", user_id, attachment_id, error = ?e, "task attachment blob remove failed");
     }

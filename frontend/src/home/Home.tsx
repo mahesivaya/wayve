@@ -20,14 +20,12 @@ export default function Home() {
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
 
-  // Navigate from the mobile hamburger menu, closing it on the way out.
   const goMobile = (path: string) => {
     setMobileMenuOpen(false);
     void navigate(path);
   };
 
-  // Record this visit once per session — covers anonymous visitors opening
-  // fluxze.com. The backend captures IP + user-agent server-side.
+  // Records anonymous visitors too; the backend captures IP + user-agent.
   useEffect(() => {
     reportVisit(window.location.pathname, document.referrer);
   }, []);
@@ -114,7 +112,6 @@ export default function Home() {
         </header>
 
         <main className="public-home-main">
-          {/* ===================== HERO ===================== */}
           <section className="hx-hero">
             <div className="hx-hero-glow" aria-hidden="true" />
             <div className="hx-hero-grid" aria-hidden="true" />
@@ -148,13 +145,10 @@ export default function Home() {
                 >
                   Book a Demo
                 </button>
-                {/* Auto-detects Apple Silicon vs Intel and lets the user
-                    override. Files hosted at /download/Fluxze-<arch>.dmg. */}
                 <DownloadApp />
               </div>
             </div>
 
-            {/* Animated product mockup — a faux Fluxze app window */}
             <HeroMock />
 
             <div className="hx-chips" aria-label="Capabilities">
@@ -171,7 +165,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ===================== BENTO FEATURES ===================== */}
           <section className="hx-section">
             <div className="hx-section-head">
               <p className="hx-eyebrow">Why Fluxze</p>
@@ -230,7 +223,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ===================== INTEGRATIONS ===================== */}
           <section className="hx-section">
             <div className="hx-section-head">
               <p className="hx-eyebrow">Integrations</p>
@@ -316,7 +308,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ===================== WHO IT'S FOR ===================== */}
           <section className="hx-section">
             <div className="hx-section-head">
               <p className="hx-eyebrow">Who it's for</p>
@@ -351,10 +342,9 @@ export default function Home() {
     );
   }
 
-  // Home IS the AI Chat page for every signed-in user (personal, organization,
-  // and platform). Clicking Home (which routes to "/") lands the user straight
-  // in AI Chat; the AI Chat sidebar item is removed (see Layout). `hideHeader`
-  // keeps the surface chrome-free — no "AI Chat / provider / model" bar.
+  // Home is the AI Chat page for every signed-in user, which is why there is no
+  // AI Chat sidebar item (see Layout). `hideHeader` drops AIChat's own
+  // provider/model bar, since this surface supplies the chrome.
   return (
     <div className="home-authed-aichat">
       <Suspense

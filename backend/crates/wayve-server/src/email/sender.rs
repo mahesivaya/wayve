@@ -173,12 +173,10 @@ pub struct OutgoingAttachment {
     pub bytes: Vec<u8>,
 }
 
-/// Build a `lettre` message with a plain-text body and optional binary
-/// attachments. `from`/`to` are raw address strings (`to` may be a
-/// comma-separated list). Shared by the dev SMTP path and the Gmail raw-MIME
-/// path (which serialises the result via `Message::formatted()`), so both
-/// produce identical, correct `multipart/mixed` output instead of hand-rolled
-/// boundaries.
+/// Builds a `lettre` message with a plain-text body and optional attachments.
+/// `to` may be a comma-separated list. Shared by the dev SMTP path and the Gmail
+/// raw-MIME path so both emit identical `multipart/mixed` output rather than
+/// hand-rolled boundaries.
 pub fn build_message(
     from: &str,
     to: &str,

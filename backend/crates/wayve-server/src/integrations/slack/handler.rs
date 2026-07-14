@@ -1,7 +1,7 @@
-//! Enterprise-gated Slack endpoints: connect a workspace, list + link Slack
-//! channels to Wayve channels, and import history. Every endpoint requires the
-//! caller's org to be on the **enterprise** tier (Slack needs server-readable
-//! chat). The bot token is encrypted at rest via `wayve_security::encryption`.
+//! Slack endpoints: connect a workspace, list and link Slack channels to Wayve
+//! channels, and import history. Every endpoint requires the caller's org to be on
+//! the enterprise tier, because Slack needs server-readable chat. The bot token is
+//! encrypted at rest.
 
 use crate::prelude::*;
 use actix_web::{delete, put};
@@ -25,9 +25,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(import);
 }
 
-/// Resolve the caller's org id, requiring the **enterprise** tier. Slack is an
-/// enterprise-only feature. `Unauthorized` if the user is unknown, `Forbidden`
-/// if they have no org or it isn't enterprise.
+/// `Forbidden` when the caller has no org or it isn't on the enterprise tier.
 async fn enterprise_org(pool: &PgPool, user_id: i32) -> Result<i32, AppError> {
     let Some(row) = sqlx::query(
         "SELECT u.organization_id AS org_id,
@@ -52,7 +50,6 @@ async fn enterprise_org(pool: &PgPool, user_id: i32) -> Result<i32, AppError> {
     }
 }
 
-/// Load + decrypt an org's Slack connection, if any.
 pub(crate) async fn load_connection(
     pool: &PgPool,
     org_id: i32,
@@ -116,7 +113,7 @@ pub async fn connect(
         return Err(AppError::bad_request("bot_token is required"));
     }
 
-    // Validate the token before storing it, so a bad token fails fast.
+    // Validating before storing means a bad token fails fast.
     let (team_name, team_id) = SlackClient::from_token(&token).auth_test().await?;
 
     let (iv, ciphertext) = encrypt(&token).map_err(|e| {

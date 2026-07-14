@@ -2,21 +2,18 @@ use crate::cache::Cache;
 use crate::prelude::*;
 use tracing::{instrument, warn};
 
-/// Liveness probe — confirms the process is up and serving HTTP. It performs
-/// no dependency checks on purpose, so a transient Postgres/Redis blip does
-/// not make an orchestrator kill an otherwise-healthy container.
+/// Liveness probe. It performs no dependency checks on purpose, so a transient
+/// Postgres or Redis blip cannot make an orchestrator kill an otherwise-healthy
+/// container.
 #[get("/health")]
 pub async fn health() -> impl Responder {
     HttpResponse::Ok().json(serde_json::json!({ "status": "ok" }))
 }
 
-/// Readiness probe — confirms the process can serve real traffic: Postgres is
-/// reachable and (when configured) Redis is reachable. Returns 503 when a
-/// dependency is down so a load balancer stops routing until it recovers.
-///
-/// Redis is optional (`cache: None` when it failed to connect at startup), so
-/// its absence is treated as ready — it only fails readiness when a configured
-/// Redis stops responding.
+/// Readiness probe. Returns 503 when a dependency is down, so a load balancer
+/// stops routing here until it recovers. Redis is optional (`cache: None` when
+/// it failed to connect at startup), so its absence counts as ready; only a
+/// configured Redis that stops responding fails readiness.
 #[get("/ready")]
 #[instrument(target = "http", skip(pool, cache))]
 pub async fn ready(pool: web::Data<PgPool>, cache: web::Data<Option<Cache>>) -> impl Responder {
@@ -82,7 +79,6 @@ mod tests {
     }
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(health).service(ready);
 }

@@ -59,13 +59,8 @@ export default function Emails() {
     bulkDelete,
   } = useEmailInbox(user?.id, normalizedSearchQuery);
 
-  // The toolbar (Compose / view toggles / search) should only appear once a
-  // mailbox is connected. But `accounts` starts empty on every refresh and
-  // only fills after /api/accounts resolves, so gating purely on
-  // `accounts.length` makes the toolbar flash in (or out) during that load
-  // window. We remember the last-known answer per user in localStorage and use
-  // it as the value during loading: returning users with a mailbox render the
-  // toolbar immediately, and known-empty users never see it flash.
+  // `accounts` starts empty on every refresh, so gating the toolbar on
+  // `accounts.length` alone would flash it during the load window.
   const hasAccountsStorageKey = user?.id
     ? `${HAS_ACCOUNTS_STORAGE_KEY}.${user.id}`
     : HAS_ACCOUNTS_STORAGE_KEY;
@@ -81,33 +76,26 @@ export default function Emails() {
     }
   }, [accountsLoaded, accounts.length, hasAccountsStorageKey]);
 
-  // Confirmed-connected once loaded; before that, fall back to the hint.
   const showToolbar =
     accounts.length > 0 || (!accountsLoaded && hadAccountsHint);
 
-  // The "add a mailbox" picker. Lifted here (rather than living inside the
-  // sidebar) so both the sidebar "+" button and the empty-state CTA in the
-  // email list open the same single modal.
+  // Lifted out of the sidebar so both the sidebar "+" button and the email list's
+  // empty-state CTA open the same modal.
   const [addAccountOpen, setAddAccountOpen] = useState(false);
 
-  // The open email is reflected in the URL as `?open=<id>` so that a page
-  // refresh (or a deep-link from another surface, e.g. the home dashboard's
-  // Inbox card) RESTORES it instead of dropping back to the list. This effect
-  // applies the param → opens the email; the effect below keeps the param in
-  // sync the other way (selectedEmail → URL). It first checks the already-
-  // loaded list to avoid an extra round-trip, and on a miss fetches by id.
+  // The open email is mirrored in the URL as `?open=<id>` so a refresh or deep
+  // link restores it. This effect applies the param; the next one syncs back.
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkAppliedRef = useRef<number | null>(null);
   useEffect(() => {
     const raw = searchParams.get("open");
     if (!raw) {
-      // No param — reset the guard so navigating to the same id again works.
+      // Reset the guard so navigating to the same id again works.
       deepLinkAppliedRef.current = null;
       return;
     }
     const id = Number(raw);
     if (!Number.isFinite(id)) {
-      // Bad value — drop the param and bail.
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -118,9 +106,8 @@ export default function Emails() {
       );
       return;
     }
-    // The param already matches what's open (typically because the sync effect
-    // below just wrote it after a row click) — nothing to do, and crucially
-    // don't disturb the current layout.
+    // The sync effect below just wrote this after a row click; don't disturb the
+    // current layout.
     if (selectedEmail?.id === id) {
       deepLinkAppliedRef.current = id;
       return;
@@ -128,11 +115,8 @@ export default function Emails() {
     if (deepLinkAppliedRef.current === id) return;
     deepLinkAppliedRef.current = id;
 
-    // Force the list-view layout when RESTORING/deep-linking an email that
-    // isn't already open, so it reads as an expanded full-width row rather
-    // than the right pane of the 3-column split. Matches the home dashboard's
-    // "click a row → see that one email" expectation. The user can toggle back
-    // to split via the SearchBar's layout buttons.
+    // Deep-linking an email that isn't already open forces list view, so it reads
+    // as a full-width row rather than the right pane of the 3-column split.
     if (emailViewLayout !== "list") {
       setEmailViewLayout("list");
     }
@@ -143,8 +127,8 @@ export default function Emails() {
       return;
     }
 
-    // Not in the current page — fetch the row directly. The detail pane is fine
-    // with a partial row (body fetches on its own); openEmail does the rest.
+    // Not in the current page — fetch the row directly. A partial row is fine; the
+    // detail pane fetches the body itself.
     let cancelled = false;
     void (async () => {
       try {
@@ -159,8 +143,8 @@ export default function Emails() {
     return () => {
       cancelled = true;
     };
-    // Re-run when the loaded list changes — if the email arrives via a later
-    // page or background sync, this effect picks it up without a re-navigate.
+    // Re-runs when the loaded list changes, so an email arriving via a later page
+    // or a background sync is picked up without re-navigating.
   }, [
     searchParams,
     emails,
@@ -171,11 +155,8 @@ export default function Emails() {
     setEmailViewLayout,
   ]);
 
-  // Mirror the open email back into the URL (`?open=<id>`) so a refresh keeps
-  // it open. Only reacts to genuine selection changes: on first mount, when
-  // nothing has been selected yet, it leaves the URL alone so the effect above
-  // can still restore from an incoming `?open=` param. Closing an email
-  // (selectedEmail → null) removes the param.
+  // Mirror the open email back into the URL. On first mount it leaves the URL
+  // alone so the effect above can still restore an incoming `?open=` param.
   const prevSelectedIdRef = useRef<number | null>(null);
   useEffect(() => {
     const cur = selectedEmail?.id ?? null;
@@ -215,11 +196,8 @@ export default function Emails() {
     }
   });
 
-  // ================= NARROW MODE (split-pane / small viewport) =================
-  // When the container is narrow (e.g. rendered inside the split view), we
-  // collapse the 3-pane layout to a stacked one: show the list OR the detail,
-  // not both. The threshold is the container width — independent of viewport
-  // size, so this also responds correctly to a resized split.
+  // When narrow, the 3-pane layout collapses to list OR detail. The threshold is
+  // container width, not viewport width, so a resized split pane also responds.
   const mainRef = useRef<HTMLDivElement>(null);
   const sidebarDraggingRef = useRef(false);
   const emailListDraggingRef = useRef(false);
@@ -324,16 +302,9 @@ export default function Emails() {
     accounts.find((account) => account?.id !== undefined)?.id ??
     null;
 
-  // ================= HANDLE OAUTH RETURN =================
-  // After /oauth/callback redirects back with #connected=true, refresh the
-  // account list so the newly linked account shows up immediately. The 30s
-  // sync worker will import its emails on the next tick.
-  //
-  // On the other side, the callback can redirect back with `?error=...`
-  // when the connect was rejected — currently the only such error is
-  // `email_in_use` (the requested Gmail/Outlook is already attached to a
-  // different Wayve user; see `email::account::email_owned_by_other_user`).
-  // We surface it as a dismissible banner above the layout.
+  // Return from /oauth/callback. `connected=true` refreshes the account list (the
+  // sync worker imports the mail on a later tick). It can instead return
+  // `?error=email_in_use`: the mailbox belongs to a different Wayve user.
   const [oauthError, setOauthError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -362,10 +333,8 @@ export default function Emails() {
 
     const errorParam = params.get("error") ?? hashParams.get("error");
     if (errorParam === "email_in_use") {
-      // Defer the setState out of the effect body so React's
-      // set-state-in-effect lint stays quiet — same pattern used in
-      // Docs.tsx and Tasks.tsx. The microtask still runs before the
-      // browser paints, so the user sees the banner without a flash.
+      // Deferred out of the effect body to satisfy the set-state-in-effect lint.
+      // It still runs before paint, so there is no flash.
       const h = window.setTimeout(() => {
         setOauthError(
           "This mailbox is already connected to another Fluxze account. " +
@@ -377,17 +346,9 @@ export default function Emails() {
     }
   }, [fetchAccounts, setRefreshTick]);
 
-  // ================= BACKGROUND REFRESH =================
-  // Steady poll so newly-arrived mail (synced into the DB by the 30s backend
-  // worker) actually appears in the UI without a manual reload. Cadence is
-  // 60s — twice the worker interval, so new mail surfaces in ~30–90s. The
-  // user's selection survives each tick (see [useEmailInbox.ts](./useEmailInbox.ts))
-  // so the open email won't be clobbered.
-  //
-  // Pauses while the tab is hidden via the Page Visibility API — a
-  // background tab shouldn't burn CPU, network, or OAuth quotas. We force
-  // one immediate refresh on the visibility → visible transition so the
-  // user sees up-to-date mail the moment they switch back.
+  // Steady 60s poll so mail synced by the backend worker appears without a manual
+  // reload. Paused while the tab is hidden so it doesn't burn network or OAuth
+  // quota in the background.
   useEffect(() => {
     const POLL_MS = 60_000;
     let timer: number | null = null;
@@ -411,9 +372,8 @@ export default function Emails() {
       if (document.hidden) {
         stop();
       } else {
-        // Catch up immediately on focus return, then resume polling.
-        // Wake first so the next fetchAccounts pulls anything new
-        // synced in the background since the tab was last visible.
+        // Wake first so the next fetchAccounts pulls anything synced while the tab
+        // was hidden.
         void wakeEmailSync();
         tick();
         start();
@@ -421,9 +381,8 @@ export default function Emails() {
     };
 
     if (!document.hidden) {
-      // Initial mount: ask the backend to sync the caller's mailboxes
-      // immediately, bypassing the adaptive worker schedule. New mail
-      // surfaces in ≤ ~2s instead of ≤ ~5min for quiet accounts.
+      // Sync now rather than waiting on the adaptive worker schedule, which backs
+      // off to ~5min for quiet accounts.
       void wakeEmailSync();
       start();
     }
@@ -435,7 +394,6 @@ export default function Emails() {
     };
   }, [fetchAccounts, setRefreshTick]);
 
-  // ================= ADD ACCOUNT =================
   const addAccount = async () => {
     const url = await getGmailConnectUrl();
     window.location.href = url;
@@ -446,8 +404,6 @@ export default function Emails() {
     window.location.href = url;
   };
 
-  // Single dispatcher from [ProviderPicker](./ProviderPicker.tsx). Each arm
-  // is an existing helper — Gmail and Outlook use OAuth redirects.
   const addProvider = (provider: import("./providers").ProviderId) => {
     switch (provider) {
       case "gmail":
@@ -489,38 +445,24 @@ export default function Emails() {
     ...account,
     display_name: accountNameOverrides[account.id] ?? account.display_name,
   }));
-  // Personal accounts and organization owners can connect external Gmail /
-  // Outlook mailboxes to their own user — the same per-user OAuth flow.
-  // Backend (`gmail_login`, `outlook_connect_url`) has no account-type gate;
-  // this is purely a UI choice. Non-owner org members stick to org-wide
-  // shared inboxes (see /settings/inboxes), so we don't surface the
-  // single-user connect picker for them.
   const isPersonalScope = user?.scope
     ? user.scope === "personal"
     : user?.account_type === "personal";
-  // Only personal accounts *manage* their own connected mailboxes — the
-  // "Accounts" header + "+ Add account" button stay personal-only. Business
-  // (organization) and platform teams manage shared/domain mailboxes in
-  // /settings/inboxes instead.
+  // Org and platform teams manage shared/domain mailboxes in /settings/inboxes.
+  // The backend has no account-type gate here; this is purely a UI choice.
   const showAccountManagement = isPersonalScope;
-  // Who may connect their own external mailbox (Gmail / Outlook / IMAP OAuth):
-  // personal accounts, plus the single *primary* owner of an organization /
-  // enterprise OR the platform (the earliest `owner` in that scope, server-
-  // computed as `is_primary_owner`). Every other role — including additional
-  // owners — is excluded; they use shared inboxes (/settings/inboxes).
+  // Connecting an external mailbox is limited to personal accounts and the single
+  // primary owner of an org or the platform (server-computed). Everyone else uses
+  // shared inboxes.
   const canConnectOwnMailbox =
     isPersonalScope || user?.is_primary_owner === true;
-  // But every scope gets the account *filter* (the "🌐 All Accounts" pill + the
-  // per-account rows) whenever they have at least one mailbox. This gives org /
-  // platform users the unified "all emails" inbox by default (activeAccount =
-  // null → backend returns the union of owned + shared-member + wayve mail) while
-  // still letting them drill into a single shared inbox.
+  // With activeAccount = null the backend returns owned + shared-member + wayve
+  // mail, so every scope defaults to the unified inbox but can still drill into a
+  // single shared one.
   const showAccountFilter = displayedAccounts.length > 0;
 
-  // If a previously-selected account disappears (e.g. a shared inbox is revoked),
-  // fall back to the unified "all emails" view rather than jumping to some other
-  // mailbox. The default activeAccount is already null (useEmailInbox), so org /
-  // platform users start unified without any forced selection.
+  // If a selected account disappears (e.g. a shared inbox is revoked), fall back
+  // to the unified view rather than jumping to some other mailbox.
   useEffect(() => {
     if (activeAccount === null) return;
     const stillVisible = displayedAccounts.some(
@@ -531,17 +473,11 @@ export default function Emails() {
     }
   }, [activeAccount, displayedAccounts, setActiveAccount]);
 
-  // ================= UI =================
   return (
     <div className="emails-root">
-      {/* Compose, view toggles, and search are only useful once a mailbox is
-          connected — hide the whole toolbar until then. The EmailList empty
-          state covers the disconnected case. */}
       {showToolbar && (
         <div className="emails-page-toolbar">
-          {/* Organization / platform pages put Compose at the far left of the
-              toolbar and let the search bar fill the rest to the right. Personal
-              accounts keep Compose in the email sidebar. */}
+          {/* Personal accounts keep Compose in the email sidebar instead. */}
           {!isPersonalScope && (
             <button
               className="compose-btn compose-btn--toolbar"
@@ -589,13 +525,8 @@ export default function Emails() {
             </div>
           </div>
         )}
-        {/* Organization / platform pages have no use for the email sidebar
-            (no per-account filter, folders, or management) — they just read the
-            unified inbox, so hide the whole sidebar + its resizer and let the
-            list take the full width. Personal accounts keep it, but only once a
-            mailbox is connected — until then there are no accounts or folders to
-            show, and onboarding happens through the list's "Add email account"
-            empty state. `showToolbar` is hint-aware so this doesn't flicker. */}
+        {/* Org and platform pages just read the unified inbox, so the sidebar and
+            its resizer are hidden and the list takes the full width. */}
         {isPersonalScope && showToolbar && (
           <>
             <EmailSidebar
@@ -670,9 +601,8 @@ export default function Emails() {
           />
         )}
 
-        {/* Mounted only while open — keeps the picker's state fresh each time
-          and avoids reset-on-close juggling. Opened by both the sidebar "+"
-          and the email-list empty-state CTA. */}
+        {/* Mounted only while open, so its state is fresh each time and needs no
+            reset-on-close. */}
         {canConnectOwnMailbox && addAccountOpen && (
           <ProviderPicker
             onClose={() => setAddAccountOpen(false)}
@@ -681,8 +611,7 @@ export default function Emails() {
               addProvider(provider);
             }}
             onConnected={() => {
-              // IMAP connect succeeded (no redirect). Close + refresh the list
-              // and nudge the email list so the new mailbox + its mail appear.
+              // IMAP connect succeeded with no redirect, so refresh here.
               setAddAccountOpen(false);
               void fetchAccounts();
               setRefreshTick((tick) => tick + 1);

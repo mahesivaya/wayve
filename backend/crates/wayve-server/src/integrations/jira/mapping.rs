@@ -1,22 +1,20 @@
-//! Pure Jira ↔ Wayve field mappings. No DB or network, so they are unit-tested
-//! in place. Jira workflows are customizable, so these are best-effort
-//! heuristics isolated here for easy tuning.
+//! Pure Jira and Wayve field mappings. No DB or network, so they are unit-tested
+//! in place. Jira workflows are customizable, so these are best-effort heuristics,
+//! isolated here for easy tuning.
 
 use super::models::JiraFields;
 use crate::prelude::*;
 
-/// A Jira issue's fields mapped onto the Wayve `tasks` columns. The single
-/// source of truth for Jira→task field translation, shared by the on-demand
-/// import (`sync::pull`) and the inbound webhook (`webhook`).
+/// The single source of truth for the Jira-to-`tasks` translation, shared by the
+/// on-demand import and the webhook.
 pub struct MappedFields {
-    /// Task name: the issue summary, or the issue key when the summary is blank.
+    /// The issue summary, or the issue key when the summary is blank.
     pub name: String,
     pub description: String,
     pub status: &'static str,
     pub priority: i16,
 }
 
-/// Map a Jira issue's `key` + `fields` to the Wayve task columns.
 pub fn map_issue_fields(key: &str, fields: &JiraFields) -> MappedFields {
     let summary = fields.summary.trim();
     let name = if summary.is_empty() {
@@ -45,9 +43,8 @@ pub fn map_issue_fields(key: &str, fields: &JiraFields) -> MappedFields {
     }
 }
 
-/// Map a Jira status (its `statusCategory.key` + display name) to a Wayve task
-/// status. Jira's category key is one of `new` / `indeterminate` / `done`;
-/// `indeterminate` is split into `in_progress` vs `in_review` by the name.
+/// Jira's category key is one of `new`, `indeterminate`, or `done`;
+/// `indeterminate` is split into `in_progress` and `in_review` by display name.
 pub fn jira_status_to_wayve(category_key: &str, status_name: &str) -> &'static str {
     match category_key {
         "new" => "to_do",
@@ -63,8 +60,7 @@ pub fn jira_status_to_wayve(category_key: &str, status_name: &str) -> &'static s
     }
 }
 
-/// Map a Jira priority name to Wayve's 1..=5 scale (5 = highest). Unknown or
-/// missing falls back to 3 (Medium).
+/// Wayve's scale is 1..=5, 5 highest. Unknown or missing falls back to 3, Medium.
 pub fn jira_priority_to_wayve(name: Option<&str>) -> i16 {
     match name.map(|n| n.trim().to_lowercase()).as_deref() {
         Some("highest") => 5,
@@ -75,8 +71,8 @@ pub fn jira_priority_to_wayve(name: Option<&str>) -> i16 {
     }
 }
 
-/// The Jira status-category a Wayve status should land in when pushing back —
-/// used to pick a transition whose target `statusCategory.key` matches.
+/// The Jira status category a Wayve status should land in when pushing back. Used
+/// to pick a transition whose target `statusCategory.key` matches.
 pub fn wayve_status_to_jira_category(status: &str) -> &'static str {
     match status {
         "done" => "done",
@@ -85,9 +81,8 @@ pub fn wayve_status_to_jira_category(status: &str) -> &'static str {
     }
 }
 
-/// Flatten an Atlassian Document Format (ADF) `description` value to plain text.
-/// Jira Cloud v3 returns ADF JSON (nested `content[].text`); tolerate a plain
-/// string or null too.
+/// Jira Cloud v3 returns Atlassian Document Format JSON, but a plain string or
+/// null is tolerated too.
 pub fn jira_description_to_text(value: &Option<Value>) -> String {
     match value {
         None | Some(Value::Null) => String::new(),

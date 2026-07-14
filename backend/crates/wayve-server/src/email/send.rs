@@ -15,8 +15,8 @@ use wayve_security::jwt::get_user_id_from_request;
 const MAX_OUTGOING_ATTACHMENTS: usize = 10;
 const MAX_OUTGOING_ATTACHMENTS_BYTES: usize = 20 * 1024 * 1024;
 
-/// Strip any path components a browser might send so a filename can't inject a
-/// header or odd MIME name. Falls back to "attachment".
+/// Strips path components so a browser-supplied filename can't inject a header
+/// or an odd MIME name. Falls back to "attachment".
 fn sanitize_attachment_filename(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or(name).trim();
     if base.is_empty() {
@@ -26,15 +26,14 @@ fn sanitize_attachment_filename(name: &str) -> String {
     }
 }
 
-/// Cheap pre-flight cap check from the base64 lengths (no decode). Returns a
-/// human-readable error when over the count or total-size limit.
+/// Pre-flight cap check done from the base64 lengths, without decoding.
 fn validate_attachment_limits(attachments: &[EmailAttachmentInput]) -> Result<(), String> {
     if attachments.len() > MAX_OUTGOING_ATTACHMENTS {
         return Err(format!(
             "Too many attachments (max {MAX_OUTGOING_ATTACHMENTS})."
         ));
     }
-    // base64 inflates ~4/3; estimate the decoded size without allocating.
+    // base64 inflates ~4/3, so this estimates the decoded size without allocating.
     let estimated: usize = attachments
         .iter()
         .map(|a| a.content_base64.len() / 4 * 3)
@@ -45,8 +44,6 @@ fn validate_attachment_limits(attachments: &[EmailAttachmentInput]) -> Result<()
     Ok(())
 }
 
-/// Decode the base64 attachments into bytes, sanitising names and defaulting the
-/// MIME type. Returns a human-readable error on malformed base64.
 fn decode_attachments(
     attachments: &[EmailAttachmentInput],
 ) -> Result<Vec<crate::email::sender::OutgoingAttachment>, String> {
@@ -95,9 +92,6 @@ pub async fn send(
 
     info!(target: "gmail", user_id, account_id = data.account_id, "send email request");
 
-    // Owner OR shared-inbox member with can_reply may send. The loader
-    // funnels both paths through the same return type so the rest of the
-    // handler stays identical regardless of which permission applies.
     let account =
         match load_email_account_for_send(pool.get_ref(), data.account_id, user_id).await? {
             Some(account) => account,
@@ -113,11 +107,9 @@ pub async fn send(
         }
     };
 
-    // Dev-only shortcut: when the connected account holds a sentinel
-    // `fake-*` refresh token (only ever inserted by seed scripts / manual
-    // rows for UI testing), bypass the real provider and deliver via the
-    // local SMTP trap (Mailpit) so the compose loop is closed end-to-end
-    // without real OAuth. No production refresh token starts with `fake-`.
+    // Dev-only shortcut through Mailpit. Only seed scripts insert a `fake-*`
+    // refresh token and no real provider token starts with `fake-`, so this
+    // sentinel cannot misroute a production send.
     if refresh_token.starts_with("fake-") {
         info!(
             target: "gmail",
@@ -192,9 +184,8 @@ pub async fn send(
         )
         .await;
 
-    // email.sent fans out only on a 2xx from the upstream provider. If
-    // Gmail/Graph rejected the send (4xx/5xx), the customer hasn't
-    // delivered a message and shouldn't get the webhook.
+    // Only fan out email.sent on a 2xx from the provider: a rejected send
+    // delivered nothing and must not produce a webhook or audit row.
     if response.status().is_success() {
         let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
         crate::webhooks::emit(
@@ -212,9 +203,7 @@ pub async fn send(
         )
         .await;
 
-        // Enterprise audit trail (Security → User actions), scoped by org like
-        // every other action. from/to/subject land in metadata, which is
-        // org/platform-admin readable by design.
+        // from/to/subject land in metadata, which is admin-readable by design.
         crate::audit::record_action(
             pool.get_ref(),
             &req,
@@ -241,27 +230,12 @@ pub async fn send(
     Ok(response)
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Plan A Phase 2 — Wayve-to-Wayve native channel
-// ──────────────────────────────────────────────────────────────────────
-//
-// The browser builds a multi-recipient `WAYVE_SECURE_V1` envelope (one
-// RSA-OAEP-wrapped AES key per recipient pubkey, plus one for the sender
-// so they can decrypt their own Sent copy) and POSTs it here. This
-// endpoint never invokes SMTP — it inserts one `emails` row per
-// recipient (source='wayve', body_encrypted=envelope, no account_id) so
-// the message lands in every recipient's inbox at the next list-emails
-// fetch. Crucially the server stores ONLY the opaque envelope; it
-// cannot decrypt the body at any point.
-//
-// Wire shape (subject is plaintext for inbox-preview UX, same trade-off
-// Plan A Phase 1 made for inbound):
-//
-//   {
-//     "recipient_user_ids": [int],
-//     "envelope":            "WAYVE_SECURE_V1\n{ ... }",
-//     "subject":             "Hello"
-//   }
+// Wayve-to-Wayve native channel. The browser builds a multi-recipient
+// WAYVE_SECURE_V1 envelope, one RSA-OAEP-wrapped AES key per recipient plus one
+// for the sender's own Sent copy, and POSTs it here. No SMTP is involved: one
+// `emails` row per recipient is inserted with source='wayve' and no account_id.
+// The server stores only the opaque envelope and can never decrypt the body. The
+// subject stays plaintext for inbox previews, the same trade-off as inbound.
 
 #[derive(serde::Deserialize)]
 pub struct SendInternalInput {
@@ -286,13 +260,12 @@ pub async fn send_internal(
         None => return Ok(HttpResponse::Unauthorized().body("Invalid token")),
     };
 
-    // Enterprise-tier senders use standard (server-readable) encryption: the
-    // `envelope` field then carries plaintext rather than a WAYVE_SECURE_V1
-    // E2E envelope, and we protect it with the server-AES at-rest layer below.
+    // Enterprise-tier senders use standard, server-readable encryption: their
+    // `envelope` field carries plaintext rather than a WAYVE_SECURE_V1 envelope,
+    // and the server-AES at-rest layer below protects it instead.
     let uses_standard =
         crate::encryption_policy::uses_standard_encryption(pool.get_ref(), user_id).await;
 
-    // ─── Validate the payload ──────────────────────────────────────
     if data.recipient_user_ids.is_empty() {
         return Ok(HttpResponse::BadRequest().body("recipient_user_ids must not be empty"));
     }
@@ -302,8 +275,7 @@ pub async fn send_internal(
             SEND_INTERNAL_MAX_RECIPIENTS
         )));
     }
-    // E2E senders MUST supply a WAYVE_SECURE_V1 envelope; enterprise (standard
-    // encryption) senders instead pass the plaintext body in this field.
+    // E2E senders must supply a WAYVE_SECURE_V1 envelope.
     if !uses_standard && !data.envelope.starts_with(WAYVE_ENVELOPE_PREFIX) {
         return Ok(HttpResponse::BadRequest().body("envelope must be a WAYVE_SECURE_V1 payload"));
     }
@@ -314,7 +286,6 @@ pub async fn send_internal(
         return Ok(HttpResponse::BadRequest().body("subject too long"));
     }
 
-    // ─── Look up sender + recipient emails for the row metadata ────
     let sender_email: Option<String> = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
         .bind(user_id)
         .fetch_optional(pool.get_ref())
@@ -325,8 +296,7 @@ pub async fn send_internal(
         None => return Ok(HttpResponse::Unauthorized().body("Sender account not found")),
     };
 
-    // Verify every requested recipient exists. A missing recipient is a
-    // 400 (probably a stale browser cache) rather than a silent skip.
+    // A recipient that doesn't resolve is a 400, never a silent skip.
     let recipient_rows: Vec<(i32, String)> =
         sqlx::query_as::<_, (i32, String)>("SELECT id, email FROM users WHERE id = ANY($1)")
             .bind(&data.recipient_user_ids)
@@ -337,23 +307,17 @@ pub async fn send_internal(
             .body("One or more recipient_user_ids do not resolve to a known user"));
     }
 
-    // ─── Insert N+1 rows: one per recipient + sender's Sent copy ───
-    //
-    // Synthetic gmail_id namespaces wayve-internal rows so they never
-    // collide with a real Gmail message id (which is a hex string). The
-    // pattern is `wayve:<sender>:<unix-ms>:<recipient or 'sent'>` so a
-    // single send produces a unique id per row even under high
-    // concurrency from the same sender.
+    // Insert one row per recipient plus the sender's Sent copy. The synthetic
+    // gmail_id `wayve:<sender>:<unix-ms>:<recipient|sent>` can never collide
+    // with a real Gmail message id (a hex string) and stays unique per row even
+    // under concurrent sends from the same user.
     let now_ms = chrono::Utc::now().timestamp_millis();
     let envelope = data.envelope.as_str();
     let subject = data.subject.as_str();
 
-    // What actually lands in (body_encrypted, body_iv):
-    //   • E2E sender      → the opaque WAYVE_SECURE_V1 envelope verbatim, no iv.
-    //   • enterprise      → server-AES ciphertext of the plaintext + its iv, so
-    //                        the row is server-readable (same shape inbound
-    //                        server-AES rows use, which the frontend already
-    //                        renders via the API's decrypted body).
+    // An E2E sender stores the opaque envelope verbatim with no iv; an
+    // enterprise sender stores server-AES ciphertext plus its iv, matching the
+    // shape of inbound server-AES rows that the API already decrypts on read.
     let (body_stored, iv_stored) = if uses_standard {
         match wayve_security::encryption::encrypt(envelope) {
             Ok((iv, ciphertext)) => (ciphertext, iv),
@@ -366,8 +330,8 @@ pub async fn send_internal(
         (envelope.to_string(), String::new())
     };
 
-    // Use a single transaction so a partial failure rolls back the whole
-    // delivery — either every recipient gets the message or nobody does.
+    // One transaction, so a partial failure rolls back the whole delivery:
+    // either every recipient gets the message or nobody does.
     let mut tx = pool.begin().await?;
 
     for (recipient_user_id, recipient_email) in &recipient_rows {
@@ -392,9 +356,8 @@ pub async fn send_internal(
         .await?;
     }
 
-    // Sender's Sent copy. Same envelope (the sender's wrapped key is
-    // inside, the browser wraps the AES key for the sender too) so they
-    // can decrypt and re-read their own message later.
+    // The Sent copy reuses the same envelope: the browser wrapped the AES key
+    // for the sender too, so they can re-read their own message later.
     let sent_gmail_id = format!("wayve:{user_id}:{now_ms}:sent");
     let recipient_list_for_to: String = recipient_rows
         .iter()
@@ -442,7 +405,6 @@ pub(super) async fn send_via_gmail(
     user_id: i32,
 ) -> HttpResponse {
     let raw_bytes: Vec<u8> = if data.attachments.is_empty() {
-        // Unchanged single-part path — byte-identical to the prior behaviour.
         format!(
             "From: {}\r\n\
         To: {}\r\n\
@@ -459,8 +421,8 @@ pub(super) async fn send_via_gmail(
         )
         .into_bytes()
     } else {
-        // Build a correct multipart/mixed message with lettre, then serialise it
-        // to RFC 822 bytes for Gmail's `raw` field.
+        // lettre builds the multipart/mixed message; Gmail's `raw` field wants
+        // it serialised to RFC 822 bytes.
         let decoded = match decode_attachments(&data.attachments) {
             Ok(decoded) => decoded,
             Err(message) => {
@@ -516,7 +478,6 @@ pub(super) async fn send_via_gmail(
     }
 }
 
-/// Sends from a connected Outlook mailbox through Graph `sendMail`.
 pub(super) async fn send_via_outlook(
     access_token: &str,
     account_id: i32,
@@ -577,7 +538,6 @@ mod tests {
 
     #[test]
     fn limits_reject_oversize() {
-        // base64 length whose ~3/4 estimate exceeds the 20 MB cap.
         let big = "A".repeat(MAX_OUTGOING_ATTACHMENTS_BYTES / 3 * 4 + 8);
         assert!(validate_attachment_limits(&[att(&big)]).is_err());
     }

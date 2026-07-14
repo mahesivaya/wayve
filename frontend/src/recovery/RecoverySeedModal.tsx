@@ -1,17 +1,10 @@
-// Single-step recovery modal shown exactly once at first key generation.
+// Shown exactly once, at first key generation. There is no verification step:
+// the user is trusted to copy or download the phrase, and losing both password
+// and phrase means the account is unrecoverable. That is a deliberate product
+// call to keep signup friction low.
 //
-//   Display the words → Copy + Download + Continue.
-//
-// The user is trusted to copy or download the phrase before clicking
-// Continue. There's no follow-up verification step — keeping signup
-// friction low is the explicit product call. "Lost password + lost
-// recovery phrase = account permanently unrecoverable" is the accepted
-// trade-off, surfaced by the copy on this modal and again by the
-// /recover-with-mnemonic page.
-//
-// Clicking Continue invokes `onConfirmed`, which uploads the AES-GCM
-// wrapped private key to the server. Upload failure (e.g. no network)
-// keeps the modal open and shows the error so the user can retry.
+// Continue calls `onConfirmed`, which uploads the AES-GCM wrapped private key.
+// An upload failure keeps the modal open so the user can retry.
 
 import { useEffect, useMemo, useState } from "react";
 import { MNEMONIC_WORD_COUNT } from "../crypto/mnemonic";
@@ -21,9 +14,7 @@ import "./recoverySeedModal.css";
 
 interface Props {
   mnemonic: string;
-  // Retained for source-compat with the multi-mode era — Plan A has a
-  // single mode so this prop no longer drives the explainer paragraph.
-  // The seed modal always shows the "only way to recover" copy.
+  // Accepted for source compatibility but unused: there is only one mode now.
   recoveryMode?: RecoveryMode;
   onConfirmed: () => Promise<void> | void;
   busy?: boolean;
@@ -41,9 +32,8 @@ export default function RecoverySeedModal({
   const [copied, setCopied] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
 
-  // Recovery-key filename keyed to the account scope so the three account
-  // kinds produce distinct files: personal vs platform team. (The org master
-  // key is downloaded from BootstrapPage as fluxze-org-recovery-key.txt.)
+  // Keyed to the account scope so personal and platform-team keys land in
+  // distinct files. The org master key is downloaded from BootstrapPage instead.
   const recoveryFileName =
     user?.scope === "platform"
       ? "fluxze.platform-recovery-key.txt"

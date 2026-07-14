@@ -11,21 +11,17 @@ pub struct AttachmentMeta {
 }
 
 pub fn extract_body(payload: &Value) -> Option<String> {
-    // A `multipart/alternative` email carries the SAME content twice —
-    // text/plain first, then text/html. We want the rich HTML part so the
-    // reading view renders it like Gmail instead of a flattened text dump.
-    // Scan the WHOLE tree for HTML first; only if there's none fall back to
-    // plain text. (The old code returned the first matching part, so the
-    // leading text/plain part always won.)
+    // A `multipart/alternative` email carries the same content twice, plain
+    // text first then HTML, so the whole tree must be scanned for HTML before
+    // falling back to plain text. Taking the first matching part would always
+    // yield the flattened text version.
     find_part_by_mime(payload, "text/html")
         .or_else(|| find_part_by_mime(payload, "text/plain"))
         // Last resort: a single-part message whose body.data sits at the top
-        // level with an unusual / missing mimeType.
+        // level with an unusual or missing mimeType.
         .or_else(|| payload["body"]["data"].as_str().map(decode_base64))
 }
 
-// Depth-first search for the first part whose mimeType matches `want`,
-// returning its decoded body. Recurses through nested multiparts.
 fn find_part_by_mime(payload: &Value, want: &str) -> Option<String> {
     if payload["mimeType"].as_str() == Some(want)
         && let Some(data) = payload["body"]["data"].as_str()

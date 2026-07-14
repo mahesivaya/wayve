@@ -82,7 +82,6 @@ mod tests {
 
         let bearer = |uid: i32, email: &str| format!("Bearer {}", jwt_for(uid, email));
 
-        // Owner creates a project → 201.
         let req = actix_test::TestRequest::post()
             .uri("/projects")
             .insert_header(("Authorization", bearer(owner_id, &owner_email)))
@@ -91,7 +90,6 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
 
-        // Owner creates a team → 201.
         let req = actix_test::TestRequest::post()
             .uri("/teams")
             .insert_header(("Authorization", bearer(owner_id, &owner_email)))
@@ -100,7 +98,6 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
 
-        // Member can see both in the org-scoped lists.
         let req = actix_test::TestRequest::get()
             .uri("/projects")
             .insert_header(("Authorization", bearer(member_id, &member_email)))
@@ -116,7 +113,6 @@ mod tests {
         assert_eq!(teams.as_array().map(|a| a.len()), Some(1));
         assert_eq!(teams[0]["slug"], "platformteam");
 
-        // A plain member cannot create — owner-only.
         let req = actix_test::TestRequest::post()
             .uri("/projects")
             .insert_header(("Authorization", bearer(member_id, &member_email)))
@@ -136,7 +132,6 @@ mod tests {
         cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
 
-    // Insert an org project directly and return its id.
     async fn insert_org_project(pool: &PgPool, org_id: i32, name: &str) -> i32 {
         sqlx::query_scalar::<_, i32>(
             "INSERT INTO projects (organization_id, name) VALUES ($1, $2) RETURNING id",
@@ -148,8 +143,8 @@ mod tests {
         .unwrap_or_else(|e| panic!("insert project: {e}"))
     }
 
-    // A plain org member cannot link a repo — the require_owner gate rejects
-    // before any GitHub validation runs, so this needs no network.
+    // A plain org member cannot link a repo. The owner gate rejects the request
+    // before any GitHub validation runs, so this test needs no network.
     #[actix_web::test]
     async fn org_member_cannot_link_repo() {
         let pool = test_pool().await;
@@ -181,9 +176,9 @@ mod tests {
         cleanup(&pool, &[member_id], &[org_id]).await;
     }
 
-    // An org OWNER links a public repo (GitHub validation mocked via wiremock),
-    // then a plain member of the same org can read it through the proxy
-    // allowlist while a repo that was never linked is refused.
+    // Once an org owner links a public repo, any member of that org can read it
+    // through the proxy, while a repo that was never linked stays refused.
+    // GitHub is mocked with wiremock via the GITHUB_API_BASE indirection.
     #[actix_web::test]
     #[serial_test::serial]
     async fn owner_links_repo_then_org_member_can_read_via_proxy() {
@@ -192,10 +187,9 @@ mod tests {
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let mock = MockServer::start().await;
-        // Both the repo-validation lookup (link) and the proxy fetch hit
-        // GET /repos/octocat/Hello-World. One mock serves both: the body
-        // satisfies validation (public, canonical owner/name); the proxy just
-        // forwards it and the test only asserts the status.
+        // One mock serves both callers of GET /repos/octocat/Hello-World: the
+        // link-time validation, which needs a public repo with a canonical owner
+        // and name, and the proxy fetch, which just forwards the body.
         Mock::given(method("GET"))
             .and(path("/repos/octocat/Hello-World"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -205,8 +199,7 @@ mod tests {
             })))
             .mount(&mock)
             .await;
-        // SAFETY: serialized via #[serial] — env mutation can't race other tests.
-        // One base covers both the repo validation and the proxy upstream.
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
         unsafe {
             std::env::set_var("GITHUB_API_BASE", mock.uri());
         }
@@ -221,10 +214,9 @@ mod tests {
         let member_email = random_email();
         let member_id = insert_local_user(&pool, &member_email, "password123").await;
         place_in_org(&pool, member_id, org_id, "member").await;
-        // Code Repo defaults to owner/super_admin/admin/developer, so a plain
-        // member is blocked by the feature gate before ever reaching the per-repo
-        // allowlist this test exercises. The org owner has enabled Code Repo for
-        // members here (an org_feature_access row); without it the member 403s.
+        // Code Repo defaults to owner, super_admin, admin and developer, so
+        // without this grant the member would be stopped by the feature gate
+        // before reaching the per-repo allowlist that this test exercises.
         sqlx::query(
             "INSERT INTO organization_feature_access (organization_id, feature_key, role) \
              VALUES ($1, 'code_repo', 'member') ON CONFLICT DO NOTHING",
@@ -242,7 +234,6 @@ mod tests {
         )
         .await;
 
-        // Owner links the public repo → 200.
         let req = actix_test::TestRequest::patch()
             .uri(&format!("/projects/{project_id}/repo"))
             .insert_header((
@@ -254,7 +245,6 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // Member reads the LINKED repo via the proxy → 200 (org-wide visibility).
         let req = actix_test::TestRequest::get()
             .uri("/github/repos/octocat/Hello-World")
             .insert_header((
@@ -265,7 +255,6 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // Member reads a NON-linked repo → 403 (allowlist).
         let req = actix_test::TestRequest::get()
             .uri("/github/repos/torvalds/linux")
             .insert_header((
@@ -282,12 +271,9 @@ mod tests {
         cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
 
-    // Pull requests are OWNER-only: an org owner reads them through the proxy,
-    // but a non-owner ADMIN — who CAN still read the rest of the (linked) repo,
-    // since "admin" is in code_repo's default roles — is refused both the PR
-    // list and a PR's issue-comment conversation. Using admin (not a plain
-    // member) isolates the new PR gate from the pre-existing code_repo feature
-    // gate, which already excludes members.
+    // Pull requests are owner-only. The caller under test is an admin rather
+    // than a plain member because admin is in code_repo's default roles, so a
+    // refusal isolates the PR gate from the broader Code Repo feature gate.
     #[actix_web::test]
     #[serial_test::serial]
     async fn pull_requests_are_owner_only_via_proxy() {
@@ -296,7 +282,6 @@ mod tests {
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let mock = MockServer::start().await;
-        // Repo validation (link) + the non-PR repo read both hit this path.
         Mock::given(method("GET"))
             .and(path("/repos/octocat/Hello-World"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -306,13 +291,12 @@ mod tests {
             })))
             .mount(&mock)
             .await;
-        // The PR list upstream — only the OWNER ever reaches it.
         Mock::given(method("GET"))
             .and(path("/repos/octocat/Hello-World/pulls"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
             .mount(&mock)
             .await;
-        // SAFETY: serialized via #[serial] — env mutation can't race other tests.
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
         unsafe {
             std::env::set_var("GITHUB_API_BASE", mock.uri());
         }
@@ -336,7 +320,6 @@ mod tests {
         )
         .await;
 
-        // Owner links the repo so it's on the org allowlist.
         let req = actix_test::TestRequest::patch()
             .uri(&format!("/projects/{project_id}/repo"))
             .insert_header((
@@ -353,7 +336,6 @@ mod tests {
         let owner_bearer = format!("Bearer {}", jwt_for(owner_id, &owner_email));
         let admin_bearer = format!("Bearer {}", jwt_for(admin_id, &admin_email));
 
-        // OWNER reads the PR list → 200.
         let req = actix_test::TestRequest::get()
             .uri("/github/repos/octocat/Hello-World/pulls")
             .insert_header(("Authorization", owner_bearer))
@@ -363,8 +345,7 @@ mod tests {
             StatusCode::OK
         );
 
-        // ADMIN (non-owner) reads the repo itself (non-PR) → 200: only PRs are
-        // gated, not the whole Code Repo feature.
+        // Only PRs are gated, not the whole Code Repo feature.
         let req = actix_test::TestRequest::get()
             .uri("/github/repos/octocat/Hello-World")
             .insert_header(("Authorization", admin_bearer.clone()))
@@ -374,8 +355,6 @@ mod tests {
             StatusCode::OK
         );
 
-        // ADMIN reads the PR list → 403, even though the repo is linked and the
-        // admin can read everything else.
         let req = actix_test::TestRequest::get()
             .uri("/github/repos/octocat/Hello-World/pulls")
             .insert_header(("Authorization", admin_bearer.clone()))
@@ -385,7 +364,7 @@ mod tests {
             StatusCode::FORBIDDEN
         );
 
-        // ADMIN reads a PR's conversation (issue comments) → 403.
+        // A PR's conversation lives under issue comments and is gated too.
         let req = actix_test::TestRequest::get()
             .uri("/github/repos/octocat/Hello-World/issues/5/comments")
             .insert_header(("Authorization", admin_bearer))

@@ -1,8 +1,6 @@
-// SCIM 2.0 Users endpoints + discovery.
-//
-// Mounted at the root scope (NOT under /api) because RFC 7644 specifies
-// `/scim/v2/*`. Authentication is the SCIM bearer token, separate from
-// our session JWT and X-API-KEY surfaces.
+// SCIM 2.0 Users endpoints and discovery. Mounted at the root scope, not under
+// /api, because RFC 7644 specifies `/scim/v2/*`. Authentication is the SCIM
+// bearer token, separate from the session JWT and X-API-KEY surfaces.
 
 use super::tokens::{ScimPrincipal, resolve};
 use crate::prelude::*;
@@ -20,8 +18,6 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(replace_user)
         .service(delete_user);
 }
-
-// ── Auth helper ───────────────────────────────────────────────────────
 
 async fn auth(
     req: &HttpRequest,
@@ -57,8 +53,6 @@ fn scim_error(status: u16, detail: &str) -> HttpResponse {
         _ => HttpResponse::InternalServerError().json(body),
     }
 }
-
-// ── Discovery ─────────────────────────────────────────────────────────
 
 #[get("/scim/v2/ServiceProviderConfig")]
 pub async fn service_provider_config() -> AppResult {
@@ -112,12 +106,9 @@ pub async fn schemas() -> AppResult {
     }])))
 }
 
-// ── User CRUD ─────────────────────────────────────────────────────────
-
-// Accepted but ignored in v1 — Wayve treats `userName` as the canonical
-// email. The `emails` field is part of the SCIM core schema so Okta /
-// Entra will send it; we accept the deserialization rather than 400 on
-// well-formed requests.
+// Accepted but ignored: `userName` is the canonical email. `emails` is part of
+// the SCIM core schema, so Okta and Entra send it; deserializing it rather than
+// rejecting keeps well-formed requests from 400ing.
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub struct ScimEmail {
@@ -184,9 +175,6 @@ pub async fn list_users(
     let start = query.start_index.unwrap_or(1).max(1);
     let count = query.count.unwrap_or(100).clamp(1, 200);
 
-    // v1 filter parser — recognises `userName eq "x"` and `externalId eq "x"`
-    // (case-insensitive operator, double-quoted value). Anything else is a
-    // 400 to keep the contract simple and observable.
     let (filter_field, filter_value) = parse_simple_filter(query.filter.as_deref());
 
     let rows = sqlx::query(
@@ -289,8 +277,8 @@ pub async fn create_user(
         return Ok(scim_error(400, "userName is required"));
     }
 
-    // Idempotent on duplicate userName/externalId — RFC 7644 §3.3 wants
-    // 409 conflict, not creation of a second row.
+    // RFC 7644 §3.3 requires a 409 on a duplicate userName/externalId, not a
+    // second row.
     if let Some(existing) = sqlx::query(
         "SELECT id FROM users WHERE organization_id = $1 \
          AND (LOWER(email) = $2 OR ($3::TEXT IS NOT NULL AND external_id = $3))",
@@ -308,11 +296,8 @@ pub async fn create_user(
         ));
     }
 
-    // SCIM-provisioned users are seeded with a random throwaway password
-    // — the IdP authenticates them via SSO/SCIM, not our login form.
-    // bcrypt cost stays at the project default (12); the password is
-    // long enough that brute force isn't a meaningful risk even if the
-    // hash ever leaks.
+    // SCIM-provisioned users get a random throwaway password: the IdP
+    // authenticates them via SSO/SCIM, never through the login form.
     let throwaway = format!("scim_{}", uuid::Uuid::new_v4().simple());
     let hashed = bcrypt::hash(&throwaway, bcrypt::DEFAULT_COST)
         .map_err(|e| AppError::Internal(format!("bcrypt: {e}")))?;
@@ -372,9 +357,8 @@ pub async fn replace_user(
         return Ok(scim_error(400, "userName is required"));
     }
     let active = data.active.unwrap_or(true);
-    // "Disabled" maps to the existing `guest` account_type, which carries
-    // the read-only baseline permission set. A future v2 might add a
-    // dedicated `disabled` flag — for v1 we reuse what's already RBAC-aware.
+    // "Disabled" maps onto the `guest` account_type, which already carries the
+    // read-only baseline permission set, rather than a new RBAC-unaware flag.
     let next_account_type = if active { "organization" } else { "guest" };
     let row = sqlx::query(
         r#"
@@ -421,10 +405,8 @@ pub async fn delete_user(
         Err(resp) => return Ok(resp),
     };
     let id = path.into_inner();
-    // SCIM DELETE is "deprovision" — we mark the user inactive (guest)
-    // rather than hard-deleting. Hard-delete cascades through ~15 tables
-    // and an admin can still do it manually via the existing admin
-    // surface.
+    // SCIM DELETE means deprovision, so mark the user inactive (guest) instead
+    // of hard-deleting, which would cascade through roughly 15 tables.
     let done = sqlx::query(
         "UPDATE users SET account_type = 'guest' \
          WHERE id = $1 AND organization_id = $2 AND account_type <> 'guest'",
@@ -439,10 +421,8 @@ pub async fn delete_user(
     Ok(HttpResponse::NoContent().finish())
 }
 
-// ── Filter parser ─────────────────────────────────────────────────────
-
-/// Minimal RFC 7644 §3.4.2.2 filter — only `<attr> eq "value"` for a fixed
-/// set of attributes. Returns `(field_canonical_name, value)` on success.
+/// Minimal RFC 7644 §3.4.2.2 filter: only `<attr> eq "value"` over `userName`
+/// and `externalId`. Returns `(canonical_field_name, value)` on success.
 fn parse_simple_filter(raw: Option<&str>) -> (Option<String>, Option<String>) {
     let Some(raw) = raw else { return (None, None) };
     let lowered = raw.trim().to_lowercase();

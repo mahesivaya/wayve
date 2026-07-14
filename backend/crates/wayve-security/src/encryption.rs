@@ -18,20 +18,13 @@ use zeroize::Zeroize;
 
 const HKDF_INFO: &[u8] = b"rwayve:v1:aes-256-gcm:messages-email-bodies";
 const DEFAULT_HKDF_SALT: &[u8] = b"rwayve:v1:hkdf-sha512";
-// Distinct HKDF context so the HMAC key used for address equality
-// search cannot be reused for AES decryption (and vice versa). If an
-// operator ever rotates only the AES key, the HMAC key stays stable
-// because both derive from the same `AES_KEY` material via different
-// info strings — but the rotation policy must wipe `*_hash` columns
-// in step. For now AES_KEY is treated as a single forever-stable key.
+// Separate HKDF context keeps the address-hash HMAC key domain-separated from
+// the AES key, even though both derive from `AES_KEY`. Rotating `AES_KEY` must
+// wipe the `*_hash` columns in step; it is treated as forever-stable for now.
 const HKDF_INFO_ADDR_HASH: &[u8] = b"rwayve:v1:hmac-sha256:email-address-hash";
 
-/// Wire prefix for the single-recipient RSA-OAEP + AES-GCM envelope used
-/// for "encrypt-on-arrival" inbound mail. Matches the format the frontend
-/// decoder in `frontend/src/emails/bodyUtils.ts` (`WAYVE_SECURE_PREFIX`)
-/// expects: prefix line, then a JSON object with type `wayve_encrypted`
-/// and byte-array fields `data` (AES-GCM ciphertext), `key` (RSA-OAEP
-/// wrapped AES key), `iv` (12-byte AES-GCM nonce).
+/// Wire prefix for the single-recipient RSA-OAEP + AES-GCM envelope. Must match
+/// the decoder in `frontend/src/emails/bodyUtils.ts` (`WAYVE_SECURE_PREFIX`).
 const WAYVE_SECURE_PREFIX: &str = "WAYVE_SECURE_V1";
 
 pub fn encrypt(text: &str) -> Result<(String, String)> {
@@ -79,14 +72,12 @@ pub fn decrypt_binary(nonce_b64: &str, ciphertext: &[u8]) -> Result<Vec<u8>, Str
 pub fn decrypt(nonce_b64: &str, cipher_b64: &str) -> Result<String, String> {
     let key_bytes = get_key()?;
 
-    // decode nonce
     let nonce = general_purpose::STANDARD
         .decode(nonce_b64)
         .map_err(|e| format!("Nonce decode error: {:?}", e))?;
 
-    // AES-GCM nonce is fixed 12 bytes; passing anything else makes
-    // `Nonce::from_slice` panic in generic-array. Reject explicitly so
-    // callers get a clean error instead of a panic.
+    // `Nonce::from_slice` panics on anything other than 12 bytes, so reject the
+    // bad length explicitly and give callers a clean error.
     if nonce.len() != 12 {
         return Err(format!(
             "Invalid nonce length: expected 12, got {}",
@@ -94,7 +85,6 @@ pub fn decrypt(nonce_b64: &str, cipher_b64: &str) -> Result<String, String> {
         ));
     }
 
-    // decode ciphertext
     let ciphertext = general_purpose::STANDARD
         .decode(cipher_b64)
         .map_err(|e| format!("Cipher decode error: {:?}", e))?;
@@ -105,7 +95,6 @@ pub fn decrypt(nonce_b64: &str, cipher_b64: &str) -> Result<String, String> {
 
     let decrypted = decrypt_with_legacy_fallback(&key_bytes, &nonce, &ciphertext)?;
 
-    // utf8 conversion
     let text = String::from_utf8(decrypted).map_err(|e| format!("UTF8 error: {:?}", e))?;
 
     Ok(text)
@@ -159,9 +148,8 @@ fn derive_hkdf_sha512_key(input_key_material: &[u8; 32]) -> Result<[u8; 32], Str
 }
 
 fn derive_address_hmac_key() -> Result<[u8; 32], String> {
-    // Same root key material, separate HKDF context. Domain separation
-    // means a leak of the HMAC key (e.g. via an oracle) can't decrypt
-    // AES-GCM messages and vice versa.
+    // Same root key material, separate HKDF context: a leaked HMAC key cannot
+    // decrypt AES-GCM messages, and vice versa.
     let key_material = get_key_material()?;
     let salt = hkdf_salt();
     let hk = Hkdf::<Sha512>::new(Some(&salt), &key_material);
@@ -171,24 +159,18 @@ fn derive_address_hmac_key() -> Result<[u8; 32], String> {
     Ok(out)
 }
 
-/// Normalize an email address for deterministic hashing. Lowercase +
-/// trim. We deliberately don't strip dots from gmail-style locals — two
-/// users who type their address with vs. without dots should NOT be
-/// conflated in our DB. The intent is "equality on the literal address
-/// the user typed", not "RFC 5322 canonicalization".
+/// Lowercase and trim for deterministic hashing. Dots in gmail-style locals are
+/// deliberately not stripped: this is equality on the literal address the user
+/// typed, not RFC 5322 canonicalization.
 fn normalize_address(addr: &str) -> String {
     addr.trim().to_lowercase()
 }
 
-/// HMAC-SHA256 of the normalized address, hex-encoded. Used as the
-/// `*_hash` column in `emails` so the Sent-folder filter and any
-/// equality lookup can run as a SQL `=` instead of decrypting every
-/// row. The hash is not reversible without brute force, AND it's keyed
-/// — an attacker who exfiltrated the `emails` table cannot construct
-/// the hash for any guessed address without also leaking `AES_KEY`.
-///
-/// Returns the hex string. Empty input returns `None` so the caller
-/// writes SQL NULL rather than the hash of an empty string.
+/// Hex HMAC-SHA256 of the normalized address, stored in the `emails.*_hash`
+/// columns so equality lookups run as SQL `=` without decrypting every row.
+/// Being keyed by `AES_KEY`, a stolen `emails` table alone cannot be brute
+/// forced. Empty input returns `None` so the caller writes SQL NULL rather than
+/// the hash of an empty string.
 pub fn compute_address_hash(addr: &str) -> Result<Option<String>, String> {
     let normalized = normalize_address(addr);
     if normalized.is_empty() {
@@ -251,65 +233,40 @@ fn hex_value(byte: u8) -> Result<u8, String> {
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Plan A — inbound "encrypt-on-arrival"
-// ──────────────────────────────────────────────────────────────────────
-//
-// `encrypt_to_pubkey` wraps a freshly-fetched inbound email body into a
-// `WAYVE_SECURE_V1` envelope that only the owner's private key can open.
-// The body-worker calls this once per fetched message, then writes the
-// resulting string into `emails.body_encrypted`. The server holds no
-// material that can decrypt it after the call returns — plaintext only
-// existed in memory for the duration of the encrypt call.
-//
-// Wire shape (must match `frontend/src/emails/bodyUtils.ts` decoder):
-//
-//   WAYVE_SECURE_V1
-//   { "type": "wayve_encrypted",
-//     "data": [ ...AES-GCM ciphertext bytes... ],
-//     "key":  [ ...RSA-OAEP-SHA256 wrapped 32-byte AES key... ],
-//     "iv":   [ ...12 AES-GCM nonce bytes... ] }
-
-/// Build a `WAYVE_SECURE_V1` single-recipient envelope around `plaintext`.
-/// `spki_der` is the recipient's RSA public key in SPKI DER form — the
-/// raw bytes Browser WebCrypto produces from `exportKey("spki", …)`,
-/// which is exactly what `users.public_key` stores (as a JSON array of
-/// bytes). Returns the full envelope string ready to persist verbatim.
+/// Build a single-recipient `WAYVE_SECURE_V1` envelope around `plaintext`, used
+/// to encrypt inbound mail on arrival so the server retains nothing that can
+/// decrypt it. `spki_der` is the recipient's RSA public key in SPKI DER form —
+/// the bytes WebCrypto's `exportKey("spki", …)` produces, which is what
+/// `users.public_key` stores as a JSON byte array.
+///
+/// The wire shape must stay in sync with the decoder in
+/// `frontend/src/emails/bodyUtils.ts`: the prefix line, then a JSON object with
+/// type `wayve_encrypted` and byte-array fields `data` (AES-GCM ciphertext),
+/// `key` (RSA-OAEP-SHA256 wrapped 32-byte AES key), and `iv` (12-byte nonce).
 pub fn encrypt_to_pubkey(plaintext: &[u8], spki_der: &[u8]) -> Result<String> {
-    // 1. Import the recipient's RSA public key. `from_public_key_der`
-    //    accepts SPKI bytes (the SubjectPublicKeyInfo wrapper Browser
-    //    WebCrypto produces) — pkcs1 would also work for raw RSA, but
-    //    SPKI is what the frontend sends us.
     let public_key = RsaPublicKey::from_public_key_der(spki_der)
         .map_err(|e| anyhow::anyhow!("public key parse failed: {e}"))?;
 
-    // 2. Generate a fresh AES-256 key for this single record. Never reuse;
-    //    each email gets its own DEK, which limits blast radius if any
-    //    one wrapped key is ever recovered.
+    // Fresh per-record data key: never reused, so recovering one wrapped key
+    // exposes only that one email.
     let mut aes_key_bytes = [0u8; 32];
     let mut nonce_bytes = [0u8; 12];
     thread_rng().fill_bytes(&mut aes_key_bytes);
     thread_rng().fill_bytes(&mut nonce_bytes);
 
-    // 3. AES-GCM encrypt the body.
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&aes_key_bytes));
     let nonce = Nonce::from_slice(&nonce_bytes);
     let ciphertext = cipher
         .encrypt(nonce, plaintext)
         .map_err(|e| anyhow::anyhow!("AES-GCM encrypt failed: {e:?}"))?;
 
-    // 4. RSA-OAEP-SHA256 wrap the AES key. SHA-256 matches the hash the
-    //    frontend uses when it imports the keypair (see selfEncrypt.ts /
-    //    keyStore.ts — `{ name: "RSA-OAEP", hash: "SHA-256" }`).
+    // OAEP must use SHA-256 to match the hash the frontend imports the keypair
+    // with (`{ name: "RSA-OAEP", hash: "SHA-256" }`).
     let padding = Oaep::new::<Sha256>();
     let wrapped_key = public_key
         .encrypt(&mut thread_rng(), padding, &aes_key_bytes)
         .map_err(|e| anyhow::anyhow!("RSA-OAEP wrap failed: {e}"))?;
 
-    // 5. Format as the wire-format envelope the frontend decoder consumes.
-    //    Bytes are serialised as JSON number arrays to match the existing
-    //    `wayve_encrypted` shape — same as what the deleted frontend
-    //    `encryptEmail.ts` produced.
     let payload = serde_json::json!({
         "type": "wayve_encrypted",
         "data": ciphertext.to_vec(),
@@ -320,17 +277,16 @@ pub fn encrypt_to_pubkey(plaintext: &[u8], spki_der: &[u8]) -> Result<String> {
     Ok(format!("{WAYVE_SECURE_PREFIX}\n{}", payload))
 }
 
-/// Default PBKDF2 iteration count for the org-member login wrap. Matches
-/// `PBKDF2_ITERATIONS` in `frontend/src/crypto/recovery.ts` so both sides
-/// use the same KDF cost. Stored in `member_login_wrapped_keys.iterations`
-/// so a future bump to 1M can coexist with old rows.
+/// PBKDF2 iteration count for the org-member login wrap. Must match
+/// `PBKDF2_ITERATIONS` in `frontend/src/crypto/recovery.ts`. Persisted per row
+/// in `member_login_wrapped_keys.iterations` so a future bump coexists with old
+/// rows.
 pub const ORG_MEMBER_PBKDF2_ITERATIONS: u32 = 600_000;
 
-/// Password-derived wrap of the member's PKCS8 private key. Base64-encoded
-/// for direct insertion into `member_login_wrapped_keys`. The salt is
-/// per-user random so a server-DB dump can't be rainbow-tabled across
-/// users; iterations is recorded explicitly so the unwrap side doesn't
-/// have to guess at a stale constant.
+/// Password-derived wrap of a member's PKCS8 private key, base64-encoded for
+/// direct insertion into `member_login_wrapped_keys`. The salt is per-user
+/// random so a DB dump cannot be rainbow-tabled across users, and `iterations`
+/// is recorded so the unwrap side never guesses at a stale constant.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PasswordWrappedPrivateKey {
     pub iv_b64: String,
@@ -339,52 +295,41 @@ pub struct PasswordWrappedPrivateKey {
     pub iterations: u32,
 }
 
-/// The full output of `provision_org_member_keypair`. The caller (the
-/// `POST /admin/users` handler) inserts each piece into the appropriate
-/// table — never logs the keypair, never returns it in the HTTP response.
+/// Output of `provision_org_member_keypair`. The caller persists each field;
+/// it must never be logged or returned in an HTTP response.
 #[derive(Debug)]
 pub struct ProvisionedOrgMemberKeypair {
-    /// SPKI bytes of the member's public key, JSON-encoded as a number
-    /// array — the wire shape `users.public_key` already stores.
+    /// SPKI public key bytes, JSON-encoded as a number array — the shape
+    /// `users.public_key` stores.
     pub public_key_json: String,
-    /// `WAYVE_SECURE_V1` envelope wrapping the PKCS8 private key under
-    /// the org's RSA pubkey. Insert verbatim into `member_wrapped_keys.ct`
-    /// (with iv = "" since the envelope is self-describing).
+    /// `WAYVE_SECURE_V1` envelope wrapping the PKCS8 private key under the org's
+    /// RSA pubkey, for owner/admin recovery. Insert verbatim into
+    /// `member_wrapped_keys.ct` (iv = "", since the envelope is self-describing).
     pub member_escrow_envelope: String,
-    /// Password-derived wrap for `member_login_wrapped_keys`. The member
-    /// uses this to unwrap on a fresh device at login time.
+    /// Password-derived wrap for `member_login_wrapped_keys`, which the member
+    /// unwraps on a fresh device at login.
     pub login_wrap: PasswordWrappedPrivateKey,
 }
 
-/// Generate an RSA-2048 keypair for a new org member, wrap the private
-/// key two ways (org escrow + password-derived login wrap), and return
-/// everything ready for the caller to persist. The plaintext private
-/// key is zeroed before this function returns.
+/// Generate an RSA-2048 keypair for a new org member and wrap the private key
+/// two ways: escrowed under the org pubkey, and under PBKDF2(password) for the
+/// member's own login path.
 ///
-/// **Security boundary:** this function holds the plaintext private key
-/// in memory for the duration of the call. Don't log it, don't pass it
-/// across `await` points (the `tokio::spawn_blocking` wrapper at the
-/// call site keeps it on a single thread), don't return it through any
-/// channel other than the wrapped envelopes above. The `zeroize` calls
-/// at the end overwrite the bytes; Rust's drop semantics make this
-/// best-effort but it raises the bar significantly above bare `Vec`.
+/// Security boundary: the plaintext private key exists in memory only for the
+/// duration of this call. Do not log it, do not carry it across `await` points,
+/// and do not return it by any route other than the wrapped envelopes above.
+/// The trailing `zeroize` calls overwrite the bytes on a best-effort basis.
 pub fn provision_org_member_keypair(
     password: &str,
     org_public_key_spki: &[u8],
 ) -> Result<ProvisionedOrgMemberKeypair> {
     use pbkdf2::pbkdf2_hmac;
 
-    // 1. Generate the RSA-2048 keypair. This is the only place the
-    //    plaintext private key ever exists on the server.
     let mut rng = thread_rng();
     let private_key = RsaPrivateKey::new(&mut rng, 2048)
         .map_err(|e| anyhow::anyhow!("rsa keygen failed: {e}"))?;
     let public_key = RsaPublicKey::from(&private_key);
 
-    // 2. Export to PKCS8 DER (member-side private key form) and SPKI DER
-    //    (public key form for both org escrow + users.public_key column).
-    //    PKCS8 bytes go in a Zeroizing<Vec<u8>> so the buffer is wiped on
-    //    drop even if a panic unwinds before the explicit zero below.
     let pkcs8 = private_key
         .to_pkcs8_der()
         .map_err(|e| anyhow::anyhow!("pkcs8 encode failed: {e}"))?;
@@ -395,11 +340,8 @@ pub fn provision_org_member_keypair(
         .map_err(|e| anyhow::anyhow!("spki encode failed: {e}"))?
         .to_vec();
 
-    // 3. Wrap (a): under the org pubkey, for owner/admin recovery.
     let member_escrow_envelope = encrypt_to_pubkey(&pkcs8_bytes, org_public_key_spki)?;
 
-    // 4. Wrap (b): under PBKDF2(password, fresh salt), for the member's
-    //    own login path. Fresh random salt + standard 600k iters.
     let mut salt = [0u8; 16];
     let mut nonce = [0u8; 12];
     let mut derived = [0u8; 32];
@@ -416,8 +358,6 @@ pub fn provision_org_member_keypair(
         .encrypt(Nonce::from_slice(&nonce), pkcs8_bytes.as_slice())
         .map_err(|e| anyhow::anyhow!("login wrap AES-GCM failed: {e:?}"))?;
 
-    // 5. Build the public-key JSON-array string the existing storage
-    //    shape expects (users.public_key is a JSON array of bytes).
     let public_key_json = serde_json::to_string(&spki_bytes)
         .map_err(|e| anyhow::anyhow!("pubkey json encode failed: {e}"))?;
 
@@ -428,9 +368,6 @@ pub fn provision_org_member_keypair(
         iterations: ORG_MEMBER_PBKDF2_ITERATIONS,
     };
 
-    // 6. Wipe everything sensitive. The wrapped envelopes above hold
-    //    only RSA/AES ciphertext at this point; the plaintext private
-    //    key bytes and the PBKDF2-derived AES key are no longer needed.
     pkcs8_bytes.zeroize();
     derived.zeroize();
     nonce.zeroize();
@@ -443,30 +380,23 @@ pub fn provision_org_member_keypair(
     })
 }
 
-/// Output of `provision_org_owner_keypair`. Same shape as
-/// [`ProvisionedOrgMemberKeypair`] minus the org-escrow envelope — the
-/// owner is the org's trust root, so by definition there's no upper key
-/// to escrow them under at the moment the org is being created.
+/// Output of `provision_org_owner_keypair`: [`ProvisionedOrgMemberKeypair`]
+/// without the escrow envelope, since the owner is the org's trust root and has
+/// no upper key to be escrowed under.
 #[derive(Debug)]
 pub struct ProvisionedOrgOwnerKeypair {
-    /// SPKI bytes of the owner's public key, JSON-encoded — wire shape
-    /// `users.public_key` expects.
+    /// SPKI public key bytes, JSON-encoded — the shape `users.public_key` stores.
     pub public_key_json: String,
-    /// Password-derived wrap for `member_login_wrapped_keys`. The owner
-    /// unwraps this with their password on first login, exactly the same
-    /// way org members do.
+    /// Password-derived wrap for `member_login_wrapped_keys`, unwrapped on first
+    /// login exactly as org members do.
     pub login_wrap: PasswordWrappedPrivateKey,
 }
 
-/// Generate an RSA-2048 keypair for a brand-new org owner at the moment
-/// the platform admin creates the organization. Wraps the private key
-/// only under PBKDF2(password) — there is no org pubkey to escrow under
-/// (the owner is the trust root; the org master key gets bootstrapped
-/// separately from the owner's browser after first login).
+/// Generate an RSA-2048 keypair for a new org owner. The private key is wrapped
+/// only under PBKDF2(password); there is no org pubkey to escrow under yet, as
+/// the org master key is bootstrapped from the owner's browser after first login.
 ///
-/// Same security boundary as `provision_org_member_keypair`: the
-/// plaintext private key exists in memory only for the duration of this
-/// call, is wrapped before returning, and the raw bytes are zeroed.
+/// Same security boundary as `provision_org_member_keypair`.
 pub fn provision_org_owner_keypair(password: &str) -> Result<ProvisionedOrgOwnerKeypair> {
     use pbkdf2::pbkdf2_hmac;
 
@@ -522,11 +452,8 @@ pub fn provision_org_owner_keypair(password: &str) -> Result<ProvisionedOrgOwner
     })
 }
 
-/// Unwrap a member's password-wrapped private key (the inverse of the
-/// `login_wrap` produced by `provision_org_member_keypair`). Used by the
-/// password-change handler to re-wrap with a new salt + new derived key.
-/// Returns the plaintext PKCS8 bytes in a Zeroizing buffer so the caller
-/// can re-wrap and the bytes get wiped at drop.
+/// Inverse of the `login_wrap` produced by `provision_org_member_keypair`.
+/// Returns plaintext PKCS8 bytes, so the caller must not log or persist them.
 pub fn unwrap_org_member_login(
     password: &str,
     wrap: &PasswordWrappedPrivateKey,
@@ -556,11 +483,9 @@ pub fn unwrap_org_member_login(
     Ok(pkcs8)
 }
 
-/// Re-wrap a member's PKCS8 private key under a new password. Used by
-/// (a) the member-driven password-change handler with the old password's
-/// unwrap result, and (b) the admin-driven password-reset handler with
-/// the org-key-driven unwrap result. Either way the input is fresh
-/// PKCS8 bytes; this just generates new salt/IV/derived key and AES-GCMs.
+/// Re-wrap a member's PKCS8 private key under a new password with a fresh salt
+/// and IV. Used by both the member password-change and the admin-driven
+/// password-reset paths.
 pub fn rewrap_org_member_login(
     new_password: &str,
     pkcs8_bytes: &[u8],
@@ -600,9 +525,6 @@ mod tests {
     use super::*;
     use rsa::pkcs8::DecodePrivateKey;
 
-    // Generate an ephemeral keypair, encrypt a body to its public half,
-    // then decrypt with the private half and confirm round-trip. The
-    // wire format is exercised end-to-end including JSON shape.
     #[test]
     fn encrypt_to_pubkey_roundtrip() {
         let mut rng = thread_rng();
@@ -613,12 +535,10 @@ mod tests {
         let plaintext = b"hello plan A: inbound encrypt-on-arrival round trip";
         let envelope = encrypt_to_pubkey(plaintext, &spki_der).expect("encrypt");
 
-        // Envelope MUST start with the wire prefix the frontend decoder
-        // hard-codes (`WAYVE_SECURE_V1`). Catch accidental drift early.
+        // The prefix and JSON field names are hard-coded in the frontend decoder,
+        // so assert on them to catch wire-format drift.
         assert!(envelope.starts_with("WAYVE_SECURE_V1\n"));
 
-        // Parse the JSON body and verify the field names match the
-        // `wayve_encrypted` shape — also catches accidental renames.
         let json_start = envelope.find('{').expect("json start");
         let parsed: serde_json::Value =
             serde_json::from_str(&envelope[json_start..]).expect("parse json");
@@ -628,8 +548,6 @@ mod tests {
         let iv: Vec<u8> = serde_json::from_value(parsed["iv"].clone()).unwrap();
         assert_eq!(iv.len(), 12);
 
-        // Reverse the envelope with the matching private key — mirrors
-        // what the browser does in decryptMessage.
         let aes_key_bytes = priv_key
             .decrypt(Oaep::new::<Sha256>(), &key)
             .expect("rsa unwrap");
@@ -641,10 +559,8 @@ mod tests {
         assert_eq!(recovered, plaintext);
     }
 
-    // Encrypting the same plaintext twice MUST produce different
-    // envelopes — proves the AES key and nonce are freshly random per
-    // call (a regression here would leak that two identical inbound
-    // emails were the same).
+    // The AES key and nonce must be freshly random per call; otherwise identical
+    // inbound emails would produce identical envelopes and leak that fact.
     #[test]
     fn encrypt_to_pubkey_is_non_deterministic() {
         let mut rng = thread_rng();
@@ -659,31 +575,21 @@ mod tests {
         let b = encrypt_to_pubkey(plaintext, &spki_der).expect("encrypt b");
         assert_ne!(a, b, "two encryptions of the same body must differ");
 
-        // Strip the prefix because that part is constant; the JSON
-        // body is what we care about for uniqueness.
         let a_body = &a[WAYVE_SECURE_PREFIX.len()..];
         let b_body = &b[WAYVE_SECURE_PREFIX.len()..];
         assert_ne!(a_body, b_body);
     }
 
-    // A non-RSA blob in `spki_der` must produce an error, not a panic
-    // or a silently-corrupted envelope. Real bodies of email come in
-    // from users.public_key which is human-populated and could be junk
-    // if a future bug populates it wrong; we want a clean error here.
+    // A junk `users.public_key` must yield an error, never a panic or a
+    // silently-corrupted envelope.
     #[test]
     fn encrypt_to_pubkey_rejects_garbage_key() {
         let result = encrypt_to_pubkey(b"x", b"not a real spki blob");
         assert!(result.is_err());
     }
 
-    // Full provisioning round-trip: generate a member keypair, escrow it
-    // under an org pubkey, login-wrap it under a password. Verify (a)
-    // the org-pubkey owner can recover the PKCS8 private key from the
-    // escrow envelope, (b) the member can recover the same PKCS8 from
-    // the login wrap using the same password, (c) both recovered keys
-    // agree, and (d) the public key bytes in the JSON match what the
-    // recovered private key implies. End-to-end check that the two
-    // wrapping paths describe the same underlying keypair.
+    // Both wrapping paths must describe the same underlying keypair: the org
+    // escrow and the password login wrap have to unwrap to identical PKCS8.
     #[test]
     fn provision_org_member_keypair_double_wrap_roundtrip() {
         let mut rng = thread_rng();
@@ -696,8 +602,8 @@ mod tests {
         let password = "correct-horse-battery-staple";
         let result = provision_org_member_keypair(password, &org_spki).expect("provision succeeds");
 
-        // (a) Owner recovers PKCS8 from the org-pubkey-wrapped envelope.
-        let prefix_len = WAYVE_SECURE_PREFIX.len() + 1; // "\n"
+        // Owner recovers PKCS8 from the org-pubkey-wrapped envelope.
+        let prefix_len = WAYVE_SECURE_PREFIX.len() + 1;
         let json_str = &result.member_escrow_envelope[prefix_len..];
         let parsed: serde_json::Value = serde_json::from_str(json_str).expect("json");
         let wrapped_aes: Vec<u8> =
@@ -713,16 +619,13 @@ mod tests {
             .decrypt(Nonce::from_slice(&body_iv), body_ct.as_ref())
             .expect("aes unwrap via org key");
 
-        // (b) Member recovers PKCS8 from the password wrap.
+        // Member recovers the same PKCS8 from the password wrap.
         let pkcs8_via_password =
             unwrap_org_member_login(password, &result.login_wrap).expect("login unwrap");
 
-        // (c) Both paths must yield the EXACT same PKCS8 bytes — proves
-        //     both wraps describe the same keypair.
         assert_eq!(pkcs8_via_org, pkcs8_via_password);
 
-        // (d) The recovered PKCS8 must parse as a real RSA private key
-        //     whose pubkey matches the JSON-encoded SPKI bytes.
+        // The recovered key must parse and imply the published SPKI bytes.
         let recovered = RsaPrivateKey::from_pkcs8_der(&pkcs8_via_org).expect("pkcs8 parse");
         let recovered_spki = RsaPublicKey::from(&recovered)
             .to_public_key_der()
@@ -732,8 +635,7 @@ mod tests {
         assert_eq!(recovered_spki, pub_json);
     }
 
-    // Wrong password must FAIL with a clear error from AES-GCM auth
-    // tag rejection — must never silently return junk PKCS8 bytes.
+    // A wrong password must fail on the AES-GCM auth tag, never return junk PKCS8.
     #[test]
     fn unwrap_org_member_login_rejects_wrong_password() {
         let mut rng = thread_rng();
@@ -748,9 +650,6 @@ mod tests {
         assert!(wrong.is_err(), "wrong password must reject");
     }
 
-    // Password change round-trip: unwrap with old password, re-wrap with
-    // new, unwrap with new must yield original PKCS8. Verifies the
-    // re-wrap path used by the password-change handler.
     #[test]
     fn rewrap_org_member_login_roundtrip() {
         let mut rng = thread_rng();
@@ -767,7 +666,6 @@ mod tests {
         let pkcs8_via_new = unwrap_org_member_login("new-pass", &new_wrap).expect("unwrap via new");
         assert_eq!(pkcs8, pkcs8_via_new);
 
-        // Salt MUST differ — confirms fresh randomness on rewrap.
         assert_ne!(initial.login_wrap.salt_b64, new_wrap.salt_b64);
     }
 }

@@ -1,8 +1,6 @@
-// Event catalog + `emit()` helper.
-//
-// `emit()` is the single place every producer in the codebase calls. It fans
-// out a single emitted event into one `webhook_deliveries` row per matching
-// endpoint, leaving the dispatcher to actually send them.
+// Event catalog and the `emit()` helper every producer calls. `emit()` fans one
+// event out into a `webhook_deliveries` row per matching endpoint; the
+// dispatcher does the sending.
 
 use crate::prelude::*;
 use chrono::Utc;
@@ -24,17 +22,16 @@ pub enum Event {
     EmailReceived,
     /// Fires when /api/email/send returns 2xx from the upstream provider.
     EmailSent,
-    /// Fires when a direct or channel message is persisted. Payload is
-    /// metadata only — message bodies are end-to-end encrypted and the
-    /// server cannot decrypt them.
+    /// Fires when a direct or channel message is persisted. The payload is
+    /// metadata only: bodies are end-to-end encrypted and the server cannot
+    /// decrypt them.
     ChatMessageSent,
     /// Fires when a new chat channel is created.
     ChatChannelCreated,
-    /// Synthetic event fired by the `POST /api/webhooks/{id}/test` endpoint
-    /// so customers can verify their handler without waiting for a real
-    /// producer. The test handler enqueues directly so this variant is in
-    /// the catalog as `wayve.ping` even though no producer calls
-    /// `emit(.., Event::Ping, ..)` yet.
+    /// Synthetic event for `POST /api/webhooks/{id}/test`, so customers can
+    /// verify their handler without waiting for a real producer. That handler
+    /// enqueues directly, so the variant is in the catalog even though no
+    /// producer calls `emit(.., Event::Ping, ..)`.
     #[allow(dead_code)]
     Ping,
 }
@@ -56,8 +53,8 @@ impl Event {
         }
     }
 
-    /// The complete set, for the dashboard's "subscribe to all events"
-    /// checkbox and for the OpenAPI spec / docs.
+    /// The complete set, for the dashboard's "subscribe to all events" checkbox
+    /// and the OpenAPI spec.
     pub const ALL: &'static [&'static str] = &[
         "task.created",
         "task.updated",
@@ -73,7 +70,7 @@ impl Event {
     ];
 }
 
-/// Whose event this is — drives which endpoints receive the delivery.
+/// Whose event this is, which drives the endpoints that receive the delivery.
 #[derive(Debug, Clone, Copy)]
 pub enum EventOwner {
     User {
@@ -97,15 +94,12 @@ impl EventOwner {
     }
 }
 
-/// Emit an event. Fan-out is a single SQL `INSERT … SELECT` so a producer
-/// firing into 100 matching endpoints still pays just one round-trip.
+/// Emit an event. Fan-out is a single `INSERT … SELECT`, so a producer firing
+/// into 100 endpoints still pays one round-trip.
 ///
-/// Errors are logged but never propagated — a webhook fan-out failure must
-/// not block the underlying task/meeting/etc. write. This is by design: the
-/// dispatcher will retry on its next tick if a row was inserted; a row that
-/// failed to insert at all is lost, which is acceptable for v1 (the
-/// producer's primary mutation has already succeeded; webhooks are
-/// best-effort by contract).
+/// Errors are logged, never propagated: a webhook fan-out failure must not
+/// block the producer's own write, which has already succeeded. Webhooks are
+/// best-effort by contract, so a row that fails to insert is simply lost.
 #[instrument(target = "webhook", skip(pool, data), fields(event = event.as_str()))]
 pub async fn emit(pool: &PgPool, owner: EventOwner, event: Event, data: serde_json::Value) {
     let EventOwner::User {
@@ -126,10 +120,9 @@ pub async fn emit(pool: &PgPool, owner: EventOwner, event: Event, data: serde_js
         "data": data,
     });
 
-    // Endpoints fire if either:
-    //   1. They belong to the producer's user_id (personal subscription), OR
-    //   2. They are org-wide AND the producer is inside that org.
-    // The event-type match supports the literal type or a `*` wildcard.
+    // An endpoint fires if it belongs to the producer's user_id, or it is
+    // org-wide and the producer is inside that org. The event-type match accepts
+    // the literal type or a `*` wildcard.
     let result = sqlx::query(
         r#"
         INSERT INTO webhook_deliveries

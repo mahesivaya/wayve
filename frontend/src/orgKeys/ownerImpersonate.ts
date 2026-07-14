@@ -1,12 +1,10 @@
-// Owner / admin impersonation flow. The key-holder uses their already-
-// loaded org private key to unwrap a member's escrow, getting back the
-// member's PKCS8 private key. From there the existing crypto code paths
-// (chat, notes, drive, email) decrypt as if the key-holder were the
+// Owner and admin impersonation. The key-holder unwraps a member's escrow with
+// the already-loaded org private key, recovering the member's PKCS8 private key,
+// after which the existing decrypt paths work as if the key-holder were that
 // member.
 //
-// The recovered member private key is held only in a scoped JS variable
-// in the impersonation page — never persisted to IndexedDB. Closing the
-// page wipes it from memory.
+// The recovered key is held only in memory on the impersonation page and is
+// never persisted to IndexedDB; closing the page wipes it.
 
 import { getMemberEscrow } from "./api";
 import { loadOrgPrivateKey } from "./orgKeyStore";
@@ -14,22 +12,17 @@ import { unwrapPkcs8WithRsaKey } from "./envelopeCodec";
 
 export type ImpersonationContext = {
   memberUserId: number;
-  // RSA-OAEP-decrypt-only CryptoKey. Pass to existing decryption helpers
-  // (selfEncrypt.ts:decryptForSelf, chat/e2ee.ts:decryptChatContent,
-  // emails/bodyUtils.ts:decryptWayveBodyIfNeeded, etc.) in place of the
-  // key those helpers usually load from IndexedDB.
+  // A decrypt-only RSA-OAEP key, passed to the existing decryption helpers in
+  // place of the key they would otherwise load from IndexedDB.
   memberPrivateKey: CryptoKey;
 };
 
-// The escrow envelope stored in member_wrapped_keys.ct is exactly the
-// `WAYVE_SECURE_V1` single-recipient shape (no iv column meaningfully
-// used — the envelope is self-describing). Parse it and unwrap with
-// the org private key.
+// The escrow envelope stored in member_wrapped_keys.ct is the single-recipient
+// shape and is self-describing, so the row's iv column is not meaningfully used.
 async function unwrapWayveSecureV1Envelope(
   envelope: string,
   recipientPrivate: CryptoKey
 ): Promise<ArrayBuffer> {
-  // Format: "WAYVE_SECURE_V1\n{json with type/data/key/iv}"
   const newlineIdx = envelope.indexOf("\n");
   if (newlineIdx < 0) {
     throw new Error("Malformed member escrow envelope (missing newline).");
@@ -89,9 +82,8 @@ export async function impersonateMember(
   return { memberUserId, memberPrivateKey };
 }
 
-// Reset path: re-wrap the member's PKCS8 under PBKDF2(new_password) and
-// return the `{iv, ct, salt, iterations}` envelope shape the backend
-// reset handler accepts. Caller posts the result via resetMemberPassword.
+// Password-reset path: re-wrap the member's PKCS8 under PBKDF2(new password) into
+// the `{iv, ct, salt, iterations}` envelope the backend reset handler accepts.
 const PBKDF2_ITERATIONS = 600_000;
 
 function bytesToB64(bytes: Uint8Array): string {
@@ -139,9 +131,8 @@ export async function rewrapPkcs8UnderPassword(
   };
 }
 
-// Same helper used in two flows: fetch escrow → unwrap → re-wrap under
-// the new password. Returned envelope is ready to upload to the backend
-// reset endpoint.
+// Fetch the escrow, unwrap it, and re-wrap under the new password. The result is
+// ready to upload to the backend reset endpoint.
 export async function rewrapMemberForPasswordReset(
   orgId: number,
   callerUserId: number,
@@ -159,7 +150,6 @@ export async function rewrapMemberForPasswordReset(
   return rewrapPkcs8UnderPassword(pkcs8, newPassword);
 }
 
-// Re-export so other modules can use the codec without importing it
-// directly — handy for the password-change path which calls this
-// helper without going through escrow.
+// Re-exported for the password-change path, which needs the codec but never goes
+// through escrow.
 export { unwrapPkcs8WithRsaKey };

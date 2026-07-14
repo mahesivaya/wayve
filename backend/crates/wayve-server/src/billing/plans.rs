@@ -1,8 +1,6 @@
-// Plan catalog. Anyone signed in can read the active catalog; only platform
-// admins may create / update / deactivate plans (they also paste in the
-// Stripe price id). The same `admin_create_plan` upsert is the single
-// write path — `code` is the immutable identity, everything else is
-// mutable, and is_active defaults to true unless explicitly set false.
+// Plan catalog endpoints. Any signed-in user may read the active catalog; only
+// platform admins may write. `admin_create_plan` is the single write path, and
+// `code` is the immutable identity everything else upserts against.
 
 use super::models::{CreatePlanInput, Plan};
 use crate::prelude::*;
@@ -29,9 +27,7 @@ pub async fn list_plans(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
     Ok(HttpResponse::Ok().json(plans))
 }
 
-// Admin list — returns EVERY plan including deactivated ones, so the
-// /settings/plans page can show the full catalog with active/inactive
-// badges. Same RBAC gate as the upsert.
+// Returns every plan, including deactivated ones, unlike the public list.
 #[get("/billing/admin/plans")]
 #[instrument(target = "auth", skip(req, pool))]
 pub async fn admin_list_plans(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -86,21 +82,16 @@ pub async fn admin_create_plan(
         })));
     }
 
-    // Features default to the empty JSON object so the column's NOT NULL
-    // constraint stays happy on first insert. Admins pass a JSONB blob —
-    // the simplest shape is `{ "End-to-end encrypted": true, "Custom domain": true }`
-    // because the existing Pricing.tsx renderer iterates Object.entries.
+    // The column is NOT NULL, so an omitted features blob becomes `{}`. Pricing
+    // .tsx iterates Object.entries over whatever shape is stored.
     let features = data
         .features
         .clone()
         .unwrap_or_else(|| serde_json::json!({}));
 
-    // is_active behaviour:
-    //   - omit → activate on create, leave EXISTING rows active (legacy
-    //     behaviour, preserves the upsert-defaults-to-active intent).
-    //   - true → activate.
-    //   - false → deactivate (hide from /pricing without losing the row
-    //     so historical subscriptions still resolve their plan_code).
+    // Omitting is_active activates the plan. Setting it false hides the plan from
+    // pricing without deleting the row, so historical subscriptions can still
+    // resolve their plan_code.
     let is_active = data.is_active.unwrap_or(true);
 
     let query = format!(
@@ -147,10 +138,8 @@ pub async fn admin_create_plan(
     Ok(HttpResponse::Created().json(plan))
 }
 
-// Soft-delete by code. The row stays so historical subscriptions that
-// reference it stay resolvable; it just drops off /pricing and the
-// public list_plans response. Idempotent — no-op on rows already
-// is_active=false, 404 only when the code never existed.
+// Soft-delete only: the row must survive so historical subscriptions referencing
+// it stay resolvable. Idempotent, and 404s only when the code never existed.
 #[delete("/billing/admin/plans/{code}")]
 #[instrument(target = "auth", skip(req, pool, path))]
 pub async fn admin_deactivate_plan(

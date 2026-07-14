@@ -1,12 +1,10 @@
-//! GitHub collaborator reads/writes for the per-repo Access panel. Reuses the
-//! shared `HTTP_CLIENT` + `github_api_base` + the caller's effective token
-//! (`github_proxy::effective_github_token`).
+//! GitHub collaborator reads and writes for the per-repo Access panel, using the
+//! caller's effective token from `github_proxy::effective_github_token`.
 //!
-//! Reading collaborators needs only repo read; **adding/removing** a collaborator
-//! needs an **admin**-scoped token on the repo. When the token lacks that, GitHub
-//! returns 403/404 — we surface that as [`SyncOutcome::Forbidden`] so the caller
-//! can still record the Wayve-side grant and tell the admin GitHub wasn't changed
-//! (never a hard 500).
+//! Reading collaborators needs only repo read, but adding or removing one needs
+//! an admin-scoped token on the repo. Without it GitHub returns 403/404, which
+//! surfaces as [`SyncOutcome::Forbidden`] rather than a 500, so the caller can
+//! still record the Wayve-side grant and report that GitHub was not changed.
 
 use crate::email::oauth::HTTP_CLIENT;
 use crate::prelude::*;
@@ -15,8 +13,8 @@ use tracing::warn;
 
 const GH_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// A repo access level in Wayve terms. `Admin` is read-only info surfaced from
-/// GitHub — we never grant admin from here.
+/// A repo access level in Wayve terms. `Admin` is read-only information surfaced
+/// from GitHub; admin is never granted from here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Level {
@@ -35,7 +33,7 @@ impl Level {
     }
 
     /// The GitHub collaborator `permission` value used when granting. `Admin` is
-    /// not grantable from this feature (falls back to `push`).
+    /// not grantable here and falls back to `push`.
     pub fn github_permission(self) -> &'static str {
         match self {
             Level::Read => "pull",
@@ -63,16 +61,16 @@ pub struct Collaborator {
 /// Result of a best-effort collaborator mutation on GitHub.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncOutcome {
-    /// GitHub accepted the change (added/updated/removed, or already in that state).
+    /// GitHub accepted the change, or was already in that state.
     Synced,
-    /// Token lacks admin on the repo (403/404) — GitHub was not changed.
+    /// The token lacks admin on the repo, so GitHub was not changed.
     Forbidden,
     /// Transport or unexpected upstream error.
     Failed,
 }
 
-/// GitHub's `permissions` object → our coarse level. admin > push/maintain (write)
-/// > pull/triage (read).
+/// Collapse GitHub's `permissions` object into our coarse level, ordered admin >
+/// push/maintain (write) > pull/triage (read).
 fn level_from_node(node: &Value) -> Level {
     let perms = node.get("permissions");
     let flag = |k: &str| {
@@ -102,8 +100,8 @@ fn authed(builder: reqwest::RequestBuilder, token: Option<&str>) -> reqwest::Req
     b
 }
 
-/// Direct collaborators on `owner/repo` with their access level. Returns `Err`
-/// only on transport/parse failure; the caller may then show the Wayve-side
+/// Direct collaborators on `owner/repo` with their access level. Fails only on
+/// transport or parse errors, after which the caller may show the Wayve-side
 /// grants alone.
 pub async fn list_collaborators(
     owner: &str,
@@ -144,8 +142,8 @@ pub async fn list_collaborators(
     Ok(out)
 }
 
-/// Add/update `login` as a collaborator at `level`. 201/204 → synced; 403/404 →
-/// forbidden (no admin); anything else → failed. Never returns `Err`.
+/// Add or update `login` as a collaborator at `level`. A 403/404 means the token
+/// lacks admin. Never returns `Err`.
 pub async fn add_collaborator(
     owner: &str,
     repo: &str,
@@ -169,8 +167,8 @@ pub async fn add_collaborator(
     }
 }
 
-/// Remove `login` as a collaborator. 204/404 → synced (gone either way); 403 →
-/// forbidden; else failed.
+/// Remove `login` as a collaborator. A 404 counts as synced, since they are gone
+/// either way. Never returns `Err`.
 pub async fn remove_collaborator(
     owner: &str,
     repo: &str,
@@ -182,7 +180,8 @@ pub async fn remove_collaborator(
     match authed(HTTP_CLIENT.delete(&url), token).send().await {
         Ok(resp) => {
             let code = resp.status().as_u16();
-            // 404 on delete means "not a collaborator" → already in desired state.
+            // A 404 on delete means they are not a collaborator, which is the
+            // desired state already.
             if code == 404 {
                 SyncOutcome::Synced
             } else {

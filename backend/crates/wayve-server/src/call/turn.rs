@@ -1,15 +1,13 @@
 //! Cloudflare Realtime TURN credential proxy.
 //!
-//! The browser can't be trusted with the long-lived Cloudflare API token, so
-//! the frontend asks the backend for a short-lived ICE credential each time
-//! it builds an `RTCPeerConnection`. The backend forwards the request to
-//! Cloudflare's `generate-ice-servers` endpoint and returns the response
-//! unchanged.
+//! The long-lived Cloudflare API token must not reach the browser, so the
+//! frontend asks the backend for a short-lived ICE credential whenever it builds
+//! an `RTCPeerConnection` and the backend proxies Cloudflare's
+//! `generate-ice-servers` response unchanged.
 //!
-//! Falls back gracefully: if `CLOUDFLARE_TURN_KEY_ID` /
-//! `CLOUDFLARE_TURN_API_TOKEN` aren't set, the endpoint returns 503 and the
-//! frontend uses STUN-only servers (calls still work between peers with
-//! permissive NATs).
+//! Without `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN` the endpoint
+//! returns 503 and the frontend falls back to STUN-only servers, which still
+//! connect peers behind permissive NATs.
 
 use crate::prelude::*;
 use serde_json::Value;
@@ -20,9 +18,8 @@ use wayve_security::jwt::get_user_id_from_request;
 
 const CLOUDFLARE_TURN_ENDPOINT: &str = "https://rtc.live.cloudflare.com/v1/turn/keys";
 
-// Shared HTTP client with a hard cap on request time so a stalled Cloudflare
-// response can't pin an actix worker. Same rationale as
-// `billing::provider::HTTP`.
+// The request timeout is a hard cap so a stalled Cloudflare response cannot pin
+// an actix worker.
 static HTTP: Lazy<Client> = Lazy::new(|| {
     Client::builder()
         .connect_timeout(Duration::from_secs(5))
@@ -40,8 +37,7 @@ fn default_ttl_seconds() -> u64 {
 
 #[instrument(target = "http", skip(req))]
 pub async fn turn_credentials(req: HttpRequest) -> AppResult {
-    // Require an authenticated user — credentials are personal-call-tied and
-    // must not be mintable by an unauthenticated client.
+    // Credentials must not be mintable by an unauthenticated client.
     let _user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     let key_id = env::var("CLOUDFLARE_TURN_KEY_ID")
@@ -52,8 +48,8 @@ pub async fn turn_credentials(req: HttpRequest) -> AppResult {
         .filter(|s| !s.is_empty());
 
     let (Some(key_id), Some(token)) = (key_id, token) else {
-        // Unconfigured: return 503 so the frontend's STUN-only fallback kicks
-        // in. This lets dev/test environments run without Cloudflare creds.
+        // 503 triggers the frontend's STUN-only fallback, so dev and test
+        // environments run without Cloudflare credentials.
         warn!(target: "http", "TURN credentials requested but Cloudflare not configured");
         return Ok(HttpResponse::ServiceUnavailable()
             .json(serde_json::json!({ "error": "turn_not_configured" })));

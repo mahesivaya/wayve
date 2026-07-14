@@ -1,7 +1,6 @@
-// Brand marks as inline SVG (no logo assets ship in the repo). Approximate but
-// brand-coloured and recognisable; swap for official logos if exact marks are
-// needed. Rendered on a white tile so dark marks stay visible in any theme.
-// Shared by the Integrations settings page and the public home showcase.
+// Brand marks as inline SVG, since no logo assets ship in the repo. They are
+// approximate: swap in official logos if exact marks are ever needed. Rendered on
+// a white tile so dark marks stay visible in either theme.
 export function BrandIcon({ name }: { name: string }) {
   switch (name) {
     case "jira":

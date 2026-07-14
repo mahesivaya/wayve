@@ -1,13 +1,7 @@
-// In-app support tickets.
-//
-// Any authenticated user (personal, organization, platform) can raise a
-// ticket from the "Help & Report issue" entry point in the header profile
-// menu or the Support section on /settings. Tickets land in
-// `support_tickets`; staff with `tickets:manage` (the `support` role in
-// rbac.rs, plus owner/super_admin) read & resolve them via the admin
-// endpoints. Replies are sent off-band by email to the ticket owner — we
-// intentionally don't model an in-app reply thread here (smaller surface,
-// faster to ship, matches the scope agreed with the user).
+// In-app support tickets. Any authenticated user can raise one; staff holding
+// `tickets:manage` (the `support` role, plus owner and super_admin) read and
+// resolve them through the admin endpoints. There is deliberately no in-app reply
+// thread — replies go out of band by email to the ticket owner.
 
 use crate::prelude::*;
 use actix_multipart::Multipart;
@@ -100,8 +94,8 @@ pub async fn create_ticket(
         _ => "other".to_string(),
     };
 
-    // Carry the user's current organization onto the ticket so platform
-    // staff can group/filter by tenant later without an extra join.
+    // Denormalizing the organization onto the ticket lets platform staff filter by
+    // tenant without an extra join.
     let org_id: Option<i32> = sqlx::query_scalar("SELECT organization_id FROM users WHERE id = $1")
         .bind(user_id)
         .fetch_one(pool.get_ref())
@@ -348,9 +342,8 @@ pub async fn admin_update_ticket(
     })))
 }
 
-// ── Attachments ──────────────────────────────────────────────────────
-// Mirrors `tasks/attachments.rs`. AES-GCM encrypts the file body on the
-// way in and base64-stores the nonce alongside the row.
+// Attachments mirror `tasks/attachments.rs`: AES-GCM encrypts the file body on the
+// way in and the nonce is base64-stored alongside the row.
 
 #[post("/support/tickets/{id}/attachments")]
 #[instrument(target = "http", skip(req, payload, pool, path))]
@@ -566,7 +559,6 @@ pub async fn delete_ticket_attachment(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(create_ticket)
         .service(list_my_tickets)

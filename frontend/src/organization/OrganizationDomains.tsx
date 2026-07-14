@@ -1,9 +1,7 @@
-// Enterprise-owner Domain page. A lightweight "verify domain ownership" flow
-// modelled on DNS TXT verification: generate a challenge token, publish it as a
-// TXT record, then confirm. Verified state persists in localStorage (per
-// domain) so it survives reloads. This is intentionally self-contained — it is
-// NOT the platform DNS-TXT verification at /platform/domains (platform-staff
-// only), and it does not perform a live DNS lookup.
+// Enterprise-owner domain page: generate a challenge token, publish it as a DNS
+// TXT record, then confirm. Verified state is kept per domain in localStorage.
+// This is distinct from the platform-staff DNS-TXT verification at
+// /platform/domains.
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
@@ -45,7 +43,6 @@ function writeState(domain: string, state: DomainState) {
   }
 }
 
-// 16 random bytes, hex-encoded — the challenge token published in DNS.
 function makeToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");

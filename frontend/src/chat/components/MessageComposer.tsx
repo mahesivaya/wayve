@@ -2,8 +2,7 @@ import { useRef, useState } from "react";
 import type { Conversation } from "../types";
 import EmojiPicker from "./EmojiPicker";
 
-// A person the composer can @-mention. `label` is what gets inserted after the
-// `@` (typically the email's local part); `email` is shown in the dropdown to
+// `label` is what gets inserted after the `@`; `email` is shown in the dropdown to
 // disambiguate people who share a label.
 export type MentionCandidate = { id: number; email: string; label: string };
 
@@ -18,11 +17,8 @@ type Props = {
   onSend: () => void;
   error?: string;
   onDismissError?: () => void;
-  // People the current user can @-mention in this conversation (channel members
-  // or the DM peer). Empty/omitted disables the mention picker.
+  // Empty or omitted disables the mention picker.
   mentionCandidates?: MentionCandidate[];
-  // Attachments (direct messages and channels). When `allowAttachments` is
-  // false the paperclip is hidden and pending files aren't shown.
   allowAttachments?: boolean;
   pendingFiles?: File[];
   onPickFiles?: (files: File[]) => void;
@@ -39,10 +35,9 @@ function fmtSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Find an in-progress `@mention` immediately to the left of the caret. Returns
-// the typed query (may be empty right after `@`) and the index of the `@` so we
-// can splice a replacement in. The `@` must start the line or follow whitespace
-// so emails/handles mid-word don't trigger it.
+// Finds an in-progress `@mention` left of the caret, returning the typed query and
+// the index of the `@` so a replacement can be spliced in. The `@` must start the
+// line or follow whitespace, so emails and mid-word handles don't trigger it.
 function activeMention(
   text: string,
   caret: number
@@ -84,8 +79,6 @@ export default function MessageComposer({
   const canSend =
     !disabled && (input.trim().length > 0 || pendingFiles.length > 0);
 
-  // Candidates matching the active query (by label or email). Only surfaced
-  // while a mention is being typed and there is at least one match.
   const q = (mentionQuery ?? "").toLowerCase();
   const matches =
     mentionQuery === null
@@ -100,7 +93,6 @@ export default function MessageComposer({
   const mentionOpen = matches.length > 0;
   const highlighted = Math.min(mentionIndex, matches.length - 1);
 
-  // Recompute the active mention from the textarea's current caret.
   const syncMention = (el: HTMLTextAreaElement) => {
     const caret = el.selectionStart ?? el.value.length;
     const mention = activeMention(el.value, caret);
@@ -113,7 +105,6 @@ export default function MessageComposer({
     }
   };
 
-  // Replace the in-progress `@query` with `@label ` and drop the menu.
   const applyMention = (candidate: MentionCandidate) => {
     const el = textareaRef.current;
     const before = input.slice(0, mentionStart);
@@ -131,10 +122,8 @@ export default function MessageComposer({
     }
   };
 
-  // Splice the chosen emoji in at the caret (replacing any selection) and put
-  // the caret back after it, so typing continues where the emoji landed. The
-  // textarea keeps its `selectionStart`/`End` while the picker holds focus, so
-  // we can read the caret here without having stashed it when the picker opened.
+  // The textarea keeps its selection range while the picker holds focus, so the caret
+  // can be read here without having stashed it when the picker opened.
   const insertEmoji = (char: string) => {
     const el = textareaRef.current;
     const start = el?.selectionStart ?? input.length;

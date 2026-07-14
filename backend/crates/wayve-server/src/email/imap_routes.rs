@@ -1,12 +1,10 @@
-//! HTTP routes for connecting a generic IMAP/SMTP mailbox (any custom-domain
-//! address not on Google/Microsoft). Three steps the connect wizard uses:
-//!   * autodiscover — guess settings from the domain, or steer to OAuth;
-//!   * test-login   — verify credentials with a real IMAP LOGIN, no persist;
-//!   * connect      — verify + persist + kick an initial sync.
+//! HTTP routes for connecting a generic IMAP/SMTP mailbox, meaning any
+//! custom-domain address not on Google or Microsoft. The connect wizard walks
+//! autodiscover, then test-login, then connect.
 //!
 //! The IMAP/SMTP password is encrypted at rest in `email_accounts.refresh_token`
-//! (`<iv>.<cipher>`); host/port/security go in the `imap_*`/`smtp_*`/
-//! `mail_security` columns.
+//! as `<iv>.<cipher>`; host, port, and security go in the
+//! `imap_*`/`smtp_*`/`mail_security` columns.
 
 use crate::email::account::{
     ConnectedEmailAccount, email_owned_by_other_user, invalidate_email_account_cache,
@@ -54,8 +52,6 @@ fn imap_guess(domain: &str) -> (String, i32, String, i32) {
     }
 }
 
-// ── autodiscover ───────────────────────────────────────────────────────
-
 #[derive(Deserialize)]
 pub struct AutodiscoverInput {
     pub email: String,
@@ -100,8 +96,6 @@ pub async fn imap_autodiscover(
     }))
 }
 
-// ── test-login ─────────────────────────────────────────────────────────
-
 #[derive(Deserialize)]
 pub struct TestLoginInput {
     pub email: String,
@@ -133,8 +127,6 @@ pub async fn imap_test_login(req: HttpRequest, body: web::Json<TestLoginInput>) 
         }
     }
 }
-
-// ── connect ──────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct ConnectInput {
@@ -196,7 +188,6 @@ pub async fn imap_connect(
         }
     }
 
-    // Verify the credentials before persisting anything.
     if let Err(e) = verify_credentials(&host, body.imap_port, &email, &password).await {
         warn!(target: "auth", user_id, email = %email, error = ?e, "imap connect verify failed");
         return HttpResponse::BadRequest().json(serde_json::json!({
@@ -231,8 +222,7 @@ pub async fn imap_connect(
         }
     };
 
-    // Persist the connection settings (separate UPDATE so the shared upsert
-    // helper stays provider-agnostic).
+    // Separate UPDATE so the shared upsert helper stays provider-agnostic.
     if let Err(e) = sqlx::query(
         "UPDATE email_accounts \
          SET imap_host = $1, imap_port = $2, smtp_host = $3, smtp_port = $4, mail_security = $5 \
@@ -255,8 +245,7 @@ pub async fn imap_connect(
 
     info!(target: "auth", user_id, account_id, "imap account connected");
 
-    // Fire an initial sync so the inbox starts filling immediately; the worker
-    // also picks it up on its next tick.
+    // Fill the inbox immediately; the worker would otherwise wait a tick.
     let pool_clone = pool.get_ref().clone();
     let email_clone = email.clone();
     let imap_port = body.imap_port;

@@ -1,28 +1,13 @@
 //! Shared `?limit=…&offset=…` parsing for list endpoints.
 //!
-//! Today every list-style handler clamps its own limit:
-//!   * `scim/handler.rs`        — `count.unwrap_or(100).clamp(1, 200)`
-//!   * `routes/audit.rs`        — `.clamp(1, AUDIT_LOG_MAX_LIMIT)`
-//!   * `routes/error_logs.rs`   — `.unwrap_or(200).clamp(1, 1000)`
-//!   * `platform_billing/*`     — bespoke per-endpoint
+//! List handlers each clamp their own limit today, so defaults and ceilings drift
+//! across modules. New list endpoints should flatten this struct into their
+//! `web::Query` input and call `.clamped(default, max)`. Existing endpoints are
+//! intentionally not migrated; adopt incrementally.
 //!
-//! Defaults and ceilings drift across modules. New list endpoints can pull
-//! this struct in via `web::Query` and call `.clamped(default, max)` to land
-//! on a single style. Existing endpoints are intentionally not migrated —
-//! adopt incrementally.
-//!
-//! Example:
 //! ```ignore
-//! #[derive(Deserialize)]
-//! struct ListInput {
-//!     #[serde(flatten)]
-//!     page: PageQuery,
-//!     // … filter fields …
-//! }
-//!
 //! pub async fn list_things(query: web::Query<ListInput>) -> AppResult {
 //!     let (limit, offset) = query.page.clamped(50, 200);
-//!     // …
 //! }
 //! ```
 
@@ -37,9 +22,8 @@ pub struct PageQuery {
 
 #[allow(dead_code)]
 impl PageQuery {
-    /// Returns `(limit, offset)` with `limit` clamped to `[1, max]` (using
-    /// `default` when unset) and `offset >= 0`. Both are `i64` so callers
-    /// can bind them directly into `sqlx::query!(..., LIMIT $1 OFFSET $2)`.
+    /// `(limit, offset)` with `limit` clamped to `[1, max]` and `offset >= 0`.
+    /// Both are `i64` so callers can bind them straight into a `LIMIT $1 OFFSET $2`.
     pub fn clamped(&self, default: i64, max: i64) -> (i64, i64) {
         let limit = self.limit.unwrap_or(default).clamp(1, max);
         let offset = self.offset.unwrap_or(0).max(0);

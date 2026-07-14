@@ -1,10 +1,6 @@
-//! Tests for the SCIM 2.0 bearer-token mint + resolve flow.
-//!
-//! Covers:
-//!   * `generate()` produces a SHA-256 hash that matches `sha256_hex(raw)`.
-//!   * `resolve()` returns the principal for a live token, None for unknown.
-//!   * Revoked tokens stop resolving even with the right hash.
-//!   * Different tokens minted for different orgs resolve to different orgs.
+//! The SCIM 2.0 bearer-token mint and resolve flow. Only the SHA-256 hash of a
+//! token is stored, a token resolves to exactly the org it was minted for, and
+//! revoking one stops it resolving even when the correct hash is presented.
 
 #[cfg(test)]
 mod tests {

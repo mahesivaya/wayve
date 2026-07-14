@@ -59,7 +59,6 @@ mod tests {
     fn rejects_tampered_ciphertext() {
         set_test_key();
         let (nonce, cipher) = encrypt("sensitive").unwrap();
-        // Flip the first character of ciphertext.
         let mut bytes = cipher.into_bytes();
         bytes[0] = bytes[0].wrapping_add(1);
         let tampered = String::from_utf8(bytes).unwrap();

@@ -1,6 +1,6 @@
-//! GitLab integration: per-user connection + GitLab issues → Tasks import.
-//! Direct REST (PAT), per-user (not enterprise-gated), self-hosted supported.
-//! Mirrors the Jira module; see `docs/architecture/adding-a-feature.md`.
+//! GitLab integration: a per-user connection and an issues-to-Tasks import over
+//! direct REST with a PAT. Not enterprise-gated, and self-hosted instances are
+//! supported. Mirrors the Jira module.
 
 pub mod client;
 pub mod handler;
@@ -8,7 +8,7 @@ pub mod mapping;
 pub mod models;
 pub mod sync;
 
-/// Authenticated, `/api`-scoped endpoints (connection management + import).
+/// Authenticated `/api` endpoints: connection management and import.
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     handler::routes(cfg);
 }

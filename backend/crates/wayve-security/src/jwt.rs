@@ -8,10 +8,10 @@ fn default_account_type() -> String {
 }
 
 /// Interactive session privilege mode carried in the JWT. An owner logs in as
-/// `Normal` (a downscoped, restricted identity) and explicitly switches to
-/// `Admin` to reach the admin console. The mode can only ever *reduce*
-/// privilege relative to the DB role (see `rbac::downscope_for_mode`), so it is
-/// safe to carry in the token — it is never trusted to *grant* anything.
+/// `Normal` and must explicitly switch to `Admin` to reach the admin console.
+/// The mode can only reduce privilege relative to the DB role (see
+/// `rbac::downscope_for_mode`), never grant it, which is why carrying it in the
+/// token is safe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SessionMode {
@@ -43,13 +43,12 @@ pub struct Claims {
     pub email: String,
     #[serde(default = "default_account_type")]
     pub account_type: String,
-    // Absent on tokens minted before this feature ⇒ default `Normal`.
+    // Absent on tokens minted before this feature, which decode as `Normal`.
     #[serde(default)]
     pub mode: SessionMode,
     pub exp: usize,
 }
 
-// 🔥 CREATE JWT
 pub fn create_jwt(user_id: i32, email: String) -> String {
     create_jwt_for_account(user_id, email, "personal".to_string())
 }
@@ -58,22 +57,18 @@ pub fn create_jwt_for_account(user_id: i32, email: String, account_type: String)
     create_jwt_for_account_with_max_exp(user_id, email, account_type, None)
 }
 
-/// Variant of `create_jwt_for_account` that clamps the JWT's `exp`
-/// claim against an optional ceiling. The default JWT TTL is 24h; if
-/// `max_exp` is set and is sooner than 24h from now, that earlier
-/// time is used. Used today for short-lived guest accounts whose
-/// `password_valid_until` is closer than the default JWT lifetime,
-/// so a guest who logs in late in their 24h window can't extend it
-/// by another 24h via the JWT.
+/// Clamps the JWT's `exp` against an optional ceiling, so a short-lived guest
+/// whose `password_valid_until` is sooner than the default 24h TTL cannot extend
+/// their window by logging in late.
 pub fn create_jwt_for_account_with_max_exp(
     user_id: i32,
     email: String,
     account_type: String,
     max_exp: Option<DateTime<Utc>>,
 ) -> String {
-    // Every existing login/OAuth/SSO mint path funnels here and gets `Normal`,
-    // so a fresh login is always the restricted identity. Only the explicit
-    // session-mode switch endpoint mints `Admin` (via `create_jwt_with_mode`).
+    // Every login, OAuth, and SSO mint path funnels through here and gets
+    // `Normal`, so a fresh login is always the restricted identity. Only the
+    // session-mode switch endpoint mints `Admin`, via `create_jwt_with_mode`.
     create_jwt_with_mode(user_id, email, account_type, max_exp, SessionMode::Normal)
 }
 
@@ -92,11 +87,8 @@ pub fn create_jwt_with_mode(
         .checked_add_signed(ChronoDuration::hours(24))
         .expect("valid timestamp");
 
-    // Clamp against `max_exp` if provided. If the ceiling has already
-    // passed we still emit a token here — the caller is expected to
-    // have rejected the login first; we never silently issue an
-    // already-expired token because the callers above the JWT layer
-    // own the "is this still valid" decision.
+    // A ceiling in the past still produces a token: callers above this layer own
+    // the "is this login still valid" decision and must reject it first.
     let expiration = match max_exp {
         Some(cap) if cap < default_expiration => cap,
         _ => default_expiration,
@@ -118,7 +110,6 @@ pub fn create_jwt_with_mode(
     .unwrap_or_else(|e| panic!("JWT encode failed: {e}"))
 }
 
-// 🔥 DECODE JWT
 pub fn decode_jwt(token: &str) -> Option<Claims> {
     let secret = crate::config::jwt_secret();
 
@@ -135,7 +126,6 @@ pub fn decode_jwt(token: &str) -> Option<Claims> {
     }
 }
 
-// 🔥 Extract user from request
 use actix_web::cookie::{Cookie, SameSite};
 use actix_web::{HttpMessage, HttpRequest};
 
@@ -154,18 +144,12 @@ pub fn auth_cookie(token: String) -> Cookie<'static> {
 }
 
 pub fn expired_auth_cookie() -> Cookie<'static> {
-    // Must mirror the Secure flag used by `auth_cookie` (HTTPS in prod).
-    // Browsers reject a non-Secure cookie attempting to overwrite a
-    // Secure one of the same name, so without this the logout response
-    // silently fails to clear the cookie and the user is still
-    // authenticated on the next page load.
+    // The Secure flag must mirror `auth_cookie`: browsers refuse to let a
+    // non-Secure cookie overwrite a Secure one of the same name, so a mismatch
+    // makes logout silently fail to clear the cookie.
     //
-    // We also set `expires` to the Unix epoch alongside `max_age(0)` —
-    // iOS Safari/WebKit (and Chrome iOS, which is WebKit-backed) has
-    // been observed to ignore Max-Age=0 alone on the second-and-later
-    // cookie-clear in a session, but reliably honors `Expires` in the
-    // past. Setting both is the recommended belt-and-suspenders form
-    // and matches what most production identity stacks ship.
+    // `expires` in the past is set alongside `max_age(0)` because WebKit ignores
+    // Max-Age=0 alone on repeat cookie-clears within a session.
     let secure = crate::config::auth_cookie_secure();
     Cookie::build(AUTH_COOKIE_NAME, "")
         .http_only(true)
@@ -193,15 +177,14 @@ pub fn token_from_request(req: &HttpRequest) -> Option<String> {
 }
 
 pub fn get_user_id_from_request(req: &HttpRequest) -> Option<i32> {
-    // An API-key request carries an ApiKeyPrincipal injected by the
-    // ApiKeyMiddleware; it authenticates the acting user without a JWT.
+    // An ApiKeyPrincipal is injected by ApiKeyMiddleware and authenticates the
+    // acting user without a JWT.
     if let Some(principal) = req.extensions().get::<crate::api_key::ApiKeyPrincipal>() {
         return Some(principal.user_id);
     }
 
-    // Embed-token requests come through the EmbedMiddleware which has
-    // already verified the signature, origin, and method. Trust the
-    // principal it stamped.
+    // EmbedMiddleware has already verified the signature, origin, and method
+    // before stamping this principal.
     if let Some(principal) = req
         .extensions()
         .get::<crate::embed::middleware::EmbedPrincipal>()
@@ -214,10 +197,8 @@ pub fn get_user_id_from_request(req: &HttpRequest) -> Option<i32> {
     Some(claims.sub)
 }
 
-/// Resolve the session mode for a request. API-key and embed principals carry
-/// no mode and are treated as `Normal` (least privilege — a programmatic key
-/// cannot silently act as admin). Interactive JWT sessions carry the claim;
-/// tokens minted before this feature decode as `Normal` via the serde default.
+/// Resolve the session mode for a request. API-key and embed principals carry no
+/// mode and are forced to `Normal`, so a programmatic key can never act as admin.
 pub fn mode_from_request(req: &HttpRequest) -> SessionMode {
     if req
         .extensions()

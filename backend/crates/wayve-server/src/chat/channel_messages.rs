@@ -7,11 +7,9 @@ use super::dto::ChannelMessagesQuery;
 use sqlx::Row;
 use tracing::{error, instrument};
 
-// History fetch for the main channel feed. Returns the 50 most recent
-// *top-level* messages (parent_message_id IS NULL). Each row carries the
-// number of replies under it so the UI can render the "N replies →" link
-// without a second round-trip. Threaded replies themselves are fetched on
-// demand via `get_channel_thread` when the user opens a thread.
+// History for the main channel feed: the 50 most recent top-level messages, each
+// carrying its reply count so the UI can render the thread link without a second
+// round-trip. Replies themselves come from `get_channel_thread` on demand.
 #[get("/chat/channel-messages")]
 #[instrument(target = "http", skip(req, pool, query), fields(channel_id = query.channel_id))]
 pub async fn get_channel_messages(
@@ -25,8 +23,8 @@ pub async fn get_channel_messages(
         return Ok(HttpResponse::Forbidden().finish());
     }
 
-    // channel_messages is RLS-enabled; read under the restricted role with the
-    // caller's GUC so the membership policy engages.
+    // `channel_messages` is RLS-enabled, so read under the restricted role with
+    // the caller's GUC to engage the membership policy.
     let mut tx = pool.begin().await?;
     sqlx::query("SELECT set_config('app.user_id', $1, true)")
         .bind(user_id.to_string())
@@ -36,9 +34,9 @@ pub async fn get_channel_messages(
         .execute(&mut *tx)
         .await?;
 
-    // Reconnect resync: when `since_id` is set, return top-level messages newer
-    // than that id in chronological order (backfill what was missed while the
-    // socket was down). Otherwise return the latest 50.
+    // Reconnect resync: with `since_id` set, return top-level messages newer than
+    // that id in chronological order, backfilling what the dropped socket missed.
+    // Otherwise return the latest 50.
     let rows = if let Some(since_id) = query.since_id {
         sqlx::query(
             r#"
@@ -103,10 +101,8 @@ pub async fn get_channel_messages(
     Ok(HttpResponse::Ok().json(messages))
 }
 
-// Returns every reply under a given top-level channel message, in ascending
-// time order. The parent is NOT included — the frontend already has it from
-// the main feed fetch. Forbidden if the caller isn't a member of the parent's
-// channel; 404 if the parent doesn't exist.
+// Every reply under a top-level channel message, oldest first. The parent is not
+// included; the frontend already has it from the main feed.
 #[get("/chat/channel-messages/{id}/thread")]
 #[instrument(target = "http", skip(req, pool, path), fields(parent_id = *path))]
 pub async fn get_channel_thread(

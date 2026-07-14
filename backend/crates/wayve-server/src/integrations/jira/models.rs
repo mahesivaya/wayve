@@ -1,7 +1,7 @@
 use crate::prelude::*;
 
-/// A decrypted per-user Jira connection, ready to make authenticated calls.
-/// Never serialized — it carries the plaintext API token.
+/// A decrypted per-user Jira connection. Must never be serialized: it carries the
+/// plaintext API token.
 pub struct JiraConnection {
     pub base_url: String,
     pub email: String,
@@ -33,14 +33,14 @@ pub struct ImportInput {
     pub max_results: Option<u32>,
 }
 
-// ---- Jira REST response shapes (only the fields we read) ----
+// Jira REST response shapes, projecting only the fields we read.
 
 #[derive(Deserialize)]
 pub struct JiraSearchResponse {
     #[serde(default)]
     pub issues: Vec<JiraIssue>,
-    /// Cursor for the next page of the enhanced JQL search. Absent on the last
-    /// page; its presence is the signal to keep paginating.
+    /// Cursor for the next page. Absent on the last page, so its presence is the
+    /// signal to keep paginating.
     #[serde(rename = "nextPageToken", default)]
     pub next_page_token: Option<String>,
 }
@@ -83,10 +83,8 @@ pub struct JiraPriority {
     pub name: String,
 }
 
-// ---- Inbound webhook payload (only the fields we read) ----
-
-/// The envelope Jira Cloud POSTs to a registered webhook. `webhook_event` is
-/// e.g. `jira:issue_updated`; `issue` is absent for non-issue events.
+/// The envelope Jira Cloud POSTs to a registered webhook. `issue` is absent for
+/// non-issue events.
 #[derive(Deserialize)]
 pub struct JiraWebhookPayload {
     #[serde(rename = "webhookEvent", default)]
@@ -95,9 +93,8 @@ pub struct JiraWebhookPayload {
     pub issue: Option<JiraWebhookIssue>,
 }
 
-/// The `issue` object inside a webhook payload. Reuses `JiraFields` (same shape
-/// as the REST search response) and adds `self`, whose host identifies the Jira
-/// site so we can match the stored `jira_base`.
+/// The `issue` object inside a webhook payload. `self`'s host identifies the Jira
+/// site, which is how a delivery is matched to the stored `jira_base`.
 #[derive(Deserialize)]
 pub struct JiraWebhookIssue {
     pub key: String,

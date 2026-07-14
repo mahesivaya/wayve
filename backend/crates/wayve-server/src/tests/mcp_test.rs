@@ -1,9 +1,7 @@
-// MCP integration: (1) the Streamable-HTTP client handshake — initialize →
-// tools/list → tools/call against a wiremock JSON-RPC server, and (2) the
-// owner/tier gate + connect flow — a personal user is blocked (403), an
-// enterprise org owner can connect (server validated via the handshake, token
-// encrypted at rest). The MCP server is mocked via wiremock; the SSRF guard is
-// relaxed for the loopback mock with MCP_ALLOW_PRIVATE_HOSTS.
+// The MCP integration: the Streamable-HTTP client handshake, and the gate on
+// connecting, which only an enterprise org owner may pass and which stores the
+// token encrypted at rest. The MCP server is mocked with wiremock, and the SSRF
+// guard is relaxed via MCP_ALLOW_PRIVATE_HOSTS so the loopback mock is reachable.
 #[cfg(test)]
 mod tests {
     use crate::integrations;
@@ -17,10 +15,10 @@ mod tests {
 
     const HEX64_TEST_KEY: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
-    /// Mount the three JSON-RPC responses a connect/handshake needs. Matched by
-    /// the `"method":"…"` substring of the POST body (one MCP endpoint, many
-    /// methods). `notifications/initialized` is unmounted → 404, which the
-    /// client ignores (it's a fire-and-forget notification).
+    /// Mounts the three JSON-RPC responses a handshake needs. One MCP endpoint
+    /// serves many methods, so the mocks match on the `"method":"…"` substring
+    /// of the request body. `notifications/initialized` is left unmounted and so
+    /// 404s, which the client ignores because it is fire-and-forget.
     async fn mount_mcp_server(mock: &MockServer) {
         Mock::given(method("POST"))
             .and(body_string_contains("\"method\":\"initialize\""))
@@ -69,8 +67,8 @@ mod tests {
             .await;
     }
 
-    /// Promote a local user to the owner of an enterprise-tier org (mirrors the
-    /// Slack test helper). Returns the org id.
+    /// Makes the user an owner of an enterprise-tier org, which is what the MCP
+    /// connect gate requires. Returns the org id.
     async fn make_enterprise(pool: &PgPool, user_id: i32) -> i32 {
         let org_id: i32 = sqlx::query_scalar(
             "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
@@ -120,7 +118,8 @@ mod tests {
         let mock = MockServer::start().await;
         mount_mcp_server(&mock).await;
 
-        // SAFETY: serialized via #[serial]; allows the loopback mock past SSRF.
+        // SAFETY: env mutation is serialized by #[serial]; CI also runs
+        // --test-threads=1. The flag lets the loopback mock past the SSRF guard.
         unsafe {
             std::env::set_var("MCP_ALLOW_PRIVATE_HOSTS", "1");
         }
@@ -180,7 +179,6 @@ mod tests {
         )
         .await;
 
-        // A personal (non-enterprise, non-platform) user is rejected.
         let req = actix_test::TestRequest::get()
             .uri("/integrations/mcp/connections")
             .insert_header(("Authorization", bearer.clone()))
@@ -188,7 +186,6 @@ mod tests {
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-        // Promote to enterprise owner → connect succeeds, token stored encrypted.
         let org_id = make_enterprise(&pool, user_id).await;
         let req = actix_test::TestRequest::post()
             .uri("/integrations/mcp/connections")
@@ -218,7 +215,7 @@ mod tests {
         let tool_count: Option<i32> = row.try_get("last_tool_count").ok().flatten();
         assert_eq!(tool_count, Some(1));
 
-        // The management list now returns the connection (and never the token).
+        // The management list returns the connection but never its token.
         let req = actix_test::TestRequest::get()
             .uri("/integrations/mcp/connections")
             .insert_header(("Authorization", bearer.clone()))

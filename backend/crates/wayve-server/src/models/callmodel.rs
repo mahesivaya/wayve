@@ -9,11 +9,9 @@ pub struct SignalMessage {
     pub from: Option<i32>,
     pub sdp: Option<String>,
     pub candidate: Option<IceCandidate>,
-    // Optional fields used by the ring/accept flow. `media` carries
-    // "audio" | "video" on a `call-invite` so the callee can render the
-    // right UI; `from_email` lets the callee show the caller's identity
-    // without an extra lookup. Both are ignored by the offer/answer/ice
-    // relay and pass through unchanged.
+    // Ring/accept flow only: `media` tells the callee which UI to render and
+    // `from_email` identifies the caller without a lookup. The offer, answer, and
+    // ICE relay pass both through unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -21,12 +19,9 @@ pub struct SignalMessage {
 }
 
 // `rename_all = "camelCase"` is load-bearing: the browser's
-// `RTCIceCandidate.toJSON()` produces camelCase keys (`sdpMid`,
-// `sdpMLineIndex`, `usernameFragment`). Without this rename the Rust
-// deserializer silently drops them as missing, then re-serializes them as
-// snake_case for the peer — `addIceCandidate` on the receiving side throws
-// "Candidate missing values for both sdpMid and sdpMLineIndex" and the call
-// connects but never gets remote ICE candidates, so media never flows.
+// `RTCIceCandidate.toJSON()` emits camelCase keys. Without the rename these
+// fields deserialize as missing and are relayed back as snake_case, so the peer's
+// `addIceCandidate` rejects every candidate and media never flows.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IceCandidate {

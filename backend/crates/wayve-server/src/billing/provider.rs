@@ -1,15 +1,14 @@
-// Stripe provider seam. A thin hand-rolled client over reqwest (the same
-// approach the project uses for Gmail/Graph/Zoom) so tests can point
-// STRIPE_API_BASE at a wiremock server. Stripe stays the source of truth;
-// everything here is request/response plumbing + webhook signature checks.
+// Stripe provider seam: a thin reqwest client so tests can point
+// STRIPE_API_BASE at a wiremock server. Stripe is the source of truth; this
+// module is request plumbing plus webhook signature checks.
 
 use crate::prelude::*;
 use anyhow::anyhow;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
-// Same rationale as `email::oauth::HTTP_CLIENT`: cap connect + total request
-// time so a stalled Stripe response can't park an async worker forever.
+// Timeouts are mandatory: a stalled Stripe response must not park an async
+// worker forever.
 static HTTP: Lazy<Client> = Lazy::new(|| {
     Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
@@ -84,10 +83,9 @@ async fn delete_request(path: &str) -> Result<Value> {
     Ok(body)
 }
 
-/// Look up a recurring price by its `lookup_key`. Returns Some(price_id) if
-/// found, None if the search returns no results. Used by `ensure_test_prices`
-/// to keep startup idempotent — re-running with the same plan code returns
-/// the existing price instead of creating duplicates.
+/// Look up a recurring price by its `lookup_key`. Keeps `ensure_test_prices`
+/// idempotent: re-running with the same plan code finds the existing price
+/// instead of creating a duplicate.
 pub async fn find_price_by_lookup_key(lookup_key: &str) -> Result<Option<String>> {
     let body = get_json(
         "/prices/search",
@@ -106,7 +104,7 @@ pub async fn find_price_by_lookup_key(lookup_key: &str) -> Result<Option<String>
         .map(str::to_string))
 }
 
-/// Create a Stripe Product. Returns the new `prod_...` id.
+/// Returns the new `prod_...` id.
 pub async fn create_product(name: &str, description: Option<&str>) -> Result<String> {
     let mut params = vec![("name", name.to_string())];
     if let Some(desc) = description {
@@ -119,9 +117,8 @@ pub async fn create_product(name: &str, description: Option<&str>) -> Result<Str
         .ok_or_else(|| anyhow!("stripe product response missing id"))
 }
 
-/// Create a recurring Price (monthly by default). Tagged with a stable
-/// `lookup_key` so re-runs can find it without storing the id outside the
-/// plans table. Returns the new `price_...` id.
+/// Create a recurring monthly Price. The `lookup_key` must be stable so re-runs
+/// can find the price without storing its id outside the plans table.
 pub async fn create_monthly_price(
     product_id: &str,
     amount_cents: i64,
@@ -142,7 +139,7 @@ pub async fn create_monthly_price(
         .ok_or_else(|| anyhow!("stripe price response missing id"))
 }
 
-/// Create a Stripe customer; returns the new `cus_...` id.
+/// Returns the new `cus_...` id.
 pub async fn create_customer(email: &str, owner_label: &str) -> Result<String> {
     let params = vec![
         ("email", email.to_string()),
@@ -175,39 +172,32 @@ pub struct SetupIntent {
 
 pub struct PendingSubscription {
     pub subscription_id: String,
-    /// PaymentIntent client_secret from the latest invoice. The frontend
-    /// confirms this with Stripe.js to actually charge the card and
-    /// flip the subscription from `incomplete` to `active`.
+    /// PaymentIntent client_secret from the latest invoice. The frontend must
+    /// confirm it with Stripe.js to charge the card and move the subscription
+    /// from `incomplete` to `active`.
     pub client_secret: String,
 }
 
-/// Create a subscription in the `incomplete` state with a PaymentIntent
-/// already attached to its latest invoice. The frontend mounts a Payment
-/// Element with the returned `client_secret` and calls `confirmPayment`
-/// — Stripe charges the card, the subscription transitions to `active`,
-/// and the webhook handler updates our local subscriptions row.
+/// Create a subscription in the `incomplete` state with a PaymentIntent attached
+/// to its latest invoice; the frontend confirms it, and the webhook handler is
+/// what updates the local subscriptions row.
 ///
-/// `client_reference` mirrors the value we send to hosted Checkout so
-/// the webhook fan-out logic can still match the subscription back to
-/// the owner + plan. Stored on the subscription's metadata.
+/// `client_reference` must mirror the value sent to hosted Checkout, since the
+/// webhook fan-out matches the subscription back to its owner and plan through
+/// it.
 pub async fn create_subscription(
     customer_id: &str,
     price_id: &str,
     client_reference: &str,
 ) -> Result<PendingSubscription> {
-    // Expand BOTH the legacy `payment_intent` (older API versions) and
-    // the newer `confirmation_secret` field (Stripe 2024-09-30+). The
-    // shape Stripe returns depends on the API version pinned to your
-    // account; supporting both keeps the integration version-agnostic.
+    // Both the legacy `payment_intent` and the newer `confirmation_secret` are
+    // expanded because which one Stripe returns depends on the API version
+    // pinned to the account.
     let params = vec![
         ("customer", customer_id.to_string()),
         ("items[0][price]", price_id.to_string()),
-        // `default_incomplete` is the canonical recipe for in-page
-        // subscription creation: Stripe creates the subscription in
-        // `incomplete`, attaches a PaymentIntent on the first invoice,
-        // and waits for the client to confirm. Without this, Stripe
-        // tries to charge immediately and we have no client_secret to
-        // hand back.
+        // Without `default_incomplete` Stripe charges immediately and returns no
+        // client_secret for the frontend to confirm.
         ("payment_behavior", "default_incomplete".to_string()),
         (
             "payment_settings[save_default_payment_method]",
@@ -225,11 +215,8 @@ pub async fn create_subscription(
         .ok_or_else(|| anyhow!("subscription response missing id"))?
         .to_string();
 
-    // Try the new path first (`confirmation_secret`), then fall back to
-    // the legacy `payment_intent.client_secret`. Either is acceptable —
-    // `stripe.confirmPayment({ elements })` on the frontend works with
-    // both, because Elements only needs the PaymentIntent's client_secret
-    // and that's exactly what each field carries.
+    // Either field carries the PaymentIntent's client_secret, which is all
+    // Elements needs, so falling back to the legacy path is safe.
     let client_secret = body
         .pointer("/latest_invoice/confirmation_secret/client_secret")
         .and_then(Value::as_str)
@@ -252,15 +239,14 @@ pub async fn create_subscription(
     })
 }
 
-/// A customer's default card, if one is set. Used to offer "use my saved card"
-/// on the org create form.
+/// A customer's saved card, offered as "use my saved card" on the org create
+/// form.
 pub struct DefaultCard {
     pub payment_method_id: String,
     pub brand: String,
     pub last4: String,
 }
 
-/// Return the customer's invoice-default card (brand + last4 + id), or None.
 pub async fn get_default_payment_method(customer_id: &str) -> Result<Option<DefaultCard>> {
     let body = get_json(
         &format!("/customers/{customer_id}"),
@@ -295,7 +281,6 @@ pub async fn get_default_payment_method(customer_id: &str) -> Result<Option<Defa
     }))
 }
 
-/// Create a hosted Checkout Session for a subscription.
 pub async fn create_checkout_session(p: &CheckoutParams) -> Result<CheckoutSession> {
     let params = vec![
         ("mode", "subscription".to_string()),
@@ -325,7 +310,7 @@ pub async fn create_checkout_session(p: &CheckoutParams) -> Result<CheckoutSessi
     })
 }
 
-/// Create a Customer Portal session; returns the URL to redirect the user to.
+/// Returns the Customer Portal URL to redirect the user to.
 pub async fn create_portal_session(customer_id: &str, return_url: &str) -> Result<String> {
     let params = vec![
         ("customer", customer_id.to_string()),
@@ -338,8 +323,8 @@ pub async fn create_portal_session(customer_id: &str, return_url: &str) -> Resul
         .ok_or_else(|| anyhow!("portal session missing url"))
 }
 
-/// Create a SetupIntent so Stripe.js can collect and attach a card without
-/// card details touching this app's servers.
+/// Create a SetupIntent so Stripe.js collects and attaches the card without card
+/// details ever touching this app's servers.
 pub async fn create_setup_intent(customer_id: &str) -> Result<SetupIntent> {
     let params = vec![
         ("customer", customer_id.to_string()),
@@ -356,7 +341,6 @@ pub async fn create_setup_intent(customer_id: &str) -> Result<SetupIntent> {
     })
 }
 
-/// Set the default payment method for future invoices on the Stripe customer.
 pub async fn set_customer_default_payment_method(
     customer_id: &str,
     payment_method_id: &str,
@@ -369,7 +353,6 @@ pub async fn set_customer_default_payment_method(
     Ok(())
 }
 
-/// Set the default payment method on an existing subscription, if present.
 pub async fn set_subscription_default_payment_method(
     subscription_id: &str,
     payment_method_id: &str,
@@ -379,46 +362,40 @@ pub async fn set_subscription_default_payment_method(
     Ok(())
 }
 
-/// Schedule cancellation of a subscription at the end of the current period.
+/// Schedule cancellation at the end of the current period.
 pub async fn cancel_at_period_end(subscription_id: &str) -> Result<()> {
     let params = vec![("cancel_at_period_end", "true".to_string())];
     post_form(&format!("/subscriptions/{subscription_id}"), &params).await?;
     Ok(())
 }
 
-/// Cancel a subscription *immediately* (Stripe `POST /subscriptions/{id}/cancel`),
-/// as opposed to [`cancel_at_period_end`]. Used when the organization itself is
-/// being deleted: the local subscription row is about to be cascade-removed, so
-/// we must stop Stripe billing right now rather than leave it running to period
-/// end with no local record.
+/// Cancel immediately, unlike [`cancel_at_period_end`]. Required when an
+/// organization is deleted: its local subscription row is about to be cascade-
+/// removed, so Stripe billing must stop now rather than run on with no local
+/// record.
 pub async fn cancel_now(subscription_id: &str) -> Result<()> {
     delete_request(&format!("/subscriptions/{subscription_id}")).await?;
     Ok(())
 }
 
-// ── Read-only "Stripe account" snapshot helpers ──────────────────────
-// Used by the platform billing console to render live balance / payouts
-// / charges, instead of (or alongside) the local DB projection. Every
-// call hits Stripe directly; callers should rate-limit / cache at the
-// handler level.
+// Read-only snapshot helpers for the platform billing console. Every call hits
+// Stripe directly, so callers are responsible for rate-limiting and caching.
 
-/// Account balance — pending + available amounts per currency.
+/// Pending and available amounts per currency.
 pub async fn fetch_balance() -> Result<Value> {
     get_json("/balance", &[]).await
 }
 
-/// Most recent payouts (money landing in the connected bank).
+/// Most recent payouts, meaning money landing in the connected bank.
 pub async fn list_payouts(limit: u32) -> Result<Value> {
     get_json("/payouts", &[("limit", limit.to_string())]).await
 }
 
-/// Most recent charges (individual payment events).
 pub async fn list_charges(limit: u32) -> Result<Value> {
     get_json("/charges", &[("limit", limit.to_string())]).await
 }
 
-/// Balance transactions in a time window — used to compute the
-/// gross / net / fees totals for "last 30 days".
+/// Balance transactions in a window, used for gross, net, and fee totals.
 pub async fn list_balance_transactions(created_gte_unix: i64, limit: u32) -> Result<Value> {
     get_json(
         "/balance_transactions",

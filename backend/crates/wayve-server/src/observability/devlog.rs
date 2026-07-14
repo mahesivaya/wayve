@@ -1,15 +1,13 @@
-//! Tiny zero-extra-dep file logger backing `info!/warn!/error!` while
-//! `tracing-subscriber` is disabled.
+//! File logger backing `info!/warn!/error!` while `tracing-subscriber` is
+//! disabled.
 //!
-//! With `tracing/log-always` enabled, every `tracing::info!/warn!/error!`
-//! call (including `target = "..."` and structured fields) is forwarded to
-//! the `log` crate facade. We register `DevLogger` as the implementation,
-//! which writes formatted lines to `backend/logs/dev.log` and stderr.
+//! The `tracing/log-always` feature forwards every `tracing` call, including
+//! its `target = "..."` and structured fields, to the `log` facade. `DevLogger`
+//! is registered as that facade's implementation and writes formatted lines to
+//! `backend/logs/dev.log` and stderr, e.g.
 //!
-//! Lines look like:
 //! ```text
 //! 2026-05-07 12:31:22.481 INFO  [auth] User registered: demo@gmail.com
-//! 2026-05-07 12:31:55.018 WARN  [auth] Invalid login attempt: fake@gmail.com
 //! ```
 
 use std::fs::{OpenOptions, create_dir_all};
@@ -26,7 +24,8 @@ struct DevLogger;
 
 impl Log for DevLogger {
     fn enabled(&self, meta: &Metadata) -> bool {
-        // Skip noisy framework internals at INFO; let WARN/ERROR through.
+        // Skip noisy framework internals at INFO; let WARN/ERROR through. App
+        // code sets target = "auth" | "ws" | "worker" | "db" to stay readable.
         let target = meta.target();
         if meta.level() >= Level::Info
             && (target.starts_with("hyper")
@@ -72,7 +71,7 @@ impl Log for DevLogger {
             )
         };
 
-        // Mirror to stderr so devs see logs without tailing.
+        // Mirror to stderr so devs see logs without tailing the file.
         eprint!("{line}");
         if let Some(m) = FILE.get()
             && let Ok(mut f) = m.lock()
@@ -91,9 +90,7 @@ impl Log for DevLogger {
 }
 
 /// Open `logs/dev.log` and register `DevLogger` as the global `log`
-/// implementation. `tracing` events flow through the log facade because of
-/// the `tracing/log-always` feature, so `info!/warn!/error!` calls land
-/// here. Safe to call once on startup.
+/// implementation. Safe to call once on startup.
 pub fn init_devlog() {
     if FILE.get().is_some() {
         return;

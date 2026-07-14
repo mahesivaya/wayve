@@ -7,10 +7,9 @@ use crate::email::provider::refresh_and_persist_email_token;
 use serde_json::Value;
 use tracing::{debug, error, info, instrument, warn};
 
-// (msg_id, sender, receiver, subject, gmail_timestamp, is_read, labels) — body
-// is fetched later by body_worker. `labels` carries the message's full Gmail
-// `labelIds` (e.g. `["INBOX","IMPORTANT","CATEGORY_UPDATES"]`) so the sidebar
-// category folders can filter without an extra round-trip to Gmail.
+/// `(msg_id, sender, receiver, subject, gmail_timestamp, is_read, labels)`. The
+/// body is fetched later by body_worker. `labels` carries the message's full
+/// Gmail `labelIds` so the sidebar category folders can filter locally.
 pub type EmailHeader = (
     String,
     String,
@@ -21,14 +20,10 @@ pub type EmailHeader = (
     Vec<String>,
 );
 
-/// Fetch the authoritative unread count for the INBOX label and stamp it on
-/// `email_accounts.provider_unread_count`. Without this, the sidebar's unread
-/// badge only reflects emails Wayve has already synced into Postgres, which
-/// grows over time as the user paginates older mail — making the count look
-/// like it's "increasing" on every Show More click.
-///
-/// Best-effort: a failed labels.get is logged and ignored so the rest of the
-/// sync still proceeds. The stale count is better than a sync hard-fail.
+/// Stamps Gmail's authoritative INBOX unread count onto
+/// `email_accounts.provider_unread_count`. Without it the sidebar badge would
+/// only count locally-synced mail, so it would appear to climb as the user
+/// paginates older mail. Best-effort: a stale count beats failing the sync.
 pub async fn refresh_provider_unread_count(
     pool: &PgPool,
     account_id: i32,
@@ -56,8 +51,7 @@ pub async fn refresh_provider_unread_count(
                 .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
         })
         .unwrap_or(0);
-    // Clamp to i32::MAX — unlikely for any real inbox but protects the
-    // INTEGER column from a malformed payload.
+    // Clamp so a malformed payload can't overflow the INTEGER column.
     let unread_i32 = i32::try_from(unread.clamp(0, i32::MAX as i64)).unwrap_or(0);
     sqlx::query("UPDATE email_accounts SET provider_unread_count = $1 WHERE id = $2")
         .bind(unread_i32)
@@ -75,11 +69,10 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
     );
 
     let resp = HTTP_CLIENT.get(&url).bearer_auth(token).send().await?;
-    // A rate-limited / errored metadata fetch returns a JSON *error* object with
-    // no `payload`/`labelIds`/`internalDate`. Parsing that and inserting it would
-    // persist a bogus "Unknown / (No Subject)" row (empty labels, now-timestamp)
-    // for a perfectly real email. Reject non-2xx (and error bodies) so the id is
-    // left for the next sync to retry instead of storing garbage.
+    // A rate-limited or errored metadata fetch returns a JSON error object with
+    // no payload/labelIds/internalDate. Parsing it would persist a bogus
+    // "Unknown / (No Subject)" row for a real email, so reject non-2xx and error
+    // bodies and leave the id for the next sync to retry.
     if !resp.status().is_success() {
         let status = resp.status();
         return Err(anyhow::anyhow!(
@@ -125,10 +118,9 @@ fn extract_gmail_timestamp(res: &Value) -> NaiveDateTime {
         .unwrap_or_else(|| chrono::Utc::now().naive_utc())
 }
 
-/// Run the full per-account sync workload: token refresh, forward sync,
-/// backfill, label backfill, and post-sync cache invalidation. Errors
-/// are logged and swallowed — the worker keeps going for the rest of
-/// the accounts in a tick.
+/// Runs the full per-account workload: token refresh, forward sync, backfill,
+/// label backfill, and cache invalidation. Errors are logged and swallowed so
+/// one bad account doesn't abort the rest of the tick.
 pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::EmailAccount) {
     let Some(refresh_token) = account.usable_refresh_token() else {
         warn!(target: "worker", account_id = account.id, "email account skipped: missing refresh token");
@@ -160,8 +152,6 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         return;
     }
 
-    // Per-tick backfill of older mail (general window) and the Gmail
-    // system/category labels.
     if let Err(err) = backfill_older(pool, account.id, &account.provider, &token.access_token).await
     {
         warn!(target: "worker", account_id = account.id, error = ?err, "backfill batch failed");
@@ -184,11 +174,8 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         }
     }
 
-    // Google Calendar: import upcoming events on the SAME cadence as email
-    // (this tick) so the Scheduler stays current, instead of the one-shot
-    // import that only ran at connect time. Reuses the token we just
-    // refreshed above; best-effort and idempotent (import_upcoming_events
-    // upserts ON CONFLICT (user_id, google_event_id)).
+    // Calendar rides the email cadence, reusing the token refreshed above.
+    // Idempotent: import_upcoming_events upserts on (user_id, google_event_id).
     if account.provider == crate::email::provider::MailProvider::Google {
         match crate::scheduler::google_calendar::import_upcoming_events(
             pool,
@@ -207,21 +194,16 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         }
     }
 
-    // Fresh mail just landed in `emails` — drop the /api/profile and
-    // /api/me caches for this user so the Storage & Usage panel
-    // reflects the new totals on the next page load instead of waiting
-    // out the 30s/60s TTLs.
+    // Fresh mail landed, so drop the profile caches rather than let the Storage
+    // and Usage panel wait out their 30s/60s TTLs.
     crate::routes::user::invalidate_profile_cache(account.user_id).await;
     crate::email::profile::invalidate_me_cache(account.user_id).await;
 }
 
-/// Adaptive-backoff scheduler. Called every 30s from the sync worker;
-/// only syncs accounts whose per-account next-due time has elapsed, then
-/// schedules the next visit based on how recently the mailbox last
-/// received mail (the `last_message_at` ladder). `schedule` lives in the
-/// worker's process memory and is rebuilt fresh on every restart — a
-/// brand-new entry implicitly means "sync now," which is the right
-/// startup behavior.
+/// Adaptive-backoff scheduler, called every 30s by the sync worker. Syncs only
+/// accounts whose next-due time has elapsed, then reschedules them off the
+/// `last_message_at` ladder. `schedule` is process memory, rebuilt on restart,
+/// so a missing entry means "sync now" — the desired startup behaviour.
 pub async fn sync_due_accounts(
     pool: &PgPool,
     schedule: &mut std::collections::HashMap<i32, std::time::Instant>,
@@ -240,9 +222,8 @@ pub async fn sync_due_accounts(
         "sync_due_accounts"
     );
 
-    // Drop entries for accounts that no longer appear in the syncable list
-    // (account deleted / OAuth revoked). Without this, the schedule map
-    // grows unboundedly across re-syncs.
+    // Drop entries for accounts that are no longer syncable (deleted, or OAuth
+    // revoked); without this the schedule map grows unboundedly.
     let live_ids: std::collections::HashSet<i32> = due
         .iter()
         .map(|a| a.id)
@@ -265,8 +246,6 @@ pub async fn sync_due_accounts(
         let Ok((account_id, pre)) = h.await else {
             continue;
         };
-        // Refresh last_message_at to capture any new mail that landed
-        // during this tick. One indexed PK lookup per account; cheap.
         let post: Option<NaiveDateTime> =
             sqlx::query_scalar("SELECT last_message_at FROM email_accounts WHERE id = $1")
                 .bind(account_id)
@@ -274,9 +253,8 @@ pub async fn sync_due_accounts(
                 .await
                 .unwrap_or(pre);
 
-        // "New mail landed" = the freshness stamp advanced this tick.
-        // Reset to the hot interval so the next pickup is fast; otherwise
-        // step up the ladder based on absolute age.
+        // An advanced freshness stamp resets to the hot interval so the next
+        // pickup is fast; otherwise the ladder steps up by absolute age.
         let new_mail_landed = match (pre, post) {
             (Some(p), Some(q)) => q > p,
             (None, Some(_)) => true,
@@ -293,10 +271,9 @@ pub async fn sync_due_accounts(
     Ok(())
 }
 
-// Adaptive-backoff ladder. Quiet accounts back off; busy ones stay hot.
-// The brackets balance "user notices new mail quickly" against
-// "we don't hammer Gmail/Outlook for inboxes that haven't seen a message
-// in a week." Tune via the constants — the rest of the worker is generic.
+// Adaptive-backoff ladder: quiet accounts back off, busy ones stay hot. The
+// brackets trade off noticing new mail quickly against hammering Gmail/Outlook
+// for inboxes that haven't seen a message in a week.
 const INTERVAL_HOT: std::time::Duration = std::time::Duration::from_secs(30);
 const INTERVAL_WARM: std::time::Duration = std::time::Duration::from_secs(60);
 const INTERVAL_COOL: std::time::Duration = std::time::Duration::from_secs(5 * 60);
@@ -334,44 +311,36 @@ mod adaptive_backoff_tests {
 
     #[test]
     fn fresh_mail_is_hot() {
-        // Anything < 1h old → 30s.
         assert_eq!(interval_for_age(Some(ago(0))), INTERVAL_HOT);
         assert_eq!(interval_for_age(Some(ago(59))), INTERVAL_HOT);
     }
 
     #[test]
     fn day_old_mail_is_warm() {
-        // 1h–24h → 60s.
         assert_eq!(interval_for_age(Some(ago(60))), INTERVAL_WARM);
         assert_eq!(interval_for_age(Some(ago(60 * 23))), INTERVAL_WARM);
     }
 
     #[test]
     fn week_old_mail_is_cool() {
-        // 24h–7d → 5min.
         assert_eq!(interval_for_age(Some(ago(60 * 24))), INTERVAL_COOL);
         assert_eq!(interval_for_age(Some(ago(60 * 24 * 6))), INTERVAL_COOL);
     }
 
     #[test]
     fn old_mail_is_cold() {
-        // > 7d → 30min.
         assert_eq!(interval_for_age(Some(ago(60 * 24 * 7))), INTERVAL_COLD);
         assert_eq!(interval_for_age(Some(ago(60 * 24 * 30))), INTERVAL_COLD);
     }
 }
 
-/// Per-tick backfill window size — how many older messages to pull each
-/// time the worker runs. Capped to keep Gmail rate-limit headroom; with a
-/// 30s tick this fully backfills ~6000 messages/hour per account, which is
-/// enough for almost every personal mailbox to catch up overnight.
+/// Older messages pulled per tick. Capped to keep Gmail rate-limit headroom; at
+/// a 30s tick that is ~6000 messages/hour per account.
 const BACKFILL_BATCH: usize = 100;
 
-/// Pulls the next batch of *older* mail for an account. Anchors the window
-/// at the oldest email currently in the local DB and asks the provider for
-/// the next BACKFILL_BATCH messages older than that. Stops naturally when
-/// `sync_before` returns no rows (mailbox exhausted) or when the account has
-/// no emails yet (in which case the forward sync handles it).
+/// Pulls the next batch of older mail, anchoring the window at the oldest email
+/// in the local DB. Stops when the provider returns no rows, or when the account
+/// has no emails yet and the forward sync is doing the initial pull.
 async fn backfill_older(
     pool: &PgPool,
     account_id: i32,
@@ -386,9 +355,6 @@ async fn backfill_older(
             .flatten();
 
     let Some(oldest_naive) = oldest else {
-        // No mail yet — the forward sync (which paginates without a
-        // last_sync floor on the first run) is responsible for the
-        // initial pull.
         return Ok(());
     };
 
@@ -479,13 +445,10 @@ pub async fn fetch_recent_ids(token: &str, max_results: usize) -> Result<Vec<Str
     Ok(ids)
 }
 
-/// Fetch the N most-recent message IDs that carry a specific label
-/// (e.g. `SPAM`, `DRAFT`). `includeSpamTrash=true` is required for SPAM
-/// because Gmail's default `messages.list` hides spam & trash even when
-/// the `labelIds` filter explicitly asks for them. The full `labelIds`
-/// array — including the requested label — is extracted by
-/// `fetch_headers_only` and persisted into `emails.labels`, so the sidebar
-/// filter `'<LABEL>' = ANY(e.labels)` lights up automatically.
+/// Most-recent message ids carrying a given label. `includeSpamTrash=true` is
+/// required because Gmail's `messages.list` hides spam and trash even when
+/// `labelIds` explicitly asks for them. `fetch_headers_only` then persists the
+/// full label array, which is what the sidebar's `= ANY(e.labels)` filter reads.
 pub async fn fetch_recent_ids_with_label(
     token: &str,
     label: &str,
@@ -524,9 +487,8 @@ pub async fn fetch_ids_before(
     before_timestamp: i64,
     max_results: usize,
 ) -> Result<Vec<String>> {
-    // includeSpamTrash=true makes Gmail return SPAM (and TRASH) messages too —
-    // without it the general backfill silently skips spam, leaving the
-    // Spam folder stuck at whatever the recent label-pull caught.
+    // Without includeSpamTrash the general backfill silently skips spam and
+    // trash, leaving the Spam folder stuck at whatever the label pull caught.
     let url = format!(
         "{}/gmail/v1/users/me/messages?maxResults={}&q=before:{}&includeSpamTrash=true",
         crate::external::gmail_api_base(),
@@ -555,9 +517,9 @@ pub async fn fetch_ids_before(
     Ok(ids)
 }
 
-/// `messages.list` variant that filters by label AND a `before:` timestamp.
-/// Used by the per-label backfill (DRAFT in particular) since drafts are
-/// excluded from `messages.list` unless `labelIds=DRAFT` is set explicitly.
+/// `messages.list` filtered by label and a `before:` timestamp. Needed for the
+/// per-label backfill because Gmail excludes drafts unless `labelIds=DRAFT` is
+/// set explicitly.
 pub async fn fetch_label_ids_before(
     token: &str,
     label: &str,
@@ -593,10 +555,9 @@ pub async fn fetch_label_ids_before(
     Ok(ids)
 }
 
-/// Backfill older messages within a single Gmail label (e.g. DRAFT, SPAM).
-/// Walks one BACKFILL_BATCH window older than the oldest local message
-/// currently carrying `label`. No-op when the label has zero local rows —
-/// the recent-only sync handles bootstrapping in that case.
+/// Backfills one BACKFILL_BATCH window older than the oldest local message
+/// carrying `label`. No-op when the label has no local rows; the recent-only
+/// sync bootstraps it in that case.
 async fn backfill_label_older(
     pool: &PgPool,
     account_id: i32,
@@ -691,12 +652,9 @@ pub fn extract_headers(res: &Value) -> (String, String, String) {
     (sender, receiver, subject)
 }
 
-/// Side-pull for messages that don't live in the INBOX scan: SPAM and DRAFT.
-/// Walks the same `fetch_headers_only` → `process_batch` path so the rows
-/// land in `emails` with their full `labelIds`, including SPAM/DRAFT, which
-/// makes the sidebar filter (`'SPAM' = ANY(e.labels)`) light up. Best-effort
-/// per label — a 4xx on one (e.g. the user revoked a scope) doesn't break
-/// the others or the main sync.
+/// Side-pull for messages the INBOX scan misses, such as SPAM and DRAFT. Rows
+/// land in `emails` with their full label array so the sidebar filters light up.
+/// Best-effort per label: a 4xx on one doesn't break the others or the sync.
 async fn sync_account_label_recent(
     pool: &PgPool,
     account_id: i32,
@@ -724,11 +682,8 @@ async fn sync_account_label_recent(
     Ok(())
 }
 
-// Cap the side-pulls. Spam fills the table fast and serves zero engagement
-// purpose past the "is it there" check; drafts are usually a handful; trash
-// is bounded by Gmail's 30-day retention. All are pulled on every sync tick
-// so the user sees fresh state for these folders even before backfill walks
-// them to completion.
+// Caps on the side-pulls, which run on every tick so these folders show fresh
+// state before backfill walks them. Spam would otherwise fill the table fast.
 const GMAIL_SPAM_RECENT_CAP: usize = 50;
 const GMAIL_DRAFT_RECENT_CAP: usize = 25;
 const GMAIL_TRASH_RECENT_CAP: usize = 50;
@@ -767,15 +722,12 @@ pub async fn sync_account(
         .execute(pool)
         .await?;
 
-    // Best-effort — sidebar unread badge reflects truth even when the user
-    // hasn't paginated all the way back through their mailbox.
     if let Err(err) = refresh_provider_unread_count(pool, account_id, token).await {
         warn!(target: "worker", account_id, error = ?err, "refresh_provider_unread_count failed");
     }
 
-    // Pull recent SPAM + DRAFT alongside the INBOX scan so the sidebar's
-    // Spam/Drafts folders show real data. Errors are warned-then-ignored
-    // so a 4xx on one label doesn't poison the whole tick.
+    // Label side-pulls are warned-then-ignored so a 4xx on one label doesn't
+    // poison the whole tick.
     if let Err(err) =
         sync_account_label_recent(pool, account_id, token, "SPAM", GMAIL_SPAM_RECENT_CAP).await
     {
@@ -836,18 +788,14 @@ pub async fn sync_account_recent(
         .execute(pool)
         .await?;
 
-    // First-sync hook fires through this path right after a Gmail account
-    // connects (see oauth_flow::oauth_callback). Stamping the provider
-    // unread count here makes the sidebar badge instantly accurate instead
-    // of starting at "however many of the recent 51 are unread" and only
-    // catching up after a full sync.
+    // This is the first-sync path, run right after a Gmail account connects.
+    // Stamping the unread count and pulling the label folders here makes the
+    // sidebar accurate immediately, rather than only reflecting the recent page
+    // until the first full sync.
     if let Err(err) = refresh_provider_unread_count(pool, account_id, token).await {
         warn!(target: "worker", account_id, error = ?err, "refresh_provider_unread_count failed");
     }
 
-    // Also pull the first page of SPAM and DRAFT so the sidebar Spam/Drafts
-    // folders aren't blank for the first 30s after connect. Same
-    // best-effort error handling as sync_account.
     if let Err(err) =
         sync_account_label_recent(pool, account_id, token, "SPAM", GMAIL_SPAM_RECENT_CAP).await
     {
@@ -931,9 +879,8 @@ where
         return Ok(());
     }
 
-    // Headers go through the email repo so the column list, encryption,
-    // and is_new detection stay in one place. Body is left empty here —
-    // body_worker fills it asynchronously.
+    // `body: None` leaves body_encrypted = '', the pending marker body_worker
+    // picks up asynchronously.
     use crate::email::repo::{InsertEmail, upsert_batch};
     let insert_batch: Vec<InsertEmail<'_>> = batch
         .iter()
@@ -953,8 +900,7 @@ where
         .collect();
     let returned = upsert_batch(pool, account_id, &insert_batch).await?;
 
-    // Webhook fan-out. Resolve the owner once per batch (the account's
-    // user_id never changes during a sync tick).
+    // The account's owner can't change mid-tick, so resolve it once per batch.
     let owner_row = sqlx::query(
         "SELECT user_id, email, provider, (SELECT organization_id FROM users WHERE id = ea.user_id) AS organization_id
            FROM email_accounts ea WHERE id = $1",
@@ -977,10 +923,8 @@ where
             if !r.is_new {
                 continue;
             }
-            // Subject + sender only — never the body. Body fetches happen
-            // asynchronously via body_worker and may carry sensitive content
-            // that customers should pull explicitly via /api/emails/{id} if
-            // they need it and have the email:read scope.
+            // Subject and sender only, never the body: consumers must pull that
+            // explicitly from /api/emails/{id} with the email:read scope.
             emit(
                 pool,
                 owner,
@@ -995,9 +939,8 @@ where
             )
             .await;
 
-            // Enterprise audit trail (Security → User actions). No HttpRequest
-            // here (background sync), so use the system variant — IP/UA are
-            // NULL. from/to/subject land in org/platform-admin-readable
+            // Background sync has no HttpRequest, so the system variant records
+            // NULL IP and user agent. from/to/subject land in admin-readable
             // metadata by design.
             crate::audit::record_action_system(
                 pool,

@@ -1,12 +1,11 @@
 //! Normalize a user's free-text "senders" description into a list of lowercase
 //! email addresses and bare domains, used to match an email's `From` address.
 //!
-//! Strategy mirrors `tasks/suggest/mapping.rs`: a cheap deterministic extraction
-//! runs first (and is the floor + the fallback), then the in-app AI re-interprets
-//! the text to expand loose phrases ("all github notifications" -> "github.com").
-//! The AI output is sanitized through the same validator and *unioned* with the
-//! deterministic result, so explicit addresses the user typed can never be
-//! dropped by a lazy model. Never errors — worst case an empty list.
+//! The strategy mirrors `tasks/suggest/mapping.rs`. A deterministic extraction
+//! runs first and is both the floor and the fallback; the in-app AI then expands
+//! loose phrases. AI output is sanitized through the same validator and unioned
+//! with the deterministic result, so explicit addresses the user typed can never
+//! be dropped by a lazy model. Never errors: worst case is an empty list.
 
 use crate::prelude::*;
 use std::collections::HashSet;
@@ -15,7 +14,7 @@ use std::collections::HashSet;
 /// inbox query builds, and the prompt size.
 pub const MAX_SENDERS: usize = 50;
 
-/// Normalize free text into lowercase addresses/bare-domains. Never errors.
+/// Never errors: an unusable description yields an empty list.
 pub async fn normalize_senders(pool: &PgPool, user_id: i32, raw: &str) -> Vec<String> {
     let deterministic = regex_extract(raw);
 
@@ -32,14 +31,12 @@ pub async fn normalize_senders(pool: &PgPool, user_id: i32, raw: &str) -> Vec<St
         None => return deterministic,
     };
 
-    // Union: deterministic first (authoritative for explicit addresses), then
-    // AI additions (phrase expansions). Dedup preserving order, cap the total.
+    // Deterministic first, so it stays authoritative for explicit addresses.
     union_capped(deterministic, ai_entries)
 }
 
-/// Ask the AI to turn the description into a JSON array of addresses/domains.
-/// Returns `None` when the call fails or yields nothing usable — the caller
-/// then relies on the deterministic extraction.
+/// `None` when the call fails or yields nothing usable, which leaves the caller
+/// on the deterministic extraction.
 async fn ai_normalize(ai: &crate::ai::provider::ResolvedAi, raw: &str) -> Option<Vec<String>> {
     let prompt = format!(
         "You convert a description of email senders into a JSON array of lowercase \
@@ -60,8 +57,8 @@ async fn ai_normalize(ai: &crate::ai::provider::ResolvedAi, raw: &str) -> Option
     Some(arr.iter().filter_map(|s| sanitize_entry(s)).collect())
 }
 
-/// Deterministic extraction: split on separators and keep tokens that sanitize
-/// to a valid address or bare domain. Handles `"a@b.com, c@d.com"` with zero AI.
+/// Splits on separators and keeps tokens that sanitize to a valid address or
+/// bare domain, so `"a@b.com, c@d.com"` resolves with no AI call at all.
 fn regex_extract(raw: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
@@ -78,7 +75,7 @@ fn regex_extract(raw: &str) -> Vec<String> {
     out
 }
 
-/// Union two lists, dedup preserving order (first list authoritative), cap length.
+/// Dedups preserving order, so the first list wins on collision.
 fn union_capped(first: Vec<String>, second: Vec<String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
@@ -93,8 +90,8 @@ fn union_capped(first: Vec<String>, second: Vec<String>) -> Vec<String> {
     out
 }
 
-/// Clean a single token into a valid lowercase address or bare domain, or `None`.
-/// Strips `mailto:`, angle brackets, quotes, and trailing punctuation.
+/// Strips `mailto:`, angle brackets, quotes, and trailing punctuation, yielding
+/// a valid lowercase address or bare domain, or `None`.
 fn sanitize_entry(token: &str) -> Option<String> {
     let s = token
         .trim()

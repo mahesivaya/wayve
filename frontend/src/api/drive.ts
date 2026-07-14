@@ -21,9 +21,8 @@ export type Folder = {
   created_at: string;
 };
 
-// Backend scopes files/folders to the authenticated user (JWT). The
-// `folder_id` parameter narrows to a specific folder; `null` (default)
-// means "drive root" (rows where folder_id IS NULL on the server).
+// The backend scopes files and folders to the authenticated user. A null
+// folder id means the drive root, i.e. rows where folder_id IS NULL.
 export const getDriveFiles = async (folderId: number | null = null) => {
   const path =
     folderId == null ? "/api/files" : `/api/files?folder_id=${folderId}`;
@@ -58,31 +57,21 @@ export const deleteFolder = async (folderId: number) => {
   if (!res.ok) throw new Error("Delete folder failed");
 };
 
-// Rename a drive file. The server keeps the on-disk blob keyed by UUID; only
-// the display name (and derived file_type) change.
+// The on-disk blob is keyed by UUID, so only the display name changes.
 export const renameDriveFile = async (fileId: number, name: string) =>
   apiFetchJson<{ id: number; name: string }>(`/api/files/${fileId}`, {
     method: "PATCH",
     body: JSON.stringify({ name }),
   });
 
-// Delete a drive file (DB row + on-disk blob). Storage usage is decremented
-// server-side.
 export const deleteDriveFile = async (fileId: number) => {
   const res = await apiFetch(`/api/files/${fileId}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Delete file failed");
 };
 
-/**
- * Upload files to drive. When `userId` is provided, each file is wrapped
- * in the WV1 binary envelope (E2E) before upload — the server only ever
- * sees ciphertext. We keep the original filename in the form field (it's
- * stored plaintext on the server today; encrypted-filename is a follow-up).
- *
- * `userId == null` is the legacy plaintext upload path; kept as an
- * escape hatch for pre-keypair users, but the caller (DriveBox) always
- * supplies userId once the key is set up.
- */
+// With a `userId`, each file is wrapped in the WV1 envelope before upload, so
+// the server sees only ciphertext; filenames still go in the clear. A null
+// `userId` is the legacy plaintext path for pre-keypair users.
 export const uploadDriveFiles = async (
   files: File[],
   folderId: number | null = null,
@@ -90,11 +79,9 @@ export const uploadDriveFiles = async (
 ) => {
   const formData = new FormData();
 
-  // IMPORTANT: append folder_id BEFORE the files. The backend streams
-  // multipart fields in order and inserts each file as it reads it, using the
-  // folder_id seen so far — so if folder_id trails the files it's parsed too
-  // late and every file is stored at root (folder_id = NULL). Sending it first
-  // matches the backend's "non-file fields first" assumption.
+  // folder_id must be appended BEFORE the files: the backend streams multipart
+  // fields in order and inserts each file as it reads it, so a trailing
+  // folder_id is parsed too late and every file lands at the root.
   if (folderId != null) {
     formData.append("folder_id", String(folderId));
   }
@@ -102,10 +89,8 @@ export const uploadDriveFiles = async (
   if (userId != null) {
     const { encryptBlobForSelf } = await import("../crypto/fileEnvelope");
     for (const file of files) {
-      // Encrypted blob is wrapped in a File with the original name so
-      // the multipart filename field still surfaces "report.pdf" to the
-      // backend handler (used for the DB row's name column). The bytes
-      // inside are opaque WV1 envelope.
+      // Re-wrap the ciphertext in a File under the original name so the
+      // multipart filename still reaches the backend for the row's name column.
       const ciphertext = await encryptBlobForSelf(file, userId);
       formData.append(
         "files",
@@ -126,9 +111,8 @@ export const uploadDriveFiles = async (
   });
 
   if (!res.ok) {
-    // 413 comes from nginx (request body over client_max_body_size), not the
-    // backend — its response is an HTML error page, so don't surface the raw
-    // markup. Show a clear, actionable message instead.
+    // A 413 comes from nginx exceeding client_max_body_size, not the backend,
+    // and its body is an HTML error page — substitute a readable message.
     if (res.status === 413) {
       throw new Error("File is too large to upload (max 50 MB).");
     }
@@ -137,8 +121,8 @@ export const uploadDriveFiles = async (
       const data = await res.clone().json();
       message = data?.message || data?.error || message;
     } catch {
-      // Fall back to the response text, but only when it's a short plain
-      // message — never a full HTML error page (e.g. from a proxy).
+      // Fall back to the response text, but only a short plain message — never
+      // a full HTML error page from a proxy.
       const text = (await res.text()).trim();
       if (text && text.length < 200 && !/<\s*html/i.test(text)) {
         message = text;
@@ -148,15 +132,8 @@ export const uploadDriveFiles = async (
   }
 };
 
-/**
- * Download a drive file. When the bytes start with the WV1 envelope
- * magic, decrypt client-side before handing the browser the blob.
- * Pre-E2E plaintext files pass through unchanged so existing rows
- * keep working through the migration.
- */
-// Fetch a Drive file and return its DECRYPTED Blob (the WV1 self-envelope is
-// unwrapped client-side; plaintext uploads pass through). Shared by the
-// download action and by image thumbnails.
+// Returns a decrypted Blob: bytes carrying the WV1 envelope magic are unwrapped
+// client-side, and pre-E2E plaintext files pass through unchanged.
 export const fetchDriveFileBlob = async (
   fileId: number,
   userId: number | null = null

@@ -1,21 +1,17 @@
 import { useEffect, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
-// Shared "drag a handle to resize a panel's width (px)" logic, extracted from
-// the several near-identical copies in Layout / Chat / GitHub. Mirrors the
-// existing useResizableColumns hook (state + localStorage persistence + a
-// pointer-drag handler). Pixel widths only — the split-pane flex weights and
-// SplitView percentage use different math and are intentionally separate.
+// Drag-to-resize a panel's pixel width, with localStorage persistence. Pixel
+// widths only: the split-pane flex weights and the SplitView percentage use
+// different math and are deliberately kept separate.
 
 export interface ResizableWidthOptions {
   storageKey: string;
   defaultWidth: number;
   min: number;
   max: number;
-  // Invert the drag direction. Default (false) grows the panel as the pointer
-  // moves right — correct for a left-anchored panel (e.g. the sidebar). Set
-  // true for a right-anchored panel whose handle sits on its LEFT edge (e.g.
-  // the chat thread panel), where dragging left should make it wider.
+  // Set for a right-anchored panel whose handle sits on its left edge, where
+  // dragging left should widen it. The default suits a left-anchored panel.
   invert?: boolean;
 }
 
@@ -45,9 +41,8 @@ export function useResizableWidth({
     }
   }, [storageKey, width]);
 
-  // pointer-down handler for the drag handle. Delta style: capture the start
-  // x + width, then track the pointer's movement relative to those. No element
-  // ref needed, and no "jump" if the handle is grabbed slightly off its edge.
+  // Tracks the pointer as a delta from the start x and width, so the panel
+  // doesn't jump when the handle is grabbed slightly off its edge.
   const startResize = (e: ReactPointerEvent) => {
     e.preventDefault();
     const startX = e.clientX;

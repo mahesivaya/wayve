@@ -6,11 +6,10 @@ use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::{EnvFilter, Layer, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-// Curated default filter for the human-readable stdout layer: show everything
-// at DEBUG except the chatty framework targets (TLS handshakes, connection
-// pooling, raw SQL), which would otherwise bury the app's own logs. The full,
-// unfiltered stream still goes to logs/tracing.log. Override with
-// RWAYVE_LOG_STDOUT_FILTER (standard RUST_LOG syntax).
+// Default filter for the stdout layer: everything at DEBUG except the chatty
+// framework targets, which would otherwise bury the app's own logs. The full
+// unfiltered stream still reaches logs/tracing.log. Override with
+// RWAYVE_LOG_STDOUT_FILTER, using RUST_LOG syntax.
 const DEFAULT_STDOUT_FILTER: &str = "debug,hyper=warn,hyper_util=warn,h2=warn,\
 rustls=warn,mio=warn,tokio=warn,reqwest=warn,sqlx=warn,want=warn,tower=warn,tonic=warn";
 
@@ -68,8 +67,8 @@ impl<'a> MakeWriter<'a> for SizeRotatingFileWriter {
     type Writer = SizeRotatingGuard<'a>;
 
     fn make_writer(&'a self) -> Self::Writer {
-        // Recover the guard if the mutex was poisoned instead of panicking —
-        // a poisoned tracing writer must not bring down the whole process.
+        // Recover from a poisoned mutex rather than panicking: a poisoned
+        // tracing writer must not bring down the whole process.
         let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         SizeRotatingGuard { state }
     }
@@ -162,8 +161,8 @@ fn tempfile_file() -> io::Result<File> {
 }
 
 pub fn init_tracing() {
-    // Keep one active tracing file and rotate it at 30MB by default. Archives
-    // are numbered newest-to-oldest: tracing.log.1, tracing.log.2, ...
+    // One active tracing file, rotated at 30MB by default. Archives are
+    // numbered newest-to-oldest: tracing.log.1, tracing.log.2, and so on.
     let file_writer = SizeRotatingFileWriter::new().or_else(|e| {
         eprintln!("tracing: failed to open {TRACING_LOG_PATH}: {e}");
         SizeRotatingFileWriter::fallback()
@@ -182,16 +181,10 @@ pub fn init_tracing() {
         .into()
     });
 
-    // The full JSON event stream always lands in logs/tracing.log (size-
-    // rotated, bind-mounted from the host). Tail it with:
-    //
-    //   tail -f logs/tracing.log
-    //
-    // In addition, when stdout logging is enabled we attach a second,
-    // human-readable (compact) layer so `docker logs <container>` /
-    // `cargo run` terminals show the live event stream. It's ON
-    // automatically in development (RWAYVE_ENV=development) and can be
-    // forced on/off anywhere with RWAYVE_LOG_STDOUT=1 / =0.
+    // The full JSON event stream always lands in logs/tracing.log. A second,
+    // compact stdout layer additionally shows the live stream in `docker logs`
+    // and `cargo run` terminals. It is on by default in development
+    // (RWAYVE_ENV=development) and forced on or off with RWAYVE_LOG_STDOUT.
     let stdout_enabled = std::env::var("RWAYVE_LOG_STDOUT")
         .ok()
         .map(|v| {
@@ -220,9 +213,9 @@ pub fn init_tracing() {
             .with_filter(stdout_filter)
     });
 
-    // The stderr fallback below only fires if the log file genuinely can't
-    // be opened (disk full, permission denied) — at that point we WANT
-    // loud terminal output so the failure isn't silent.
+    // The stderr fallback fires only when the log file genuinely cannot be
+    // opened, such as a full disk. Loud terminal output is wanted there so the
+    // failure is not silent.
     match file_writer {
         Ok(writer) => {
             let file_layer = fmt::layer()

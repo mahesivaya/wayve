@@ -1,9 +1,8 @@
-// Bootstrap-side crypto for the org master key. The owner runs this on
-// org-creation to mint a fresh RSA-2048 keypair, generate a BIP-39
-// mnemonic, and produce TWO wrapped envelopes — one under the
-// PBKDF2(mnemonic) and one under the owner's personal pubkey — for upload
-// via /api/organizations/{id}/keys. Everything happens in the owner's
-// browser; the plaintext private key never leaves WebCrypto.
+// Bootstrap-side crypto for the org master key. At org creation the owner mints
+// an RSA-2048 keypair and a BIP-39 mnemonic, then produces two wrapped
+// envelopes: one under PBKDF2(mnemonic) and one under the owner's personal
+// public key. Everything happens in the owner's browser and the plaintext
+// private key never leaves WebCrypto.
 
 import { generateMnemonic, mnemonicToEntropy } from "../crypto/mnemonic";
 import { loadPublicKey } from "../crypto/keyStore";
@@ -18,8 +17,7 @@ import { wrapPkcs8ToRsaPubkey } from "./envelopeCodec";
 const PBKDF2_ITERATIONS = 600_000; // matches frontend/src/crypto/recovery.ts
 
 export type BootstrapResult = {
-  // Space-separated 24-word string — same shape generateMnemonic() returns.
-  // Callers split on /\s+/ for word-by-word display.
+  // Space-separated 24-word string; callers split on /\s+/ to display it.
   mnemonic: string;
   publicKeyBytes: ArrayBuffer;
 };
@@ -30,15 +28,11 @@ function bytesToB64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Wait up to ~20s for the personal pubkey to land in IndexedDB. AuthContext's
-// `setupEncryption` runs in the background after login, so the very first
-// org-bootstrap redirect after a brand-new owner logs in can fire BEFORE
-// the personal keypair has been saved. setupEncryption may also have to
-// (a) call /api/me/wrapped-key, (b) call /api/me/basic-key, then (c)
-// generate the RSA-2048 keypair, then (d) write to IndexedDB — comfortably
-// 1–10s end to end on cold WebCrypto + a slow network. Polling here keeps
-// the bootstrap page from failing with a confusing "sign in fully first"
-// message just because the two async tasks raced.
+// AuthContext's `setupEncryption` runs in the background after login, so the
+// first org-bootstrap redirect for a brand-new owner can fire before the
+// personal keypair has been saved. That setup can take several seconds on cold
+// WebCrypto and a slow network, so poll instead of failing the bootstrap page
+// with a confusing "sign in fully first" purely because the two tasks raced.
 export async function waitForPublicKey(
   userId: number,
   email: string,
@@ -46,7 +40,7 @@ export async function waitForPublicKey(
   intervalMs = 250
 ): Promise<ArrayBuffer | null> {
   const start = performance.now();
-  // First attempt is immediate so steady-state (key already present)
+  // Try once immediately so the steady state, where the key is already present,
   // doesn't pay the polling tax.
   let key = await loadPublicKey(userId, email);
   while (!key && performance.now() - start < timeoutMs) {
@@ -86,7 +80,6 @@ export async function bootstrapOrgMasterKey(
   founderUserId: number,
   founderEmail: string
 ): Promise<BootstrapResult> {
-  // 1. Generate org RSA-2048 keypair.
   const orgPair = await crypto.subtle.generateKey(
     {
       name: "RSA-OAEP",
@@ -98,7 +91,7 @@ export async function bootstrapOrgMasterKey(
     ["wrapKey", "unwrapKey", "encrypt", "decrypt"]
   );
 
-  // 2. Export private (PKCS8) for wrapping, public (SPKI) for upload.
+  // PKCS8 for wrapping, SPKI for upload.
   const orgPrivatePkcs8 = await crypto.subtle.exportKey(
     "pkcs8",
     orgPair.privateKey
@@ -108,11 +101,10 @@ export async function bootstrapOrgMasterKey(
     orgPair.publicKey
   );
 
-  // 3. Generate the 24-word mnemonic.
   const mnemonic = await generateMnemonic();
   const entropy = await mnemonicToEntropy(mnemonic);
 
-  // 4. Mnemonic wrap: per-org random salt + PBKDF2 + AES-GCM.
+  // Mnemonic wrap: per-org random salt, PBKDF2, AES-GCM.
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const aesKey = await deriveMnemonicKey(entropy, salt);
@@ -128,18 +120,11 @@ export async function bootstrapOrgMasterKey(
     pbkdf2_iterations: PBKDF2_ITERATIONS,
   };
 
-  // 5. User-pubkey wrap: encrypt the same PKCS8 to the founder's
-  //    PERSONAL pubkey so they auto-load the org key on this device
-  //    without re-entering the mnemonic next session.
-  //
-  //    For platform-admin-created owners the personal keypair is
-  //    server-provisioned at org creation and unwrapped on this device
-  //    by `unwrapAndCacheMemberKeys` during login. For self-serve flow
-  //    the founder is an existing personal user with the key already
-  //    on this device. Either way it's expected to be in IndexedDB by
-  //    the time bootstrap runs — but AuthContext::setupEncryption is
-  //    not awaited before `user` flips, so we still poll briefly as a
-  //    safety net for that race.
+  // User-pubkey wrap: encrypt the same PKCS8 to the founder's personal public
+  // key, so next session they auto-load the org key on this device without
+  // re-entering the mnemonic. The personal key should already be in IndexedDB by
+  // now, but setupEncryption is not awaited before `user` flips, so poll briefly
+  // as a safety net against that race.
   const founderPub = await waitForPublicKey(founderUserId, founderEmail);
   if (!founderPub) {
     throw new Error(
@@ -151,7 +136,6 @@ export async function bootstrapOrgMasterKey(
     founderPub
   );
 
-  // 6. POST everything to the backend.
   const body: BootstrapKeysRequest = {
     public_key: JSON.stringify(Array.from(new Uint8Array(orgPublicSpki))),
     wrapped_mnemonic,

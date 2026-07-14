@@ -5,11 +5,9 @@ import MessageReactions from "./MessageReactions";
 import MessageText from "./MessageText";
 import { PersonIcon } from "../../icons";
 
-// Inbound Slack messages are stored as `[Slack · <author>] <text>` under the
-// connecting Wayve user's id, so without special handling they'd render as the
-// viewer's own message (right-aligned, no author). Parse out the Slack author
-// and clean Slack's `<@U…>` / `<#C…>` / `<url|label>` markup so they render as
-// received, with the real author shown.
+// Inbound Slack messages are stored under the connecting Wayve user's id, so without
+// parsing the author back out they would render as the viewer's own message. The
+// replacements below also strip Slack's `<@U…>` / `<#C…>` / `<url|label>` markup.
 const SLACK_RE = /^\[Slack · (.+?)\]\s?([\s\S]*)$/;
 
 function parseSlackMessage(
@@ -30,12 +28,10 @@ type Props = {
   messages: ChatMessage[];
   selectedChannel: ChatChannel | null;
   currentUserId?: number;
-  // Channel-only: open a thread side panel for a top-level message. Direct
-  // messages don't support threads (the WS rejects parent_message_id on DMs),
-  // so DM contexts pass null here and the hover action is hidden.
+  // Channels only: the WS rejects parent_message_id on DMs, so DM contexts pass null
+  // and the hover action is hidden.
   onOpenThread?: ((message: ChatMessage) => void) | null;
-  // Toggle the viewer's emoji reaction on a message. Omitted → no reaction row
-  // (e.g. a read-only render).
+  // Omitting this hides the reaction row.
   onToggleReaction?: (
     messageId: number,
     isChannel: boolean,
@@ -65,25 +61,21 @@ export default function MessageThread({
     );
   }
 
-  // Threaded replies live in the side panel only — keep the main feed clean.
-  // `parent_message_id` is undefined for DM rows (no column on `messages`),
-  // which makes them all top-level by definition.
+  // Threaded replies belong to the side panel only. `parent_message_id` is undefined
+  // on DM rows, which makes them all top-level by definition.
   const topLevel = messages.filter((m) => m.parent_message_id == null);
 
   return (
     <div className="messages">
       {topLevel.map((msg, i) => {
         const slack = msg.content ? parseSlackMessage(msg.content) : null;
-        // Slack-origin messages are never the viewer's own — always render them
-        // as received (left), regardless of the stored sender id.
+        // A Slack-origin message is never the viewer's own, whatever sender id it was
+        // stored under, so it always renders as received.
         const mine = !slack && msg.sender_id === currentUserId;
         const displayContent = slack ? slack.text : msg.content;
-        // Who-sent-it label: the Slack author for bridged messages, else the
-        // Wayve sender's name. Own messages need no label (they're right-aligned).
         const senderName = slack ? slack.author : (msg.sender_name ?? null);
         const showSender = !mine && !!senderName;
         const replyCount = msg.reply_count ?? 0;
-        // Only top-level channel messages with an id can host a thread.
         const canOpenThread =
           !!onOpenThread && msg.message_id != null && selectedChannel != null;
 

@@ -1,17 +1,12 @@
-// Owner / admin impersonation view with tabs for all 6 surfaces.
+// Owner and admin impersonation view.
 //
-// On mount: recovers the target member's keypair via the org master key
-// (impersonateMember → fetch member escrow → unwrap with org private
-// key). The recovered key lives in a useState ref and is passed to each
-// tab; closing the page wipes it. Never persisted to IndexedDB.
+// On mount it recovers the target member's keypair via the org master key:
+// fetch the member's escrow, then unwrap it with the org private key. The
+// recovered key lives only in component state and is wiped when the page
+// closes. It is never persisted to IndexedDB.
 //
-// Surfaces:
-//   * Notes        — WAYVE_SECURE_V1 self-envelope, decrypt in-browser
-//   * Emails       — WAYVE_SECURE_V1 single or multi-recipient envelope
-//   * Chat         — direct messages + channel messages, WAYVE_CHAT_E2E_V1
-//   * Drive        — list files (binary decryption deferred)
-//   * Tasks        — plaintext (server-readable; not E2E in v1)
-//   * Scheduler    — plaintext meetings (server-readable; not E2E in v1)
+// Notes, emails, chat and drive are E2E and decrypt in-browser. Tasks and
+// scheduler are plaintext on the server and are not E2E in v1.
 
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -30,30 +25,27 @@ const TABS: Array<{ key: Surface; label: string; isE2E: boolean }> = [
   { key: "scheduler", label: "Scheduler", isE2E: false },
 ];
 
-// =====================================================================
-//   Decryption helpers — use a SPECIFIC private key (impersonated)
-//   rather than auto-loading from IndexedDB the way the regular
-//   decrypt helpers do.
-// =====================================================================
+// These decryption helpers take an explicit impersonated private key rather than
+// auto-loading the caller's own from IndexedDB, which is what the regular
+// decrypt helpers do.
 
 const td = new TextDecoder();
 
-// Decrypt any WAYVE_SECURE_V1 envelope (notes self_v1, email single
-// `wayve_encrypted`, email multi `wayve_encrypted_multi`) using the
-// supplied private key + the target user_id (to look up the wrapped
-// AES key slot in multi-recipient envelopes).
+// Handles every envelope variant: the notes self envelope, and single- and
+// multi-recipient email envelopes. `userId` selects the wrapped AES key slot in
+// the multi-recipient case.
 async function decryptWayveSecureV1(
   envelope: string,
   userId: number,
   privateKey: CryptoKey
 ): Promise<string> {
   if (!envelope.startsWith("WAYVE_SECURE_V1\n")) {
-    return envelope; // not an envelope, return as-is
+    return envelope;
   }
   const body = JSON.parse(envelope.slice("WAYVE_SECURE_V1\n".length));
   let wrappedAes: number[];
   if (body.key) {
-    // single-recipient
+    // Single-recipient.
     wrappedAes = body.key as number[];
   } else if (body.keys) {
     const slot = body.keys[String(userId)];
@@ -82,8 +74,8 @@ async function decryptWayveSecureV1(
   return td.decode(plain);
 }
 
-// Decrypt a WAYVE_CHAT_E2E_V1 envelope using the supplied private key.
-// Multi-recipient: looks up keys[userId] for the wrapped AES key slot.
+// Chat envelopes are always multi-recipient, so `userId` selects the wrapped AES
+// key slot.
 async function decryptWayveChatE2E(
   envelope: string,
   userId: number,
@@ -116,10 +108,6 @@ async function decryptWayveChatE2E(
   );
   return td.decode(plain);
 }
-
-// =====================================================================
-//   Row types
-// =====================================================================
 
 type Note = {
   id: number;
@@ -177,10 +165,7 @@ type Meeting = {
   zoom_join_url?: string | null;
 };
 
-// =====================================================================
-//   Fingerprint of the recovered key (for the proof banner at the top)
-// =====================================================================
-
+// Fingerprint shown in the proof banner at the top of the page.
 async function fingerprintOfRecoveredKey(
   privateKey: CryptoKey
 ): Promise<string> {
@@ -205,10 +190,6 @@ async function fingerprintOfRecoveredKey(
     .map((b) => b.toString(16).padStart(2, "0"))
     .join(":");
 }
-
-// =====================================================================
-//   Page
-// =====================================================================
 
 type State =
   | { kind: "loading" }
@@ -378,10 +359,6 @@ export default function RecoverMemberDataPage() {
   );
 }
 
-// =====================================================================
-//   Tab components
-// =====================================================================
-
 type DecryptProps = { orgId: number; memberId: number; memberKey: CryptoKey };
 type PlainProps = { orgId: number; memberId: number };
 
@@ -487,7 +464,7 @@ function EmailsTab({ orgId, memberId, memberKey }: DecryptProps) {
           continue;
         }
         if (!raw.startsWith("WAYVE_SECURE_V1\n")) {
-          // legacy server-AES rows: not decryptable client-side
+          // Legacy server-AES rows cannot be decrypted client-side.
           m.set(email.id, {
             body: "(legacy server-AES body — not client-decryptable)",
           });
@@ -737,10 +714,6 @@ function SchedulerTab({ orgId, memberId }: PlainProps) {
     </>
   );
 }
-
-// =====================================================================
-//   Shared layout bits
-// =====================================================================
 
 function Row({
   id,

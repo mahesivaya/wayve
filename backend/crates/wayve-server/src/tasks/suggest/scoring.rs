@@ -1,7 +1,7 @@
-//! Turn the commits that touched the mapped files into a ranked list of
-//! authors. Deterministic and explainable: each author's score is the sum of a
-//! recency weight over their commits, so more edits and more-recent edits rank
-//! higher. Raw counts are kept so the endpoint can say *why*.
+//! Turn the commits that touched the mapped files into a ranked list of authors.
+//! Deterministic and explainable: each author's score sums a recency weight over
+//! their commits, so more edits and more-recent edits rank higher. Raw counts are
+//! kept so the endpoint can explain the ranking.
 
 use super::github::FileCommit;
 use chrono::{DateTime, Utc};
@@ -11,16 +11,16 @@ use std::collections::HashMap;
 pub struct AuthorScore {
     /// GitHub login, when the commit carried one.
     pub login: Option<String>,
-    /// Commit author display name — the label when there's no login.
+    /// Commit author display name, the label when there is no login.
     pub name: Option<String>,
     pub score: f64,
     pub commits: u32,
-    /// Commits within the last 90 days (drives the "N recent" explanation).
+    /// Commits within the last 90 days, which drive the "N recent" explanation.
     pub recent_commits: u32,
     pub last_activity: Option<DateTime<Utc>>,
 }
 
-/// Recency multiplier for one commit — newer work counts for more.
+/// Recency multiplier for one commit; newer work counts for more.
 fn recency_weight(date: Option<DateTime<Utc>>, now: DateTime<Utc>) -> f64 {
     let Some(d) = date else { return 1.0 };
     match (now - d).num_days().max(0) {
@@ -32,17 +32,17 @@ fn recency_weight(date: Option<DateTime<Utc>>, now: DateTime<Utc>) -> f64 {
     }
 }
 
-/// Aggregate commits across all mapped files into ranked author scores
-/// (highest first). Commits with neither a login nor a name are ignored.
+/// Aggregate commits across all mapped files into ranked author scores, highest
+/// first. Commits with neither a login nor a name are ignored.
 pub fn rank_authors(commits: &[FileCommit]) -> Vec<AuthorScore> {
     rank_authors_at(commits, Utc::now())
 }
 
-/// Testable core: aggregation relative to an explicit "now".
+/// Testable core: aggregation relative to an explicit `now`.
 fn rank_authors_at(commits: &[FileCommit], now: DateTime<Utc>) -> Vec<AuthorScore> {
     let mut map: HashMap<String, AuthorScore> = HashMap::new();
     for c in commits {
-        // Identity: login when present (authoritative), else the display name.
+        // The login is authoritative when present; otherwise fall back to name.
         let key = match (&c.login, &c.name) {
             (Some(l), _) => format!("login:{}", l.to_ascii_lowercase()),
             (None, Some(n)) => format!("name:{n}"),

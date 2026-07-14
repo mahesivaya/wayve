@@ -1,13 +1,6 @@
-//! Slack ↔ Wayve message sync.
-//!
-//! Inbound: pull a linked Slack channel's history and write each plain user
-//! message into the mapped Wayve channel. Because Slack is enterprise-only and
-//! enterprise chat is *not* E2E, messages are stored under the server-AES
-//! at-rest layer (server-readable) and render directly in the channel.
-//!
-//! Outbound: a best-effort bridge that posts a Wayve channel message to the
-//! linked Slack channel. It never fails its caller (mirrors Jira's
-//! `push_task_if_linked`).
+//! Slack and Wayve message sync. Slack is enterprise-only and enterprise chat is
+//! not E2E, so imported messages are stored under the server-AES at-rest layer and
+//! render directly. The outbound bridge is best-effort and never fails its caller.
 
 use crate::prelude::*;
 use sqlx::Row;
@@ -24,10 +17,8 @@ struct LinkRow {
     last_imported_ts: Option<String>,
 }
 
-/// Import recent messages for every linked channel of `conn`'s org (or just
-/// `only_channel`). Returns `(messages_imported, channels_touched)`. Imported
-/// messages are attributed to `importer_user_id` and prefixed with their Slack
-/// author so the origin is clear in the Wayve channel.
+/// Imported messages are attributed to `importer_user_id` and prefixed with their
+/// Slack author so the origin is clear.
 pub async fn import_all(
     pool: &PgPool,
     conn: &SlackConnection,
@@ -60,8 +51,8 @@ pub async fn import_all(
 
     let mut total_imported = 0i64;
     let mut channels_touched = 0usize;
-    // Resolve each Slack user's display name at most once per run — users.info
-    // is rate-limited and the same author repeats across many messages.
+    // users.info is rate-limited and the same author repeats across many messages,
+    // so each display name is resolved at most once per run.
     let mut author_cache: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
 
@@ -73,21 +64,19 @@ pub async fn import_all(
                 limit,
             )
             .await?;
-        // Slack returns newest-first; insert oldest-first to preserve order.
+        // Slack returns newest-first, so reverse to insert in chronological order.
         messages.reverse();
 
         let mut newest_ts = link.last_imported_ts.clone();
         let mut imported_here = 0i64;
 
         for m in messages {
-            // Only plain user messages — skip joins/leaves/bot/edit subtypes.
             if m.msg_type != "message" || m.subtype.is_some() {
                 continue;
             }
-            // Skip anything at or before the cursor: Slack's `oldest` is
-            // inclusive (the cursor message comes back) and the channel may be
-            // re-pulled wholesale. Slack `ts` are fixed-width "secs.micros"
-            // strings, so lexicographic order matches chronological order.
+            // Slack's `oldest` is inclusive, so the cursor message comes back and
+            // must be skipped. Slack `ts` are fixed-width "secs.micros" strings,
+            // so lexicographic order matches chronological order.
             if let Some(cursor) = link.last_imported_ts.as_deref()
                 && m.ts.as_str() <= cursor
             {
@@ -148,9 +137,8 @@ pub async fn import_all(
     Ok((total_imported, channels_touched))
 }
 
-/// Best-effort outbound bridge: if `wayve_channel_id` is linked to Slack, post
-/// `text` there under `sender_name` (the Wayve author, so Slack shows who wrote
-/// it rather than the bot). Never fails its caller — logs and swallows.
+/// Posts under the Wayve author's name rather than the bot's. Best-effort: logs
+/// and swallows errors so it never fails its caller.
 pub async fn push_to_slack_if_linked(
     pool: &PgPool,
     wayve_channel_id: i32,

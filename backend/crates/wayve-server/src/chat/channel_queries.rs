@@ -10,9 +10,8 @@ use tracing::instrument;
 pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    // A channel is visible only when its creator shares the caller's scope —
-    // same platform, same organization, or both personal. This mirrors the
-    // scoped chat people-picker so cross-tenant channels never appear.
+    // A channel is visible only when its creator shares the caller's scope, so
+    // cross-tenant channels never appear.
     let ctx = rbac::resolve_role_context(pool.get_ref(), user_id).await?;
 
     let rows = sqlx::query(
@@ -103,9 +102,7 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
                 chrono::Utc,
             );
 
-            // Timestamp of the channel's most recent message (any thread level),
-            // so the sidebar can surface active channels in "Recent". NULL for a
-            // channel with no messages yet.
+            // Null for a channel that has no messages yet.
             let last_message_at = row
                 .get::<Option<chrono::NaiveDateTime>, _>("last_message_at")
                 .map(|t| {

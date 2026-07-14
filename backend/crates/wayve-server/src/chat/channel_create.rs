@@ -47,8 +47,7 @@ pub async fn create_channel(
     member_ids.sort_unstable();
     member_ids.dedup();
 
-    // A solo channel (just the creator) is allowed: the creator is added as
-    // admin below and every other code path works with a single member.
+    // A solo channel is allowed; the creator is added as its admin below.
 
     let mut tx = pool.begin().await?;
 
@@ -73,8 +72,8 @@ pub async fn create_channel(
             invite_role
         };
 
-        // A failed member insert is reported as a 400, not a 500 — the most
-        // likely cause is a bad member id in the request body.
+        // Reported as a 400 rather than a 500: the likely cause is a bad member
+        // id in the request body.
         if let Err(e) = sqlx::query(
             r#"
             INSERT INTO channel_members (channel_id, user_id, role)
@@ -120,7 +119,6 @@ pub async fn create_channel(
 
     tx.commit().await?;
 
-    // Enterprise audit trail (Security → chat activity).
     crate::audit::record_action(
         pool.get_ref(),
         &req,
@@ -142,10 +140,8 @@ pub async fn create_channel(
     let created_at =
         chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(created_naive, chrono::Utc);
 
-    // Webhook fan-out — strictly after commit. emit() opens its own
-    // transaction; firing before commit would risk webhook_deliveries
-    // referencing a channel that doesn't exist if the surrounding
-    // transaction later rolls back.
+    // Must run after the commit: emit() opens its own transaction, so firing
+    // earlier could leave a delivery referencing a channel that rolled back.
     let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
     crate::webhooks::emit(
         pool.get_ref(),
@@ -160,8 +156,8 @@ pub async fn create_channel(
         }),
     )
     .await;
-    // A failed member-email read is non-fatal: the channel already exists, so
-    // we log and fall back to empty lists rather than failing the request.
+    // Non-fatal: the channel already exists, so fall back to empty lists rather
+    // than failing the request.
     let member_rows = match sqlx::query(
         r#"
         SELECT u.email, cm.role

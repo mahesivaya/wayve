@@ -100,7 +100,6 @@ mod tests {
         )
         .await;
 
-        // ---- GET the grid ----
         let req = actix_test::TestRequest::get()
             .uri(&format!("/repos/{OWNER}/{REPO}/access"))
             .insert_header(("Authorization", bearer.clone()))
@@ -133,7 +132,6 @@ mod tests {
         assert_eq!(bob["user_id"], serde_json::json!(null));
         assert_eq!(bob["source"], serde_json::json!("github"));
 
-        // ---- Add carol (GitHub accepts) ----
         let req = actix_test::TestRequest::put()
             .uri(&format!("/repos/{OWNER}/{REPO}/access"))
             .insert_header(("Authorization", bearer.clone()))
@@ -142,7 +140,8 @@ mod tests {
         let res: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
         assert_eq!(res["github_outcome"], serde_json::json!("synced"));
 
-        // ---- Add dave (token lacks admin → 403, Wayve side still fine) ----
+        // When the GitHub token lacks admin the sync is refused, but the Wayve-side
+        // grant must still stand rather than the whole call failing.
         let req = actix_test::TestRequest::put()
             .uri(&format!("/repos/{OWNER}/{REPO}/access"))
             .insert_header(("Authorization", bearer))
@@ -152,7 +151,6 @@ mod tests {
         assert_eq!(res["github_outcome"], serde_json::json!("forbidden"));
         assert!(res["note"].as_str().unwrap_or("").contains("admin"));
 
-        // Cleanup.
         for uid in [caller, member] {
             let _ = sqlx::query("DELETE FROM users WHERE id = $1")
                 .bind(uid)

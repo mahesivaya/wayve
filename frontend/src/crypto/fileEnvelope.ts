@@ -1,11 +1,9 @@
 // Binary envelope for E2E-encrypted file blobs (drive, email attachments).
 //
-// Why a binary format rather than the JSON `WAYVE_SECURE_V1` shape that
-// notes / chat use:
-//   - JSON-encoding raw bytes as a number array roughly triples size.
-//     For a 50 MB drive upload that's a 150 MB request body.
-//   - File uploads already go through multipart/form-data which preserves
-//     binary bytes natively — no need to base64 anything.
+// Binary rather than the JSON `WAYVE_SECURE_V1` shape used by notes and chat,
+// because JSON-encoding raw bytes as a number array roughly triples the size —
+// a 50 MB upload would become a 150 MB request body — and multipart/form-data
+// already carries binary natively, so nothing needs base64.
 //
 // Layout (all integers big-endian):
 //   bytes  0..4   magic     "WV1\0"   (0x57 0x56 0x31 0x00)
@@ -15,10 +13,8 @@
 //   bytes  22..22+wlen      wrapped AES key (RSA-OAEP ciphertext)
 //   bytes  rest             AES-GCM ciphertext (file body + 16-byte tag)
 //
-// The header is ~280 bytes for an RSA-2048 wrap. The wrapped key holds
-// only one recipient (the file owner); to support sharing a file later,
-// we extend the format with multiple `(user_id, wrapped_key)` entries —
-// see TODO at end. Phase 1 doesn't ship sharing.
+// The wrapped key holds exactly one recipient, the file owner, so this format
+// cannot express a shared file. See the TODO at the end.
 
 import { loadPrivateKey, loadPublicKey } from "./keyStore";
 
@@ -84,16 +80,12 @@ function concatBytes(parts: Uint8Array[]): Uint8Array {
 }
 
 /**
- * Encrypt a Blob/File for storage on the server. Returns a Blob in the
- * WV1 binary envelope format — opaque bytes the server stores verbatim.
+ * Returns a Blob in the WV1 envelope format: opaque bytes the server stores
+ * verbatim. The AES key is wrapped with the owner's public key, so only they can
+ * decrypt the result.
  *
- * @param blob       The plaintext file body.
- * @param userId     The owner's user_id (we wrap the AES key with their
- *                   public key so only they can decrypt the result).
- * @param mimeType   Optional MIME type override; not part of the envelope.
- *                   The caller is responsible for storing/restoring it
- *                   alongside the encrypted blob (e.g. as a separate
- *                   form field or DB column).
+ * `mimeType` is NOT part of the envelope. The caller must store and restore it
+ * alongside the encrypted blob, as a separate form field or DB column.
  */
 export async function encryptBlobForSelf(
   blob: Blob,
@@ -103,7 +95,7 @@ export async function encryptBlobForSelf(
   const publicKey = await importOwnPublicKey(userId);
   const plaintext = await blob.arrayBuffer();
 
-  // Generate a fresh AES key for this one file — never reused.
+  // A fresh AES key per file; never reused.
   const aesKey = await crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
     true,
@@ -118,7 +110,6 @@ export async function encryptBlobForSelf(
     )
   );
 
-  // Wrap the AES key with the user's RSA public key.
   const rawAes = await crypto.subtle.exportKey("raw", aesKey);
   const wrappedKey = new Uint8Array(
     await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, rawAes)
@@ -133,17 +124,16 @@ export async function encryptBlobForSelf(
     ciphertext,
   ]);
 
-  // `.slice().buffer` produces a guaranteed ArrayBuffer (not the union
-  // ArrayBufferLike that TS infers for Uint8Array) — matches the strict
-  // BlobPart typing used in newer @types/node + lib.dom.
+  // `.slice().buffer` yields a true ArrayBuffer rather than the ArrayBufferLike
+  // union TS infers for Uint8Array, which strict BlobPart typing rejects.
   return new Blob([envelope.slice().buffer], {
     type: mimeType ?? "application/octet-stream",
   });
 }
 
 /**
- * Quick header check — used by the download path to decide whether to
- * treat the response as an envelope or as a pre-E2E plaintext file.
+ * Header check that lets the download path tell an envelope apart from a
+ * pre-E2E plaintext file.
  */
 export function looksLikeEnvelope(bytes: Uint8Array): boolean {
   return (
@@ -156,14 +146,12 @@ export function looksLikeEnvelope(bytes: Uint8Array): boolean {
 }
 
 /**
- * Parse and decrypt a WV1 envelope downloaded from the server. Returns
- * a Blob with the original file contents; caller picks the MIME type
- * (we don't carry it in-envelope to keep the format minimal).
+ * Parse and decrypt a WV1 envelope. The caller supplies the MIME type, which the
+ * envelope deliberately does not carry.
  *
- * Throws if the envelope is malformed, the version isn't recognized,
- * or the user's local private key can't decrypt the wrapped key — i.e.
- * the only honest failure modes. Don't catch-and-rethrow here; the UI
- * should surface "couldn't decrypt this file" verbatim.
+ * Throws when the envelope is malformed, the version is unrecognized, or the
+ * local private key cannot unwrap the AES key. Let those propagate: the UI
+ * should tell the user the file could not be decrypted rather than hide it.
  */
 export async function decryptBlobForSelf(
   encrypted: ArrayBuffer | Uint8Array,

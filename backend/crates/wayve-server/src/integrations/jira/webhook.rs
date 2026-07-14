@@ -1,14 +1,13 @@
 //! Inbound Jira Cloud webhook: keeps linked Wayve tasks in sync when an issue
-//! changes *in Jira*, complementing the on-demand pull in `sync::pull`.
+//! changes in Jira, complementing the on-demand pull in `sync::pull`.
 //!
-//! Jira Cloud does NOT sign webhook deliveries (unlike GitHub/Stripe, which
-//! HMAC the body), so the only authenticator is a shared secret passed as the
-//! `?token=` query value and checked against `config::jira_webhook_secret()`.
-//! The route is public (no JWT) — it is machine-to-machine.
+//! Jira Cloud does not sign webhook deliveries, so the only authenticator is a
+//! shared secret passed as the `?token=` query value and checked against
+//! `config::jira_webhook_secret()`. The route is public, with no JWT.
 //!
-//! The connection is per-user but a webhook is per-site, so an incoming issue
-//! is applied to every task that links it, matched on `(jira_issue_key,
-//! jira_base)`. Issues nobody imported match nothing, which is correct.
+//! The connection is per-user but a webhook is per-site, so an incoming issue is
+//! applied to every task that links it, matched on `(jira_issue_key, jira_base)`.
+//! Issues nobody imported match nothing, which is correct.
 
 use crate::prelude::*;
 use tracing::{info, instrument, warn};
@@ -33,8 +32,8 @@ pub async fn jira_webhook(
     pool: web::Data<PgPool>,
     body: web::Bytes,
 ) -> AppResult {
-    // Jira doesn't sign payloads, so the URL secret is the only authenticator.
-    // With no secret configured we cannot authenticate anyone → refuse.
+    // The URL secret is the only authenticator, so with none configured we cannot
+    // authenticate anyone and must refuse.
     let Some(secret) = crate::config::jira_webhook_secret() else {
         warn!(target: "worker", "JIRA_WEBHOOK_SECRET not set; rejecting Jira webhook");
         return Ok(HttpResponse::ServiceUnavailable()
@@ -56,7 +55,6 @@ pub async fn jira_webhook(
         }
     };
 
-    // Non-issue events (and malformed ones) carry no issue → ack and ignore.
     let Some(issue) = payload.issue else {
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "ok": true, "ignored": true })));
     };
@@ -71,8 +69,8 @@ pub async fn jira_webhook(
             info!(target: "worker", key = %issue.key, updated, "jira webhook applied");
             Ok(HttpResponse::Ok().json(serde_json::json!({ "ok": true, "updated": updated })))
         }
-        // Deleting the Jira issue does not delete the Wayve task (deliberate —
-        // the local task may still be wanted); just record it.
+        // Deleting the Jira issue deliberately does not delete the Wayve task: the
+        // local task may still be wanted.
         "jira:issue_deleted" => {
             info!(target: "worker", key = %issue.key, "jira webhook: issue deleted (no-op)");
             Ok(HttpResponse::Ok().json(serde_json::json!({ "ok": true, "ignored": true })))
@@ -84,9 +82,9 @@ pub async fn jira_webhook(
     }
 }
 
-/// Update every task linked to this issue, returning the row count. Matches on
-/// `jira_issue_key` and, when known, the `jira_base` site so the same key on a
-/// different site can't be cross-updated.
+/// Update every task linked to this issue. Matching on the `jira_base` site as
+/// well as the key, when the site is known, stops the same key on a different site
+/// from cross-updating.
 async fn apply_to_tasks(
     pool: &PgPool,
     issue: &JiraWebhookIssue,
@@ -114,10 +112,8 @@ async fn apply_to_tasks(
     Ok(result.rows_affected())
 }
 
-/// Reduce a Jira `self` URL (`https://site.atlassian.net/rest/api/2/issue/10001`)
-/// to the site base (`https://site.atlassian.net`) — the form stored in
-/// `jira_base` (the connect handler trims any trailing slash). Returns `None`
-/// if there's no scheme or host.
+/// Reduce a Jira `self` URL to its site base, the form stored in `jira_base`.
+/// `None` when there is no scheme or host.
 fn site_base_from_self(self_url: &str) -> Option<String> {
     let scheme_end = self_url.find("://")? + 3;
     let rest = &self_url[scheme_end..];

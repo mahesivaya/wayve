@@ -1,7 +1,7 @@
-// Billing feature module (Stripe). Supports both personal and organization
-// billing in V1. Submodules map 1:1 to the planned architecture; shared
-// owner-resolution / authorization helpers live here so every submodule can
-// reach them via `use super::...`.
+// Billing feature module. Covers both personal and organization billing. The
+// local tables are a projection of Stripe, which remains the source of truth.
+// Shared owner-resolution and authorization helpers live here so every submodule
+// can reach them via `use super::...`.
 
 pub mod catalog;
 pub mod checkout;
@@ -69,7 +69,7 @@ pub async fn resolve_owner(
 }
 
 /// Mutating an organization's billing requires an organization or platform
-/// admin. Personal billing is always self-service.
+/// admin; personal billing is always self-service.
 pub async fn require_owner_manager(
     req: &HttpRequest,
     pool: &PgPool,
@@ -80,8 +80,8 @@ pub async fn require_owner_manager(
         return Ok(());
     }
     let (account_type, _) = account_row(pool, user_id).await?;
-    // Mode-aware: managing org billing is an admin action, refused for a
-    // normal-mode owner (downscoped to member).
+    // Mode-aware: an owner browsing in normal mode is downscoped to member, and
+    // managing org billing is an admin action, so it is refused.
     let (role, _) = effective_role_for_request(req, pool, user_id)
         .await
         .map_err(|e| {
@@ -119,7 +119,7 @@ pub async fn require_platform_admin(
         })));
     }
 
-    // Mode-aware: refused for a normal-mode platform owner (member).
+    // Mode-aware: refused for a platform owner browsing in normal mode.
     let (role, _) = effective_role_for_request(req, pool, user_id)
         .await
         .map_err(|e| {
@@ -135,9 +135,9 @@ pub async fn require_platform_admin(
     }
 }
 
-/// Periodic reconciliation: deactivate entitlements once their owner no longer
-/// has an active subscription (e.g. a cancellation Stripe never re-notified
-/// us about). Idempotent — safe to run on any cadence.
+/// Periodic reconciliation that deactivates entitlements whose owner no longer
+/// has an active subscription, catching cancellations whose webhook never
+/// arrived. Idempotent, so it is safe to run on any cadence.
 pub async fn spawn_billing_worker(pool: PgPool) {
     let mut ticks: u64 = 0;
     loop {
@@ -172,19 +172,12 @@ pub async fn spawn_billing_worker(pool: PgPool) {
     }
 }
 
-/// Bootstrap dev/test environments: for every paid plan in the DB that has
-/// no `stripe_price_id` yet, look up (or create) a matching Stripe Price
-/// using a stable lookup_key, then persist its id on the plan row.
+/// Link every paid plan lacking a `stripe_price_id` to a Stripe Price, creating
+/// one if needed. Idempotent via the stable lookup_key, and best-effort: a Stripe
+/// failure leaves the plan unlinked rather than crashing startup.
 ///
-/// Idempotent — re-runs find the existing Price by lookup_key instead of
-/// creating duplicates. Best-effort: a Stripe API failure logs a warning
-/// and leaves the plan unlinked rather than crashing startup (the
-/// subscribe endpoint still surfaces "This plan is not linked to a Stripe
-/// price yet" so the operator sees what's missing).
-///
-/// Gated on `is_test_mode()` so production never auto-creates Stripe prices
-/// — production plans should be hand-managed via the Stripe dashboard and
-/// linked into the DB via `UPDATE plans SET stripe_price_id = ...`.
+/// Gated on test mode so production never auto-creates prices; production plans
+/// are hand-managed in the Stripe dashboard and linked into the DB by hand.
 pub async fn ensure_test_prices(pool: &PgPool) {
     if !provider::is_configured() || !provider::is_test_mode() {
         return;

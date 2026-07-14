@@ -1,7 +1,6 @@
 // Effective entitlements for a billing owner. The `entitlements` table is a
-// materialized snapshot of "what does this owner's active plan grant",
-// refreshed whenever a subscription changes (checkout completion / webhook).
-// Feature modules enforce limits by calling the helpers here.
+// materialized snapshot of what the owner's active plan grants, refreshed when a
+// subscription changes. Feature modules enforce limits through the helpers here.
 
 use super::catalog;
 use super::models::{BillingOwner, Entitlement};
@@ -10,9 +9,8 @@ use crate::prelude::*;
 use tracing::{error, instrument};
 
 /// Free baseline for an owner with no paid subscription, sourced from the plan
-/// catalog (single source of truth): an organization with no subscription
-/// lands on Free Organization, a personal account on Free Personal. The
-/// `features` map here is the runtime limit set, not the display bullets.
+/// catalog so it cannot drift. `features` here is the runtime limit set, not the
+/// marketing bullets.
 fn free_defaults(owner: &BillingOwner) -> Entitlement {
     let plan = catalog::free_plan_for(owner.kind());
     Entitlement {
@@ -28,17 +26,12 @@ fn free_defaults(owner: &BillingOwner) -> Entitlement {
     }
 }
 
-/// Resolve the owner's effective entitlements.
-///
-/// We resolve **live** from the owner's active subscription plan rather than
-/// trusting the materialized `entitlements` snapshot alone: that snapshot is
-/// only refreshed by Stripe webhooks (`refresh_entitlements`), which can lag or
-/// not fire, leaving storage/seat limits stale after a plan change (e.g. the
-/// plan badge flips to "Most Advance" but storage still shows the old 10 GB).
-/// The live query is ordered the same way as `current_plan_for_user`
-/// (`ORDER BY s.id DESC`) so the granted limits always track the *displayed*
-/// plan. We fall back to the stored snapshot (legacy/manual grants), then the
-/// free baseline, when there's no active subscription.
+/// Resolve the owner's effective entitlements live from their active
+/// subscription, because the materialized snapshot is only refreshed by Stripe
+/// webhooks, which can lag or never fire and leave limits stale after a plan
+/// change. The ordering must match `current_plan_for_user` so granted limits
+/// always track the plan the user is shown. Falls back to the stored snapshot,
+/// which preserves manual grants, and then to the free baseline.
 pub async fn effective_entitlements(pool: &PgPool, owner: BillingOwner) -> Entitlement {
     let live = sqlx::query_as::<_, (String, i64, i32, Value)>(
         r#"
@@ -71,8 +64,6 @@ pub async fn effective_entitlements(pool: &PgPool, owner: BillingOwner) -> Entit
         Err(e) => error!(target: "billing", error = ?e, "live entitlement lookup failed"),
     }
 
-    // No active subscription — use the last materialized snapshot if present
-    // (preserves any legacy/manual grant), otherwise the free baseline.
     let row = sqlx::query_as::<_, Entitlement>(
         r#"
         SELECT plan_code, storage_limit_bytes, seat_limit, features, active
@@ -97,8 +88,8 @@ pub async fn effective_entitlements(pool: &PgPool, owner: BillingOwner) -> Entit
     }
 }
 
-/// Recompute and persist the owner's entitlement snapshot from their current
-/// active subscription. Called after checkout completion and from webhooks.
+/// Recompute and persist the owner's entitlement snapshot. Must run after
+/// checkout completion and on every subscription webhook.
 pub async fn refresh_entitlements(pool: &PgPool, owner: BillingOwner) -> Result<()> {
     let plan = sqlx::query_as::<_, (String, i64, i32, Value)>(
         r#"
@@ -120,8 +111,6 @@ pub async fn refresh_entitlements(pool: &PgPool, owner: BillingOwner) -> Result<
     let (plan_code, storage, seats, features, active) = match plan {
         Some((code, storage, seats, features)) => (Some(code), storage, seats, features, true),
         None => {
-            // No active subscription → scope-aware free baseline (org: Free
-            // Organization 5/5 GB; personal: Free Personal 1/1 GB).
             let d = free_defaults(&owner);
             (
                 d.plan_code,
@@ -133,8 +122,8 @@ pub async fn refresh_entitlements(pool: &PgPool, owner: BillingOwner) -> Result<
         }
     };
 
-    // Prior snapshot — so the audit row below fires only on a real grant
-    // change (plan or active flip), not on every renewal webhook.
+    // Read the prior snapshot so the audit row below fires only on a real grant
+    // change, not on every renewal webhook.
     let prior = sqlx::query_as::<_, (Option<String>, bool)>(
         r#"
         SELECT plan_code, active FROM entitlements
@@ -187,8 +176,7 @@ pub async fn refresh_entitlements(pool: &PgPool, owner: BillingOwner) -> Result<
         .await?;
     }
 
-    // Audit the grant only when it materially changed. A grant (active true) or
-    // revoke (active false) is a financial signal worth a permanent row.
+    // A grant or revoke is a financial signal worth a permanent row.
     let (prior_plan, prior_active) = prior.unwrap_or((None, false));
     if prior_plan != plan_code || prior_active != active {
         crate::audit::record_billing(
@@ -217,10 +205,6 @@ pub async fn refresh_entitlements(pool: &PgPool, owner: BillingOwner) -> Result<
 
     Ok(())
 }
-
-// Enforcement seam: other feature modules (drive uploads, email send caps,
-// ...) call `effective_entitlements` and compare against the relevant limit
-// before allowing a billable action.
 
 #[get("/billing/entitlements")]
 #[instrument(target = "http", skip(req, pool))]

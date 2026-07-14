@@ -1,15 +1,12 @@
 //! Cross-instance realtime fan-out subscriber.
 //!
-//! Chat publishes every outbound frame to a Redis pub/sub channel
-//! (`ws:user:{id}`). This task PSUBSCRIBEs `ws:user:*` and delivers each frame
-//! to the matching WebSocket session **on this instance**. Running it on every
-//! backend instance is what lets chat work across more than one instance: a
-//! send received on instance A is published to Redis and delivered by whichever
-//! instance currently holds the recipient's socket.
+//! Chat publishes every outbound frame to `ws:user:{id}`. This task PSUBSCRIBEs
+//! `ws:user:*` and delivers each frame to the matching session on this instance,
+//! so a send received on one instance reaches the recipient's socket wherever it
+//! is held. Spawn once per process.
 //!
-//! Spawn once per process (see `main`). Best-effort: if Redis is down the
-//! sender's `fan_out_user` falls back to local delivery, so single-instance
-//! deployments keep working without this subscriber doing anything.
+//! Best-effort: with Redis down, `fan_out_user` falls back to local delivery, so
+//! single-instance deployments work without this subscriber.
 
 use futures::StreamExt;
 use std::time::Duration;
@@ -46,7 +43,6 @@ async fn subscribe_loop() -> redis::RedisResult<()> {
                 continue;
             }
         };
-        // Channel name is `ws:user:{id}` — extract the target user id.
         let user_id = msg
             .get_channel_name()
             .strip_prefix("ws:user:")
@@ -56,6 +52,6 @@ async fn subscribe_loop() -> redis::RedisResult<()> {
         }
     }
 
-    // Stream ended (connection closed) — return Ok so run_subscriber retries.
+    // The stream ended, so return Ok and let run_subscriber reconnect.
     Ok(())
 }

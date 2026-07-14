@@ -5,10 +5,8 @@ export type EmailAccount = {
   email: string;
   display_name?: string | null;
   unread_count?: number;
-  // Shared-inbox surface. `is_shared` lights up the chip in the sidebar;
-  // `shared_label` is the friendly name (e.g. "Support"); `is_owner`
-  // distinguishes accounts the user connected themselves from ones
-  // they're a member of (controls "Disconnect", rename rights, etc.).
+  // `is_owner` distinguishes an account the user connected themselves from one
+  // they are merely a member of, which controls rename and disconnect rights.
   is_shared?: boolean;
   shared_label?: string | null;
   is_owner?: boolean;
@@ -28,8 +26,8 @@ export interface EmailItem {
   attachments_checked?: boolean;
   attachments?: EmailAttachment[];
   zoom_join_url?: string | null;
-  // Shared-inbox surface (populated when the row comes from a shared
-  // account). All optional — personal-inbox rows leave them undefined.
+  // Populated only when the row comes from a shared account; personal-inbox
+  // rows leave these undefined.
   is_shared?: boolean;
   shared_label?: string | null;
   inbox_status?: "open" | "pending" | "closed" | null;
@@ -48,16 +46,11 @@ export interface WayveEncryptedBody {
 
 export type { EmailAttachment };
 
-// Every folder is now wired to real data. Inbox + Sent come from the
-// `emails` table directly; the rest filter on `emails.labels` which the
-// sync worker populates with Gmail labelIds, Outlook categories, and
-// synthetic IMPORTANT / SPAM / DRAFT injected at parse time so one
-// filter shape works across both providers.
-//
-// `STUB_EMAIL_FOLDERS` stays around (empty) so future iterations can
-// re-introduce a coming-soon placeholder for any new folder without
-// reshuffling EmailList — drop a name in and the existing placeholder
-// branch picks it up.
+// Inbox and Sent read the `emails` table directly. The rest filter on
+// `emails.labels`, which the sync worker fills with Gmail labelIds, Outlook
+// categories, and synthetic IMPORTANT / SPAM / DRAFT values, so one filter
+// shape works across both providers. `STUB_EMAIL_FOLDERS` is empty but kept:
+// adding a name to it re-enables EmailList's coming-soon placeholder branch.
 export type EmailFolder =
   | "inbox"
   | "sent"
@@ -67,8 +60,8 @@ export type EmailFolder =
   | "drafts"
   | "social"
   | "trash"
-  // Virtual, source-based folder: GitHub PR/notification emails (matched on
-  // the `notifications@github.com` sender by the backend), not a Gmail label.
+  // Virtual folder matched by sender (`notifications@github.com`) on the
+  // backend, not a Gmail label.
   | "github";
 
 export const STUB_EMAIL_FOLDERS: ReadonlyArray<EmailFolder> = [];

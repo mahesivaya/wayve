@@ -158,8 +158,8 @@ pub async fn remove_channel_user(
             .execute(pool.get_ref())
             .await?;
 
-        // Audit the exit. actor = the user who left/was removed; metadata notes
-        // who performed the removal (self-leave when they match).
+        // The actor is the user who left or was removed; the metadata records who
+        // performed the removal, which matches the actor on a self-leave.
         let channel_name: Option<String> =
             sqlx::query_scalar("SELECT name FROM channels WHERE id = $1")
                 .bind(channel_id)

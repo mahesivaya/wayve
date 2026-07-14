@@ -67,15 +67,12 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let account_type: String = row.get("account_type");
     let organization_id: Option<i32> = row.try_get("organization_id").ok().flatten();
     let organization_slug: Option<String> = row.try_get("organization_slug").ok().flatten();
-    // Legacy rows (created before recovery_mode existed) shouldn't happen
-    // — the column has a NOT NULL default — but treat any unknown value
-    // as "full" to keep the safer-default semantics.
+    // Default an unreadable value to "full", the safer semantics.
     let recovery_mode: String = row
         .try_get::<String, _>("recovery_mode")
         .unwrap_or_else(|_| "full".to_string());
     let theme_json: Option<String> = row.try_get("theme_json").ok().flatten();
-    // Uploaded profile image. The stored value is a disk path; the client only
-    // needs the stable serve URL (it 404s/falls back to the initial when unset).
+    // The column stores a disk path; the client only needs the serve URL.
     let avatar_path: Option<String> = row.try_get("avatar_path").ok().flatten();
     let avatar_url = avatar_path.map(|_| format!("/api/users/{id}/avatar"));
     let chat_encrypt_files: bool = row.try_get("chat_encrypt_files").unwrap_or(true);
@@ -94,10 +91,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
             }
         };
 
-    // Look up the user's current tier so the frontend can show a tier badge
-    // and the "Upgrade" affordance. Falls back to the basic_user plan when
-    // the user has no active subscription — that's the default state for
-    // every new registration.
+    // Falls back to the basic_user plan, the default for a new registration.
     let current_plan = match current_plan_for_user(pool.get_ref(), id, organization_id).await {
         Ok(plan) => Some(plan),
         Err(e) => {
@@ -155,13 +149,9 @@ pub async fn save_public_key(
     Ok(HttpResponse::Ok().body("Saved"))
 }
 
-// PUT /api/me/theme — persist the user's theme choice. Body: { theme: <json>|null }
-// where <json> is the serialized ThemeChoice from the frontend customizer
-// ({ kind: "preset"|"custom"|"default", ... }). NULL clears the saved
-// preference and reverts the user to the stylesheet default on next load.
-//
-// The column is treated as opaque to the backend: we don't validate the
-// schema. The frontend owns the format and is permissive on parse errors.
+// Persists the frontend's serialized ThemeChoice, or NULL to clear it. The
+// column is opaque to the backend: the frontend owns the format and is
+// permissive on parse errors, so nothing here validates the schema.
 #[put("/me/theme")]
 #[instrument(target = "http", skip(req, pool, body))]
 pub async fn put_theme(
@@ -180,8 +170,7 @@ pub async fn put_theme(
     let theme: Option<String> = match body.get("theme") {
         Some(serde_json::Value::Null) | None => None,
         Some(serde_json::Value::String(s)) => Some(s.clone()),
-        // Allow callers to send the object directly instead of a string —
-        // we serialize it back. Keeps the API forgiving.
+        // Accept the object directly as well as a string, and serialize it back.
         Some(value) => Some(value.to_string()),
     };
 

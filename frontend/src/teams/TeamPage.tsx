@@ -25,21 +25,18 @@ export default function TeamPage() {
   // `null` = not found (or not in the caller's org).
   const [team, setTeam] = useState<Team | null | undefined>(undefined);
 
-  // Only a team admin / manager may add members. There's no per-team role data
-  // yet, so we gate on the org/platform "members:manage" permission — the same
-  // capability that governs member management elsewhere. When real team
-  // membership lands, swap this for a per-team manager check.
+  // There is no per-team role data yet, so this gates on the org/platform
+  // "members:manage" permission. Swap it for a per-team manager check when real
+  // team membership lands.
   const canManageMembers = hasPermission(user, "members:manage");
 
-  // Member list is local-only (not yet persisted); the "Add member" button
-  // appends in-session.
   const [members, setMembers] = useState<Member[]>([]);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<Member>(EMPTY_DRAFT);
 
-  // Reset view state synchronously when the slug changes (navigating between
-  // teams reuses this component). Done during render via a tracked previous
-  // value rather than in an effect — see Chat.tsx for the same pattern.
+  // Navigating between teams reuses this component, so view state resets during
+  // render via a tracked previous value rather than in an effect. Chat.tsx uses
+  // the same pattern.
   const [lastSlug, setLastSlug] = useState(slug);
   if (lastSlug !== slug) {
     setLastSlug(slug);
@@ -49,8 +46,6 @@ export default function TeamPage() {
     setDraft(EMPTY_DRAFT);
   }
 
-  // The fetch itself stays in an effect; setState runs in the async callbacks
-  // (allowed) rather than synchronously in the effect body.
   useEffect(() => {
     let cancelled = false;
     getTeam(slug)

@@ -6,14 +6,14 @@ pub struct SendEmailRequest {
     pub to: String,
     pub subject: String,
     pub body: String,
-    /// Standard-mailbox attachments (base64). Empty for a plain text send;
-    /// only the standard Gmail/Outlook path honours these (not E2E/secure).
+    /// Honoured only by the standard Gmail and Outlook path, not the E2E secure
+    /// send.
     #[serde(default)]
     pub attachments: Vec<EmailAttachmentInput>,
 }
 
-/// One outgoing attachment as it arrives from the browser: the file bytes are
-/// standard-base64 encoded in `content_base64`.
+/// One outgoing attachment from the browser, with the file bytes standard-base64
+/// encoded in `content_base64`.
 #[derive(Debug, Deserialize)]
 pub struct EmailAttachmentInput {
     pub filename: String,

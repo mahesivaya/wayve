@@ -1,18 +1,10 @@
 // Org-member login crypto.
 //
-// At login the backend returns `login_wrap: {iv, ct, salt, iterations}`
-// for org members (personal users get null). The browser:
-//   1. PBKDF2-derives an AES-GCM key from the entered password.
-//   2. Decrypts the wrapped PKCS8 private key.
-//   3. Imports it and saves to the existing `wayve_keys` IndexedDB under
-//      `privateKey:${userId}`, so chat/notes/drive/email decrypt paths
-//      find it in the same place a personal user's key lives.
-//
-// Public key bytes can be reconstructed from the PKCS8 (the RSA key
-// includes the modulus), but the existing code expects a separate
-// `publicKey:${userId}` slot. We fetch the SPKI bytes from
-// `users.public_key` via the same endpoint personal users use, then
-// save both.
+// At login the backend returns `login_wrap: {iv, ct, salt, iterations}` for org
+// members; personal users get null. The browser PBKDF2-derives an AES-GCM key
+// from the entered password, decrypts the wrapped PKCS8 private key, and saves
+// it into the same IndexedDB slot a personal user's key lives in, so every
+// chat/notes/drive/email decrypt path finds it unchanged.
 
 import {
   loadPrivateKey,
@@ -30,9 +22,8 @@ function bytesToB64(b: Uint8Array): string {
   return btoa(s);
 }
 
-// PBKDF2(password)-wrap a PKCS8 private key into a login envelope (the same
-// shape stored in member_login_wrapped_keys). Shared by the change-password
-// flow below.
+// Produces the same envelope shape stored in member_login_wrapped_keys, so the
+// iteration count here must match what the backend and the unwrap path expect.
 async function wrapPkcs8ForLogin(
   pkcs8: ArrayBuffer,
   password: string
@@ -72,11 +63,10 @@ async function wrapPkcs8ForLogin(
   };
 }
 
-// Build the new login envelope for a self-service password change, re-wrapping
-// the user's already-cached private key under the new password. Returns null if
-// no key is cached on this device (a personal user who never set up E2E keys) —
-// in which case the backend has no member_login_wrapped_keys row to rotate and
-// the plain password change is enough.
+// Re-wraps the already-cached private key under a new password for a
+// self-service password change. Null means no key is cached on this device, so
+// the backend has no member_login_wrapped_keys row to rotate and the plain
+// password change suffices.
 export async function buildLoginWrapForPassword(
   userId: number | null | undefined,
   email: string | null | undefined,
@@ -93,19 +83,15 @@ export type CachedKeys = {
   publicKeyBytes: ArrayBuffer;
 };
 
-// Derive a public-key SPKI buffer from a PKCS8 private key by importing
-// the private key with `extractable=true` and re-exporting the public
-// component. Avoids a round-trip to /api/me/public-key when the server
-// might not have it yet (race during first-login after provisioning).
+// Deriving the SPKI locally avoids a round-trip to /api/me/public-key, which can
+// race on first login after provisioning when the server may not have it yet.
+//
+// WebCrypto has no direct "give me the public half" call, so the portable path
+// is to import as extractable RSA-OAEP, export to JWK, strip the private fields,
+// and re-import.
 async function derivePublicKeyFromPrivate(
   pkcs8: ArrayBuffer
 ): Promise<ArrayBuffer> {
-  // To export the public half we need to import with sign-like usages
-  // first, but RSA-OAEP keys only export their public half through a
-  // separate keypair derive. Easiest portable path: import as
-  // extractable RSA-OAEP, export jwk, strip the private fields, import
-  // back as SPKI. WebCrypto doesn't have a direct "give me the public
-  // half" call.
   const priv = await crypto.subtle.importKey(
     "pkcs8",
     pkcs8,
@@ -114,7 +100,6 @@ async function derivePublicKeyFromPrivate(
     ["decrypt"]
   );
   const jwk = await crypto.subtle.exportKey("jwk", priv);
-  // Build a public-only JWK by keeping only the public fields.
   const pubJwk: JsonWebKey = {
     kty: jwk.kty,
     n: jwk.n,
@@ -164,18 +149,16 @@ export async function unwrapAndCacheMemberKeys(
   );
   const publicKeyBytes = await derivePublicKeyFromPrivate(pkcs8);
 
-  // Save to the SAME IndexedDB slots personal users use so every existing
-  // decrypt code path (chat/notes/drive/email) finds it without
-  // modification.
+  // The same IndexedDB slots personal users use, so every existing decrypt path
+  // finds the key without modification.
   await savePrivateKey(privateKey, userId, email);
   await savePublicKey(publicKeyBytes, userId, email);
 
   return { privateKey, publicKeyBytes };
 }
 
-// Used by the password-change flow: unwrap the existing wrap with the
-// OLD password, re-wrap with the NEW password, return the new envelope
-// ready to POST. Caller uploads it alongside the new password.
+// Unwrap the existing envelope with the OLD password and re-wrap it under the
+// NEW one. The caller uploads the result alongside the new password.
 export async function rewrapOwnLoginEnvelope(
   oldPassword: string,
   newPassword: string,

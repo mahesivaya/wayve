@@ -9,13 +9,8 @@ type Props = {
   onToggle: (messageId: number, isChannel: boolean, emoji: string) => void;
 };
 
-// The reaction row under a message bubble: one pill per emoji (with its count,
-// highlighted when the viewer is among the reactors) plus an add-reaction
-// button that opens the same picker the composer uses.
-//
-// A pill click toggles, so the pill is both "who reacted" and the control to
-// join or leave that reaction — which is why it's a button with aria-pressed
-// rather than a static count.
+// Each pill is both the reactor count and the control to join or leave that reaction,
+// which is why it is a button with aria-pressed rather than a static count.
 export default function MessageReactions({
   message,
   currentUserId,

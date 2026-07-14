@@ -18,9 +18,8 @@ function fmtDate(value: string | null): string {
 
 export default function ScimTokens() {
   const { user } = useAuth();
-  // SCIM bearer tokens move user data — gate the management surface on
-  // `webhooks:manage` (matches the backend's permission requirement and
-  // mirrors the SIEM-token gate on the AuditSecurity page).
+  // SCIM bearer tokens move user data, so this must stay gated on the same
+  // `webhooks:manage` permission the backend requires.
   const canManage = hasPermission(user, "webhooks:manage");
 
   const [tokens, setTokens] = useState<ScimToken[]>([]);

@@ -11,18 +11,18 @@ const EMAIL_ACCOUNT_CACHE_MAX_CAPACITY: u64 = 10_000;
 const USER_ACCOUNT_LIST_CACHE_TTL_SECS: u64 = 60;
 const USER_ACCOUNT_LIST_CACHE_MAX_CAPACITY: u64 = 10_000;
 
-// Process-global pool handle, set once at startup. Lets code paths that don't
-// receive a `&PgPool` (e.g. the IMAP `MailSender` trait method, whose signature
-// is fixed across providers) still reach the DB to load connection settings.
+// Process-global pool, so code paths with no `&PgPool` in scope can still load
+// connection settings. The IMAP `MailSender` impl needs this: its signature is
+// fixed across providers and carries no pool.
 static GLOBAL_POOL: std::sync::OnceLock<PgPool> = std::sync::OnceLock::new();
 
-/// Register the process pool. Call once during startup.
+/// Call once during startup.
 pub fn init_pool(pool: PgPool) {
     let _ = GLOBAL_POOL.set(pool);
 }
 
-/// Clone the process pool. Panics only if called before `init_pool` — a
-/// deterministic startup-ordering bug rather than a runtime condition.
+/// Panics only if called before `init_pool`, which is a startup-ordering bug
+/// rather than a runtime condition.
 pub fn pool_handle() -> PgPool {
     GLOBAL_POOL
         .get()
@@ -52,11 +52,10 @@ pub struct EmailAccount {
     pub provider: MailProvider,
     pub refresh_token: Option<String>,
     pub last_sync: Option<i64>,
-    /// Wall-clock timestamp of the most-recent message we've received
-    /// for this account. NULL on a brand-new mailbox; the sync worker
-    /// treats NULL as "cold" (30min interval). Updated by
-    /// `repo::upsert_batch` / `upsert_one` whenever a row is freshly
-    /// inserted, and seeded from `MAX(emails.created_at)` at startup.
+    /// Timestamp of the most recent message received for this account, written
+    /// by `repo::upsert_batch` / `upsert_one` on fresh inserts and seeded from
+    /// `MAX(emails.created_at)` at startup. NULL on a new mailbox, which the
+    /// sync worker's backoff ladder treats as cold.
     pub last_message_at: Option<chrono::NaiveDateTime>,
 }
 
@@ -82,9 +81,8 @@ fn account_from_row(row: sqlx::postgres::PgRow) -> EmailAccount {
         provider,
         refresh_token: row.try_get("refresh_token").ok().flatten(),
         last_sync: row.try_get("last_sync").ok(),
-        // Optional because legacy callers may select rows without the
-        // column (queries that haven't been updated). try_get + flatten
-        // makes that a NULL rather than a hard failure.
+        // Some callers select without this column, so a missing one must read as
+        // NULL rather than fail the whole row.
         last_message_at: row
             .try_get::<Option<chrono::NaiveDateTime>, _>("last_message_at")
             .ok()
@@ -122,11 +120,10 @@ pub async fn load_email_account_for_user(
     Ok(account)
 }
 
-/// Like `load_email_account_for_user` but also accepts shared-inbox
-/// members with `can_reply = TRUE`. Used by the send-mail handler so
-/// teammates can reply from `support@`. Owner access still uses the
-/// same per-account cache; shared-member access bypasses the cache
-/// (membership is a server-of-truth check we want fresh).
+/// Like `load_email_account_for_user`, but also accepts shared-inbox members
+/// with `can_reply = TRUE`, so teammates can reply from `support@`. The
+/// shared-member path deliberately bypasses the cache: membership is an
+/// authorization check that must be read fresh.
 #[instrument(target = "db", skip(pool), fields(account_id, user_id))]
 pub async fn load_email_account_for_send(
     pool: &PgPool,
@@ -154,9 +151,8 @@ pub async fn load_email_account_for_send(
     Ok(row.map(account_from_row))
 }
 
-/// Load a mailbox by its address (case-insensitive). Used by the Gmail push
-/// receiver, which only knows the email. Uncached on purpose — pushes are
-/// infrequent and we want fresh token/cursor state each time.
+/// Case-insensitive lookup by address, for the Gmail push receiver, which knows
+/// only the email. Uncached: pushes are infrequent and need fresh token state.
 #[instrument(target = "db", skip(pool))]
 pub async fn load_email_account_by_email(
     pool: &PgPool,
@@ -212,19 +208,11 @@ pub async fn load_user_email_accounts_for_older_sync(
 
 #[instrument(target = "db", skip(pool), fields(user_id))]
 pub async fn load_account_summaries_for_user(pool: &PgPool, user_id: i32) -> Result<Vec<Account>> {
-    // Owner mailboxes AND shared inboxes the caller is a member of. The
-    // LEFT JOIN against shared_inbox_members is repeated in the WHERE so
-    // a single GROUP BY collapses everything to one row per account.
-    // `provider_unread_count` is the truth (Gmail labels.get / Outlook
-    // mailFolders/inbox), refreshed every sync tick. Falls back to a local
-    // COUNT for the brief window between account-add and first successful
-    // sync, so the badge is never blank — and for shared inboxes whose
-    // provider count we don't refresh from the member's perspective.
-    // The fallback excludes SPAM and DRAFT so the badge mirrors what an
-    // inbox-only view shows, matching what Gmail's labels.get returns for
-    // INBOX. We also keep the legacy "sender is self" exclusion so
-    // outbound mail Gmail mistakenly leaves marked unread doesn't inflate
-    // the count.
+    // `provider_unread_count` is authoritative and refreshed every sync tick.
+    // The local COUNT is only a fallback, for the window between account-add and
+    // first sync and for shared inboxes whose provider count isn't refreshed per
+    // member. It excludes SPAM and DRAFT to match what Gmail's labels.get reports
+    // for INBOX, and self-sent mail, which would otherwise inflate the badge.
     let accounts = sqlx::query_as::<_, Account>(
         r#"
         SELECT
@@ -278,16 +266,11 @@ pub struct ConnectedEmailAccount<'a> {
     pub expires_in: i64,
 }
 
-/// Returns `Some(owner_user_id)` if `email` is already connected as a
-/// non-shared mailbox under a Wayve user OTHER than `requesting_user_id`.
-/// OAuth callbacks call this before insert so the same Gmail/Outlook can't
-/// silently end up as a duplicate `email_accounts` row across users —
-/// previously this let user_5 connect user_1's mailbox and sync a parallel
-/// copy of every message, which inflated the DB and split visibility.
-///
-/// Shared inboxes are intentionally excluded: those are designed to surface
-/// the same provider mailbox to multiple users via `shared_inbox_members`,
-/// which is the right multi-user path.
+/// Returns `Some(owner_user_id)` when `email` is already connected as a
+/// non-shared mailbox under a different user. OAuth callbacks must check this
+/// before insert: otherwise one user can connect another's mailbox and sync a
+/// duplicate copy of every message. Shared inboxes are excluded, since
+/// `shared_inbox_members` is the supported way to surface one mailbox to many.
 pub async fn email_owned_by_other_user(
     pool: &PgPool,
     email: &str,
@@ -323,12 +306,10 @@ pub async fn upsert_connected_email_account(
     let expiry = (chrono::Utc::now() + chrono::Duration::seconds(account.expires_in)).naive_utc();
     let refresh_token = account.refresh_token.unwrap_or("");
 
-    // `last_sync` is the worker's incremental cursor: NULL means "never synced,
-    // crawl the whole mailbox." Set it to NOW on first insert so the worker's
-    // first tick runs a bounded `after:NOW-1h` query instead of paging the
-    // entire mailbox. The on-connect `sync_account_recent` already pulls the
-    // most recent ~51 messages, so nothing is lost. ON CONFLICT preserves the
-    // existing cursor on reconnect.
+    // `last_sync` is the worker's incremental cursor, and NULL means "crawl the
+    // whole mailbox". Seeding it to NOW keeps the first tick to a bounded
+    // `after:` query; the on-connect `sync_account_recent` has already pulled
+    // recent mail, so nothing is lost. ON CONFLICT preserves it on reconnect.
     let row = sqlx::query(
         r#"
         INSERT INTO email_accounts

@@ -24,16 +24,13 @@ import {
 import MembersTree from "./MembersTree";
 import "./membersPanel.css";
 
-// Roles offered in the inline "Create new user" form. Intentionally a tight
-// subset of the 9-role catalog — admins typically provision these and only
-// promote to owner/super_admin/admin/billing through the existing per-row
-// role change.
+// A deliberately tight subset of the 9-role catalog: higher roles are reached
+// through the per-row role change instead of at creation time.
 const CREATE_ROLES: Role[] = ["guest", "developer", "member", "support"];
 
-// Members & Roles management panel, shared by the organization and platform
-// admin homes. Listing requires `members:read`; the role <select> only appears
-// for members the viewer is actually allowed to modify (see canModifyMember).
-// The "Create new user" form requires `members:manage`.
+// Shared by the organization and platform admin homes. Listing requires
+// `members:read`, the role <select> requires the viewer to pass canModifyMember,
+// and the "Create new user" form requires `members:manage`.
 type Props =
   | { scope: "platform" }
   | { scope: "organization"; organizationId: number };
@@ -45,14 +42,10 @@ export default function MembersRolesPanel(props: Props) {
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  // Members are shown as an org-chart tree by default (click a node for
-  // details); "List" switches to the management rows (role change / delete).
   const [view, setView] = useState<"tree" | "list">("tree");
 
-  // Password-reset modal state. Modal opens with a target member; the
-  // form captures the new temp password, computes a fresh login wrap in
-  // the browser using the org master key, and POSTs both. Success closes
-  // the modal and surfaces the new password so the admin can share it.
+  // Resetting a password computes a fresh login wrap in the browser using the
+  // org master key and POSTs it alongside the new temp password.
   const [resetTarget, setResetTarget] = useState<Member | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [resetBusy, setResetBusy] = useState(false);
@@ -62,23 +55,21 @@ export default function MembersRolesPanel(props: Props) {
     tempPassword: string;
   } | null>(null);
 
-  // Create-user inline form state.
   const [createOpen, setCreateOpen] = useState(false);
   const [createEmail, setCreateEmail] = useState("");
   const [createRole, setCreateRole] = useState<Role>("member");
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState("");
-  // Email-confirmation step. The account is only created once the admin hands
-  // back the 6-digit code mailed to `deliveryEmail` — which defaults to the
-  // account email but can point at a different, reachable inbox.
+  // The account is only created once the admin hands back the 6-digit code
+  // mailed to `deliveryEmail`, which defaults to the account email but can point
+  // at a different, reachable inbox.
   const [deliveryEmail, setDeliveryEmail] = useState("");
   const [deliveryEdited, setDeliveryEdited] = useState(false);
   const [codeSentTo, setCodeSentTo] = useState("");
   const [createCode, setCreateCode] = useState("");
   const [sendingCode, setSendingCode] = useState(false);
-  // The plaintext password is returned by the backend exactly once. Hold it
-  // in component state until the admin dismisses the banner so they can copy
-  // and share it. Refresh/navigation away loses it (intentionally).
+  // The backend returns the plaintext password exactly once, so it is held in
+  // component state until dismissed and is lost on refresh, by design.
   const [lastCreated, setLastCreated] = useState<{
     email: string;
     tempPassword: string;
@@ -93,9 +84,8 @@ export default function MembersRolesPanel(props: Props) {
   const organizationId =
     props.scope === "organization" ? props.organizationId : null;
 
-  // Detail-page path for a member, routed by scope. Used by both the list rows
-  // and the tree nodes. Platform URLs use the member's username (canonical),
-  // falling back to the numeric id when a member has no username.
+  // Platform URLs are keyed by username (canonical), falling back to the numeric
+  // id when a member has none.
   const memberHref = (m: Pick<Member, "user_id" | "username">) => {
     if (props.scope === "platform") {
       const slug = m.username?.trim() ? m.username.trim() : String(m.user_id);
@@ -105,12 +95,10 @@ export default function MembersRolesPanel(props: Props) {
   };
 
   useEffect(() => {
-    // Without members:read the panel renders nothing (see the guard at the end
-    // of the component), so there is no loading state to reset here.
+    // Without members:read the panel renders nothing (guard at the end of the
+    // component), so there is no loading state to reset here.
     if (!canRead) return;
 
-    // `loading` starts true and is only ever cleared in the async finally
-    // below — no synchronous setState in the effect body.
     let alive = true;
     const request =
       props.scope === "platform" || organizationId == null
@@ -164,9 +152,6 @@ export default function MembersRolesPanel(props: Props) {
     }
   };
 
-  // Hard-delete with a native confirm prompt. Server-side gates handle the
-  // last-owner / role-management / cross-scope edge cases; this just keeps
-  // the user from accidentally clicking through.
   const submitResetPassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!resetTarget || props.scope !== "organization" || !user) return;
@@ -668,10 +653,7 @@ export default function MembersRolesPanel(props: Props) {
               {members.map((member) => {
                 const editable =
                   canChangeRoles && canModifyMember(permissions, member.role);
-                // Delete shares the same role-management predicate as role
-                // changes, plus the actor must not be deleting themselves and
-                // must still hold members:manage. Server-side enforces all three
-                // again — this is only the UI gate.
+                // UI gate only; the server enforces the same three conditions.
                 const canDelete =
                   canManage &&
                   canModifyMember(permissions, member.role) &&

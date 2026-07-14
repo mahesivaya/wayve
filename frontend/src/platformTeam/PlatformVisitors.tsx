@@ -19,8 +19,8 @@ const VISITOR_COLUMNS = [
 
 const VISITORS_COL_WIDTHS_KEY = "rwayve.platformVisitors.colWidths";
 
-// Device / browser parsed from the raw User-Agent the backend stored. Cheap
-// substring matching — good enough for an at-a-glance traffic view.
+// Cheap substring matching on the stored User-Agent, which is good enough for an
+// at-a-glance traffic view.
 function parseDevice(ua: string | null): string {
   if (!ua) return "—";
   const s = ua.toLowerCase();
@@ -44,9 +44,8 @@ function parseBrowser(ua: string | null): string {
   return "Other";
 }
 
-// Everyone who opened the public site (incl. anonymous visitors) — from the
-// page_visits table. Owner-only; the backend additionally requires platform
-// scope + audit:read.
+// Every visitor to the public site, anonymous included, from the page_visits
+// table. Owner-only here; the backend also requires platform scope + audit:read.
 export default function PlatformVisitors({
   embedded = false,
 }: {

@@ -1,7 +1,5 @@
-// Boot-time token + JWT helpers extracted from AuthContext so the auth
-// provider stays focused on React state and side effects. None of these
-// helpers depend on the provider — they read `window.location`, the
-// stored auth token, and decode the JWT payload.
+// Boot-time token and JWT helpers. None of these depend on AuthContext: they
+// read `window.location`, the stored auth token, and the JWT payload.
 
 import { getAuthToken, setAuthToken } from "./token";
 import { logger } from "../utils/logger";
@@ -25,8 +23,8 @@ const decodeBase64Url = (value: string): string => {
   return new TextDecoder().decode(bytes);
 };
 
-// Decode JWT payload. Returns null on malformed/expired tokens so callers
-// can treat a stale token the same as no token.
+// Returns null on a malformed or expired token, so callers can treat a stale
+// token exactly like no token at all.
 export const parseJwt = (token: string): Claims | null => {
   try {
     const claims = JSON.parse(decodeBase64Url(token.split(".")[1])) as Claims;
@@ -39,15 +37,14 @@ export const parseJwt = (token: string): Claims | null => {
   }
 };
 
-// Resolve the boot-time token: prefer the OAuth redirect token from the URL
-// fragment, otherwise reuse the stored one. The fragment keeps the token out
-// of server logs, referrers, and browser request history.
+// Prefer the OAuth redirect token from the URL fragment, otherwise reuse the
+// stored one. The fragment carries the token specifically because fragments are
+// never sent to the server, keeping it out of server logs, referrers, and
+// browser request history.
 //
-// `isFreshSignup` mirrors the `#signup=true` (Google) and `#sso=true&new=true`
-// (enterprise SSO) markers the backend writes on fresh-account landings. The
-// bootstrap useEffect threads this into setupEncryption so a brand-new
-// OAuth/SSO user gets the 24-word seed modal — instead of being prompted to
-// enter a phrase they were never given.
+// `isFreshSignup` mirrors the markers the backend writes on fresh-account
+// landings, and setupEncryption uses it to show the 24-word seed modal rather
+// than asking a brand-new OAuth user for a phrase they were never given.
 export const resolveBootToken = (): {
   token: string | null;
   isFreshSignup: boolean;
@@ -57,26 +54,19 @@ export const resolveBootToken = (): {
   const isSignup = hashParams.has("signup");
   const isOAuthLanding =
     isSignup || hashParams.has("connected") || hashParams.has("sso");
-  // `signup=true` is set on every signup-FLOW landing (the same backend
-  // handler serves both new signups and existing-user re-signins because
-  // the "Sign in with Google" button on /login also uses
-  // ?mode=signup). The `&new=true` add-on is set only when the OAuth
-  // round actually inserted a new user row — that's the one case where
-  // we want to generate fresh keys + show the 24-word seed modal.
+  // `signup=true` appears on every signup-flow landing, including existing users
+  // re-signing in, because /login's "Sign in with Google" button also uses
+  // ?mode=signup. Only `&new=true` means the OAuth round actually inserted a new
+  // user row, which is the sole case where we generate fresh keys.
   const isOAuthNewUser =
     (isSignup && hashParams.get("new") === "true") ||
     (hashParams.has("sso") && hashParams.get("new") === "true");
   const isFreshSignup = isOAuthNewUser;
 
-  // Two OAuth-landing shapes:
-  //   1. `#signup=true&token=...` — older flows put the JWT in the
-  //      fragment so it stays out of server logs.
-  //   2. `#signup=true` (no token) — newer flows set the JWT via an
-  //      HttpOnly cookie at the OAuth callback and only use the
-  //      fragment to carry UI markers like `signup`/`connected`/`sso`.
-  // Either way we want to clean the fragment from the URL and surface
-  // `isFreshSignup` so the bootstrap setupEncryption knows to show
-  // the seed modal instead of asking for an existing recovery phrase.
+  // Two OAuth-landing shapes exist. Older flows put the JWT in the fragment
+  // (`#signup=true&token=...`) so it stayed out of server logs; newer flows set
+  // it as an HttpOnly cookie at the callback and use the fragment only for UI
+  // markers. Either way, clean the fragment out of the URL.
   if (isOAuthLanding) {
     if (tokenFromHash) {
       log.info("restoring token from OAuth redirect (hash-token)");
@@ -84,16 +74,14 @@ export const resolveBootToken = (): {
     } else {
       log.info("OAuth redirect (cookie-token); cleaning fragment");
     }
-    // A Google (`#signup`) or enterprise-SSO (`#sso`) landing is a fresh login,
-    // so start the left sidebar expanded for all users (mirrors the password
-    // `login()` path). Skip the mailbox-connect-only landing (`#connected`),
-    // which is a mid-session return, not a login. `Layout` reads this key on
-    // mount; "0" = expanded. Best-effort — storage may be unavailable.
+    // A Google or SSO landing is a fresh login, so expand the sidebar as the
+    // password `login()` path does. A mailbox-connect landing (`#connected`) is a
+    // mid-session return, not a login, so it is skipped.
     if (isSignup || hashParams.has("sso")) {
       try {
         localStorage.setItem("rwayve.sidebar.collapsed", "0");
       } catch {
-        // storage unavailable — Layout falls back to expanded anyway.
+        // Storage unavailable; Layout falls back to expanded anyway.
       }
     }
     const path = window.location.pathname || "/home";

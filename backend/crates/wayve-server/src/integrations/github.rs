@@ -25,9 +25,8 @@ async fn github_webhook(req: HttpRequest, body: web::Bytes) -> AppResult {
         "received GitHub webhook"
     );
 
-    // A newly *opened* pull request is the only "new PR" trigger we email on.
-    // Best-effort: a malformed payload or mail failure is logged but never
-    // fails the webhook — GitHub retries non-2xx, which would double-send.
+    // Best-effort: a malformed payload or mail failure is logged but must never
+    // fail the webhook, because GitHub retries non-2xx and would double-send.
     if event == "pull_request"
         && let Some(pr) = parse_opened_pull_request(&body)
     {
@@ -41,7 +40,6 @@ async fn github_webhook(req: HttpRequest, body: web::Bytes) -> AppResult {
     })))
 }
 
-/// The handful of fields surfaced in the "new PR" notification email.
 struct OpenedPull {
     number: i64,
     title: String,
@@ -50,9 +48,7 @@ struct OpenedPull {
     author: String,
 }
 
-/// Pull PR details out of a `pull_request` webhook payload, but only for the
-/// `opened` action — reopened/synchronize/edited are not a *new* PR. Returns
-/// `None` for any other action or a payload we can't read.
+/// Only the `opened` action: reopened, synchronize, and edited are not a new PR.
 fn parse_opened_pull_request(body: &[u8]) -> Option<OpenedPull> {
     let payload: serde_json::Value = serde_json::from_slice(body).ok()?;
     if payload.get("action").and_then(serde_json::Value::as_str) != Some("opened") {
@@ -86,9 +82,7 @@ fn parse_opened_pull_request(body: &[u8]) -> Option<OpenedPull> {
     })
 }
 
-/// Email the configured inbox that a new PR was opened, with a link into the
-/// in-app code-repo viewer (the GitHub URL is included as a fallback). The
-/// recipient is configurable via `GITHUB_PR_NOTIFY_EMAIL`. Best-effort: a send
+/// The recipient is configurable via `GITHUB_PR_NOTIFY_EMAIL`. Best-effort: a send
 /// failure is logged, never propagated.
 async fn notify_pull_request_opened(pr: &OpenedPull) {
     let to = crate::config::github_pr_notify_email();
@@ -211,7 +205,6 @@ mod tests {
 
     #[test]
     fn ignores_non_opened_actions() {
-        // reopened / synchronize / edited are not a *new* PR.
         let payload = serde_json::json!({
             "action": "synchronize",
             "pull_request": { "number": 7, "title": "x" }

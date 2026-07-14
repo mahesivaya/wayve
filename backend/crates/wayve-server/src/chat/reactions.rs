@@ -1,16 +1,13 @@
 //! Emoji reactions on chat messages.
 //!
-//! Reactions ride the existing chat WebSocket: the client sends a `react` frame
-//! and every participant receives a `reaction_updated` frame carrying the full,
-//! re-aggregated reaction set for that message (not a delta), so a client that
-//! missed a frame still converges on the right state.
+//! Reactions ride the chat WebSocket: a `react` frame in, a `reaction_updated`
+//! frame out to every participant carrying the message's full re-aggregated
+//! reaction set rather than a delta, so a client that missed a frame converges.
 //!
-//! The emoji is stored in PLAINTEXT — unlike message content, which is a
-//! client-side E2E envelope the server cannot read. Reactions must be aggregated
-//! server-side (counts, who-reacted, joined into the history queries) and a
-//! message's AES key is wrapped per-recipient at send time, so a reactor cannot
-//! produce an aggregatable ciphertext. See the `message_reactions` comment in
-//! `infra/postgres/init.sql`.
+//! The emoji is stored in plaintext, unlike message content, which is a client
+//! E2E envelope the server cannot read. Reactions must be aggregated server-side,
+//! and the per-recipient key wrapping means a reactor cannot produce an
+//! aggregatable ciphertext. See `message_reactions` in `infra/postgres/init.sql`.
 
 use crate::cache::Cache;
 use crate::prelude::*;
@@ -20,36 +17,32 @@ use tracing::warn;
 
 use super::websocket::fan_out_user;
 
-/// Longest emoji we'll store. A single emoji — even a flag or a multi-codepoint
-/// ZWJ sequence like 👩‍👩‍👧‍👦 — fits comfortably; the cap is what stops the field
-/// from being used to smuggle a message body past the E2E check.
+/// Roomy enough for a multi-codepoint ZWJ sequence. The cap is what stops this
+/// plaintext field from smuggling a message body past the E2E check.
 const MAX_EMOJI_LEN: usize = 32;
 
-/// Inbound `{"type":"react", …}` frame.
-///
-/// Existing chat frames carry no `type` field, so they fail to deserialize into
-/// this struct — which is exactly how the WS handler tells the two apart.
+/// Inbound `{"type":"react", …}` frame. Other chat frames carry no `type` field,
+/// so they fail to deserialize here, which is how the WS handler tells them apart.
 #[derive(Debug, Deserialize)]
 pub struct ReactionFrame {
     pub r#type: String,
-    /// Id of the message being reacted to, in whichever table `is_channel` selects.
+    /// Id of the message reacted to, in whichever table `is_channel` selects.
     pub message_id: i32,
-    /// True → `channel_messages`, false → `messages` (DMs). The two tables have
-    /// independent id spaces, so this is what disambiguates them.
+    /// True selects `channel_messages`, false selects `messages` (DMs). The two
+    /// tables have independent id spaces, so an id alone is ambiguous.
     #[serde(default)]
     pub is_channel: bool,
     pub emoji: String,
 }
 
-/// One emoji and everyone who reacted with it, as sent to clients.
+/// One emoji and everyone who reacted with it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReactionGroup {
     pub emoji: String,
     pub user_ids: Vec<i32>,
 }
 
-/// Every reaction on a message, grouped by emoji, oldest emoji first (so pills
-/// don't reshuffle as counts change).
+/// Oldest emoji first, so the pills do not reshuffle as counts change.
 async fn grouped_for_message(
     pool: &PgPool,
     message_id: i32,
@@ -60,7 +53,7 @@ async fn grouped_for_message(
     } else {
         "message_id"
     };
-    // `column` is one of two literals chosen above, never client input.
+    // `column` is one of the two literals chosen above, never client input.
     let sql = format!(
         "SELECT emoji, ARRAY_AGG(user_id ORDER BY user_id) AS user_ids \
          FROM message_reactions \
@@ -78,8 +71,7 @@ async fn grouped_for_message(
         .collect())
 }
 
-/// Reactions for a batch of messages, keyed by message id — one query for a
-/// whole page of history instead of one per message.
+/// One query per page of history instead of one per message.
 pub async fn grouped_for_messages(
     pool: &PgPool,
     message_ids: &[i32],
@@ -103,8 +95,8 @@ pub async fn grouped_for_messages(
     let rows = match sqlx::query(&sql).bind(message_ids).fetch_all(pool).await {
         Ok(rows) => rows,
         Err(e) => {
-            // Reactions are decoration: a failure here must not blank out the
-            // message history, so degrade to "no reactions" and log.
+            // Reactions are decoration, so a failure here degrades to "none"
+            // rather than blanking out the message history.
             warn!(target: "ws", error = ?e, "reaction fetch failed; serving messages without reactions");
             return HashMap::new();
         }
@@ -122,8 +114,7 @@ pub async fn grouped_for_messages(
 }
 
 /// Attach a `reactions` array to each already-built message object. The caller
-/// has already authorized the read (channel membership / DM participation), so
-/// this runs on the plain pool like the `reply_count` subquery beside it.
+/// has already authorized the read, so this runs on the plain pool.
 pub async fn attach_to_json(pool: &PgPool, messages: &mut [serde_json::Value], is_channel: bool) {
     let ids: Vec<i32> = messages
         .iter()
@@ -149,9 +140,8 @@ pub async fn attach_to_json(pool: &PgPool, messages: &mut [serde_json::Value], i
     }
 }
 
-/// Who should be told about a change to this message's reactions — and, along
-/// the way, whether `actor_id` is allowed to react to it at all. Returns
-/// `RowNotFound` when the message doesn't exist or the actor isn't a participant.
+/// Who to notify about a reaction change, and in the same pass whether `actor_id`
+/// may react at all. `RowNotFound` means no such message, or a non-participant.
 async fn audience(
     pool: &PgPool,
     actor_id: i32,
@@ -160,7 +150,7 @@ async fn audience(
 ) -> Result<(Vec<i32>, Option<i32>), sqlx::Error> {
     if is_channel {
         // Derive the channel from the message rather than trusting a
-        // client-supplied channel_id, then gate on membership of THAT channel.
+        // client-supplied id, then gate on membership of that channel.
         let channel_id =
             sqlx::query_scalar::<_, i32>("SELECT channel_id FROM channel_messages WHERE id = $1")
                 .bind(message_id)
@@ -195,12 +185,10 @@ async fn audience(
     }
 }
 
-/// Toggle `actor_id`'s reaction and broadcast the message's new reaction set to
-/// every participant (the actor included, so their own pill updates from the
-/// server's view rather than an optimistic guess).
-///
-/// Reacting with an emoji you've already used removes it — one control, both
-/// directions, which is what the unique index on (message, user, emoji) encodes.
+/// Toggle `actor_id`'s reaction and broadcast the new set to every participant,
+/// the actor included, so their pill reflects the server's view. Reacting with an
+/// emoji you already used removes it, as the unique index on (message, user,
+/// emoji) encodes.
 pub async fn handle_react(
     pool: &PgPool,
     cache: &Option<Cache>,
@@ -242,7 +230,7 @@ pub async fn handle_react(
         "message_id"
     };
 
-    // Toggle: delete first, and only insert if nothing was there to delete.
+    // Toggle: delete first, insert only if there was nothing to delete.
     let delete_sql = format!(
         "DELETE FROM message_reactions \
          WHERE {column} = $1 AND user_id = $2 AND emoji = $3"
@@ -286,7 +274,6 @@ pub async fn handle_react(
         }
     };
 
-    // The full set, not a delta — a client that dropped a frame still converges.
     let payload = serde_json::json!({
         "type": "reaction_updated",
         "message_id": message_id,

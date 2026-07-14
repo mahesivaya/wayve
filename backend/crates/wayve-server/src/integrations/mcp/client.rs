@@ -1,19 +1,13 @@
-//! Minimal MCP (Model Context Protocol) client over the **Streamable-HTTP**
-//! transport — the only transport usable from a hosted backend (stdio would need
-//! to spawn the customer's process). It speaks JSON-RPC 2.0 to a single endpoint:
-//! `initialize` → `notifications/initialized` → `tools/list` → `tools/call`.
+//! Minimal MCP (Model Context Protocol) client over the Streamable-HTTP transport,
+//! the only transport usable from a hosted backend. It speaks JSON-RPC 2.0 to a
+//! single endpoint.
 //!
-//! Two things make this its own client rather than the shared `HTTP_CLIENT`:
-//!   1. **SSRF.** The server URL is admin-supplied and fetched server-side from
-//!      inside the VPC, so every call validates the URL (https + the resolved IP
-//!      must be publicly routable) before connecting. The load-bearing block on
-//!      EC2 is the link-local metadata endpoint `169.254.169.254`.
-//!   2. **No redirects.** A `302 -> http://169.254.169.254` must not bounce past
-//!      the guard, so this client disables redirect following.
-//!
-//! Residual risk: DNS rebinding between our validation `lookup_host` and
-//! reqwest's own resolution (TOCTOU). We re-validate on every request to shrink
-//! the window; pinning the connection to the validated IP is a later hardening.
+//! It uses its own HTTP client for SSRF reasons: the server URL is admin-supplied
+//! and fetched from inside the VPC, so every call revalidates that it is https and
+//! resolves to a publicly routable IP (the EC2 metadata endpoint 169.254.169.254 is
+//! the load-bearing block), and redirects are disabled so a 302 cannot bounce past
+//! that guard. Residual risk is DNS rebinding between our `lookup_host` and
+//! reqwest's own resolution; revalidating on every request shrinks the window.
 
 use crate::prelude::*;
 use reqwest::Url;
@@ -39,8 +33,8 @@ static MCP_HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
         .unwrap()
 });
 
-/// True when `ip` points back into private/internal space and must be refused.
-/// 169.254.0.0/16 (`is_link_local`) covers the cloud-metadata endpoint.
+/// True when `ip` is private or internal and must be refused. `is_link_local`
+/// (169.254.0.0/16) covers the cloud metadata endpoint.
 fn is_blocked_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
@@ -68,11 +62,10 @@ fn is_blocked_ip(ip: IpAddr) -> bool {
     }
 }
 
-/// Validate an MCP server URL against SSRF: require https and ensure every
-/// address it resolves to is publicly routable. Bypassed only by the test-only
-/// `MCP_ALLOW_PRIVATE_HOSTS` flag (see `external::mcp_allow_private_hosts`).
+/// SSRF gate: require https and ensure every address the host resolves to is
+/// publicly routable. Bypassed only by the test-only `MCP_ALLOW_PRIVATE_HOSTS`.
 pub async fn validate_server_url(url: &str) -> Result<(), AppError> {
-    // Parse first so even a bypassed (test) URL is well-formed.
+    // Parse first, so even a bypassed test URL must be well-formed.
     let parsed = Url::parse(url).map_err(|_| AppError::bad_request("Invalid MCP server URL"))?;
 
     if crate::external::mcp_allow_private_hosts() {
@@ -97,8 +90,7 @@ pub async fn validate_server_url(url: &str) -> Result<(), AppError> {
     }
     let port = parsed.port_or_known_default().unwrap_or(443);
 
-    // A literal IP is checked directly; a hostname is resolved and every
-    // returned address checked.
+    // A hostname must have every resolved address checked, not just the first.
     if let Ok(ip) = host.parse::<IpAddr>() {
         if is_blocked_ip(ip) {
             return Err(AppError::bad_request(
@@ -126,8 +118,7 @@ pub async fn validate_server_url(url: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// A live MCP session against one server. Holds the server-issued
-/// `Mcp-Session-Id` (if any) and whether the handshake has run.
+/// A live MCP session against one server.
 pub struct McpClient {
     url: String,
     token: Option<String>,
@@ -154,7 +145,7 @@ impl McpClient {
         if let Some(token) = &self.token {
             b = b.bearer_auth(token);
         }
-        // Locks are released before any await; never held across one.
+        // The lock must be released before any await, never held across one.
         let sid = self.session_id.lock().ok().and_then(|g| g.clone());
         if let Some(sid) = sid {
             b = b.header("Mcp-Session-Id", sid);
@@ -171,8 +162,7 @@ impl McpClient {
         }
     }
 
-    /// A JSON-RPC request (has an `id`). Returns the `result` value, mapping a
-    /// JSON-RPC `error` to a 400.
+    /// A JSON-RPC request (has an `id`). A JSON-RPC `error` maps to a 400.
     async fn rpc(&self, id: i64, method: &str, params: Value) -> Result<Value, AppError> {
         validate_server_url(&self.url).await?;
         let body = serde_json::json!({
@@ -290,8 +280,7 @@ impl McpClient {
         Ok(tools)
     }
 
-    /// `tools/call`. Handshakes first if not already initialized. Returns the
-    /// raw JSON-RPC `result` (`content[]`, `structuredContent`, `isError`).
+    /// `tools/call`, handshaking first if needed. Returns the raw JSON-RPC result.
     pub async fn call_tool(&self, name: &str, args: Value) -> Result<Value, AppError> {
         let inited = self.initialized.lock().map(|g| *g).unwrap_or(false);
         if !inited {
@@ -302,10 +291,8 @@ impl McpClient {
     }
 }
 
-/// Extract the JSON-RPC envelope from an SSE body. A Streamable-HTTP server may
-/// answer a request with `text/event-stream`; the response we want is the last
-/// `data:` event that parses as JSON (a single event's data may span multiple
-/// `data:` lines, joined by newlines).
+/// A Streamable-HTTP server may answer with SSE. The payload is the last `data:`
+/// event that parses as JSON; one event's data may span several `data:` lines.
 fn parse_sse_json(raw: &str) -> Result<Value, AppError> {
     let mut last: Option<Value> = None;
     let mut buf = String::new();
@@ -339,7 +326,6 @@ mod tests {
 
     #[test]
     fn blocks_metadata_and_private_ips() {
-        // The EC2 metadata endpoint and friends must be refused.
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254))));
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))));
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5))));
@@ -348,10 +334,8 @@ mod tests {
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))));
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(100, 64, 0, 1))));
         assert!(is_blocked_ip(IpAddr::V6(Ipv6Addr::LOCALHOST)));
-        // fc00::/7 unique-local and fe80::/10 link-local
         assert!(is_blocked_ip("fd00::1".parse().unwrap()));
         assert!(is_blocked_ip("fe80::1".parse().unwrap()));
-        // IPv4-mapped metadata address
         assert!(is_blocked_ip("::ffff:169.254.169.254".parse().unwrap()));
     }
 
@@ -365,7 +349,6 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn rejects_http_and_private_urls() {
-        // Guard is active (flag unset in this unit test).
         assert!(validate_server_url("http://example.com/mcp").await.is_err());
         assert!(
             validate_server_url("https://169.254.169.254/mcp")

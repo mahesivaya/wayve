@@ -6,8 +6,8 @@ import { apiFetchJson } from "./client";
 export type AccessStatus = "none" | "pending" | "approved" | "denied";
 export type AccessTarget = "platform" | "organization";
 
-// Response of GET /api/access-requests/me — the caller's own status for a
-// resource. `data` is present only when the request is approved.
+// The caller's own status for a resource. `data` is present only once the
+// request is approved.
 export type MyAccessStatus = {
   status: AccessStatus;
   target: AccessTarget | null;
@@ -16,7 +16,7 @@ export type MyAccessStatus = {
   data?: string | null;
 };
 
-// A row in the support review queue (GET /api/access-requests/admin).
+// A row in the support review queue.
 export type AccessRequestView = {
   id: number;
   user_id: number;
@@ -33,8 +33,8 @@ export type AccessRequestView = {
   decided_at: string | null;
 };
 
-// One line from the access-request audit log (logs/access_requests.log),
-// scoped to the caller's support team by the backend.
+// One line from logs/access_requests.log, scoped by the backend to the caller's
+// support team.
 export type AccessHistoryEntry = {
   ts: string;
   event: "requested" | "updated" | "approved" | "denied";
@@ -55,8 +55,8 @@ export const getMyAccessStatus = async (resource: string = DEFAULT_RESOURCE) =>
     `/api/access-requests/me?resource=${encodeURIComponent(resource)}`
   );
 
-// Creates a pending request, or updates the explanation on the existing
-// active one (the backend upserts on user+resource).
+// The backend upserts on user and resource, so this either creates a pending
+// request or updates the explanation on the caller's existing active one.
 export const createAccessRequest = async (
   resource: string = DEFAULT_RESOURCE,
   note?: string

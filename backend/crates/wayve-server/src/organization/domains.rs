@@ -1,19 +1,10 @@
-//! Organization custom-domain ownership.
+//! Organization custom-domain ownership, under
+//! `/api/organizations/{org_id}/domains`. Platform-owner only.
 //!
-//! Endpoints under `/api/organizations/{org_id}/domains`:
-//!
-//! - `GET /domains` — list the org's claimed domains + status.
-//! - `POST /domains` — claim a domain (returns the DNS TXT challenge to publish).
-//! - `POST /domains/{id}/verify` — run the DNS TXT check; flip `verified`.
-//! - `DELETE /domains/{id}` — drop a claim.
-//!
-//! All four are **platform-owner only** — the platform owner administers
-//! which domains an organization is allowed to mint addresses on. Ownership
-//! is proven by DNS, not asserted: `verified` is only ever set by
+//! Ownership is proven by DNS, never asserted: `verified` is set only by
 //! [`verify_domain`] after a successful TXT lookup, never from a client field.
-//!
-//! The single source of truth for "may this org mint `x@domain`?" is
-//! [`is_domain_verified_for_org`], consumed by `admin_create_user`.
+//! [`is_domain_verified_for_org`] is the single source of truth for whether an
+//! org may mint addresses on a domain.
 
 use crate::email::provider_lookup::RESOLVER;
 use crate::prelude::*;
@@ -27,9 +18,9 @@ use tracing::{info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::rbac::{Role, Scope, resolve_role_context_moded};
 
-/// Free / public email providers can never be claimed as an organization
-/// domain — nobody can prove DNS control of a shared consumer domain, and
-/// they're not anyone's private domain. Rejected before the DNS step.
+/// Public email providers can never be claimed as an organization domain, since
+/// nobody can prove DNS control of a shared consumer domain. Rejected before the
+/// DNS step.
 const PUBLIC_PROVIDER_DOMAINS: &[&str] = &[
     "gmail.com",
     "googlemail.com",
@@ -62,8 +53,7 @@ pub fn is_public_provider_domain(domain: &str) -> bool {
 }
 
 /// Normalize user-typed input into a bare registrable domain, or `None` if it
-/// doesn't look like a domain. Strips scheme/path, lowercases, trims a
-/// trailing dot, and rejects anything with illegal characters or shape.
+/// doesn't look like a domain.
 pub fn normalize_domain(input: &str) -> Option<String> {
     let mut d = input.trim().to_lowercase();
     for prefix in ["https://", "http://"] {
@@ -75,7 +65,7 @@ pub fn normalize_domain(input: &str) -> Option<String> {
         d.truncate(idx);
     }
     if let Some(idx) = d.find('@') {
-        // tolerate someone pasting an email address
+        // Tolerate a pasted email address.
         d = d[idx + 1..].to_string();
     }
     let d = d.trim_end_matches('.').to_string();
@@ -100,8 +90,8 @@ pub fn normalize_domain(input: &str) -> Option<String> {
     Some(d)
 }
 
-/// 32-char alphanumeric challenge token. High entropy so it can't be guessed
-/// and forged into a TXT record by anyone other than the domain's DNS admin.
+/// Challenge token. Must stay high-entropy: a guessable token could be published
+/// as a TXT record by someone other than the domain's DNS admin.
 fn generate_verify_token() -> String {
     use rand::{Rng, distributions::Alphanumeric};
     rand::thread_rng()
@@ -119,12 +109,7 @@ fn challenge_record(domain: &str, token: &str) -> (String, String) {
     )
 }
 
-// ---------------------------------------------------------------------------
-//   Platform-owner gate
-// ---------------------------------------------------------------------------
-
-/// Require the caller to be the platform **owner**. Domain administration is
-/// a platform-team responsibility, restricted to the owner role.
+/// Require the caller to be the platform owner.
 async fn require_platform_owner(req: &HttpRequest, pool: &PgPool) -> Result<i32, HttpResponse> {
     let Some(user_id) = get_user_id_from_request(req) else {
         return Err(HttpResponse::Unauthorized()
@@ -144,10 +129,6 @@ async fn require_platform_owner(req: &HttpRequest, pool: &PgPool) -> Result<i32,
     }
     Ok(user_id)
 }
-
-// ---------------------------------------------------------------------------
-//   Request / response shapes
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
 pub struct ClaimDomainRequest {
@@ -190,10 +171,6 @@ fn to_view(r: &sqlx::postgres::PgRow) -> DomainView {
         txt_value,
     }
 }
-
-// ---------------------------------------------------------------------------
-//   Handlers
-// ---------------------------------------------------------------------------
 
 #[get("/organizations/{org_id}/domains")]
 #[instrument(target = "auth", skip(req, pool))]
@@ -276,7 +253,7 @@ pub struct DomainPolicyInput {
     pub allow: bool,
 }
 
-/// Read the org's "allow unverified/public email domains" flag. Platform-owner only.
+/// Platform-owner only.
 #[get("/organizations/{org_id}/domain-policy")]
 #[instrument(target = "auth", skip(req, pool))]
 pub async fn get_domain_policy(
@@ -298,9 +275,9 @@ pub async fn get_domain_policy(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "allow_unverified_email_domains": allow })))
 }
 
-/// Toggle the org's "allow unverified/public email domains" flag. When true,
-/// `admin_create_user` skips the public-provider + verified-domain checks for
-/// this org, letting it mint addresses on any domain. Platform-owner only.
+/// Platform-owner only. When the flag is true, `admin_create_user` skips the
+/// public-provider and verified-domain checks and the org may mint addresses on
+/// any domain.
 #[put("/organizations/{org_id}/domain-policy")]
 #[instrument(target = "auth", skip(req, pool, body))]
 pub async fn set_domain_policy(
@@ -394,13 +371,11 @@ pub struct VerifyOwnershipRequest {
     pub token: String,
 }
 
-/// Lightweight, organization-owner-facing domain check used by the in-app
-/// Domain page (`/organization/domains`). Stateless — no `organization_domains`
-/// row: the caller supplies the challenge token they published, and we run the
-/// SAME live DNS TXT lookup as [`verify_domain`]. A domain the caller doesn't
-/// control has no such record, so it never verifies. Any organization-scoped
-/// user may call it; it grants nothing server-side (the member-creation gate
-/// still requires a verified `organization_domains` row).
+/// Stateless domain check for the in-app Domain page: the caller supplies the
+/// token they published and this runs the same live TXT lookup as
+/// [`verify_domain`]. Open to any organization-scoped user because it grants
+/// nothing server-side — the member-creation gate still requires a verified
+/// `organization_domains` row.
 #[post("/org-domains/verify")]
 #[instrument(target = "auth", skip(req, pool, body))]
 pub async fn verify_domain_ownership(
@@ -467,13 +442,7 @@ pub async fn delete_domain(
     Ok(HttpResponse::NoContent().finish())
 }
 
-// ---------------------------------------------------------------------------
-//   DNS + shared verified-domain check
-// ---------------------------------------------------------------------------
-
-/// Look up the TXT records at `_wayve-challenge.<domain>` and return true if
-/// any record exactly equals `expected`. A TXT record can be split into
-/// multiple character-strings, so chunks are joined before comparison.
+/// True if any TXT record at `_wayve-challenge.<domain>` equals `expected`.
 async fn dns_txt_contains(domain: &str, expected: &str) -> bool {
     let name = format!("_wayve-challenge.{domain}");
     let lookup = match tokio::time::timeout(Duration::from_secs(5), RESOLVER.txt_lookup(name)).await
@@ -481,9 +450,8 @@ async fn dns_txt_contains(domain: &str, expected: &str) -> bool {
         Ok(Ok(lookup)) => lookup,
         _ => return false,
     };
-    // 0.26's Lookup exposes records via .answers(); filter for RData::TXT.
-    // A TXT record may be split into multiple character-strings, so join the
-    // chunks before comparing against the expected challenge value.
+    // A TXT record may be split into multiple character-strings, so the chunks
+    // must be joined before comparing against the challenge value.
     lookup.answers().iter().any(|r| match &r.data {
         RData::TXT(txt) => {
             let joined: Vec<u8> = txt
@@ -497,10 +465,8 @@ async fn dns_txt_contains(domain: &str, expected: &str) -> bool {
     })
 }
 
-/// Single source of truth for "may this org mint `*@domain`?" — true only if
-/// the org has a VERIFIED claim on exactly this domain. No longer enforced at
-/// member creation (domain verification was disabled there); retained for the
-/// domain pages and potential future gates.
+/// True only if the org holds a verified claim on exactly this domain. Not
+/// currently enforced at member creation; retained for the domain pages.
 #[allow(dead_code)]
 pub async fn is_domain_verified_for_org(pool: &PgPool, org_id: i32, domain: &str) -> bool {
     let normalized = domain.trim().to_lowercase();

@@ -16,34 +16,26 @@ interface EmailListProps {
   onBulkMarkRead?: (ids: number[]) => Promise<void> | void;
   onBulkDelete?: (ids: number[]) => Promise<void> | void;
   activeFolder?: EmailFolder;
-  // Whether the user has any email account connected, and whether that
-  // fact is known yet (the accounts fetch has resolved). Together they let
-  // the list show a "connect an account" empty state instead of a blank
-  // panel — but only once we're sure there genuinely are zero accounts.
+  // `accountsLoaded` distinguishes "no accounts" from "not fetched yet", so the
+  // connect-an-account empty state never flashes at users who do have mailboxes.
   hasAccounts?: boolean;
   accountsLoaded?: boolean;
-  // Whether to render the bulk/folder-tab chrome at all. The parent passes a
-  // hint-aware "a mailbox is (believed) connected" flag so the Inbox/Sent tab
-  // bar doesn't flash in during the initial accounts fetch and then vanish for
-  // users with no mailbox. Defaults to true to preserve standalone behavior.
+  // Keeps the bulk/folder-tab chrome from flashing in during the accounts fetch.
   showChrome?: boolean;
-  // Whether this user is allowed to connect mailboxes (personal users and
-  // org owners). Non-owner org members see the empty state without a CTA.
+  // Only personal users and org owners may connect mailboxes; everyone else sees
+  // the empty state without a CTA.
   canAddAccount?: boolean;
   onAddAccount?: () => void;
-  // Inbox/Sent folder tabs shown inline in the bulk bar. Used by org/platform
-  // pages that hide the full email sidebar but still need to reach Sent.
+  // Folder tabs inline in the bulk bar, for org/platform pages that hide the email
+  // sidebar but still need to reach Sent.
   showFolderTabs?: boolean;
   onSelectFolder?: (folder: EmailFolder) => void;
-  // Opens the full-panel "all attachments" view (the Files view). When
-  // provided, an Attachments button shows in the bulk bar. Omitted by the
-  // org/platform embeddings that don't host the Files panel.
+  // Omitted by embeddings that don't host the Files panel.
   onShowAttachments?: () => void;
 }
 
-// Folders still without a real backing query. Important / Updates / Social are
-// now backed by the synced Gmail category labels (CATEGORY_*/IMPORTANT) and
-// filtered server-side, so they render the list instead of a placeholder.
+// Folders with no backing query. Important / Updates / Social are not stubs: they
+// are filtered server-side off the synced Gmail category labels.
 const STUB_FOLDER_LABELS: Record<string, string> = {
   spam: "Spam",
   drafts: "Drafts",
@@ -59,9 +51,8 @@ function formatMobileTime(value: string) {
   return fmtListTimestamp(date);
 }
 
-// Strip the "<addr>" tail from a sender header so the list shows a
-// clean display name. Matches the formatting used in the personal-home
-// dashboard so the inbox and the home preview read the same.
+// Strip the "<addr>" tail from a sender header. Matches the home dashboard's
+// formatting so the inbox and the home preview read the same.
 function displaySender(value: string | null | undefined): string {
   const raw = value?.trim();
   if (!raw) return "Unknown sender";
@@ -96,23 +87,14 @@ export const EmailList: React.FC<EmailListProps> = ({
   const isStubFolder = activeFolder
     ? (STUB_EMAIL_FOLDERS as ReadonlyArray<string>).includes(activeFolder)
     : false;
-  // Show the connect-an-account empty state only once we know there are
-  // genuinely zero accounts — never while the accounts fetch is still in
-  // flight, which would flash the CTA at users who do have mailboxes.
   const showNoAccounts = accountsLoaded && !hasAccounts;
   const { searchQuery, setSearchQuery } = useGlobalSearch();
 
-  // Per-row bulk-select state for list view. Bulk action callbacks are
-  // optional — when provided, Mark read / Delete buttons appear in the
-  // bar. Selection is cleared on successful action completion.
   const [checkedIds, setCheckedIds] = useState<Set<number>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
-  // Inline toast shown when the user clicks Mark read / Delete with no
-  // selection. Auto-dismisses after ~2s so the bar settles back to normal.
   const [bulkHint, setBulkHint] = useState<string | null>(null);
-  // Client-side filter; doesn't trigger a backend re-fetch. Filters over
-  // the already-loaded `emails` so Show more still pulls older mail in
-  // chronological order — toggling Unread later applies to the full set.
+  // Client-side filter over the already-loaded `emails`, so it triggers no re-fetch
+  // and Show more still pages older mail in chronological order.
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
 
   const visibleEmails = useMemo(
@@ -185,23 +167,10 @@ export const EmailList: React.FC<EmailListProps> = ({
     }
   };
 
-  // Infinite scroll: when the user nears the bottom of the list, pull
-  // the next page automatically. Replaces the explicit "Show more
-  // emails" button so browsing feels continuous.
-  //
-  // Implementation notes:
-  // - The scroll listener is bound ONCE (no deps) so we don't churn
-  //   add/remove on every render of the parent — which was happening
-  //   before because `loadMore` is re-created each render and was in
-  //   the effect's dep array. The handler reads the latest hasMore /
-  //   loadingMore / loadMore via refs instead.
-  // - An `inFlightRef` ref guards against duplicate calls before
-  //   `loadingMore` state updates (scroll fires faster than React
-  //   commits, so the state-only guard wasn't reliable).
-  // - A second effect auto-triggers loadMore right after emails
-  //   change when the container isn't yet scrollable — otherwise a
-  //   short initial page would never let the user reach a scroll
-  //   bottom, and loadMore would never fire.
+  // Infinite scroll. The listener binds once and reads through refs, because
+  // `loadMore` is re-created every parent render and would churn it. `inFlightRef`
+  // guards duplicates: scroll fires faster than React commits, so the `loadingMore`
+  // state alone is not enough.
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
   const hasMoreRef = useRef(hasMore);
@@ -229,9 +198,8 @@ export const EmailList: React.FC<EmailListProps> = ({
     const el = listScrollRef.current;
     if (!el) return;
     const onScroll = () => {
-      // Trigger when the bottom edge is within ~400px — far enough
-      // ahead that the next page often arrives before the user runs
-      // out of rows.
+      // Trigger ahead of the bottom edge so the next page usually arrives before
+      // the user runs out of rows.
       if (el.scrollHeight - el.scrollTop - el.clientHeight < 400) {
         triggerLoadMore();
       }
@@ -242,12 +210,8 @@ export const EmailList: React.FC<EmailListProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // After emails change (or the list first renders), check whether the
-  // container has enough content to actually scroll. If not, kick
-  // loadMore so the user can keep paging without needing to fight a
-  // non-scrollable list. This fixes the "didn't get any next emails"
-  // case where the initial 25 rows don't fill the visible area on a
-  // tall viewport.
+  // If the loaded rows don't fill the container it can never be scrolled, so the
+  // handler above would never fire. Kick loadMore directly when that happens.
   useEffect(() => {
     const el = listScrollRef.current;
     if (!el) return;
@@ -354,8 +318,8 @@ export const EmailList: React.FC<EmailListProps> = ({
             className={`email-bulk-action${showUnreadOnly ? " is-active" : ""}`}
             onClick={() => {
               setShowUnreadOnly((prev) => !prev);
-              // Drop selections that the new filter would hide so the count
-              // displayed in the bar always matches what the user can see.
+              // Drop selections the new filter would hide, so the count in the bar
+              // always matches what the user can see.
               setCheckedIds(new Set());
             }}
             aria-pressed={showUnreadOnly}
@@ -463,22 +427,17 @@ export const EmailList: React.FC<EmailListProps> = ({
             >
               <div className="email-top">
                 {isListView && (
-                  // Unread indicator pinned to the left of the envelope.
-                  // The envelope itself is the hover-to-checkbox toggle;
-                  // the unread dot is a separate visual that matches the
-                  // reference screenshot — solid orange for unread, empty
-                  // slot for read so the row gutter alignment never shifts.
+                  // The read state keeps an empty slot rather than collapsing, so
+                  // the row gutter alignment never shifts.
                   <span
                     className={`email-row-unread-dot ${email.is_read === false ? "is-unread" : ""}`}
                     aria-hidden="true"
                   />
                 )}
                 {isListView && (
-                  // Envelope icon by default; on row hover (or when the
-                  // row is checked) the icon fades out and the checkbox
-                  // fades in over the same spot. stopPropagation on the
-                  // wrapper so a click on the checkbox doesn't also open
-                  // the email.
+                  // The envelope icon and the checkbox share a spot and cross-fade
+                  // on hover. stopPropagation so ticking the checkbox doesn't also
+                  // open the email.
                   <span
                     className="email-row-toggle"
                     onClick={(event) => event.stopPropagation()}
@@ -491,15 +450,8 @@ export const EmailList: React.FC<EmailListProps> = ({
                       aria-label={`Select email "${email.subject || "(No Subject)"}"`}
                     />
                     <span className="email-row-icon" aria-hidden="true">
-                      {/* Two envelope variants so the read state reads at
-                      a glance from the icon itself:
-                        - Unread → closed envelope (V flap pointing down
-                          inside the rectangle).
-                        - Read → opened envelope (^ flap above the
-                          rectangle + a letter line peeking out).
-                      Inline SVG so the rendering is consistent across
-                      OSes (the unicode `✉` ships as a colorful emoji
-                      on macOS/Windows, a plain glyph on Linux). */}
+                      {/* Inline SVG rather than the unicode envelope, which renders
+                      as a color emoji on macOS/Windows but a plain glyph on Linux. */}
                       {email.is_read === false ? (
                         <svg
                           viewBox="0 0 16 16"
@@ -531,12 +483,7 @@ export const EmailList: React.FC<EmailListProps> = ({
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         >
-                          {/* Outer envelope with angled top edges — the
-                          flap is pulled back so the silhouette tapers
-                          inward at the top, the same shape Lucide's
-                          `mail-open` uses. */}
                           <path d="M14.5 7v5.75a1.5 1.5 0 0 1-1.5 1.5H3a1.5 1.5 0 0 1-1.5-1.5V7a1.5 1.5 0 0 1 .6-1.2l5.25-3.95a1.5 1.5 0 0 1 1.8 0l5.25 3.95A1.5 1.5 0 0 1 14.5 7Z" />
-                          {/* Internal V showing the letter slot. */}
                           <path d="M14.25 7.25L8 11.5 1.75 7.25" />
                         </svg>
                       )}
@@ -544,11 +491,9 @@ export const EmailList: React.FC<EmailListProps> = ({
                   </span>
                 )}
                 <span className="email-primary">
-                  {/* Shared-inbox workflow chip. Only renders when the row
-                  came from a shared account AND has been touched at
-                  least once (no chip = no help-desk state yet, i.e.
-                  implicit "open" — surfaced by the row's unread style
-                  rather than a redundant green chip on every mail). */}
+                  {/* An untouched row has no help-desk state yet — an implicit
+                  "open", which the unread style already conveys, so it gets no chip
+                  rather than a redundant green one. */}
                   {email.is_shared && email.inbox_status && (
                     <span className={`inbox-status-chip ${email.inbox_status}`}>
                       {email.inbox_status}
@@ -619,13 +564,8 @@ export const EmailList: React.FC<EmailListProps> = ({
         </>
       )}
 
-      {/* Load-more footer. Infinite scroll still auto-pages as the user nears
-          the bottom, but the explicit button is the reliable fallback for the
-          cases where scroll input never reaches the list — e.g. a shrunk
-          multi-pane tab where the initial page fits without overflowing, so
-          there's nothing to scroll and the auto-loader can't trigger. The
-          `.load-more-wrap` sticks to the bottom of the list (position: sticky)
-          so the button stays reachable even when the list isn't scrollable. */}
+      {/* Fallback for what infinite scroll can't cover, e.g. a shrunk pane where
+          the page fits without overflowing, so there is nothing to scroll. */}
       {!isStubFolder && hasMore && (
         <div className="load-more-wrap">
           {loadingMore ? (

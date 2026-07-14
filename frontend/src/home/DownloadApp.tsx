@@ -4,8 +4,8 @@ type BuildKey = "mac-arm64" | "mac-x64" | "windows";
 type IconKind = "apple" | "windows";
 
 // Installers are hosted on S3 (public-read, Content-Disposition: attachment so
-// they download cross-origin). Updating a build = re-upload to this bucket; no
-// frontend redeploy needed.
+// they download cross-origin). Shipping a new build is a re-upload to this
+// bucket; no frontend redeploy needed.
 const S3 = "https://fluxze-desktop-downloads.s3.us-east-1.amazonaws.com";
 
 const BUILDS: Record<
@@ -13,8 +13,8 @@ const BUILDS: Record<
   { href: string; label: string; sub: string; icon: IconKind }
 > = {
   "mac-arm64": {
-    // New keys: the original Fluxze-arm64/x64.dmg objects are write-locked on
-    // S3, so the refreshed builds (open at /login) are published under these.
+    // The original Fluxze-arm64/x64.dmg objects are write-locked on S3, so
+    // current builds publish under these keys instead.
     href: `${S3}/Fluxze-mac-arm64.dmg`,
     label: "macOS",
     sub: "Apple Silicon",
@@ -108,9 +108,6 @@ async function detectMacArch(): Promise<"mac-arm64" | "mac-x64"> {
   return "mac-arm64";
 }
 
-// Cross-platform download control: a "Download for <your OS>" button whose caret
-// opens a polished menu of every build (macOS arm64/Intel, Windows), each
-// with a platform icon + arch sub-label and the auto-detected one marked.
 export default function DownloadApp() {
   const [primary, setPrimary] = useState<BuildKey>("mac-arm64");
   const [open, setOpen] = useState(false);

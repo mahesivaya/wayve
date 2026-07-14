@@ -25,11 +25,8 @@ type SendEmailProps = {
   onSent?: () => void;
 };
 
-// Parse a free-form `To` value into individual email addresses. Accepts
-// commas, semicolons, or whitespace as separators (the three things most
-// users actually type — Gmail itself accepts the first two). Empty
-// strings are filtered out so trailing separators don't produce ghost
-// addresses.
+// Accepts commas, semicolons, or whitespace as separators. Empty strings are
+// filtered out so a trailing separator doesn't produce a ghost address.
 function parseRecipients(raw: string): string[] {
   return raw
     .split(/[,;\s]+/)
@@ -46,20 +43,15 @@ export default function SendEmail({
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  // Plan A Phase 3 — Secure-send toggle. When on, EVERY recipient
-  // (Wayve or external) gets the magic-link path with the same
-  // user-supplied passphrase. Off (default) keeps the cascade in
-  // place: Wayve users via internal channel, externals via plain SMTP.
+  // When on, every recipient (Wayve or external) gets the magic-link path with
+  // the same user-supplied passphrase, overriding the encryption mode below.
   const [secureSend, setSecureSend] = useState(false);
   const [passphrase, setPassphrase] = useState("");
 
-  // Encryption choice for the send (independent of Secure send):
-  //   "standard" — DEFAULT. Plain email via SMTP to the recipient's real
-  //                mailbox (Gmail/Outlook). Reaches external accounts; not E2E.
-  //   "e2e"      — Wayve-to-Wayve internal channel: encrypted in-browser,
-  //                only visible inside Fluxze accounts. Non-Fluxze recipients
-  //                fall back to SMTP (can't E2E without their key).
-  //   "pgp"      — placeholder, disabled in the UI for now.
+  // "standard" (default) sends plain SMTP to the recipient's real mailbox: it
+  // reaches external accounts but is not E2E. "e2e" encrypts in-browser and is
+  // only readable inside Fluxze accounts; recipients who aren't Fluxze users
+  // have no key, so they fall back to SMTP. "pgp" is a disabled placeholder.
   type EncryptionMode = "standard" | "e2e" | "pgp";
   const [encryptionMode, setEncryptionMode] =
     useState<EncryptionMode>("standard");
@@ -67,7 +59,7 @@ export default function SendEmail({
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Standard-mailbox attachments (not E2E). Picking files forces the send down
+  // Attachments are standard-mailbox only. Picking files forces the send down
   // the SMTP path (see `forceStandard` below) regardless of the E2E choice.
   const [attachments, setAttachments] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -104,8 +96,8 @@ export default function SendEmail({
       setStatus("Passphrase must be at least 6 characters ⚠️");
       return;
     }
-    // Secure-send and E2E can't carry attachments in this scope — block the
-    // mismatch rather than silently dropping files or weakening encryption.
+    // Secure send can't carry attachments. Block the mismatch rather than
+    // silently dropping files or weakening the encryption.
     if (secureSend && attachments.length > 0) {
       setStatus(
         "Secure send can't include attachments — remove them or turn off Secure send ⚠️"
@@ -117,19 +109,11 @@ export default function SendEmail({
     setStatus("");
 
     try {
-      // ── Secure-send branch: every recipient gets the magic-link
-      //    path with the same passphrase. The body is encrypted ONCE
-      //    in the browser (the bundle is the same for everyone); we
-      //    upload it once per recipient so each gets their own token
-      //    (which lets the sender revoke or expire each one
-      //    individually later if we add that UI). The recipient list
-      //    can mix Wayve and non-Wayve addresses — Secure-send treats
-      //    them identically and does not auto-promote Wayve users to
-      //    the native channel.
+      // Secure send treats Wayve and non-Wayve recipients identically and never
+      // auto-promotes Wayve users to the native channel. The sealed bundle is
+      // the same for everyone, so seal once (WebCrypto sealing is expensive),
+      // but upload it per recipient so each gets its own revocable token.
       if (secureSend) {
-        // The encrypted bundle is identical for every recipient, so seal ONCE
-        // (WebCrypto sealing is expensive) rather than per recipient. Each
-        // recipient still gets its own upload/token, fired concurrently.
         const bundle = await sealSecureMessage(body, passphrase);
         const secureErrors: string[] = [];
         const results = await Promise.allSettled(
@@ -171,18 +155,15 @@ export default function SendEmail({
 
       const senderId = user?.id;
 
-      // Encode attachments once (base64) for the standard send payload.
       const attachmentPayloads =
         attachments.length > 0 ? await filesToAttachments(attachments) : undefined;
-      // Attachments are standard-mailbox only: when files are attached, force
-      // every recipient down the SMTP path (skip the E2E internal channel).
+      // Attachments are standard-mailbox only, so any file forces every
+      // recipient down the SMTP path and skips the E2E internal channel.
       const forceStandard = attachments.length > 0;
 
-      // Standard (default) skips the Wayve-user lookups entirely — every
-      // recipient gets a plain SMTP email to their real mailbox. Only the
-      // "e2e" mode needs to detect Fluxze users to route them through the
-      // encrypted internal channel. A lookup failure is treated as "not on
-      // Wayve" so a transient API hiccup falls back to SMTP.
+      // Only "e2e" needs to detect Fluxze users; standard mode skips the
+      // lookups entirely. A lookup failure is treated as "not on Wayve", so a
+      // transient API hiccup degrades to SMTP rather than failing the send.
       const lookups: Array<{ email: string; user: WayveRecipient | null }> =
         encryptionMode === "standard" || forceStandard
           ? recipients.map((email) => ({ email, user: null }))
@@ -201,10 +182,9 @@ export default function SendEmail({
               })
             );
 
-      // Partition the resolved lookups in one pass — anything that
-      // resolves to a Wayve user WITH a non-empty public key goes
-      // through the native channel; everything else (unknown address,
-      // Wayve user without a pubkey on file) falls back to SMTP.
+      // Only a Wayve user with a non-empty public key can take the native
+      // channel. An unknown address, or a Wayve user with no key on file,
+      // falls back to SMTP.
       const wayveLookups: Array<{ email: string; user: WayveRecipient }> = [];
       const externalEmails: string[] = [];
       for (const l of lookups) {
@@ -223,15 +203,12 @@ export default function SendEmail({
       let externalDelivered = 0;
       const errors: string[] = [];
 
-      // ── Wayve-to-Wayve native channel — ONE envelope covers all
-      //    Wayve recipients at once (multi-recipient wrap), plus the
-      //    sender's own slot so their Sent copy decrypts later.
+      // Wayve-to-Wayve native channel. One envelope wraps every Wayve recipient
+      // plus the sender's own slot, so their Sent copy stays decryptable.
       if (wayveLookups.length > 0 && senderId !== undefined) {
-        // Enterprise-tier senders use standard (server-readable) encryption: the
-        // backend accepts the plaintext body in place of a WAYVE_SECURE_V1 E2E
-        // envelope and stores it server-readable. Everyone else builds the
-        // multi-recipient E2E envelope (one wrap covering all recipients + the
-        // sender's own Sent copy).
+        // Enterprise-tier senders get server-readable encryption instead: the
+        // backend accepts a plaintext body in place of a WAYVE_SECURE_V1
+        // envelope and applies only its own at-rest layer.
         const standardEncryption = user?.current_plan?.tier === "enterprise";
 
         try {
@@ -278,15 +255,13 @@ export default function SendEmail({
           );
         }
       } else if (wayveLookups.length > 0 && senderId === undefined) {
-        // Edge case: lookups found Wayve users but the SPA hasn't
-        // resolved the signed-in user yet. Fall the addresses back to
-        // SMTP so the send doesn't get stuck.
+        // Wayve users resolved but the SPA hasn't resolved the signed-in user
+        // yet, so there is no sender key. Fall back to SMTP rather than stall.
         externalEmails.push(...wayveLookups.map((l) => l.email));
       }
 
-      // ── Standard SMTP for non-Wayve recipients. The backend endpoint
-      //    takes one `to` at a time; we loop sequentially so a per-
-      //    recipient failure doesn't take down the rest.
+      // The SMTP endpoint takes one `to` at a time, so loop sequentially and
+      // let a per-recipient failure fall through without taking down the rest.
       for (const externalTo of externalEmails) {
         try {
           await sendEmailApi({
@@ -307,8 +282,8 @@ export default function SendEmail({
         }
       }
 
-      // ── Status summary — tell the user exactly what happened per
-      //    channel so they're never guessing whether a send was E2E.
+      // Report per channel, so the user is never guessing whether a send
+      // actually went E2E.
       if (internalDelivered > 0 && externalDelivered > 0) {
         setStatus(
           `Sent E2E to ${internalDelivered} Fluxze user${internalDelivered === 1 ? "" : "s"} + standard mail to ${externalDelivered} external recipient${externalDelivered === 1 ? "" : "s"} ✅`
@@ -324,9 +299,8 @@ export default function SendEmail({
       }
 
       if (errors.length > 0) {
-        // Any per-recipient failure surfaces but doesn't block the
-        // overall flow if at least one delivery succeeded. Form is
-        // cleared only on a fully clean send so the user can retry.
+        // The form is cleared only on a fully clean send, so the user can retry
+        // the failed recipients without retyping.
         setStatus(`${status} ⚠️ ${errors.join("; ")}`);
       }
 

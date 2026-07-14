@@ -1,14 +1,7 @@
-// Drive folder routes.
-//
-// Endpoints:
-//   POST   /api/folders                       — create folder
-//   GET    /api/folders?parent_folder_id=N    — list children of N (NULL = root)
-//   DELETE /api/folders/{id}                  — delete folder + cascade to
-//                                                children + files
-//
-// Tenant gate on every endpoint: rows are joined / filtered on
-// `folders.user_id = <jwt user_id>`. A 404 (not 403) is returned for
-// folders owned by other users so the API doesn't leak existence.
+// Drive folder routes. Every endpoint is tenant-gated: rows are filtered on
+// `folders.user_id = <jwt user_id>`, and a folder owned by another user returns
+// 404 rather than 403 so the API does not leak its existence. Deleting a folder
+// cascades to its child folders and files.
 
 use crate::prelude::*;
 use actix_web::{HttpResponse, delete, get, patch, post, web};
@@ -40,8 +33,7 @@ pub struct RenameFolderRequest {
 #[derive(Deserialize)]
 pub struct ListFoldersQuery {
     /// Filter to folders whose parent matches. `None` returns root-level
-    /// folders. Honoring the explicit-NULL semantics keeps the URL shape
-    /// orthogonal to the file list (which uses the same convention).
+    /// folders, the same NULL convention the file list uses.
     pub parent_folder_id: Option<i64>,
 }
 
@@ -59,18 +51,16 @@ pub async fn create_folder(
         return Ok(HttpResponse::BadRequest()
             .json(serde_json::json!({ "error": "Folder name is required" })));
     }
-    // Cap at a generous-but-bounded length so a malicious client can't store
-    // megabytes of "name". DB column is TEXT (unbounded) but reasonable UIs
-    // produce <= 255 chars.
+    // The column is unbounded TEXT, so cap the length here to stop a malicious
+    // client storing megabytes of "name".
     if name.chars().count() > 255 {
         return Ok(HttpResponse::BadRequest()
             .json(serde_json::json!({ "error": "Folder name is too long (max 255 chars)" })));
     }
 
-    // If parent is given, verify it exists AND belongs to this user. Without
-    // this check a user could nest folders under another user's parent —
-    // wouldn't expose data, but corrupts the tree and surfaces foreign rows
-    // through the parent lookup.
+    // A given parent must exist and belong to this user. Without the check, a
+    // user could nest folders under another user's parent, corrupting the tree
+    // and surfacing foreign rows through the parent lookup.
     if let Some(parent_id) = body.parent_folder_id {
         let owns_parent: Option<i64> =
             sqlx::query_scalar("SELECT id FROM folders WHERE id = $1 AND user_id = $2")
@@ -136,9 +126,8 @@ pub async fn list_folders(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let parent_folder_id = query.parent_folder_id;
 
-    // `parent_folder_id IS NOT DISTINCT FROM $2` matches NULL when the param
-    // is NULL — Postgres's regular `=` returns NULL on NULL operands, which
-    // would silently drop the root-level case.
+    // `IS NOT DISTINCT FROM` matches NULL against NULL. A plain `=` yields NULL
+    // on NULL operands, which would silently drop the root-level case.
     let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
         let rows = sqlx::query_as::<_, Folder>(
             r#"
@@ -181,7 +170,6 @@ pub async fn rename_folder(
             .json(serde_json::json!({ "error": "Folder name is too long (max 255 chars)" })));
     }
 
-    // Capture the prior name for the audit trail before renaming.
     let old_name: Option<String> =
         sqlx::query_scalar("SELECT name FROM folders WHERE id = $1 AND user_id = $2")
             .bind(folder_id)
@@ -189,8 +177,8 @@ pub async fn rename_folder(
             .fetch_optional(pool.get_ref())
             .await?;
 
-    // UPDATE ... RETURNING folds the ownership check and "did it exist?" check
-    // into one round-trip; a 404 (not 403) avoids leaking other users' rows.
+    // UPDATE ... RETURNING folds the ownership and existence checks into one
+    // round-trip. Returning 404 rather than 403 avoids leaking other users' rows.
     let updated: Option<i64> = sqlx::query_scalar(
         "UPDATE folders SET name = $1 WHERE id = $2 AND user_id = $3 RETURNING id",
     )
@@ -237,10 +225,9 @@ pub async fn delete_folder(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let folder_id = path.into_inner();
 
-    // DELETE ... RETURNING combines the ownership check, delete, and "did
-    // anything happen?" check into one round-trip. The FK ON DELETE CASCADE
-    // on both `folders.parent_folder_id` and `files.folder_id` removes any
-    // descendants in the same transaction.
+    // DELETE ... RETURNING folds the ownership and existence checks into one
+    // round-trip. The ON DELETE CASCADE on `folders.parent_folder_id` and
+    // `files.folder_id` removes descendants in the same transaction.
     let removed: Option<String> =
         sqlx::query_scalar("DELETE FROM folders WHERE id = $1 AND user_id = $2 RETURNING name")
             .bind(folder_id)

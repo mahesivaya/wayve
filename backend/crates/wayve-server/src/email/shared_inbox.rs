@@ -1,22 +1,18 @@
-//! Helpers for shared inboxes (org and platform-level).
+//! Shared inboxes, at org and platform level.
 //!
-//! A "shared inbox" is an `email_accounts` row with `is_shared = TRUE`. The
-//! owner-user keeps full access; additional users listed in
-//! `shared_inbox_members` can read and (if `can_reply`) send from the
-//! account. Workflow state (open / pending / closed + assignee) lives in
-//! `shared_inbox_email_state`, one row per email, created lazily on first
-//! mutation.
+//! A shared inbox is an `email_accounts` row with `is_shared = TRUE`. The owner
+//! keeps full access; users in `shared_inbox_members` can read and, with
+//! `can_reply`, send from it. Workflow state lives in
+//! `shared_inbox_email_state`, one row per email, created lazily.
 //!
-//! All access-control logic for shared inboxes funnels through this file
-//! so the rules are stated in one place. Routes and the email send path
-//! call into here rather than rolling their own SQL.
+//! All shared-inbox access control funnels through this file, so the rules are
+//! stated once. Routes and the send path call in here rather than writing SQL.
 
 use crate::prelude::*;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// One workflow row as exposed to the UI. Matches a JOIN against
-/// `shared_inbox_email_state` LEFT-JOINed onto an emails query.
+/// One workflow row as exposed to the UI.
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct InboxState {
     pub email_id: i32,
@@ -26,8 +22,8 @@ pub struct InboxState {
     pub updated_by: Option<i32>,
 }
 
-/// Membership row joined with the user's email so the admin page can list
-/// "who has access" without an additional /api/users lookup.
+/// Membership joined with the user's email, so the admin page can list who has
+/// access without a second /api/users lookup.
 #[derive(Debug, Serialize, FromRow)]
 pub struct InboxMember {
     pub account_id: i32,
@@ -39,10 +35,9 @@ pub struct InboxMember {
     pub created_at: DateTime<Utc>,
 }
 
-/// Partial-update payload. `serde` doesn't distinguish "absent key" from
-/// "explicit null" for `Option<T>`, so we encode the "unassign" intent
-/// with a separate `clear_assignee` flag rather than relying on
-/// `Option<Option<i32>>` magic.
+/// Partial-update payload. `serde` can't distinguish an absent key from an
+/// explicit null for `Option<T>`, so unassigning needs its own
+/// `clear_assignee` flag.
 #[derive(Debug, Deserialize)]
 pub struct StatusUpdate {
     pub status: Option<String>,   // "open" | "pending" | "closed"
@@ -51,14 +46,14 @@ pub struct StatusUpdate {
     pub clear_assignee: bool, // true = explicit unassign (overrides assignee_id)
 }
 
-/// Validate a status string against the CHECK constraint in init.sql.
+/// Must stay in sync with the CHECK constraint on
+/// `shared_inbox_email_state.status` in init.sql.
 pub fn is_valid_status(s: &str) -> bool {
     matches!(s, "open" | "pending" | "closed")
 }
 
-/// Does `user_id` have *any* access to `account_id` — either as the
-/// owner-user OR as a shared-inbox member? This is the gate every
-/// read-path handler should call before showing data.
+/// True when `user_id` is the owner of `account_id` or a shared-inbox member.
+/// Every read-path handler must call this before showing data.
 pub async fn can_access_account(
     pool: &PgPool,
     user_id: i32,
@@ -82,11 +77,10 @@ pub async fn can_access_account(
     Ok(row.is_some())
 }
 
-/// Does `user_id` have `can_reply` rights on `account_id`? Owner always
-/// gets reply rights; shared members only if their row says so. Currently
-/// unused in handlers because `load_email_account_for_send` enforces the
-/// same gate at the SQL level — kept around as the canonical predicate
-/// in case a future handler wants a check decoupled from a row load.
+/// True when `user_id` may send from `account_id`: always for the owner, and for
+/// a shared member whose row grants `can_reply`. Unused today because
+/// `load_email_account_for_send` enforces the same gate in SQL; kept as the
+/// canonical predicate for a handler that needs the check without a row load.
 #[allow(dead_code)]
 pub async fn can_reply_from_account(
     pool: &PgPool,
@@ -110,9 +104,8 @@ pub async fn can_reply_from_account(
     Ok(row.map(|(allowed,)| allowed).unwrap_or(false))
 }
 
-/// Lazily create-or-update a workflow row. `status` and `assignee_id`
-/// follow the `StatusUpdate` partial-update semantics (None = leave
-/// alone; Some(None) on assignee = unassign).
+/// Creates or patches a workflow row, following `StatusUpdate`'s partial-update
+/// semantics.
 pub async fn upsert_state(
     pool: &PgPool,
     email_id: i32,
@@ -125,21 +118,17 @@ pub async fn upsert_state(
         return Err(format!("Invalid status: {s}"));
     }
 
-    // Build the UPDATE columns dynamically so we don't overwrite fields
-    // the caller didn't mention. `COALESCE` would have the same effect
-    // for `status`, but `assignee_id = NULL` has to be distinguishable
-    // from "leave alone".
+    // The UPDATE columns are built dynamically so fields the caller didn't
+    // mention aren't overwritten. COALESCE would do for `status`, but
+    // `assignee_id = NULL` must stay distinguishable from "leave alone".
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // Decide initial assignee for the INSERT branch.
     let initial_assignee = if update.clear_assignee {
         None
     } else {
         update.assignee_id
     };
 
-    // Insert a row if none exists. ON CONFLICT DO NOTHING then partial
-    // UPDATE — straightforward upsert + selective patch.
     sqlx::query(
         r#"
         INSERT INTO shared_inbox_email_state (email_id, status, assignee_id, updated_by, updated_at)

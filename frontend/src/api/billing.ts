@@ -1,7 +1,5 @@
 import { apiFetchJson } from "./client";
 
-// ---- Types -----------------------------------------------------------------
-
 export type PlanTier = "personal" | "startups" | "business" | "enterprise";
 
 export type Plan = {
@@ -95,16 +93,12 @@ export type OrganizationBilling = {
   }[];
 };
 
-// ---- Calls -----------------------------------------------------------------
-
-// Billing routes use `preserve401: true` so a credentials issue surfaces as a
-// throw at the call site instead of bouncing the user to /login mid-flow.
+// Billing routes use `preserve401` so a credentials issue surfaces as a throw
+// at the call site instead of bouncing the user to /login mid-flow.
 const json = <T>(path: string, options?: RequestInit) =>
   apiFetchJson<T>(path, { preserve401: true, ...options });
 
 export const listPlans = () => json<Plan[]>("/api/billing/plans");
-
-// ---- Platform admin: plan management --------------------------------------
 
 export type UpsertPlanInput = {
   code: string;
@@ -122,24 +116,18 @@ export type UpsertPlanInput = {
   is_active?: boolean;
 };
 
-/** Returns ALL plans including deactivated ones — only platform admins may call. */
+// Platform admins only. Unlike listPlans, this includes deactivated plans.
 export const adminListPlans = () => json<Plan[]>("/api/billing/admin/plans");
 
-/**
- * Create or update a plan by `code`. Same payload shape for both — the
- * server upserts on the unique `code` column. Returns the persisted row.
- */
+// Creates or updates a plan; the server upserts on the unique `code` column.
 export const adminUpsertPlan = (input: UpsertPlanInput) =>
   json<Plan>("/api/billing/admin/plans", {
     method: "POST",
     body: JSON.stringify(input),
   });
 
-/**
- * Soft-delete (sets is_active=false). The row stays so historical
- * subscriptions that still reference it stay resolvable; it just stops
- * appearing on /pricing.
- */
+// A soft delete: the row stays so historical subscriptions referencing it stay
+// resolvable, and only stops appearing on /pricing.
 export const adminDeactivatePlan = async (code: string) => {
   await json<void>(`/api/billing/admin/plans/${encodeURIComponent(code)}`, {
     method: "DELETE",
@@ -165,10 +153,10 @@ export const startCheckout = (planCode: string, autopay = true) =>
     body: JSON.stringify({ plan_code: planCode, autopay }),
   });
 
-// In-page subscription: returns a PaymentIntent client_secret the caller
-// mounts a Stripe Payment Element with. No redirect to checkout.stripe.com.
-// The subscription is created in `incomplete` state and flips to `active`
-// once the frontend's confirmPayment succeeds + Stripe webhooks land.
+// In-page alternative to startCheckout, with no redirect to checkout.stripe.com:
+// returns a PaymentIntent client_secret for the caller to mount a Stripe Payment
+// Element with. The subscription starts `incomplete` and flips to `active` once
+// confirmPayment succeeds and the Stripe webhooks land.
 export const startInlineSubscription = (planCode: string, autopay = true) =>
   json<{
     subscription_id: string;
@@ -207,8 +195,7 @@ export type DefaultCard = {
   last4: string;
 };
 
-// The requesting owner's saved default card, or null when none is on file
-// (e.g. a Basic user who has never paid). Drives the "use saved card" radio
-// on the org create form.
+// Null when no card is on file, e.g. a Basic user who has never paid. Drives
+// the "use saved card" radio on the org create form.
 export const getDefaultPaymentMethod = () =>
   json<{ default: DefaultCard | null }>("/api/billing/payment-method/default");

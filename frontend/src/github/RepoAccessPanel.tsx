@@ -10,10 +10,8 @@ import "./repoAccess.css";
 
 type Level = "read" | "write";
 
-// Per-repo access panel: shows who can access this repo and at what level
-// (GitHub's live level when available), and lets an admin add/remove members.
-// Adding a member grants Wayve dashboard visibility and best-effort-adds them as
-// a GitHub collaborator (where the token has admin on the repo).
+// Adding a member grants Wayve dashboard visibility and, best-effort, adds them
+// as a GitHub collaborator where the token has admin on the repo.
 export default function RepoAccessPanel({
   owner,
   repo,
@@ -37,8 +35,8 @@ export default function RepoAccessPanel({
       );
   }, [owner, repo]);
 
-  // Deferred to a microtask so the effect body doesn't synchronously setState
-  // (React 19 cascading-render rule) — same pattern as Tasks.tsx / AuditSecurity.
+  // Deferred to a microtask so the effect body doesn't synchronously setState,
+  // which React 19 flags as a cascading render.
   useEffect(() => {
     const timer = window.setTimeout(() => load(), 0);
     return () => window.clearTimeout(timer);

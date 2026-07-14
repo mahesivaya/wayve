@@ -1,10 +1,6 @@
-// Visual layer for the call state machine. Rendered both by the standalone
-// [Call](./Call.tsx) page and inside [Chat](../chat/Chat.tsx) so the same
-// banners/active panel appear regardless of where the user kicked off (or
-// answered) the call.
-//
-// The host component owns the [useCallSession](./useCallSession.ts) hook
-// and passes its output straight through — this component is pure UI.
+// Pure UI for the call state machine, rendered by both the /call page and Chat so the
+// same banners appear wherever the call started. The host owns the useCallSession hook
+// and passes its output straight through.
 
 import { useEffect, useState } from "react";
 import type { CallSession } from "./useCallSession";
@@ -14,7 +10,6 @@ type Props = {
   session: CallSession;
 };
 
-// mm:ss elapsed since the call went active.
 function formatElapsed(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
   const mm = Math.floor(total / 60)
@@ -37,10 +32,8 @@ export default function CallOverlays({ session }: Props) {
     localVideoRef,
   } = session;
 
-  // Tick once a second while a call is active to drive the duration display.
-  // No synchronous reset on start: `now` is stale-but-earlier than a fresh
-  // `startedAt`, so `formatElapsed` clamps the first frame to 00:00 until the
-  // interval's first tick a second later.
+  // `now` needs no synchronous reset on start: it is stale but earlier than a fresh
+  // `startedAt`, so formatElapsed clamps the first frame to 00:00 until the first tick.
   const startedAt = callState.kind === "active" ? callState.startedAt : null;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

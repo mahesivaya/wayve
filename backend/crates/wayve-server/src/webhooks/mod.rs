@@ -1,12 +1,11 @@
-// Outbound webhook subscriptions.
-//
-// Customers subscribe to platform events; the dispatcher worker delivers a
-// signed JSON envelope to the registered URL. Retry policy is 3 attempts at
-// 0s, 1m, 5m. Endpoints that consecutively fail are auto-disabled.
+// Outbound webhook subscriptions. Customers subscribe to platform events and
+// the dispatcher worker delivers a signed JSON envelope to the registered URL,
+// retrying at 0s, 1m, and 5m before auto-disabling a persistently failing
+// endpoint.
 //
 // The wire format and event-type catalog are a long-term contract: renaming
-// `task.created` later breaks every customer integration. Treat additions
-// as backwards-compatible and avoid removal once an event has shipped.
+// `task.created` breaks every customer integration. Additions are
+// backwards-compatible; never remove an event once it has shipped.
 
 pub mod dispatcher;
 pub mod events;

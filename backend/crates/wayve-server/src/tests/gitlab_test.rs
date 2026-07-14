@@ -42,7 +42,6 @@ mod tests {
     async fn connect_and_import() {
         let mock = MockServer::start().await;
 
-        // Credential probe at connect time.
         Mock::given(method("GET"))
             .and(path("/api/v4/user"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -50,7 +49,6 @@ mod tests {
             })))
             .mount(&mock)
             .await;
-        // Assigned-issues list for import.
         Mock::given(method("GET"))
             .and(path("/api/v4/issues"))
             .respond_with(ResponseTemplate::new(200).set_body_json(issues_body()))
@@ -78,7 +76,7 @@ mod tests {
         )
         .await;
 
-        // --- Connect: token validated then stored encrypted at rest. ---
+        // Connecting must validate the token and leave it encrypted at rest.
         let req = actix_test::TestRequest::put()
             .uri("/integrations/gitlab/connection")
             .insert_header(("Authorization", bearer.clone()))
@@ -104,7 +102,6 @@ mod tests {
         let enc: String = row.get("access_token_encrypted");
         assert_eq!(decrypt(&iv, &enc).unwrap_or_default(), "glpat-secret");
 
-        // --- Import: two issues become two tasks, mapped. ---
         let req = actix_test::TestRequest::post()
             .uri("/integrations/gitlab/import")
             .insert_header(("Authorization", bearer.clone()))
@@ -114,7 +111,8 @@ mod tests {
         assert_eq!(body["imported"], 2);
         assert_eq!(body["updated"], 0);
 
-        // Re-import the same issues → updated in place, not duplicated.
+        // Re-importing the same issues updates them in place instead of
+        // duplicating them.
         let req = actix_test::TestRequest::post()
             .uri("/integrations/gitlab/import")
             .insert_header(("Authorization", bearer.clone()))
@@ -124,7 +122,6 @@ mod tests {
         assert_eq!(body["imported"], 0);
         assert_eq!(body["updated"], 2);
 
-        // List tasks: two, with the mapped status/priority + GitLab link.
         let req = actix_test::TestRequest::get()
             .uri("/tasks")
             .insert_header(("Authorization", bearer.clone()))

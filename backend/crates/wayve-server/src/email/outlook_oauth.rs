@@ -20,8 +20,8 @@ use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::{auth_cookie, create_jwt_for_account, get_user_id_from_request};
 use wayve_security::oauth::{consume_state, create_oauth_state};
 
-/// OAuth `state` flow tags — distinct from the Google flows (and each other)
-/// so a state minted for one purpose can't be replayed for another.
+/// Flow tags for the OAuth `state`, distinct from the Google flows and from each
+/// other, so a state minted for one purpose can't be replayed for another.
 const OUTLOOK_FLOW_SIGNUP: &str = "outlook_signup";
 const OUTLOOK_FLOW_CONNECT: &str = "outlook_connect";
 
@@ -64,15 +64,15 @@ fn authorize_url(creds: &OutlookCredentials, scope: &str, state: &str) -> String
         .append_pair("redirect_uri", &creds.redirect_uri)
         .append_pair("response_mode", "query")
         .append_pair("scope", scope)
-        // Force the consent screen so newly-added scopes are actually granted
-        // instead of reusing a cached, narrower grant.
+        // Force the consent screen, or Microsoft reuses a cached, narrower grant
+        // and newly-added scopes are never actually granted.
         .append_pair("prompt", "consent")
         .append_pair("state", state);
     url.to_string()
 }
 
-/// Shared boilerplate to start an OAuth flow. Returns the provider consent URL
-/// on success — the caller decides whether to 302 to it or return it as JSON.
+/// Returns the provider consent URL. The caller decides whether to 302 to it or
+/// return it as JSON.
 async fn start_oauth_flow(
     pool: &PgPool,
     user_id: Option<i32>,
@@ -91,7 +91,6 @@ async fn start_oauth_flow(
     Ok(authorize_url(creds, scope, &state))
 }
 
-/// `GET /outlook/login?mode=signup` — kicks off Microsoft sign-in.
 #[instrument(target = "auth", skip(query, pool))]
 pub async fn outlook_login(
     query: web::Query<OutlookLoginQuery>,
@@ -106,7 +105,7 @@ pub async fn outlook_login(
             .body("Use POST /api/outlook/connect-url to connect a mailbox");
     }
 
-    // Sign-in is a browser navigation — 302 straight to the consent screen.
+    // Sign-in is a browser navigation, so 302 straight to the consent screen.
     match start_oauth_flow(
         pool.get_ref(),
         None,
@@ -123,8 +122,6 @@ pub async fn outlook_login(
     }
 }
 
-/// `POST /api/outlook/connect-url` — returns the Microsoft consent URL for
-/// connecting the signed-in user's Outlook mailbox.
 #[instrument(target = "auth", skip(req, pool))]
 pub async fn outlook_connect_url(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
     let user_id = match get_user_id_from_request(&req) {
@@ -146,8 +143,8 @@ pub async fn outlook_connect_url(req: HttpRequest, pool: web::Data<PgPool>) -> i
         Err(response) => return response,
     };
 
-    // connect-url is fetched by the frontend — return the URL as JSON so it
-    // can `window.location.href` to it (a 302 would be followed by fetch()).
+    // The frontend fetches this, so return the URL as JSON for it to navigate
+    // to. A 302 here would be followed by fetch() instead of the browser.
     match start_oauth_flow(
         pool.get_ref(),
         Some(user_id),
@@ -242,10 +239,9 @@ struct OAuthCompletion<'a> {
     frontend: &'a str,
 }
 
-/// Unified finisher for OAuth callbacks.
-///
-/// If `session_user_id` is present, it links the mailbox to that user.
-/// Otherwise, it performs a sign-in/sign-up for the identified email.
+/// Unified finisher for OAuth callbacks. A present `session_user_id` links the
+/// mailbox to that user; otherwise this signs in or signs up the identified
+/// email.
 async fn finalize_oauth_session(
     pool: &PgPool,
     req: &HttpRequest,
@@ -350,7 +346,6 @@ async fn finalize_oauth_session(
     }
 }
 
-/// Resolves an OAuth identity to a local user ID.
 async fn resolve_user_for_oauth(
     pool: &PgPool,
     email: &str,
@@ -432,7 +427,6 @@ fn sanitize_microsoft_email(raw: &str) -> String {
     email
 }
 
-/// Reads the signed-in user's primary email from Microsoft Graph `/me`.
 async fn graph_user_email(access_token: &str) -> std::result::Result<String, HttpResponse> {
     let url = format!("{}/v1.0/me", crate::external::microsoft_graph_base());
     let me: Value = match crate::email::oauth::HTTP_CLIENT

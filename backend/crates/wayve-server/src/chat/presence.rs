@@ -1,30 +1,17 @@
 //! User online/offline presence.
 //!
-//! Two-layer design so it works on a single EC2 box today and across many ECS
-//! tasks tomorrow:
+//! Live state is a Redis sorted set of `user_id → last-heartbeat unix seconds`; a
+//! user is online while that score is fresh (within [`STALE_AFTER_SECS`]).
+//! Without Redis we fall back to the per-process session registry
+//! ([`crate::chat::websocket::is_online_local`]), correct on a single instance.
+//! Durable state is `users.last_seen`, so an offline user still renders
+//! "last seen …".
 //!
-//! * **Live (option A)** — a Redis sorted set `presence:online` maps
-//!   `user_id → last-heartbeat unix seconds`. A user is *online* when that
-//!   score is fresh (within [`STALE_AFTER_SECS`]). Any instance holding one of
-//!   the user's sockets refreshes the score on every heartbeat, so multiple
-//!   tabs / multiple instances collapse to one presence with no counters to
-//!   leak. When Redis is absent we fall back to the per-process session
-//!   registry ([`crate::chat::websocket::is_online_local`]) — correct for a
-//!   single instance, which is exactly when Redis is optional.
-//! * **Durable (option B)** — `users.last_seen` is stamped on connect,
-//!   disconnect, and stale-reap, so an *offline* user still shows
-//!   "last seen …". The snapshot endpoint reads it.
-//!
-//! Presence *changes* are pushed only to a user's contacts (DM partners +
-//! channel co-members) over the existing `ws:user:*` fan-out, so the dot flips
-//! live without a poll. Connect broadcasts online immediately. Offline is
-//! announced the instant a user's *last* socket closes: a per-user live-socket
-//! counter (`presence:conns:{id}`, shared across instances) is incremented on
-//! connect and decremented on disconnect, and when it reaches zero we remove
-//! the score and announce offline right away — multi-tab and multi-instance
-//! safe (another live socket keeps the count above zero). [`run_sweeper`] is
-//! the crash-safe backstop: if an instance dies without decrementing, the score
-//! goes stale and the sweep reaps it (clearing the leaked counter too).
+//! Changes are pushed over the `ws:user:*` fan-out to the user's contacts, so the
+//! dot flips without polling. Offline is announced when the last socket closes,
+//! tracked by a cross-instance counter so extra tabs never flap a user offline.
+//! [`run_sweeper`] is the crash-safe backstop for sockets that vanished without a
+//! clean disconnect.
 
 use crate::cache::Cache;
 use crate::prelude::*;
@@ -35,26 +22,23 @@ use super::websocket::{fan_out_user, is_online_local};
 
 /// Redis sorted set holding `user_id → last-heartbeat unix seconds`.
 const PRESENCE_KEY: &str = "presence:online";
-/// Per-user live-socket counter key. Counts open chat sockets across all
-/// instances so the last close can flip the user offline immediately.
+/// Open chat sockets for a user across all instances.
 fn conns_key(user_id: i32) -> String {
     format!("presence:conns:{user_id}")
 }
-/// A session whose last heartbeat is older than this is considered offline.
-/// Must comfortably exceed the chat heartbeat interval (25s) so a live client
-/// is never flapped offline between beats.
+/// A session with no heartbeat for this long is offline. Must comfortably exceed
+/// the chat heartbeat interval (25s) so a live client never flaps between beats.
 const STALE_AFTER_SECS: i64 = 45;
-/// How often the sweeper scans for stale sessions to reap + announce offline.
+/// How often the sweeper reaps stale sessions and announces them offline.
 const SWEEP_INTERVAL_SECS: u64 = 15;
-/// Bound the snapshot fan-in so a crafted `?ids=` can't ask about the world.
+/// Bounds the snapshot fan-in so a crafted `?ids=` cannot ask about the world.
 const MAX_SNAPSHOT_IDS: usize = 500;
 
 fn now_ts() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
-/// One user's presence as returned by the snapshot endpoint. `online` is the
-/// live signal; `last_seen` is the durable fallback rendered when offline.
+/// `online` is the live signal; `last_seen` is the durable offline fallback.
 #[derive(Serialize)]
 pub struct PresenceView {
     pub user_id: i32,
@@ -62,31 +46,26 @@ pub struct PresenceView {
     pub last_seen: Option<String>,
 }
 
-// ================= LIFECYCLE HOOKS (called from the WS actor) =================
-
-/// A chat socket for `user_id` just connected. Marks them online (Redis, or the
-/// local registry when Redis is down), stamps `last_seen`, and — only on a real
-/// offline→online transition — announces online to their contacts.
+/// Marks the user online and announces it to their contacts, but only on a real
+/// offline-to-online transition.
 pub async fn on_connect(cache: &Option<Cache>, pool: &PgPool, user_id: i32) {
     persist_last_seen(pool, user_id).await;
 
     let transitioned = match cache {
         Some(c) => {
             let now = now_ts();
-            // Fresh transition when there was no score, or the previous one had
-            // already gone stale (so contacts think they're offline).
+            // A transition only if there was no score, or the previous one went
+            // stale and contacts already believe the user is offline.
             let was_online = c
                 .zscore(PRESENCE_KEY, &user_id.to_string())
                 .await
                 .is_some_and(|prev| now - prev <= STALE_AFTER_SECS);
-            // Count this socket so the last disconnect can flip us offline
-            // immediately (see `on_disconnect`).
             c.incr(&conns_key(user_id)).await;
             c.zadd(PRESENCE_KEY, &user_id.to_string(), now).await;
             !was_online
         }
-        // No Redis → single instance. `started` has already registered this
-        // socket, so a redundant "online" is harmless; announce it.
+        // Single-instance: the socket is already registered, so a redundant
+        // announcement is harmless.
         None => true,
     };
 
@@ -95,30 +74,23 @@ pub async fn on_connect(cache: &Option<Cache>, pool: &PgPool, user_id: i32) {
     }
 }
 
-/// Heartbeat tick — refresh the freshness score so the user stays online.
-/// No-op without Redis (the local registry is the source of truth there).
+/// Refresh the freshness score so the user stays online. No-op without Redis,
+/// where the local registry is the source of truth.
 pub async fn on_heartbeat(cache: &Option<Cache>, user_id: i32) {
     if let Some(c) = cache {
         c.zadd(PRESENCE_KEY, &user_id.to_string(), now_ts()).await;
     }
 }
 
-/// A chat socket for `user_id` closed. Always refresh `last_seen`, then announce
-/// offline as soon as this was their *last* socket:
-/// * With Redis, decrement the cross-instance socket counter; when it reaches
-///   zero remove the score and announce offline immediately. Another open
-///   socket (any tab, any instance) keeps the count positive, so we don't flap.
-/// * Without Redis, announce offline iff no local socket remains (multi-tab).
-///
-/// The [`run_sweeper`] backstop still catches a socket that vanished without a
-/// clean disconnect (e.g. an instance crash leaves the counter non-zero).
+/// Announces offline only when this was the user's last socket, across tabs and
+/// instances. [`run_sweeper`] backstops unclean disconnects.
 pub async fn on_disconnect(cache: &Option<Cache>, pool: &PgPool, user_id: i32) {
     persist_last_seen(pool, user_id).await;
 
     match cache {
         Some(c) => {
-            // Last socket anywhere → offline now. The ZREM return value guards
-            // the announce so exactly one caller emits (matches the sweeper).
+            // The ZREM return value guards the announce so exactly one caller
+            // emits it, which is how this stays race-free against the sweeper.
             if c.decr(&conns_key(user_id)).await <= 0
                 && c.zrem(PRESENCE_KEY, &user_id.to_string()).await == 1
             {
@@ -133,11 +105,8 @@ pub async fn on_disconnect(cache: &Option<Cache>, pool: &PgPool, user_id: i32) {
     }
 }
 
-// ================= SWEEPER (Redis mode, one per socket-serving instance) =====
-
-/// Spawn the stale-session reaper. Runs on `All` / `Api` roles when Redis is
-/// up; a no-op otherwise (single-instance offline is announced inline by
-/// [`on_disconnect`]).
+/// Spawn the stale-session reaper. Only meaningful with Redis; without it
+/// [`on_disconnect`] announces offline inline.
 pub fn spawn_sweeper(pool: PgPool, cache: Cache) {
     actix_web::rt::spawn(run_sweeper(pool, cache));
 }
@@ -153,15 +122,13 @@ async fn run_sweeper(pool: PgPool, cache: Cache) {
             .await;
         for member in stale {
             let Ok(user_id) = member.parse::<i32>() else {
-                // A non-numeric member has no business here; drop it.
                 cache.zrem(PRESENCE_KEY, &member).await;
                 continue;
             };
-            // Whichever instance's ZREM actually removes the member won the
-            // race — only it announces offline, so contacts get one event.
+            // Only the instance whose ZREM removed the member announces, so
+            // contacts receive exactly one offline event.
             if cache.zrem(PRESENCE_KEY, &member).await == 1 {
-                // Clear any socket count leaked by a crashed instance so the
-                // fast-path counter starts clean on the user's next connect.
+                // Clears any count leaked by a crashed instance.
                 cache.del(&conns_key(user_id)).await;
                 persist_last_seen(&pool, user_id).await;
                 broadcast_presence(&pool, &cache_opt, user_id, false).await;
@@ -170,10 +137,7 @@ async fn run_sweeper(pool: PgPool, cache: Cache) {
     }
 }
 
-// ================= SNAPSHOT (HTTP) ===========================================
-
-/// `GET /api/chat/presence?ids=1,2,3` — the caller's contacts' current
-/// presence. Content-free: ids, an online flag, and a last-seen timestamp.
+/// `GET /api/chat/presence?ids=1,2,3` — current presence for the given users.
 #[instrument(target = "http", skip(req, pool, cache, query))]
 pub async fn get_presence(
     req: HttpRequest,
@@ -200,14 +164,13 @@ pub struct PresenceQuery {
     pub ids: String,
 }
 
-/// Resolve online + last-seen for a set of user ids. `online` comes from Redis
-/// freshness (or the local registry without Redis); `last_seen` from the DB.
+/// `online` comes from Redis freshness, or the local registry without Redis;
+/// `last_seen` comes from the DB.
 pub async fn snapshot(cache: &Option<Cache>, pool: &PgPool, ids: &[i32]) -> Vec<PresenceView> {
     if ids.is_empty() {
         return Vec::new();
     }
 
-    // Durable last_seen for all requested ids in one scan.
     let last_seen: std::collections::HashMap<i32, String> =
         sqlx::query_as::<_, (i32, Option<chrono::DateTime<chrono::Utc>>)>(
             "SELECT id, last_seen FROM users WHERE id = ANY($1)",
@@ -242,10 +205,7 @@ pub async fn snapshot(cache: &Option<Cache>, pool: &PgPool, ids: &[i32]) -> Vec<
     views
 }
 
-// ================= INTERNALS =================================================
-
-/// Stamp `users.last_seen = NOW()`. Best-effort — a failed write just means the
-/// "last seen …" label is a little stale.
+/// Best-effort: a failed write only leaves the "last seen …" label stale.
 async fn persist_last_seen(pool: &PgPool, user_id: i32) {
     if let Err(e) = sqlx::query("UPDATE users SET last_seen = NOW() WHERE id = $1")
         .bind(user_id)
@@ -256,8 +216,7 @@ async fn persist_last_seen(pool: &PgPool, user_id: i32) {
     }
 }
 
-/// Push a presence change to everyone who'd care — the user's DM partners and
-/// channel co-members — over the per-user fan-out.
+/// Push a presence change to the user's contacts over the per-user fan-out.
 async fn broadcast_presence(pool: &PgPool, cache: &Option<Cache>, user_id: i32, online: bool) {
     let contacts = contacts_of(pool, user_id).await;
     if contacts.is_empty() {
@@ -268,7 +227,6 @@ async fn broadcast_presence(pool: &PgPool, cache: &Option<Cache>, user_id: i32, 
         "type": "presence",
         "user_id": user_id,
         "online": online,
-        // On connect this is ~now; on offline it's the moment we reaped them.
         "last_seen": chrono::Utc::now().to_rfc3339(),
     })
     .to_string();
@@ -280,10 +238,9 @@ async fn broadcast_presence(pool: &PgPool, cache: &Option<Cache>, user_id: i32, 
     .await;
 }
 
-/// The distinct set of users who share a conversation with `user_id`: everyone
-/// they've DM'd (either direction) plus every co-member of a channel they're
-/// in. Runs on the pooled (owner) role, bypassing RLS like the sibling
-/// on-connect delivered sweep — presence carries no message content.
+/// Every DM partner plus every co-member of the user's channels. Runs on the
+/// pooled owner role, bypassing RLS, which is safe because presence carries no
+/// message content.
 async fn contacts_of(pool: &PgPool, user_id: i32) -> Vec<i32> {
     sqlx::query_scalar::<_, i32>(
         r#"

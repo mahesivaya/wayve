@@ -1,12 +1,8 @@
-// Enterprise-owner-controlled AI provider:
-//   (1) the config endpoints are gated to the org OWNER on the enterprise tier —
-//       a personal user, an org admin (non-owner) and a plain member all get 403;
-//   (2) the owner can PUT/GET/DELETE; the key is stored ENCRYPTED and never
-//       returned by GET;
-//   (3) every member of the org resolves the owner's provider (the binding);
-//   (4) a private/loopback custom base_url is rejected by the SSRF guard (400);
-//   (5) a fail-closed provider error surfaces as an error instead of silently
-//       falling back to the platform default.
+// The enterprise-owner-controlled AI provider. These tests pin that only an
+// enterprise org owner can configure it, that the API key is stored encrypted
+// and never read back, that every member of the org resolves the owner's
+// provider, that the SSRF guard rejects a private custom base_url, and that a
+// fail-closed provider error never silently falls back to the platform default.
 // The upstream provider (Anthropic) is mocked with wiremock via ANTHROPIC_API_BASE.
 #[cfg(test)]
 mod tests {
@@ -20,7 +16,6 @@ mod tests {
 
     const HEX64_TEST_KEY: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
-    /// Anthropic Messages API mock that returns a minimal successful turn.
     async fn mount_anthropic_ok(mock: &MockServer) {
         Mock::given(method("POST"))
             .and(path("/v1/messages"))
@@ -35,7 +30,7 @@ mod tests {
             .await;
     }
 
-    /// Anthropic mock that always 500s — used for the fail-closed case.
+    /// An upstream that always fails, for the fail-closed case.
     async fn mount_anthropic_500(mock: &MockServer) {
         Mock::given(method("POST"))
             .and(path("/v1/messages"))
@@ -47,7 +42,7 @@ mod tests {
             .await;
     }
 
-    /// Promote a local user to the OWNER of an enterprise-tier org. Returns org id.
+    /// Makes the user the owner of an enterprise-tier org and returns its id.
     async fn make_enterprise(pool: &PgPool, user_id: i32) -> i32 {
         let org_id: i32 = sqlx::query_scalar(
             "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
@@ -80,7 +75,6 @@ mod tests {
         org_id
     }
 
-    /// Add a second user to `org_id` with `role`, returning the new user id.
     async fn add_member(pool: &PgPool, org_id: i32, role: &str) -> i32 {
         let email = random_email();
         let uid = insert_local_user(pool, &email, "password123").await;
@@ -102,8 +96,8 @@ mod tests {
         uid
     }
 
-    /// Promote a local user to a platform OWNER (account_type + platform_members
-    /// row, which is what `resolve_ai_for_user`'s platform-member check reads).
+    /// Makes the user a platform owner. Both the account_type and the
+    /// platform_members row are needed: `resolve_ai_for_user` reads the row.
     async fn make_platform_owner(pool: &PgPool, user_id: i32) {
         sqlx::query("UPDATE users SET account_type = 'platform_admin' WHERE id = $1")
             .bind(user_id)
@@ -148,7 +142,6 @@ mod tests {
         )
         .await;
 
-        // Personal user → 403.
         let email = random_email();
         let personal = insert_local_user(&pool, &email, "password123").await;
         let bearer = format!("Bearer {}", jwt_for(personal, &email));
@@ -161,7 +154,6 @@ mod tests {
             StatusCode::FORBIDDEN
         );
 
-        // Enterprise org owner exists, but an ADMIN and a MEMBER of it are denied.
         let owner_email = random_email();
         let owner = insert_local_user(&pool, &owner_email, "password123").await;
         let org_id = make_enterprise(&pool, owner).await;
@@ -198,7 +190,7 @@ mod tests {
     async fn owner_put_get_delete_key_encrypted() {
         let mock = MockServer::start().await;
         mount_anthropic_ok(&mock).await;
-        // SAFETY: serialized via #[serial].
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
         unsafe {
             std::env::set_var("AES_KEY", HEX64_TEST_KEY);
             std::env::set_var("ANTHROPIC_API_BASE", mock.uri());
@@ -218,7 +210,6 @@ mod tests {
         )
         .await;
 
-        // PUT — owner selects Anthropic with their own key; validated then stored.
         let req = actix_test::TestRequest::put()
             .uri("/ai/config")
             .insert_header(("Authorization", bearer.clone()))
@@ -233,7 +224,7 @@ mod tests {
             StatusCode::OK
         );
 
-        // Stored encrypted; decrypts back to the plaintext key.
+        // The key must be at rest only as ciphertext that decrypts back.
         let row = sqlx::query(
             "SELECT provider, api_key_iv, api_key_encrypted FROM org_ai_configs WHERE organization_id = $1",
         )
@@ -246,7 +237,7 @@ mod tests {
         let enc: String = row.get("api_key_encrypted");
         assert_eq!(decrypt(&iv, &enc).unwrap_or_default(), "sk-ant-secret");
 
-        // GET — returns status but never the key.
+        // A read returns the config status but never the key itself.
         let req = actix_test::TestRequest::get()
             .uri("/ai/config")
             .insert_header(("Authorization", bearer.clone()))
@@ -259,7 +250,7 @@ mod tests {
         assert!(body["config"].get("api_key_encrypted").is_none());
         assert!(body["providers"].is_array());
 
-        // DELETE — reverts to platform default.
+        // Deleting reverts the org to the platform default.
         let req = actix_test::TestRequest::delete()
             .uri("/ai/config")
             .insert_header(("Authorization", bearer.clone()))
@@ -308,7 +299,6 @@ mod tests {
         )
         .await;
 
-        // Owner configures the provider.
         let req = actix_test::TestRequest::put()
             .uri("/ai/config")
             .insert_header(("Authorization", bearer))
@@ -322,7 +312,6 @@ mod tests {
             StatusCode::OK
         );
 
-        // A plain member of the same org resolves the OWNER's provider + key.
         let member = add_member(&pool, org_id, "member").await;
         let resolved = ai::provider::resolve_ai_for_user(&pool, member)
             .await
@@ -330,7 +319,7 @@ mod tests {
             .unwrap_or_else(|| panic!("member should resolve the org provider"));
         assert_eq!(resolved.provider, ai::provider::AiProvider::Anthropic);
         assert_eq!(resolved.api_key, "sk-ant-secret");
-        // Defaulted model since the owner didn't pin one.
+        // The owner pinned no model, so the provider default applies.
         assert_eq!(
             resolved.model,
             ai::provider::AiProvider::Anthropic.default_model()
@@ -349,7 +338,7 @@ mod tests {
     async fn ssrf_rejects_private_base_url() {
         unsafe {
             std::env::set_var("AES_KEY", HEX64_TEST_KEY);
-            // Ensure the guard is NOT relaxed for this test.
+            // The SSRF guard must not be relaxed for this test.
             std::env::remove_var("MCP_ALLOW_PRIVATE_HOSTS");
         }
         let pool = test_pool().await;
@@ -366,7 +355,7 @@ mod tests {
         )
         .await;
 
-        // OpenAI-compatible with a link-local metadata endpoint → 400.
+        // The link-local cloud metadata endpoint is the canonical SSRF target.
         let req = actix_test::TestRequest::put()
             .uri("/ai/config")
             .insert_header(("Authorization", bearer))
@@ -393,7 +382,7 @@ mod tests {
         unsafe {
             std::env::set_var("AES_KEY", HEX64_TEST_KEY);
             std::env::set_var("ANTHROPIC_API_BASE", mock.uri());
-            // A platform Gemini key exists — fail-closed must NOT use it.
+            // A usable platform key that fail-closed must refuse to fall back to.
             std::env::set_var("GEMINI_API_KEY", "platform-gemini-key");
         }
 
@@ -403,8 +392,8 @@ mod tests {
         let org_id = make_enterprise(&pool, owner).await;
         let bearer = format!("Bearer {}", jwt_for(owner, &email));
 
-        // Insert a fail-closed Anthropic config directly (the upstream 500s, so a
-        // validating PUT would reject it — we're testing runtime behavior).
+        // The config is inserted directly because the upstream 500s, so a
+        // validating write would reject it; this test is about runtime behavior.
         let (iv, enc) = encrypt("sk-ant-secret").unwrap_or_else(|e| panic!("encrypt: {e}"));
         sqlx::query(
             "INSERT INTO org_ai_configs
@@ -431,7 +420,6 @@ mod tests {
             .set_json(serde_json::json!({ "messages": [{ "role": "user", "content": "hi" }] }))
             .to_request();
         let resp = actix_test::call_service(&app, req).await;
-        // Provider failed and fail_closed → error, not a fallback 200.
         assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
         drop(app);
@@ -443,10 +431,9 @@ mod tests {
         drop(mock);
     }
 
-    // A PLATFORM owner can configure the platform-team provider (no enterprise
-    // tier required), it's stored in the platform_ai_config singleton encrypted,
-    // platform members resolve it, and a non-platform user is UNAFFECTED (falls
-    // back to the env default) — i.e. platform config never touches org/personal.
+    // A platform owner can configure the platform-team provider without an
+    // enterprise tier, and only platform members resolve it: the config must
+    // never leak into an org or personal account, which keep the env default.
     #[actix_web::test]
     #[serial_test::serial]
     async fn platform_owner_configures_and_only_platform_members_resolve() {
@@ -472,7 +459,6 @@ mod tests {
         )
         .await;
 
-        // Platform owner selects Anthropic — accepted WITHOUT an enterprise tier.
         let req = actix_test::TestRequest::put()
             .uri("/ai/config")
             .insert_header(("Authorization", bearer.clone()))
@@ -486,7 +472,7 @@ mod tests {
             StatusCode::OK
         );
 
-        // Stored in the platform singleton, encrypted.
+        // The key must be at rest only as ciphertext in the platform singleton.
         let row = sqlx::query(
             "SELECT provider, api_key_iv, api_key_encrypted FROM platform_ai_config WHERE id = 1",
         )
@@ -498,7 +484,6 @@ mod tests {
         let enc: String = row.get("api_key_encrypted");
         assert_eq!(decrypt(&iv, &enc).unwrap_or_default(), "sk-plat-secret");
 
-        // The platform owner (a platform member) resolves the platform provider.
         let resolved = ai::provider::resolve_ai_for_user(&pool, owner)
             .await
             .unwrap_or_else(|e| panic!("resolve owner: {e}"))
@@ -506,8 +491,8 @@ mod tests {
         assert_eq!(resolved.provider, ai::provider::AiProvider::Anthropic);
         assert_eq!(resolved.api_key, "sk-plat-secret");
 
-        // A personal (non-platform, non-org) user is UNAFFECTED — falls back to
-        // the env default Gemini, never the platform-team config.
+        // A personal user must fall back to the env default, never the
+        // platform-team config.
         let outsider_email = random_email();
         let outsider = insert_local_user(&pool, &outsider_email, "password123").await;
         let outsider_ai = ai::provider::resolve_ai_for_user(&pool, outsider)

@@ -1,18 +1,14 @@
-// 24-word recovery mnemonic. Standard BIP-39:
-//   - 256 bits of entropy from crypto.getRandomValues
-//   - 8-bit checksum = first 8 bits of SHA-256(entropy)
-//   - 264 bits = 24 × 11 bits → 24 words from the BIP-39 English wordlist
+// 24-word recovery mnemonic. Standard BIP-39: 256 bits of entropy from
+// crypto.getRandomValues, plus an 8-bit checksum (the leading bits of
+// SHA-256(entropy)), split into 24 eleven-bit indices into the English wordlist.
 //
-// Strength: 256 bits of entropy is well outside any practical brute-force
-// envelope, so the PBKDF2 stretching in recovery.ts is a defense-in-depth
-// layer rather than the load-bearing one. Decoding verifies the SHA-256
-// checksum, so a single-word typo is caught locally instead of falling
-// through to an opaque AES-GCM auth-tag failure.
+// 256 bits of entropy is far outside any practical brute-force envelope, so the
+// PBKDF2 stretching in recovery.ts is defense-in-depth rather than the
+// load-bearing layer. Decoding verifies the checksum, so a single-word typo is
+// caught locally instead of surfacing as an opaque AES-GCM auth-tag failure.
 //
-// This file replaces the legacy 6-word custom encoding. Legacy envelopes
-// uploaded under the 6-word scheme cannot be unwrapped here — the
-// dev-DB cleanup step removes any stragglers; in production we just
-// re-onboard those users on next login.
+// Envelopes uploaded under the legacy 6-word scheme cannot be unwrapped here;
+// those users are re-onboarded on next login.
 
 import { BIP39_ENGLISH } from "./wordlist";
 
@@ -34,8 +30,8 @@ function bytesToBits(bytes: Uint8Array): string {
 }
 
 function bitsToBytes(bits: string): Uint8Array {
-  // Caller must pass a multiple-of-8 string. Used only on the entropy
-  // portion of a decoded mnemonic (ENTROPY_BITS, which is divisible by 8).
+  // Only ever called on the entropy portion of a decoded mnemonic, whose length
+  // is divisible by 8.
   if (bits.length % 8 !== 0) {
     throw new Error("bitsToBytes: bit-string length must be a multiple of 8");
   }
@@ -53,13 +49,9 @@ async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
 
 async function checksumBits(entropy: Uint8Array): Promise<string> {
   const digest = await sha256(entropy);
-  // Take the first CHECKSUM_BITS bits of the SHA-256 hash.
   return bytesToBits(digest).slice(0, CHECKSUM_BITS);
 }
 
-/**
- * Generate a fresh 24-word recovery mnemonic with a valid BIP-39 checksum.
- */
 export async function generateMnemonic(): Promise<string> {
   const entropy = new Uint8Array(ENTROPY_BYTES);
   crypto.getRandomValues(entropy);
@@ -80,15 +72,12 @@ async function entropyToMnemonic(entropy: Uint8Array): Promise<string> {
 }
 
 /**
- * Decode a 24-word mnemonic back to its 32-byte entropy buffer. Throws on:
- *   - Wrong word count
- *   - Unknown word (typo, wrong language)
- *   - Invalid SHA-256 checksum (typo that lands on a valid word)
+ * Decode a 24-word mnemonic back to its 32-byte entropy buffer. Throws on a
+ * wrong word count, an unknown word, or a checksum mismatch.
  *
- * The checksum catches almost all single-word typos locally before the
- * AES-GCM step in recovery.ts has to fail. The few typos that pass the
- * checksum but produce the wrong key still surface as a clean
- * "could not decrypt recovery payload" via AES-GCM auth-tag verification.
+ * The checksum catches almost every single-word typo locally, before the AES-GCM
+ * step in recovery.ts would have to fail. The rare typo that passes the checksum
+ * but yields the wrong key still surfaces cleanly as an auth-tag failure there.
  */
 export async function mnemonicToEntropy(mnemonic: string): Promise<Uint8Array> {
   const words = mnemonic.trim().toLowerCase().split(/\s+/);
@@ -115,12 +104,12 @@ export async function mnemonicToEntropy(mnemonic: string): Promise<Uint8Array> {
   return entropy;
 }
 
-/** Lowercase + collapse repeated whitespace for paste-from-anywhere UX. */
+/** Lowercase and collapse whitespace so a phrase pasted from anywhere works. */
 export function normalizeMnemonicInput(input: string): string {
   return input.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-/** Live-UI feedback ("All 24 words look good ✓"). Null = OK, string = error. */
+/** Live UI feedback. Null means valid; a string is the error to display. */
 export async function checkMnemonic(input: string): Promise<string | null> {
   try {
     await mnemonicToEntropy(input);
@@ -130,5 +119,4 @@ export async function checkMnemonic(input: string): Promise<string | null> {
   }
 }
 
-/** Number of words the rest of the UI should expect. */
 export const MNEMONIC_WORD_COUNT = WORD_COUNT;

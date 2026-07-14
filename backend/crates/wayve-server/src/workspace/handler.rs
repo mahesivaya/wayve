@@ -1,13 +1,11 @@
 //! Projects and teams shown in the app sidebar.
 //!
-//! Teams are organization-scoped. Projects are polymorphic-owned: an
-//! organization owner creates org projects (visible to the whole org), and a
-//! **personal account** owns its own projects keyed on `user_id`. A personal
-//! project may link ONE public GitHub repo (`github_owner`/`github_repo`),
-//! browsed in the Code Repo viewer. Org-project creation stays locked to the
-//! organization OWNER via [`rbac::require_owner`]; personal users manage only
-//! their own projects. Platform accounts keep the legacy single-repo view and
-//! do not own projects here.
+//! Teams are organization-scoped. Projects are polymorphic-owned: org projects
+//! are visible to the whole org and their creation is locked to the
+//! organization owner via [`rbac::require_owner`], while a personal account
+//! owns its own projects keyed on `user_id`. A project may link one GitHub repo
+//! (`github_owner`/`github_repo`) for the Code Repo viewer. Platform accounts
+//! keep the legacy single-repo view and own no projects here.
 
 use crate::email::oauth::HTTP_CLIENT;
 use crate::prelude::*;
@@ -65,9 +63,9 @@ fn slugify(name: &str) -> String {
     }
 }
 
-/// First slug of the form `base`, `base-2`, `base-3`, … not already present in
-/// `taken`. Keeps team slugs unique within an org without relying on a retry
-/// loop against the unique constraint.
+/// First slug of the form `base`, `base-2`, `base-3`, … not already in `taken`.
+/// Keeps team slugs unique within an org without retrying against the unique
+/// constraint.
 fn pick_free_slug(base: &str, taken: &[String]) -> String {
     if !taken.contains(&base.to_string()) {
         return base.to_string();
@@ -82,10 +80,8 @@ fn pick_free_slug(base: &str, taken: &[String]) -> String {
     }
 }
 
-/// The caller's home organization id, or `None` for personal / platform
-/// accounts that don't belong to one.
-// Which teams the caller can see: an org member sees their org's teams; a
-// platform owner sees platform-level teams (organization_id IS NULL).
+/// Which teams the caller can see: an org member sees their org's teams, and a
+/// platform owner sees platform-level teams (`organization_id IS NULL`).
 enum TeamScope {
     Org(i32),
     Platform,
@@ -116,8 +112,8 @@ fn project_json(row: &sqlx::postgres::PgRow) -> serde_json::Value {
     })
 }
 
-/// Server-held PAT for the GitHub proxy / repo validation. Optional — without
-/// it we still validate, just against the 60/hr anonymous rate limit.
+/// Server-held PAT for the GitHub proxy and repo validation. Optional: without
+/// it validation still runs, but against the 60/hr anonymous rate limit.
 fn github_token() -> Option<String> {
     std::env::var("GITHUB_TOKEN")
         .ok()
@@ -136,13 +132,12 @@ fn is_valid_repo(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
 }
 
-/// Pull `(owner, repo)` out of any common GitHub reference: a full
-/// `https://github.com/owner/repo[/...|.git]`, an `git@github.com:owner/repo.git`
-/// SSH URL, a bare `github.com/owner/repo`, or just `owner/repo`. Returns
-/// `None` if it doesn't look like a GitHub repo path.
+/// Pull `(owner, repo)` out of any common GitHub reference: an HTTPS URL, an
+/// SSH URL, a bare `github.com/owner/repo`, or just `owner/repo`. Returns `None`
+/// if it does not look like a GitHub repo path.
 fn parse_repo_url(raw: &str) -> Option<(String, String)> {
     let s = raw.trim();
-    // SSH form first (it has no scheme to strip).
+    // SSH form first: it has no scheme to strip.
     let rest = if let Some(ssh) = s.strip_prefix("git@github.com:") {
         ssh
     } else {
@@ -164,12 +159,11 @@ fn parse_repo_url(raw: &str) -> Option<(String, String)> {
     Some((owner.to_string(), repo.to_string()))
 }
 
-/// Parse a pasted repo URL and confirm with GitHub that it exists. Returns the
-/// canonical owner/name casing. `bearer` is the token to look the repo up with
-/// (a connected personal user's own token, else the shared PAT); `allow_private`
-/// permits private repos — set only for a personal caller acting with their own
-/// token, so an org/public paste-URL still stays public-only. Any failure is a
-/// 400 with a caller-safe message.
+/// Parse a pasted repo URL and confirm with GitHub that it exists, returning
+/// the canonical owner/name casing. `bearer` is the token to look the repo up
+/// with: a connected personal user's own token, otherwise the shared PAT.
+/// `allow_private` must be set only for a personal caller acting with their own
+/// token, so that org and public pastes stay public-only.
 async fn parse_and_validate_repo(
     raw: &str,
     bearer: Option<&str>,
@@ -234,8 +228,6 @@ async fn parse_and_validate_repo(
     Ok((owner_canon, repo_canon))
 }
 
-// GET /api/projects — projects for the caller (org members see org projects;
-// personal accounts see their own), newest first.
 #[get("/projects")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_projects(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -246,10 +238,9 @@ pub async fn list_projects(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         .await
         .map_err(AppError::Db)?;
 
-    // Org members see their org's projects; personal accounts see their own.
-    // Platform staff are unrestricted and see every project (so the create-task
-    // project dropdown and other consumers work for the platform owner too, not
-    // just the Code Repo repo list which reads a different source).
+    // Org members see their org's projects and personal accounts see their own.
+    // Platform staff are unrestricted and see every project, so consumers like
+    // the create-task project dropdown work for the platform owner too.
     let rows = match ctx.scope {
         Scope::Organization => {
             let Some(org_id) = ctx.organization_id else {
@@ -291,8 +282,6 @@ pub async fn list_projects(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
     Ok(HttpResponse::Ok().json(projects))
 }
 
-// POST /api/projects — create a project. Org owners create org projects;
-// personal accounts create their own (optionally linking a public repo).
 #[post("/projects")]
 #[instrument(target = "http", skip(req, pool, input))]
 pub async fn create_project(
@@ -319,10 +308,9 @@ pub async fn create_project(
 
     let row = match ctx.scope {
         Scope::Personal => {
-            // Personal accounts own projects via user_id; an optional repo URL
-            // is validated before storing. A user who has connected their own
-            // GitHub validates with THEIR token (so their private repos are
-            // accepted); otherwise it's public-only via the shared PAT.
+            // A user who has connected their own GitHub validates with their own
+            // token, so their private repos are accepted. Everyone else is
+            // public-only via the shared PAT.
             let (gh_owner, gh_repo) = match input.repo_url.as_deref().map(str::trim) {
                 Some(raw) if !raw.is_empty() => {
                     let user_token =
@@ -347,7 +335,6 @@ pub async fn create_project(
             .await?
         }
         Scope::Organization => {
-            // Org projects stay locked to the organization owner.
             let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
                 Ok(ctx) => ctx,
                 Err(response) => return Ok(response),
@@ -356,9 +343,6 @@ pub async fn create_project(
                 return Ok(HttpResponse::BadRequest()
                     .json(serde_json::json!({ "message": "No organization in context" })));
             };
-            // An optional repo URL is validated (public-only) before storing, so
-            // an owner can create a project and import its repo in one step —
-            // mirroring the personal branch above.
             let (gh_owner, gh_repo) = match input.repo_url.as_deref().map(str::trim) {
                 Some(raw) if !raw.is_empty() => {
                     // Org projects stay public-only via the shared token.
@@ -391,8 +375,6 @@ pub async fn create_project(
     Ok(HttpResponse::Created().json(project_json(&row)))
 }
 
-// PATCH /api/projects/{id} — rename a project. Org owners rename org projects;
-// personal accounts rename their own.
 #[patch("/projects/{id}")]
 #[instrument(target = "http", skip(req, pool, path, input))]
 pub async fn update_project(
@@ -419,8 +401,8 @@ pub async fn update_project(
     }
     let id = path.into_inner();
 
-    // Scoped UPDATE — a project the caller doesn't own won't match, so we 404
-    // rather than leak that the id exists.
+    // The scoped UPDATE will not match a project the caller does not own, so
+    // this 404s rather than leaking that the id exists.
     let row = match ctx.scope {
         Scope::Personal => {
             sqlx::query(
@@ -468,10 +450,8 @@ pub async fn update_project(
     }
 }
 
-// PATCH /api/projects/{id}/repo — link (or replace) the public GitHub repo on a
-// project. Personal accounts link their own projects; org owners link their
-// organization's projects (the linked repo then becomes visible to every member
-// of that org via list_projects + the github proxy's org allowlist).
+// Linking a repo to an org project makes it visible to every member of that org,
+// through both list_projects and the github proxy's org allowlist.
 #[patch("/projects/{id}/repo")]
 #[instrument(target = "http", skip(req, pool, path, input))]
 pub async fn link_project_repo(
@@ -488,13 +468,13 @@ pub async fn link_project_repo(
         .map_err(AppError::Db)?;
     let id = path.into_inner();
 
-    // Scoped UPDATE — a project the caller doesn't own won't match, so we 404
-    // rather than leak that the id exists. Repo validation (public-only) runs
-    // only after authorization so a non-owner can't probe GitHub through us.
+    // The scoped UPDATE will not match a project the caller does not own, so
+    // this 404s rather than leaking that the id exists. Repo validation runs
+    // only after authorization, so a non-owner cannot probe GitHub through us.
     let row = match ctx.scope {
         Scope::Personal => {
-            // Connected personal users validate with their own token (private
-            // repos allowed); otherwise public-only via the shared PAT.
+            // Connected personal users validate with their own token, which
+            // allows private repos; everyone else is public-only via the PAT.
             let user_token = crate::github_oauth::stored_token_for(pool.get_ref(), user_id).await;
             let shared = github_token();
             let bearer = user_token.as_deref().or(shared.as_deref());
@@ -514,7 +494,8 @@ pub async fn link_project_repo(
             .await?
         }
         Scope::Organization => {
-            // Linking is owner-only, mirroring org project create/rename/delete.
+            // Linking is owner-only, mirroring org project create, rename, and
+            // delete.
             let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
                 Ok(ctx) => ctx,
                 Err(response) => return Ok(response),
@@ -553,8 +534,6 @@ pub async fn link_project_repo(
     }
 }
 
-// DELETE /api/projects/{id} — delete a project. Org owners delete org projects;
-// personal accounts delete their own. The linked repo columns go with the row.
 #[delete("/projects/{id}")]
 #[instrument(target = "http", skip(req, pool, path))]
 pub async fn delete_project(
@@ -570,8 +549,8 @@ pub async fn delete_project(
         .map_err(AppError::Db)?;
     let id = path.into_inner();
 
-    // Scoped DELETE — a project the caller doesn't own won't match, so we 404
-    // rather than leak that the id exists.
+    // The scoped DELETE will not match a project the caller does not own, so
+    // this 404s rather than leaking that the id exists.
     let row = match ctx.scope {
         Scope::Personal => {
             sqlx::query(
@@ -614,7 +593,6 @@ pub async fn delete_project(
     }
 }
 
-// GET /api/teams — teams for the caller's org, newest first.
 #[get("/teams")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_teams(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
@@ -647,7 +625,6 @@ pub async fn list_teams(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
     Ok(HttpResponse::Ok().json(teams))
 }
 
-// GET /api/teams/{slug} — one team in the caller's org (for the detail page).
 #[get("/teams/{slug}")]
 #[instrument(target = "http", skip(req, pool, path))]
 pub async fn get_team(
@@ -689,7 +666,6 @@ pub async fn get_team(
     }
 }
 
-// POST /api/teams — create a team (org owner only).
 #[post("/teams")]
 #[instrument(target = "http", skip(req, pool, input))]
 pub async fn create_team(
@@ -731,8 +707,8 @@ pub async fn create_team(
     let tagline = clean_optional(input.tagline.as_deref(), TAGLINE_MAX);
     let description = clean_optional(input.description.as_deref(), DESCRIPTION_MAX);
 
-    // Choose a slug unique within the scope (org, or the platform-team set when
-    // org_id is NULL) before inserting. IS NOT DISTINCT FROM makes NULL = NULL.
+    // The slug must be unique within the scope: the org, or the platform-team
+    // set when org_id is NULL. `IS NOT DISTINCT FROM` makes NULL match NULL.
     let base = slugify(name);
     let taken: Vec<String> = sqlx::query_scalar(
         "SELECT slug FROM teams WHERE organization_id IS NOT DISTINCT FROM $1 AND (slug = $2 OR slug LIKE $2 || '-%')",

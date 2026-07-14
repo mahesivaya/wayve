@@ -4,16 +4,16 @@ import { apiFetchJson } from "./client";
 
 const VISIT_SENT_KEY = "rwayve.visitBeaconSent";
 
-// Fire-and-forget "page opened" beacon. Sent at most once per browser session
-// (sessionStorage guard) so SPA navigations / re-renders don't spam rows.
-// Anonymous-safe: the bearer token is attached only when present; the backend
-// records the IP + user-agent server-side, so the client never sends them.
+// A fire-and-forget "page opened" beacon, guarded by sessionStorage so SPA
+// navigations and re-renders cannot spam rows. It is safe anonymously: the
+// bearer token is attached only when present, and the IP and user-agent are
+// recorded server-side rather than sent by the client.
 export function reportVisit(path: string, referrer: string): void {
   try {
     if (sessionStorage.getItem(VISIT_SENT_KEY)) return;
     sessionStorage.setItem(VISIT_SENT_KEY, "1");
   } catch {
-    // sessionStorage unavailable (private mode) — fall through and still send.
+    // sessionStorage is unavailable in private mode; still send the beacon.
   }
 
   const token = getAuthToken();
@@ -27,7 +27,7 @@ export function reportVisit(path: string, referrer: string): void {
     body: JSON.stringify({ path, referrer: referrer || undefined }),
     keepalive: true,
   }).catch(() => {
-    // Beacon is best-effort; never disturb the page over a failed log.
+    // Best-effort: never disturb the page over a failed log.
   });
 }
 
@@ -40,8 +40,8 @@ export type VisitRow = {
   path: string;
   referrer: string | null;
   created_at: string;
-  // Coarse geolocation of `ip`, resolved offline at write time. NULL for older
-  // rows and private/unresolvable IPs.
+  // Coarse geolocation of `ip`, resolved offline at write time. Null for older
+  // rows and private or unresolvable IPs.
   country: string | null;
   region: string | null;
   city: string | null;

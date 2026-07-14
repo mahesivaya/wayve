@@ -9,28 +9,23 @@ interface EmailSidebarProps {
   setActiveFolder: (folder: EmailFolder) => void;
   viewMode: "email" | "files";
   onOpenFiles: () => void;
-  // Opens the "add a mailbox" picker, which the parent owns (so the same
-  // modal is shared with the email-list empty-state CTA).
+  // The picker is owned by the parent, so the same modal is shared with the
+  // email-list empty-state CTA.
   onRequestAddAccount: () => void;
   onCompose: () => void;
   composeDisabled: boolean;
   width: number;
   onRenameAccount: (id: number, displayName: string | null) => Promise<void>;
-  // Whether to show the account *filter* list (the "🌐 All Accounts" pill + the
-  // per-account rows). Shown for any scope that has ≥1 account, so organization /
-  // platform users get the unified "all emails" view by default and can still drill
-  // into a single shared inbox.
+  // The account filter list. Shown for any scope with at least one account, so
+  // org and platform users get the unified view but can still drill into a
+  // single shared inbox.
   showAccountFilter?: boolean;
-  // Whether to show account *management* affordances (the "Accounts" header + the
-  // "+ add mailbox" button). Personal-only — org/platform mailboxes are managed in
-  // /settings/inboxes, not from the inbox sidebar.
+  // Account management affordances. Personal-only: org and platform mailboxes
+  // are managed in /settings/inboxes.
   showAccountManagement?: boolean;
-  // Personal accounts keep the Compose button at the top of the sidebar.
-  // Organization / platform pages move it into the page toolbar instead, so
-  // they hide the sidebar copy to avoid showing two.
+  // Org and platform pages move Compose into the page toolbar, so the sidebar
+  // copy is hidden to avoid showing two.
   showComposeButton?: boolean;
-  // The Gmail-style folder nav (Inbox/Sent/Important/…/Attachments). Personal
-  // accounts show it; organization / platform pages hide the whole block.
   showFolderNav?: boolean;
 }
 
@@ -117,10 +112,9 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           >
             <span className="filter-btn-label">🌐 All Accounts</span>
             {(() => {
-              // Sum of per-account `unread_count`s. The backend already
-              // returns these in /api/accounts (see email::account), so we
-              // skip an extra round-trip and the badge stays in lock-step
-              // with each row's own pill below.
+              // Summed client-side from the counts /api/accounts already
+              // returns, so this needs no extra round-trip and stays in
+              // lock-step with each row's own pill below.
               const total = accounts.reduce(
                 (sum, acc) => sum + (acc.unread_count ?? 0),
                 0
@@ -138,9 +132,8 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
 
           {accounts.map((acc) => {
             const isEditing = editingAccountId === acc.id;
-            // For shared inboxes the human-friendly `shared_label` ("Support")
-            // is the most useful name; `display_name` is the personal nickname
-            // the owner-user gave it, which doesn't carry over for members.
+            // A shared inbox prefers `shared_label`, since `display_name` is a
+            // nickname the owner gave it that doesn't carry over to members.
             const displayName =
               (acc.is_shared && acc.shared_label?.trim()) ||
               acc.display_name?.trim() ||
@@ -257,18 +250,15 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           >
             📤 Sent
           </button>
-          {/* Source-based virtual folder: surfaces GitHub PR / notification
-            emails (matched on the notifications@github.com sender by the
-            backend `folder=github` filter), cutting across every account. */}
+          {/* Virtual folder cutting across every account, matched by sender on
+            the backend rather than by label. */}
           <button
             className={`filter-btn ${activeFolder === "github" && viewMode === "email" ? "active" : ""}`}
             onClick={() => setActiveFolder("github")}
           >
             🐙 GitHub PRs
           </button>
-          {/* Gmail-style category folders. All wired to `emails.labels`
-            (Gmail labelIds + Outlook categories + synthetic SPAM/DRAFT
-            from the side-pull sync paths). */}
+          {/* Category folders, all filtered on `emails.labels`. */}
           <button
             className={`filter-btn ${activeFolder === "important" && viewMode === "email" ? "active" : ""}`}
             onClick={() => setActiveFolder("important")}

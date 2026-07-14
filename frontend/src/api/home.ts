@@ -1,11 +1,8 @@
 import { apiFetchJson } from "./client";
 
-// Per-card dashboard fetchers. Each card on /home calls its own endpoint
-// so the fastest queries (Today / Tasks) paint immediately and the
-// slowest (Inbox / Recent — joins + AES decryption) stream in when ready.
-// The legacy aggregate `/api/home/summary` is still exposed by the
-// backend for compatibility, but new code should prefer the per-card
-// endpoints below.
+// Each card on /home calls its own endpoint, so the fast queries paint
+// immediately and the slow ones, which join and AES-decrypt, stream in when
+// ready. Prefer these over the legacy aggregate `/api/home/summary`.
 
 export type MeetingPreview = {
   id: number;

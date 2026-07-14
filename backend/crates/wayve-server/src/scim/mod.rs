@@ -1,16 +1,9 @@
-// SCIM 2.0 service-provider implementation (Users only in v1).
-//
-// Per the RFC 7644 contract, requests authenticate with an organization-
-// scoped bearer token (header `Authorization: Bearer <scim_token>`).
-// Responses follow SCIM Core User schema (RFC 7643). Resources are
-// scoped to the bearer's organization — there is no cross-org leakage
-// even if an IdP misconfigures the URL.
-//
-// Out of scope for v1 (documented as gaps in the spec response):
-//   * Groups
-//   * PATCH operations (PUT replaces only)
-//   * Complex filters — only `userName eq` and `externalId eq` are honored
-//   * /Bulk
+// SCIM 2.0 service provider (Users only in v1). Requests authenticate with an
+// organization-scoped bearer token (`Authorization: Bearer <scim_token>`) and
+// every resource is scoped to that bearer's organization, so a misconfigured
+// IdP URL still cannot leak across orgs. Responses follow the RFC 7643 Core
+// User schema. Not supported in v1: Groups, PATCH (PUT replaces), /Bulk, and
+// filters other than `userName eq` / `externalId eq`.
 
 pub mod admin;
 pub mod handler;

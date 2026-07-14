@@ -1,8 +1,6 @@
-// Slide-in detail panel for a business, opened from the Business table on the
-// platform Business page. Shows the data we already have per org (members,
-// email accounts, storage, admin, created date) plus a storage bar shown
-// relative to the largest business so the value has visual context (there is
-// no per-plan storage quota in the list data yet).
+// Slide-in detail panel for a business, opened from the platform Business table.
+// The storage bar is relative to the largest business, because the list data
+// carries no per-plan storage quota to measure against.
 import { useEffect } from "react";
 import type { AdminOrganization } from "../api/admin";
 import { fmtDateTime } from "../utils/datetime";

@@ -8,9 +8,8 @@ use wayve_security::jwt::get_user_id_from_request;
 fn note_from_row(row: sqlx::postgres::PgRow) -> Note {
     Note {
         id: row.get("id"),
-        // In E2EE mode, the 'title' and 'content' columns contain the
-        // WAYVE_SECURE_V1 envelope strings directly. We pass them to the
-        // frontend as-is for client-side decryption.
+        // In E2EE mode these columns hold WAYVE_SECURE_V1 envelope strings, so
+        // they are passed through verbatim for client-side decryption.
         title: row.try_get("title").ok(),
         content: row.try_get("content").ok(),
         created_at: row.try_get("created_at").ok(),
@@ -23,8 +22,8 @@ fn note_from_row(row: sqlx::postgres::PgRow) -> Note {
 pub async fn list_notes(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
-    // RLS-scoped: the policy also enforces `user_id = app.user_id`; the explicit
-    // WHERE stays as defense-in-depth and keeps the query plan unchanged.
+    // The RLS policy already enforces `user_id = app.user_id`; the explicit
+    // WHERE is defense-in-depth and keeps the query plan unchanged.
     let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
         let rows = sqlx::query(
             "SELECT id, title, content, created_at, updated_at
@@ -100,13 +99,12 @@ pub async fn update_note(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let id = path.into_inner();
 
-    // Owner-scoped UPDATE — silently no-ops if the note belongs to someone
-    // else, so we 404 rather than leaking that the id exists.
+    // The owner-scoped UPDATE no-ops on someone else's note, so this 404s
+    // rather than leaking that the id exists. The prior title is captured in
+    // the same RLS transaction to tell a rename from a content edit.
     let title = data.title.as_deref().unwrap_or("Untitled");
     let content = data.content.as_deref().unwrap_or("");
 
-    // Capture the prior title so we can tell a rename from a content edit.
-    // Both reads/writes run in one RLS-scoped transaction.
     let (old_title, row) =
         crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
             let old_title: Option<String> =

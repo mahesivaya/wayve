@@ -1,12 +1,6 @@
-// 2D color grid picker — the macro-style centerpiece of the Custom tab.
-//
-// Renders a dotted matrix of OKLCH samples (hue varying horizontally,
-// lightness varying vertically) with a draggable square marker showing the
-// current selection. Click or drag anywhere on the grid to set the hue.
-//
-// We render dots as SVG <circle>s because there are ~1200 of them and
-// inline-styled divs become sluggish to update. SVG also gives us a clean
-// preserveAspectRatio="none" stretch so the grid fills any container width
+// A dotted matrix of OKLCH samples with a draggable marker. The ~1200 dots are
+// SVG circles rather than divs: inline-styled divs are sluggish to update at
+// that count, and preserveAspectRatio="none" stretches the grid to any width
 // without per-dot math.
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -19,11 +13,9 @@ interface Props {
 
 const COLS = 60;
 const ROWS = 22;
-// A fixed chroma for the preview dots — high enough that the spectrum is
-// vivid, low enough that low-saturation hues don't out-gamut and clip.
+// High enough for a vivid spectrum, low enough that no hue clips out of gamut.
 const PREVIEW_C = 0.16;
-// Chroma range that the Y axis spans: 0 (top, muted) ↔ CHROMA_MAX (bottom,
-// vivid). Matches the slider's max so the grid + slider stay in sync.
+// Must match the Chroma slider's max, or the grid and slider drift apart.
 const CHROMA_MAX = 0.3;
 const CHROMA_STEP = 0.01;
 
@@ -36,9 +28,8 @@ interface Dot {
 function buildDots(): Dot[] {
   const dots: Dot[] = [];
   for (let row = 0; row < ROWS; row++) {
-    // Top half (row 0..ROWS/2-1): brighter band, dropping from L=0.82 to ~0.55.
-    // Bottom half: darker band, dropping from L=0.45 to ~0.22.
-    // The mid-row split makes the grid look like macro's two-zone gradient.
+    // The mid-row split gives the grid two lightness bands: a brighter one on
+    // top and a darker one below.
     const half = Math.floor(ROWS / 2);
     const l =
       row < half
@@ -56,8 +47,7 @@ function buildDots(): Dot[] {
   return dots;
 }
 
-// Round chroma to the slider's step (0.01) so the grid + slider don't drift
-// out of sync from float math.
+// Snap to the slider's step so float math can't drift the two out of sync.
 const snapChroma = (c: number) =>
   Math.max(0, Math.min(CHROMA_MAX, Math.round(c / CHROMA_STEP) * CHROMA_STEP));
 
@@ -65,10 +55,7 @@ export default function ColorGrid({ hue, chroma, onChange }: Props) {
   const dots = useMemo(() => buildDots(), []);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // X drives hue (0..360), Y drives chroma (0..CHROMA_MAX). Top of grid =
-  // muted (low chroma); bottom = vivid (high chroma). The marker reflects
-  // both axes so the user can see exactly where they are in the color
-  // space — fine-tuning is still available via the Chroma slider below.
+  // X drives hue; Y drives chroma, muted at the top and vivid at the bottom.
   const markerCol = (hue / 360) * COLS;
   const chromaPct = chroma / CHROMA_MAX;
   const markerXPct = (markerCol / COLS) * 100;

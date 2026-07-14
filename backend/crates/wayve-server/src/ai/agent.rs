@@ -1,14 +1,7 @@
 //! The agentic chat loop, provider-agnostic. The org's AI provider is resolved
 //! per request (see `ai::provider::resolve_ai_for_user`) and the loop dispatches
-//! to Gemini, Anthropic, or any OpenAI-compatible endpoint. When the caller is an
-//! MCP owner (enterprise org or platform) with connected servers, their tools are
-//! declared to the model and a bounded tool-call loop lets it read the customer's
-//! systems through `tools/call`. Everyone else gets the plain passthrough.
-//!
-//! MCP discovery is done once, provider-neutral; each provider then formats those
-//! tools into its own declaration shape and runs its own message loop. Non-
-//! streaming to match the frontend, which awaits a single `{reply}` (extended with
-//! an optional `tools_used` list).
+//! to Gemini, Anthropic, or any OpenAI-compatible endpoint. Non-streaming, to
+//! match the frontend, which awaits a single `{reply}`.
 
 use crate::ai::native_tools;
 use crate::ai::provider::{AiProvider, DataAccess, ResolvedAi};
@@ -19,8 +12,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tracing::warn;
 
-/// Max tool-calling rounds before we force a final, tool-less answer. Bounds a
-/// misbehaving server from trapping the model in an endless call cycle.
+/// Rounds before we force a final, tool-less answer, so a misbehaving server can't
+/// trap the model in an endless call cycle.
 const MAX_ROUNDS: usize = 5;
 /// Cap on how many tools we declare to the model in one request.
 const MAX_TOOLS: usize = 64;
@@ -40,8 +33,7 @@ static AI_HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
         .unwrap()
 });
 
-/// A normalized conversation turn from the client: `role` is "user" or "model";
-/// `content` is non-empty (the handler filters blanks).
+/// A normalized turn: `role` is "user" or "model"; `content` is non-empty.
 pub struct ChatMsg {
     pub role: String,
     pub content: String,
@@ -54,11 +46,9 @@ pub struct ToolUsed {
     pub connection_label: String,
 }
 
-/// An action the assistant PROPOSED but did not perform. Outward-facing or
-/// irreversible actions (e.g. sending an email) never execute inside the agent
-/// loop — the browser performs them through the existing authenticated endpoint
-/// after the user clicks Confirm. Serialized into the chat response's
-/// `pending_actions` array so the UI can render a confirmation card.
+/// An action the assistant proposed but did not perform. Outward-facing or
+/// irreversible actions must never execute inside the agent loop; the browser
+/// performs them through the authenticated endpoint after the user confirms.
 #[derive(Serialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PendingAction {
@@ -75,14 +65,12 @@ pub struct ChatResult {
     pub reply: String,
     pub tools_used: Vec<ToolUsed>,
     pub pending_actions: Vec<PendingAction>,
-    /// Prompt/completion tokens summed across every provider call in this turn
-    /// (tool-call rounds included). 0 when the provider didn't report usage.
+    /// Summed across every provider call in this turn, tool-call rounds included.
     pub input_tokens: i64,
     pub output_tokens: i64,
 }
 
-/// Pull a nested integer (`root[a][b]`) from a provider response, defaulting to
-/// 0. Used to read token counts, which live at a different path per provider.
+/// Token counts live at a different path per provider.
 fn nested_i64(root: &Value, a: &str, b: &str) -> i64 {
     root.get(a)
         .and_then(|x| x.get(b))
@@ -90,16 +78,10 @@ fn nested_i64(root: &Value, a: &str, b: &str) -> i64 {
         .unwrap_or(0)
 }
 
-/// Estimated cost of one turn in **micro-cents** (millionths of a cent), from
-/// the model and its token counts. Prices are cents per 1M tokens (input,
-/// output); an unknown model bills 0 so a missing entry never fabricates spend.
-/// Matched loosely by model-name substring so dated/aliased ids resolve to the
-/// right family.
-///
-/// Micro-cents (not cents) is the stored unit on purpose: a single sub-cent turn
-/// truncated to whole cents reads as `$0.00`, and many such turns each truncate
-/// to zero, systematically understating spend. Storing the un-divided figure
-/// lets the dashboard `SUM(...)` losslessly and divide by 1_000_000 exactly once.
+/// Estimated cost of one turn in micro-cents. Prices are cents per 1M tokens,
+/// matched by model-name substring so dated/aliased ids resolve to the right
+/// family; an unknown model bills 0 rather than fabricate spend. Micro-cents is the
+/// stored unit because sub-cent turns rounded to whole cents understate spend.
 pub fn cost_micro_cents(model: &str, input_tokens: i64, output_tokens: i64) -> i64 {
     let m = model.to_ascii_lowercase();
     let (in_per_m, out_per_m): (i64, i64) = if m.contains("opus") {
@@ -122,10 +104,7 @@ pub fn cost_micro_cents(model: &str, input_tokens: i64, output_tokens: i64) -> i
     input_tokens * in_per_m + output_tokens * out_per_m
 }
 
-/// One tool declared to the model, provider-neutral — either a Wayve-native
-/// action (see `native_tools`) or a discovered MCP tool. Each provider formats
-/// this into its own declaration shape (Gemini `functionDeclarations`, Anthropic
-/// `tools`, OpenAI `tools`).
+/// A provider-neutral tool: a Wayve-native action or a discovered MCP tool.
 #[derive(Clone)]
 pub(crate) struct NeutralTool {
     pub(crate) ns_name: String,
@@ -133,9 +112,7 @@ pub(crate) struct NeutralTool {
     pub(crate) input_schema: Option<Value>,
 }
 
-/// Live MCP state for one chat: the aligned clients/labels, the neutral tool
-/// list, and a map from the namespaced tool name back to its owning client +
-/// original name.
+/// `dispatch` maps a namespaced tool name to its client index and original name.
 struct LoadedMcp {
     clients: Vec<McpClient>,
     labels: Vec<String>,
@@ -143,9 +120,6 @@ struct LoadedMcp {
     dispatch: HashMap<String, (usize, String)>,
 }
 
-/// Everything a tool call needs at dispatch time: the DB pool + caller (for
-/// native tools), the always-present native tool set, and the caller's MCP tools
-/// (when they are an MCP owner). Built once per chat in `run`.
 struct ToolCtx<'a> {
     pool: Option<&'a PgPool>,
     user_id: i32,
@@ -156,9 +130,6 @@ struct ToolCtx<'a> {
 }
 
 impl<'a> ToolCtx<'a> {
-    /// Native action tools are available to EVERY caller; MCP tools only when
-    /// `load_mcp_tools` found some. Native tools are filtered to the data
-    /// categories `access` allows.
     fn for_chat(
         pool: &'a PgPool,
         user_id: i32,
@@ -185,7 +156,6 @@ impl<'a> ToolCtx<'a> {
         }
     }
 
-    /// Native tools first, then MCP — the full set declared to the model.
     fn declared_tools(&self) -> Vec<NeutralTool> {
         let mut all = self.native.clone();
         if let Some(loaded) = &self.loaded {
@@ -195,9 +165,8 @@ impl<'a> ToolCtx<'a> {
     }
 }
 
-/// Run a chat turn against the resolved provider. `msgs` is the normalized
-/// conversation. If the provider fails and the org allowed it (`!fail_closed` and
-/// the provider isn't already the platform default), retry on the platform Gemini.
+/// If the provider fails and the org allowed it (`!fail_closed`, and it isn't
+/// already the platform default), retry on the platform Gemini.
 pub async fn run(
     pool: &PgPool,
     user_id: i32,
@@ -205,14 +174,11 @@ pub async fn run(
     ai: &ResolvedAi,
 ) -> Result<ChatResult, AppError> {
     let loaded = load_mcp_tools(pool, user_id).await;
-    // Native action/read tools are declared to the model for EVERY caller,
-    // alongside any MCP tools the caller owns.
     let ctx = ToolCtx::for_chat(pool, user_id, loaded, ai.data_access);
 
     match run_one(&msgs, &ctx, ai).await {
         Ok(result) => Ok(result),
         Err(e) if !ai.fail_closed && ai.provider != AiProvider::Gemini => {
-            // The owner explicitly allowed falling back to the platform default.
             match crate::config::gemini_api_key() {
                 Some(key) => {
                     warn!(target: "ai", error = %e, "AI provider failed; falling back to platform default");
@@ -222,7 +188,7 @@ pub async fn run(
                         model: crate::config::gemini_model(),
                         base_url: None,
                         fail_closed: false,
-                        // Preserve the owner's data-access choice on fallback.
+                        // The owner's data-access choice must survive the fallback.
                         data_access: ai.data_access,
                     };
                     run_one(&msgs, &ctx, &fallback).await
@@ -246,8 +212,8 @@ async fn run_one(
     }
 }
 
-/// Validate a provider config by making one trivial, tool-less request. Used by
-/// the config endpoint to reject a bad key/model/endpoint before storing it.
+/// One trivial request, so the config endpoint can reject a bad key, model, or
+/// endpoint before storing it.
 pub async fn probe(ai: &ResolvedAi) -> Result<(), AppError> {
     let msgs = vec![ChatMsg {
         role: "user".to_string(),
@@ -256,9 +222,7 @@ pub async fn probe(ai: &ResolvedAi) -> Result<(), AppError> {
     run_one(&msgs, &ToolCtx::none(), ai).await.map(|_| ())
 }
 
-/// Run a single, **tool-less** completion against the resolved provider and
-/// return the model's text. For focused one-shot uses (e.g. mapping a task to
-/// likely files) that want a plain answer, not the agentic tool loop.
+/// A single tool-less completion, for one-shot uses that want a plain answer.
 pub async fn complete(ai: &ResolvedAi, prompt: &str) -> Result<String, AppError> {
     let msgs = vec![ChatMsg {
         role: "user".to_string(),
@@ -267,11 +231,8 @@ pub async fn complete(ai: &ResolvedAi, prompt: &str) -> Result<String, AppError>
     run_one(&msgs, &ToolCtx::none(), ai).await.map(|r| r.reply)
 }
 
-/// Dispatch one tool call. Native Wayve tools are tried first (their reserved
-/// name prefix can't collide with the MCP `c{idx}_` namespacing); otherwise the
-/// call routes to its owning MCP client. Returns the `ToolUsed` breadcrumb (for
-/// the UI), the response value (Gemini-shaped object), and any `PendingAction`
-/// the tool proposed (e.g. a `compose_email` draft awaiting user confirmation).
+/// Native Wayve tools are tried first; their reserved name prefix can't collide
+/// with the MCP `c{idx}_` namespacing. Otherwise the call routes to its MCP client.
 async fn dispatch_tool(
     ctx: &ToolCtx<'_>,
     ns_name: &str,
@@ -310,11 +271,8 @@ async fn dispatch_tool(
     }
 }
 
-// ───────────────────────────── Gemini ─────────────────────────────
-
-/// SSRF re-check for a custom provider `base_url`, run before every request the
-/// way the MCP client does (defeats DNS rebinding between save and use). Vendor
-/// default bases (operator-configured via env) are trusted and not re-checked.
+/// SSRF re-check for a custom `base_url` before every request, to defeat DNS
+/// rebinding between save and use. Vendor default bases are trusted.
 async fn guard_base(ai: &ResolvedAi) -> Result<(), AppError> {
     if let Some(base) = ai.base_url.as_deref() {
         validate_server_url(base).await?;
@@ -407,8 +365,6 @@ fn gemini_decls(tools: &[NeutralTool]) -> Vec<Value> {
         .collect()
 }
 
-/// POST to Gemini's `generateContent`, optionally with `tools`. Returns the model
-/// turn (`candidates[0].content`), or `Null` if absent.
 async fn gemini_generate(
     contents: &[Value],
     decls: &[Value],
@@ -452,12 +408,8 @@ async fn gemini_generate(
         warn!(target: "ai", %status, msg, "gemini non-2xx");
         return Err(AppError::Internal(format!("AI upstream error: {msg}")));
     }
-    // Return the full response so the caller can read both the model turn
-    // (`candidates[0].content`) and token usage (`usageMetadata`).
     Ok(payload)
 }
-
-// ──────────────────────────── Anthropic ────────────────────────────
 
 async fn run_anthropic(
     msgs: &[ChatMsg],
@@ -502,7 +454,8 @@ async fn run_anthropic(
                 output_tokens: out_tokens,
             });
         }
-        // Echo the assistant turn (carries the tool_use blocks), then answer each.
+        // The assistant turn carrying the tool_use blocks must be echoed back
+        // before the results, or Anthropic rejects the request.
         messages.push(serde_json::json!({ "role": "assistant", "content": blocks.clone() }));
         let mut results: Vec<Value> = Vec::new();
         for b in blocks
@@ -573,8 +526,6 @@ fn anthropic_tools(tools: &[NeutralTool]) -> Vec<Value> {
         .collect()
 }
 
-/// POST to Anthropic's Messages API. Returns the full response object (caller
-/// reads `content` + decides on tool calls).
 async fn anthropic_generate(
     messages: &[Value],
     tools: &[Value],
@@ -623,8 +574,6 @@ async fn anthropic_generate(
     Ok(payload)
 }
 
-// ─────────────────────── OpenAI-compatible ────────────────────────
-
 async fn run_openai(
     msgs: &[ChatMsg],
     ctx: &ToolCtx<'_>,
@@ -670,7 +619,7 @@ async fn run_openai(
                 output_tokens: out_tokens,
             });
         }
-        // Echo the assistant turn (carries tool_calls), then answer each.
+        // The assistant turn carrying the tool_calls must be echoed back first.
         messages.push(message.clone());
         for tc in &tool_calls {
             let id = tc.get("id").and_then(|i| i.as_str()).unwrap_or("");
@@ -732,7 +681,6 @@ fn openai_tools(tools: &[NeutralTool]) -> Vec<Value> {
         .collect()
 }
 
-/// POST to an OpenAI-compatible `/chat/completions`. Returns `choices[0].message`.
 async fn openai_generate(
     messages: &[Value],
     tools: &[Value],
@@ -771,15 +719,10 @@ async fn openai_generate(
         warn!(target: "ai", %status, msg, "openai non-2xx");
         return Err(AppError::Internal(format!("AI upstream error: {msg}")));
     }
-    // Return the full response so the caller can read both the assistant message
-    // (`choices[0].message`) and token usage (`usage`).
     Ok(payload)
 }
 
-// ───────────────────────── MCP discovery ──────────────────────────
-
-/// Discover the caller's MCP tools, or `None` if they aren't an MCP owner, have
-/// no enabled connections, or none of them yield usable tools.
+/// `None` when the caller is not an MCP owner or no connection yields a tool.
 async fn load_mcp_tools(pool: &PgPool, user_id: i32) -> Option<LoadedMcp> {
     let owner = resolve_mcp_owner_opt(pool, user_id).await?;
     let connections = load_connections(pool, owner, true).await.ok()?;
@@ -794,8 +737,8 @@ async fn load_mcp_tools(pool: &PgPool, user_id: i32) -> Option<LoadedMcp> {
 
     for conn in &connections {
         let client = McpClient::new(&conn.server_url, conn.auth_token.as_deref());
-        // A server that fails the handshake or tool listing is skipped, not fatal
-        // — the chat still works with the remaining servers (or as a passthrough).
+        // A server that fails the handshake or tool listing is skipped, not fatal:
+        // the chat still works with the remaining servers.
         if let Err(e) = client.initialize().await {
             warn!(target: "ai", label = %conn.label, error = %e, "mcp server initialize failed; skipping");
             continue;
@@ -836,8 +779,6 @@ async fn load_mcp_tools(pool: &PgPool, user_id: i32) -> Option<LoadedMcp> {
     })
 }
 
-// ───────────────────────────── helpers ─────────────────────────────
-
 fn content_parts(content: &Value) -> Vec<Value> {
     content
         .get("parts")
@@ -854,10 +795,8 @@ fn stitch_text(parts: &[Value]) -> String {
         .join("")
 }
 
-/// Convert an MCP `tools/call` result into the JSON object Gemini's
-/// `functionResponse.response` requires. Prefers `structuredContent`; otherwise
-/// joins text blocks (truncated). Carries `isError` through. Anthropic/OpenAI
-/// reuse this and stringify it via [`response_to_text`].
+/// Gemini's `functionResponse.response` requires a JSON object. Anthropic and
+/// OpenAI reuse this shape and stringify it via [`response_to_text`].
 fn tool_result_to_response(result: &Value) -> Value {
     let is_error = result
         .get("isError")
@@ -884,8 +823,7 @@ fn tool_result_to_response(result: &Value) -> Value {
     serde_json::json!({ "isError": is_error, "result": truncate(&text, MAX_TOOL_OUTPUT) })
 }
 
-/// Stringify a tool response for providers that pass tool results as text
-/// (Anthropic `tool_result.content`, OpenAI `tool` message content).
+/// Anthropic `tool_result.content` and OpenAI `tool` messages carry text, not JSON.
 fn response_to_text(resp: &Value) -> String {
     truncate(&resp.to_string(), MAX_TOOL_OUTPUT)
 }
@@ -899,9 +837,8 @@ fn truncate(s: &str, max: usize) -> String {
     out
 }
 
-/// Namespace a tool name with its connection index so two servers can expose the
-/// same tool name and the dispatcher knows the owner. Also coerces the name into
-/// the providers' allowed identifier set and length.
+/// The connection index prefix lets two servers expose the same tool name. Also
+/// coerces the name into the providers' allowed identifier set and length.
 fn namespaced_name(idx: usize, name: &str) -> String {
     let cleaned: String = name
         .chars()
@@ -920,8 +857,7 @@ fn namespaced_name(idx: usize, name: &str) -> String {
     out
 }
 
-/// Build a Gemini `parameters` schema from an MCP tool's `inputSchema`, or `None`
-/// when the tool takes no arguments.
+/// `None` when the tool takes no arguments; Gemini rejects an empty `parameters`.
 fn tool_parameters(input_schema: Option<&Value>) -> Option<Value> {
     let schema = input_schema?;
     if !schema.is_object() {
@@ -936,8 +872,8 @@ fn tool_parameters(input_schema: Option<&Value>) -> Option<Value> {
     if has_props { Some(sanitized) } else { None }
 }
 
-/// An object JSON Schema for Anthropic `input_schema` / OpenAI `parameters`,
-/// which both require an object schema even when the tool takes no arguments.
+/// Anthropic `input_schema` and OpenAI `parameters` both require an object schema
+/// even when the tool takes no arguments.
 fn object_schema(input_schema: Option<&Value>) -> Value {
     match input_schema {
         Some(s) if s.is_object() => {
@@ -952,11 +888,9 @@ fn object_schema(input_schema: Option<&Value>) -> Value {
     }
 }
 
-/// Recursively reduce full JSON Schema to the subset the providers' function-
-/// calling accepts. Unknown keywords (`$schema`, `$ref`, `additionalProperties`,
-/// `format`, `title`, `$defs`, `patternProperties`, …) are dropped, and a
-/// `type: ["string","null"]` union collapses to a single type, since Gemini 400s
-/// on any of those.
+/// Reduce full JSON Schema to the subset the providers' function calling accepts.
+/// Unknown keywords are dropped and type unions collapse to a single type, because
+/// Gemini 400s on either.
 fn sanitize_schema(schema: &Value) -> Value {
     let Some(map) = schema.as_object() else {
         return serde_json::json!({ "type": "string" });
@@ -966,7 +900,6 @@ fn sanitize_schema(schema: &Value) -> Value {
         match key.as_str() {
             "type" => {
                 if let Some(arr) = val.as_array() {
-                    // Prefer the first non-"null" type; fall back to the first.
                     let chosen = arr
                         .iter()
                         .filter_map(|t| t.as_str())
@@ -994,11 +927,10 @@ fn sanitize_schema(schema: &Value) -> Value {
             "items" => {
                 out.insert("items".into(), sanitize_schema(val));
             }
-            // Everything else is dropped.
             _ => {}
         }
     }
-    // Object schemas should carry a (possibly empty) properties map.
+    // Object schemas must carry a (possibly empty) properties map.
     if out.get("type").and_then(|t| t.as_str()) == Some("object") && !out.contains_key("properties")
     {
         out.insert("properties".into(), Value::Object(serde_json::Map::new()));
@@ -1049,7 +981,6 @@ mod tests {
             object_schema(None),
             serde_json::json!({ "type": "object", "properties": {} })
         );
-        // A non-object schema is coerced to the empty object schema.
         let scalar = serde_json::json!({ "type": "string" });
         assert_eq!(
             object_schema(Some(&scalar)),

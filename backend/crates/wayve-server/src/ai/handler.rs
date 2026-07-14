@@ -13,20 +13,12 @@ pub struct ChatTurn {
 
 #[derive(Deserialize)]
 pub struct ChatRequest {
-    /// Full conversation history including the latest user message at the end.
-    /// Caller is responsible for ordering and trimming for token limits.
+    /// Latest user message last. The caller owns ordering and token-limit trimming.
     pub messages: Vec<ChatTurn>,
 }
 
-/// POST /api/ai/chat — the assistant. The provider is resolved per request from
-/// the caller's organization: an enterprise org runs on the owner-selected
-/// provider (Gemini / Anthropic / OpenAI-compatible), everyone else on the
-/// platform default (Gemini). Keys live server-side and never reach the browser;
-/// auth is JWT-gated like the rest of /api.
-///
-/// For an MCP owner (enterprise org / platform) with connected servers, the
-/// request runs through `agent::run`, which declares those servers' tools and runs
-/// a bounded tool-call loop so the model can read the customer's own systems.
+/// The provider is resolved per request from the caller's organization; keys stay
+/// server-side and never reach the browser.
 #[post("/ai/chat")]
 #[instrument(target = "ai", skip(req, pool, data), fields(turns = data.messages.len()))]
 pub async fn ai_chat(
@@ -51,8 +43,7 @@ pub async fn ai_chat(
         ai.provider.as_str()
     );
 
-    // Normalize turns: drop blanks, coerce role to "user"/"model" so a wrong
-    // client can't break the request. Each provider maps these to its own shape.
+    // Coercing the role means a misbehaving client can't break the request.
     let msgs: Vec<ChatMsg> = data
         .messages
         .iter()
@@ -69,11 +60,9 @@ pub async fn ai_chat(
 
     let result = crate::ai::agent::run(pool.get_ref(), user_id, msgs, &ai).await?;
 
-    // Record usage for the owner-only /settings/ai/usage dashboard. Best-effort:
-    // a metering failure must never fail the chat. Owner scope mirrors provider
-    // resolution — an org with its own enabled config owns its members' usage;
-    // everyone else (platform members, personal, platform-default Gemini) is
-    // platform scope (organization_id NULL).
+    // Metering is best-effort: a failure here must never fail the chat. The owner
+    // scope mirrors provider resolution, so an org with its own enabled config owns
+    // its members' usage and everyone else falls to platform scope.
     let owner_org: Option<i32> = sqlx::query_scalar(
         "SELECT u.organization_id FROM users u
            JOIN org_ai_configs c ON c.organization_id = u.organization_id
@@ -84,8 +73,7 @@ pub async fn ai_chat(
     .await
     .ok()
     .flatten();
-    // Micro-cents is the precise figure the dashboard aggregates; cost_cents is
-    // a rounded legacy copy kept for backward compatibility.
+    // The dashboard aggregates micro-cents; cost_cents is a rounded legacy copy.
     let cost_micro_cents =
         crate::ai::agent::cost_micro_cents(&ai.model, result.input_tokens, result.output_tokens);
     let cost_cents = (cost_micro_cents + 500_000) / 1_000_000;
@@ -117,11 +105,8 @@ pub async fn ai_chat(
     })))
 }
 
-/// GET /api/ai/provider — the resolved provider/model the caller's assistant runs
-/// on, so the UI can label itself truthfully instead of assuming Gemini. Mirrors
-/// the resolution `ai_chat` uses (org-configured provider, else platform Gemini).
-/// Returns ONLY the provider id + model — never the API key — so it is safe for
-/// every authenticated user, members included. `null` when nothing is configured.
+/// Returns only the provider id and model, never the API key, which is what makes
+/// it safe for every authenticated user.
 #[get("/ai/provider")]
 #[instrument(target = "ai", skip(req, pool))]
 pub async fn get_ai_provider(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {

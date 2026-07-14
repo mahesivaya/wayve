@@ -1,7 +1,7 @@
 use crate::prelude::*;
 
-/// A decrypted per-user GitLab connection, ready for authenticated calls.
-/// Never serialized — it carries the plaintext access token.
+/// A decrypted per-user GitLab connection. Must never be serialized: it carries
+/// the plaintext access token.
 pub struct GitlabConnection {
     pub base_url: String,
     pub access_token: String,
@@ -18,11 +18,10 @@ pub struct ConnectionStatus {
 
 #[derive(Deserialize)]
 pub struct ConnectInput {
-    /// Instance base, e.g. `https://gitlab.com` or a self-hosted host. Defaults
-    /// to gitlab.com when omitted/blank.
+    /// Instance base: gitlab.com or a self-hosted host. Defaults to gitlab.com.
     #[serde(default)]
     pub base_url: Option<String>,
-    /// GitLab personal access token (validated with `GET /user`).
+    /// GitLab personal access token, validated before storage.
     pub access_token: String,
 }
 
@@ -35,7 +34,7 @@ pub struct ImportInput {
     pub max_results: Option<u32>,
 }
 
-// ---- GitLab REST response shapes (only the fields we read) ----
+// GitLab REST response shapes, projecting only the fields we read.
 
 #[derive(Deserialize)]
 pub struct GitlabIssue {

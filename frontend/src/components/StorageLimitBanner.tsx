@@ -13,30 +13,26 @@ export { STORAGE_CHANGED_EVENT };
 const DISMISS_KEY = "rwayve:storage-alert-dismissed";
 
 type Props = {
-  // Reuses Layout's existing upgrade navigation so the button lands on the
-  // inline Stripe upgrade flow at /billing.
   onUpgrade: () => void;
 };
 
 export default function StorageLimitBanner({ onUpgrade }: Props) {
   const location = useLocation();
-  // Usage + level + audience gating all live in the shared hook so the banner
-  // and the NotificationBell stay in lock-step.
+  // Usage, level and audience gating live in the shared hook so this banner and
+  // the NotificationBell stay in lock-step.
   const { used, limit, pct, level } = useStorageStatus();
   const [dismissed, setDismissed] = useState(
     () => sessionStorage.getItem(DISMISS_KEY) === "1"
   );
 
-  // Redundant on the billing page. The hook already returns "none" for
-  // unlimited plans, ineligible audiences (non-owner org members / platform),
-  // and missing data.
+  // Redundant on the billing page.
   if (location.pathname.startsWith("/billing")) return null;
   if (level === "none" || used === null || limit === null || pct === null) {
     return null;
   }
 
   const critical = level === "critical";
-  // Warning is dismissible for the session; the critical (blocked) state stays
+  // The warning is dismissible for the session, but the critical state persists
   // until the user frees space or upgrades.
   if (!critical && dismissed) return null;
 

@@ -1,8 +1,7 @@
 use crate::prelude::*;
 use chrono::{DateTime, Utc};
 
-/// A billing owner is polymorphic: either an individual user (personal
-/// billing) or a whole organization (organization billing).
+/// Who is billed: an individual user, or a whole organization.
 #[derive(Debug, Clone, Copy)]
 pub enum BillingOwner {
     User(i32),
@@ -44,8 +43,8 @@ pub struct Plan {
     pub name: String,
     pub description: Option<String>,
     pub audience: String,
-    /// Sub-tier within the audience (`personal` | `startups` | `business` |
-    /// `enterprise`). Distinguishes Business from Enterprise org plans.
+    /// Sub-tier within the audience: `personal`, `startups`, `business`, or
+    /// `enterprise`.
     pub tier: String,
     pub stripe_price_id: Option<String>,
     pub amount_cents: i64,
@@ -102,8 +101,7 @@ pub struct CreatePlanInput {
     pub name: String,
     pub description: Option<String>,
     pub audience: Option<String>,
-    /// Optional tier; defaults to `personal` when omitted. Validated against
-    /// `personal | startups | business | enterprise` in `admin_create_plan`.
+    /// Defaults to `personal`; validated in `admin_create_plan`.
     pub tier: Option<String>,
     pub stripe_price_id: Option<String>,
     pub amount_cents: Option<i64>,
@@ -111,13 +109,10 @@ pub struct CreatePlanInput {
     pub billing_interval: Option<String>,
     pub storage_limit_bytes: Option<i64>,
     pub seat_limit: Option<i32>,
-    /// Free-form bullet list of feature notes the admin wants to surface
-    /// on /pricing. Stored as JSONB `{bullet1: true, bullet2: true}` so
-    /// the existing Pricing.tsx renderer (which does `Object.entries`)
-    /// keeps working with no further changes.
+    /// Feature bullets for the pricing page, stored as JSONB whose keys
+    /// Pricing.tsx iterates over.
     pub features: Option<Value>,
-    /// Optional — when not provided, plan is (re)activated on upsert as
-    /// the historical default. Pass `false` to keep an existing plan
-    /// hidden from /pricing without losing the row.
+    /// Omitting this activates the plan on upsert. Pass `false` to hide an
+    /// existing plan from pricing without losing the row.
     pub is_active: Option<bool>,
 }

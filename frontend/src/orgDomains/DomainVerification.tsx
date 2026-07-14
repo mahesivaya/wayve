@@ -1,9 +1,7 @@
-// Platform-owner domain administration. Claim a custom domain for an
-// organization, publish the DNS TXT challenge, and verify ownership. Only a
-// verified domain lets that org mint `*@domain` member addresses (enforced
-// server-side in admin_create_user). Reached at /platform/domains?org=<id>.
-//
-// Backend: backend/crates/wayve-server/src/organization/domains.rs
+// Platform-owner domain administration: claim a domain for an organization,
+// publish the DNS TXT challenge, and verify ownership. Only a verified domain
+// lets that org mint `*@domain` member addresses, enforced server-side in
+// admin_create_user (backend/crates/wayve-server/src/organization/domains.rs).
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -70,8 +68,7 @@ export default function DomainVerification() {
     if (orgId != null) void load(orgId);
   }, [orgId, load]);
 
-  // Populate the org picker so the owner chooses by name instead of having
-  // to know the numeric ID. Platform staff only (same gate as this page).
+  // Populates the org picker so the owner selects by name rather than numeric ID.
   useEffect(() => {
     void (async () => {
       try {

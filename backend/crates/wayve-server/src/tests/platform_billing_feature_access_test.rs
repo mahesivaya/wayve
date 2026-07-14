@@ -1,17 +1,9 @@
-//! The platform Billing console (`/platform-billing/*`) must honor the
-//! `billing` feature-access matrix at the platform scope — not just the RBAC
-//! permission. A platform owner can remove a role from the Billing feature even
-//! if that role holds `billing:read`, and the gate must then return 403.
-//!
-//! Covers:
-//!   * `is_allowed_platform` for the `billing` feature: defaults (owner + billing
-//!     allowed, others denied), a saved config that narrows it, and the
-//!     always-allowed owner.
-//!   * The wiring: `GET /platform-billing/overview` returns 403 for a `billing`-
-//!     role user (who passes the RBAC gate) once the platform owner restricts the
-//!     Billing feature to owner-only. The gate denies before the overview query,
-//!     so this does not depend on the runtime-created `employees`/`payroll_runs`
-//!     tables.
+//! The platform Billing console must honor the platform-scope `billing`
+//! feature-access matrix, not just the RBAC permission. A platform owner can
+//! remove a role from the Billing feature even though that role still holds
+//! `billing:read`, and the console must then refuse it. The feature gate denies
+//! before the overview query runs, so these tests do not depend on the
+//! runtime-created `employees` and `payroll_runs` tables.
 
 #[cfg(test)]
 mod tests {
@@ -38,8 +30,8 @@ mod tests {
         .unwrap_or_else(|e| panic!("set platform role: {e}"));
     }
 
-    // Replace the saved platform allowlist for the `billing` feature with exactly
-    // `roles` (empty `roles` clears it, restoring the code default).
+    // Replaces the saved allowlist for the `billing` feature. An empty `roles`
+    // clears it, restoring the code default.
     async fn set_billing_platform_access(pool: &PgPool, roles: &[&str]) {
         sqlx::query("DELETE FROM platform_feature_access WHERE feature_key = 'billing'")
             .execute(pool)
@@ -71,7 +63,8 @@ mod tests {
     #[serial_test::serial]
     async fn is_allowed_platform_honors_billing_defaults_and_config() {
         let pool = test_pool().await;
-        // Default (no saved rows): owner + billing allowed; others denied.
+        // With no saved rows the default applies: owner and billing are allowed,
+        // everyone else is denied.
         set_billing_platform_access(&pool, &[]).await;
         assert!(
             is_allowed_platform(&pool, "billing", "owner")
@@ -89,15 +82,15 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{e}"))
         );
 
-        // Owner narrows the feature to owner-only.
+        // Narrowing the feature to owner-only excludes the billing role even
+        // though it still holds billing:read. The owner is allowed regardless of
+        // configuration.
         set_billing_platform_access(&pool, &["owner"]).await;
-        // Owner is always allowed regardless of configuration.
         assert!(
             is_allowed_platform(&pool, "billing", "owner")
                 .await
                 .unwrap_or_else(|e| panic!("{e}"))
         );
-        // The billing role is now excluded even though it holds billing:read.
         assert!(
             !is_allowed_platform(&pool, "billing", "billing")
                 .await
@@ -117,7 +110,6 @@ mod tests {
         let user_id = insert_local_user(&pool, &email, "password123").await;
         make_platform_member(&pool, user_id, "billing").await;
 
-        // Owner restricts the Billing feature to owner-only at the platform scope.
         set_billing_platform_access(&pool, &["owner"]).await;
 
         let app = actix_test::init_service(
@@ -136,8 +128,8 @@ mod tests {
             .to_request();
         let resp = actix_test::call_service(&app, req).await;
 
-        // RBAC passes (billing role holds billing:read) but the feature gate
-        // denies — proving the platform billing console enforces the matrix.
+        // The caller clears the RBAC gate but must still be denied by the feature
+        // gate, which is what proves the console consults the matrix.
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
         cleanup(&pool, user_id).await;

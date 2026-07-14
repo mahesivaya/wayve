@@ -123,7 +123,6 @@ pub async fn create_api_key(
         })));
     }
 
-    // Validate the requested scopes.
     for scope in &data.scopes {
         if !is_valid_scope(scope) {
             return Ok(HttpResponse::BadRequest()
@@ -154,7 +153,6 @@ pub async fn create_api_key(
             .json(serde_json::json!({ "message": "Expiry must be in the future" })));
     }
 
-    // Resolve the acting principal.
     let act_as = data.act_as_user_id.unwrap_or(ctx.user_id);
     let acting_org: Option<i32> = if act_as == ctx.user_id {
         ctx.organization_id
@@ -517,7 +515,6 @@ mod tests {
     }
 }
 
-/// Register this domain's routes. Called from `routes::routes` (the aggregator).
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(create_api_key)
         .service(list_api_keys)
