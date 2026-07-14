@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.2.1](https://github.com/mahesivaya/wayve/releases/tag/v7.2.1) - 2026-07-14
+
+### 🐛 Bug Fixes
+
+- **home:** Purge cached home snapshots when the session ends ([#79](https://github.com/mahesivaya/wayve/issues/79))
+
+### 🧹 Maintenance
+
+- Simplify comments across the project — cut narration, keep constraints ([#78](https://github.com/mahesivaya/wayve/issues/78))
+- **changelog:** Update for v7.2.0 [skip ci]
+
 ## [7.2.0](https://github.com/mahesivaya/wayve/releases/tag/v7.2.0) - 2026-07-14
 
 ### 🚀 Features
