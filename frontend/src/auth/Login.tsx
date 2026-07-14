@@ -302,7 +302,7 @@ export default function Login() {
             </p>
 
             <p className="switch-auth">
-              Don’t have an account? <Link to="/register">Register</Link>
+              Don’t have an account? <Link to="/pricing">Register</Link>
             </p>
           </form>
         )}

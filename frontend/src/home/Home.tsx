@@ -78,7 +78,7 @@ export default function Home() {
             </button>
             <button
               className="home-register-btn"
-              onClick={() => navigate("/register")}
+              onClick={() => navigate("/pricing")}
             >
               Register
             </button>
@@ -105,7 +105,7 @@ export default function Home() {
               <button onClick={() => goMobile("/login")}>Login</button>
               <button
                 className="home-register-btn"
-                onClick={() => goMobile("/register")}
+                onClick={() => goMobile("/pricing")}
               >
                 Register
               </button>
