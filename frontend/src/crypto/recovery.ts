@@ -1,13 +1,11 @@
-// Recovery flow: wrap the user's RSA private key with an AES-256-GCM key
-// derived from their BIP-39 mnemonic. Only the resulting opaque ciphertext
-// is sent to the server (in /api/me/wrapped-key). The mnemonic itself
-// never leaves the device.
+// Recovery flow: wrap the user's RSA private key with an AES-256-GCM key derived
+// from their BIP-39 mnemonic. Only the opaque ciphertext is sent to the server
+// (/api/me/wrapped-key); the mnemonic itself never leaves the device.
 //
-// Threat model assumption: the server is honest-but-curious. It can read
-// the wrapped-key blob, but with PBKDF2 at 600,000 iterations and 256-bit
-// entropy, brute-forcing the mnemonic is computationally infeasible.
-// If you reduce the iteration count for "performance", you're trading
-// real security for milliseconds. Don't.
+// The threat model assumes an honest-but-curious server. It can read the
+// wrapped-key blob, but at 600,000 PBKDF2 iterations over 256-bit entropy,
+// brute-forcing the mnemonic is infeasible. Lowering the iteration count for
+// "performance" trades real security for milliseconds. Don't.
 
 import { savePrivateKey, savePublicKey } from "./keyStore";
 
@@ -17,8 +15,6 @@ const PBKDF2_SALT = new TextEncoder().encode("wayve-recovery-v1");
 async function deriveWrappingKey(
   mnemonicEntropy: Uint8Array
 ): Promise<CryptoKey> {
-  // PBKDF2 happens to be slow on purpose. Importing the entropy as raw
-  // key material is the standard subtle-crypto pattern.
   const baseKey = await crypto.subtle.importKey(
     "raw",
     mnemonicEntropy.slice().buffer,
@@ -41,15 +37,14 @@ async function deriveWrappingKey(
 }
 
 /**
- * Wire format for the wrapped key payload. Stored verbatim on the server,
- * uploaded as JSON. Versioned so a future migration (different KDF,
- * different cipher) can coexist with v1 keys during a transition.
+ * Wire format for the wrapped key payload, uploaded as JSON and stored verbatim.
+ * Versioned so a future KDF or cipher change can coexist with v1 keys.
  */
 export type WrappedKeyEnvelope = {
   v: 1;
   iv: string; // base64, 12 bytes
-  pub: string; // base64 of SPKI-exported public key (so a recovered device knows the matching pubkey without an extra round-trip)
-  ct: string; // base64 of AES-GCM ciphertext over pkcs8 private key
+  pub: string; // base64 SPKI public key, so a recovered device needs no extra round-trip
+  ct: string; // base64 AES-GCM ciphertext over the pkcs8 private key
 };
 
 function bytesToB64(bytes: Uint8Array): string {
@@ -66,10 +61,9 @@ function b64ToBytes(b64: string): Uint8Array {
 }
 
 /**
- * Encrypt the user's private + public keys under a mnemonic-derived key.
- * Returns the JSON-safe envelope that the backend stores verbatim.
- * Used by `recovery_mode = 'full'` users — the unwrap path reconstitutes
- * the real RSA private key on a new device.
+ * Encrypt the user's keypair under a mnemonic-derived key. The unwrap path
+ * reconstitutes the real RSA private key on a new device, so this envelope is
+ * the only thing standing between a lost device and lost data.
  */
 export async function wrapKeysForRecovery(
   privateKey: CryptoKey,
@@ -93,23 +87,21 @@ export async function wrapKeysForRecovery(
 }
 
 /**
- * Build a credential-only envelope for `recovery_mode = 'password_only'`
- * users. The wrapped plaintext is 32 random bytes — meaningless on its
- * own, but successfully decrypting it proves the user holds the
- * mnemonic. That's all `/recover-with-mnemonic` needs to authorize a
- * password reset.
+ * Credential-only envelope for `recovery_mode = 'password_only'` users. The
+ * wrapped plaintext is 32 random bytes, meaningless on its own, but decrypting
+ * it proves the user holds the mnemonic — all `/recover-with-mnemonic` needs to
+ * authorize a password reset.
  *
- * Crucially, the user's real RSA private key never leaves the device in
- * this mode. Server compromise leaks only the credential blob, which
- * can be brute-forced into a mnemonic but yields no decryption material
- * for the user's chat/notes/files.
+ * The real RSA private key never leaves the device in this mode, so a server
+ * compromise leaks only this blob and no decryption material for the user's
+ * chat, notes or files.
  */
 export async function wrapCredentialForRecovery(
   publicKeyBytes: ArrayBuffer,
   mnemonicEntropy: Uint8Array
 ): Promise<WrappedKeyEnvelope> {
-  // 32 random bytes is enough to make the ciphertext non-empty and the
-  // AES-GCM auth tag meaningful. The contents are never read again.
+  // Enough bytes to make the ciphertext non-empty and the auth tag meaningful.
+  // The contents are never read again.
   const credentialPlaintext = crypto.getRandomValues(new Uint8Array(32));
   const wrappingKey = await deriveWrappingKey(mnemonicEntropy);
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -121,20 +113,17 @@ export async function wrapCredentialForRecovery(
   return {
     v: 1,
     iv: bytesToB64(iv),
-    // Include the device's public key so the server has the SPKI on
-    // record (matches the `full` shape — backend treats both rows
-    // identically). The pubkey is also stored on `users.public_key`
-    // via /api/save-public-key; this is a convenience copy.
+    // Carry the public key so this row matches the `full` shape and the backend
+    // can treat both identically. It duplicates `users.public_key`.
     pub: bytesToB64(new Uint8Array(publicKeyBytes)),
     ct: bytesToB64(new Uint8Array(ciphertext)),
   };
 }
 
 /**
- * Reverse of `wrapKeysForRecovery`. On success, saves both keys into
- * IndexedDB under the given `userId` so the rest of the app finds them
- * exactly where the normal first-login flow puts them. Throws on
- * tampered or wrong-mnemonic envelopes (AES-GCM auth tag failure).
+ * Reverse of `wrapKeysForRecovery`. Saves both keys into IndexedDB under
+ * `userId`, where the rest of the app expects to find them. Throws on a tampered
+ * or wrong-mnemonic envelope, which surfaces as an AES-GCM auth tag failure.
  */
 export async function unwrapKeysFromRecovery(
   envelope: WrappedKeyEnvelope,
@@ -156,7 +145,7 @@ export async function unwrapKeysFromRecovery(
       ct.slice().buffer
     );
   } catch {
-    // AES-GCM auth tag mismatch — wrong mnemonic, or the blob was tampered with.
+    // Auth tag mismatch: wrong mnemonic, or the blob was tampered with.
     throw new Error(
       "Could not decrypt recovery payload — please double-check your 24 words."
     );
@@ -171,10 +160,9 @@ export async function unwrapKeysFromRecovery(
   );
   const publicKeyBytes = b64ToBytes(envelope.pub).slice().buffer;
 
-  // Persist locally so chat/notes/drive/attachments all find the keypair
-  // in the same place a normal first-login flow puts it. Email alias is
-  // also written so a later userId reshuffle (dev DB reset) doesn't
-  // orphan these keys.
+  // Persist locally so chat, notes, drive and attachments all find the keypair
+  // where a normal first login would have put it. The email alias is written too,
+  // so a later userId reshuffle (a dev DB reset) doesn't orphan these keys.
   await savePrivateKey(privateKey, userId, email);
   await savePublicKey(publicKeyBytes, userId, email);
 

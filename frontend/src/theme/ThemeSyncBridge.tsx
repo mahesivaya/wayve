@@ -1,17 +1,9 @@
-// Bridges the (auth-unaware) CustomThemeContext to backend persistence.
+// Bridges the auth-unaware CustomThemeContext to backend persistence; it renders
+// children unchanged and exists only for the side effects.
 //
-// On user login, hydrates the full theme state (active choice + named library
-// + UI overrides) from `user.theme_json` (delivered by /api/me). The hydrate
-// happens once per user id — re-hydrating on every /api/me poll would clobber
-// unsaved local changes.
-//
-// On any theme-state change, PUTs the serialized v2 blob to /api/me/theme —
-// debounced (~600ms) so rapid library edits/renames don't spam the API, and
-// only when authenticated and only when the value differs from what we last
-// sent/received. The lastRemoteRef guard prevents the hydrate-then-PUT echo.
-//
-// The bridge renders its children unchanged — its only job is the side-effect
-// coupling.
+// Hydration runs once per user id: re-hydrating on every /api/me poll would
+// clobber unsaved local changes. Pushes are debounced so rapid library edits
+// don't spam the API, and lastRemoteRef suppresses the hydrate-then-PUT echo.
 
 import { useEffect, useRef, type ReactNode } from "react";
 
@@ -30,7 +22,6 @@ export default function ThemeSyncBridge({ children }: { children: ReactNode }) {
   const hydratedForUserRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Hydrate from server when a new user lands. Only runs once per user id.
   useEffect(() => {
     if (!user) {
       hydratedForUserRef.current = null;
@@ -44,13 +35,12 @@ export default function ThemeSyncBridge({ children }: { children: ReactNode }) {
       lastRemoteRef.current = serializePersisted(remote);
       hydrate(remote);
     } else {
-      // Server has no override. Treat current local state as "to be synced up"
-      // so the PUT effect picks it up on the next tick.
+      // The server has no override, so leave the local state marked unsynced and
+      // let the PUT effect push it up on the next tick.
       lastRemoteRef.current = null;
     }
   }, [user, hydrate]);
 
-  // Push local changes up to the server (debounced, only when authenticated).
   useEffect(() => {
     if (!user) return;
     const serialized = serializePersisted({ active: choice, library, ui });

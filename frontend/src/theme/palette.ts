@@ -1,19 +1,7 @@
-// Macro-style palette generator. Takes five inputs (hue, chroma, saturation,
-// contrast, depth) and a target mode (light | dark), and derives the full
-// customizable token set in OKLCH color space. OKLCH gives perceptual
-// uniformity — a 0.1 step in L looks like the same brightness step at every
-// hue, which means generated palettes stay readable across the spectrum.
-//
-// All modern Chromium/Firefox/Safari support `oklch()` natively, so we emit
-// it directly without conversion.
-//
-// The five inputs correspond to the macro UI's controls:
-//   hue        — base accent hue (0..360°), picked from the color grid
-//   chroma     — accent color intensity (0..0.30)
-//   saturation — multiplier on chroma for soft variants (0..1.5)
-//   contrast   — text-to-background distance (0..1)
-//   depth      — background darkness shift (-0.05..+0.05 in light,
-//                                            -0.05..+0.05 in dark)
+// Derives the full customizable token set from five inputs and a target mode.
+// Colors are emitted as OKLCH, which every current browser supports natively:
+// its perceptual uniformity means a given lightness step looks the same at
+// every hue, so generated palettes stay readable across the whole spectrum.
 
 import type { TokenOverrides, TokenRole } from "./customTokens";
 
@@ -34,17 +22,15 @@ export const DEFAULT_INPUT: PaletteInput = {
 };
 
 function oklch(l: number, c: number, h: number): string {
-  // Clamp to safe ranges. Out-of-gamut OKLCH is rendered as the nearest
-  // displayable color by the browser, but it's better to keep us inside.
+  // Browsers clamp out-of-gamut OKLCH to the nearest displayable color, but
+  // staying in range keeps the result predictable.
   const L = Math.max(0, Math.min(1, l));
   const C = Math.max(0, Math.min(0.4, c));
   const H = ((h % 360) + 360) % 360;
   return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${H.toFixed(1)})`;
 }
 
-// Fixed hue anchors for the status colors — green for success, red for
-// danger, amber for warning. We don't let the user retint these, since
-// "danger" looking green would be a usability disaster.
+// Status hues are fixed, never user-retinted: a green "danger" would be unusable.
 const HUE_SUCCESS = 145;
 const HUE_DANGER = 25;
 const HUE_WARNING = 75;
@@ -55,18 +41,15 @@ export function generatePalette(
 ): TokenOverrides {
   const { hue, chroma, saturation, contrast, depth } = input;
 
-  // Lightness anchors. Light mode: high-L surfaces, low-L text.
-  // Dark mode: low-L surfaces, high-L text. Depth shifts the surface
-  // darkness up or down; contrast pulls the text further from the surface.
+  // Light mode uses high-lightness surfaces with low-lightness text; dark mode
+  // inverts that. Depth shifts surface darkness; contrast pulls text further
+  // from the surface.
   const isDark = mode === "dark";
 
-  // How strongly the chosen colour paints the page background. It scales with
-  // the input chroma so a neutral theme (chroma 0, including B&W) keeps clean
-  // white / near-black surfaces, while a saturated one colours the whole
-  // background on every page. In light mode we also drop the surface lightness
-  // as the tint grows — a near-white surface (L≈0.96) physically can't hold
-  // much chroma, so without the drop a strong colour just clamps back to pale
-  // (this is why the background used to barely change).
+  // Tint scales with chroma so a neutral theme keeps clean white / near-black
+  // surfaces. In light mode the surface lightness must drop as the tint grows:
+  // a near-white surface physically cannot hold much chroma, so without the drop
+  // a strong color just clamps back to pale.
   const tint = chroma * saturation; // 0 (neutral) .. ~0.45 (vivid)
   const surfaceChroma = Math.min(tint * 0.7, 0.16);
   const tintDrop = isDark ? 0 : tint * 0.3;
@@ -82,8 +65,7 @@ export function generatePalette(
   const borderSoftL = isDark ? 0.24 : 0.93;
   const borderMutedL = isDark ? 0.32 : 0.86;
 
-  // Primary action color. We render it at a mid lightness so it works
-  // against both light and dark surfaces.
+  // Mid lightness so the primary action color works on light and dark surfaces.
   const primaryL = isDark ? 0.68 : 0.55;
   const primaryHoverL = isDark ? 0.78 : 0.62;
   const primarySoftL = isDark ? 0.22 : 0.94;
@@ -98,9 +80,8 @@ export function generatePalette(
     surface: oklch(surfaceL, surfaceChroma, hue),
     "surface-soft": oklch(surfaceSoftL, surfaceChroma, hue),
     "surface-hover": oklch(surfaceHoverL, surfaceChroma, hue),
-    // Content-area canvas (.split-pane) + the inset list/grid pane. Tracks the
-    // soft/hover surface so a generated theme retints/neutralizes the page
-    // background (B&W light → pure white) instead of leaving a static color.
+    // Canvas and pane track the surface tokens rather than taking fixed colors,
+    // so a generated theme actually retints the page background.
     canvas: oklch(surfaceSoftL, surfaceChroma, hue),
     pane: oklch(surfaceHoverL, surfaceChroma, hue),
     "text-primary": oklch(textPrimaryL, 0, hue),
@@ -126,18 +107,16 @@ export function generatePalette(
   };
 }
 
-// For preset definitions — convert hex (or any CSS color string) to an
-// override map keyed by role. The preset file uses friendly hex/oklch strings
-// directly without going through the generator.
+// Lets the preset file define themes with literal color strings, bypassing the
+// generator.
 export function rolesFromMap(
   map: Partial<Record<TokenRole, string>>
 ): TokenOverrides {
   return { ...map };
 }
 
-// A random-but-tasteful PaletteInput for the "Randomize" (🎲) action. Bounds
-// keep chroma/contrast in a readable range so the result is never garish or
-// illegible.
+// The bounds keep chroma and contrast in a readable range, so a random theme is
+// never garish or illegible.
 export function randomInput(): PaletteInput {
   const rand = (min: number, max: number) => min + Math.random() * (max - min);
   return {
@@ -149,9 +128,8 @@ export function randomInput(): PaletteInput {
   };
 }
 
-// Normalize any CSS color string (oklch, hex, rgb, named) to [r,g,b] 0..255
-// using the canvas trick: the 2D context normalizes fillStyle to #rrggbb /
-// rgba(). Returns null if the color can't be resolved (e.g. SSR / no canvas).
+// Normalizes any CSS color string to [r,g,b] by round-tripping it through a 2D
+// canvas fillStyle. Returns null when there is no canvas (e.g. SSR).
 function cssColorToRgb(color: string): [number, number, number] | null {
   try {
     const ctx = document.createElement("canvas").getContext("2d");
@@ -176,7 +154,7 @@ function cssColorToRgb(color: string): [number, number, number] | null {
   return null;
 }
 
-// Convert any CSS color to a #rrggbb hex string (for seeding <input type=color>).
+// Seeds <input type=color>, which only accepts #rrggbb.
 export function cssColorToHex(color: string, fallback = "#888888"): string {
   const rgb = cssColorToRgb(color);
   if (!rgb) return fallback;
@@ -200,8 +178,7 @@ function relativeLuminance([r, g, b]: [number, number, number]): number {
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
 
-// WCAG contrast ratio (1..21) between two CSS colors. Returns null if either
-// color can't be resolved.
+// WCAG contrast ratio (1..21). Null if either color can't be resolved.
 export function contrastRatio(fg: string, bg: string): number | null {
   const a = cssColorToRgb(fg);
   const b = cssColorToRgb(bg);

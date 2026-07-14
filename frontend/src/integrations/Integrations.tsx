@@ -30,26 +30,21 @@ export default function Integrations() {
   const { user } = useAuth();
   // Slack is an enterprise-only feature (it needs server-readable chat).
   const isEnterprise = user?.current_plan?.tier === "enterprise";
-  // Connect MCP is for enterprise org owners/admins and platform owners/admins
-  // (the backend enforces the tier/scope gate; this just decides UI visibility).
+  // UI visibility only; the backend enforces the same tier/scope gate.
   const canManageMcp =
     hasPermission(user, "mcp:manage") &&
     (isEnterprise || user?.scope === "platform");
 
-  // Who may connect their own external mailbox (Gmail): personal accounts and
-  // the primary owner of an organization / platform — mirrors the backend gate
-  // `require_external_mailbox_actor`. Other members use shared inboxes, so we
-  // hide the Gmail tile for them rather than show a card that would 403.
+  // Mirrors the backend gate `require_external_mailbox_actor`: only personal
+  // accounts and a primary owner may connect their own mailbox. Everyone else
+  // uses shared inboxes, so the Gmail tile is hidden rather than 403-ing.
   const isPersonalScope = user?.scope
     ? user.scope === "personal"
     : user?.account_type === "personal";
   const canConnectMailbox = isPersonalScope || user?.is_primary_owner === true;
 
-  // Live Jira connection state drives the Jira card's badge (Enabled vs
-  // Connect). Best-effort: any error just leaves it unconnected.
+  // Connection badges are best-effort: any error just leaves the card unconnected.
   const [jiraConnected, setJiraConnected] = useState(false);
-  // Jira setup (connect + import) is done inline here — the card toggles it open
-  // instead of sending the user to the Tasks page.
   const [showJira, setShowJira] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -63,8 +58,6 @@ export default function Integrations() {
     };
   }, []);
 
-  // GitHub connect (OAuth) is also done inline here — the card toggles the
-  // panel open instead of sending the user to the Code Repo page.
   const [githubConnected, setGithubConnected] = useState(false);
   const [showGithub, setShowGithub] = useState(false);
   useEffect(() => {
@@ -79,8 +72,7 @@ export default function Integrations() {
     };
   }, []);
 
-  // Slack connection badge — only enterprise orgs can reach the endpoint, so we
-  // only probe it for them (a non-enterprise probe would 403).
+  // Probed only for enterprise orgs; anyone else would get a 403.
   const [slackConnected, setSlackConnected] = useState(false);
   const [showSlack, setShowSlack] = useState(false);
   useEffect(() => {
@@ -96,8 +88,7 @@ export default function Integrations() {
     };
   }, [isEnterprise]);
 
-  // MCP connection badge — only enterprise/platform owners can reach the
-  // endpoint, so we only probe it for them (others would 403).
+  // Probed only for enterprise/platform owners; anyone else would get a 403.
   const [mcpConnected, setMcpConnected] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
   useEffect(() => {
@@ -113,7 +104,6 @@ export default function Integrations() {
     };
   }, [canManageMcp]);
 
-  // GitLab connection badge (per-user, any account).
   const [gitlabConnected, setGitlabConnected] = useState(false);
   const [showGitlab, setShowGitlab] = useState(false);
   useEffect(() => {
@@ -128,9 +118,8 @@ export default function Integrations() {
     };
   }, []);
 
-  // Gmail connection badge — only probed for users who can connect a mailbox
-  // (others don't see the tile). "Connected" = the user owns at least one
-  // mailbox (the accounts summary doesn't expose the provider).
+  // The accounts summary doesn't expose the provider, so "connected" here just
+  // means the user owns at least one mailbox.
   const [gmailConnected, setGmailConnected] = useState(false);
   const [showGmail, setShowGmail] = useState(false);
   useEffect(() => {
@@ -216,9 +205,7 @@ export default function Integrations() {
     },
   ];
 
-  // Slack is enterprise-only and MCP is enterprise/platform-only — hide those
-  // tiles entirely from accounts that can't use them rather than showing a
-  // disabled badge.
+  // Tiles an account can't use are hidden entirely rather than shown disabled.
   const visibleServices = services.filter(
     (s) =>
       (s.key !== "slack" || isEnterprise) &&

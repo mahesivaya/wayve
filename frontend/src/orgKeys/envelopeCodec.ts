@@ -1,11 +1,11 @@
-// Shared codec for the (iv, ct) envelope shape that the org-key flows
-// use to wrap a PKCS8 private key under EITHER (a) the org pubkey
-// [RSA-OAEP + AES-GCM hybrid, ct holds JSON {wrapped_aes, body}] OR
-// (b) a PBKDF2-derived key [AES-GCM directly, ct holds raw ciphertext].
+// Shared codec for the org-key envelopes, which wrap a PKCS8 private key either
+// under an RSA pubkey (an RSA-OAEP + AES-GCM hybrid, where ct holds a JSON
+// {wrapped_aes, body}) or under a PBKDF2-derived key (AES-GCM directly, where ct
+// holds raw ciphertext).
 //
-// The wire shape is `{iv: base64, ct: base64}` in both cases — the
-// difference is in what the ct decodes to. Callers pick the right
-// unwrap helper based on which key column the envelope came from.
+// The wire shape is `{iv: base64, ct: base64}` in both cases; only what ct
+// decodes to differs. Callers must pick the unwrap helper matching the key column
+// the envelope came from.
 
 function b64ToBytes(b64: string): Uint8Array {
   const binary = atob(b64);
@@ -18,9 +18,8 @@ export function decodeBase64(s: string): Uint8Array {
   return b64ToBytes(s);
 }
 
-// Unwrap a PKCS8 private key from a `{iv, ct}` envelope that was
-// produced by RSA-OAEP-wrapping an AES key + AES-GCM-encrypting the
-// PKCS8. The recipient holds the matching RSA private key.
+// The recipient must hold the RSA private key matching the pubkey the AES key
+// was wrapped to.
 export async function unwrapPkcs8WithRsaKey(
   iv: string,
   ct: string,
@@ -54,11 +53,8 @@ export async function unwrapPkcs8WithRsaKey(
   );
 }
 
-// Unwrap a PKCS8 private key from a `{iv, ct, pbkdf2_salt, iterations}`
-// envelope that was produced by PBKDF2-deriving an AES key and
-// AES-GCM-encrypting the PKCS8 directly. `inputMaterial` is whatever
-// PBKDF2 hashes — mnemonic entropy for the org bootstrap path, or the
-// raw password bytes for the member-login path.
+// `inputMaterial` is whatever PBKDF2 hashes: mnemonic entropy on the org
+// bootstrap path, or raw password bytes on the member-login path.
 export async function unwrapPkcs8WithPbkdf2(
   iv: string,
   ct: string,
@@ -95,10 +91,9 @@ export async function unwrapPkcs8WithPbkdf2(
   );
 }
 
-// Helper for testing parity with the backend: build the same `{iv, ct}`
-// envelope that orgKeypair.bootstrapOrgMasterKey emits when wrapping a
-// PKCS8 under a recipient RSA pubkey. Used by ownerImpersonate when it
-// needs to re-wrap (e.g., add a new key-holder) AND by unit tests.
+// Emits the same envelope as orgKeypair.bootstrapOrgMasterKey, so the two must
+// stay in step. Used when re-wrapping to add a key holder, and by unit tests
+// checking parity with the backend.
 export async function wrapPkcs8ToRsaPubkey(
   pkcs8: ArrayBuffer,
   recipientSpkiBytes: ArrayBuffer

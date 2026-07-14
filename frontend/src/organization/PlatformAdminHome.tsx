@@ -37,9 +37,8 @@ function fmtMoney(cents: number, currency = "USD"): string {
   }).format(cents / 100);
 }
 
-// Single console-card spec. `visible` is computed per-user from the RBAC
-// permission catalog; cards the user can't see are filtered out before
-// render, so the grid only ever holds entries the user can actually open.
+// `visible` is UI gating only, never authorization: the backend re-checks every
+// call. Cards the user can't see are filtered out before render.
 type ConsoleCard = {
   key: string;
   label: string;
@@ -51,8 +50,6 @@ type ConsoleCard = {
 export default function PlatformAdminHome() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  // The header search box lives in `Layout`; the query reaches us through the
-  // search context.
   const { searchQuery, normalizedSearchQuery } = useGlobalSearch();
   const canManageMembers = hasPermission(user, "members:manage");
   const canManageApiKeys = hasPermission(user, "api_keys:manage");
@@ -65,15 +62,11 @@ export default function PlatformAdminHome() {
   const canSeeScim = hasPermission(user, "webhooks:manage");
   const canManagePlans = hasPermission(user, "billing:manage");
 
-  // Live figures for the Users card — total users + storage used + emails, so
-  // the card shows real data at a glance instead of a static description.
   const [usersSummary, setUsersSummary] = useState<UsersSummary | null>(null);
-  // Business + Enterprise cards aggregate the same admin-org list.
+  // The Business and Enterprise cards both aggregate this admin-org list.
   const [orgs, setOrgs] = useState<AdminOrganization[] | null>(null);
-  // Billing + Plans cards.
   const [billing, setBilling] = useState<PlatformBillingOverview | null>(null);
   const [plansCount, setPlansCount] = useState<number | null>(null);
-  // Remaining cards: members, support, developer, analytics, security, scim.
   const [membersCount, setMembersCount] = useState<number | null>(null);
   const [ticketsCount, setTicketsCount] = useState<number | null>(null);
   const [apiKeysCount, setApiKeysCount] = useState<number | null>(null);
@@ -228,15 +221,14 @@ export default function PlatformAdminHome() {
       { members: 0, storage: 0, emailAccounts: 0 }
     );
 
-  // The Business card counts every non-enterprise org; the Enterprise card only
-  // the enterprise tier — matching the split on the two dedicated pages.
+  // This split must match the one on the two dedicated pages.
   const businessOrgs = (orgs ?? []).filter((o) => o.tier !== "enterprise");
   const enterpriseOrgs = (orgs ?? []).filter((o) => o.tier === "enterprise");
   const businessTotals = tierTotals(businessOrgs);
   const enterpriseTotals = tierTotals(enterpriseOrgs);
 
-  // Per-card live stats, keyed by card. Returns null when the data for that
-  // card hasn't loaded (the card falls back to its description).
+  // Null until that card's data loads, in which case the card falls back to its
+  // description.
   const statsForCard = (key: string): CardStat[] | null => {
     if (key === "users" && usersSummary) {
       return [
@@ -396,17 +388,9 @@ export default function PlatformAdminHome() {
     },
   ];
 
-  // Explicit dashboard layout, one inner array per row:
-  //   1. Users · Business · Enterprise
-  //   2. Billing · Plans & pricing
-  //   3. Members · Support · Developer
-  // Anything not named here (Analytics, Security, SCIM, …) flows into
-  // trailing rows of up to three. Hidden (no-permission) cards drop out
-  // and empty rows are skipped, so non-owner roles still get a tidy grid.
-  // RBAC decides which cards exist; the header search box then narrows that
-  // set. Filtering here — before the rows are laid out — keeps the explicit
-  // row grouping and the "empty rows are skipped" behaviour working for a
-  // search result as well.
+  // Explicit row layout, one inner array per row. Cards not named below flow
+  // into trailing rows of up to three. Filtering happens before rows are laid
+  // out, so hidden and unmatched cards drop out and empty rows are skipped.
   const permitted = consoles.filter((c) => c.visible);
   const matched = permitted.filter((c) =>
     matchesTileSearch(normalizedSearchQuery, c.label, c.description)
@@ -431,9 +415,8 @@ export default function PlatformAdminHome() {
   const hasAnyConsole = permitted.length > 0;
   const noSearchMatches = hasAnyConsole && rows.length === 0;
 
-  // Enter / Space keyboard activation so the article behaves like a
-  // button for screen-reader + keyboard users. `event.preventDefault`
-  // on Space stops the page from scrolling.
+  // Makes the article behave like a button for keyboard and screen-reader users.
+  // preventDefault on Space stops the page from scrolling.
   const handleCardKeyDown = (
     event: KeyboardEvent<HTMLElement>,
     path: string

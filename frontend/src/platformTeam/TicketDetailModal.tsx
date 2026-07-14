@@ -1,7 +1,4 @@
-// Ticket detail overlay for the Support Console. Opens when a platform
-// staffer clicks a ticket row — shows the full description, reporter/org,
-// created/updated/resolved timestamps, and attachments (images rendered
-// inline via an authenticated blob fetch; other files as download links).
+// Ticket detail overlay for the Support Console.
 import { useEffect, useState } from "react";
 import {
   downloadTicketAttachment,
@@ -47,8 +44,8 @@ export default function TicketDetailModal({ ticket, onClose }: Props) {
         const list = await listTicketAttachments(ticket.id);
         if (cancelled) return;
         setAttachments(list);
-        // Image previews need an authenticated request, so the browser can't
-        // load them via a plain <img src> — fetch each as a blob in parallel.
+        // Previews need an authenticated request, so a plain <img src> cannot
+        // load them; each is fetched as a blob instead.
         await Promise.all(
           list.filter(isImage).map(async (a) => {
             try {

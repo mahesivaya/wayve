@@ -1,11 +1,6 @@
-// Standalone /call page: a tenant-scoped directory of users with audio/video
-// call buttons. Kept as a sibling to /chat (per the chat/call UI merge) so
-// existing bookmarks keep working and `useCallSession` is the single
-// signaling-state owner.
-//
-// The chat-integrated entry point lives in [Chat](../chat/Chat.tsx) — when
-// a 1:1 conversation is selected, ChatHeader renders the same audio/video
-// icons and they call into the same hook.
+// Standalone /call page: a tenant-scoped user directory with audio/video buttons. It
+// is a second entry point into the same useCallSession hook that ChatHeader uses, so
+// signaling state has exactly one owner either way.
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetchJson } from "../api/client";

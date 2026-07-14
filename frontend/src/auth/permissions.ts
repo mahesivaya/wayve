@@ -1,9 +1,7 @@
-// RBAC permission catalog and role→permission matrix.
-//
-// This mirrors backend/src/security/rbac.rs — keep the two in lockstep. The
-// backend is the source of truth for authorization; this module exists so the
-// UI can gate panels/buttons, and to derive an optimistic permission set before
-// /api/me confirms the real one.
+// RBAC permission catalog and role→permission matrix, mirroring
+// backend/src/security/rbac.rs — keep the two in lockstep. The backend remains
+// the source of truth for authorization; this copy only gates UI affordances and
+// supplies an optimistic permission set before /api/me confirms the real one.
 
 export const PERMISSIONS = [
   "apps:use",
@@ -28,20 +26,18 @@ export const PERMISSIONS = [
   "tickets:manage",
   "sso:manage",
   "inbox:manage",
-  // Connect/manage remote MCP servers (enterprise org + platform; gated to the
-  // tier/scope on the backend). owner / super_admin / admin.
+  // Remote MCP servers: owner / super_admin / admin, and the backend also gates
+  // it to the enterprise tier.
   "mcp:manage",
-  // Select/change the org's AI provider + view its usage/cost governance.
-  // Owner-only (NOT super_admin/admin), gated to the enterprise tier on the
-  // backend. Every member then uses the owner's choice; members can't change it.
+  // Owner-only, not super_admin or admin: the org's AI provider is the owner's
+  // call and every member then uses that choice.
   "ai:manage",
-  // Org master key permissions (mirror backend wayve-security/rbac.rs).
-  // org_keys:bootstrap is owner-only; org_keys:use_master is granted to
-  // owner / super_admin / admin (NOT security — separation of duties).
+  // org_keys:bootstrap is owner-only; org_keys:use_master goes to owner /
+  // super_admin / admin but NOT security, for separation of duties.
   "org_keys:bootstrap",
   "org_keys:use_master",
-  // Create/author, edit, rename, delete, upload files in the shared Documents
-  // workspace. owner + super_admin only; everyone else is read-only.
+  // Write access to the shared Documents workspace: owner + super_admin only,
+  // everyone else is read-only.
   "documents:manage",
 ] as const;
 
@@ -64,15 +60,14 @@ export type Role = (typeof ROLES)[number];
 // `member` and `guest` share the baseline capability bundle.
 const BASELINE: Permission[] = ["apps:use", "profile:manage_self"];
 
-// owner = the whole catalog; super_admin = the whole catalog minus billing
-// AND minus org_keys:bootstrap (only the original owner can bootstrap /
-// promote a new key holder — matches backend wayve-security/rbac.rs).
+// Owner holds the whole catalog. super_admin holds it minus billing, minus
+// ai:manage, and minus org_keys:bootstrap — only the original owner may
+// bootstrap or promote a key holder. Matches wayve-security/rbac.rs.
 const SUPER_ADMIN: Permission[] = PERMISSIONS.filter(
   (perm) =>
     perm !== "billing:manage" &&
     perm !== "billing:read" &&
     perm !== "org_keys:bootstrap" &&
-    // ai:manage is owner-only (the org's AI provider is the owner's call).
     perm !== "ai:manage"
 );
 
@@ -132,7 +127,6 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   guest: BASELINE,
 };
 
-/** Human-readable label for a role. */
 export const ROLE_LABELS: Record<Role, string> = {
   owner: "Owner",
   super_admin: "Super admin",
@@ -145,22 +139,20 @@ export const ROLE_LABELS: Record<Role, string> = {
   guest: "Guest",
 };
 
-/** Coerce an arbitrary string to a known role; unknown values become `member`. */
+/** Unknown or missing values fall back to the least-privileged role, `member`. */
 export function normalizeRole(role?: string | null): Role {
   return (ROLES as readonly string[]).includes(role ?? "")
     ? (role as Role)
     : "member";
 }
 
-/** The permissions a role grants. */
 export function permissionsForRole(role?: string | null): Permission[] {
   return [...ROLE_PERMISSIONS[normalizeRole(role)]];
 }
 
-// Roles that should NOT see the Pricing surface (nav link AND the /pricing
-// route) in either org or platform scope — they don't manage plans/billing.
-// Only owner, super_admin and billing keep access. Used by both the sidebar
-// (Layout) and the route guard so the URL can't bypass the hidden nav link.
+// Roles that see neither the Pricing nav link nor the /pricing route, leaving
+// access to owner, super_admin and billing. Used by both the sidebar and the
+// route guard, so typing the URL cannot bypass the hidden link.
 export const PRICING_HIDDEN_ROLES: Role[] = [
   "admin",
   "security",
@@ -170,7 +162,6 @@ export const PRICING_HIDDEN_ROLES: Role[] = [
   "member",
 ];
 
-/** Whether this user's role is allowed to view Pricing. */
 export function canViewPricing(
   user: { effective_role?: string | null } | null | undefined
 ): boolean {
@@ -178,20 +169,13 @@ export function canViewPricing(
 }
 
 /**
- * Whether this user may see the Integrations page.
+ * Visible to personal accounts, for whom it is the only route to connecting a
+ * Gmail mailbox, and to the owner of an organization or of the platform. Nobody
+ * else is meant to wire up company-wide integrations.
  *
- * Personal accounts (it is their only route to connecting a Gmail mailbox —
- * `GmailPanel` is rendered nowhere else) plus the `owner` of an organization
- * (enterprise included, since enterprise is an org plan tier rather than a
- * separate scope) or of the platform. Every other member — org/platform admin,
- * developer, member, guest — is not meant to wire up company-wide integrations,
- * and the tiles they would see are gated server-side anyway, so the page would
- * mostly 403 at them.
- *
- * UI visibility only. The individual integration endpoints keep their own
- * backend gates (Slack = enterprise tier, MCP = `mcp:manage`, Gmail =
- * `require_external_mailbox_actor`), so hiding the page grants no new access —
- * it just stops showing a page of tiles that wouldn't work.
+ * UI visibility only. Each integration endpoint keeps its own backend gate, so
+ * hiding the page grants no new access; it just stops showing tiles that would
+ * 403 anyway.
  */
 export function canViewIntegrations(
   user:
@@ -204,10 +188,9 @@ export function canViewIntegrations(
     | undefined
 ): boolean {
   if (!user) return false;
-  // `scope` is the authority. Fall back to account_type when it hasn't resolved
-  // yet — but they use different vocabularies: account_type carries the
-  // `organization_admin` / `platform_admin` discriminators, which map onto the
-  // organization / platform scopes.
+  // `scope` is the authority; account_type is only a fallback for before it
+  // resolves. The two use different vocabularies, so the account_type
+  // discriminators have to be mapped onto scopes here.
   const scope =
     user.scope ??
     {
@@ -226,7 +209,6 @@ export function canViewIntegrations(
 
 type PermissionHolder = { permissions?: string[] | null } | null | undefined;
 
-/** Whether the holder (typically the auth user) has `perm`. */
 export function hasPermission(
   holder: PermissionHolder,
   perm: Permission
@@ -234,7 +216,6 @@ export function hasPermission(
   return Boolean(holder?.permissions?.includes(perm));
 }
 
-/** Whether the holder has at least one of `perms`. */
 export function hasAnyPermission(
   holder: PermissionHolder,
   perms: Permission[]
@@ -242,7 +223,7 @@ export function hasAnyPermission(
   return perms.some((perm) => hasPermission(holder, perm));
 }
 
-// Roles strictly below `admin` — the set a `roles:assign_limited` holder may
+// Roles strictly below `admin`: the set a `roles:assign_limited` holder may
 // assign or modify. Mirrors `Role::is_below_admin` on the backend.
 export const ROLES_BELOW_ADMIN: Role[] = [
   "security",
@@ -254,8 +235,8 @@ export const ROLES_BELOW_ADMIN: Role[] = [
 ];
 
 /**
- * The roles an actor may pick in a role-change dropdown. `roles:manage` holders
- * may assign anything; `roles:assign_limited` holders only roles below admin.
+ * `roles:manage` holders may assign anything; `roles:assign_limited` holders
+ * only roles below admin.
  */
 export function assignableRoles(actorPermissions?: string[] | null): Role[] {
   if (actorPermissions?.includes("roles:manage")) {
@@ -284,18 +265,13 @@ export function canModifyMember(
   return false;
 }
 
-// The roles for which the "API Keys" admin surface is appropriate.
-// Stricter than the raw `api_keys:manage` permission (which Developer also
-// holds for their own keys) — this is the *admin UI* gate, not the API gate.
+// Stricter than the raw `api_keys:manage` permission, which Developer also holds
+// for its own keys: this is the admin-UI gate, not the API gate.
 const API_KEY_ADMIN_ROLES: Role[] = ["owner", "super_admin", "admin"];
 
 /**
- * Whether the `API Keys` admin button should be visible.
- *
- * Visible to: organization / platform owner, super_admin, admin.
- * Hidden from: personal accounts (no admin surface in a workspace of one),
- * and from every other role — including Developer, who can still call the
- * /api/keys endpoints for their own keys but doesn't need the admin UI.
+ * Hidden from personal accounts, which have no admin surface in a workspace of
+ * one, and from Developer, who can still call /api/keys for their own keys.
  */
 export function canAccessApiKeyAdmin(
   user:

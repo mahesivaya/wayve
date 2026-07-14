@@ -1,9 +1,7 @@
 // Shared-inbox API client. Mirrors backend/src/routes/shared_inbox.rs.
 //
-// Two surfaces:
-//   1. Admin CRUD over /api/shared-inboxes (gated server-side by `inbox:manage`).
-//   2. Workflow updates over /api/shared-inboxes/emails/{id}/state — any user
-//      who can read the underlying email (owner or member) may patch state.
+// The CRUD calls are gated server-side by `inbox:manage`, but the workflow
+// state patch is not: any user who can read the underlying email may update it.
 
 import { apiFetch, apiFetchJson } from "./client";
 
@@ -92,12 +90,8 @@ export async function removeInboxMember(
   });
 }
 
-/**
- * Partial-update the workflow state for one email.
- * - status: leave undefined to leave alone
- * - assignee_id: set a user id to assign; leave undefined to leave alone
- * - clear_assignee: true to explicitly unassign (overrides assignee_id)
- */
+// A partial update: an omitted field is left alone. `clear_assignee` unassigns
+// and overrides `assignee_id`.
 export function updateEmailState(
   emailId: number,
   patch: {

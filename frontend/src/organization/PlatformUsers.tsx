@@ -17,7 +17,6 @@ export default function PlatformUsers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Per-user table (personal users): email + memory used.
   const [users, setUsers] = useState<PlatformUserRow[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState("");
@@ -45,8 +44,7 @@ export default function PlatformUsers() {
     };
   }, []);
 
-  // Load (or reload) the personal-users table. Debounced on the search box so
-  // typing doesn't fire a request per keystroke.
+  // Debounced on the search box so typing doesn't fire a request per keystroke.
   useEffect(() => {
     let alive = true;
     setUsersLoading(true);

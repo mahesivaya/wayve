@@ -1,18 +1,11 @@
-// Runtime theme store. Holds the user's active choice (preset id, custom
-// inputs + mode, a saved library entry, or default) PLUS the named theme
-// library and the scoped UI-tab color overrides, and applies the result to
-// :root as CSS variable overrides. Persistence is localStorage-only here; the
-// optional backend sync layer (ThemeSyncBridge) wraps this.
+// Runtime theme store: the active choice, the saved library, and the UI color
+// overrides, applied to :root as CSS variables. Persistence here is
+// localStorage-only; ThemeSyncBridge wraps this with backend sync.
 //
-// The applied tokens are the union of:
-//   1. the base palette (preset / generated-from-custom / saved-from-library), then
-//   2. the scoped UI overrides layered on top (they win).
-// Either way the result is the same shape: a map of role → CSS color string.
-//
-// Apply order matters: writing each token as
-// `document.documentElement.style.setProperty("--color-foo", "...")` takes
-// precedence over the stylesheet rules in src/index.css. To revert a role to
-// the stylesheet default, we call `removeProperty` for it.
+// Applied tokens are the base palette with the UI overrides layered on top, so
+// the overrides win. Setting an inline property on :root beats the stylesheet
+// rules in src/index.css, so reverting a role to its default means calling
+// removeProperty rather than writing a value.
 
 import {
   useCallback,
@@ -86,11 +79,10 @@ function genId(): string {
   } catch {
     // fall through
   }
-  // Math.random fallback is fine for a local id.
+  // Math.random is fine here: the id is local-only, never a security boundary.
   return `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Base palette (before UI overrides) for the active choice.
 function baseTokensFor(
   active: ThemeChoice,
   library: SavedTheme[]
@@ -107,7 +99,7 @@ function baseTokensFor(
   return generatePalette(active.input, active.mode);
 }
 
-// Effective mode for the active choice (drives data-theme).
+// Drives the data-theme attribute.
 function modeFor(active: ThemeChoice, library: SavedTheme[]): ThemeMode | null {
   if (active.kind === "default") return null;
   if (active.kind === "preset")
@@ -140,7 +132,6 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
     [active, library]
   );
 
-  // Apply base palette + UI overrides whenever any of them change.
   useEffect(() => {
     applyTokensToRoot({ ...baseTokens, ...ui });
     const mode = modeFor(active, library);
@@ -157,8 +148,8 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
 
   const resetToDefault = useCallback(() => {
     setState((prev) => {
-      // Restore stylesheet defaults: clear the active palette and UI overrides
-      // (but keep the saved library — that would be destructive to wipe).
+      // Clear the palette and overrides but keep the saved library; wiping a
+      // user's saved themes on "reset" would be destructive.
       const updated: PersistedTheme = {
         ...prev,
         active: { kind: "default" },
@@ -169,7 +160,6 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // --- Library ---------------------------------------------------------------
   const saveTheme = useCallback(
     (name: string, mode: ThemeMode, input: PaletteInput) => {
       const id = genId();
@@ -220,7 +210,6 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // --- Scoped UI overrides ---------------------------------------------------
   const setUiOverride = useCallback((role: TokenRole, color: string) => {
     setState((prev) => {
       const updated: PersistedTheme = {
@@ -250,17 +239,17 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Replace the whole state (backend hydration on login). Persists locally too
-  // so a later offline reload keeps the server-sourced theme.
+  // Backend hydration on login. Persists locally too, so a later offline reload
+  // still gets the server-sourced theme.
   const hydrate = useCallback((next: PersistedTheme) => {
     setState(next);
     saveToStorage(next);
   }, []);
 
-  // --- Live preview (no persist) — used while dragging sliders/grid ----------
+  // Live preview while dragging; deliberately does not persist.
   const previewInput = useCallback(
     (input: PaletteInput, mode: ThemeMode) => {
-      // Layer current UI overrides on top so preview matches the saved result.
+      // Layer UI overrides on top so the preview matches the saved result.
       applyTokensToRoot({ ...generatePalette(input, mode), ...ui });
       document.documentElement.setAttribute("data-theme", mode);
     },

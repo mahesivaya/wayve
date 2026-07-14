@@ -1,15 +1,13 @@
 import { useEffect, useRef } from "react";
 
-// Auto sign-out after this long with no user interaction. 15 minutes.
 export const IDLE_LIMIT_MS = 15 * 60 * 1000;
 
-// Shared across tabs so activity in ANY tab keeps the whole session alive (the
-// auth token/cookie is shared, so one tab timing out would end the session for
-// all of them). Also lets a logout in one tab be noticed by the others.
+// Shared across tabs so activity in any tab keeps the whole session alive. The
+// auth token is shared, so one tab timing out would otherwise end the session
+// for all of them.
 const ACTIVITY_KEY = "wayve-last-activity";
-// Don't hammer localStorage on every mousemove — persist at most this often.
+// Persist at most this often, rather than on every mousemove.
 const WRITE_THROTTLE_MS = 5_000;
-// How often we check the elapsed-idle time. Coarse on purpose (cheap).
 const CHECK_INTERVAL_MS = 15_000;
 
 const ACTIVITY_EVENTS = [
@@ -22,13 +20,11 @@ const ACTIVITY_EVENTS = [
 ] as const;
 
 /**
- * Sign the user out after {@link IDLE_LIMIT_MS} of inactivity. Only runs while
- * `enabled` (i.e. logged in); `onIdle` performs the actual logout. Activity is
- * shared across tabs via localStorage, so being active anywhere resets the clock
- * everywhere.
+ * Sign the user out after {@link IDLE_LIMIT_MS} of inactivity. Runs only while
+ * `enabled`, and activity in any tab resets the clock in all of them.
  */
 export function useIdleLogout(enabled: boolean, onIdle: () => void): void {
-  // Keep the latest callback without re-subscribing the listeners every render.
+  // Hold the latest callback without re-subscribing the listeners every render.
   const onIdleRef = useRef(onIdle);
   useEffect(() => {
     onIdleRef.current = onIdle;
@@ -45,7 +41,7 @@ export function useIdleLogout(enabled: boolean, onIdle: () => void): void {
       try {
         localStorage.setItem(ACTIVITY_KEY, String(t));
       } catch {
-        /* storage unavailable — per-tab timing still works */
+        /* Storage unavailable; per-tab timing still works. */
       }
     };
     persist(last);
@@ -58,7 +54,7 @@ export function useIdleLogout(enabled: boolean, onIdle: () => void): void {
       }
     };
 
-    // Another tab's activity (or its own idle write) resets our clock too.
+    // Another tab's activity resets this tab's clock too.
     const onStorage = (e: StorageEvent) => {
       if (e.key === ACTIVITY_KEY && e.newValue) {
         const t = Number(e.newValue);
@@ -75,7 +71,7 @@ export function useIdleLogout(enabled: boolean, onIdle: () => void): void {
         /* ignore */
       }
       if (!firedOnce && Date.now() - last >= IDLE_LIMIT_MS) {
-        firedOnce = true; // guard against a double-fire before unmount
+        firedOnce = true; // Guards against a double-fire before unmount.
         onIdleRef.current();
       }
     };

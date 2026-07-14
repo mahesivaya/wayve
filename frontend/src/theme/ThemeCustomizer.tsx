@@ -1,17 +1,5 @@
-// Theme customizer UI (macro.com-style). Layout:
-//
-//   Header   — Basic / Advanced editor tabs · mode wheel · Reset
-//   Editor   — Basic: one-click background swatches
-//              Advanced: 2D color grid + 4 sliders + toolbar
-//              (name · Save · Randomize · Import)
-//   Library  — Themes / UI sub-tabs
-//              Themes: presets + the user's saved themes (apply / copy /
-//                      rename / delete)
-//              UI: a curated set of safe per-role color overrides with a
-//                  contrast guard + Reset
-//
-// Advanced edits live-preview via previewInput/clearPreview from the context
-// (writes to :root without persisting), so dragging is cheap and revertible.
+// Editor changes live-preview through previewInput/clearPreview, which write to
+// :root without persisting, so dragging a slider is cheap and revertible.
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -53,7 +41,6 @@ import {
 
 type LibTab = "themes" | "ui";
 
-// --- Thin line-art header icons (match the macro toolbar) ---
 function SaveIcon() {
   return (
     <svg viewBox="0 0 24 24" className="theme-icon" aria-hidden="true">
@@ -77,7 +64,6 @@ function DiceIcon() {
   );
 }
 
-// Half-filled circle = light/dark contrast toggle (replaces the color wheel).
 function ContrastIcon() {
   return (
     <svg viewBox="0 0 24 24" className="theme-icon" aria-hidden="true">
@@ -90,8 +76,8 @@ function ContrastIcon() {
 // Minimum WCAG ratio between text and surface before we warn the user.
 const MIN_CONTRAST = 4.5;
 
-// Macro-style quick background swatches. One click sets the page background
-// (and matching accents) to a curated color + mode — no grid, no hex typing.
+// One-click background swatches: each sets the page background and matching
+// accents to a curated color + mode.
 const BACKGROUNDS: {
   id: string;
   label: string;
@@ -148,22 +134,18 @@ const BACKGROUNDS: {
     },
   ];
 
-// Pure black & white inputs for the Contrast button's monochrome toggle.
-// `chroma: 0, saturation: 0` makes generatePalette() emit a fully greyscale
-// palette (surfaces, text, borders, buttons AND status colors). `saturation: 0`
-// also distinguishes these from the colored swatches above (which keep the
-// default saturation of 1), so `isBwInput()` can tell B&W apart from, e.g.,
-// the chroma-0 "Ink" swatch.
+// Inputs for the Contrast button's monochrome toggle. `chroma: 0` makes
+// generatePalette emit a fully greyscale palette; `saturation: 0` is what lets
+// isBwInput distinguish these from the colored swatches (saturation 1) —
+// including the chroma-0 "Ink" swatch.
 const BW_LIGHT_INPUT: PaletteInput = {
   hue: 0,
   chroma: 0,
   saturation: 0,
   contrast: 1,
-  // +depth lifts the surface lightnesses (page bg + cards) to pure white in
-  // generatePalette (surfaceSoftL = 0.96 + depth, clamped at 1.0). At depth 0
-  // the B&W "white" theme rendered the background at oklch 96% — a flat gray
-  // that read as "not clean white". depth only touches surfaces, so text/border
-  // contrast is unchanged.
+  // Positive depth is required for a clean white: at depth 0 the surfaces land
+  // at oklch 96%, which reads as flat gray. Depth only touches surfaces, so
+  // text and border contrast are unaffected.
   depth: 0.04,
 };
 const BW_DARK_INPUT: PaletteInput = {
@@ -178,7 +160,6 @@ function isBwInput(input: PaletteInput): boolean {
   return input.chroma === 0 && input.saturation === 0;
 }
 
-// A compact 3-dot swatch for a library row — same generator as the live theme.
 function RowSwatch({ input, mode }: { input: PaletteInput; mode: ThemeMode }) {
   const tokens = useMemo(() => generatePalette(input, mode), [input, mode]);
   return (
@@ -213,10 +194,8 @@ export default function ThemeCustomizer() {
 
   const [libTab, setLibTab] = useState<LibTab>("themes");
 
-  // App font (UI tab), resolved per scope: a user's own > their org's > the
-  // platform default. Every signed-in user sets their own; org owners set the
-  // org's; the platform owner sets the default. Changing a level re-styles the
-  // whole app to the newly-resolved font (key→stack mapping in platformFonts).
+  // App font resolves by scope, most specific first: the user's own, then their
+  // org's, then the platform default.
   const { user } = useAuth();
   const [fontCfg, setFontCfg] = useState<FontConfig | null>(null);
   const [fontSaving, setFontSaving] = useState(false);
@@ -253,7 +232,7 @@ export default function ThemeCustomizer() {
             ? await putOrgFont(key)
             : await putPlatformFont(key);
       cacheFontKey(res.resolved);
-      applyPlatformFont(res.resolved); // instant, whole-app
+      applyPlatformFont(res.resolved);
       refreshFonts(); // re-sync all levels + capabilities
     } catch {
       refreshFonts(); // fall back to server truth
@@ -282,30 +261,23 @@ export default function ThemeCustomizer() {
   const [importError, setImportError] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
-  // Single-view editor: the sliders/grid live-preview the current input at all
-  // times. Discrete picks (swatch/preset/saved/B&W) sync `input`/`mode` so this
-  // preview matches the pick instead of masking it.
+  // Discrete picks (swatch/preset/saved/B&W) sync `input`/`mode` so this always-on
+  // preview reflects the pick rather than masking it.
   useEffect(() => {
     previewInput(input, mode);
   }, [input, mode, previewInput]);
-  // Revert an unsaved preview when the panel closes (the old code did this when
-  // leaving the Advanced tab). Unmount-only so it doesn't clear+reapply — and
-  // flicker — on every slider tick.
+  // Revert an unsaved preview on unmount only; doing it on every render would
+  // clear and reapply on each slider tick, which flickers.
   useEffect(() => () => clearPreview(), [clearPreview]);
 
-  // Chroma slider track: gray → fully-saturated accent at the current hue.
   const chromaTrack = `linear-gradient(to right, oklch(0.70 0 ${input.hue}), oklch(0.65 0.28 ${input.hue}))`;
 
   const activePresetId = choice.kind === "preset" ? choice.presetId : null;
   const activeSavedId = choice.kind === "saved" ? choice.id : null;
-  // Whether a black & white theme is currently applied (set by the Contrast
-  // button). Used for the button's pressed state and to decide the next toggle.
   const bwActive = choice.kind === "custom" && isBwInput(choice.input);
 
-  // Contrast button: toggle a pure monochrome theme. From any colored theme the
-  // first click → white (B&W light); the next → black (B&W dark); then back to
-  // white. Picking a colored swatch below clears B&W, so the next click restarts
-  // at white.
+  // Cycles white → black → white. Picking a colored swatch clears B&W, so the
+  // next click restarts at white.
   const toggleBlackAndWhite = () => {
     const nextMode: ThemeMode =
       bwActive && choice.kind === "custom" && choice.mode === "light"
@@ -317,16 +289,9 @@ export default function ThemeCustomizer() {
     setMode(nextMode);
   };
 
-  // --- actions ---------------------------------------------------------------
-  // Sync the slider state to each discrete pick so the always-on preview shows
-  // the pick instead of the previous slider input.
-
-  // Commit a free-form editor change (grid / sliders / randomize / import).
-  // These used to only live-preview via previewInput, so clearPreview() on
-  // panel close reverted them — the user would pick a colour from the grid,
-  // click away, and watch it snap back to the last committed theme. Persisting
-  // the edit as the active custom choice (the same thing the background
-  // swatches already do) makes it stick.
+  // Free-form editor changes (grid / sliders / randomize / import) must be
+  // committed as the active custom choice, not merely previewed — otherwise
+  // clearPreview on panel close snaps them back to the last committed theme.
   const commitInput = (next: PaletteInput, nextMode: ThemeMode = mode) => {
     setInput(next);
     setMode(nextMode);
@@ -393,9 +358,8 @@ export default function ThemeCustomizer() {
     }
   };
 
-  // --- UI tab contrast guard -------------------------------------------------
-  // getComputedStyle returns a LIVE declaration, so reading it later always
-  // reflects the current :root values — compute it once.
+  // getComputedStyle returns a live declaration, so later reads still reflect
+  // the current :root values. Compute it once.
   const rootStyle = useMemo(
     () =>
       typeof document !== "undefined"
@@ -627,7 +591,6 @@ export default function ThemeCustomizer() {
         )}
       </div>
 
-      {/* ----- Library: Themes / UI ----- */}
       <div className="theme-lib">
         <div className="theme-lib-tabs" role="tablist">
           <button

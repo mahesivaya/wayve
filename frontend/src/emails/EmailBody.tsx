@@ -12,12 +12,9 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
   }
 });
 
-// Reset + sensible defaults injected into the iframe document so emails that
-// rely on the UA defaults still read well, and images/tables can't overflow.
-// Default background + text are tuned for the navy app theme so the email
-// body blends in instead of being a white slab. Emails that hardcode their
-// own colors (tables/cards) keep them — we only set the defaults that
-// uncolored content inherits.
+// Injected into the iframe document so emails relying on UA defaults still read
+// well and images/tables can't overflow. Only defaults are set, tuned for the
+// navy app theme; emails that hardcode their own colors keep them.
 const FRAME_CSS = `
   html, body { margin: 0; padding: 0; background: #0a1730; }
   body {
@@ -33,11 +30,10 @@ const FRAME_CSS = `
   a { color: #60a5fa; }
 `;
 
-// Render a full HTML email in a sandboxed iframe. The HTML is sanitized with
-// DOMPurify (defence in depth) AND the frame runs WITHOUT `allow-scripts`, so
-// email JavaScript can never execute. `allow-same-origin` is only there so we
-// can measure the content height for auto-fit; without `allow-scripts` it does
-// not grant the email any real capability.
+// SECURITY: the HTML is sanitized with DOMPurify *and* the frame runs without
+// `allow-scripts`, so email JavaScript can never execute. `allow-same-origin`
+// exists only to measure content height for auto-fit; absent `allow-scripts` it
+// grants the email no real capability. Do not weaken either layer.
 function HtmlEmail({ html }: { html: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(320);
@@ -100,8 +96,6 @@ function HtmlEmail({ html }: { html: string }) {
   );
 }
 
-// Chooses the right renderer: a sandboxed HTML frame for HTML emails (so images
-// and layout show), or the existing linkified-plaintext path for text emails.
 export default function EmailBody({ body }: { body: string }) {
   if (isHtmlBody(body)) {
     return <HtmlEmail html={body} />;

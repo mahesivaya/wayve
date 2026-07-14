@@ -1,8 +1,5 @@
-// Org-admin page for configuring per-organization OIDC SSO. Lives under
-// /settings/sso. Requires the `sso:manage` permission (admin / owner /
-// super_admin / security). Renders a single-form upsert backed by
-// PUT /api/organizations/{id}/sso/config — the page is intentionally not
-// a list because a single org has at most one SSO config.
+// Per-organization OIDC SSO config, gated on `sso:manage`. A single upsert form
+// rather than a list, because an org has at most one SSO config.
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -55,8 +52,7 @@ export default function SsoSettings() {
   const [status, setStatus] = useState("");
   const [showGuide, setShowGuide] = useState(false);
 
-  // The redirect URI to register at Google. Known even before the config is
-  // saved, so the guide can show it up front.
+  // Known before the config is saved, so the guide can show it up front.
   const redirectUri =
     existing?.redirect_uri ??
     `${window.location.origin}/api/auth/sso/callback`;
@@ -135,8 +131,7 @@ export default function SsoSettings() {
       const payload: SsoConfigInput = {
         issuer_url: form.issuer_url.trim(),
         client_id: form.client_id.trim(),
-        // Only send the secret if the admin typed a new one. PUT treats
-        // an absent secret as "keep what's stored."
+        // PUT treats an absent secret as "keep what's stored".
         client_secret: form.client_secret ? form.client_secret : undefined,
         allowed_domain: form.allowed_domain.trim(),
         enforce_sso: form.enforce_sso,

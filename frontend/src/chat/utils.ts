@@ -3,9 +3,8 @@ import type { ChannelRole, Conversation } from "./types";
 import type { PresenceInfo } from "./hooks/usePresence";
 import { APP_TIME_ZONE } from "../utils/datetime";
 
-// Class for a DM row's name so online/offline reads at a glance: online users
-// stay dark/prominent, offline users go light/muted. Empty while presence is
-// still unknown so a row doesn't flash "offline" before the first snapshot.
+// Empty while presence is unknown, so a row doesn't flash "offline" before the first
+// snapshot lands.
 export const presenceNameClass = (presence: PresenceInfo | undefined) =>
   presence
     ? presence.online
@@ -30,9 +29,8 @@ export const formatTime = (dateStr: string) => {
       });
 };
 
-// WhatsApp-style ticks: single check when sent, double check once
-// delivered, double check (colored blue by the bubble's `message-status--read`
-// class) once read.
+// One tick for sent, two for delivered, and two again for read, which the bubble's
+// `message-status--read` class recolors.
 export const getStatusIcon = (status: string) => {
   switch (status) {
     case "sent":
@@ -52,8 +50,7 @@ export const getConversationTitle = (conversation: Conversation | null) => {
     : conversation.user.email;
 };
 
-// Compact relative time for conversation rows: "just now", "5m", "3h", "2d",
-// "4w", then a short month/day for anything older. Empty string for no time.
+// "just now", "5m", "3h", "2d", "4w", then a short month/day for anything older.
 export const relativeTime = (iso: string | null | undefined): string => {
   if (!iso) return "";
   const t = new Date(iso).getTime();

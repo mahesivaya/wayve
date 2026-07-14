@@ -1,8 +1,5 @@
-// Right-side panel that opens when the user clicks "Reply in thread" on a
-// channel message. Shows the parent + every reply under it + a composer that
-// posts new messages with `parent_message_id` set. Live WS messages flowing
-// through Chat.tsx are mirrored here via the `replies` prop — this component
-// is purely presentational and doesn't open its own socket.
+// Purely presentational: Chat.tsx owns the socket and mirrors live WS replies in via
+// the `replies` prop, and its composer posts with `parent_message_id` set.
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
@@ -18,15 +15,13 @@ type Props = {
   isConnected: boolean;
   onClose: () => void;
   onSendReply: (text: string) => void | Promise<void>;
-  // Toggle the viewer's emoji reaction on the parent or any reply.
   onToggleReaction?: (
     messageId: number,
     isChannel: boolean,
     emoji: string
   ) => void;
-  // Draggable width (px). Applied as a CSS variable rather than an inline
-  // `width` so the narrow-mode takeover rule (which sets width:auto) still
-  // wins. Falls back to the stylesheet default when undefined.
+  // Applied as a CSS variable rather than an inline `width`, so the narrow-mode
+  // takeover rule (which sets width:auto) still wins.
   width?: number;
 };
 
@@ -43,7 +38,6 @@ export default function ThreadPanel({
   const [draft, setDraft] = useState("");
   const tailRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to the newest reply as they arrive.
   useEffect(() => {
     tailRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [replies.length]);

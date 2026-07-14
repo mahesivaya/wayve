@@ -11,21 +11,17 @@ export type PresenceInfo = {
 export type PresenceMap = ReadonlyMap<number, PresenceInfo>;
 
 /**
- * Tracks online/offline for a set of users (the chat directory). Seeds from the
- * `/api/chat/presence` snapshot, applies live `presence` WS frames for instant
- * flips on your contacts, and reconciles on a light poll to catch anyone whose
- * change we didn't get pushed (non-contacts, or a missed frame).
- *
- * Returns the current map plus `applyPresenceEvent`, which the chat socket
- * calls when a `{ type: "presence" }` frame arrives.
+ * Seeds from the `/api/chat/presence` snapshot, applies live `presence` WS frames via
+ * `applyPresenceEvent` (called by the chat socket), and reconciles on a poll to catch
+ * anyone whose change was never pushed: a non-contact, or a missed frame.
  */
 export function usePresence(userIds: number[]) {
   const [presence, setPresence] = useState<Map<number, PresenceInfo>>(
     () => new Map()
   );
 
-  // Depend on the id *set*, not the array identity, so the fetch effect doesn't
-  // re-run on every render just because a new array was passed.
+  // Key on the id set rather than array identity, so the fetch effect doesn't re-run
+  // on every render just because a new array was passed.
   const idsKey = useMemo(
     () => [...new Set(userIds)].sort((a, b) => a - b).join(","),
     [userIds]
@@ -50,7 +46,6 @@ export function usePresence(userIds: number[]) {
 
   useEffect(() => {
     void refresh();
-    // Reconcile fallback; WS frames keep contacts snappier between polls.
     const id = setInterval(() => void refresh(), 30_000);
     return () => clearInterval(id);
   }, [refresh]);

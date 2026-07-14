@@ -1,15 +1,7 @@
-// Org-admin page for shared inboxes. Lives under /settings/inboxes.
-// Requires the `inbox:manage` permission.
-//
-// Two-pane layout:
-//   - LEFT: list of current shared inboxes, each clickable to load members
-//   - RIGHT: members panel for the selected inbox + a "Mark as shared" form
-//            for one of the user's existing email accounts
-//
-// Adding a shared inbox = picking one of the admin's already-connected
-// email accounts (Gmail / Outlook) and marking it shared. We don't create
-// new OAuth connections here — that's done from the existing /emails
-// "Connect mailbox" flow.
+// Org-admin page for shared inboxes, at /settings/inboxes, gated on the
+// `inbox:manage` permission. Sharing an inbox means marking one of the admin's
+// already-connected email accounts as shared; new OAuth connections are made
+// from the /emails "Connect mailbox" flow instead.
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -51,12 +43,10 @@ export default function SharedInboxes() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
 
-  // Share-an-account form
   const [pickAccount, setPickAccount] = useState<number | "">("");
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Add-member form
   const [memberEmail, setMemberEmail] = useState("");
   const [memberCanReply, setMemberCanReply] = useState(true);
   const [addingMember, setAddingMember] = useState(false);
@@ -87,7 +77,6 @@ export default function SharedInboxes() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  // Load members whenever the selected inbox changes.
   useEffect(() => {
     if (!selected) {
       const timer = window.setTimeout(() => setMembers([]), 0);
@@ -146,8 +135,7 @@ export default function SharedInboxes() {
       setStatus("Inbox shared.");
       setPickAccount("");
       setLabel("");
-      // Refresh accounts so the newly-shared one disappears from the
-      // candidates list.
+      // Refresh so the newly shared account drops out of the candidate list.
       void load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to share");
@@ -193,8 +181,7 @@ export default function SharedInboxes() {
     setAddingMember(true);
     setError("");
     try {
-      // The backend's add-member endpoint takes a `user_id`. Resolve the
-      // email to an ID by hitting the existing user-lookup endpoint.
+      // The add-member endpoint takes a `user_id`, so resolve the email first.
       const resp = await fetch(
         `/api/users/by-email?email=${encodeURIComponent(email)}`,
         { credentials: "include" }

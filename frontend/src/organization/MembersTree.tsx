@@ -4,11 +4,8 @@ import type { Member } from "../api/rbac";
 import { ROLE_LABELS, normalizeRole, type Role } from "../auth/permissions";
 import "./membersTree.css";
 
-// Org-chart view of the members list. There is no manager/reports-to field in
-// the data, so the hierarchy is DERIVED from role rank (owner at the top, then
-// super-admins, admins, the functional roles, members, guests). Each tier is a
-// row; clicking a node opens that member's full detail page (`memberHref`).
-// Used by both the organization and platform members pages.
+// There is no manager/reports-to field in the data, so the org-chart hierarchy
+// is derived entirely from role rank.
 
 const RANK: Record<Role, number> = {
   owner: 0,

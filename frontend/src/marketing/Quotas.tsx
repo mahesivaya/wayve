@@ -7,9 +7,8 @@ import { fmtShortDate } from "../utils/datetime";
 import { planName } from "../billing/planCatalog";
 import "./quotas.css";
 
-// Marketing copy + human-friendly labels per plan code. Lives alongside the
-// page rather than in the API so the spec stays purely about numbers and
-// product/marketing can iterate on tone without a backend deploy.
+// Kept out of the API so the spec stays purely numeric and copy can change
+// without a backend deploy.
 const COPY: Record<
   string,
   { headline: string; tagline: string; cta: string; highlight?: boolean }
@@ -73,8 +72,8 @@ export default function Quotas() {
     try {
       const list = await listTiers();
       setTiers(list);
-      // Authenticated users get to see *their* current tier marked
-      // distinctly + their usage strip; visitors only see the comparison.
+      // Authenticated users additionally see their own tier marked and their
+      // usage strip; visitors only get the comparison.
       if (user) {
         try {
           setQuota(await getQuota());

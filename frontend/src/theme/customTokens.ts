@@ -1,8 +1,6 @@
-// Catalog of CSS custom properties the user can override at runtime via
-// the theme customizer. A small set on purpose — these are the tokens that
-// shape the perceived identity of the app. Brand identity tokens
-// (gradient cards, provider brand colors, hero accents) are intentionally
-// NOT in this list: they're identity, not theme.
+// The tokens a user may override at runtime. Brand identity tokens (gradient
+// cards, provider brand colors, hero accents) are deliberately excluded: they
+// are identity, not theme.
 
 export type TokenRole =
   | "primary"
@@ -31,9 +29,8 @@ export type TokenRole =
   | "warning"
   | "warning-soft";
 
-// The mapping from semantic role → underlying CSS custom property name. The
-// customizer writes overrides as `--color-<name>: <value>` on :root. Keep
-// the names in sync with src/index.css.
+// These names must stay in sync with src/index.css; the customizer writes each
+// override as `--color-<name>` on :root.
 export const TOKEN_VAR: Record<TokenRole, string> = {
   primary: "--color-primary",
   "primary-hover": "--color-primary-hover",
@@ -45,9 +42,8 @@ export const TOKEN_VAR: Record<TokenRole, string> = {
   surface: "--color-surface",
   "surface-soft": "--color-surface-soft",
   "surface-hover": "--color-surface-hover",
-  // Full-page content-area backgrounds (the split-pane canvas + the inset list
-  // pane). Themeable so a generated theme — especially B&W — neutralizes them
-  // instead of leaving a static color showing through.
+  // The page backgrounds must be themeable, or a generated theme (B&W above all)
+  // leaves a static color showing through behind everything.
   canvas: "--color-canvas",
   pane: "--color-pane",
   "text-primary": "--color-text-primary",

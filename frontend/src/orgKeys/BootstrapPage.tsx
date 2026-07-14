@@ -28,8 +28,8 @@ export default function BootstrapPage() {
   const [copied, setCopied] = useState(false);
 
   const downloadMnemonic = (words: string[]) => {
-    // Numbered + space-separated forms in the same file so the user can
-    // pick whichever they want when restoring. No trailing whitespace.
+    // Both the numbered and the space-separated form go in the file so the user
+    // can restore from whichever they prefer.
     const numbered = words.map((w, i) => `${i + 1}. ${w}`).join("\n");
     const phrase = words.join(" ");
     const body = `Fluxze organization recovery key\nGenerated ${new Date().toISOString()}\n\n${numbered}\n\nPhrase:\n${phrase}\n`;
@@ -54,11 +54,9 @@ export default function BootstrapPage() {
       return;
     }
     let cancelled = false;
-    // Idempotency guard: a previous visit may have already bootstrapped
-    // this org. The backend rejects re-bootstrap with 400, which would
-    // surface here as a confusing "Bootstrap failed" — even though the
-    // org is in fact set up. Probe GET /keys first; if it returns the
-    // pubkey, route the user to the dashboard with a clear message.
+    // Idempotency guard. The backend rejects a re-bootstrap with a 400, which
+    // would surface as a misleading "Bootstrap failed" for an org that is in
+    // fact set up, so probe GET /keys first.
     void (async () => {
       try {
         await getOrgKeys(orgId);
@@ -73,7 +71,6 @@ export default function BootstrapPage() {
           return;
         }
       }
-      // Fresh org — actually bootstrap.
       try {
         const result = await bootstrapOrgMasterKey(orgId, user.id, user.email);
         if (cancelled) return;

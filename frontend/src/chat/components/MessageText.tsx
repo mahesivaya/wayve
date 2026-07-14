@@ -4,10 +4,9 @@ import {
   taskRefPath,
 } from "../../tasks/taskShareLink";
 
-// Renders message body text with bare URLs and task references (`#42 Task
-// name`) turned into clickable links. Same-origin URLs and in-app task refs
-// use router links so a click navigates client-side (Tasks opens the linked
-// task's details straight away); external URLs open in a new tab.
+// Bare URLs and task references (`#42 Task name`) become links. Same-origin URLs and
+// task refs use router links so the click navigates client-side; external URLs open in
+// a new tab.
 const TOKEN_RE = /https?:\/\/[^\s]+|#\d+\s+[^\n#]+/g;
 
 function splitTrailing(url: string): [string, string] {

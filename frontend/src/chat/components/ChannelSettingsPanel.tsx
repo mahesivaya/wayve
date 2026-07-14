@@ -48,9 +48,8 @@ export default function ChannelSettingsPanel({
 }: Props) {
   const pendingRequests: JoinRequest[] = channel.pending_join_requests ?? [];
 
-  // One unified member list. `admins` is a subset of `users` (the backend's
-  // member_emails includes admins), so iterating `users` and tagging by
-  // membership in `admins` yields each person exactly once with the right role.
+  // `admins` is a subset of `users`, since the backend's member_emails already
+  // includes admins, so tagging while iterating `users` lists each person once.
   const adminSet = new Set(admins);
   const members = users.map((email) => ({
     email,

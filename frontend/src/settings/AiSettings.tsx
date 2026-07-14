@@ -1,9 +1,6 @@
-// Owner-only page to select/change the org's AI provider. Lives under
-// /settings/ai. Requires the owner-only `ai:manage` permission and an
-// enterprise-tier org (the backend enforces both). The owner picks a provider
-// BLOCK, then fills that provider's fields (model + key, plus a base URL for the
-// OpenAI-compatible block). Every member of the org then uses this provider; they
-// can't change it. The key is encrypted at rest and never returned to the browser.
+// Owner-only page to choose the org's AI provider, which every member then uses.
+// The backend enforces both the `ai:manage` permission and an enterprise-tier
+// org. The API key is encrypted at rest and never returned to the browser.
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -22,10 +19,8 @@ import {
 } from "../api/aiProvider";
 import "./aiProvider.css";
 
-// The data categories shown on the platform "Data access" panel. Only the
-// categories the assistant has native tools for today are switchable (email,
-// calendar) — the rest are listed as "coming soon" so the roadmap is visible
-// without pretending a dead toggle does anything.
+// Only categories the assistant has native tools for (email, calendar) are
+// switchable; the rest are listed as "coming soon" rather than dead toggles.
 type GatedCategory = keyof AiDataAccess; // "email" | "calendar"
 const DATA_CATEGORIES: {
   key: GatedCategory | "chat" | "drive" | "notes" | "tasks";
@@ -84,9 +79,9 @@ export default function AiSettings() {
 
   const canManage = hasPermission(user, "ai:manage");
   const isEnterprise = user?.current_plan?.tier === "enterprise";
-  // Platform owners configure the platform team's provider (a separate, singleton
-  // config that applies only to platform members — never to any org). The backend
-  // accepts platform owners without an enterprise tier, so don't gate them on it.
+  // Platform owners configure a separate singleton config that applies only to
+  // platform members, never to an org. The backend accepts platform owners
+  // without an enterprise tier, so they must not be gated on it here.
   const isPlatform = user?.scope === "platform";
   const audience = isPlatform ? "platform team" : "organization";
 
@@ -104,8 +99,7 @@ export default function AiSettings() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
 
-  // Platform-only "Data access" panel: which data categories the assistant may
-  // read. `daSaving` holds the category currently being persisted.
+  // Platform-only panel for which categories the assistant may read.
   const [dataAccess, setDataAccess] = useState<AiDataAccess | null>(null);
   const [daSaving, setDaSaving] = useState<GatedCategory | null>(null);
   const [daError, setDaError] = useState("");
@@ -130,8 +124,8 @@ export default function AiSettings() {
   }, []);
 
   useEffect(() => {
-    // The no-permission branch renders its own view below regardless of
-    // `loading`, so we simply don't kick off the fetch.
+    // The no-permission branch renders its own view regardless of `loading`, so
+    // there is no fetch to kick off.
     if (!canManage) return;
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
@@ -177,8 +171,7 @@ export default function AiSettings() {
 
   const selectedOption = providers.find((p) => p.id === selected) ?? null;
   const needsBaseUrl = selectedOption?.needs_base_url ?? false;
-  // Whether the currently-selected provider already has a stored key (only true
-  // when the selection matches what's saved).
+  // True only when the selected provider is the saved one and it has a key.
   const hasStoredKey =
     !!config?.has_key && config.provider === selected;
 
@@ -186,8 +179,8 @@ export default function AiSettings() {
     setSelected(id);
     setStatus("");
     setError("");
-    // Reset per-provider fields to the saved value if re-selecting the stored
-    // provider, else clear so defaults/placeholders show.
+    // Restore the saved values when re-selecting the stored provider, otherwise
+    // clear the fields so placeholders show.
     if (config?.provider === id) {
       setModel(config.model ?? "");
       setBaseUrl(config.base_url ?? "");
@@ -209,10 +202,9 @@ export default function AiSettings() {
         provider: selected,
         model: model.trim() || undefined,
         base_url: needsBaseUrl ? baseUrl.trim() || undefined : undefined,
-        // Typed key → use it. Blank + same stored provider → omit (keep stored
-        // key). Blank + a DIFFERENT provider → send "" so we never inherit the
-        // previous provider's key (the backend then requires one, or — for
-        // Gemini — falls back to the platform key).
+        // A typed key wins. A blank key on the stored provider is omitted, which
+        // keeps the stored one. A blank key on a different provider sends "", so
+        // the previous provider's key is never inherited.
         api_key: apiKey ? apiKey : hasStoredKey ? undefined : "",
         fail_closed: failClosed,
       });

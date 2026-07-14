@@ -57,9 +57,8 @@ async function loadMarked(): Promise<MarkedFn> {
   return (md: string) => loaded.parse(md);
 }
 
-// Belt-and-braces sanitiser. marked is well-behaved on its own output but
-// our content is trusted (baked into the backend binary), and we additionally
-// strip any tag that could execute script — pure defense in depth.
+// Defense in depth only: the content is trusted (baked into the backend binary)
+// and marked is well-behaved, but strip anything that could execute script.
 function stripUnsafe(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -78,15 +77,14 @@ export default function Docs() {
   const [html, setHtml] = useState("");
   const renderHostRef = useRef<HTMLDivElement>(null);
 
-  // Load catalog once.
   useEffect(() => {
     let alive = true;
     listDocs()
       .then((items) => {
         if (!alive) return;
         setCatalog(items);
-        // First visit lands at /docs (no slug) → redirect to the first
-        // available doc so the right-hand pane is never blank.
+        // /docs with no slug redirects to the first doc so the pane is never
+        // blank.
         if (!slug && items.length > 0) {
           void navigate(`/docs/${items[0].slug}`, { replace: true });
         }
@@ -122,14 +120,14 @@ export default function Docs() {
 
   useEffect(() => {
     if (!slug) return;
-    // setTimeout defers the setState that loadSlug fires out of the effect
-    // body so React's set-state-in-effect lint stays quiet.
+    // Defers loadSlug's setState out of the effect body, which React's
+    // set-state-in-effect rule disallows.
     const h = window.setTimeout(() => void loadSlug(slug), 0);
     return () => window.clearTimeout(h);
   }, [slug, loadSlug]);
 
-  // Scroll the rendered content to top on doc switch so a long doc doesn't
-  // open mid-page just because the previous one was scrolled down.
+  // Reset scroll on doc switch so a long doc doesn't open mid-page just because
+  // the previous one was scrolled down.
   useEffect(() => {
     if (renderHostRef.current) {
       renderHostRef.current.scrollTop = 0;
@@ -172,11 +170,8 @@ export default function Docs() {
     [catalog, loadingList, slug]
   );
 
-  // The sidebar list of catalog items is now redundant — DocsShell's
-  // sidebar surfaces the same entries (and more) with a search box.
-  // We intentionally don't render `sidebar` here. Keep it computed
-  // above (the `useMemo`) so removing it is a one-liner rather than
-  // a broad rewrite of the page's effects.
+  // Deliberately not rendered: DocsShell already surfaces these entries. Kept
+  // computed so restoring it stays a one-liner.
   void sidebar;
 
   return (

@@ -17,10 +17,9 @@ const EMPTY: SlackConnectionStatus = {
   enabled: false,
 };
 
-// Enterprise-only Slack bridge: connect a workspace with a bot token, link Slack
-// channels to Wayve channels, and import history. Inbound messages are stored
-// server-readable (enterprise chat is not E2E) and render under Chat; new Wayve
-// messages in a linked channel are posted back to Slack.
+// Enterprise-only Slack bridge: link Slack channels to Wayve channels and mirror
+// messages both ways. Bridged messages are stored server-readable, which is why
+// this requires enterprise chat (not E2E).
 export default function SlackPanel() {
   const [status, setStatus] = useState<SlackConnectionStatus | null>(null);
   const [token, setToken] = useState("");

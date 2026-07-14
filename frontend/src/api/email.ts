@@ -1,11 +1,9 @@
 import { apiFetch, apiFetchJson } from "./client";
 
-// Mirrors `EmailFolder` in `../emails/types.ts`. Kept in sync by convention
-// rather than imported — this module is the lowest layer of the API client
-// and we don't want it to depend on the feature folder. The backend's
-// `routes/email.rs::get_emails` ignores unknown folder values today
-// (returns all), so the stub folders are safe to pass over the wire until
-// the sync worker starts ingesting Gmail labels / Outlook categories.
+// Duplicates `EmailFolder` in `../emails/types.ts` on purpose: this module is
+// the lowest layer of the API client and must not depend on a feature folder.
+// Keep the two in sync. The backend's `routes/email.rs::get_emails` ignores
+// unknown folder values (returns all), so the stub folders are safe to send.
 export type EmailFolder =
   | "inbox"
   | "sent"
@@ -85,16 +83,11 @@ const emailListPath = ({
   return `/api/emails?${params.toString()}`;
 };
 
-// Cached for 15s: the emails page (and its sidebar badge) fetch accounts on
-// every mount/navigation. deleteAccount / updateAccountDisplayName / OAuth
-// connect are non-GET, so they clear the GET cache and a fresh list loads.
+// Cached briefly because the emails page and its sidebar badge refetch accounts
+// on every mount. The account mutations are non-GET, so they clear the cache.
 export const getAccounts = async <T = unknown>() =>
   apiFetchJson<T[]>("/api/accounts", { cacheTtlMs: 15_000 });
 
-// Total unread email count across all of the user's accounts. Backed by the
-// `idx_emails_unread` partial index, so this is cheap even on a huge inbox.
-// Powers the sidebar nav badge (and the "All Accounts" filter badge) without
-// loading the full inbox to count locally.
 export const getEmailsUnreadCount = async (): Promise<number> => {
   const data = await apiFetchJson<{ count: number }>(
     "/api/emails/unread-count"
@@ -134,12 +127,6 @@ export const getOutlookConnectUrl = async () => {
   return data.url;
 };
 
-// Persist that the user has opened this email. The frontend flips `is_read`
-// optimistically; this call is what makes the change survive a page refresh.
-// Fire-and-forget — the caller logs failures but doesn't roll the UI back.
-
-// ── Generic IMAP/SMTP (any custom-domain mailbox) ──────────────────────────
-
 export type ImapSettings = {
   imap_host: string;
   imap_port: number;
@@ -148,10 +135,9 @@ export type ImapSettings = {
   security: string; // "ssl" | "starttls"
 };
 
-// Autodiscover connection settings from the email's domain. Either returns
-// `{ use_oauth }` (the domain is on Google/Microsoft — connect via OAuth
-// instead) or guessed IMAP/SMTP settings (which the user can edit before
-// testing). Never throws on an unknown domain — it falls back to a guess.
+// Returns either `{ use_oauth }` (the domain is on Google/Microsoft, so connect
+// via OAuth instead) or guessed IMAP/SMTP settings the user can edit. Never
+// throws on an unknown domain; it falls back to a guess.
 export const imapAutodiscover = async (
   email: string
 ): Promise<{ use_oauth?: "google" | "microsoft" } & Partial<ImapSettings>> =>
@@ -160,7 +146,7 @@ export const imapAutodiscover = async (
     body: JSON.stringify({ email }),
   });
 
-// Verify credentials with a real IMAP LOGIN without persisting anything.
+// Verifies credentials with a real IMAP LOGIN without persisting anything.
 // Throws with the backend's user-facing message on failure.
 export const imapTestLogin = async (input: {
   email: string;
@@ -173,8 +159,8 @@ export const imapTestLogin = async (input: {
     body: JSON.stringify(input),
   });
 
-// Verify + persist the IMAP/SMTP mailbox. Returns the new account row id.
-// Throws with the backend's user-facing message on failure.
+// Verifies and persists the mailbox. Throws with the backend's user-facing
+// message on failure.
 export const connectImap = async (
   input: ImapSettings & { email: string; password: string }
 ): Promise<{ id: number; email: string; provider: string }> =>
@@ -185,18 +171,16 @@ export const connectImap = async (
 
 export const markEmailRead = async (emailId: number): Promise<void> => {
   await apiFetchJson(`/api/emails/${emailId}/read`, { method: "POST" });
-  // Poke any mounted unread-count badges (Layout sidebar, "All Accounts"
-  // filter) so they refresh from /api/emails/unread-count instead of waiting
-  // for the 60s poll. Listener lives in useEmailsUnreadCount.
+  // Poke mounted unread-count badges so they refresh now instead of waiting for
+  // the 60s poll. The listener lives in useEmailsUnreadCount.
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("rwayve:emails-unread-changed"));
   }
 };
 
-// Maps an arbitrary email address to the OAuth provider key the backend
-// supports (`"gmail"` or `"outlook"` today). Throws on unsupported domains —
-// the backend has logged the attempt at WARN level (target: "email").
-// See [provider_lookup.rs](../../../backend/src/email/provider_lookup.rs).
+// Maps an email address to a supported OAuth provider key (`"gmail"` or
+// `"outlook"`). Throws on unsupported domains. See
+// [provider_lookup.rs](../../../backend/src/email/provider_lookup.rs).
 export const lookupEmailProvider = async (email: string): Promise<string> => {
   const data = await apiFetchJson<{ provider: string }>(
     "/api/email-providers/lookup",
@@ -240,15 +224,12 @@ export const getAllEmailAttachments = async () =>
   apiFetchJson<EmailAttachment[]>("/api/emails/attachments");
 
 /**
- * Download an email attachment. If `userId` is provided AND the bytes
- * start with the WV1 envelope magic (i.e. the attachment was originally
- * a Wayve-encrypted file forwarded via email), decrypt client-side.
+ * Downloads an attachment, decrypting client-side when `userId` is given and
+ * the bytes carry the WV1 envelope magic.
  *
- * Important limitation: outbound email attachments from Wayve to
- * non-Wayve recipients are NOT E2E-encrypted — they go through the
- * standard Gmail/Outlook SMTP path in plaintext, because the recipient's
- * mail client can't decrypt our envelope format. End-to-end for
- * attachments is only achievable inside the Wayve <-> Wayve loop today.
+ * Note that outbound attachments to non-Wayve recipients are NOT E2E-encrypted:
+ * they go over plain Gmail/Outlook SMTP, because a foreign mail client cannot
+ * decrypt our envelope. E2E attachments only work Wayve-to-Wayve.
  */
 export const downloadEmailAttachment = async (
   attachment: EmailAttachment,
@@ -281,20 +262,15 @@ export const downloadEmailAttachment = async (
   URL.revokeObjectURL(url);
 };
 
-// Fire-and-forget: ask the backend to sync every email account the
-// caller owns RIGHT NOW, bypassing the adaptive per-account schedule.
-// The endpoint returns 202 Accepted as soon as the syncs are queued —
-// the actual work happens in a background tokio task on the backend.
-// The next inbox poll (≤60 s away) picks up anything new.
-//
-// Errors are swallowed; this is best-effort latency reduction, not a
-// correctness path. The 30-second worker tick still catches anything
-// that didn't sync here.
+// Asks the backend to sync every account the caller owns now, ahead of the
+// adaptive schedule. Errors are swallowed because this is best-effort latency
+// reduction, not a correctness path: the 30s worker tick catches anything
+// missed here.
 export const wakeEmailSync = async (): Promise<void> => {
   try {
     await apiFetch("/api/email/wake", { method: "POST" });
   } catch {
-    // Intentional: wake is a hint, not a guarantee.
+    // Wake is a hint, not a guarantee.
   }
 };
 
@@ -307,8 +283,8 @@ export const sendEmail = async (payload: SendEmailPayload) => {
   return res.text();
 };
 
-// Read a File into a standard-base64 string (no `data:` URL prefix) for an
-// attachment's `content_base64`.
+// Standard base64, with the `data:` URL prefix stripped, as `content_base64`
+// requires.
 export const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -322,7 +298,6 @@ export const fileToBase64 = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
-// Convert picked Files into the send payload's attachment shape.
 export const filesToAttachments = async (
   files: File[]
 ): Promise<EmailComposeAttachment[]> =>
@@ -334,22 +309,8 @@ export const filesToAttachments = async (
     }))
   );
 
-// Total-attachment cap mirrored on the backend (`MAX_OUTGOING_ATTACHMENTS_BYTES`).
+// Must stay in sync with the backend's `MAX_OUTGOING_ATTACHMENTS_BYTES`.
 export const MAX_ATTACHMENTS_BYTES = 20 * 1024 * 1024;
-
-// ---------------------------------------------------------------------------
-// Plan A Phase 2 — Wayve-to-Wayve native channel
-// ---------------------------------------------------------------------------
-//
-// `getUserByEmail` resolves a recipient address to a Wayve user record so
-// the compose flow can detect "this person is on Wayve" and (when they
-// are) encrypt to their RSA public key. Returns null when the address
-// is not a Wayve user — fall back to the standard SMTP send path.
-//
-// `sendInternalEmail` POSTs a pre-built multi-recipient envelope to the
-// backend's send-internal endpoint. The server never sees plaintext —
-// only the opaque envelope string the browser produced via
-// `buildInternalEnvelope` (see `frontend/src/emails/internalEnvelope.ts`).
 
 export type WayveRecipient = {
   id: number;
@@ -359,9 +320,10 @@ export type WayveRecipient = {
 };
 
 /**
- * Resolve an email address to a Wayve user. Returns `null` for unknown
- * addresses (which means: not a Wayve user — caller should use plain
- * SMTP). Throws on transport errors so retries are explicit.
+ * Resolves an address to a Wayve user so compose can encrypt to their RSA
+ * public key. `null` means the address is not a Wayve user and the caller
+ * should fall back to plain SMTP. Throws on transport errors so retries are
+ * explicit.
  */
 export const getUserByEmail = async (
   email: string
@@ -381,10 +343,11 @@ export type SendInternalPayload = {
 };
 
 /**
- * Deliver a pre-encrypted multi-recipient envelope through the
- * Wayve-to-Wayve native channel. No SMTP involved; the backend stores
- * one row per recipient + one Sent copy for the sender, all carrying
- * the same opaque envelope.
+ * Delivers a pre-encrypted multi-recipient envelope over the Wayve-to-Wayve
+ * channel, no SMTP involved. The server never sees plaintext — only the opaque
+ * envelope the browser built via `buildInternalEnvelope` (see
+ * `frontend/src/emails/internalEnvelope.ts`) — and stores it once per recipient
+ * plus a Sent copy.
  */
 export const sendInternalEmail = async (payload: SendInternalPayload) => {
   const res = await apiFetch("/api/emails/internal", {
@@ -393,10 +356,6 @@ export const sendInternalEmail = async (payload: SendInternalPayload) => {
   });
   return res.json() as Promise<{ delivered: number; sent_id: string }>;
 };
-
-// ---------------------------------------------------------------------------
-// Plan A Phase 3 — Secure-send magic link
-// ---------------------------------------------------------------------------
 
 export type SecureSendPayload = {
   recipient_email: string;
@@ -409,10 +368,9 @@ export type SecureSendPayload = {
 };
 
 /**
- * Upload a pre-encrypted secure message bundle. Server picks the token
- * + expiry and fires the notification email; we get back the token +
- * link the sender can copy (e.g., to share the link manually if SES
- * fails to deliver).
+ * Uploads a pre-encrypted secure-message bundle. The server picks the token and
+ * expiry and sends the notification email; the returned link lets the sender
+ * share it manually if delivery fails.
  */
 export const sendSecureEmail = async (payload: SecureSendPayload) => {
   const res = await apiFetch("/api/emails/secure", {
@@ -427,17 +385,16 @@ export const sendSecureEmail = async (payload: SecureSendPayload) => {
 };
 
 /**
- * Public-route fetch — no auth header required. Used by the magic-link
- * read page to pull the ciphertext bundle for client-side decryption.
- * Returns null on 404 (invalid token), throws on other errors.
+ * Public route, no auth header required: the magic-link read page pulls the
+ * ciphertext bundle here for client-side decryption. Returns null when there is
+ * no readable message, throws on other errors.
  */
 export const fetchSecureMessage = async (token: string) => {
   const res = await apiFetch(
     `/api/secure-messages/${encodeURIComponent(token)}`,
     {
       preserve401: true,
-      // 404 = invalid token, 410 = expired; both mean "no message", return
-      // null instead of throwing.
+      // 404 is an invalid token and 410 an expired one; both mean "no message".
       preserve404: true,
       preserve410: true,
     }

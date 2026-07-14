@@ -12,10 +12,10 @@ async function errMessage(res: Response): Promise<string | null> {
   }
 }
 
-// Organization Documents — a shared workspace where every org member has full
-// read/write/delete access. No per-user encryption envelope (the server holds
-// the at-rest key and serves blobs to any member), so unlike Drive these calls
-// never pass a userId for client-side crypto.
+// Organization Documents is a shared workspace where every org member has full
+// access. There is no per-user encryption envelope: the server holds the at-rest
+// key and serves blobs to any member, so unlike Drive these calls never pass a
+// userId for client-side crypto.
 
 export type DocumentFolder = {
   id: number;
@@ -108,7 +108,7 @@ export const deleteDocument = async (fileId: number) => {
     throw new Error((await errMessage(res)) ?? "Failed to delete file");
 };
 
-// Author a new text document in-app (owner/super_admin only on the backend).
+// Owner and super_admin only, enforced on the backend.
 export const createTextDocument = async (
   name: string,
   content: string,
@@ -123,14 +123,14 @@ export const createTextDocument = async (
   return res.json() as Promise<DocumentFile>;
 };
 
-// Fetch a document's decrypted text for viewing/editing (any member).
+// Returns decrypted text, and is open to any member.
 export const getDocumentContent = async (fileId: number) => {
   return apiFetchJson<{ name: string; content: string }>(
     `/api/documents/${fileId}/content`
   );
 };
 
-// Overwrite a document's content (owner/super_admin only on the backend).
+// Owner and super_admin only, enforced on the backend.
 export const updateDocumentContent = async (
   fileId: number,
   content: string

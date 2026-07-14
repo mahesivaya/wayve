@@ -7,10 +7,8 @@ import {
 } from "../api/github";
 
 /**
- * Per-user GitHub connect (OAuth) shown inline on the Integrations page.
- * Disconnected: a "Connect GitHub" button that starts the OAuth redirect.
- * Connected: the linked login + a Disconnect button. After OAuth the backend
- * callback returns to the Code Repo page, where repos are imported/browsed.
+ * Per-user GitHub connect. After OAuth the backend callback returns to the Code
+ * Repo page, where repos are imported and browsed.
  */
 export default function GitHubPanel({
   onChange,
@@ -35,8 +33,7 @@ export default function GitHubPanel({
     }
   }, [onChange]);
 
-  // Deferred to a microtask so the effect body doesn't synchronously setState
-  // (matches JiraPanel's pattern).
+  // Deferred to a microtask so the effect body doesn't synchronously setState.
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);

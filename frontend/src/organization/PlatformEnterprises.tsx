@@ -24,7 +24,6 @@ export default function PlatformEnterprises() {
     null
   );
 
-  // ---- Create-enterprise form ----
   const [name, setName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
@@ -36,7 +35,6 @@ export default function PlatformEnterprises() {
     setLoading(true);
     listAdminOrganizations()
       .then((items) => {
-        // Enterprise page: only orgs on the enterprise tier.
         setEnterprises(items.filter((org) => org.tier === "enterprise"));
         setError("");
       })

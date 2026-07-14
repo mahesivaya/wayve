@@ -89,8 +89,8 @@ function TimeSelect({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // When the popup opens, scroll the currently-selected row into view so
-  // the user lands near their existing pick instead of at midnight.
+  // Scroll the selected row into view on open, so the user lands near their
+  // existing pick instead of at midnight.
   useEffect(() => {
     if (!open || !listRef.current) return;
     const selected =
@@ -138,9 +138,8 @@ export default function Scheduler() {
   const daySlotsRef = useRef<HTMLDivElement>(null);
   const weekGridRef = useRef<HTMLDivElement>(null);
 
-  // Container-width (not viewport) narrow detection so the scheduler collapses
-  // correctly inside a split pane. Below the threshold we hide the sidebar and
-  // render a single-day column instead of the cramped 7-column week grid.
+  // Narrowness is measured on the container, not the viewport, so the scheduler
+  // collapses correctly inside a split pane.
   const schedulerRootRef = useRef<HTMLDivElement>(null);
   const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
@@ -156,18 +155,15 @@ export default function Scheduler() {
     return () => ro.disconnect();
   }, []);
 
-  // A split pane is always too narrow for the sidebar + 7-column week, so we
-  // collapse unconditionally when embedded in one. Outside a split pane we fall
-  // back to the width-based `isNarrow` measurement.
+  // A split pane is always too narrow for the sidebar plus the 7-column week, so
+  // it collapses unconditionally; elsewhere the width measurement decides.
   const inSplitPane = useInSplitPane();
   const collapsed = isNarrow || inSplitPane;
 
   const [view, setView] = useState<SchedulerView>("week");
 
-  // When the pane becomes collapsed, the 7-column week can't fit, so default to
-  // the single-day column. This only fires on the collapse transition — it does
-  // NOT override the view, so the Week button still works (the user can switch
-  // back to a horizontally-scrolling week if they really want it).
+  // Collapsing defaults the view to a single day, but only on the transition, so
+  // the Week button still works afterwards.
   useEffect(() => {
     if (collapsed) {
       setView((v) => (v === "week" ? "day" : v));
@@ -183,7 +179,6 @@ export default function Scheduler() {
   );
   const [newCalendarName, setNewCalendarName] = useState("");
 
-  // modal
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<SchedulerEvent | null>(null);
 
@@ -197,9 +192,8 @@ export default function Scheduler() {
 
   const [participants, setParticipants] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState("");
-  // Org/platform-scoped people directory for the participant typeahead.
-  // /api/users/all already returns only the caller's own org members (or
-  // platform team / personal peers), so suggestions never cross tenants.
+  // People directory for the participant typeahead. /api/users/all returns only
+  // the caller's own org members, so suggestions never cross tenants.
   const [directory, setDirectory] = useState<ChatUser[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(0);
@@ -211,8 +205,8 @@ export default function Scheduler() {
         if (alive) setDirectory(users);
       })
       .catch(() => {
-        // Best-effort: if the directory can't load the field still accepts
-        // free-typed emails, it just won't suggest matches.
+        // Best-effort: without the directory the field still accepts typed
+        // emails, it just won't suggest matches.
       });
     return () => {
       alive = false;
@@ -307,10 +301,8 @@ export default function Scheduler() {
     );
   };
 
-  // ================= PARTICIPANTS =================
-  // Suggestions: people from the scoped directory whose email matches what's
-  // typed (substring, case-insensitive) and who aren't already added. Empty
-  // query shows the first few so the list is browsable on focus.
+  // Directory people whose email matches what's typed and who aren't already
+  // added. An empty query shows the first few, so the list is browsable on focus.
   const participantSuggestions = useMemo(() => {
     const query = emailInput.trim().toLowerCase();
     const chosen = new Set(participants.map((p) => p.toLowerCase()));
@@ -326,7 +318,6 @@ export default function Scheduler() {
 
     if (!email) return;
 
-    // better validation
     if (!email.includes("@") || !email.includes(".")) {
       alert("Enter a valid email");
       return;
@@ -364,7 +355,6 @@ export default function Scheduler() {
     setParticipants(participants.filter((p) => p !== email));
   };
 
-  // ================= FETCH =================
   const fetchMeetings = useCallback(async () => {
     const data = (await getMeetings()) as ApiMeeting[];
 
@@ -386,7 +376,6 @@ export default function Scheduler() {
     void fetchMeetings();
   }, [fetchMeetings]);
 
-  // ================= CREATE / UPDATE =================
   const saveMeeting = async () => {
     const startMins = toMinutes(start);
     const endMins = toMinutes(end);
@@ -406,10 +395,9 @@ export default function Scheduler() {
       return;
     }
 
-    // Conflict check: warn (but allow override) if the proposed window
-    // overlaps any existing event on the same date. When editing, the
-    // event being edited is excluded so it doesn't conflict with itself.
-    // Two intervals [a1,a2) and [b1,b2) overlap iff a1 < b2 && b1 < a2.
+    // An overlap with an existing event on the same date warns but is allowed.
+    // The event being edited is excluded so it can't conflict with itself.
+    // Intervals [a1,a2) and [b1,b2) overlap iff a1 < b2 && b1 < a2.
     const conflicts = events.filter((existing) => {
       if (editingEvent && existing.id === editingEvent.id) return false;
       if (existing.date !== selectedDate) return false;
@@ -434,7 +422,7 @@ export default function Scheduler() {
 
     const finalParticipants = [...participants];
 
-    // auto-add typed email if not added
+    // Auto-add an email that was typed but never confirmed with Enter.
     const email = emailInput.trim().toLowerCase();
     if (email && email.includes("@") && email.includes(".")) {
       if (!finalParticipants.includes(email)) {
@@ -480,9 +468,8 @@ export default function Scheduler() {
     setSelectedCalendarId("office");
   };
 
-  // ================= EDIT =================
-  // Snap a time string to the nearest 15-min boundary so it always
-  // matches one of the dropdown options.
+  // Snap to the nearest 15-minute boundary so the value always matches one of
+  // the dropdown options.
   const snap15 = (time: string) => {
     const mins = toMinutes(time);
     const snapped = Math.min(Math.round(mins / 15) * 15, 23 * 60 + 45);
@@ -542,10 +529,9 @@ export default function Scheduler() {
     const calendar = getCalendarForEvent(event);
     return calendar?.visible ?? true;
   });
-  // Per-day lane assignment for overlapping events. Each event's id maps
-  // to its `lane` (0-indexed column) and `laneCount` (max concurrent
-  // events in its overlap cluster). Used to position events side-by-side
-  // when their times conflict, matching Google / Outlook column splits.
+  // Per-day lane assignment for overlapping events: each event id maps to its
+  // `lane` (0-indexed column) and `laneCount` (max concurrent events in its
+  // overlap cluster), which positions conflicting events side by side.
   const lanesByDay = useMemo(() => {
     const byDate = new Map<string, typeof calendarVisibleEvents>();
     for (const event of calendarVisibleEvents) {
@@ -560,12 +546,10 @@ export default function Scheduler() {
     return map;
   }, [calendarVisibleEvents]);
 
-  // ================= TIME DROPDOWNS =================
-  // 15-min slots across the day, rendered in 12-hour format. Start filters
-  // out past slots when scheduling for today; end filters to slots strictly
-  // after the chosen start so the End dropdown can't produce an invalid
-  // range. Current start/end are always included so the controlled select
-  // never loses its value.
+  // 15-minute slots across the day. Start hides past slots when scheduling for
+  // today, and End only offers slots strictly after the chosen start, so the
+  // dropdowns can't produce an invalid range. The current start/end are always
+  // included so the controlled select never loses its value.
   const timeSlots = useMemo(() => {
     const slots: { value: string; label: string; mins: number }[] = [];
     for (let m = 0; m < 24 * 60; m += 15) {
@@ -589,7 +573,6 @@ export default function Scheduler() {
     return timeSlots.filter((s) => s.mins > startMins || s.mins === endMins);
   }, [timeSlots, start, end]);
 
-  // ================= MINI CALENDAR =================
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -613,7 +596,6 @@ export default function Scheduler() {
       className={`scheduler${collapsed ? " narrow" : ""}`}
       ref={schedulerRootRef}
     >
-      {/* SIDEBAR */}
       <div className="scheduler-sidebar">
         <button className="scheduler-create-main" onClick={() => openCreate()}>
           <span>＋</span>
@@ -695,7 +677,6 @@ export default function Scheduler() {
         </div>
       </div>
 
-      {/* MAIN */}
       <div className="calendar">
         <div className="calendar-header">
           {collapsed && (
@@ -744,7 +725,6 @@ export default function Scheduler() {
           <button onClick={() => setView("month")}>Month</button>
         </div>
 
-        {/* DAY VIEW */}
         {view === "day" && (
           <div className="day-view">
             <h3 className="day-title">{currentDate.toDateString()}</h3>
@@ -780,11 +760,10 @@ export default function Scheduler() {
                       {slotEvents.map((e) =>
                         (() => {
                           const calendar = getCalendarForEvent(e);
-                          // Time-accurate block + lane positioning for overlap
-                          // resolution: a 30-min event spans half a slot, a 90-min
-                          // event spans 1.5 slots. `top` is the sub-hour offset;
-                          // `left`/`width` split the day column into N columns
-                          // when N events overlap, matching Google / Outlook.
+                          // Blocks are sized by duration, so a 30-minute event
+                          // spans half a slot. `top` is the sub-hour offset, and
+                          // `left`/`width` split the column into N lanes when N
+                          // events overlap.
                           const durationSlots =
                             (e.end - e.start) / SLOT_MINUTES;
                           const topFraction =
@@ -825,7 +804,6 @@ export default function Scheduler() {
           </div>
         )}
 
-        {/* WEEK VIEW */}
         {view === "week" && (
           <div className="week-view">
             <div className="week-header">
@@ -891,11 +869,8 @@ export default function Scheduler() {
                           {slotEvents.map((e) =>
                             (() => {
                               const calendar = getCalendarForEvent(e);
-                              // Time-accurate block + lane positioning for overlap
-                              // resolution: a 30-min event spans half a slot; a
-                              // 90-min event spans 1.5 slots. `top` is the sub-hour
-                              // offset; `left`/`width` split the day column into N
-                              // columns when N events overlap.
+                              // Same duration-based sizing and lane split as the
+                              // day view above.
                               const durationSlots =
                                 (e.end - e.start) / SLOT_MINUTES;
                               const topFraction =
@@ -940,7 +915,6 @@ export default function Scheduler() {
           </div>
         )}
 
-        {/* MONTH VIEW */}
         {view === "month" && (
           <div className="month-view">
             <div className="month-weekday-row">
@@ -967,10 +941,9 @@ export default function Scheduler() {
                     <div className="date">{i + 1}</div>
                     <div className="events">
                       {(() => {
-                        // Cap how many chips a day cell shows so a busy day
-                        // renders "+N more" instead of ballooning past the
-                        // grid (Google-Calendar style). The link opens that
-                        // day's Day view, where every event is visible.
+                        // Cap the chips per cell so a busy day renders "+N more"
+                        // instead of ballooning past the grid. The link opens
+                        // that day's Day view, where every event is visible.
                         const MAX_VISIBLE = 3;
                         const dayEvents = calendarVisibleEvents
                           .filter((e) => e.date === dayDate)
@@ -1022,7 +995,6 @@ export default function Scheduler() {
         )}
       </div>
 
-      {/* MODAL */}
       <Modal
         isOpen={showModal}
         onClose={resetModal}

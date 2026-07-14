@@ -28,9 +28,8 @@ const OUTCOMES = [
   "invalid",
 ];
 
-// Sign-in lifecycle events we surface in the "Audit Access activity" table.
-// These rows already live in `audit_logs` — recorded by the auth handlers on
-// every login, logout, failed login and password change.
+// Sign-in lifecycle events, already recorded in `audit_logs` by the auth
+// handlers on every login, logout, failed login and password change.
 const SESSION_ACTIONS = new Set([
   "login",
   "logout",
@@ -371,9 +370,8 @@ function csvEscape(value: string | number | null) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
-// The audit page is split into one tab per table; only the active tab's section
-// renders, filling the page with its own scroll. `perm` gates which tabs a user
-// sees — the activity/audit tables need audit:read, the SIEM panel needs
+// One tab per table; only the active tab's section renders. `perm` gates which
+// tabs a user sees: the audit tables need audit:read, the SIEM panel needs
 // webhooks:manage.
 const AUDIT_TABS = [
   { key: "access", label: "Access", perm: "read" },
@@ -402,11 +400,9 @@ export default function AuditSecurity({
   // audit:read) lands on the SIEM tab instead of an empty page.
   const [tab, setTab] = useState<AuditTab>(canReadAudit ? "access" : "siem");
 
-  // Owners only — the platform owner, or an organization owner (who sees only
-  // their own org's audit rows, scoped by the backend). Even platform
-  // super_admin / security, who hold audit:read, are bounced. Mirrors the
-  // backend require_owner gate. We compute the flag here but DON'T early-return
-  // — the hooks below must run on every render to keep call order stable.
+  // Owners only, mirroring the backend's require_owner gate: even platform
+  // super_admin and security, who hold audit:read, are bounced. Computed without
+  // an early return so the hooks below keep a stable call order.
   const isOwner =
     user?.effective_role === "owner" &&
     (user?.scope === "platform" || user?.scope === "organization");
@@ -421,40 +417,34 @@ export default function AuditSecurity({
   const [actionsLoading, setActionsLoading] = useState(false);
   const [actionsError, setActionsError] = useState("");
 
-  // Client-side filters for the user-activity table.
+  // Every per-table filter below is applied client-side over the loaded rows.
   const [actStart, setActStart] = useState("");
   const [actEnd, setActEnd] = useState("");
   const [actEmail, setActEmail] = useState("");
   const [actType, setActType] = useState("");
 
-  // Client-side filters for the emails-activity table.
   const [emUser, setEmUser] = useState("");
   const [emType, setEmType] = useState("");
   const [emFrom, setEmFrom] = useState("");
   const [emTo, setEmTo] = useState("");
 
-  // Client-side filters for the chat-activity table.
   const [chUser, setChUser] = useState("");
   const [chType, setChType] = useState("");
   const [chChannel, setChChannel] = useState("");
 
-  // Client-side filters for the calendar-activity table.
   const [calUser, setCalUser] = useState("");
   const [calType, setCalType] = useState("");
   const [calMeeting, setCalMeeting] = useState("");
 
-  // Client-side filters for the drive-activity table.
   const [drvType, setDrvType] = useState("");
   const [drvStart, setDrvStart] = useState("");
   const [drvEnd, setDrvEnd] = useState("");
   const [drvMinMb, setDrvMinMb] = useState("");
 
-  // Client-side filters for the notes-activity table.
   const [ntName, setNtName] = useState("");
   const [ntStart, setNtStart] = useState("");
   const [ntEnd, setNtEnd] = useState("");
 
-  // Client-side filters for the tasks-activity table.
   const [tkUser, setTkUser] = useState("");
   const [tkSummary, setTkSummary] = useState("");
   const [tkStatus, setTkStatus] = useState("");
@@ -467,9 +457,8 @@ export default function AuditSecurity({
   const [siemMessage, setSiemMessage] = useState("");
   const [siemError, setSiemError] = useState("");
 
-  // Apply the date-range / email / activity filters to the loaded rows. The
-  // activity value matches the derived kind (so "registered" excludes plain
-  // logins, and vice-versa); other values match the raw action.
+  // The activity filter matches the derived kind, so "registered" excludes plain
+  // logins and vice versa; every other value matches the raw action.
   const filteredActions = useMemo(() => {
     const email = actEmail.trim().toLowerCase();
     // `actEnd` is an inclusive day, so compare against end-of-day.
@@ -687,9 +676,8 @@ export default function AuditSecurity({
     }
   }, [canReadAudit, filters]);
 
-  // User sign-in activity (login / logout / login failed). The backend returns
-  // a broader set of security-relevant actions, so we keep only the session
-  // lifecycle events here.
+  // The backend returns a broader set of security-relevant actions, so only the
+  // session lifecycle events are kept here.
   const loadActions = useCallback(async () => {
     if (!canReadAudit) return;
     setActionsLoading(true);

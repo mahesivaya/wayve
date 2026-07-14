@@ -12,8 +12,7 @@ import {
 } from "../api/audit";
 import { fmtDateTime } from "../utils/datetime";
 
-// Maps users.auth_provider to a friendly label + pill style for the
-// "Registration types" table.
+// Keys must match the users.auth_provider discriminator.
 const REGISTRATION_PROVIDERS: Record<string, { label: string; pill: string }> =
   {
     google: { label: "Gmail (Google)", pill: "provider-google" },
@@ -45,8 +44,6 @@ const USER_LOG_COLUMNS = [
 
 const USER_LOGS_COL_WIDTHS_KEY = "rwayve.platformUserLogs.colWidths";
 
-// The three views, surfaced as top-level tabs. Only the active tab's table is
-// rendered, and it fills the page height with its own internal scroll.
 const LOG_TABS = [
   { key: "registrations", label: "Registration types" },
   { key: "timespent", label: "Time on site" },
@@ -55,9 +52,8 @@ const LOG_TABS = [
 
 type LogTab = (typeof LOG_TABS)[number]["key"];
 
-// Security-relevant user actions (sign-in/out, password changes, deletions,
-// file downloads/exports, billing changes) from the audit_logs table. Mirrors
-// logs/user_actions.log. Scoped by the backend: platform staff see everyone.
+// Security-relevant user actions from the audit_logs table, mirroring
+// logs/user_actions.log. The backend scopes the rows: platform staff see all.
 export default function PlatformUserLogs({
   embedded = false,
 }: {

@@ -13,9 +13,8 @@ import { parseJwt } from "./bootToken";
 import { unwrapAndCacheMemberKeys } from "../orgKeys/memberLogin";
 import "./login.css";
 
-// Hash-fragment error codes set by the backend SSO callback when something
-// goes wrong (state mismatch, token verification, IdP error, etc.). Mapped
-// to a friendly message here instead of leaking the raw code at the user.
+// Error codes the backend SSO callback puts in the hash fragment, mapped so the
+// raw code is never shown to the user.
 const SSO_ERROR_LABELS: Record<string, string> = {
   invalid_state:
     "Your SSO sign-in expired or was tampered with. Please try again.",
@@ -40,8 +39,7 @@ function parseSsoError(): string {
 
 export default function Login() {
   const [params] = useSearchParams();
-  // Arriving from the email-verification screen (?verified=1&email=...): show a
-  // "Verified — sign in" banner and pre-fill the email so it's basically one tap.
+  // The email-verification screen sends users back here as ?verified=1&email=...
   const verified = params.get("verified") === "1";
   const [email, setEmail] = useState(() => params.get("email") ?? "");
   const [password, setPassword] = useState("");
@@ -56,9 +54,8 @@ export default function Login() {
     const ssoErr = parseSsoError();
     return ssoErr || queryErr;
   });
-  // One-shot notice when the previous session ended from the 15-min idle
-  // timeout (set by AuthContext.logout("idle")). Read-and-clear so a refresh
-  // doesn't keep showing it.
+  // Set by AuthContext.logout("idle"). Read once and cleared, so a refresh
+  // doesn't keep showing the notice.
   const [idleNotice] = useState(() => {
     try {
       if (sessionStorage.getItem("wayve-logout-reason") === "idle") {
@@ -73,8 +70,7 @@ export default function Login() {
   const navigate = useNavigate();
   const { login: authLogin } = useAuth();
 
-  // Strip the SSO error fragment after it's been displayed so a refresh
-  // doesn't keep showing it.
+  // Strip the SSO error fragment once displayed, so a refresh doesn't repeat it.
   useEffect(() => {
     if (window.location.hash.includes("sso_error")) {
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -88,8 +84,7 @@ export default function Login() {
     try {
       const data = await login(email, password);
 
-      // Local account that hasn't confirmed its email yet — send them to the
-      // code-entry screen (email prefilled).
+      // A local account cannot log in until it confirms its email.
       if (data && data.error === "email_unverified") {
         navigate(`/verify-email?email=${encodeURIComponent(email)}`);
         return;
@@ -99,13 +94,10 @@ export default function Login() {
         throw new Error("No token returned");
       }
 
-      // Org members: server returned a password-wrapped private key in
-      // `login_wrap`. Unwrap with PBKDF2(password) and write to the
-      // existing IndexedDB slot BEFORE authLogin runs setupEncryption —
-      // that way setupEncryption's "key already on device" branch
-      // short-circuits and the user lands fully set up. Personal users
-      // get no login_wrap and follow the existing mnemonic path
-      // unchanged.
+      // Org members get a password-wrapped private key in `login_wrap`, which
+      // must reach IndexedDB before authLogin runs setupEncryption so that
+      // setupEncryption takes its "key already on device" short-circuit.
+      // Personal users get no login_wrap and follow the mnemonic path instead.
       if (data.login_wrap) {
         try {
           const claims = parseJwt(data.token);
@@ -126,14 +118,11 @@ export default function Login() {
         }
       }
 
-      // Forward the typed password so AuthContext can produce the
-      // PBKDF2 login-wrap for a personal user on first signup-then-
-      // login on this device. Existing users (key already in IDB) hit
-      // the short-circuit branch in setupEncryption and the password
-      // is never used.
+      // The password is forwarded only so AuthContext can derive the PBKDF2
+      // login-wrap on a personal user's first login from this device.
       authLogin(data.token, data.account_type ?? "personal", false, password);
 
-      // Org slug isn't known yet at login; routing settles to /organization/<slug>
+      // The org slug is not known yet; routing settles on /organization/<slug>
       // once AuthContext's post-login /api/me fetch resolves.
       void navigate(homePathForUser({ account_type: data.account_type }));
     } catch {
@@ -146,8 +135,7 @@ export default function Login() {
     window.location.href = `${getApiBase()}/gmail/login?mode=signup`;
   };
 
-  // Build the SSO start URL for the typed-in work email and redirect.
-  // The backend looks up the org by email domain and either redirects to
+  // The backend resolves the org from the email domain and either redirects to
   // the IdP or returns a 404 we surface inline.
   const handleSsoSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -159,18 +147,15 @@ export default function Login() {
     }
     setSsoLoading(true);
     try {
-      // Probe the start endpoint first so we can show a friendly inline
-      // error if no SSO is configured for the domain. Following the 302
-      // would either land on the IdP (good) or on /login with an error
-      // hash (also OK but we can do better when we already know the
-      // outcome).
+      // Probe the start endpoint first so an unconfigured domain produces an
+      // inline error rather than a redirect back to /login with an error hash.
       const probe = await fetch(url, {
         redirect: "manual",
         credentials: "include",
       });
       if (probe.status === 0 || (probe.status >= 300 && probe.status < 400)) {
-        // Browsers report opaqueredirect as type/status 0 when we ask
-        // redirect:manual — that's the success case.
+        // Under redirect:manual an opaqueredirect surfaces as status 0, which is
+        // the success case here.
         window.location.href = url;
         return;
       }

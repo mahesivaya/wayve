@@ -35,14 +35,8 @@ import "./organizationAdmin.css";
 
 type TileStat = { value: string; label: string };
 
-// Plan-code → friendly name comes from the single catalog source of truth
-// (`billing/planCatalog`); `planName` returns "Free" when there's no code.
-
-// Single tile spec — used for both the role-specific consoles row and the
-// app tiles row. `visible` is computed per-user from the RBAC permission
-// catalog so admins, billing, security, developer, support members each
-// see only the consoles their role can act on. App tiles are visible to
-// everyone (gated only by login).
+// `visible` is UI gating only, never authorization: the backend re-checks every
+// call. App tiles are visible to everyone.
 type Tile = {
   icon: ReactNode;
   label: string;
@@ -55,13 +49,9 @@ export default function OrganizationAdminHome() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // If this user is the org owner (only the owner holds `org_keys:bootstrap`)
-  // and the org has no master key yet — which is the state right after a
-  // platform-admin-created org, or a self-serve org whose first owner closed
-  // the tab during bootstrap — send them to the mnemonic flow. Without this,
-  // a freshly-provisioned owner lands on the dashboard, never sees the 24
-  // words, and silently can't ever decrypt member data. The bootstrap page
-  // is the single place the mnemonic is shown, by design (one-time).
+  // An owner whose org has no master key yet must be sent to the mnemonic flow.
+  // The bootstrap page is the only place the 24 words are ever shown, so an
+  // owner who skips it can never decrypt member data.
   const canBootstrap = hasPermission(user, "org_keys:bootstrap");
   const orgId = user?.organization_id ?? null;
   useEffect(() => {
@@ -95,22 +85,17 @@ export default function OrganizationAdminHome() {
   const canSeeSharedInboxes = hasPermission(user, "inbox:manage");
   const canSeeSso = hasPermission(user, "sso:manage");
   const canReadAudit = hasPermission(user, "audit:read");
-  // Owner-only: select the org's AI provider + see its usage/cost governance.
   const canSeeAi = hasPermission(user, "ai:manage");
 
-  // The header search box lives in `Layout`; the query reaches us through the
-  // search context.
   const { searchQuery, normalizedSearchQuery, setSearchQuery } =
     useGlobalSearch();
 
-  // The query is app-wide state and isn't cleared on navigation, so arriving
-  // here carrying a leftover query from another page would silently hide most
-  // of the tiles. Landing on home always starts from a clean box.
+  // The search query is app-wide state that survives navigation, so a leftover
+  // query from another page would silently hide most tiles on arrival.
   useEffect(() => {
     setSearchQuery("");
   }, [setSearchQuery]);
 
-  // Live figures for the org-owner console tiles.
   const [membersCount, setMembersCount] = useState<number | null>(null);
   const [planLabel, setPlanLabel] = useState<TileStat[] | null>(null);
   const [apiKeysCount, setApiKeysCount] = useState<number | null>(null);
@@ -336,10 +321,8 @@ export default function OrganizationAdminHome() {
     },
   ];
 
-  // RBAC decides which tiles exist for this user; the header search box then
-  // narrows that set. Kept as two steps so an empty result is attributable —
-  // "you have no consoles" and "nothing matched your search" are different
-  // states and get different copy below.
+  // RBAC and search filtering stay separate so an empty result is attributable:
+  // "no consoles" and "nothing matched" get different copy below.
   const visibleConsoles = consoles.filter((c) => c.visible);
   const hasAnyConsole = visibleConsoles.length > 0;
   const matchedConsoles = visibleConsoles.filter((c) =>

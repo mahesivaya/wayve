@@ -1,20 +1,20 @@
 import { apiFetch, apiFetchJson } from "./client";
 
-// Per-organization feature access. The owner controls which roles may use each
-// gateable feature (currently the Code Repo viewer). Reading is available to
-// any org member (used to gate nav); writing is owner-only (backend enforces).
+// Per-organization feature access: the owner controls which roles may use each
+// gateable feature. Any org member may read it, to gate nav, but writing is
+// owner-only and the backend enforces that.
 
 export type FeatureRow = {
   key: string;
   label: string;
-  // Roles currently allowed (resolved: configured set, or the feature default).
+  // The resolved allowed set, being either the configured roles or, failing
+  // that, the code-defined `default_roles`.
   allowed_roles: string[];
-  // The code-defined default, shown as a "Reset to default" affordance.
   default_roles: string[];
 };
 
 export type FeatureAccess = {
-  // Every assignable role, in display order — the matrix columns.
+  // Every assignable role, in display order; these are the matrix columns.
   roles: string[];
   features: FeatureRow[];
 };

@@ -11,11 +11,10 @@ import "./mcpPanel.css";
 
 type AuthType = "none" | "bearer";
 
-// Curated connection blocks the owner picks from — mirrors the AI-provider
-// block picker. Selecting a block pre-fills the fields below (the URL stays
-// editable so an owner can point at their own tenant/region). The auth defaults
-// are a starting point; the owner supplies the token. "Custom" reveals the
-// smart-paste box and blank fields for any other remote MCP server.
+// Curated connection blocks that pre-fill the form. The URL stays editable so an
+// owner can point at their own tenant or region, and the auth defaults are only a
+// starting point — the owner always supplies the token. "Custom" starts blank and
+// reveals the smart-paste box.
 type McpPreset = {
   id: string;
   label: string;
@@ -86,10 +85,8 @@ const MCP_PRESETS: McpPreset[] = [
   },
 ];
 
-// Best-effort parse of a pasted server reference into {label, url, token}. Accepts:
-//  - a bare URL ("https://mcp.acme.com/mcp")
-//  - a `claude mcp add --transport http <name> <url> --header "Authorization: Bearer X"` command
-//  - a JSON config snippet ({ "mcpServers": { "name": { "url": ..., "headers": {...} } } })
+// Best-effort parse of a pasted server reference into {label, url, token}. Accepts
+// a bare URL, a `claude mcp add ...` command, or a JSON config snippet.
 function parseServerInput(text: string): {
   label?: string;
   url?: string;
@@ -122,7 +119,6 @@ function parseServerInput(text: string): {
     }
   }
 
-  // URL anywhere in the text.
   const urlMatch = t.match(/https?:\/\/[^\s"',]+/);
   const url = urlMatch?.[0];
   if (!url) return {};
@@ -130,8 +126,8 @@ function parseServerInput(text: string): {
   const tokenMatch = t.match(/Bearer\s+([^"'\s]+)/i);
   const token = tokenMatch?.[1];
 
-  // For a `claude mcp add` command, the server name is the bareword just before
-  // the URL (skipping flags and transport keywords).
+  // In a `claude mcp add` command the server name is the bareword just before the
+  // URL, once flags and transport keywords are skipped.
   let label: string | undefined;
   if (/mcp\s+add/i.test(t)) {
     const parts = t.split(/\s+/);
@@ -156,8 +152,8 @@ function labelFromUrl(url: string): string {
   }
 }
 
-// Bare hostname, lowercased — used to match a connected server back to its
-// preset block ("is GitHub already connected?"). "" for an unparseable URL.
+// Bare lowercased hostname, used to match a connected server back to its preset
+// block. Returns "" for an unparseable URL.
 function urlHost(url: string): string {
   try {
     return new URL(url).hostname.toLowerCase();
@@ -166,10 +162,9 @@ function urlHost(url: string): string {
   }
 }
 
-// Connect remote MCP (Model Context Protocol) servers so the AI assistant can
-// call their tools — e.g. read the org's own database. Enterprise org owners and
-// platform owners only (the backend enforces the tier/scope gate). The auth
-// token is write-only here and never returned.
+// Connect remote MCP servers so the AI assistant can call their tools. Enterprise
+// org owners and platform owners only, enforced by the backend. The auth token is
+// write-only: the API never returns it.
 export default function McpPanel() {
   const [connections, setConnections] = useState<McpConnection[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -210,8 +205,6 @@ export default function McpPanel() {
     }
   };
 
-  // Pick a connection block: pre-fill the fields from the preset. The URL stays
-  // editable; "Custom" starts blank and reveals the smart-paste box.
   const pick = (preset: McpPreset) => {
     setSelected(preset.id);
     setError(null);
@@ -232,8 +225,7 @@ export default function McpPanel() {
   const isCustom = MCP_PRESETS.find((p) => p.id === selected)?.custom ?? false;
   const canAdd = Boolean(label.trim() && serverUrl.trim()) && busy !== "add";
 
-  // Hosts of already-registered servers, so a preset block can flag itself as
-  // "Connected" (matched by hostname). Refreshes whenever `connections` reloads.
+  // Hosts of registered servers, so a preset block can flag itself as connected.
   const connectedHosts = new Set(
     (connections ?? []).map((c) => urlHost(c.server_url)).filter(Boolean)
   );
@@ -283,8 +275,8 @@ export default function McpPanel() {
     }
   };
 
-  // Open/close the per-server settings panel, seeding the edit fields from the
-  // connection. The token starts blank (rotate-only — it's never returned).
+  // The token field starts blank because it is rotate-only: the API never returns
+  // the stored value.
   const openSettings = (c: McpConnection) => {
     setError(null);
     setMessage(null);

@@ -1,7 +1,6 @@
-// Owner / admin view of the org-key audit log. Every fetch of a member's
-// escrow, every password reset, every bootstrap, and every key-holder
-// promotion leaves a row here. Read-only — there's no edit/delete path
-// on the audit log by design (otherwise the audit value is null).
+// Owner and admin view of the org-key audit log: every escrow fetch, password
+// reset, bootstrap, and key-holder promotion lands here. Deliberately read-only,
+// since an editable audit log is worthless.
 
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/useAuth";
@@ -13,7 +12,6 @@ type State =
   | { kind: "error"; message: string };
 
 function formatAction(action: string): string {
-  // Map snake_case → Title Case for the column.
   switch (action) {
     case "bootstrap":
       return "Bootstrap";

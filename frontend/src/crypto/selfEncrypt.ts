@@ -1,13 +1,11 @@
-// Self-encryption helpers for owner-only surfaces (notes today; drive +
-// attachments to come). Wraps content in the same WAYVE_SECURE_V1 envelope
-// shape that chat uses, but with only one recipient (the user themselves).
+// Self-encryption helpers for owner-only surfaces such as notes. Content goes
+// into the same envelope shape chat uses, but with a single recipient: the user
+// themselves.
 //
-// Why mirror the chat envelope instead of inventing a new format?
-//   - One decoder path covers chat, notes, drive, attachments.
-//   - When we later add shared notes / shared drive folders, the "keys"
-//     dict already supports multi-recipient — just add more entries.
-//   - Server-side detection ("does this row start with WAYVE_SECURE_V1?")
-//     is one prefix check across all features.
+// Mirroring the chat envelope rather than inventing a format keeps one decoder
+// path across chat, notes, drive and attachments; leaves the multi-recipient
+// "keys" dict in place for shared notes later; and lets the server detect an
+// encrypted row with a single prefix check.
 
 import { decryptMessage } from "./crypto";
 import { loadPublicKey, loadPrivateKey } from "./keyStore";
@@ -41,19 +39,17 @@ async function importOwnPublicKey(userId: number): Promise<CryptoKey> {
 }
 
 /**
- * Encrypt `plaintext` with a fresh AES-256-GCM key, then wrap that AES
- * key with the user's own RSA public key. Result is a WAYVE_SECURE_V1
- * envelope string suitable for storing in the notes/title columns
- * verbatim. Decrypt later with `decryptForSelf`.
+ * Encrypt `plaintext` under a fresh AES-256-GCM key, then wrap that key with the
+ * user's own RSA public key. The resulting envelope string is stored verbatim in
+ * the notes and title columns, and `decryptForSelf` reverses it.
  */
 export async function encryptForSelf(
   plaintext: string,
   userId: number
 ): Promise<string> {
   if (plaintext.length === 0) {
-    // Don't waste an AES key on empty strings — and an empty-string
-    // envelope would be visually indistinguishable from an empty cell.
-    // Callers should treat "" as "no content" and skip encryption.
+    // An empty-string envelope would be indistinguishable from an empty cell, so
+    // callers must treat "" as "no content" and skip encryption entirely.
     return "";
   }
 
@@ -89,20 +85,17 @@ export async function encryptForSelf(
 }
 
 /**
- * Detect whether a stored string is a self-encrypted envelope. Used to
- * preserve backward compatibility with plaintext rows that pre-date this
- * feature: any string without the prefix is returned as-is.
+ * Preserves backward compatibility with plaintext rows that pre-date this
+ * feature: any string without the prefix is passed through untouched.
  */
 export function isSelfEncrypted(value: string | null | undefined): boolean {
   return typeof value === "string" && value.startsWith(SELF_PREFIX);
 }
 
 /**
- * Decrypt a WAYVE_SECURE_V1 envelope produced by `encryptForSelf`. If
- * the input isn't an envelope, returns it unchanged (so callers don't
- * have to branch). On any decryption error returns a clear placeholder
- * string the UI can render directly rather than throwing — losing one
- * note shouldn't crash the whole list.
+ * Reverses `encryptForSelf`. A non-envelope input is returned unchanged, so
+ * callers don't have to branch. A decryption failure returns a placeholder
+ * string rather than throwing: one unreadable note must not crash the list.
  */
 export async function decryptForSelf(
   value: string,
@@ -143,9 +136,8 @@ export async function decryptForSelf(
 }
 
 /**
- * Batch helper — decrypts each field of an object that's an envelope.
- * Used by list-views (notes index, drive list) so a single map() call
- * covers every encrypted field on every row.
+ * Decrypts every envelope-shaped field of a row, so list views can cover all
+ * encrypted fields on all rows with a single map().
  */
 export async function decryptFieldsForSelf<T extends Record<string, unknown>>(
   row: T,

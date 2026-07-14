@@ -20,9 +20,7 @@ export function normalizeAccountType(accountType?: string | null): AccountType {
   return "personal";
 }
 
-/**
- * Mirrors the backend slugify(): lowercase, ASCII-alphanumeric only.
- */
+/** Must match the backend slugify(): lowercase, ASCII-alphanumeric only. */
 export const slugify = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -47,13 +45,9 @@ type AccountLike = {
   can_switch_admin?: boolean;
 };
 
-// Landing route for a fully-resolved user. The app intentionally has three
-// dashboard surfaces: personal, organization, and platform. Role-specific
-// panels are handled inside the dashboard with RBAC permissions.
-//
-// Platform team roles land on their own console — the generic platform admin
-// home only has the org-management surface, so anything role-specific gets
-// its own page. Owner / super_admin / admin still land on the generic home.
+// Platform team roles land on their own console: the generic platform home only
+// carries the org-management surface. Owner, super_admin and admin are absent
+// here because they do land on that generic home.
 const PLATFORM_ROLE_HOMES: Record<string, string> = {
   billing: "/platform/billing",
   security: "/logs/audit",
@@ -64,10 +58,9 @@ const PLATFORM_ROLE_HOMES: Record<string, string> = {
 };
 
 export function homePathForUser(user?: AccountLike | null): string {
-  // A switchable owner (org/enterprise/platform) defaults to the personal
-  // workspace and only sees their admin console after entering admin mode.
-  // Gated on `can_switch_admin` so a regular member (also mode "normal") still
-  // lands on their scope home.
+  // A switchable owner defaults to the personal workspace and reaches their admin
+  // console only after entering admin mode. The `can_switch_admin` gate keeps a
+  // regular member, who is also in mode "normal", on their own scope home.
   if (user?.can_switch_admin && user?.mode !== "admin") {
     return "/home";
   }

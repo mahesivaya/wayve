@@ -10,9 +10,8 @@ import {
 } from "../api/billing";
 import "./planAdmin.css";
 
-// Bytes <-> GB helpers. The schema stores bytes (BIGINT); the admin form
-// asks for a human-friendly GB number. The form is whole-GB only (no
-// decimals), so a GB value rounds to the nearest gibibyte.
+// The schema stores bytes, while the form takes whole GB, so a value rounds to
+// the nearest gibibyte.
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 const bytesToGB = (bytes: number) =>
   bytes <= 0 ? 0 : Math.round(bytes / BYTES_PER_GB);
@@ -23,15 +22,12 @@ const centsToDollars = (cents: number) =>
   cents <= 0 ? 0 : Math.round(cents / 100);
 const dollarsToCents = (dollars: number) => Math.round(dollars) * 100;
 
-// Strip everything but digits so the number fields never accept a decimal
-// point (or sign). Used by every numeric input's onChange.
+// Keeps the numeric inputs from accepting a decimal point or a sign.
 const digitsOnly = (value: string) => value.replace(/[^0-9]/g, "");
 
-// "Feature bullets" in the form are one-per-line free text. We persist
-// them as a JSON object `{ "bullet text": true }` so the existing
-// Pricing.tsx renderer (which iterates Object.entries) shows each line
-// as a separate row. Round-trip preserves order on most browsers since
-// modern JS object key iteration is insertion-ordered for string keys.
+// Feature bullets are one-per-line free text, persisted as `{ "bullet": true }`
+// because Pricing.tsx iterates Object.entries to render each line as a row.
+// Order survives the round trip: string keys iterate in insertion order.
 const featuresToText = (features: Record<string, unknown>): string =>
   Object.keys(features).join("\n");
 
@@ -53,11 +49,9 @@ type DraftForm = {
   description: string;
   audience: "personal" | "organization";
   stripe_price_id: string;
-  // Numeric inputs are held as strings while editing so the field can be
-  // cleared (empty) and accept in-progress values like "1." — binding them
-  // to a `number` makes `Number("")` snap back to 0, which traps the cursor
-  // and blocks typing a fresh value. They're coerced to numbers in
-  // `draftToPayload`.
+  // Numeric inputs stay strings while editing so the field can be cleared.
+  // Binding them to a `number` makes `Number("")` snap back to 0, which traps
+  // the cursor. `draftToPayload` coerces them back to numbers.
   amount_dollars: string;
   currency: string;
   billing_interval: string;
@@ -88,9 +82,8 @@ const planToDraft = (plan: Plan): DraftForm => ({
   description: plan.description ?? "",
   audience: plan.audience,
   stripe_price_id: plan.stripe_price_id ?? "",
-  // A 0/empty numeric renders as a blank field (with a placeholder) rather
-  // than a literal "0" the admin has to delete before typing. Empty coerces
-  // back to the right default in `draftToPayload`.
+  // A zero renders as a blank field rather than a literal "0" the admin has to
+  // delete first; `draftToPayload` coerces the blank back to the default.
   amount_dollars:
     plan.amount_cents === 0 ? "" : String(centsToDollars(plan.amount_cents)),
   currency: plan.currency,
@@ -126,10 +119,8 @@ const fmtPrice = (plan: Plan): string => {
 };
 
 const fmtStorage = (bytes: number): string => {
-  // Render anything non-positive as "—". The schema default is 0 (no
-  // quota set) and historical rows sometimes carry -1 as a legacy
-  // "unlimited" sentinel; both should display the same way rather
-  // than rounding to a misleading "-0 MB" via Number.toFixed.
+  // Anything non-positive renders as an em dash: 0 is the schema default for no
+  // quota, and older rows carry -1 as a legacy "unlimited" sentinel.
   if (bytes <= 0) return "—";
   if (bytes >= BYTES_PER_GB * 1024)
     return `${(bytes / (BYTES_PER_GB * 1024)).toFixed(1)} TB`;
@@ -146,9 +137,8 @@ export default function PlanAdmin() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Editor state. `editingCode` distinguishes "creating new" (null)
-  // from "editing existing" (a string), which controls whether the
-  // Code input is locked (it's the upsert key).
+  // A null `editingCode` means creating; a string means editing, which locks the
+  // Code input because it is the upsert key.
   const [showForm, setShowForm] = useState(false);
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftForm>(EMPTY_DRAFT);
@@ -171,8 +161,8 @@ export default function PlanAdmin() {
     if (canManage) void reload();
   }, [canManage, reload]);
 
-  // Auto-clear the success / error banners after a few seconds so the
-  // user doesn't see stale state from a prior action.
+  // Clear the banners after a few seconds so no stale state from a prior action
+  // stays on screen.
   useEffect(() => {
     if (!success) return;
     const t = window.setTimeout(() => setSuccess(""), 4000);

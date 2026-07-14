@@ -18,9 +18,8 @@ export function useEmailInbox(
   normalizedSearchQuery: string
 ) {
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
-  // Flips true after the first /api/accounts response (success or failure) so
-  // the UI can tell "still loading" apart from "genuinely zero accounts" and
-  // only show the connect-an-account empty state once we actually know.
+  // Flips true after the first /api/accounts response, success or failure, so
+  // the UI can tell "still loading" apart from "genuinely zero accounts".
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<EmailItem | null>(null);
@@ -69,19 +68,15 @@ export function useEmailInbox(
         }
       );
       setEmails(data);
-      // The backend's `hasMore` reflects the DB state only — it doesn't know
-      // that the provider (Gmail/Outlook) may have older messages we haven't
-      // synced yet. Default to "more might exist" whenever the list is
-      // non-empty, so the user can always trigger `sync_older_page` via the
-      // "Show more" button. Once a load-more returns zero new rows, the click
-      // handler flips this off and the button hides.
+      // The backend's `hasMore` reflects DB state only; it doesn't know the
+      // provider may still hold older messages we haven't synced. Assume more
+      // might exist whenever the list is non-empty, so the user can always
+      // trigger `sync_older_page`. loadMore flips this off on an empty page.
       setHasMore(hasMorePage || data.length > 0);
-      // Preserve the user's selection across a list refresh. The post-import
-      // poll in [Emails.tsx](./Emails.tsx) bumps `refreshTick` every 2 s for
-      // ~24 s after a new mailbox is connected — without this, every tick
-      // would clobber the selected email back to "Select an email". We only
-      // clear the selection when the email genuinely left the list (account
-      // switch, folder change, server-side delete).
+      // Preserve the selection across a list refresh: Emails.tsx polls
+      // `refreshTick` every 2s after a mailbox is connected, and each tick
+      // would otherwise clobber the open email. Clear it only when the email
+      // genuinely left the list (account switch, folder change, delete).
       setSelectedEmail((cur) =>
         cur && data.some((email) => email.id === cur.id) ? cur : null
       );
@@ -94,10 +89,9 @@ export function useEmailInbox(
     setLoadingMore(true);
     try {
       const last = emails[emails.length - 1];
-      // Pass cursor as milliseconds so the backend can preserve sub-second
-      // ordering. Flooring to whole seconds (the old behavior) would skip
-      // any email sharing the cursor's second on the next page, causing
-      // load-more to return empty and the button to vanish.
+      // Milliseconds, not seconds: flooring the cursor to a whole second skips
+      // every email sharing that second on the next page, which makes load-more
+      // return empty and the button vanish.
       const before = new Date(last.created_at).getTime();
       const { emails: data } = await getEmails<EmailItem>({
         folder: activeFolder,
@@ -106,12 +100,10 @@ export function useEmailInbox(
         before,
         beforeId: last.id,
       });
-      // Defensive de-dup on append. The backend's keyset pagination
-      // `(created_at, id) < (before, beforeId)` is usually strict, but a
-      // background sync writing a row between the initial fetch and this
-      // loadMore — or two emails sharing the same created_at second — can
-      // produce an id overlap. React keys must be unique, so drop rows we
-      // already have rather than rendering a duplicate.
+      // De-dup on append. Keyset pagination on `(created_at, id)` is usually
+      // strict, but a background sync writing a row between the initial fetch
+      // and this loadMore can still produce an id overlap, and React keys must
+      // be unique.
       setEmails((prev) => {
         const seen = new Set(prev.map((email) => email.id));
         const fresh = data.filter((email) => !seen.has(email.id));
@@ -119,11 +111,9 @@ export function useEmailInbox(
           ? [...prev, ...data]
           : [...prev, ...fresh];
       });
-      // The backend's `hasMore` reflects only whether *this* SQL page hit the
-      // 51-row LIMIT — it doesn't know whether the provider (Gmail/Outlook)
-      // still has more older mail past what was pulled in this tick. Treat
-      // any non-empty response as "more might exist; let the user click
-      // again." Only an empty response means we've reached the end.
+      // Same reason as above: the backend only knows whether this SQL page hit
+      // its LIMIT, not whether the provider holds older mail. Only an empty
+      // response proves we reached the end.
       setHasMore(data.length > 0);
     } finally {
       setLoadingMore(false);
@@ -150,12 +140,9 @@ export function useEmailInbox(
     }
   };
 
-  // Auto-refresh the attachment list while the user is on the Files view
-  // AND the inbox is still being scanned (either no emails synced yet or
-  // some emails haven't had their bodies/attachments processed by the
-  // body worker). New attachments stream in without the user having to
-  // re-click "Files". The poll stops automatically once every email has
-  // `attachments_checked === true` — no waste once sync is complete.
+  // While the Files view is open and the body worker still has emails to
+  // process, poll so new attachments stream in. Stops once every email has
+  // `attachments_checked === true`.
   const inboxStillScanning =
     viewMode === "files" &&
     accounts.length > 0 &&
@@ -170,8 +157,7 @@ export function useEmailInbox(
         const data = await getAllEmailAttachments();
         if (!cancelled) setFiles(data);
       } catch {
-        // Best-effort — keep the old list rather than blanking it on a
-        // transient failure. The next tick will retry.
+        // Keep the old list rather than blanking it; the next tick retries.
       }
     }, 20_000);
     return () => {
@@ -190,10 +176,8 @@ export function useEmailInbox(
       )
     );
 
-    // Decrement the matching account's unread badge in the sidebar. The
-    // server-side count comes back on the next /api/accounts fetch (which the
-    // post-import poll already triggers), so this is purely about the
-    // immediate flicker — without it, the badge stays stale until refresh.
+    // Decrement the sidebar unread badge optimistically. The authoritative
+    // count arrives with the next /api/accounts fetch.
     if (wasUnread && email.account_id != null) {
       setAccounts((prev) =>
         prev.map((acc) =>
@@ -204,10 +188,8 @@ export function useEmailInbox(
       );
     }
 
-    // Persist the read state so a page refresh doesn't bring the row back as
-    // unread. Fire-and-forget — the optimistic UI above is the source of
-    // truth for this render; a failed POST gets a log line but no rollback
-    // (the next provider sync will reconcile if needed).
+    // Fire-and-forget: a failed POST logs but does not roll back the optimistic
+    // UI above, and the next provider sync reconciles.
     if (wasUnread) {
       void markEmailRead(email.id).catch((err) => {
         logger.warn("Failed to persist read state", { emailId: email.id, err });
@@ -273,11 +255,8 @@ export function useEmailInbox(
     setSelectedEmail((cur) => (cur?.id === emailId ? null : cur));
   };
 
-  // Apply mark-read to many ids at once. Optimistic UI is the source of
-  // truth in this render; failed POSTs log but don't roll back so a flaky
-  // network mid-batch doesn't make rows pop back to "unread" — the next
-  // provider sync reconciles. Decrements the per-account unread badge by
-  // however many were actually unread.
+  // Failed POSTs log but don't roll back, so a flaky network mid-batch doesn't
+  // make rows pop back to unread; the next provider sync reconciles.
   const bulkMarkRead = async (ids: number[]) => {
     if (ids.length === 0) return;
     const idSet = new Set(ids);
@@ -304,7 +283,7 @@ export function useEmailInbox(
         };
       })
     );
-    // Also patch the cache so a subsequent open() doesn't repaint as unread.
+    // Patch the cache too, so a subsequent open() doesn't repaint as unread.
     for (const id of ids) {
       const cached = emailCache.current[id];
       if (cached) emailCache.current[id] = { ...cached, is_read: true };
@@ -322,10 +301,9 @@ export function useEmailInbox(
     );
   };
 
-  // Optimistic remove from the list, then fire deletes in parallel. On any
-  // failure the row is gone from the UI but the next refresh will pull it
-  // back if the backend still has it — acceptable for the bulk action since
-  // the user can re-delete.
+  // Optimistic removal, then parallel deletes. A failed delete leaves the row
+  // gone from the UI until the next refresh pulls it back, which is acceptable
+  // here because the user can simply re-delete.
   const bulkDelete = async (ids: number[]) => {
     if (ids.length === 0) return;
     const idSet = new Set(ids);

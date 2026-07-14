@@ -9,11 +9,9 @@ import {
 import { getEmails, markEmailRead } from "../../api/email";
 import { loadCached, saveCached } from "./useCardData";
 
-// Persists the ids of emails we've just opened from this card so the
-// next mount of the home page applies the read state immediately,
-// even before /api/emails has caught up with the backend write. The
-// set is bounded so it can't grow without limit; entries are dropped
-// once they get crowded out.
+// Ids of emails opened from this card, so the next mount of the home page shows
+// them as read even before /api/emails has caught up with the backend write.
+// Bounded so it can't grow without limit.
 const RECENT_READ_KEY = "rwayve.home.recentlyRead";
 const RECENT_READ_MAX = 200;
 
@@ -33,7 +31,6 @@ function markRecentlyRead(id: number) {
   try {
     const current = loadRecentlyRead();
     current.add(id);
-    // Bound the set — drop oldest entries when capacity is hit.
     const arr = Array.from(current);
     const trimmed = arr.slice(Math.max(0, arr.length - RECENT_READ_MAX));
     sessionStorage.setItem(RECENT_READ_KEY, JSON.stringify(trimmed));
@@ -45,11 +42,8 @@ import { updateTaskApi } from "../../api/tasks";
 import type { EmailItem } from "../../emails/types";
 import "./personalDashboard.css";
 
-// Three-section personal-user home: welcome strip + Today (meetings +
-// tasks merged) + a tall scrollable Emails list. Org / platform-admin
-// users get the per-card 2×2 ActivityDashboard instead; this layout is
-// shaped around how an individual moves through their day (look at
-// what's next → triage email).
+// Home layout for personal accounts. Org / platform-admin users get the 2×2
+// ActivityDashboard instead.
 
 const formatHHMM = (hhmm: string) => {
   const parts = hhmm.split(":").map(Number);
@@ -87,10 +81,9 @@ const senderName = (sender: string | null | undefined) => {
 export default function PersonalDashboard() {
   const navigate = useNavigate();
 
-  // Seed from sessionStorage so a return visit to /home paints instantly;
-  // the mount fetch below still runs and refreshes in the background (same
-  // behaviour as ActivityDashboard). Keys are namespaced "personal.*" so they
-  // don't collide with ActivityDashboard's differently-shaped card snapshots.
+  // Seed from sessionStorage so a return visit to /home paints instantly; the
+  // mount fetch below still refreshes in the background. Keys are namespaced
+  // "personal.*" so they don't collide with ActivityDashboard's snapshots.
   const [meetings, setMeetings] = useState<MeetingPreview[] | null>(() =>
     loadCached<MeetingPreview[]>("personal.meetings")
   );
@@ -141,9 +134,8 @@ export default function PersonalDashboard() {
     getEmails<EmailItem>({ folder: "inbox" })
       .then((result) => {
         if (cancelled) return;
-        // Apply the "recently opened from this card" hint so emails the
-        // user just clicked render as read immediately — even if the
-        // backend write hasn't completed yet by the time we re-fetched.
+        // Emails opened from this card render as read immediately, even if the
+        // backend write hadn't completed by the time we re-fetched.
         const recent = loadRecentlyRead();
         const merged =
           recent.size === 0
@@ -192,12 +184,10 @@ export default function PersonalDashboard() {
     [tasks]
   );
 
-  // Click handler for the Inbox card: mark the email read optimistically
-  // both in the visible list AND in sessionStorage (so a fast back-nav
-  // from /emails to /home still sees the row as read), then fire the
-  // markEmailRead POST in the background, then navigate. The /emails
-  // page's openEmail no-ops the markEmailRead call when it sees the
-  // row already at is_read=true, so this isn't double work.
+  // Marks read optimistically in the list and in sessionStorage (so a fast
+  // back-nav from /emails still sees the row as read) before navigating. The
+  // /emails page's openEmail no-ops its own markEmailRead when is_read is
+  // already true, so the POST isn't duplicated.
   const openEmailFromHome = (email: EmailItem) => {
     if (email.is_read === false) {
       markRecentlyRead(email.id);
@@ -210,8 +200,8 @@ export default function PersonalDashboard() {
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
       void markEmailRead(email.id).catch(() => {
-        // Best-effort — useEmailInbox.openEmail will retry the POST
-        // once the /emails page picks up the deep link.
+        // Best-effort — useEmailInbox.openEmail retries once /emails picks up
+        // the deep link.
       });
     }
     void navigate(`/emails?open=${email.id}`);
@@ -223,7 +213,6 @@ export default function PersonalDashboard() {
 
   return (
     <div className="personal-dashboard">
-      {/* ── Meetings + Tasks (two columns) ──────────────────── */}
       <div className="personal-dashboard-row">
         <section className="personal-card">
           <header className="personal-card-head">
@@ -273,7 +262,6 @@ export default function PersonalDashboard() {
           )}
         </section>
 
-        {/* ── 3. Task ────────────────────────────────────────────── */}
         <section className="personal-card">
           <header className="personal-card-head">
             <h2>Task</h2>
@@ -328,7 +316,6 @@ export default function PersonalDashboard() {
         </section>
       </div>
 
-      {/* ── 3. Emails ──────────────────────────────────────────── */}
       <section className="personal-card personal-emails-card">
         <header className="personal-card-head">
           <h2>Emails</h2>
@@ -359,9 +346,8 @@ export default function PersonalDashboard() {
               >
                 <span className="personal-email-dot" aria-hidden="true" />
                 <span className="personal-email-icon" aria-hidden="true">
-                  {/* Mirror the /emails inbox: closed envelope for
-                      unread, opened envelope for read. Inline SVG so
-                      the glyph looks the same on every OS. */}
+                  {/* Inline SVG rather than an emoji glyph so the envelope
+                      renders identically on every OS. */}
                   {email.is_read === false ? (
                     <svg
                       viewBox="0 0 16 16"

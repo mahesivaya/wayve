@@ -3,9 +3,9 @@ import { apiFetch, apiFetchJson } from "./client";
 import { getAuthToken } from "../auth/token";
 import { getApiBase } from "../config/env";
 
-// Upload one chat attachment. `body` is the ciphertext (e2e mode) or the raw
-// file (server mode); `e2e` tells the backend which it is. Returns the row id
-// to put in the message envelope + WS `attachment_ids`.
+// `body` is the ciphertext (e2e mode) or the raw file (server mode); `e2e` tells
+// the backend which it is. Returns the row id to put in the message envelope and
+// the WS frame's `attachment_ids`.
 export async function uploadChatAttachment(opts: {
   body: Blob;
   filename: string;
@@ -44,8 +44,8 @@ export async function uploadChatAttachment(opts: {
   return res.json();
 }
 
-// Download an attachment's bytes (still client-ciphertext when e2e, else the
-// plaintext file). Raw fetch so we get binary; never triggers session-expiry.
+// Returns client-ciphertext when e2e, else the plaintext file. Raw fetch so the
+// body stays binary; never triggers session-expiry handling.
 export async function downloadChatAttachment(id: number): Promise<ArrayBuffer> {
   const token = getAuthToken();
   const res = await fetch(
@@ -67,10 +67,8 @@ export type ChatUser = {
   public_key?: number[] | null;
 };
 
-// One emoji on a message and everyone who reacted with it. Note the emoji is
-// NOT end-to-end encrypted (message content is): reactions are aggregated
-// server-side, so the server can see who reacted with what. See the
-// `message_reactions` comment in infra/postgres/init.sql.
+// Reactions are NOT end-to-end encrypted (message content is): they are
+// aggregated server-side, so the server sees who reacted with what.
 export type ReactionGroup = {
   emoji: string;
   user_ids: number[];
@@ -79,43 +77,37 @@ export type ReactionGroup = {
 export type ChatMessage = {
   message_id?: number;
   sender_id: number;
-  // Display name of the sender (username, else email), returned on channel
-  // messages so the UI can show who sent each one. Absent on DMs (1-on-1, the
-  // peer is known) and on legacy rows.
+  // Returned on channel messages only. Absent on DMs, where the peer is known.
   sender_name?: string | null;
   receiver_id?: number;
   channel_id?: number;
   content: string;
   status: "sent" | "delivered" | "read";
   created_at: string;
-  // Threaded channel replies set this to the parent (top-level) message id.
-  // Null/undefined = top-level. Threads are channel-only on the wire — the
-  // backend rejects DMs with parent_message_id set.
+  // Threaded channel replies set this to the parent's message id; null/undefined
+  // is top-level. Channel-only on the wire — the backend rejects a DM that sets it.
   parent_message_id?: number | null;
-  // Server-computed count of replies under a top-level message. Only present
-  // on top-level rows returned by the main channel history fetch; replies
-  // themselves carry 0.
+  // Server-computed. Only present on top-level rows from the channel history
+  // fetch; replies themselves carry 0.
   reply_count?: number;
-  // Sender-generated correlation token. Sent with the WS frame; echoed back
-  // in the broadcast so the sender's UI can match the server-assigned
-  // `message_id` to its optimistic local copy without re-fetching.
+  // Sender-generated correlation token, echoed back in the broadcast so the
+  // sender's UI can match the server-assigned `message_id` to its optimistic copy.
   client_id?: string | null;
-  // Ids of uploaded chat_attachments to link to this message (DM or channel).
-  // Sent with the WS frame; not present on history rows.
+  // Sent with the WS frame to link uploads to this message; absent on history rows.
   attachment_ids?: number[];
-  // Populated client-side after decryption: the attachment descriptors parsed
-  // from the envelope, the raw envelope (to lazily unwrap the AES key for e2e
-  // attachment download), and the local files for the optimistic bubble.
+  // Local-only, populated after decryption and never sent on the wire: descriptors
+  // parsed from the envelope, the raw envelope (to lazily unwrap the AES key for
+  // e2e attachment download), and the local files backing an optimistic bubble.
   attachments?: ChatAttachmentMeta[];
   _envelope?: string;
   _localFiles?: File[];
-  // Emoji reactions, grouped by emoji. Returned by the history fetches and
-  // replaced wholesale by each `reaction_updated` WS frame.
+  // Returned by the history fetches and replaced wholesale by each
+  // `reaction_updated` WS frame.
   reactions?: ReactionGroup[];
 };
 
-// Wire frame for toggling a reaction over the chat socket. Reacting with an
-// emoji you've already used removes it — one frame, both directions.
+// Reacting with an emoji you've already used removes it — one frame, both
+// directions.
 export function reactionFrame(
   messageId: number,
   isChannel: boolean,
@@ -129,7 +121,7 @@ export function reactionFrame(
   });
 }
 
-// One attachment as rendered in a bubble (mirrors the envelope descriptor).
+// Mirrors the descriptor carried inside the envelope.
 export type ChatAttachmentMeta = {
   id: number;
   name: string;
@@ -144,9 +136,7 @@ export type ChatChannel = {
   visibility: "public" | "private";
   created_by: number;
   created_at: string;
-  // Timestamp of the channel's most recent message, used to surface active
-  // channels in the sidebar "Recent" group. Null when the channel has no
-  // messages yet.
+  // Null when the channel has no messages yet. Drives the sidebar "Recent" group.
   last_message_at?: string | null;
   current_user_role?: "admin" | "user";
   is_member: boolean;
@@ -168,12 +158,10 @@ export type ChatChannel = {
 export const getChatUsers = async () =>
   apiFetchJson<ChatUser[]>("/api/users/all");
 
-// Live online/offline + durable "last seen" for a set of users. `online` is the
-// realtime signal (a fresh chat socket somewhere); `last_seen` (RFC3339, or
-// null if never connected) is what the UI shows when they're offline. Content-
-// free — no message data crosses here. Live changes for your contacts also
-// arrive over the chat socket as `{ type: "presence" }` frames; this endpoint
-// seeds the initial state and reconciles on a light poll.
+// `online` is the realtime signal (a live chat socket somewhere); `last_seen`
+// (RFC3339, null if never connected) is shown when they're offline. Live changes
+// also arrive over the chat socket as `{ type: "presence" }` frames — this
+// endpoint seeds the initial state and reconciles on a light poll.
 export type UserPresence = {
   user_id: number;
   online: boolean;
@@ -189,9 +177,8 @@ export const getPresence = async (ids: number[]): Promise<UserPresence[]> => {
   return data.presence;
 };
 
-// Per-DM-conversation summary: unread counts + last-activity time for recency
-// ordering, plus the total unread across all conversations. Counts/timestamps
-// only — message content stays E2E-encrypted, never returned here.
+// Counts and timestamps only — message content stays E2E-encrypted and is never
+// returned here.
 export type DmConversationSummary = {
   user_id: number;
   unread_count: number;
@@ -201,13 +188,10 @@ export type ChatConversationSummary = {
   total_unread: number;
   conversations: DmConversationSummary[];
 };
-// Three independent consumers poll this — the global unread badge
-// (useChatUnreadCount), the Chat page list (useChatConversations), and the
-// notification bell — so on the Chat page it was fetched twice per interval.
-// Coalesce them: concurrent callers share one in-flight request, and a result
-// newer than SUMMARY_TTL_MS is reused. Real-time updates still arrive over the
-// chat websocket; this poll is only the periodic reconcile, so a few seconds of
-// staleness is harmless.
+// Three independent consumers poll this (the unread badge, the Chat page list,
+// and the notification bell), so concurrent callers share one in-flight request
+// and a result newer than SUMMARY_TTL_MS is reused. Real-time updates arrive over
+// the chat websocket, so a few seconds of staleness here is harmless.
 const SUMMARY_TTL_MS = 5000;
 let summaryCache: { at: number; data: ChatConversationSummary } | null = null;
 let summaryInFlight: Promise<ChatConversationSummary> | null = null;
@@ -234,8 +218,8 @@ export const getChatConversationSummary =
 export const getChatMessages = async (
   userId: number,
   otherUserId: number,
-  // Reconnect resync: when set, the server returns only messages newer than
-  // this id (chronological) so the client backfills exactly what it missed.
+  // Reconnect resync: when set, the server returns only messages newer than this
+  // id, so the client backfills exactly what it missed.
   sinceId?: number
 ) => {
   const params = new URLSearchParams({
@@ -319,9 +303,9 @@ export const joinChatChannel = async (channelId: number) => {
   return res.json() as Promise<{ status: "joined" | "pending" }>;
 };
 
-// Brands are applied here because the call takes two ids of different kinds
-// positionally — `approveChatChannelJoinRequest(userId, channelId)` would
-// otherwise compile. Callers must funnel ids through `asChannelId` / `asUserId`.
+// Branded ids because the call takes two ids of different kinds positionally —
+// `approveChatChannelJoinRequest(userId, channelId)` would otherwise compile.
+// Callers must funnel ids through `asChannelId` / `asUserId`.
 export const approveChatChannelJoinRequest = async (
   channelId: ChannelId,
   userId: UserId

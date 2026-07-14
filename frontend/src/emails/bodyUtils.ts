@@ -3,9 +3,8 @@ import { loadPrivateKey } from "../crypto/keyStore";
 
 const WAYVE_SECURE_PREFIX = "WAYVE_SECURE_V1";
 
-// Heuristic: does this body look like HTML (vs. plain text)? Matches an opening
-// tag or an entity. Shared by the plaintext normaliser and the detail view's
-// HTML renderer so they agree on what counts as HTML.
+// Matches an opening tag or an entity. Shared by the plaintext normaliser and
+// the detail view's HTML renderer so they agree on what counts as HTML.
 export function isHtmlBody(body: string): boolean {
   return /[<&][a-zA-Z#/!]/.test(body);
 }
@@ -44,17 +43,12 @@ export function normalizeEmailBody(body: string) {
     .trim();
 }
 
-// Two envelope shapes share the `WAYVE_SECURE_V1` prefix:
-//   * `wayve_encrypted`        — single-recipient. Phase 1 (inbound
-//     encrypt-on-arrival from external Gmail/Outlook senders) emits
-//     this; `key` is one RSA-OAEP-wrapped AES key for the inbox owner.
-//   * `wayve_encrypted_multi`  — multi-recipient. Phase 2 (Wayve-to-
-//     Wayve native channel) emits this; `keys` is a map keyed by
-//     recipient user_id so the same envelope row decrypts cleanly for
-//     every recipient including the sender's Sent copy.
-//
-// The normaliser returns a discriminated union so the decryptor can
-// pick the right wrapped key without re-parsing the JSON.
+// Two envelope shapes share the `WAYVE_SECURE_V1` prefix. `wayve_encrypted` is
+// single-recipient, emitted by the inbound encrypt-on-arrival path, and carries
+// one RSA-OAEP-wrapped AES key for the inbox owner. `wayve_encrypted_multi` is
+// emitted by the Wayve-to-Wayve channel and carries a `keys` map indexed by
+// recipient user_id, so one stored row decrypts for every recipient and for the
+// sender's Sent copy. Both must stay in sync with the Rust encryption module.
 type ParsedWayveEnvelope =
   | { kind: "single"; data: number[]; key: number[]; iv: number[] }
   | {
@@ -133,12 +127,10 @@ export function emailBodyErrorMessage(err: unknown) {
   return "Failed to load email body. Try again.";
 }
 
-// The Gmail body endpoint (`/api/emails/{id}/body`) returns a 409 whose message
-// asks the user to reconnect when the account's refresh token is dead — revoked,
-// expired (testing-mode apps), or issued by a since-rotated OAuth client. Detect
-// that case so the detail view can offer a one-click reconnect instead of a
-// dead-end error string. Accepts the raw error or the already-stringified
-// `_bodyError` message.
+// The Gmail body endpoint returns a 409 asking the user to reconnect when the
+// account's refresh token is dead: revoked, expired under a testing-mode app,
+// or issued by a since-rotated OAuth client. Detecting it lets the detail view
+// offer a one-click reconnect instead of a dead-end error string.
 export function isGmailReconnectError(error: unknown): boolean {
   const message =
     typeof error === "string"
@@ -156,9 +148,8 @@ export async function decryptWayveBodyIfNeeded(
   const encrypted = parseWayveEncryptedBody(body);
 
   if (!encrypted) {
-    // Return the body as-is (HTML preserved) — the detail view renders HTML
-    // emails in a sandboxed frame and linkifies plain text. Consumers that
-    // need plain text (reply quoting, previews) flatten it themselves.
+    // HTML is preserved: the detail view renders it in a sandboxed frame.
+    // Consumers needing plain text (reply quoting, previews) flatten it.
     return body;
   }
 
@@ -180,13 +171,9 @@ export async function decryptWayveBodyIfNeeded(
     throw new Error("This device does not have your Fluxze private key");
   }
 
-  // Pick the correct wrapped key per envelope shape:
-  //   * single-recipient envelopes carry one `key` field for the inbox
-  //     owner — used by Phase 1's inbound encrypt-on-arrival path.
-  //   * multi-recipient envelopes carry a `keys` map indexed by
-  //     recipient user_id — used by Phase 2's Wayve-to-Wayve channel.
-  //     We MUST have a userId here to know which slot is ours; without
-  //     it (legacy callers pre-Phase-2) we surface a clear error.
+  // A single-recipient envelope has one `key`; a multi-recipient one needs the
+  // userId to find our slot in `keys`, so a caller without one gets a clear
+  // error rather than a decryption failure.
   let wrappedKeyBytes: number[];
   if (encrypted.kind === "single") {
     wrappedKeyBytes = encrypted.key;
@@ -207,9 +194,10 @@ export async function decryptWayveBodyIfNeeded(
 
   let lastError: unknown = null;
 
+  // Try the user-scoped key first, then the legacy unscoped one, so rows
+  // encrypted before keys were scoped per user still open.
   for (const privateKey of privateKeys) {
     try {
-      // Raw decrypted body (HTML preserved); the detail view handles rendering.
       return await decryptMessage(
         new Uint8Array(encrypted.data),
         new Uint8Array(wrappedKeyBytes),

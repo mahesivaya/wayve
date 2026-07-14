@@ -1,15 +1,9 @@
-// Single source of truth for the 1:1 calling lifecycle. Used by:
-//   - The standalone /call page (legacy directory-driven entry point).
-//   - The /chat page, where audio/video buttons in [ChatHeader](../chat/components/ChatHeader.tsx)
-//     start a call against the currently-selected DM.
-//
-// The hook owns the /ws/call WebSocket, the RTCPeerConnection, local media
-// tracks, and the state machine. Refs are returned so the caller can attach
-// them to <audio> / <video> elements rendered wherever the call UI lives.
-//
-// Backend WS endpoints (/ws/chat and /ws/call) deliberately stay separate;
-// merging them would mix two different protocols and complicate
-// [ws_registry.rs](../../../backend/src/ws_registry.rs).
+// Single source of truth for the 1-on-1 calling lifecycle, used by the /call page
+// and the /chat page's audio/video buttons. Calls are peer-to-peer with no media
+// server, so 1-on-1 only. The hook owns the /ws/call WebSocket (signaling relay
+// only), the RTCPeerConnection, local media tracks, and the state machine; the
+// returned refs are attached to <audio>/<video> elements by whichever UI renders
+// the call. /ws/chat and /ws/call stay separate protocols.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getIceServers } from "../api/turn";
@@ -18,9 +12,9 @@ import { logger } from "../utils/logger";
 
 const log = logger.scope("call");
 
-// Signaling envelope shared with the backend `models::callmodel::SignalMessage`.
-// `media` is only set on `call-invite`; `from_email` lets the callee render
-// the caller's identity without hitting the directory.
+// Must stay in sync with the backend `models::callmodel::SignalMessage`. `media` is
+// only set on `call-invite`; `from_email` lets the callee render the caller's
+// identity without hitting the directory.
 export type CallSignal = {
   type:
     | "call-invite"
@@ -41,8 +35,8 @@ export type CallSignal = {
 
 export type CallMedia = "audio" | "video";
 
-// Call lifecycle. Media negotiation deliberately stays out of the directory
-// phase — the offer/answer dance only starts after the callee taps Accept.
+// The offer/answer exchange only starts once the callee taps Accept, so no media
+// is negotiated while the call is merely ringing.
 export type CallState =
   | { kind: "idle" }
   | { kind: "outgoing"; peerId: number; peerEmail: string; media: CallMedia }
@@ -53,11 +47,10 @@ export type CallState =
       peerEmail: string;
       media: CallMedia;
       muted: boolean;
-      // Camera disabled mid-call (video calls only). The track stays in the
-      // PeerConnection so renegotiation isn't needed — we just flip
-      // `track.enabled`, which sends black frames until re-enabled.
+      // The track stays in the PeerConnection and only `track.enabled` flips, so no
+      // renegotiation is needed; the peer receives black frames until re-enabled.
       videoOff: boolean;
-      // Epoch ms when the call went active, for the elapsed-time display.
+      // Epoch ms, for the elapsed-time display.
       startedAt: number;
     };
 
@@ -75,11 +68,9 @@ export interface CallSession {
   localVideoRef: React.RefObject<HTMLVideoElement>;
 }
 
-// ICE servers (STUN + TURN) are fetched per-call from `/api/turn/credentials`
-// — see [getIceServers](../api/turn.ts). The backend proxies Cloudflare's
-// `generate-ice-servers` so the long-lived API token never reaches the
-// browser. If the endpoint is unreachable or unconfigured, the helper
-// returns a STUN-only fallback so calls still work between permissive NATs.
+// ICE servers are fetched per call from `/api/turn/credentials`; the backend proxies
+// Cloudflare so the long-lived API token never reaches the browser. If that endpoint
+// is unreachable, getIceServers falls back to STUN only.
 
 // Outgoing calls auto-cancel after this if the callee never picks up.
 const RING_TIMEOUT_MS = 30_000;
@@ -95,9 +86,8 @@ export function useCallSession(
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const ringTimerRef = useRef<number | null>(null);
-  // ICE candidates that arrived before the remote description was applied.
-  // addIceCandidate() throws if called first, so we buffer and flush once
-  // setRemoteDescription resolves (see the offer/answer handlers).
+  // addIceCandidate() throws before the remote description is applied, so candidates
+  // that arrive early are buffered here and flushed once setRemoteDescription resolves.
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   const [connected, setConnected] = useState(false);
@@ -136,9 +126,8 @@ export function useCallSession(
 
   const buildPeerConnection = useCallback(
     async (peerId: number, media: CallMedia): Promise<RTCPeerConnection> => {
-      // Fetch fresh ICE config (includes Cloudflare TURN credentials when
-      // configured) before instantiating the PC — required for relay
-      // candidates to be discovered during the initial ICE gather pass.
+      // Fetch ICE config before instantiating the PC, or relay candidates won't be
+      // discovered during the initial gather pass.
       const iceServers = await getIceServers();
       const pc = new RTCPeerConnection({ iceServers });
 
@@ -162,10 +151,9 @@ export function useCallSession(
         }
       };
 
-      // A clean hang-up sends `call-end`, but an unclean peer drop (network
-      // loss, tab close, crash) sends nothing — the surviving side would sit
-      // on a frozen "active" panel forever. The PeerConnection itself notices
-      // within a few seconds, so fall back to the local UI on failure.
+      // A clean hang-up sends `call-end`, but an unclean drop (network loss, tab
+      // close, crash) sends nothing and would leave the survivor on a frozen "active"
+      // panel. The PeerConnection notices within seconds, so tear down locally.
       pc.onconnectionstatechange = () => {
         if (
           pc.connectionState === "failed" ||
@@ -183,8 +171,7 @@ export function useCallSession(
     [sendSignal, teardownPeer]
   );
 
-  // Drain ICE candidates that arrived before the remote description existed.
-  // Called immediately after each setRemoteDescription.
+  // Must be called immediately after every setRemoteDescription.
   const flushPendingCandidates = useCallback(async (pc: RTCPeerConnection) => {
     const queued = pendingCandidatesRef.current;
     pendingCandidatesRef.current = [];
@@ -220,8 +207,8 @@ export function useCallSession(
         type: "call-invite",
         to: peerId,
         media,
-        // The backend overrides `from` with the authenticated user id;
-        // `from_email` is purely informational so the callee can render us.
+        // The backend overrides `from` with the authenticated user id, so `from_email`
+        // is informational only.
         from_email: myEmail,
       });
 
@@ -291,9 +278,8 @@ export function useCallSession(
     setCallState({ ...callState, muted: next });
   }, [callState]);
 
-  // Camera on/off during a video call. Like mute, this flips `track.enabled`
-  // rather than removing the track — no renegotiation, the peer just receives
-  // black frames until the camera is turned back on.
+  // Like mute, this flips `track.enabled` rather than removing the track, so no
+  // renegotiation is needed.
   const toggleVideo = useCallback(() => {
     if (callState.kind !== "active" || callState.media !== "video") return;
     const stream = localStreamRef.current;
@@ -313,7 +299,7 @@ export function useCallSession(
       switch (signal.type) {
         case "call-invite": {
           if (callState.kind !== "idle") {
-            // We're busy — auto-reject so the caller's UI doesn't hang.
+            // Busy: auto-reject so the caller's UI doesn't hang.
             sendSignal({ type: "call-reject", to: from });
             return;
           }
@@ -397,9 +383,8 @@ export function useCallSession(
         case "ice-candidate": {
           const pc = pcRef.current;
           if (!pc || !signal.candidate) return;
-          // Candidates can outrun the answer on the caller side. Until the
-          // remote description is set, addIceCandidate() throws — so buffer
-          // and flush after setRemoteDescription instead of dropping them.
+          // Candidates can outrun the answer on the caller side, and addIceCandidate()
+          // throws until the remote description is set, so buffer instead of dropping.
           if (!pc.remoteDescription) {
             pendingCandidatesRef.current.push(signal.candidate);
             return;
@@ -423,9 +408,8 @@ export function useCallSession(
     ]
   );
 
-  // One WS for the lifetime of the host component. Auth lives in the cookie
-  // (or query token for legacy clients) — see [chat_ws](../../../backend/src/chat/websocket.rs).
-  // Tear down on unmount so a route change doesn't leak the connection.
+  // One WS for the lifetime of the host component; torn down on unmount so a route
+  // change doesn't leak the connection.
   useEffect(() => {
     if (myId === null) return;
     const ws = new WebSocket(`${getWsBase()}/ws/call`);
@@ -448,15 +432,13 @@ export function useCallSession(
       ws.close();
       teardownPeer();
     };
-    // handleSignal closes over state; we want one stable WS for the
-    // lifetime of the host and re-bind onmessage in the effect below
-    // when the closure changes.
+    // handleSignal closes over call state, so the effect below re-binds onmessage
+    // rather than tearing down this socket.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myId]);
 
-  // Re-bind the message handler whenever the closure (which captures
-  // call state) changes — without this, the WS would call a stale handler
-  // and miss state transitions.
+  // Re-bind the message handler whenever its closure changes, or the WS would call a
+  // stale handler and miss state transitions.
   useEffect(() => {
     const ws = wsRef.current;
     if (!ws) return;
@@ -470,12 +452,9 @@ export function useCallSession(
     };
   }, [handleSignal]);
 
-  // Attach the local stream to the preview <video> the moment the active
-  // call UI mounts the element. `attachLocalMedia` runs BEFORE setCallState
-  // flips to "active", so `localVideoRef.current` is null at capture time
-  // and the inline `srcObject = stream` assignment there silently no-ops.
-  // Without this effect, the user sees a black self-preview rectangle for
-  // the whole call even though their camera is being captured and sent.
+  // attachLocalMedia runs before setCallState flips to "active", so localVideoRef is
+  // still null there and its inline srcObject assignment no-ops. This attaches the
+  // stream once the active call UI has actually mounted the preview element.
   useEffect(() => {
     if (callState.kind !== "active" || callState.media !== "video") return;
     const el = localVideoRef.current;

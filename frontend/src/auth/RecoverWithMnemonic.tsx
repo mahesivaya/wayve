@@ -1,22 +1,11 @@
-// Mnemonic-based password reset.
+// Mnemonic-based password reset: the only way back into an account whose password
+// is lost. Losing both the password and the phrase is unrecoverable.
 //
-// User flow:
-//   1. Enter email + 24-word recovery phrase + new password
-//   2. Frontend converts the phrase → 32-byte entropy (standard BIP-39
-//      wordlist + checksum) and POSTs to /api/auth/recover-with-mnemonic.
-//      Words never cross the wire.
-//   3. Backend verifies the phrase by AES-GCM-decrypting the user's
-//      stored envelope. If the auth tag passes, it sets the new
-//      password and returns the envelope so the frontend can locally
-//      unwrap the RSA keypair too. Plan A has a single recovery_mode
-//      ('full'), so the envelope always comes back — the
-//      "password_only" branch from the previous schema is retired.
-//   4. With the envelope in hand this page also locally unwraps the
-//      user's RSA keypair and saves it to IndexedDB so the user lands
-//      in /home with chat/notes/drive working.
-//
-// "Lost password AND lost mnemonic" = account is genuinely unrecoverable.
-// That's the explicit promise this page reinforces in its copy.
+// The 24-word phrase is converted to entropy locally and only the entropy is
+// POSTed, so the words themselves never cross the wire. The backend proves the
+// phrase by AES-GCM decrypting the user's stored envelope, sets the new password,
+// and returns that envelope, which this page unwraps into IndexedDB so E2E
+// features work immediately.
 
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -54,7 +43,7 @@ export default function RecoverWithMnemonicPage() {
 
     let entropy: Uint8Array;
     try {
-      // Validates word count + membership locally before the network round-trip.
+      // Validates word count and wordlist membership before the round-trip.
       entropy = await mnemonicToEntropy(normalizeMnemonicInput(mnemonic));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid recovery phrase");
@@ -69,17 +58,14 @@ export default function RecoverWithMnemonicPage() {
         newPassword
       );
 
-      // Plan A: the server always returns the envelope on a successful
-      // mnemonic reset, so we always unlock E2E keys locally and the
-      // user doesn't have to re-enter the mnemonic at /recover after
-      // login. The legacy `wrapped_envelope === null` branch is gone.
+      // A successful reset always returns the envelope, so the keys unlock here
+      // and the user never has to re-enter the phrase at /recover after login.
       if (wrapped_envelope) {
         try {
           await unwrapKeysFromRecovery(wrapped_envelope, entropy, user_id);
         } catch (err) {
-          // Non-fatal: password is already reset. The user can finish the
-          // E2E restore at /recover after they log in. Surface a soft
-          // notice via logger.
+          // Non-fatal: the password is already reset and the user can finish the
+          // E2E restore at /recover after logging in.
           logger.warn("E2E keys were not unlocked locally:", err);
         }
       }

@@ -1,7 +1,5 @@
-// Platform-wide error log dashboard. Shows everything ingested by
-// /api/error-logs — uncaught JS errors, unhandled promise rejections,
-// failed API calls, and (when called from handlers) server-side
-// internal faults. Gated by `logs:read` + platform scope.
+// Platform-wide error log dashboard over everything ingested by /api/error-logs.
+// Gated by platform scope plus `logs:read`.
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
@@ -27,9 +25,8 @@ function shortStack(stack: string | null, lines = 4): string {
   return stack.split("\n").slice(0, lines).join("\n");
 }
 
-// Resizable columns for the log table. `width` is the default px width;
-// `min` is the floor when dragging. The <tbody> cells are rendered in this
-// same order, so the colgroup widths line up with the data columns.
+// Drag-resizable columns: `width` is the default px width, `min` the floor. The
+// <tbody> cells must stay in this order for the colgroup widths to line up.
 const LOG_COLUMNS = [
   { key: "time", label: "Time", width: 150, min: 110 },
   { key: "source", label: "Source", width: 84, min: 64 },
@@ -65,8 +62,7 @@ export default function PlatformLogs({
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  // Per-column widths (px), drag-resizable and persisted. Defaults come from
-  // LOG_COLUMNS; a stored value overrides but is floored at the column's min.
+  // A persisted width overrides the LOG_COLUMNS default but is floored at min.
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
     const defaults: Record<string, number> = {};
     for (const c of LOG_COLUMNS) defaults[c.key] = c.width;
@@ -95,9 +91,6 @@ export default function PlatformLogs({
     }
   }, [colWidths]);
 
-  // Drag the grip on a header's right edge to resize that column. Listeners
-  // live only for the duration of the drag; the table is wider than the
-  // viewport when needed and its wrapper scrolls horizontally.
   const startResize = (key: string, min: number) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -146,12 +139,10 @@ export default function PlatformLogs({
     void reload();
   }, [reload]);
 
-  // Auto-refresh while the toggle is on. 15s feels live without
-  // hammering the DB; the dashboard isn't a real-time tail.
+  // 15s is deliberately slow: this is a dashboard, not a real-time tail. The
+  // refresh is skipped entirely while the tab is hidden.
   useEffect(() => {
     if (!autoRefresh) return;
-    // Skip the refresh while the tab is hidden — no point re-fetching and
-    // re-rendering 300 rows nobody is looking at (mirrors the Emails surface).
     const id = window.setInterval(() => {
       if (document.visibilityState === "visible") void reload();
     }, 15_000);

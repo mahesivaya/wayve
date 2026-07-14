@@ -4,14 +4,12 @@ import { getAccounts, getGmailConnectUrl } from "../api/email";
 import { type EmailAccount } from "../emails/types";
 
 /**
- * Gmail connect (OAuth) shown inline on the Integrations page. Starts the same
- * per-user Gmail OAuth flow the emails page uses (`getGmailConnectUrl`); the
- * backend callback attaches the mailbox and returns to `/emails#connected=true`,
- * where the connected inbox reads and sends. Disconnect / rename live on the
- * emails surface, so this panel only offers Connect + a jump to the inbox.
+ * Gmail connect, using the same per-user OAuth flow as the emails page: the
+ * backend callback attaches the mailbox and returns to `/emails#connected=true`.
+ * Disconnect and rename live on the emails surface, so this panel only connects.
  *
- * Note: `/api/accounts` doesn't expose the provider, so "connected" here means
- * the user has at least one connected mailbox — good enough for the badge.
+ * `/api/accounts` doesn't expose the provider, so "connected" here just means the
+ * user has at least one mailbox, which is good enough for the badge.
  */
 export default function GmailPanel({
   onChange,
@@ -27,8 +25,7 @@ export default function GmailPanel({
     setLoading(true);
     try {
       const list = await getAccounts<EmailAccount>();
-      // Only count mailboxes the user connected themselves — shared inboxes
-      // they're merely a member of aren't "their" Gmail connection.
+      // Shared inboxes the user is merely a member of aren't their own connection.
       const owned = list.filter((a) => a.is_owner !== false);
       setAccounts(owned);
       onChange?.(owned.length > 0);
@@ -39,8 +36,7 @@ export default function GmailPanel({
     }
   }, [onChange]);
 
-  // Deferred to a microtask so the effect body doesn't synchronously setState
-  // (matches JiraPanel / GitHubPanel).
+  // Deferred to a microtask so the effect body doesn't synchronously setState.
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);

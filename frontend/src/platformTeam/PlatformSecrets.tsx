@@ -29,9 +29,8 @@ type EmbedMintResponse = {
   scopes: string[];
 };
 
-// Test endpoints — read-only paths so testing a key never mutates state.
-// Each one is annotated with the scope it needs so the owner can predict
-// which keys should succeed vs. be denied for scope-mismatch.
+// Read-only paths only, so testing a key never mutates state. Each carries the
+// scope it needs, so the owner can predict which keys should be denied.
 const TEST_ENDPOINTS: Array<{ method: "GET"; path: string; scope: ApiScope }> =
   [
     { method: "GET", path: "/api/me", scope: "profile:read" },
@@ -50,13 +49,11 @@ type TestResult = {
 
 export default function PlatformSecrets() {
   const { user } = useAuth();
-  // Owner-only: this page mints platform-wide credentials. Even super_admin
-  // is intentionally excluded — they bypass billing checks but should not
-  // be able to provision a `*`-scoped internal key.
+  // Owner-only. super_admin is deliberately excluded: it must not be able to
+  // provision a `*`-scoped internal key.
   const canView =
     user?.scope === "platform" && user?.effective_role === "owner";
 
-  // ── Create form ────────────────────────────────────────────────────
   const [name, setName] = useState("");
   const [keyType, setKeyType] = useState<KeyType>("external");
   const [fullAccess, setFullAccess] = useState(false);
@@ -69,14 +66,12 @@ export default function PlatformSecrets() {
   const [createError, setCreateError] = useState("");
   const [created, setCreated] = useState<CreatedApiKey | null>(null);
 
-  // ── Test panel ────────────────────────────────────────────────────
   const [testKey, setTestKey] = useState("");
   const [testEndpoint, setTestEndpoint] = useState(TEST_ENDPOINTS[0].path);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testError, setTestError] = useState("");
 
-  // ── Embed token mint ──────────────────────────────────────────────
   const [embedOrigin, setEmbedOrigin] = useState("https://customer.example");
   const [embedScopes, setEmbedScopes] = useState<Set<string>>(
     () => new Set(["profile:read"])
@@ -155,8 +150,7 @@ export default function PlatformSecrets() {
         rate_limit_per_min: rateLimit ? Number(rateLimit) : undefined,
       });
       setCreated(result);
-      // Pre-fill the test box so the owner can run the very next click
-      // without copy-paste — the raw key is only available right now.
+      // The raw key is only ever available here, so pre-fill the test box now.
       setTestKey(result.api_key);
     } catch (err) {
       setCreateError(

@@ -2,9 +2,8 @@ import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import { useLocation } from "react-router-dom";
 import { lazy, Suspense } from "react";
 
-// /services/:slug → /docs/services/:slug. Native <Navigate to="..."/>
-// can't include a dynamic `:slug` from the URL, so this tiny wrapper
-// reads the param via useParams and forwards.
+// <Navigate to="..."/> can't interpolate a dynamic `:slug` from the URL, so
+// this wrapper reads the param and forwards to /docs/services/:slug.
 function LegacyServiceRedirect() {
   const { slug } = useParams();
   return <Navigate to={`/docs/services/${slug ?? ""}`} replace />;
@@ -26,12 +25,11 @@ import { homePathForUser, normalizeAccountType } from "./auth/accountHome";
 import { canViewIntegrations } from "./auth/permissions";
 import { SPLIT_APPS } from "./components/LayoutConfig";
 
-// 🔥 Lazy loaded pages
-// Home & GitHubRepo also appear in SPLIT_APPS, but keep dedicated lazy consts
-// here because their routes are guarded/redirecting and declared explicitly
-// below. Emails/Chat/Scheduler/Drive/Notes/Tasks/AIChat/About get their routes
-// generated from SPLIT_APPS (see the Layout block) using the lazy Comps defined
-// in LayoutConfig.ts — single source of truth, no duplicate route here.
+// Every page below is lazy-loaded; Layout, Header and AuthContext are the eager
+// ones. Home and GitHubRepo also appear in SPLIT_APPS but keep dedicated lazy
+// consts here because their routes are guarded or redirecting and so are
+// declared explicitly. The rest of the split-pane apps have their routes
+// generated from SPLIT_APPS, which stays the single source of truth.
 const Home = lazy(() => import("./home/Home"));
 const Call = lazy(() => import("./call/Call"));
 const Documents = lazy(() => import("./documents/DocumentsBox"));
@@ -127,8 +125,8 @@ export default function App() {
 
   const accountType = normalizeAccountType(user?.account_type);
   // A switchable owner only reaches admin surfaces in admin mode. The
-  // account_type-keyed guards below don't auto-restrict from the downscoped
-  // /me (account_type is never mutated), so they're explicitly ANDed with this.
+  // account_type-keyed guards below can't detect the downscoped /me on their
+  // own (account_type is never mutated), so they must be ANDed with this.
   const adminMode = user?.mode === "admin";
   const isOrganizationUser =
     (accountType === "organization_admin" ||
@@ -152,13 +150,12 @@ export default function App() {
         }
       >
         <Routes>
-          {/* ROOT */}
           <Route
             path="/"
             element={user ? (redirectToAccountHome ?? <Home />) : <Home />}
           />
 
-          {/* PUBLIC */}
+          {/* Public routes. */}
           <Route
             path="/login"
             element={user ? (redirectToAccountHome ?? <Login />) : <Login />}
@@ -186,26 +183,18 @@ export default function App() {
             path="/recover-with-mnemonic"
             element={<RecoverWithMnemonicPage />}
           />
-          {/* Plan A Phase 3 — Secure-send magic link. Intentionally
-            public: the recipient is not (necessarily) a Wayve user,
-            and the passphrase is what actually unlocks the message.
-            The page fetches the ciphertext from a no-auth API route
-            and decrypts entirely client-side. */}
+          {/* The secure-send magic link is deliberately public: the recipient
+            need not be a Wayve user, and the passphrase is what unlocks the
+            message. The page fetches ciphertext from a no-auth route and
+            decrypts entirely client-side. */}
           <Route path="/m/:token" element={<SecureMessageView />} />
           <Route path="/organization" element={<Organization />} />
-          {/* /services/:slug is now /docs/services/:slug — redirect old
-            links so any externally-shared URL still lands. */}
           <Route path="/services/:slug" element={<LegacyServiceRedirect />} />
           <Route path="/docs/services/:slug" element={<ServicePage />} />
-          {/* Pricing is a public-facing page: anyone (logged out OR in) should
-            be able to view plans. It lives here rather than under the
-            ProtectedRoute branch so unauth visitors aren't bounced to
-            /login. The component renders its own header chrome, so no
-            Layout wrapper is needed. */}
-          {/* Personal accounts bounce off these surfaces: Pricing redirects
-            to Settings (where "Manage billing & upgrade" lives); Developers
-            and Docs fall back to the account home. Public visitors and
-            organization / platform users pass through unchanged. */}
+          {/* Pricing sits outside ProtectedRoute so logged-out visitors can view
+            plans without being bounced to /login, and it renders its own header
+            chrome so it needs no Layout. Personal accounts are redirected to
+            Settings, where "Manage billing & upgrade" lives. */}
           <Route
             path="/pricing"
             element={
@@ -215,25 +204,18 @@ export default function App() {
             }
           />
           <Route path="/support" element={<Support />} />
-          {/* Public lead form reached from the home "Book a Demo" CTA. */}
           <Route path="/book-demo" element={<BookDemo />} />
-          {/* ── Documentation surface ──────────────────────────────────
-            Every dev-readable page now lives under /docs/* with a
-            shared DocsShell (search + sidebar + breadcrumbs). The
-            whole tree is public — anyone, logged-in or not, can
-            browse the API contract. Legacy paths (/developers,
-            /developers/quotas, /services/:slug) 301-style redirect
-            to their /docs/* canonical URL.
-            -------------------------------------------------------- */}
+          {/* The whole /docs/* tree is public, so anyone can browse the API
+            contract. Legacy paths (/developers, /developers/quotas,
+            /services/:slug) redirect to their canonical /docs/* URL. */}
           <Route path="/docs" element={<DocsIndex />} />
           <Route path="/docs/api" element={<SwaggerDocs />} />
           <Route path="/docs/developers" element={<Developers />} />
           <Route path="/docs/quotas" element={<Quotas />} />
-          {/* Backend markdown catalog — matches anything else under
-            /docs/*. Order matters: this must come AFTER the static
-            routes above so /docs/api etc. aren't treated as slugs. */}
+          {/* The markdown catalog matches anything else under /docs/*, so it
+            must stay AFTER the static routes above or /docs/api and friends
+            would be treated as slugs. */}
           <Route path="/docs/:slug" element={<Docs />} />
-          {/* Legacy paths — keep external links working forever. */}
           <Route
             path="/developers"
             element={<Navigate to="/docs/developers" replace />}
@@ -243,14 +225,12 @@ export default function App() {
             element={<Navigate to="/docs/quotas" replace />}
           />
 
-          {/* PROTECTED */}
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
-              {/* Sidebar split-pane apps — routes generated from the single
-                SPLIT_APPS registry in LayoutConfig.ts. Adding a sidebar app
-                there adds both the sidebar entry AND its route. Guarded /
-                redirecting ones (home, github) opt out via autoRoute:false and
-                are declared explicitly below. */}
+              {/* Sidebar split-pane app routes are generated from the SPLIT_APPS
+                registry in LayoutConfig.ts, so adding an app there adds both the
+                sidebar entry and its route. Guarded or redirecting ones opt out
+                via autoRoute:false and are declared explicitly below. */}
               {SPLIT_APPS.filter((app) => app.autoRoute !== false).map(
                 (app) => (
                   <Route key={app.key} path={app.path} element={<app.Comp />} />
@@ -276,10 +256,10 @@ export default function App() {
               <Route
                 path="/platform/home"
                 element={
-                  // A platform user whose role-derived home is NOT this page
-                  // (currently: billing → /platform/billing) gets bounced out.
-                  // Keeps /platform/home from being the landing surface
-                  // for roles that have no actionable panels on it.
+                  // A platform user whose role-derived home is some other page
+                  // (billing lands on /platform/billing) is bounced out, so
+                  // /platform/home never becomes the landing surface for a role
+                  // with no actionable panels on it.
                   accountType === "platform_admin" &&
                   accountHome === "/platform/home" ? (
                     <PlatformAdminHome />
@@ -327,28 +307,24 @@ export default function App() {
                 path="/aichat"
                 element={<Navigate to="/ai-chat" replace />}
               />
-              {/* The Code Repo viewer is available to: platform team, org
-                owner/super_admin/admin, developers (either scope) via the
-                Workspace section, and personal accounts that opt in via the
-                sidebar "+" add-app button. Any authenticated user may reach
-                it — the backend proxy serves a single read-only repo — so the
-                guard only bounces unauthenticated visitors. */}
+              {/* Any authenticated user may reach the Code Repo viewer, since
+                the backend proxy serves a single read-only repo. The guard only
+                bounces unauthenticated visitors. */}
               <Route
                 path="/github"
                 element={
                   user ? <GitHubRepo /> : <Navigate to={accountHome} replace />
                 }
               />
-              {/* Per-project repo viewer (personal accounts add their own repo to
-                a project; the bare /github above keeps the platform team's
-                single-repo dashboard). */}
+              {/* Per-project repo viewer. The bare /github above stays the
+                platform team's single-repo dashboard. */}
               <Route
                 path="/github/:projectId"
                 element={
                   user ? <GitHubRepo /> : <Navigate to={accountHome} replace />
                 }
               />
-              {/* Platform-owner only: graphical tracing-log dashboard. */}
+              {/* Platform-owner only. */}
               <Route
                 path="/logs/tracing"
                 element={
@@ -364,7 +340,7 @@ export default function App() {
                 path="/platform/tracing"
                 element={<Navigate to="/logs/tracing" replace />}
               />
-              {/* Platform-owner only: domain administration for organizations. */}
+              {/* Platform-owner only. */}
               <Route
                 path="/platform/domains"
                 element={
@@ -395,10 +371,10 @@ export default function App() {
               />
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />
-              {/* Integrations is for personal accounts (their only route to
-                connecting a Gmail mailbox) and organization / platform OWNERS.
-                Other members are bounced home — the sidebar and Settings links
-                are gated on the same predicate. */}
+              {/* Integrations is for personal accounts, whose only route to
+                connecting a Gmail mailbox it is, and for organization and
+                platform owners. Other members are bounced home. The sidebar and
+                Settings links gate on the same predicate. */}
               <Route
                 path="/integrations"
                 element={
@@ -409,10 +385,9 @@ export default function App() {
                   )
                 }
               />
-              {/* Owner-only feature access matrix (the page self-guards;
-                the sidebar link is also owner-gated). Same component serves
-                organization and platform owners — the backend resolves the
-                matrix from the caller's scope. */}
+              {/* The owner-only feature access matrix self-guards. One component
+                serves both scopes; the backend resolves the matrix from the
+                caller's scope. */}
               <Route
                 path="/organization/access"
                 element={<FeatureAccessPage />}
@@ -445,9 +420,8 @@ export default function App() {
               />
               <Route path="/platform/welcome" element={<PlatformWelcome />} />
               <Route path="/platform/secrets" element={<PlatformSecrets />} />
-              {/* All log/audit surfaces live under one /logs/* namespace.
-                The old /platform/*, /organization/logs and /security/audit
-                paths below redirect here so bookmarks keep working. */}
+              {/* All log and audit surfaces live under one /logs/* namespace;
+                the older paths below redirect here. */}
               <Route
                 path="/logs"
                 element={<Navigate to="/logs/app" replace />}
@@ -479,10 +453,9 @@ export default function App() {
                 path="/projects/:owner/:repo"
                 element={<ProjectDetail />}
               />
-              {/* Org-master-key flows. Bootstrap shows the 24-word
-                mnemonic ONCE; recovery-key accepts the mnemonic on a
-                fresh device; recover-data is the owner / admin
-                impersonation proof view. */}
+              {/* Org-master-key flows: bootstrap shows the 24-word mnemonic
+                once, recovery-key accepts it on a fresh device, and impersonate
+                is the owner/admin proof view. */}
               <Route
                 path="/organization/recovery-key/bootstrap"
                 element={<OrgKeyBootstrap />}
@@ -495,8 +468,7 @@ export default function App() {
                 path="/organization/members/:uid/impersonate"
                 element={<RecoverMemberData />}
               />
-              {/* Legacy alias — "recover-data" read like the member lost data;
-                "impersonate" describes what the owner is actually doing. */}
+              {/* Legacy alias. */}
               <Route
                 path="/organization/members/:uid/recover-data"
                 element={
@@ -535,9 +507,7 @@ export default function App() {
             </Route>
           </Route>
 
-          {/* FALLBACK — explicit 404 (also reported to /api/error-logs). The
-              "home" link points at the account home for logged-in users, or
-              the login page otherwise. */}
+          {/* Explicit 404, also reported to /api/error-logs. */}
           <Route
             path="*"
             element={<NotFound homePath={user ? accountHome : "/login"} />}

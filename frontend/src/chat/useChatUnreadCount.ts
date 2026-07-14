@@ -1,15 +1,12 @@
 import { useEffect, useState } from "react";
 import { getChatConversationSummary } from "../api/chat";
 
-// Custom event other chat surfaces can fire after marking a conversation read
-// so the sidebar badge refreshes immediately instead of waiting for the poll.
+// Other chat surfaces fire this after marking a conversation read, so the sidebar
+// badge refreshes immediately instead of waiting for the poll.
 export const CHAT_UNREAD_CHANGED_EVENT = "rwayve:chat-unread-changed";
 
-// Subscribe to the total unread chat (direct-message) count. Mirrors
-// useEmailsUnreadCount: used by the Layout sidebar's Chat nav badge.
-//
-// `enabled` lets callers gate the fetch on auth state — passing `false`
-// while the user is logging out keeps the badge from firing a 401.
+// `enabled` gates the fetch on auth state: passing `false` while the user is logging
+// out keeps the badge from firing a 401.
 export function useChatUnreadCount(enabled: boolean = true): number {
   const [count, setCount] = useState<number>(0);
 
@@ -35,8 +32,8 @@ export function useChatUnreadCount(enabled: boolean = true): number {
     };
     document.addEventListener("visibilitychange", onVisible);
 
-    // The chat page fires this with the fresh total in `detail` (instant, no
-    // refetch); other emitters may fire it bare → fall back to a refetch.
+    // The chat page fires this with the fresh total in `detail`, but other emitters
+    // may fire it bare, so fall back to a refetch.
     const onChanged = (e: Event) => {
       const detail = (e as CustomEvent<number>).detail;
       if (typeof detail === "number" && !cancelled) setCount(detail);

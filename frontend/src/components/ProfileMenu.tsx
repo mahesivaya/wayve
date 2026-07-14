@@ -8,11 +8,9 @@ import { useCustomTheme } from "../theme/useCustomTheme";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
 
-// Three "identity" CSS variables — used as inline backgrounds on the
-// Appearance menu item's mini swatch. Browsers resolve var() in inline
-// `style={{ background: 'var(--…)' }}`, so the swatch always reflects the
-// active palette (including custom themes) without us having to mirror the
-// values into React state.
+// Must stay as var() references, not literal colors: browsers resolve var() in
+// inline styles, so the swatch tracks the active palette (custom themes and dark
+// mode included) without mirroring any values into React state.
 const SWATCH_VARS = [
   "var(--color-primary-action)",
   "var(--color-accent-purple)",
@@ -26,8 +24,7 @@ export default function ProfileMenu() {
   const [switching, setSwitching] = useState(false);
 
   const inAdminMode = user?.mode === "admin";
-  // Show the switcher to an eligible owner (in normal mode) or whenever already
-  // elevated (so they can exit). Regular members never see it.
+  // Eligible owners see this, plus anyone already elevated so they can exit.
   const showSwitcher = inAdminMode || (user?.can_switch_admin ?? false);
 
   const handleSwitch = async (target: "normal" | "admin") => {
@@ -36,7 +33,6 @@ export default function ProfileMenu() {
     try {
       await switchMode(target);
       setMenuOpen(false);
-      // Land on the admin console (admin) or the personal workspace (normal).
       navigate(
         target === "admin"
           ? homePathForUser({ ...user, mode: "admin", can_switch_admin: true })
@@ -51,8 +47,7 @@ export default function ProfileMenu() {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const appearanceRef = useRef<HTMLDivElement>(null);
-  // Re-key the swatch when the choice changes so the inline var() values
-  // re-resolve. The colors themselves come straight from CSS variables.
+  // Re-keying on the choice forces the inline var() values to re-resolve.
   const { choice } = useCustomTheme();
   const swatchKey = useMemo(() => JSON.stringify(choice), [choice]);
 
@@ -71,9 +66,9 @@ export default function ProfileMenu() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [menuOpen]);
 
-  // Separate handler for the Appearance panel — it's rendered outside the
-  // profile-menu wrapper so the menu's outside-click doesn't fire when the
-  // user drags a slider inside the customizer.
+  // The Appearance panel needs its own outside-click handler because it renders
+  // outside the profile-menu wrapper, so the menu's handler would otherwise fire
+  // when the user drags a slider inside the customizer.
   useEffect(() => {
     if (!appearanceOpen) return;
     const onDocClick = (e: MouseEvent) => {
@@ -203,9 +198,8 @@ export default function ProfileMenu() {
             className="profile-dropdown-item profile-dropdown-logout"
             onClick={() => {
               setMenuOpen(false);
-              // logout() owns the redirect (hard nav to "/"). A client-side
-              // navigate here would bounce to the account home while `user`
-              // is still set — an extra flash.
+              // logout() owns the redirect. Navigating here instead would bounce
+              // to the account home while `user` is still set, causing a flash.
               logout();
             }}
           >

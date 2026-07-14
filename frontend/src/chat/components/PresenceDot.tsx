@@ -5,9 +5,8 @@ type Props = {
 };
 
 /**
- * The little green/grey status dot. Rendered inside a `position: relative`
- * container (e.g. `.conversation-icon`) so it pins to the avatar's corner.
- * Nothing is drawn until presence is known, so a row doesn't flash "offline"
+ * Must be rendered inside a `position: relative` container to pin to the avatar's
+ * corner. Draws nothing until presence is known, so a row doesn't flash "offline"
  * before the first snapshot lands.
  */
 export default function PresenceDot({ presence }: Props) {

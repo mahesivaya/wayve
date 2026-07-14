@@ -2,19 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { getProfile } from "../api/profile";
 import { useAuth } from "../auth/useAuth";
 
-// Single source of truth for the storage/memory limit alert, shared by the
-// StorageLimitBanner and the NotificationBell so they always agree and gate to
-// the same audience.
+// Single source of truth for the storage limit alert, shared by
+// StorageLimitBanner and NotificationBell so they always agree.
 //
-// Audience (per product decision): alert ONLY personal accounts and
-// organization OWNERS. All other organization members and platform-scope users
-// never see the alert — they can't act on an org/personal storage cap.
+// The alert reaches personal accounts and organization owners only: no one else
+// can act on a storage cap, so showing it to them would be noise.
 
-// Warn once usage crosses 90% of the plan's storage limit; "critical" at 100%.
 export const WARN_THRESHOLD = 0.9;
 
-// Fired by other surfaces (e.g. Drive upload/delete in DriveBox) so consumers
-// re-check usage immediately instead of waiting for the next focus/poll.
+// Fired by surfaces that change usage (e.g. a Drive upload) so consumers
+// re-check immediately instead of waiting for the next focus.
 export const STORAGE_CHANGED_EVENT = "rwayve:storage-changed";
 
 export type StorageLevel = "none" | "warn" | "critical";
@@ -65,7 +62,6 @@ export function useStorageStatus(): StorageStatus {
     };
   }, [refresh]);
 
-  // Allow-list audience: personal accounts OR organization owners only.
   const isPersonal =
     user?.account_type === "personal" ||
     (user?.scope !== "organization" && user?.scope !== "platform");
@@ -73,8 +69,8 @@ export function useStorageStatus(): StorageStatus {
     user?.scope === "organization" && user?.effective_role === "owner";
   const eligible = Boolean(user) && (isPersonal || isOrgOwner);
 
-  // pct is only meaningful for a finite limit (> 0). Unlimited plans (limit <= 0)
-  // and missing data yield level "none".
+  // Only a finite limit yields a percentage; unlimited plans and missing data
+  // fall through to level "none".
   const pct =
     used !== null && limit !== null && limit > 0 ? used / limit : null;
 

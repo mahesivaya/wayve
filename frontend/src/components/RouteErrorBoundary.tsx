@@ -1,17 +1,15 @@
-// App-wide error boundary for the lazy route tree. Without this, a failed
-// dynamic import (a stale chunk after a deploy, or an HMR-corrupted lazy
-// boundary in dev) or any render throw propagates past <Suspense> with nothing
-// to catch it — React unmounts the whole tree and the page goes silently
-// blank. This catches those: chunk-load failures auto-reload once; anything
-// else shows a visible "something went wrong / reload" panel instead of blank.
+// Without this boundary a failed dynamic import (a stale chunk after a deploy)
+// or any render throw propagates past <Suspense> uncaught, React unmounts the
+// tree, and the page goes silently blank. Chunk-load failures auto-reload once;
+// anything else shows a reload panel.
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { reportClientError } from "../api/errorLogs";
 
 const RELOAD_FLAG = "route-chunk-reloaded";
 
-// A failed dynamic import surfaces under a few different messages/names across
-// browsers and bundlers — match them all so we only auto-reload for genuine
-// chunk-load failures, not for ordinary render bugs.
+// Browsers and bundlers report a failed dynamic import under several different
+// names and messages. Matching them all keeps the auto-reload to genuine
+// chunk-load failures rather than ordinary render bugs.
 function isChunkLoadError(error: unknown): boolean {
   if (!error) return false;
   const name = (error as { name?: string }).name ?? "";
@@ -35,8 +33,8 @@ export default class RouteErrorBoundary extends Component<Props, State> {
   }
 
   componentDidMount() {
-    // We rendered fine — clear the one-shot guard so a future stale chunk can
-    // reload again.
+    // Rendering succeeded, so clear the one-shot guard and let a future stale
+    // chunk reload again.
     try {
       sessionStorage.removeItem(RELOAD_FLAG);
     } catch {
@@ -53,18 +51,16 @@ export default class RouteErrorBoundary extends Component<Props, State> {
       } catch {
         /* ignore */
       }
-      // Auto-reload once to pick up the fresh bundle/chunk map. Guard against a
-      // loop if the chunk is genuinely gone (then we fall through to the panel).
+      // Reload once for the fresh chunk map. The guard prevents a reload loop
+      // when the chunk is genuinely gone; that case falls through to the panel.
       if (!alreadyReloaded) {
         window.location.reload();
         return;
       }
     }
-    // Surface non-chunk errors for diagnosis instead of swallowing them.
     console.error("RouteErrorBoundary caught:", error, info.componentStack);
     // React-caught render errors don't fire window.onerror, so the global
-    // reporter (installErrorReporter) never sees them. Forward them here so
-    // they still land in /api/error-logs and the platform dashboard.
+    // reporter never sees them. Forward them so they still reach /api/error-logs.
     reportClientError({
       severity: "error",
       message: error.message || "render error",

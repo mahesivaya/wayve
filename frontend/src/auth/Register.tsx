@@ -34,10 +34,9 @@ export default function Register() {
 
     setSubmitting(true);
     try {
-      // The account is created UNVERIFIED and a 6-digit code is emailed — the
-      // user must enter it before they can log in (that first login is when the
-      // E2E keypair + recovery phrase are set up). No auto-login; go to the code
-      // screen with the email prefilled.
+      // The account is created unverified: the user must enter the emailed 6-digit
+      // code before they can log in, and that first login is what sets up the E2E
+      // keypair and recovery phrase. No auto-login.
       await register(email, password, confirmPassword, "full");
       navigate(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err) {

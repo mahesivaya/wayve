@@ -1,15 +1,8 @@
-// Restore a private key from a recovery mnemonic on a fresh device.
-//
-// Flow:
-//   1. User signs in normally (their session JWT is valid)
-//   2. Lands here at /recover (manual nav or auto-prompted by Auth if
-//      no IndexedDB key is found)
-//   3. Pastes the recovery words → membership check against the wordlist
-//   4. Fetch the wrapped envelope from /api/me/wrapped-key
-//   5. PBKDF2(mnemonic) → derive wrapping key → AES-GCM decrypt
-//      (wrong words → auth-tag verification fails, clean error)
-//   6. Save the recovered keypair into IndexedDB
-//   7. Redirect to /home — chat / notes / drive / attachments now work
+// Restores a private key from a recovery mnemonic on a fresh device. The user
+// must already be signed in, since the wrapped envelope is fetched from
+// /api/me/wrapped-key with their session JWT. The mnemonic is stretched with
+// PBKDF2 into the wrapping key, so wrong words fail AES-GCM tag verification and
+// surface as a clean error rather than a corrupt key.
 
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";

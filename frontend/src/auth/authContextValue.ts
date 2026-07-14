@@ -1,10 +1,9 @@
 import { createContext } from "react";
 import type { AccountType } from "./accountHome";
 
-// Snapshot of the user's current tier — returned by /api/me (and /api/profile)
-// from `routes/user.rs::current_plan_for_user`. Falls back to the
-// `basic_user` plan when no active subscription exists, so this field is
-// almost always present for an authenticated user.
+// The user's current tier, from /api/me. The backend falls back to the
+// `basic_user` plan when no subscription is active, so this is almost always
+// present for an authenticated user.
 export type CurrentPlan = {
   code: string;
   name: string;
@@ -15,41 +14,36 @@ export type CurrentPlan = {
   amount_cents: number;
 };
 
-// Plan A: only one recovery mode exists — 'full'. Every user's RSA
-// private key is wrapped by their 24-word BIP-39 mnemonic; the server
-// stores only the opaque envelope. The string union still exists as a
-// type so the rest of the SPA compiles unchanged, but it has exactly
-// one inhabitant. The legacy 'basic' and 'password_only' rows have
-// been migrated to 'full' (see infra/postgres/init.sql and
-// backend/.../startup.rs).
+// Only one recovery mode exists. Every user's RSA private key is wrapped by
+// their 24-word BIP-39 mnemonic and the server stores only the opaque envelope.
+// The union survives as a one-inhabitant type so the rest of the SPA compiles;
+// legacy 'basic' and 'password_only' rows were migrated to 'full'.
 export type RecoveryMode = "full";
 
 export type UserType = {
   email: string;
   id: number;
-  // Optional handle — backend returns `Option<String>` from /api/me and
-  // /api/profile. Null when the user signed up via OAuth without setting one
-  // (or hasn't been migrated). Used in places like Support.tsx for cosmetic
-  // gating; never load-bearing.
+  // Null when the user signed up via OAuth without setting one. Cosmetic only,
+  // never load-bearing.
   username?: string | null;
   account_type: AccountType;
   effective_role?: string | null;
   role_label?: string | null;
   // RBAC scope ("personal" | "organization" | "platform") and the resolved
-  // permission strings — server-computed, used to gate UI.
+  // permissions. Server-computed, and for UI gating only.
   scope?: string | null;
   permissions?: string[];
-  // True only for THE first owner of an organization (earliest `owner` row).
-  // Server-computed; gates single-person owner affordances like connecting the
-  // org's own OAuth mailbox. Always false for personal/platform scopes.
+  // True only for the FIRST owner of an organization. Gates single-owner
+  // affordances such as connecting the org's own OAuth mailbox, and is always
+  // false in personal and platform scopes.
   is_primary_owner?: boolean;
-  // Interactive session mode. An owner logs in as "normal" (a downscoped,
-  // restricted identity) and can switch to "admin" to reach the admin console.
-  // Absent ⇒ treat as "normal". Server-authoritative (from the JWT claim).
+  // An owner logs in as "normal", a downscoped identity, and can switch to
+  // "admin" to reach the admin console. Absent means "normal". Comes from the
+  // JWT claim, so it is server-authoritative.
   mode?: "normal" | "admin";
-  // True when the caller's TRUE (pre-downscope) role is an org/platform owner,
-  // i.e. eligible to enter admin mode. Server-computed, so it's visible even
-  // while downscoped in normal mode (drives the switcher's visibility).
+  // True when the caller's true, pre-downscope role is an org or platform owner
+  // and they may therefore enter admin mode. Stays visible while downscoped,
+  // which is what drives the switcher.
   can_switch_admin?: boolean;
   organization_id?: number | null;
   organization_slug?: string | null;
@@ -57,27 +51,26 @@ export type UserType = {
   current_plan?: CurrentPlan | null;
   // Defaults to "full" when /api/me predates the column (legacy rows).
   recovery_mode?: RecoveryMode;
-  // Serialized ThemeChoice from the theme customizer. Opaque JSON string;
-  // the theme module owns the schema. NULL/undefined means no server-side
-  // override, so the client uses its localStorage cache or the default.
+  // Serialized ThemeChoice, an opaque JSON string whose schema the theme module
+  // owns. Absent means no server-side override, so the client falls back to its
+  // localStorage cache or the default.
   theme_json?: string | null;
-  // When true, chat file attachments this user sends are end-to-end encrypted
-  // (server can't read them); false = server-encrypted at rest only. Toggled in
-  // Settings by personal accounts and owners. Defaults true.
+  // True means this user's chat attachments are end-to-end encrypted and the
+  // server cannot read them; false means server-encrypted at rest only.
   chat_encrypt_files?: boolean;
 };
 
 export type AuthType = {
   user: UserType | null;
   initializing: boolean;
-  // `isFreshRegistration` flips the encryption-setup path. Only the
-  // register flow generates new keys + shows the 24-word seed modal.
-  // Regular login leaves the server's wrapped envelope alone — if local
-  // keys are missing, the user recovers via /recover-with-mnemonic.
-  // `plaintextPassword`, when supplied, is forwarded once to
-  // setupEncryption so the post-login flow can also produce a PBKDF2
-  // login-wrap for the personal user (auto-unlock on new browsers,
-  // skip the mnemonic prompt). Optional — SSO/Google paths omit it.
+  // `isFreshRegistration` flips the encryption-setup path: only the register flow
+  // generates new keys and shows the 24-word seed modal. A regular login leaves
+  // the server's wrapped envelope alone, and if local keys are missing the user
+  // recovers via /recover-with-mnemonic instead.
+  //
+  // `plaintextPassword` is forwarded once to setupEncryption so it can build the
+  // PBKDF2 login-wrap that lets the user auto-unlock on a new browser. SSO and
+  // Google paths omit it.
   login: (
     token: string,
     accountType?: string,
@@ -85,13 +78,11 @@ export type AuthType = {
     plaintextPassword?: string
   ) => void;
   logout: () => void;
-  // Re-fetch /api/me and update user state. Called after server-side
-  // mutations that change the caller's scope/permissions (e.g. a personal
-  // user creating an organization and being promoted to organization_admin).
+  // Called after server-side mutations that change the caller's scope or
+  // permissions, such as a personal user creating an organization and being
+  // promoted to organization_admin.
   refresh: () => Promise<void>;
-  // Switch the session between "normal" and "admin". POSTs /api/session/mode,
-  // stores the returned token, and refreshes /api/me. Rejects if the server
-  // refuses (e.g. a non-owner requesting admin).
+  // Rejects if the server refuses, for example a non-owner requesting admin.
   switchMode: (target: "normal" | "admin") => Promise<void>;
 };
 

@@ -1,7 +1,6 @@
-// Owner-only AI usage & cost governance dashboard. Lives under
-// /settings/ai/usage. Gated by the owner-only `ai:manage` permission (backend
-// also enforces enterprise tier). Renders SAMPLE data for now (the response
-// carries `sample: true`); real metering is a phase-2 swap behind the same shape.
+// Owner-only AI usage and cost dashboard, gated by `ai:manage`. The figures are
+// sample data for now (the response carries `sample: true`); real metering will
+// arrive behind the same response shape.
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -38,9 +37,8 @@ export default function AiUsageGovernance() {
     } finally {
       setLoading(false);
     }
-    // Authoritative Anthropic spend is best-effort and platform-owner-only —
-    // a 403 (org owner) or any failure just hides the panel, never blocks the
-    // page.
+    // Authoritative Anthropic spend is platform-owner-only, so a 403 or any
+    // other failure hides the panel rather than blocking the page.
     try {
       setAnthropicCost(await getAnthropicCost());
     } catch {
@@ -49,8 +47,8 @@ export default function AiUsageGovernance() {
   }, []);
 
   useEffect(() => {
-    // The no-permission branch renders its own view below regardless of
-    // `loading`, so we simply don't kick off the fetch.
+    // The no-permission branch renders its own view regardless of `loading`, so
+    // there is no fetch to kick off.
     if (!canManage) return;
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);

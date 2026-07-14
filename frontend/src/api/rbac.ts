@@ -1,8 +1,7 @@
 import { apiFetch } from "./client";
 
-// RBAC member-listing and role-management calls. `apiFetch` already throws an
-// Error (carrying the backend `message`) on any non-2xx response, so these
-// helpers only need to parse the success body.
+// `apiFetch` already throws an Error carrying the backend `message` on any
+// non-2xx response, so these helpers only parse the success body.
 
 export type Member = {
   user_id: number;
@@ -60,8 +59,8 @@ export async function updatePlatformMemberRole(
   return res.json();
 }
 
-// Per-user project (GitHub repo) access for a platform member. Repos are keyed
-// by GitHub `full_name` ("owner/name").
+// Per-user project access for a platform member. Repos are keyed by GitHub
+// `full_name`, i.e. "owner/name", in this and the three calls below.
 export async function getPlatformMemberProjects(
   userId: number
 ): Promise<string[]> {
@@ -72,7 +71,7 @@ export async function getPlatformMemberProjects(
   return Array.isArray(data?.repos) ? (data.repos as string[]) : [];
 }
 
-// Replace the member's granted repo set. Returns the persisted list.
+// Replaces the member's granted repo set, returning the persisted list.
 export async function setPlatformMemberProjects(
   userId: number,
   repos: string[]
@@ -86,7 +85,7 @@ export async function setPlatformMemberProjects(
   return Array.isArray(data?.repos) ? (data.repos as string[]) : [];
 }
 
-// Org variant — the same per-member project access, scoped to one organization.
+// The same per-member project access, scoped to one organization.
 export async function getOrganizationMemberProjects(
   organizationId: number,
   userId: number
@@ -112,9 +111,8 @@ export async function setOrganizationMemberProjects(
   return Array.isArray(data?.repos) ? (data.repos as string[]) : [];
 }
 
-// Full profile + per-service storage for one team member, backing the scoped
-// member detail page. The org variant is authorized to the caller's own org;
-// the platform variant to platform staff only. Both return the same shape.
+// Both fetches below return this shape, but the org variant is authorized to the
+// caller's own org and the platform variant to platform staff only.
 export type MemberStorage = {
   total_bytes: number;
   gmail_bytes: number;
@@ -153,8 +151,8 @@ export async function getOrganizationMemberDetail(
   return res.json();
 }
 
-// `identifier` is the member's username (the canonical URL) or their numeric
-// user id (legacy links) — the backend accepts either.
+// The backend accepts either the member's username, which is the canonical URL,
+// or their numeric user id, which legacy links still use.
 export async function getPlatformMemberDetail(
   identifier: string | number
 ): Promise<MemberDetail> {
@@ -165,10 +163,9 @@ export async function getPlatformMemberDetail(
   return res.json();
 }
 
-// Response from POST /api/admin/users. `temp_password` is only present when
-// the backend generated a password (i.e., the form submitted email + role
-// without a password). Surface it to the admin in a "shown once" UI — it
-// won't be available on subsequent calls or in any audit log.
+// `temp_password` is present only when the backend generated one. It must be
+// surfaced to the admin in a shown-once UI: no later call and no audit log can
+// recover it.
 export type AdminCreatedUser = {
   id: number;
   username: string | null;
@@ -182,12 +179,10 @@ export type AdminCreatedUser = {
 export type AdminCreateUserInput = {
   email: string;
   role: string;
-  // "platform_admin" when called from the platform members panel,
-  // "organization" when called from an org context. The backend forces
-  // org-context callers to "organization" regardless, so this is mostly a
-  // hint for platform admins to create platform-scoped users.
+  // The backend forces org-context callers to "organization" regardless, so
+  // this mainly lets platform admins create platform-scoped users.
   account_type: "platform_admin" | "organization";
-  // The 6-digit code mailed by sendAdminCreateCode (api/admin.ts). The backend
+  // The 6-digit code mailed by sendAdminCreateCode in api/admin.ts. The backend
   // refuses to create the account without a valid one.
   verification_code: string;
 };
@@ -212,10 +207,10 @@ export async function adminCreateUser(
   return data;
 }
 
-// Hard-deletes the user. Backend gates this by `members:manage` AND the same
-// can_assign_role predicate the role-change endpoint uses — so even with the
-// permission, you cannot delete a user whose role you cannot manage. Last
-// owner of an org/platform is also protected server-side.
+// Hard-deletes the user. The backend gates this on `members:manage` and on the
+// same can_assign_role predicate the role-change endpoint uses, so even with the
+// permission you cannot delete a user whose role you cannot manage. The last
+// owner of a scope is protected server-side too.
 export async function adminDeleteUser(userId: number): Promise<void> {
   await apiFetch(`/api/admin/users/${userId}`, {
     method: "DELETE",

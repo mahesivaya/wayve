@@ -2,12 +2,14 @@ import { decryptMessage } from "../crypto/crypto";
 import { loadPrivateKey } from "../crypto/keyStore";
 import type { ChatMessage } from "../api/chat";
 
+// Plaintext must never cross the backend boundary: only envelopes built here do.
+// The prefix and envelope shape are paired with the Rust side (chat/websocket.rs),
+// which rejects non-envelope normal messages, so any change must be made in both.
 const CHAT_E2E_PREFIX = "WAYVE_CHAT_E2E_V1\n";
 
-// Attachment descriptor carried INSIDE the E2E envelope (so filename/size stay
-// private even in server-encrypted mode). `iv` present ⇒ the file body is
-// end-to-end encrypted with this message's AES key (decrypt client-side);
-// absent ⇒ the body is server-encrypted (download returns plaintext).
+// Attachment descriptors ride INSIDE the envelope, so the server never sees a
+// filename or size. An `iv` means the file body is end-to-end encrypted with this
+// message's AES key; without one, the body is only server-encrypted.
 export type ChatAttachmentDescriptor = {
   id: number;
   name: string;
@@ -64,16 +66,15 @@ const parseEnvelope = (content: string): ChatEnvelope | null => {
 export const isEncryptedChatContent = (content: string) =>
   Boolean(parseEnvelope(content));
 
-// Fresh per-message AES-256-GCM key. Used for the text AND any e2e attachments
-// in the same message, so the recipient unwraps one key to read everything.
+// One fresh AES-256-GCM key per message, wrapping the text AND every E2E attachment
+// on it, so the recipient unwraps a single key to read everything.
 export const generateChatKey = () =>
   crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
     "encrypt",
     "decrypt",
   ]);
 
-// Encrypt one file body with the message AES key (e2e mode). Returns the
-// ciphertext to upload and the iv to record in the attachment descriptor.
+// Returns the ciphertext to upload and the iv to record in the descriptor.
 export async function encryptChatFile(
   aesKey: CryptoKey,
   file: Blob
@@ -87,8 +88,8 @@ export async function encryptChatFile(
   return { ciphertext, iv: Array.from(iv) };
 }
 
-// Build the full E2E envelope: encrypt the text with `aesKey`, RSA-wrap that key
-// for each recipient, and carry the attachment descriptors.
+// Encrypts the text with `aesKey`, RSA-wraps that key once per recipient, and carries
+// the attachment descriptors.
 export async function buildChatEnvelope(
   plaintext: string,
   aesKey: CryptoKey,
@@ -130,7 +131,6 @@ export async function buildChatEnvelope(
   return `${CHAT_E2E_PREFIX}${JSON.stringify(envelope)}`;
 }
 
-// Text-only convenience (unchanged behavior): generate a key + build envelope.
 export async function encryptChatContent(
   plaintext: string,
   recipientPublicKeys: Map<number, number[] | ArrayBuffer | Uint8Array>
@@ -139,13 +139,12 @@ export async function encryptChatContent(
   return buildChatEnvelope(plaintext, aesKey, recipientPublicKeys);
 }
 
-// Parsed attachment descriptors from an (undecrypted) envelope, for rendering.
 export const parseChatAttachments = (
   content: string
 ): ChatAttachmentDescriptor[] => parseEnvelope(content)?.attachments ?? [];
 
-// Recover the message AES key for this user (to decrypt e2e attachments on
-// demand). Returns null if the envelope/key/private key is unavailable.
+// Recovers the message AES key for this user, so E2E attachments can be decrypted on
+// demand. Null when the envelope, the wrapped key, or the private key is unavailable.
 export async function unwrapChatKey(
   content: string,
   currentUserId: number
@@ -169,7 +168,6 @@ export async function unwrapChatKey(
   }
 }
 
-// Decrypt one e2e attachment body with the message AES key + its iv.
 export const decryptChatFile = (
   aesKey: CryptoKey,
   ciphertext: ArrayBuffer,
@@ -207,9 +205,9 @@ export async function decryptChatContent(
   }
 }
 
-// Decrypt one message: replace `content` with plaintext and, when the envelope
-// carries attachments, surface their descriptors + keep the raw envelope so the
-// bubble can lazily unwrap the AES key for e2e attachment downloads.
+// Replaces `content` with plaintext. When the envelope carries attachments, it also
+// surfaces their descriptors and keeps the raw envelope so the bubble can lazily
+// unwrap the AES key for E2E attachment downloads.
 export async function decryptChatMessage<T extends ChatMessage>(
   message: T,
   currentUserId: number

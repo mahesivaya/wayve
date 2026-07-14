@@ -31,13 +31,8 @@ import "./billing.css";
 const BYTES_IN_GB = 1024 * 1024 * 1024;
 const UNLIMITED_STORAGE = -1;
 
-// Plan display copy (price/features fallback) + display order come from the
-// single source of truth `planCatalog` (imported above). The in-app cards
-// render live from the API; these only back labels and fallbacks.
-
-// Plan titles come straight from the DB `name` column now (Basic / Advance /
-// Most Advance / Startups / Business / Enterprise), so no per-code override is
-// needed. Kept as an empty escape hatch for future display-only renames.
+// Plan titles come from the DB `name` column. This map is an escape hatch for
+// display-only renames.
 const PLAN_TITLE: Record<string, string> = {};
 
 function planDisplayRank(plan: Plan): number {
@@ -85,16 +80,14 @@ function formatDate(value: string | null): string {
   return fmtShortDate(value);
 }
 
-// "June 2026" — the billing history is one row per month, so we label each
-// charge by its month rather than the exact day.
+// Billing history is one row per month, so charges are labelled by month
+// ("June 2026") rather than by exact day.
 function formatMonth(value: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return fmtShortDate(value);
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
-
-// Friendly plan-code → name comes from `planCatalog.planName` (imported above).
 
 function loadStripeScript(): Promise<void> {
   if (window.Stripe) return Promise.resolve();
@@ -142,11 +135,10 @@ function BillingInner() {
   const [paymentMessage, setPaymentMessage] = useState("");
   const [paymentSuccess, setPaymentSuccess] = useState("");
 
-  // Inline-subscription Payment Element. Parallel to the payment-method
-  // form above — they use distinct Stripe Element trees because one
-  // confirms a SetupIntent (saving a card) and the other confirms a
-  // PaymentIntent (charging the first invoice), and Elements doesn't
-  // let you swap intent types on an existing mount.
+  // The inline-subscription Payment Element needs its own Element tree,
+  // separate from the payment-method form above: one confirms a SetupIntent
+  // (saving a card) and the other a PaymentIntent (charging the first
+  // invoice), and Elements can't swap intent types on an existing mount.
   const [subscribeFormOpen, setSubscribeFormOpen] = useState(false);
   const [subscribeFormReady, setSubscribeFormReady] = useState(false);
   const [subscribeMessage, setSubscribeMessage] = useState("");
@@ -163,20 +155,16 @@ function BillingInner() {
   const subscribePaymentElementRef = useRef<StripePaymentElement | null>(null);
   const subscribeElementsRef = useRef<StripeElements | null>(null);
   const subscribeStripeRef = useRef<StripeInstance | null>(null);
-  // Cached Stripe.js instance — initialized once when the page mounts so
-  // clicking Subscribe doesn't pay the script-download + init cost on
-  // every click. ~200-500ms saved on the first subscribe attempt.
+  // Stripe.js is initialized once at mount so clicking Subscribe doesn't pay
+  // the script-download cost (~200-500ms on the first attempt).
   const preloadedStripeRef = useRef<StripeInstance | null>(null);
-  // The DOM node we scroll into view when the subscribe panel opens, so
-  // the user can see the form appear inline rather than feeling like
-  // the page jumped to a new screen.
   const subscribePanelRef = useRef<HTMLElement | null>(null);
 
   const checkoutStatus = params.get("checkout");
 
-  // `useCache` defaults to false so every post-mutation reload fetches fresh;
-  // only the initial mount opts into the short-lived cache (avoids the 6-request
-  // refetch when navigating back to Billing).
+  // `useCache` defaults to false so every post-mutation reload fetches fresh.
+  // Only the initial mount opts into the short-lived cache, which avoids the
+  // six-request refetch when navigating back to Billing.
   const reload = useCallback(async (useCache = false) => {
     setError("");
     try {
@@ -219,22 +207,18 @@ function BillingInner() {
     return () => window.clearTimeout(timer);
   }, [reload]);
 
-  // After an upgrade, the plan/limit/status live in several caches: the
-  // frontend GET cache (/api/profile, /api/accounts), the global auth user
-  // (`current_plan`, drives the whole app + Settings), and this page's billing
-  // data. Clear the GET cache and refetch all three so every surface — Settings
-  // storage limit, plan badge, the storage banner — reflects the new plan
-  // immediately. Stripe's activation webhook is async, so callers schedule a
-  // couple of attempts to catch it.
+  // Plan/limit/status are cached in three places after an upgrade: the frontend
+  // GET cache, the global auth user (`current_plan`), and this page's data. All
+  // three must refetch so Settings, the plan badge, and the storage banner
+  // agree. Stripe's activation webhook is async, so callers schedule more than
+  // one attempt.
   const refreshAfterUpgrade = useCallback(async () => {
     invalidateGetCache();
     await Promise.allSettled([reload(), refresh()]);
   }, [reload, refresh]);
 
-  // Warm-up: download Stripe.js + init `Stripe(publishableKey)` as soon
-  // as we know the key. By the time the user clicks Subscribe, the only
-  // remaining latency is the backend → Stripe round-trip plus Stripe's
-  // own iframe handshake; the ~200-500ms script download is already gone.
+  // Warm up Stripe.js as soon as the publishable key is known, so a later
+  // Subscribe click only pays the backend round-trip and iframe handshake.
   useEffect(() => {
     const publishableKey = stripeStatus?.publishable_key;
     if (!publishableKey || !publishableKey.startsWith("pk_")) return;
@@ -247,8 +231,7 @@ function BillingInner() {
         if (cancelled) return;
         preloadedStripeRef.current = window.Stripe?.(publishableKey) ?? null;
       } catch {
-        // Best-effort: subscribe() will retry the load on click if this
-        // failed (e.g. user is offline at page-load time).
+        // Best-effort: subscribe() retries the load on click.
       }
     })();
     return () => {
@@ -258,13 +241,9 @@ function BillingInner() {
 
   const ownerType = sub?.owner_type ?? "personal";
 
-  // Post-checkout redirect: after a successful Stripe checkout that
-  // belongs to an organization, send the owner to /organization-home so
-  // they land on their workspace dashboard instead of staying on the
-  // billing screen. Personal-plan checkouts stay on /billing where the
-  // user just landed from Stripe (existing behavior). The brief delay
-  // lets the success banner flash before navigation so the user has
-  // visual confirmation of the charge.
+  // After a successful organization checkout the owner lands on their
+  // workspace dashboard; personal checkouts stay on /billing. The delay lets
+  // the success banner show before navigating away.
   useEffect(() => {
     if (loading) return;
     if (checkoutStatus !== "success") return;
@@ -275,9 +254,8 @@ function BillingInner() {
     return () => window.clearTimeout(handle);
   }, [loading, checkoutStatus, ownerType, navigate]);
 
-  // Returning from a successful checkout (hosted or inline redirect): refresh
-  // plan-derived data everywhere. Retry once after a few seconds since Stripe's
-  // activation webhook may not have landed when we first re-fetch.
+  // Returning from a successful checkout refreshes plan-derived data. The retry
+  // covers Stripe's activation webhook not having landed on the first fetch.
   useEffect(() => {
     if (checkoutStatus !== "success") return;
     void refreshAfterUpgrade();
@@ -286,15 +264,13 @@ function BillingInner() {
   }, [checkoutStatus, refreshAfterUpgrade]);
 
   const currentPlanCode = sub?.subscription?.plan_code ?? null;
-  // A personal account with no subscription row is implicitly on the free
-  // Basic tier — surface that explicitly so the card renders as "Active"
-  // instead of falling through to the generic "Included" placeholder.
+  // A personal account with no subscription row is implicitly on the free Basic
+  // tier, so name it explicitly and the card renders as "Active".
   const effectiveCurrentCode =
     currentPlanCode ?? (ownerType === "personal" ? "basic_user" : null);
   const hasPaidPlan = (sub?.subscription?.amount_cents ?? 0) > 0;
-  // Organization owners get a focused billing view (monthly amount, monthly
-  // bill history, downloadable receipts) instead of the personal
-  // plan-selection + usage + members layout.
+  // Organizations get a focused billing view instead of the personal
+  // plan-selection + usage layout.
   const isOrg = ownerType === "organization";
 
   const clearSubscribeElements = useCallback(() => {
@@ -306,27 +282,23 @@ function BillingInner() {
     setSubscribeFormReady(false);
   }, []);
 
-  // Open the in-page subscribe form for `plan`. Creates the subscription
-  // server-side in `incomplete` state and mounts a Payment Element bound
-  // to the latest invoice's PaymentIntent. Confirmation happens locally
-  // via stripe.confirmPayment — no redirect to checkout.stripe.com.
+  // Creates the subscription server-side in `incomplete` state and mounts a
+  // Payment Element bound to the latest invoice's PaymentIntent. Confirmation
+  // happens locally via stripe.confirmPayment — no redirect to checkout.stripe.com.
   const subscribe = async (plan: Plan) => {
     setBusy(`plan:${plan.code}`);
     setError("");
     setSubscribeMessage("");
     setPaymentSuccess("");
-    // Mutually exclusive with the payment-method form so two Element
-    // trees don't compete for focus / a stale clientSecret.
+    // Mutually exclusive with the payment-method form so two Element trees
+    // don't compete for focus or a stale clientSecret.
     if (paymentFormOpen) {
       setPaymentFormOpen(false);
       clearPaymentElements();
     }
     setSubscribePlan(plan);
     setSubscribeFormOpen(true);
-    // Scroll the new panel into view on the next frame (after React
-    // commits the show-panel render), so the user sees the form expand
-    // inline instead of perceiving a navigation away from the Plans
-    // section they just clicked from.
+    // Scroll on the next frame, once React has committed the show-panel render.
     window.requestAnimationFrame(() => {
       subscribePanelRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -344,10 +316,8 @@ function BillingInner() {
         throw new Error("Stripe publishable key is not configured");
       }
 
-      // Use the preloaded Stripe instance when available — it's already
-      // downloaded + initialized from the mount-time warm-up effect.
-      // Fall back to a fresh load if the preload hasn't finished yet or
-      // failed (offline at mount, slow script CDN, etc.).
+      // Prefer the warmed-up instance; fall back to a fresh load if the preload
+      // hasn't finished or failed.
       let stripe = preloadedStripeRef.current;
       const [intent] = await Promise.all([
         startInlineSubscription(plan.code, autopay),
@@ -403,10 +373,9 @@ function BillingInner() {
         throw new Error("Payment form is not ready yet");
       }
 
-      // `redirect: "if_required"` keeps the user on this page when no
-      // 3DS challenge is needed. When the bank DOES require 3DS, Stripe
-      // bounces to the bank's auth page and then back to `return_url`
-      // — that URL is on our own domain, NOT checkout.stripe.com.
+      // `redirect: "if_required"` keeps the user here when no 3DS challenge is
+      // needed. If the bank requires 3DS, Stripe bounces to the bank and back
+      // to `return_url`, which is on our own domain, not checkout.stripe.com.
       const result = await stripe.confirmPayment({
         elements,
         confirmParams: {
@@ -419,19 +388,13 @@ function BillingInner() {
         throw new Error(result.error.message ?? "Could not complete payment");
       }
 
-      // PaymentIntent succeeded inline (no redirect). Stripe will fire
-      // `invoice.payment_succeeded` + `customer.subscription.updated`
-      // webhooks that flip our local subscriptions row to `active`. The
-      // delay gives those a fighting chance to land before we re-fetch;
-      // worst case the user sees `incomplete` briefly and the next
-      // refresh corrects it.
       setSubscribeFormOpen(false);
       setSubscribePlan(null);
       clearSubscribeElements();
       setPaymentSuccess("Subscription started — confirming with Stripe…");
-      // Two attempts: the first usually beats the webhook (shows the pending
-      // state), the second lands after activation so plan/limit/status settle
-      // across Settings, the plan badge, and the storage banner.
+      // Stripe's webhooks flip the local subscriptions row to `active`. Two
+      // refresh attempts: the first usually beats the webhook and shows the
+      // pending state, the second lands after activation.
       window.setTimeout(() => void refreshAfterUpgrade(), 1500);
       window.setTimeout(() => void refreshAfterUpgrade(), 5000);
     } catch (err) {
@@ -443,8 +406,7 @@ function BillingInner() {
     }
   };
 
-  // Unmount the Payment Element on Billing's unmount so it doesn't
-  // outlive the React tree.
+  // Unmount the Payment Element so it doesn't outlive the React tree.
   useEffect(() => () => clearSubscribeElements(), [clearSubscribeElements]);
 
   const clearPaymentElements = useCallback(() => {
@@ -474,8 +436,8 @@ function BillingInner() {
         throw new Error("Stripe publishable key is not configured");
       }
 
-      // SetupIntent's client_secret must be created once per Elements tree.
-      // Cancel + reopen creates a fresh one (clearPaymentElements resets it).
+      // A SetupIntent client_secret is good for exactly one Elements tree, so
+      // cancel + reopen must create a fresh one.
       const [{ client_secret: clientSecret }] = await Promise.all([
         createPaymentMethodSetupIntent(),
         loadStripeScript(),
@@ -529,9 +491,8 @@ function BillingInner() {
         throw new Error("Payment form is not ready yet");
       }
 
-      // redirect: "if_required" keeps us on the page when no 3DS challenge is
-      // needed; on a 3DS card Stripe bounces to return_url and the effect
-      // below reads ?setup_intent_client_secret to finish wiring the default.
+      // On a 3DS card Stripe bounces to return_url, and the effect below reads
+      // ?setup_intent_client_secret to finish wiring up the default card.
       const result = await stripe.confirmSetup({
         elements,
         confirmParams: {
@@ -569,10 +530,9 @@ function BillingInner() {
 
   useEffect(() => () => clearPaymentElements(), [clearPaymentElements]);
 
-  // Post-return handler: after a 3DS challenge Stripe bounces back to
-  // return_url with ?setup_intent_client_secret in the URL. Retrieve the
-  // intent, attach the resulting payment method as default, then strip the
-  // query so refreshes don't re-trigger.
+  // After a 3DS challenge Stripe returns with ?setup_intent_client_secret.
+  // Attach the resulting payment method as default, then strip the query so a
+  // refresh doesn't re-trigger this.
   useEffect(() => {
     const intentSecret = params.get("setup_intent_client_secret");
     if (!intentSecret) return;
@@ -642,13 +602,11 @@ function BillingInner() {
   const canViewStripeDetails =
     user?.account_type === "platform_admin" && user?.effective_role === "owner";
 
-  // Personal plans stay under "Plans"; business/enterprise (audience
-  // "organization") render in their own section below.
+  // Personal plans stay under "Plans"; organization-audience plans render
+  // below, split so Business and Enterprise are distinct sections.
   const personalPlans = visiblePlans.filter(
     (plan) => plan.audience === "personal"
   );
-  // Organization plans, split so Business (Startups + Business tiers) and
-  // Enterprise render as distinct sections instead of one bucket.
   const businessPlans = visiblePlans.filter(
     (plan) => plan.audience === "organization" && plan.tier !== "enterprise"
   );
@@ -757,7 +715,6 @@ function BillingInner() {
         <div className="billing-banner success">{paymentSuccess}</div>
       )}
 
-      {/* ---- Organization billing (focused view) ---- */}
       {isOrg && (
         <>
           <section className="billing-card">
@@ -945,10 +902,7 @@ function BillingInner() {
             className="billing-payment-form"
             onSubmit={(event) => void confirmSubscribe(event)}
           >
-            {/* Stripe's iframe mounts here. While it's still loading
-                (backend round-trip + iframe handshake, ~1-2s) show a
-                skeleton so the panel doesn't look broken. The skeleton
-                is purely cosmetic — it sits behind the Element and is
+            {/* Stripe's iframe mounts here; the skeleton sits behind it and is
                 covered the moment the Element paints. */}
             <div className="billing-stripe-field billing-stripe-mount">
               {!subscribeFormReady && (
@@ -992,12 +946,8 @@ function BillingInner() {
         </section>
       )}
 
-      {/* ---- Subscription status ---- */}
-      {/* Management-only sections (Subscription, Usage, Invoices) render
-          only for paid users — a brand-new free account has nothing to
-          manage, so /billing collapses to a plan picker. The page reveals
-          the full management surface automatically after the first
-          successful checkout. */}
+      {/* The management sections (Subscription, Usage, Invoices) render only
+          for paid users, so a free account sees /billing as a plan picker. */}
       {hasPaidPlan && !isOrg && (
         <section className="billing-card">
           <h2>Subscription</h2>
@@ -1050,7 +1000,6 @@ function BillingInner() {
         </section>
       )}
 
-      {/* ---- Usage ---- */}
       {hasPaidPlan && !isOrg && (
         <section className="billing-card">
           <h2>Usage</h2>
@@ -1086,7 +1035,7 @@ function BillingInner() {
         </section>
       )}
 
-      {/* ---- Plans / Checkout (personal accounts only) ---- */}
+      {/* Plans / checkout, personal accounts only. */}
       {!isOrg && (
         <section className="billing-card">
           <div className="billing-section-head">
@@ -1111,10 +1060,9 @@ function BillingInner() {
         </section>
       )}
 
-      {/* ---- Business ---- */}
-      {/* Personal users always see this (to create an org); an org owner only
-          sees it while they have no active subscription, so they can subscribe.
-          Once subscribed, the focused billing view above is all they get. */}
+      {/* Personal users always see the Business section so they can create an
+          org. An org owner only sees it while they have no active
+          subscription; once subscribed, the focused view above is all they get. */}
       {businessPlans.length > 0 && (
         <section className="billing-card">
           <div className="billing-section-head">
@@ -1126,7 +1074,6 @@ function BillingInner() {
         </section>
       )}
 
-      {/* ---- Enterprise ---- */}
       {enterprisePlans.length > 0 && (
         <section className="billing-card">
           <div className="billing-section-head">
@@ -1176,7 +1123,6 @@ function BillingInner() {
         </section>
       )}
 
-      {/* ---- Invoices ---- */}
       {hasPaidPlan && !isOrg && (
         <section className="billing-card">
           <h2>Invoices</h2>
@@ -1222,11 +1168,10 @@ function BillingInner() {
   );
 }
 
-// Access wrapper: for an organization member whose role the owner hasn't
-// granted the Billing feature, render a plain "no access" screen instead of the
-// page (whose org-billing/invoices calls the backend would 403 anyway). Keeping
-// the heavy BillingInner unmounted avoids its many fetches firing for a role
-// that can't see billing. Personal/platform accounts always pass through.
+// Access wrapper: an organization member whose role wasn't granted Billing gets
+// a "no access" screen. Leaving BillingInner unmounted keeps its many fetches
+// (which the backend would 403 anyway) from firing. Personal and platform
+// accounts always pass through.
 export default function Billing() {
   const { user } = useAuth();
   const isOrg = user?.scope === "organization";

@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { BRAND_NAME } from "../config/brand";
-// Note: swagger-ui-react ships its own CSS — has to be loaded once,
-// here, so the UI renders with the expected layout.
+// swagger-ui-react ships its own CSS and must have it loaded once, here.
 import "swagger-ui-react/swagger-ui.css";
 import SwaggerUI from "swagger-ui-react";
 import DocsShell from "../docs/DocsShell";
 import "./swaggerDocs.css";
 
-// Tells Swagger UI where to draw the live API spec from. Always the
-// same path; the backend serves it at /api/openapi.json regardless of
-// environment.
 const SPEC_URL = "/api/openapi.json";
 
 type OpenApiServer = {
@@ -22,12 +18,9 @@ type OpenApiSpec = {
   [key: string]: unknown;
 };
 
-// Fetch the spec ourselves so we can rewrite its `servers` block to
-// match the page origin. Without this, a user opening the page on
-// localhost would see "Production" selected by default — and
-// "Try it out" would fire requests at prod from their dev session.
-// Putting the current origin first makes the default sensible
-// while still allowing operators to flip to prod via the dropdown.
+// The spec's `servers` block is rewritten to put the page origin first.
+// Otherwise "Production" is selected by default and "Try it out" fires requests
+// at prod from a dev session. Operators can still flip to prod via the dropdown.
 async function loadSpec(): Promise<OpenApiSpec> {
   const res = await fetch(SPEC_URL, { credentials: "same-origin" });
   if (!res.ok) {
@@ -37,9 +30,8 @@ async function loadSpec(): Promise<OpenApiSpec> {
   const currentOrigin = window.location.origin;
 
   const existing = Array.isArray(spec.servers) ? spec.servers : [];
-  // Drop any server entry that already matches our origin so we
-  // don't end up with two identical dropdown options after the
-  // injection below.
+  // Drop an existing entry for our origin so the injection below doesn't
+  // produce two identical dropdown options.
   const filtered = existing.filter(
     (s) => typeof s.url === "string" && s.url !== currentOrigin
   );
@@ -69,9 +61,8 @@ export default function SwaggerDocs() {
     };
   }, []);
 
-  // Stable identity so SwaggerUI doesn't see a new prop every render.
-  // Swagger UI internally remounts a lot when its `spec` prop's
-  // identity changes — `useMemo` keeps it pinned.
+  // Swagger UI remounts heavily whenever its `spec` prop changes identity, so
+  // keep that identity pinned.
   const memoSpec = useMemo(() => spec, [spec]);
 
   return (

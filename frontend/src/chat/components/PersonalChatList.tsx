@@ -12,10 +12,8 @@ type Props = {
   summary: ChatConversationSummary;
   presence: PresenceMap;
   /**
-   * Which half of the DM list to render. `"recent"` is the active
-   * conversations (Unread + Recent) shown above the channels; `"people"` is
-   * the directory of everyone else, shown below. Splitting lets the sidebar
-   * surface recent chats at the top while keeping the People directory last.
+   * Which half of the DM list to render: `"recent"` is the active conversations
+   * above the channels, `"people"` the full directory below them.
    */
   section: "recent" | "people";
 };
@@ -34,7 +32,6 @@ export default function PersonalChatList({
   presence,
   section,
 }: Props) {
-  // Index the DM summary by the other participant's id.
   const byUser = new Map(summary.conversations.map((c) => [c.user_id, c]));
 
   const rows: Row[] = users.map((user) => {
@@ -50,20 +47,17 @@ export default function PersonalChatList({
     (b.lastAt ? Date.parse(b.lastAt) : 0) -
     (a.lastAt ? Date.parse(a.lastAt) : 0);
 
-  // Unread first, then the rest of the recent chat history (messaged before,
-  // nothing unread). These two are shortcuts to active conversations.
   const unread = rows.filter((r) => r.unread > 0).sort(byRecency);
   const recent = rows.filter((r) => r.unread === 0 && r.lastAt).sort(byRecency);
-  // The directory is the FULL roster — everyone you can DM, whether or not you
-  // have history with them. Someone you've messaged appears both here and under
-  // Recent; DMing a person must not remove them from the list you find people in.
+  // The directory is the full roster, so someone you have messaged appears both here
+  // and under Recent. DMing a person must not remove them from the list you find
+  // people in.
   const people = [...rows].sort((a, b) =>
     a.user.email.localeCompare(b.user.email)
   );
 
-  // `meta` (relative time + unread badge) belongs on the Recent/Unread rows,
-  // where it says why the row is there. The directory row is a plain roster
-  // entry, so it stays quiet even for people you've chatted with.
+  // `meta` (relative time and unread badge) explains why a Recent/Unread row is
+  // there, so the plain directory row omits it.
   const renderRow = (r: Row, meta = true) => {
     const active =
       selectedConversation?.type === "user" &&
@@ -101,8 +95,6 @@ export default function PersonalChatList({
     );
   };
 
-  // The people directory, under a "Users" header below the channel list —
-  // everyone you can start (or resume) a DM with.
   if (section === "people") {
     return (
       <>
@@ -114,7 +106,6 @@ export default function PersonalChatList({
     );
   }
 
-  // Active conversations (Unread + Recent) — rendered above the channels.
   return (
     <>
       {unread.length > 0 && (

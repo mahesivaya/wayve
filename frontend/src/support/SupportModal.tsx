@@ -1,10 +1,6 @@
-// In-app "Report an issue" overlay.
-//
-// Triggered from the header profile menu and from /settings → Support.
-// Submits to POST /api/support/tickets, then uploads any selected files
-// to /api/support/tickets/{id}/attachments. Staff with `tickets:manage`
-// see and resolve tickets via /platform/support. Replies are sent
-// off-band by email to the ticket owner.
+// Creates the ticket first, then uploads any selected files against the
+// returned ticket id. Staff with `tickets:manage` resolve tickets via
+// /platform/support, and replies go out off-band by email.
 
 import {
   useEffect,

@@ -29,20 +29,17 @@ export type UserActionRow = {
   action: string;
   resource_type: string | null;
   resource_id: string | null;
-  // Free-form event details (e.g. email from/to/subject for
-  // email_sent / email_received).
+  // Free-form event details, keyed per action.
   metadata: Record<string, unknown> | null;
   ip: string | null;
-  // Coarse geolocation of `ip`, resolved offline at write time. NULL for older
-  // rows, system events, or private/unresolvable IPs.
+  // Coarse geolocation of `ip`, resolved offline at write time. Null for older
+  // rows, system events, and private or unresolvable IPs.
   country: string | null;
   region: string | null;
   city: string | null;
   created_at: string;
 };
 
-// Actions that are a financial / billing signal (plan changes, entitlement
-// grants, payment-method updates, cancellations).
 const BILLING_ACTIONS = new Set([
   "checkout_started",
   "subscription_activated",
@@ -65,7 +62,6 @@ function fmtBytes(bytes: number): string {
   return `${i === 0 ? value : value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
 }
 
-// Readable one-liner for a billing action's metadata.
 function formatBillingDetails(row: UserActionRow): string {
   const m = row.metadata ?? {};
   const str = (k: string) =>
@@ -104,10 +100,8 @@ function formatBillingDetails(row: UserActionRow): string {
   return parts.join(" · ");
 }
 
-// Human-readable summary of a user action's metadata for the "Details"
-// column. Email events get a "from → to · subject" line; billing events get a
-// plan/status summary; anything else falls back to compact key=value pairs (or
-// "" when there's no metadata).
+// Summarizes a user action's metadata for the "Details" column, falling back to
+// compact key=value pairs, or "" when the row has no metadata at all.
 export function formatUserActionDetails(row: UserActionRow): string {
   const m = row.metadata;
   if (!m || typeof m !== "object") return "";
@@ -152,8 +146,7 @@ export type UserAuditResult = {
   actions: UserActionRow[];
 };
 
-// Full cross-category audit trail for a single user, resolved by email.
-// Owner-gated server-side (org owner → their members only).
+// Owner-gated server-side, so an org owner can only resolve their own members.
 export async function lookupUserAudit(email: string): Promise<UserAuditResult> {
   const params = new URLSearchParams({ email });
   return apiFetchJson<UserAuditResult>(
@@ -162,8 +155,8 @@ export async function lookupUserAudit(email: string): Promise<UserAuditResult> {
   );
 }
 
-// How a user registered: 'local' (email + password), 'google' (Gmail OAuth)
-// or 'microsoft' (Outlook OAuth) — from users.auth_provider.
+// `auth_provider` mirrors users.auth_provider: "local", "google", or
+// "microsoft".
 export type RegistrationTypeRow = {
   id: number;
   email: string;
@@ -183,10 +176,9 @@ export async function listRegistrationTypes(
   );
 }
 
-// Estimated time-on-site per logged-in user, computed server-side by
-// sessionizing activity_events (a >30-min gap starts a new session) and
-// summing each session's span. Reflects roughly the last 7 days (activity
-// retention). total_minutes is whole minutes; single-event sessions = 0.
+// Estimated time-on-site, computed server-side by sessionizing activity_events
+// so a gap over 30 minutes starts a new session. It covers only the last 7 days
+// of retained activity, and a single-event session contributes zero minutes.
 export type UserTimeSpentRow = {
   user_id: number;
   username: string | null;

@@ -25,18 +25,15 @@ import {
 } from "../api/github";
 import "./githubRepo.css";
 
-// Bulk-import every repository the connected GitHub token can see — one project
-// per repo — skipping any already linked to an existing project (deduped by
-// `owner/repo`). Best-effort: a repo that fails to link is skipped rather than
-// aborting the whole import. `onProgress` reports how many have been created so
-// the button can show a running count. Returns the newly created projects.
+// One project per visible repo, deduped by `owner/repo` against existing
+// projects. Best-effort: a repo that fails to link is skipped rather than
+// aborting the whole import.
 async function importAllRepos(
   existing: Project[],
   onProgress?: (done: number) => void
 ): Promise<Project[]> {
   const { connected, repos } = await listImportableRepos();
   if (!connected) {
-    // Personal account with no GitHub connected — nothing to import.
     throw new Error("Connect your GitHub account to import your repositories.");
   }
   const alreadyLinked = new Set(
@@ -54,30 +51,20 @@ async function importAllRepos(
         await createProject(repo.name, `https://github.com/${repo.full_name}`)
       );
     } catch {
-      // Skip a repo that fails to link (transient error / permission); the
-      // rest of the import still proceeds.
+      // Skip this repo; the rest of the import still proceeds.
     }
     onProgress?.(created.length);
   }
   return created;
 }
 
-// The platform team's legacy single-repo dashboard (the bare /github route
-// with no project). Personal accounts get their own repos via /github/:id.
+// Repo shown by the bare /github route when no project is selected.
 const FALLBACK_OWNER = "mahesivaya";
 const FALLBACK_REPO = "wayve";
-// All GitHub calls go through our own backend proxy at /api/github/*.
-// The proxy:
-//   * gates on a logged-in Wayve session (no anon access) and authorizes the
-//     repo per caller (platform = full; personal = own linked repos only),
-//   * attaches the server-held GITHUB_TOKEN PAT, lifting the rate
-//     limit from 60/hr to 5000/hr without ever exposing the token to
-//     the browser,
-//   * caches GET responses for 60s, so the N-calls-per-mount we do
-//     here don't compound across reloads.
-// The path shape (`/repos/{owner}/{repo}/...`) matches GitHub's API
-// 1:1, so request URLs from this file read the same as before. The
-// `owner`/`repo` are now per-viewer props (see GitHubRepoViewer).
+// Every GitHub call goes through our backend proxy at /api/github/*, which
+// authorizes the repo per caller, attaches the server-held GITHUB_TOKEN PAT
+// (never exposed to the browser), and caches GETs for 60s. Proxy paths mirror
+// GitHub's API 1:1, so request URLs here read the same as GitHub's own.
 
 type Repo = {
   full_name: string;
@@ -136,14 +123,7 @@ type CommitItem = {
   } | null;
 };
 
-/**
- * Detail view of a single commit fetched from
- * `/repos/{owner}/{repo}/commits/{sha}`. The diff payload lives under
- * `files[].patch` — a unified-diff string that we render line-by-line
- * with +/- coloring. `stats` rolls up additions/deletions across files
- * so the commit row can show "+12 −4" without summing patches client-
- * side.
- */
+// `patch` is a unified-diff string rendered line-by-line with +/- coloring.
 type CommitFile = {
   filename: string;
   status: string;
@@ -165,18 +145,10 @@ type CommitDetail = {
   parents?: Array<{ sha: string; html_url: string }>;
 };
 
-// ── Split (side-by-side) diff rendering ─────────────────────────────
-//
-// Parse a GitHub per-file unified `patch` into paired left/right rows so the
-// commit view renders old vs new in two columns (GitHub's "Split" view).
-// Within a change block consecutive removals are paired row-for-row with the
-// additions that follow; any overhang gets an empty cell on the opposite side.
-// Context lines appear on both sides; `@@` hunk headers span the full width.
-//
-// GitHub's `files[].patch` is pure hunk content (no `diff --git`/`---`/`+++`
-// file headers — those only appear in raw diffs), so a leading `-`/`+` is
-// always real content. The only non-content line we drop is the
-// `\ No newline at end of file` marker.
+// Split (side-by-side) diff rendering. Within a change block, consecutive
+// removals pair row-for-row with the additions that follow; overhang gets an
+// empty cell opposite. GitHub's `files[].patch` is pure hunk content (no
+// `diff --git`/`---`/`+++` headers), so a leading `-`/`+` is always content.
 type SplitCell = {
   no: number | null;
   text: string;
@@ -195,7 +167,6 @@ function toSplitRows(patch: string): SplitRow[] {
   let dels: SplitCell[] = [];
   let adds: SplitCell[] = [];
 
-  // Pair the buffered removals/additions of one change block, then reset.
   const flush = () => {
     const n = Math.max(dels.length, adds.length);
     for (let i = 0; i < n; i++) {
@@ -219,15 +190,15 @@ function toSplitRows(patch: string): SplitRow[] {
       }
       rows.push({ type: "hunk", text: line });
     } else if (line.startsWith("\\")) {
-      // "\ No newline at end of file" — annotation, not a content line.
+      // "\ No newline at end of file" is an annotation, not content.
       continue;
     } else if (line.startsWith("+")) {
       adds.push({ no: newLn++, text: line.slice(1), kind: "add" });
     } else if (line.startsWith("-")) {
       dels.push({ no: oldLn++, text: line.slice(1), kind: "del" });
     } else {
-      // Context line (leading space, or a blank line in the patch): flush the
-      // pending change block first so removals/additions stay grouped.
+      // Context line: flush the pending change block first so removals and
+      // additions stay grouped.
       flush();
       const text = line.startsWith(" ") ? line.slice(1) : line;
       rows.push({
@@ -267,16 +238,9 @@ function CommitSplitPatch({ patch }: { patch: string }) {
   );
 }
 
-// ── Pull request detail ─────────────────────────────────────────────
-//
-// The PR list (GitHubPull) only carries enough to render a row. Opening a
-// PR fetches these richer shapes through the same read-only proxy:
-//   * PullDetail   — /pulls/{n}              (body, +/− stats, head.sha, …)
-//   * CommitFile   — /pulls/{n}/files        (identical shape to commit
-//                                             files, so CommitSplitPatch
-//                                             renders them as-is)
-//   * IssueComment — /issues/{n}/comments    (the conversation comments)
-//   * PullReview   — /pulls/{n}/reviews      (approvals / change requests)
+// Opening a PR fetches richer shapes than the list row carries. Note that
+// /pulls/{n}/files returns the same shape as commit files, so CommitSplitPatch
+// renders them as-is.
 type PullDetail = {
   number: number;
   title: string;
@@ -294,9 +258,9 @@ type PullDetail = {
   changed_files?: number;
   labels?: Array<{ name: string }>;
   requested_reviewers?: Array<{ login: string }>;
-  // GitHub computes mergeability asynchronously on the single-PR endpoint:
-  // `mergeable` is null until ready, then true / false (conflicts).
-  // `mergeable_state` is "clean" | "dirty" | "unstable" | "blocked" | "draft" | …
+  // GitHub computes mergeability asynchronously, so `mergeable` is null until
+  // ready. `mergeable_state` is "clean" | "dirty" | "unstable" | "blocked" |
+  // "draft" | …
   mergeable?: boolean | null;
   mergeable_state?: string;
 };
@@ -317,8 +281,7 @@ type PullReview = {
   submitted_at: string | null;
 };
 
-// Everything we cache for one opened PR, fetched together so the detail
-// view renders in a single pass (mirrors commitDetailBySha for commits).
+// Fetched together so the detail view renders in one pass.
 type PullBundle = {
   detail: PullDetail;
   files: CommitFile[];
@@ -327,7 +290,7 @@ type PullBundle = {
 };
 
 // Comments and reviews merged into one chronological conversation.
-// `reviewState` is set only on review entries (drives the verdict badge).
+// `reviewState` is set only on review entries and drives the verdict badge.
 type TimelineEntry = {
   key: string;
   author: string;
@@ -336,7 +299,7 @@ type TimelineEntry = {
   reviewState?: string;
 };
 
-// Status pill for a PR: merged / closed / draft / open (in that priority).
+// Priority order: merged, then closed, then draft, then open.
 function pullStatus(d: {
   state: string;
   draft?: boolean;
@@ -348,7 +311,6 @@ function pullStatus(d: {
   return { label: "Open", cls: "is-open" };
 }
 
-// Badge for a review's verdict in the discussion timeline.
 function reviewBadge(state: string): { label: string; cls: string } {
   switch (state) {
     case "APPROVED":
@@ -362,8 +324,7 @@ function reviewBadge(state: string): { label: string; cls: string } {
   }
 }
 
-// Render a raw unified diff (the `?media=diff` fallback) with per-line
-// coloring — the same treatment the commit full-diff uses.
+// Renders the `?media=diff` fallback payload.
 function RawUnifiedDiff({ text }: { text: string }) {
   return (
     <pre className="github-commit-patch is-full">
@@ -385,16 +346,14 @@ function RawUnifiedDiff({ text }: { text: string }) {
   );
 }
 
-// Initials for an avatar chip: first letters of the first two word-parts
-// (split on spaces and hyphens), else the first two characters.
+// First letters of the first two word-parts, else the first two characters.
 function initials(name: string): string {
   const parts = name.trim().split(/[\s-]+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return (name.slice(0, 2) || "?").toUpperCase();
 }
 
-// A small initials avatar (no network image — works offline and avoids
-// broken-image flashes; mirrors the mockup's MK / GB chips).
+// Initials only, no network image, so there is no broken-image flash offline.
 function PrAvatar({ name }: { name: string }) {
   return (
     <span className="github-pr-avatar" aria-hidden="true">
@@ -403,10 +362,8 @@ function PrAvatar({ name }: { name: string }) {
   );
 }
 
-// Lightweight inline rendering for PR/comment text: `backtick` spans become
-// <code> chips and bare http(s) URLs become links. Newlines are preserved by
-// the container's `white-space: pre-wrap`. Not a full markdown renderer —
-// just the two affordances the PR view needs.
+// Not a markdown renderer: backtick spans become <code> chips and bare http(s)
+// URLs become links. Newlines survive via the container's `white-space: pre-wrap`.
 function renderRichText(text: string): ReactNode[] {
   const out: ReactNode[] = [];
   text.split(/(`[^`]+`)/g).forEach((seg, i) => {
@@ -445,19 +402,12 @@ type RunsResponse = {
   total_count: number;
 };
 
-// How many runs we pull per `/actions/runs` page. 50 matches GitHub's
-// own "453 workflow runs" view density without blowing past the
-// API's 100/page max. The "Load more" affordance pages further if the
-// repo has more than this.
+// Must stay under GitHub's 100/page maximum. "Load more" pages beyond this.
 const RUNS_PER_PAGE = 50;
 
-// Commits page size. The Commits tab pages through the full branch history
-// 25-at-a-time (Prev/Next) rather than showing just the latest few.
 const COMMITS_PER_PAGE = 25;
 
-// Individual step inside a job — what GitHub renders as the bullet list
-// under each job header on the run page. The `number` field is the
-// 1-indexed position within the job (Setup is usually #1).
+// `number` is the 1-indexed position of the step within its job.
 type JobStep = {
   name: string;
   status: string;
@@ -501,12 +451,8 @@ function firstLine(value: string) {
   return value.split("\n")[0] || "Commit";
 }
 
-/**
- * Render a duration between two ISO timestamps as a compact human label
- * (e.g. "37s", "4m 12s", "1h 22m"). Mirrors what GitHub shows in the
- * step list. Returns "—" when either endpoint is missing (step skipped
- * or not yet started) so the slot stays consistent across rows.
- */
+// Compact label such as "37s", "4m 12s" or "1h 22m". Returns "—" when either
+// endpoint is missing (a step that was skipped or has not started).
 function formatDuration(start: string | null, end: string | null): string {
   if (!start) return "—";
   const startMs = Date.parse(start);
@@ -525,17 +471,8 @@ function formatDuration(start: string | null, end: string | null): string {
   return remMinutes === 0 ? `${hours}h` : `${hours}h ${remMinutes}m`;
 }
 
-/**
- * Sort directory entries the way every file browser does:
- *   1. directories first
- *   2. files second
- *   3. case-insensitive alphabetical inside each group
- *
- * The GitHub Contents API returns items in repository order (which is
- * essentially arbitrary), so without this the UI mixes folders and files
- * — the screenshot you sent had `.env.*` files interleaved with
- * `.github`, `.vscode`, `backend` directories.
- */
+// Directories first, then files, alphabetical within each group. The Contents
+// API returns items in arbitrary repository order.
 function sortContents(items: ContentItem[]): ContentItem[] {
   return [...items].sort((a, b) => {
     const aDir = a.type === "dir" ? 0 : 1;
@@ -545,8 +482,8 @@ function sortContents(items: ContentItem[]): ContentItem[] {
   });
 }
 
-// Inline SVG icons — single source render so we can theme by class and
-// avoid the emoji-rendering inconsistency across OSes.
+// Inline SVG rather than emoji so icons theme by class and render the same
+// across operating systems.
 function FolderIcon() {
   return (
     <svg
@@ -594,17 +531,9 @@ function FileIcon() {
   );
 }
 
-/**
- * Group a flat workflow_runs list by workflow name, return one node per
- * unique workflow with runs sorted newest first. The Actions panel
- * renders these as a two-level expandable tree (workflow → runs) so a
- * busy repo with many workflows stays scannable instead of showing 30
- * mixed rows.
- *
- * Rollup status (used to color the parent row): if the most-recent run
- * for the workflow has finished, use its conclusion; otherwise inherit
- * the latest run's in-progress/queued state.
- */
+// One node per workflow, runs newest first, for the Actions tree. `rollupState`
+// colors the parent row: the latest run's conclusion if it has finished,
+// otherwise its in-progress/queued status.
 type WorkflowGroup = {
   name: string;
   runs: WorkflowRun[];
@@ -661,17 +590,8 @@ function ChevronIcon() {
   );
 }
 
-/**
- * GitHub-style round status icon for a job or step. Inlined SVG so colors
- * theme through CSS `currentColor` via the `.status-<state>` class.
- *
- *   success         — filled circle + white check
- *   failure/timed_out/startup_failure — filled red circle + white x
- *   cancelled       — outlined circle + diagonal stroke (corner-to-corner)
- *   skipped/neutral — outlined circle + opposite diagonal slash
- *   in_progress     — dashed outlined circle (CSS spin)
- *   queued/pending  — plain outlined circle
- */
+// Round status icon for a job or step. Colors come from CSS `currentColor` via
+// the `.status-<state>` class.
 function StatusIcon({ state }: { state: string }) {
   const cls = `github-status-icon status-${state}`;
   switch (state) {
@@ -821,9 +741,8 @@ function StatusIcon({ state }: { state: string }) {
 }
 
 async function githubJson<T>(url: string): Promise<T> {
-  // Authenticate the same way as the rest of the app: a Bearer token from
-  // localStorage (the cookie alone is unreliable in token-only sessions).
-  // The proxy attaches the Accept + X-GitHub-Api-Version headers server-side.
+  // Bearer token, not the cookie alone, which is unreliable in token-only
+  // sessions. The proxy adds the Accept and X-GitHub-Api-Version headers.
   const token = getAuthToken();
   const response = await fetch(url, {
     credentials: "include",
@@ -831,18 +750,16 @@ async function githubJson<T>(url: string): Promise<T> {
   });
 
   if (!response.ok) {
-    // A 403 from the proxy means this account isn't allowed to read this repo
-    // (not linked to one of your projects) — surface a plain message.
+    // A 403 means the repo isn't linked to one of this account's projects.
     if (response.status === 403) {
       throw new Error("You don't have access to this repository.");
     }
     throw new Error(`GitHub request failed (${response.status})`);
   }
 
-  // A 200 that doesn't parse to an object/array means something upstream
-  // returned an unexpected body (e.g. an HTML page from a misrouted request
-  // or a literal `null`). Treat it as an error so callers surface a banner
-  // instead of silently resolving to a falsy value that renders as a blank.
+  // A 200 that isn't an object or array means something upstream returned an
+  // unexpected body (a misrouted HTML page, a literal `null`). Throw so callers
+  // show a banner rather than resolving to a falsy value that renders blank.
   const data = (await response.json()) as unknown;
   if (data === null || typeof data !== "object") {
     throw new Error("GitHub returned an unexpected response.");
@@ -863,35 +780,29 @@ function GitHubRepoViewer({
 }: {
   owner: string;
   repo: string;
-  // Optional repo selector rendered at the top of the left rail, above the
-  // Branch block (used by the personal in-page manager).
+  // Optional repo selector rendered at the top of the left rail.
   repoSwitcher?: ReactNode;
 }) {
-  // Per-viewer proxy base. Stable for the component's lifetime because the
-  // outer wrapper keys this viewer by `${owner}/${repo}` (it remounts when the
-  // linked repo changes), so callbacks can capture it safely.
+  // Stable for the component's lifetime: the outer wrapper keys this viewer by
+  // `${owner}/${repo}`, so it remounts when the linked repo changes and
+  // callbacks can capture this safely.
   const API_BASE = `/api/github/repos/${owner}/${repoName}`;
 
-  // Pull Requests are owner-only across every scope (personal / organization /
-  // enterprise / platform). The backend proxy enforces this on the `pulls`
-  // (and PR-comment `issues`) paths; here we just hide the tab so non-owners
-  // never see it or fire 403 fetches. `effective_role === "owner"` mirrors the
-  // backend's `Role::Owner` for all scopes (personal accounts resolve to owner).
+  // UI gating only, never authorization: the backend proxy is the authority and
+  // re-checks every request. Pull Requests are owner-only in every scope, so
+  // hiding the tab just spares non-owners a guaranteed 403.
   const { user } = useAuth();
   const isOwner = user?.effective_role === "owner";
-  // Who may see/manage the per-repo Access panel: a scope owner (personal/org/
-  // platform all resolve to "owner") or anyone with members:manage (org/platform
-  // admins). The backend re-checks; this just gates the sidebar link.
+  // The per-repo Access panel is for a scope owner or anyone with members:manage.
   const canManageAccess = isOwner || hasPermission(user, "members:manage");
   const [repo, setRepo] = useState<Repo | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branch, setBranch] = useState("main");
-  // Custom branch dropdown (replaces a native <select> so the list reliably
-  // opens downward and the branch names can be themed).
+  // A custom dropdown rather than a native <select> so the list reliably opens
+  // downward and the branch names can be themed.
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const branchMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // Close the branch menu on outside click or Escape.
   useEffect(() => {
     if (!branchMenuOpen) return;
     const onDown = (e: MouseEvent) => {
@@ -917,34 +828,25 @@ function GitHubRepoViewer({
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<ContentItem | null>(null);
   const [fileText, setFileText] = useState("");
-  // README contents for the Description tab. Fetched per branch (like
-  // workflows/commits) and rendered as raw text — there's no markdown
-  // renderer wired up, and markdown stays human-readable as-is.
+  // README for the Description tab, fetched per branch and rendered as raw
+  // text: there is no markdown renderer wired up.
   const [readme, setReadme] = useState("");
   const [readmeLoading, setReadmeLoading] = useState(false);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [commits, setCommits] = useState<CommitItem[]>([]);
-  // Commits pagination. GitHub's /commits returns no total, so we read the
-  // proxy-forwarded Link header to get the grand total (see loadCommitsTotal).
   const [commitsPage, setCommitsPage] = useState(1);
   const [commitsHasMore, setCommitsHasMore] = useState(false);
   const [commitsLoading, setCommitsLoading] = useState(false);
-  // Total commits on the branch (null = unknown). Derived from the `rel="last"`
-  // page of a `per_page=1` request's Link header.
+  // Null when unknown: GitHub's /commits returns no total, so this is derived
+  // from the `rel="last"` page of a `per_page=1` request's Link header.
   const [commitsTotal, setCommitsTotal] = useState<number | null>(null);
-  // Open pull requests (read-only). Merging happens on github.com via each
-  // PR's html_url — the proxy is GET-only and the shared token has no write
-  // access to linked public repos.
   const [pulls, setPulls] = useState<GitHubPull[]>([]);
   const [pullsLoading, setPullsLoading] = useState(false);
   const [pullsError, setPullsError] = useState("");
-  // Which PR states to show. We fetch open + closed together (state=all) and
-  // filter client-side, defaulting to "open" — the Closed button switches over.
+  // Open and closed PRs are fetched together (state=all) and filtered here.
   const [pullFilter, setPullFilter] = useState<"open" | "closed">("open");
-  // Master ⇄ detail for the Pull Requests tab. `selectedPull` is the open
-  // PR number (null = list view). Each opened PR's detail + files +
-  // conversation + checks are fetched together and cached by number so
-  // re-opening is instant (mirrors commitDetailBySha).
+  // Null means the list view; a number is the opened PR. Each opened PR's
+  // bundle is cached by number so re-opening is instant.
   const [selectedPull, setSelectedPull] = useState<number | null>(null);
   const [pullBundleByNumber, setPullBundleByNumber] = useState<
     Record<number, PullBundle>
@@ -955,8 +857,7 @@ function GitHubRepoViewer({
   const [errorByPullNumber, setErrorByPullNumber] = useState<
     Record<number, string>
   >({});
-  // Raw unified-diff fallback for a PR (via ?media=diff), keyed by PR
-  // number — same opt-in the commit view uses when patches are omitted.
+  // Raw unified-diff fallback via ?media=diff, used when GitHub omits patches.
   const [pullFullDiff, setPullFullDiff] = useState<Record<number, string>>({});
   const [pullFullDiffLoading, setPullFullDiffLoading] = useState<Set<number>>(
     new Set()
@@ -964,47 +865,35 @@ function GitHubRepoViewer({
   const [pullFullDiffError, setPullFullDiffError] = useState<
     Record<number, string>
   >({});
-  // PR detail view chrome: whether the long description is expanded, and which
-  // collapsible sections (discussion / files / details / checks) are closed.
   const [descExpanded, setDescExpanded] = useState(false);
   const [collapsedPrSections, setCollapsedPrSections] = useState<Set<string>>(
     new Set()
   );
-  // PR approval (owner-only write). `approvingPull` is the number mid-request;
-  // `approvedPulls` reflects a successful approve optimistically (the proxied
-  // reviews list stays cached for the TTL); errors carry GitHub's own message.
+  // Approval is owner-only and optimistic on success, because the proxied
+  // reviews list stays cached for its TTL.
   const [approvingPull, setApprovingPull] = useState<number | null>(null);
   const [approvedPulls, setApprovedPulls] = useState<Set<number>>(new Set());
   const [approveErrorByPull, setApproveErrorByPull] = useState<
     Record<number, string>
   >({});
-  // PR merge (owner-only write). `mergingPull` is mid-request; `confirmMergePull`
-  // drives the two-step confirm; `mergeMethod` is the chosen strategy; errors
-  // carry GitHub's own message. On success the detail + list are refetched.
+  // Merge is owner-only. `confirmMergePull` drives the two-step confirm.
   const [mergingPull, setMergingPull] = useState<number | null>(null);
   const [confirmMergePull, setConfirmMergePull] = useState<number | null>(null);
   const [mergeMethod, setMergeMethod] = useState<MergeMethod>("merge");
   const [mergeErrorByPull, setMergeErrorByPull] = useState<
     Record<number, string>
   >({});
-  // Per-commit detail (file diffs) loaded on demand when a commit row
-  // is expanded. Cached by SHA so toggling open → closed → open doesn't
-  // re-hit GitHub. Aux maps track which commits are expanded, currently
-  // loading, or have an error to surface inline.
+  // Per-commit file diffs, loaded when a row is expanded and cached by SHA so
+  // toggling a row closed and open again doesn't re-hit GitHub.
   const [expandedCommitShas, setExpandedCommitShas] = useState<Set<string>>(
     new Set()
   );
   const [commitDetailBySha, setCommitDetailBySha] = useState<
     Record<string, CommitDetail>
   >({});
-  // Conversation comments on a commit (GitHub `/commits/{sha}/comments`),
-  // fetched alongside the diff and shown at the end of the commit — mirrors the
-  // PR conversation. Read-only, same as the PR comment box.
   const [commitCommentsBySha, setCommitCommentsBySha] = useState<
     Record<string, IssueComment[]>
   >({});
-  // Per-commit comment composer: the in-progress draft text, the set of SHAs
-  // whose comment is currently posting, and any per-commit post error.
   const [commitCommentDraft, setCommitCommentDraft] = useState<
     Record<string, string>
   >({});
@@ -1020,11 +909,8 @@ function GitHubRepoViewer({
   const [errorByCommitSha, setErrorByCommitSha] = useState<
     Record<string, string>
   >({});
-  // Raw unified-diff text fetched on demand via the proxy's
-  // `?media=diff` opt-in. This is the fallback for commits where the
-  // JSON `files[].patch` is missing (GitHub truncates patches over
-  // ~300 KB or for binary-adjacent files). Keyed by SHA so re-opening
-  // the same commit's full diff is instant.
+  // Fallback for commits whose JSON `files[].patch` is missing: GitHub truncates
+  // patches over roughly 300 KB and for binary-adjacent files.
   const [fullDiffBySha, setFullDiffBySha] = useState<Record<string, string>>(
     {}
   );
@@ -1034,11 +920,9 @@ function GitHubRepoViewer({
   const [errorFullDiffBySha, setErrorFullDiffBySha] = useState<
     Record<string, string>
   >({});
-  // Which individual file diffs (inside an expanded commit or PR) are
-  // collapsed. Files default to expanded, so this Set holds only the
-  // ones the user has folded away. Keys are namespaced by their owner
-  // (`<sha>::<filename>` for commits, `pr-<n>::<filename>` for PR files)
-  // so one Set serves both views without collisions.
+  // Holds only the file diffs the user has folded away; files default to
+  // expanded. Keys are namespaced (`<sha>::<filename>` for commits,
+  // `pr-<n>::<filename>` for PR files) so one Set serves both views.
   const [collapsedFiles, setCollapsedFiles] = useState<Set<string>>(new Set());
   const toggleFile = (key: string) => {
     setCollapsedFiles((prev) => {
@@ -1049,31 +933,21 @@ function GitHubRepoViewer({
     });
   };
   const [workflows, setWorkflows] = useState<ContentItem[]>([]);
-  // Which workflow rows in the Actions tree are expanded. Defaults to
-  // empty so every workflow starts collapsed — users can expand the ones
-  // they care about. State key is the workflow name (display name from
-  // the workflow_run.name field).
+  // Keyed by workflow display name (workflow_run.name).
   const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(
     new Set()
   );
-  // When the user clicks a run inside the Actions tree we fetch its
-  // jobs + steps and render them INLINE beneath the run row — mirroring
-  // GitHub's run detail page (jobs as cards, steps as a checklist
-  // inside each job). Per-run state means multiple runs can stay
-  // expanded at once and the API call is cached per run so re-toggling
-  // an already-loaded run is instant.
+  // Jobs and steps render inline under an expanded run row. State is per run, so
+  // several runs can stay open at once and each fetch is cached by run id.
   const [expandedRunIds, setExpandedRunIds] = useState<Set<number>>(new Set());
   const [jobsByRunId, setJobsByRunId] = useState<Record<number, Job[]>>({});
   const [loadingRunIds, setLoadingRunIds] = useState<Set<number>>(new Set());
   const [errorByRunId, setErrorByRunId] = useState<Record<number, string>>({});
-  // Second-level expansion inside the run-detail flow. Clicking a job
-  // header reveals/hides its step checklist — GitHub-style. State is
-  // keyed by job id (globally unique) so multiple jobs across multiple
-  // runs can stay open independently.
+  // Keyed by job id, which is globally unique, so jobs across different runs
+  // expand independently.
   const [expandedJobIds, setExpandedJobIds] = useState<Set<number>>(new Set());
-  // Paginated history of workflow runs. `runsPage` is the most-recent
-  // page we've fetched; `runsTotal` comes from GitHub's total_count
-  // header so we know when to hide the "Load more" affordance.
+  // `runsTotal` comes from GitHub's total_count and decides when "Load more"
+  // disappears.
   const [runsPage, setRunsPage] = useState(1);
   const [runsTotal, setRunsTotal] = useState(0);
   const [runsLoadingMore, setRunsLoadingMore] = useState(false);
@@ -1081,16 +955,14 @@ function GitHubRepoViewer({
   const [fileLoading, setFileLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Section nav for the left rail. Persist the user's last view so
-  // re-opening /github lands them on the same panel.
   type GitHubPull = {
     number: number;
     title: string;
     html_url: string;
     state: string;
     draft?: boolean;
-    // Present (non-null) only on merged PRs — the list endpoint carries it, so
-    // we can distinguish Merged from plain Closed without the detail fetch.
+    // Non-null only on merged PRs, which is how the list row tells Merged from
+    // plain Closed without fetching the detail.
     merged_at?: string | null;
     user: { login: string } | null;
     head: { ref: string };
@@ -1121,9 +993,6 @@ function GitHubRepoViewer({
     } catch {
       // ignore
     }
-    // Default landing tab: the project overview, so users grasp what the
-    // project is before diving into code. A previously-selected tab is
-    // remembered above (persisted in the effect below).
     return "description";
   });
 
@@ -1135,9 +1004,7 @@ function GitHubRepoViewer({
     }
   }, [activeSection]);
 
-  // Resizable split between the file tree and the preview panel. Default
-  // 280px gives the tree room for typical file names while leaving the
-  // preview as the larger pane. Persisted; shared useResizableWidth hook.
+  // Resizable split between the file tree and the preview panel.
   const { width: filesPaneWidth, startResize: handleFilesPaneResize } =
     useResizableWidth({
       storageKey: "rwayve.github.filesPaneWidth",
@@ -1150,9 +1017,8 @@ function GitHubRepoViewer({
     setError("");
     setLoading(true);
     try {
-      // Fetch the repo first; only this is fatal. Branches are best-effort —
-      // an empty repo (no commits) legitimately has none, so a failure there
-      // shouldn't blank the whole view.
+      // Only the repo fetch is fatal. Branches are best-effort: an empty repo
+      // legitimately has none, so failing there must not blank the view.
       const repoData = await githubJson<Repo>(API_BASE);
       setRepo(repoData);
       setBranch(repoData.default_branch);
@@ -1160,14 +1026,12 @@ function GitHubRepoViewer({
         `${API_BASE}/branches?per_page=50`
       ).catch(() => [] as Branch[]);
       setBranches(branchData);
-      // Runs are fetched by the branch-driven effect below (so the list
-      // re-filters when the user switches branches).
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "GitHub data failed to load";
-      // The shared token can list a repo via /user/repos but still get a 404
-      // opening it directly (private/org repo it can't read, empty repo, or
-      // one renamed since the list was fetched). Surface that plainly.
+      // The shared token can list a repo via /user/repos yet still 404 opening
+      // it directly: a private repo it can't read, an empty repo, or one
+      // renamed since the list was fetched.
       setError(
         msg.includes("404")
           ? "This repository couldn't be opened — it may be empty, private, or not accessible with the current GitHub access."
@@ -1178,23 +1042,13 @@ function GitHubRepoViewer({
     }
   }, [API_BASE]);
 
-  /**
-   * Fetch a page of workflow runs. We deliberately do NOT pass
-   * `branch=` — a push to ANY branch should surface under Actions so
-   * the user can see CI activity without having to switch the branch
-   * picker first. The Actions panel header makes this explicit with a
-   * "Showing runs from all workflows" subtitle.
-   *
-   * `append` means we're paging through history (preserves runs
-   * already loaded); otherwise the result REPLACES the list.
-   */
+  // Deliberately passes no `branch=`: a push to any branch should surface under
+  // Actions without the user switching the branch picker first. `append` pages
+  // through history; otherwise the result replaces the list.
   const loadRuns = useCallback(
     async (page: number, append: boolean) => {
       if (append) setRunsLoadingMore(true);
-      // Clear any stale banner from a previous attempt so a successful
-      // retry doesn't leave the error visible. The other loaders
-      // (loadRepo, loadDirectory) already do this; loadRuns was the
-      // outlier and caused the 404 banner to stick across page state.
+      // Clear any stale banner so a successful retry doesn't leave it visible.
       setError("");
       try {
         const url =
@@ -1208,19 +1062,15 @@ function GitHubRepoViewer({
           append ? [...current, ...data.workflow_runs] : data.workflow_runs
         );
         if (!append) {
-          // Default every workflow group to expanded so the Actions
-          // panel reads as a flat run list out-of-the-box — matches
-          // GitHub's own /actions view. The user can still collapse a
-          // workflow they want to hide; that state survives "Load more"
-          // because we only seed the set on replace, not on append.
+          // Seed every workflow group as expanded so Actions reads as a flat run
+          // list. Only on replace, so a user's collapses survive "Load more".
           const names = new Set(
             data.workflow_runs.map((run) => run.name?.trim() || "Workflow")
           );
           setExpandedWorkflows(names);
         }
       } catch (err) {
-        // Surface the error but don't blow up the rest of the page —
-        // the user still has files / commits / workflows on screen.
+        // Surface the error without blanking the rest of the page.
         setError(
           err instanceof Error ? err.message : "Action runs failed to load"
         );
@@ -1283,11 +1133,9 @@ function GitHubRepoViewer({
     [API_BASE]
   );
 
-  // README for the Description tab. Resolve the file metadata via the
-  // proxied Contents API, then fetch its raw text from download_url (same
-  // two-step the file preview uses in openFile). Any failure — most
-  // commonly a repo with no README — clears the text so the pane shows
-  // its graceful fallback rather than an error.
+  // Resolve the file metadata via the Contents API, then fetch raw text from
+  // download_url. Any failure, most commonly a repo with no README, clears the
+  // text so the pane shows its fallback rather than an error.
   const loadReadme = useCallback(
     async (nextBranch: string) => {
       setReadmeLoading(true);
@@ -1336,9 +1184,8 @@ function GitHubRepoViewer({
     [API_BASE]
   );
 
-  // Grand total commits on the branch. GitHub omits a count, but with
-  // `per_page=1` the Link header's `rel="last"` page number IS the total. The
-  // proxy forwards that header; a missing header means a single page (<=1 commit).
+  // GitHub omits a commit count, but with `per_page=1` the Link header's
+  // `rel="last"` page number is the total. A missing header means one page.
   const loadCommitsTotal = useCallback(
     async (nextBranch: string) => {
       try {
@@ -1360,7 +1207,7 @@ function GitHubRepoViewer({
           setCommitsTotal(parseInt(last[1], 10));
           return;
         }
-        // No "last" relation → at most one page; the body length is the total.
+        // No "last" relation means one page, so the body length is the total.
         const data = (await res.json()) as unknown;
         setCommitsTotal(Array.isArray(data) ? data.length : null);
       } catch {
@@ -1370,7 +1217,7 @@ function GitHubRepoViewer({
     [API_BASE]
   );
 
-  // Open pull requests. PRs aren't branch-filtered, so this takes no branch.
+  // PRs aren't branch-filtered, so this takes no branch.
   const loadPulls = useCallback(async () => {
     setPullsError("");
     setPullsLoading(true);
@@ -1389,16 +1236,13 @@ function GitHubRepoViewer({
     }
   }, [API_BASE]);
 
-  // Client-side view over the fetched (open + closed/merged) PRs. "closed"
-  // includes merged, since a merged PR has state === "closed".
+  // "closed" includes merged, since a merged PR has state === "closed".
   const filteredPulls = pulls.filter((pr) =>
     pullFilter === "open" ? pr.state === "open" : pr.state !== "open"
   );
 
-  // Fetch one PR's full payload — detail, changed files, and conversation
-  // (comments + reviews) — through the same read-only proxy, then cache it
-  // by number. Detail is fetched first; the rest run in parallel and each
-  // degrades to empty on its own error so one failure can't blank the page.
+  // Detail is fetched first; files and conversation run in parallel and each
+  // degrades to empty on its own error, so one failure can't blank the page.
   const loadPullDetail = useCallback(
     async (number: number, force = false) => {
       if (!force && pullBundleByNumber[number]) return;
@@ -1427,8 +1271,8 @@ function GitHubRepoViewer({
           ...current,
           [number]: { detail, files, comments, reviews },
         }));
-        // Default every file in this PR to collapsed — the diff opens on
-        // demand. Keys match the `pr-{number}::{filename}` scheme below.
+        // Collapse every file in this PR; keys use the `pr-{number}::{filename}`
+        // scheme shared with collapsedFiles.
         setCollapsedFiles((current) => {
           const next = new Set(current);
           for (const f of files) next.add(`pr-${number}::${f.filename}`);
@@ -1453,7 +1297,6 @@ function GitHubRepoViewer({
     [API_BASE, pullBundleByNumber]
   );
 
-  // Open a PR into the detail view and kick off its fetch.
   const openPull = useCallback(
     (number: number) => {
       setSelectedPull(number);
@@ -1463,9 +1306,9 @@ function GitHubRepoViewer({
     [loadPullDetail]
   );
 
-  // Owner approves the PR via the backend proxy. Optimistic on success; on
-  // failure surface GitHub's verbatim message (e.g. a 422 "Can not approve your
-  // own pull request." or a 403 when the server token lacks write scope).
+  // Surface GitHub's verbatim failure message. The server PAT is the same GitHub
+  // user who opens the PRs, so approving your own PR always 422s ("Can not
+  // approve your own pull request."); a 403 means the token lacks write scope.
   const approvePull = async (prNumber: number) => {
     setApprovingPull(prNumber);
     setApproveErrorByPull((cur) => {
@@ -1489,9 +1332,8 @@ function GitHubRepoViewer({
     }
   };
 
-  // Owner merges the PR via the backend proxy. On success, refetch the detail
-  // (flips to merged → the action cards disappear) and the open-PR list (drops
-  // it + the count badge). On failure, surface GitHub's verbatim message.
+  // On success, refetch the detail (it flips to merged, hiding the action cards)
+  // and the PR list (which drops it and its count badge).
   const mergePull = async (prNumber: number) => {
     setMergingPull(prNumber);
     setConfirmMergePull(null);
@@ -1517,9 +1359,7 @@ function GitHubRepoViewer({
     }
   };
 
-  // Raw unified diff for a PR via the proxy's `?media=diff` opt-in — the
-  // fallback when GitHub omits per-file patches (large files). Cached by
-  // number. Mirrors loadFullDiff for commits.
+  // Fallback when GitHub omits per-file patches. Mirrors loadFullDiff for commits.
   const loadPullFullDiff = useCallback(
     async (number: number) => {
       if (pullFullDiff[number]) return;
@@ -1561,10 +1401,8 @@ function GitHubRepoViewer({
     [API_BASE, pullFullDiff]
   );
 
-  // Fetch the per-commit detail (which includes the patch for every changed
-  // file) via the same /api/github proxy the rest of this page uses, and cache
-  // it by SHA. Skips the network when already cached unless `force` is set
-  // (used by the Retry affordance after a failed/empty load).
+  // Skips the network when the SHA is already cached, unless `force` is set (the
+  // Retry affordance after a failed or empty load).
   const loadCommitDetail = useCallback(
     async (sha: string, force = false) => {
       if (!force && commitDetailBySha[sha]) return;
@@ -1603,9 +1441,7 @@ function GitHubRepoViewer({
     [API_BASE, commitDetailBySha]
   );
 
-  // Expand a commit row inline to show its file-level diff. First open kicks
-  // off the per-commit detail fetch; subsequent toggles read from the
-  // in-component cache so re-opening is instant.
+  // First open kicks off the detail fetch; later toggles read the cache.
   const toggleCommitDetail = useCallback(
     (sha: string) => {
       let opened = false;
@@ -1624,12 +1460,9 @@ function GitHubRepoViewer({
     [loadCommitDetail]
   );
 
-  // Self-heal: any commit that is expanded but has no detail, no error, and
-  // isn't already loading gets its diff fetched automatically. Covers cases
-  // where a row is open without going through the click path — the commit list
-  // reloaded (clearing the detail cache), state reset, or a token/access fix —
-  // so the diff loads on its own instead of stranding the user on the manual
-  // "Refresh" fallback.
+  // Self-heal: a commit that is expanded with no detail, no error, and no fetch
+  // in flight got there without the click path (the commit list reloaded and
+  // cleared the cache, or state reset), so fetch its diff automatically.
   useEffect(() => {
     for (const sha of expandedCommitShas) {
       if (
@@ -1648,8 +1481,8 @@ function GitHubRepoViewer({
     loadCommitDetail,
   ]);
 
-  // Post a comment on a commit. On success the created comment (returned by the
-  // proxy) is appended locally — avoids the 60s GET cache serving a stale list.
+  // The created comment is appended locally, since the proxy's 60s GET cache
+  // would otherwise serve a stale list.
   const submitCommitComment = useCallback(
     async (sha: string) => {
       const body = (commitCommentDraft[sha] ?? "").trim();
@@ -1684,10 +1517,8 @@ function GitHubRepoViewer({
     [commitCommentDraft, postingCommentShas, owner, repoName]
   );
 
-  // Fetch the raw unified diff for a commit through the proxy's
-  // `?media=diff` opt-in. Used when the JSON detail returned
-  // `files[]` without a `patch` (large text files, >300 KB). Cached by
-  // SHA so re-opening the full diff is instant.
+  // Used when the JSON detail returned `files[]` without a `patch` (text files
+  // over roughly 300 KB).
   const loadFullDiff = useCallback(
     async (sha: string) => {
       if (fullDiffBySha[sha]) return;
@@ -1710,8 +1541,7 @@ function GitHubRepoViewer({
           throw new Error(`GitHub diff failed (${response.status})`);
         }
         const text = await response.text();
-        // Cap at ~2 MB so a runaway commit can't blow the browser tab —
-        // GitHub itself caps the raw diff endpoint at a similar size.
+        // Cap at ~2 MB so a runaway commit can't blow up the browser tab.
         const capped =
           text.length > 2_000_000
             ? `${text.slice(0, 2_000_000)}\n\n…diff truncated; open on GitHub for the full patch`
@@ -1734,15 +1564,13 @@ function GitHubRepoViewer({
     [API_BASE, fullDiffBySha]
   );
 
-  // Toggle the run-detail flow inline. First open also fetches the
-  // jobs (with steps embedded) and caches them keyed by run id so
-  // re-toggling the same run doesn't re-hit GitHub's API.
+  // First open also fetches the run's jobs (steps embedded) and caches them by
+  // run id.
   const toggleRunFlow = useCallback(
     async (run: WorkflowRun) => {
-      // Decide open/close from the CURRENT state synchronously. Do NOT read a
-      // flag mutated inside the setState updater — React may run that updater
-      // asynchronously, so the flag was still false here and the jobs fetch
-      // below was silently skipped (the run rendered "no jobs to display").
+      // Decide open/close from current state synchronously. Do not read a flag
+      // mutated inside a setState updater: React may run that updater later, so
+      // the flag reads false here and the jobs fetch below is silently skipped.
       const willOpen = !expandedRunIds.has(run.id);
       setExpandedRunIds((current) => {
         const next = new Set(current);
@@ -1754,8 +1582,7 @@ function GitHubRepoViewer({
         return next;
       });
       if (!willOpen) return;
-      // If we've already fetched jobs for this run, the cached entry is
-      // good enough — collapse + re-expand should feel instant.
+      // Already-fetched jobs are reused so re-expanding is instant.
       if (jobsByRunId[run.id]) return;
 
       setLoadingRunIds((current) => new Set(current).add(run.id));
@@ -1805,15 +1632,12 @@ function GitHubRepoViewer({
     void loadWorkflows(branch);
     void loadCommits(branch, 1);
     void loadCommitsTotal(branch);
-    // Reopening the PR list (vs. a stale detail) whenever the repo/branch
-    // changes keeps the tab coherent across repo switches. PRs are owner-only,
-    // so non-owners never fetch them (the proxy would 403 anyway).
+    // Reset to the PR list rather than a stale detail when the repo or branch
+    // changes. Non-owners never fetch PRs; the proxy would 403 them.
     setSelectedPull(null);
     if (isOwner) void loadPulls();
-    // Actions list is now branch-agnostic (a push to any branch should
-    // surface), so we only refresh it on the initial repo load and
-    // reset per-run UI state at the same time. Run-detail caches stay
-    // valid (keyed by run id, which is global).
+    // The Actions list is branch-agnostic, so it only refreshes on the initial
+    // repo load. Run-detail caches stay valid because run ids are global.
     setRunsPage(1);
     setRunsTotal(0);
     setExpandedRunIds(new Set());
@@ -1831,9 +1655,8 @@ function GitHubRepoViewer({
     repo,
   ]);
 
-  // A non-owner can land on "pulls" if it was persisted from a prior owner
-  // session or the role changed mid-session. PRs are owner-only, so fall back
-  // to the overview instead of showing a blank panel.
+  // A non-owner can land on "pulls" from a persisted section or a mid-session
+  // role change, so fall back to the overview instead of a blank panel.
   useEffect(() => {
     if (!isOwner && activeSection === "pulls") setActiveSection("description");
     if (!canManageAccess && activeSection === "access")
@@ -2152,12 +1975,9 @@ function GitHubRepoViewer({
           )}
 
           {activeSection === "files" && (
-            // Progressive disclosure: until a file is opened, render the
-            // file tree as a single full-width list. Once the user picks
-            // a file, the layout splits to show files + preview side by
-            // side. Closing the preview returns to the single-pane list.
-            // In split mode the grid columns are driven inline so the
-            // drag handle between tree and preview can resize live.
+            // The tree is a single full-width list until a file is opened, then
+            // the layout splits into tree plus preview. In split mode the grid
+            // columns are set inline so the drag handle can resize live.
             <main
               className={`github-grid ${selectedFile ? "is-split" : "is-single"}`}
               style={
@@ -2744,9 +2564,8 @@ function GitHubRepoViewer({
                     const bundle = pullBundleByNumber[selectedPull];
                     const d = bundle.detail;
                     const status = pullStatus(d);
-                    // Comments + meaningful reviews, oldest first. A bare
-                    // COMMENTED review with no body is GitHub's wrapper around
-                    // inline code comments — drop it so the thread stays clean.
+                    // Oldest first. A bare COMMENTED review with no body is
+                    // GitHub's wrapper around inline code comments, so drop it.
                     const timeline: TimelineEntry[] = [
                       ...bundle.comments.map((c) => ({
                         key: `c${c.id}`,
@@ -3553,9 +3372,8 @@ function GitHubRepoViewer({
   );
 }
 
-// Paste-a-URL panel shown when a project has no repo linked yet. `canLink`
-// gates the input: a personal owner or an org owner sees it; a plain org member
-// gets a read-only "ask your owner" message (the backend would 403 them anyway).
+// Shown when a project has no repo linked yet. `canLink` gates the input: a
+// personal or org owner sees it, a plain org member gets a read-only hint.
 function AddRepoPanel({
   project,
   onLinked,
@@ -3632,8 +3450,7 @@ function AddRepoPanel({
   );
 }
 
-// Resolves a personal account's project (by route id) to its linked repo, then
-// renders the viewer. Handles loading / not-found / no-repo-yet states.
+// Resolves a personal account's project (by route id) to its linked repo.
 function GitHubRepoProject({
   projectId,
   repoSwitcher,
@@ -3646,9 +3463,8 @@ function GitHubRepoProject({
   const [project, setProject] = useState<Project | "missing" | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Note: no synchronous setState here (would trip react-hooks/set-state-in-
-  // effect). `loading` starts true; we only flip it false when the fetch
-  // settles. The wrapper is keyed by projectId so each project mounts fresh.
+  // No synchronous setState here; it would trip react-hooks/set-state-in-effect.
+  // `loading` starts true and only flips false once the fetch settles.
   const reload = useCallback(() => {
     void listProjects()
       .then((rows) => {
@@ -3699,8 +3515,8 @@ function repoLabel(p: Project): string {
     : p.name;
 }
 
-// Derive a project name from a pasted repo URL (the repo segment), so a
-// personal user only has to paste the URL — no separate "name" field.
+// The repo segment of a pasted URL becomes the project name, so there is no
+// separate "name" field to fill in.
 function repoNameFromUrl(raw: string): string {
   const cleaned = raw.trim().replace(/\.git$/, "");
   const match = cleaned.match(/([^/:]+)\/([^/]+)\/?$/);
@@ -3708,8 +3524,7 @@ function repoNameFromUrl(raw: string): string {
 }
 
 // In-page repo manager for personal accounts at the bare `/github` route. The
-// repo selector (dropdown + Add) renders inside the viewer's left rail, ABOVE
-// the Branch block, via the `repoSwitcher` prop. No sidebar involvement.
+// repo selector renders in the viewer's left rail via the `repoSwitcher` prop.
 function PersonalRepoManager() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -3719,7 +3534,7 @@ function PersonalRepoManager() {
   const [err, setErr] = useState("");
   const [importing, setImporting] = useState(false);
   const [importCount, setImportCount] = useState(0);
-  // GitHub connection: null = loading, then { connected, login? }.
+  // Null while the connection status is still loading.
   const [ghConn, setGhConn] = useState<{
     connected: boolean;
     login?: string;
@@ -3731,8 +3546,8 @@ function PersonalRepoManager() {
       .catch(() => setGhConn({ connected: false }));
   }, []);
 
-  // Load connection on mount, and re-check after returning from the OAuth
-  // redirect (the callback bounces back to /github#connected=true).
+  // Re-check after the OAuth redirect, which bounces back to
+  // /github#connected=true.
   useEffect(() => {
     refreshConnection();
     if (window.location.hash.includes("connected=true")) {
@@ -3760,8 +3575,7 @@ function PersonalRepoManager() {
       .catch(() => {});
   };
 
-  // Pull every repo the user's connected GitHub can access and add them all in
-  // one click, instead of pasting URLs one at a time.
+  // Adds every accessible repo in one click, instead of pasting URLs one by one.
   const importAll = () => {
     if (busy || importing) return;
     setImporting(true);
@@ -3787,8 +3601,7 @@ function PersonalRepoManager() {
       .finally(() => setImporting(false));
   };
 
-  // No synchronous setState in the effect (react-hooks/set-state-in-effect):
-  // listProjects resolves asynchronously and only then sets state.
+  // No synchronous setState here; it would trip react-hooks/set-state-in-effect.
   useEffect(() => {
     void listProjects()
       .then((rows) => {
@@ -3820,8 +3633,7 @@ function PersonalRepoManager() {
 
   const hasRepos = (projects?.length ?? 0) > 0;
 
-  // Repo selector card injected at the top of the viewer's left rail (above
-  // Branch): the dropdown of the user's repos + an Add button below it.
+  // Injected into the viewer's left rail via the repoSwitcher prop.
   const switcher = (
     <div className="github-sidebar-card github-repo-switch">
       <span className="github-sidebar-branch-label">Repository</span>
@@ -3915,8 +3727,8 @@ function PersonalRepoManager() {
     </div>
   );
 
-  // No repos yet → centered first-repo panel (there's no viewer rail to host
-  // the switcher in until a repo exists).
+  // With no repos there is no viewer rail to host the switcher, so show a
+  // centered first-repo panel instead.
   if (!hasRepos) {
     return (
       <div className="github-page github-empty-state">
@@ -4002,10 +3814,8 @@ function PersonalRepoManager() {
 }
 
 // In-page repo manager for organization accounts at the bare `/github` route.
-// Lists the org's projects in a switcher (above the Branch block) and renders
-// the selected project's linked repo. Linking itself is owner-only and lives in
-// the sidebar project menu; here `canLink` only decides whether an unlinked
-// project shows the link form or a read-only hint.
+// Linking is owner-only and lives in the sidebar project menu; here `canLink`
+// only decides whether an unlinked project shows the form or a read-only hint.
 function OrgRepoManager({ canLink }: { canLink: boolean }) {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -4016,8 +3826,7 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
   const [importing, setImporting] = useState(false);
   const [importCount, setImportCount] = useState(0);
 
-  // Import every repo the connected GitHub token can access as its own org
-  // project in one click (owner-only, same gate as the paste-URL form).
+  // Owner-only, the same gate as the paste-URL form.
   const importAll = () => {
     if (busy || importing) return;
     setImporting(true);
@@ -4054,9 +3863,8 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
       .catch(() => setProjects([]));
   }, []);
 
-  // Owners import a repo in one step: create an org project named after the
-  // repo and link it together. Mirrors PersonalRepoManager.submitAdd — org
-  // create now honors repo_url server-side, and the endpoint stays owner-gated.
+  // Creates the org project and links the repo in one owner-gated call. Mirrors
+  // PersonalRepoManager.submitAdd.
   const submitAdd = () => {
     const value = url.trim();
     if (!value || busy) return;
@@ -4224,11 +4032,8 @@ type RepoListItem = {
   private: boolean;
 };
 
-// Platform Code Repo dashboard. Lists every repository the server token can see
-// (above the Branch block, via the viewer's repoSwitcher slot) and lets the
-// user switch which one the dashboard shows. Defaults to the fluxze repo so the
-// page looks unchanged on first load; falls back to just that repo (no switcher)
-// if the list can't be fetched.
+// Platform dashboard over every repository the server token can see. Defaults to
+// the fluxze repo, and falls back to just that repo if the list can't be fetched.
 function PlatformRepoManager() {
   // Deep-link support: the Projects page opens a repo via ?owner=&repo=.
   const [searchParams] = useSearchParams();
@@ -4249,9 +4054,7 @@ function PlatformRepoManager() {
   const selectedFullName = `${selected.owner}/${selected.repo}`;
   const hasRepos = (repos?.length ?? 0) > 0;
 
-  // Repo selector card injected at the top of the viewer's left rail, above the
-  // Branch block. Listed by full owner/repo name; selecting one remounts the
-  // viewer (it's keyed by owner/repo below).
+  // Selecting a repo remounts the viewer, which is keyed by owner/repo below.
   const switcher = hasRepos ? (
     <div className="github-sidebar-card github-repo-switch">
       <span className="github-sidebar-branch-label">Repository</span>
@@ -4290,13 +4093,13 @@ function PlatformRepoManager() {
   );
 }
 
-// Route entry. `/github/:projectId` browses one project's repo. The bare
-// `/github` gives personal accounts the in-page repo manager, and the platform
-// team a multi-repo dashboard (repo switcher above the Branch block).
+// Route entry. `/github/:projectId` browses one project's repo; the bare
+// `/github` gives personal accounts the repo manager and the platform team the
+// multi-repo dashboard.
 export default function GitHubRepo() {
   const { user } = useAuth();
   const { projectId } = useParams<{ projectId?: string }>();
-  // Guests can't see code files — show a plain access message instead.
+  // Guests can't see code files.
   if (user?.effective_role === "guest") {
     return (
       <div
@@ -4309,8 +4112,8 @@ export default function GitHubRepo() {
   }
   const isOrg = user?.scope === "organization";
   const isPersonal = user?.account_type === "personal";
-  // Who may LINK a repo: a personal account (own projects) or an org owner.
-  // Everyone else who can reach this page is read-only.
+  // Only a personal account or an org owner may link a repo; everyone else who
+  // reaches this page is read-only.
   const canLink = isPersonal || (isOrg && user?.effective_role === "owner");
   if (projectId) {
     return (

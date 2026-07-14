@@ -61,9 +61,8 @@ import "./chat.css";
 export default function Chat() {
   const { user } = useAuth();
   const { normalizedSearchQuery } = useGlobalSearch();
-  // The open conversation is mirrored into the URL (`?c=<channelId>` or
-  // `?dm=<userId>`) so a browser refresh restores it instead of dumping the
-  // user back on the empty chat home. See the restore + sync effects below.
+  // The open conversation is mirrored into the URL (`?c=<channelId>` / `?dm=<userId>`)
+  // so a refresh restores it.
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {
@@ -78,9 +77,6 @@ export default function Chat() {
   const [selectedConversation, setSelectedConversation] =
     useState<Conversation | null>(null);
 
-  // Online/offline for everyone in the directory. Seeded from the presence
-  // snapshot, kept live by `presence` WS frames (wired into useChatSocket
-  // below) for contacts, and reconciled on a poll inside the hook.
   const userIds = useMemo(() => users.map((u) => u.id), [users]);
   const { presence, applyPresenceEvent } = usePresence(userIds);
   const [input, setInput] = useState("");
@@ -92,30 +88,18 @@ export default function Chat() {
     useState<ChannelVisibility>("public");
   const [channelError, setChannelError] = useState("");
 
-  // Thread side panel state. `activeThread` is the parent message the user
-  // clicked "Reply in thread" on; `threadReplies` is the decrypted list of
-  // replies under it. WS messages with parent_message_id matching the active
-  // thread get routed here; replies for other parents only bump reply_count
-  // on the corresponding main-feed message and otherwise stay hidden.
+  // WS messages whose parent_message_id matches `activeThread` are routed to the
+  // panel; replies for other parents only bump the main-feed message's reply_count.
   const [activeThread, setActiveThread] = useState<ChatMessage | null>(null);
   const [threadReplies, setThreadReplies] = useState<ChatMessage[]>([]);
-  // Reset thread state when the user navigates to a different conversation.
-  // Tracked via a "previous value" state read during render so React can
-  // bail out of the stale render and re-run with the cleared values in the
-  // same pass — the equivalent of an effect that does the same thing
-  // without the extra commit / cascading render (see react.dev:
-  // "You Might Not Need an Effect → Adjusting state when a prop changes").
+  // Conversation-change reset via a "previous value" read during render, so React
+  // re-runs with the cleared values in the same pass rather than an extra render.
   const [lastResetFor, setLastResetFor] = useState<Conversation | null>(
     selectedConversation
   );
-  // Surfaced inline above the composer when a send fails (typically because
-  // a channel member hasn't finished encryption setup). Distinct from
-  // `settingsError`, which lives behind the channel-settings panel and is
-  // invisible to a user who's just trying to send. Declared early so the
-  // conversation-change block below can reset it.
+  // Send failures shown inline above the composer, typically a channel member who
+  // hasn't finished encryption setup. Distinct from `settingsError`.
   const [composeError, setComposeError] = useState("");
-  // Pending file attachments for the next send (DM or channel), + an in-flight
-  // upload flag.
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   if (lastResetFor !== selectedConversation) {
@@ -123,9 +107,8 @@ export default function Chat() {
     setActiveThread(null);
     setThreadReplies([]);
     setComposeError("");
-    // Drop files staged for the conversation we just left — otherwise a file
-    // picked for a DM would follow the user into a channel and get posted to
-    // everyone in it.
+    // Drop files staged for the conversation we just left, or a file picked for a
+    // DM would follow the user into a channel and get posted to everyone in it.
     setPendingFiles([]);
   }
 
@@ -140,9 +123,6 @@ export default function Chat() {
   const selectedRef = useRef<Conversation | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Drag-resizable sidebar: the user drags the divider between the
-  // channels/people list and the message area to trade width between them.
-  // Persisted; clamped 200–640px. Shared useResizableWidth hook.
   const { width: sidebarWidth, startResize: startSidebarDrag } =
     useResizableWidth({
       storageKey: "rwayve.chatSidebar.width",
@@ -151,8 +131,7 @@ export default function Chat() {
       max: 640,
     });
 
-  // Drag the divider on the thread panel's LEFT edge to resize it. The panel is
-  // right-anchored, so dragging left widens it (invert). Persisted; 260–680px.
+  // Right-anchored and resized from its left edge, so the drag is inverted.
   const { width: threadWidth, startResize: startThreadDrag } =
     useResizableWidth({
       storageKey: "rwayve.chatThread.width",
@@ -171,10 +150,8 @@ export default function Chat() {
     [selectedConversation]
   );
 
-  // People the composer can @-mention. Channels only — 1-on-1 DMs get no picker
-  // (the single peer is already implied). Candidates are the channel's members
-  // resolved to their directory id where known, minus the current user. `label`
-  // is the email's local part — what gets inserted after the `@`.
+  // Channels only: a DM implies its peer, so it gets no mention picker. `label`
+  // is the email's local part, which is what gets inserted after the `@`.
   const mentionCandidates = useMemo<MentionCandidate[]>(() => {
     if (selectedConversation?.type !== "channel") return [];
     const selfEmail = user?.email?.trim().toLowerCase();
@@ -200,9 +177,8 @@ export default function Chat() {
     selectedRef.current = selectedConversation;
   }, [selectedConversation]);
 
-  // Collapse to a single pane (list OR conversation) when the chat area is too
-  // narrow for both. Width is observed on the container, not the window, since
-  // chat can render inside a split pane.
+  // Width is observed on the container, not the window, since chat can render
+  // inside a split pane.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -222,18 +198,11 @@ export default function Chat() {
 
       const decrypted = await decryptChatMessage(msg, user.id);
 
-      // Self-echo reconciliation: the broadcast carries the same client_id we
-      // generated on send, so we patch the optimistic local copy with the real
-      // server-assigned message_id (and refreshed created_at) instead of
-      // appending a duplicate. The reply_count bump on the parent was already
-      // done optimistically in sendThreadReply, so we deliberately do not bump
-      // again here.
+      // Self-echo: the broadcast carries the client_id we sent, so patch the
+      // optimistic bubble with the server-assigned message_id instead of appending
+      // a duplicate. sendThreadReply already bumped the parent's reply_count.
       if (decrypted.sender_id === user.id && decrypted.client_id) {
-        // Carry the echo's status onto the optimistic bubble (only ever
-        // upgrading: sent < delivered < read). For a recipient who's online,
-        // the echo already says "delivered", so the ✓✓ tick advances atomically
-        // here — no separate status_update event that could race ahead of this
-        // reconciliation and be dropped (the "delivered only after reload" bug).
+        // Status only ever upgrades, so a late 'delivered' cannot clobber a 'read'.
         const rank: Record<string, number> = { sent: 0, delivered: 1, read: 2 };
         const mergeStatus = (current: ChatMessage["status"]) =>
           (rank[decrypted.status] ?? 0) > (rank[current] ?? 0)
@@ -269,10 +238,7 @@ export default function Chat() {
         return;
       }
 
-      // Threaded reply from someone else: keep it out of the main feed
-      // entirely. If the matching thread is open, append it to the panel;
-      // either way, bump the parent's reply_count so the "N replies →"
-      // indicator updates live.
+      // Someone else's threaded reply stays out of the main feed.
       if (decrypted.parent_message_id != null) {
         setThreadReplies((prev) =>
           activeThread?.message_id === decrypted.parent_message_id
@@ -294,11 +260,9 @@ export default function Chat() {
     [user, activeThread]
   );
 
-  // Reconnect resync (Tier 2): whenever the socket (re)opens, backfill any
-  // messages the open conversation missed while it was down — fetch everything
-  // newer than the highest message id we already hold, then merge deduped by
-  // message_id. Without this, messages sent during a drop are lost until the
-  // user reselects the conversation.
+  // Reconnect resync: on reopen, refetch everything newer than the highest
+  // message_id we hold (`since_id`) and merge deduped by message_id. Without it,
+  // messages sent during the drop stay missing until the conversation is reopened.
   const resyncSelectedConversation = useCallback(async () => {
     const convo = selectedRef.current;
     if (!user || !convo) return;
@@ -331,9 +295,7 @@ export default function Chat() {
     }
   }, [user, messages]);
 
-  // A `status_update` WS event advances a sent message's delivery tick
-  // (sent → delivered → read). Patch the matching bubble in place, only ever
-  // upgrading — a late 'delivered' must not clobber a 'read' that already won.
+  // Only ever upgrade the tick: a late 'delivered' must not clobber a 'read'.
   const handleStatusUpdate = useCallback(
     (messageId: number, status: ChatMessage["status"]) => {
       const rank: Record<string, number> = { sent: 0, delivered: 1, read: 2 };
@@ -349,10 +311,8 @@ export default function Chat() {
     []
   );
 
-  // A `reaction_updated` WS event carries the message's FULL reaction set, so
-  // we replace rather than merge — that's what lets a client that missed a frame
-  // converge. Patch both the main feed and any open thread, since a reacted-to
-  // message can be visible in either.
+  // A `reaction_updated` event carries the full reaction set, so replace rather
+  // than merge — that is what lets a client that missed a frame converge.
   const handleReactionUpdate = useCallback(
     (messageId: number, _isChannel: boolean, reactions: ReactionGroup[]) => {
       const patch = (list: ChatMessage[]) =>
@@ -373,18 +333,14 @@ export default function Chat() {
     appendRealtimeMessage,
     resyncSelectedConversation,
     handleStatusUpdate,
-    // Any inbound DM (even for a conversation we're not viewing) may change an
-    // unread count / recency, so refresh the summary that drives the
-    // Unread/Recent sections + total badge.
+    // Any inbound DM can change an unread count or recency.
     refreshSummary,
-    // Flip a contact's online dot the instant they connect/disconnect.
     applyPresenceEvent,
     handleReactionUpdate
   );
 
-  // Toggle our reaction on a message. Fire-and-forget: the pill updates when the
-  // server's `reaction_updated` echo comes back, so what's on screen is always
-  // what's stored — no optimistic state to reconcile or roll back.
+  // Fire-and-forget: the pill updates on the server's `reaction_updated` echo, so
+  // there is no optimistic state to roll back.
   const toggleReaction = useCallback(
     (messageId: number, isChannel: boolean, emoji: string) => {
       const ws = wsRef.current;
@@ -394,14 +350,9 @@ export default function Chat() {
     [wsRef]
   );
 
-  // The 1:1 call entry point lives in [ChatHeader](./components/ChatHeader.tsx).
-  // useCallSession owns the /ws/call socket and the peer-connection lifecycle;
-  // [CallOverlays](../call/CallOverlays.tsx) renders banners + the active
-  // panel in the chat-area so users see incoming calls without leaving /chat.
   const callSession = useCallSession(user?.id ?? null, user?.email);
   const selectedUser =
     selectedConversation?.type === "user" ? selectedConversation.user : null;
-  // Presence for the open DM's peer, so the header can show Online / last seen.
   const selectedUserPresence = selectedUser
     ? (presence.get(selectedUser.id) ?? null)
     : null;
@@ -441,10 +392,8 @@ export default function Chat() {
     setThreadReplies([]);
   };
 
-  // Mirrors sendMessage but pins `parent_message_id` on the WS payload so
-  // the backend writes the row as a thread reply. Optimistic local state:
-  // append decrypted reply + bump the parent's reply_count in the main feed
-  // (the WS echo for own messages is filtered out by useChatSocket).
+  // Mirrors sendMessage but pins `parent_message_id`, which is what makes the
+  // backend write the row as a thread reply.
   const sendThreadReply = async (text: string) => {
     if (!wsRef.current || !user || !activeThread || !selectedConversation)
       return;
@@ -509,8 +458,8 @@ export default function Chat() {
       setMessages(await decryptChatMessages(rawMessages, user.id));
       setSelectedConversation({ type: "user", user: otherUser });
       setChannelSettingsOpen(false);
-      // Opening the DM marks its messages read server-side, so refresh the
-      // summary to clear this conversation's unread badge.
+      // Opening the DM marks its messages read server-side; refresh to clear the
+      // unread badge.
       void refreshSummary();
     } catch (err) {
       logger.error("Failed to load messages", err);
@@ -537,7 +486,6 @@ export default function Chat() {
     }
   };
 
-  // Stable key for the open conversation, used by the URL restore/sync effects.
   const conversationKey =
     selectedConversation?.type === "channel"
       ? `c:${selectedConversation.channel.id}`
@@ -545,21 +493,18 @@ export default function Chat() {
         ? `dm:${selectedConversation.user.id}`
         : null;
 
-  // Restore the conversation named in the URL on first load (e.g. after a
-  // browser refresh, or a shared `/chat?c=12` deep link). Waits for the
-  // channels/users lists to load before resolving the target, and only applies
-  // a given param once so the sync effect below can freely rewrite the URL.
+  // Restore the conversation named in the URL. Each param is applied at most once,
+  // so the sync effect below can rewrite the URL without triggering a reload here.
   const deepLinkAppliedRef = useRef<string | null>(null);
   useEffect(() => {
     const cParam = searchParams.get("c");
     const dmParam = searchParams.get("dm");
     const key = cParam ? `c:${cParam}` : dmParam ? `dm:${dmParam}` : null;
     if (!key) {
-      // No param — reset the guard so re-opening the same conversation works.
+      // Reset the guard so re-opening the same conversation works.
       deepLinkAppliedRef.current = null;
       return;
     }
-    // Already showing it (typically the sync effect just wrote the param).
     if (conversationKey === key) {
       deepLinkAppliedRef.current = key;
       return;
@@ -572,26 +517,23 @@ export default function Chat() {
     const otherUser = dmParam
       ? users.find((u) => String(u.id) === dmParam)
       : undefined;
-    // Target not in the loaded lists yet (still loading, or no access) — wait
-    // for the next render. Don't set the guard, so a later load can retry.
+    // Not in the loaded lists yet. Leave the guard unset so a later load retries.
     if (!channel && !otherUser) return;
 
     deepLinkAppliedRef.current = key;
-    // Defer the load (it sets state) out of the effect body so React's
-    // set-state-in-effect lint stays quiet — same pattern as Emails/Tasks.
+    // Defer the load out of the effect body since it sets state.
     const handle = window.setTimeout(() => {
       if (channel) void loadChannelMessages(channel);
       else if (otherUser) void loadUserMessages(otherUser);
     }, 0);
     return () => window.clearTimeout(handle);
-    // loadChannelMessages/loadUserMessages are recreated each render; depending
-    // on them would loop. The closures captured here are always the latest.
+    // loadChannelMessages/loadUserMessages are recreated each render, so depending
+    // on them would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, channels, users, conversationKey]);
 
-  // Mirror the open conversation back into the URL (replace, not push, so it
-  // doesn't spam history). Guarded by a ref so the initial null→null render
-  // doesn't clear a `?c=…` param before the restore effect can read it.
+  // Mirror the open conversation back into the URL. The ref guard stops the initial
+  // null→null render from clearing a `?c=…` param before the effect above reads it.
   const prevConversationKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (conversationKey === prevConversationKeyRef.current) return;
@@ -674,12 +616,9 @@ export default function Chat() {
     let attachmentIds: number[] = [];
     let descriptors: ChatAttachmentDescriptor[] = [];
 
-    // Enterprise-tier orgs use standard (server-readable) encryption instead of
-    // E2E. For a plain text message we send the plaintext directly; the backend
-    // stores it under its server-AES at-rest layer and recipients render it as
-    // is. Messages that carry file attachments stay E2E (the attachment
-    // descriptors travel inside the envelope), so the standard-encryption path
-    // is the text-only case.
+    // Enterprise-tier orgs opt out of E2E: plaintext crosses the backend boundary
+    // and is protected only by the server-side AES at-rest layer. This is the sole
+    // path where that is allowed, and only for text — attachments always stay E2E.
     const standardEncryption = user.current_plan?.tier === "enterprise";
 
     try {
@@ -694,7 +633,9 @@ export default function Chat() {
 
         if (files.length > 0) {
           setUploadingFiles(true);
-          // One AES key for the message text AND every e2e attachment.
+          // One AES key wraps the text and every E2E attachment. The descriptors
+          // (filename, mime, size, iv) ride inside the envelope, so the server
+          // never sees a filename.
           const aesKey = await generateChatKey();
           const e2e = user.chat_encrypt_files !== false;
           for (const file of files) {
@@ -750,7 +691,7 @@ export default function Chat() {
     }
     setUploadingFiles(false);
 
-    // Wire payload (local-only fields like _localFiles are NOT sent).
+    // Wire payload. Local-only fields such as _localFiles are never sent.
     const wire: ChatMessage = {
       sender_id: user.id,
       content: encryptedContent,
@@ -829,9 +770,8 @@ export default function Chat() {
     }
   };
 
-  // Accepts an explicit value so the settings panel can save-on-change (a radio
-  // toggle) without waiting for the `visibilityDraft` state to flush; falls back
-  // to the draft when called with no argument.
+  // Takes an explicit value so the settings panel can save-on-change without
+  // waiting for `visibilityDraft` to flush.
   const saveVisibility = async (
     visibility: ChannelVisibility = visibilityDraft
   ) => {
@@ -915,11 +855,9 @@ export default function Chat() {
     ? users.filter((u) => u.email.toLowerCase().includes(normalizedSearchQuery))
     : users;
 
-  // Personal accounts get a compact sidebar: only the 5 most recently created
-  // channels and the 5 most recently registered users. While a search is active
-  // the lists stay unbounded so older conversations remain findable. ChatUser
-  // carries no created_at, so a higher id (serial PK) is the registration-order
-  // proxy for "latest registered".
+  // Personal accounts get a compact sidebar, unbounded while a search is active so
+  // older conversations stay findable. ChatUser carries no created_at, so a higher
+  // id stands in for registration order.
   const RECENT_SIDEBAR_LIMIT = 5;
   const isPersonalAccount =
     normalizeAccountType(user?.account_type) === "personal";
@@ -982,7 +920,6 @@ export default function Chat() {
         presence={presence}
       />
 
-      {/* Drag to trade width between the sidebar and the message area. */}
       <div
         className="chat-sidebar-resizer"
         onPointerDown={startSidebarDrag}

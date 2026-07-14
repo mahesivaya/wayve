@@ -1,7 +1,7 @@
 import { apiFetch, apiFetchJson } from "./client";
 
 // The org's AI provider, selected by the enterprise owner. The API key is never
-// returned — only `has_key` reflects whether one is stored.
+// returned; only `has_key` reveals whether one is stored.
 export type AiProviderId = "gemini" | "anthropic" | "openai_compatible";
 
 export type AiConfig = {
@@ -15,8 +15,8 @@ export type AiConfig = {
   last_validated_at: string | null;
 };
 
-// A selectable provider block, returned by the backend so the UI catalog stays
-// in lockstep with what the server actually supports.
+// Returned by the backend so the UI catalog stays in lockstep with the
+// providers the server actually supports.
 export type AiProviderOption = {
   id: AiProviderId;
   label: string;
@@ -37,7 +37,7 @@ export const putAiConfig = async (payload: {
   provider: AiProviderId;
   model?: string;
   base_url?: string;
-  // Omit to keep the stored key; "" clears it (Gemini → platform key).
+  // Omit to keep the stored key; an empty string clears it.
   api_key?: string;
   fail_closed: boolean;
 }) =>
@@ -50,11 +50,10 @@ export const deleteAiConfig = async () => {
   await apiFetch("/api/ai/config", { method: "DELETE" });
 };
 
-// ── AI data access (platform team only) ────────────────────────────────────
-// Which categories of the user's own Wayve data the platform assistant's native
-// tools may read. Only the categories with native tools today are enforceable
-// (email, calendar); the endpoint is platform-owner-only. Reading before a
-// provider is configured returns the open defaults; saving requires a provider.
+// Which categories of the user's own data the assistant's native tools may read.
+// Only email and calendar are enforceable, being the categories with native
+// tools. Platform-owner-only: reading before a provider is configured returns
+// open defaults, but saving requires one.
 export type AiDataAccess = {
   email: boolean;
   calendar: boolean;
@@ -69,7 +68,7 @@ export const putAiDataAccess = async (payload: AiDataAccess) =>
     body: JSON.stringify(payload),
   });
 
-// ── Usage & cost governance (sample data for now) ──────────────────────────
+// Usage and cost governance, backed by sample data for now.
 export type AiUsage = {
   sample: boolean;
   provider: string;
@@ -94,9 +93,8 @@ export type AiUsage = {
 
 export const getAiUsage = async () => apiFetchJson<AiUsage>("/api/ai/usage");
 
-// Authoritative spend billed by Anthropic (Admin Cost API), as opposed to the
-// local per-turn estimate in AiUsage. Platform-owner only; the endpoint 403s
-// for org owners and returns { configured: false } when no admin key is set.
+// The spend Anthropic actually bills, as opposed to AiUsage's local per-turn
+// estimate. Platform-owner only, and `configured: false` when no admin key is set.
 export type AnthropicCost = {
   configured: boolean;
   period?: string;

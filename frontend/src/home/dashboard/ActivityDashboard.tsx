@@ -61,10 +61,9 @@ export default function ActivityDashboard() {
   const navigate = useNavigate();
   const [captureValue, setCaptureValue] = useState("");
 
-  // Four independent fetches kick off together on mount; each card
-  // renders the instant its own promise resolves. Tasks/Today (cheap
-  // queries) typically paint in <100ms; Inbox/Recent (joins + AES
-  // decryption) follow when their queries complete.
+  // Four independent fetches start together; each card renders as soon as its
+  // own promise resolves, so the cheap queries aren't held up by Inbox/Recent
+  // (joins + AES decryption).
   const today = useCardData<TodaySummary>("today", getHomeToday);
   const inbox = useCardData<InboxSummary>("inbox", getHomeInbox);
   const tasks = useCardData<{ top: TaskPreview[] }>("tasks", getHomeTasks);
@@ -131,8 +130,6 @@ export default function ActivityDashboard() {
     </div>
   );
 }
-
-// ─────────────────────────── Cards ────────────────────────────
 
 type CardProps<T> = {
   data: T | null;

@@ -1,10 +1,6 @@
-// Persisted theme state shape + (de)serialization, shared by the localStorage
-// store (CustomThemeContext) and the backend sync bridge (ThemeSyncBridge) so
-// both agree on the format and the v1→v2 migration.
-//
-// v1 stored a single bare `ThemeChoice`. v2 wraps it as
-// `{ v: 2, active, library, ui }` to support a named theme library and the
-// scoped UI-tab overrides. Reading an old v1 blob migrates it forward.
+// Shared by the localStorage store and the backend sync bridge so both agree on
+// the format and the v1→v2 migration. v1 stored a bare ThemeChoice; v2 wraps it
+// as { v: 2, active, library, ui }. Old v1 blobs are migrated forward on read.
 
 import type {
   PersistedTheme,
@@ -32,8 +28,7 @@ function isThemeChoice(value: unknown): value is ThemeChoice {
   );
 }
 
-// Parse a stored blob (from localStorage or the backend `theme_json`) into the
-// v2 shape, migrating v1 (a bare ThemeChoice) and tolerating garbage.
+// Tolerates garbage: an unparseable blob yields null rather than throwing.
 export function parsePersisted(
   json: string | null | undefined
 ): PersistedTheme | null {
@@ -43,7 +38,6 @@ export function parsePersisted(
     if (!parsed || typeof parsed !== "object") return null;
     const obj = parsed as Record<string, unknown>;
 
-    // v2 — { v: 2, active, library, ui }
     if (obj.v === 2 && isThemeChoice(obj.active)) {
       return {
         active: obj.active,
@@ -59,12 +53,12 @@ export function parsePersisted(
       };
     }
 
-    // Legacy v1a — { choice: ThemeChoice } (the old localStorage wrapper).
+    // Legacy v1: the old localStorage wrapper.
     if (isThemeChoice(obj.choice)) {
       return { active: obj.choice, library: [], ui: {} };
     }
 
-    // Legacy v1b — a bare ThemeChoice (the old backend wire format).
+    // Legacy v1: the old backend wire format, a bare ThemeChoice.
     if (isThemeChoice(obj)) {
       return { active: obj as unknown as ThemeChoice, library: [], ui: {} };
     }
@@ -74,8 +68,7 @@ export function parsePersisted(
   return null;
 }
 
-// Serialize the v2 shape. Returns null when there's nothing to persist
-// (default active, empty library, no UI overrides) so storage stays clean.
+// Returns null when there is nothing to persist, so storage stays clean.
 export function serializePersisted(state: PersistedTheme): string | null {
   const isEmpty =
     state.active.kind === "default" &&

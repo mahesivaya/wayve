@@ -37,14 +37,12 @@ export default function Webhooks() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Create form
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<CreateWebhookInput>(EMPTY_DRAFT);
   const [busy, setBusy] = useState("");
   const [createdSecret, setCreatedSecret] =
     useState<CreatedWebhookEndpoint | null>(null);
 
-  // Delivery viewer
   const [openId, setOpenId] = useState<number | null>(null);
   const [deliveries, setDeliveries] = useState<WebhookDelivery[]>([]);
   const [deliveriesLoading, setDeliveriesLoading] = useState(false);

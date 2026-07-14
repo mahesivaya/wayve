@@ -1,13 +1,10 @@
-// Tiny TTL + in-flight de-dupe cache for page-level data loads.
+// A TTL and in-flight de-dupe cache for page-level data loads: concurrent
+// callers share one request, and a load that resolved within `ttlMs` is reused
+// rather than re-fetched. Pages like Billing and Settings otherwise re-fire
+// every request on each mount.
 //
-// Several pages (Billing, Settings, Platform Billing) fire 3–7 requests via
-// Promise.all on every mount, re-fetching everything each time the user
-// navigates back. Wrapping the load in `cachedLoad` means:
-//   - concurrent callers share ONE in-flight request (de-dupe), and
-//   - a load that resolved within `ttlMs` is reused instead of re-fetched.
-//
-// The TTL is deliberately short so data can't stay stale for long after a
-// mutation; call `invalidateCache(key)` after a write to force a fresh load.
+// Keep TTLs short so data cannot stay stale for long, and call
+// `invalidateCache(key)` after a write to force a fresh load.
 
 type Entry = { at: number; value: Promise<unknown> };
 

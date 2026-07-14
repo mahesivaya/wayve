@@ -240,21 +240,12 @@ const SPEC_URL = "/api/openapi.json";
 
 export default function Developers() {
   const { user } = useAuth();
-  // The embedded Redoc panel that used to render the OpenAPI spec
-  // inline has been removed — the interactive reference now lives at
-  // /docs/api (Swagger UI). One canonical place for the spec means
-  // less duplication, no ~890KB Redoc bundle on this page, and no
-  // two-column-clipping when the surrounding shell is narrow.
 
   const dashboardLink = user ? "/platform/secrets" : "/register";
 
   return (
     <DocsShell title="Developer overview" single>
       <div className="dev-portal">
-        {/* dev-header / dev-footer removed — DocsShell now provides the
-          brand + nav + footer via MarketingShell. dev-portal stays as
-          the in-page layout container for the hero + sections. */}
-
         <header className="dev-hero">
           <div className="dev-hero-inner">
             <h1>{BRAND_NAME} Developers</h1>
@@ -388,11 +379,6 @@ export default function Developers() {
             </a>
           </div>
         </section>
-
-        {/* dev-footer block removed — the MarketingShell footer that
-          wraps DocsShell already lists developer / platform / company
-          links. Avoiding a duplicate footer keeps the page consistent
-          with every other /docs/* page. */}
       </div>
     </DocsShell>
   );

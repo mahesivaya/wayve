@@ -31,10 +31,8 @@ type RecentRow = DmRow | ChannelRow;
 const ts = (v: string | null) => (v ? Date.parse(v) : 0);
 const byRecency = (a: RecentRow, b: RecentRow) => ts(b.lastAt) - ts(a.lastAt);
 
-// "Recent" lists the conversations you're actively in — recent DMs AND the
-// channels you're a member of that have activity — interleaved by last-message
-// time. Unread DMs appear inline here (with their unread badge) rather than in
-// a separate "Unread" group at the top.
+// DMs and member channels with activity, interleaved by last-message time. Unread DMs
+// stay inline with their badge rather than being hoisted into a separate group.
 export default function RecentConversations({
   users,
   channels,
@@ -55,8 +53,6 @@ export default function RecentConversations({
     };
   });
 
-  // Include unread DMs inline (they keep their badge in renderDm) instead of
-  // hoisting them into a separate group above.
   const recentDMs: RecentRow[] = dmRows.filter((r) => r.lastAt);
   const recentChannels: RecentRow[] = channels
     .filter((ch) => ch.is_member && ch.last_message_at)

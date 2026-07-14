@@ -39,14 +39,8 @@ type NotificationBellProps = {
   chatUnread: number;
 };
 
-/**
- * Header bell that surfaces unread emails + chat messages in one place. The
- * badge count is driven by the same two hooks that feed the sidebar badges
- * (passed in as props, so they stay in lock-step). The item list is fetched
- * lazily on first open, reusing the home-inbox preview, the chat conversation
- * summary, and the chat user directory (`/api/users/all`) for id→email — the
- * exact path the Chat page itself uses, so no backend change is needed.
- */
+// Counts arrive as props from the same hooks that feed the sidebar badges, so
+// the two stay in lock-step. The item list is fetched lazily on first open.
 export default function NotificationBell({
   emailUnread,
   chatUnread,
@@ -58,12 +52,11 @@ export default function NotificationBell({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<NotifItem[]>([]);
-  // Has at least one fetch finished? Drives the "all caught up" vs "loading"
-  // empty states.
+  // Distinguishes the "all caught up" empty state from the "loading" one.
   const [loadedOnce, setLoadedOnce] = useState(false);
 
-  // Storage/memory limit alert — shared with the top StorageLimitBanner, and
-  // already gated to the right audience (personal accounts + org owners only).
+  // Shared with StorageLimitBanner, which already gates the alert to personal
+  // accounts and org owners.
   const { level: storageLevel, pct: storagePct } = useStorageStatus();
   const storageItem: NotifItem | null =
     storageLevel === "none"
@@ -85,14 +78,13 @@ export default function NotificationBell({
   const total =
     Math.max(0, emailUnread) + Math.max(0, chatUnread) + (storageItem ? 1 : 0);
 
-  // Lazy load: fetch the item lists whenever the panel opens. Failures are
-  // non-fatal — the badge keeps working and the panel just shows its empty
-  // state. A guard token discards a stale response if the panel re-opens.
+  // Fetch on open; failures are non-fatal, leaving the badge working and the
+  // panel on its empty state.
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    // Defer to a macrotask so the effect body doesn't synchronously call
-    // setState (React 19 "set-state-in-effect" rule) — same pattern as Tasks.
+    // Deferred to a macrotask so the effect body doesn't synchronously call
+    // setState, which React 19 disallows.
     const timer = window.setTimeout(() => {
       setLoading(true);
       void (async () => {
@@ -150,10 +142,9 @@ export default function NotificationBell({
       alive = false;
       window.clearTimeout(timer);
     };
-    // Re-run on each open so reopening refreshes the list.
   }, [open]);
 
-  // Close on outside click + Escape, only while open (mirrors ProfileMenu).
+  // Close on outside click and Escape, only while open.
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: MouseEvent) => {
@@ -183,8 +174,7 @@ export default function NotificationBell({
     void navigate(path);
   };
 
-  // Storage alert pinned to the top, ahead of message notifications. Shown even
-  // while the email/chat lists are still loading.
+  // Storage alert pins to the top and shows even while the lists are loading.
   const displayItems: NotifItem[] = storageItem
     ? [storageItem, ...items]
     : items;
@@ -271,9 +261,8 @@ export default function NotificationBell({
                 ))}
               </ul>
 
-              {/* The list scrolls within the panel; this jumps to the full
-                  inbox for the complete view. Only when there are message
-                  notifications (the storage alert links to /billing itself). */}
+              {/* Only for message notifications: the storage alert links to
+                  /billing on its own. */}
               {items.length > 0 && (
                 <button
                   type="button"

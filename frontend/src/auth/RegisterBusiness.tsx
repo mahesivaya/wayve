@@ -5,9 +5,8 @@ import { useNavigate, Link } from "react-router-dom";
 import PublicHeader from "../components/PublicHeader";
 import "./login.css"; // reuse auth-card styles
 
-// Direct business signup — creates the organization AND its owner account in one
-// step (owner is minted as organization_admin), instead of making a personal
-// account first and upgrading. No payment here; billing is added later.
+// Direct business signup: creates the organization and its owner account (as
+// organization_admin) in one step. No payment here; billing is added later.
 export default function RegisterBusiness() {
   const [orgName, setOrgName] = useState("");
   const [username, setUsername] = useState("");
@@ -28,11 +27,9 @@ export default function RegisterBusiness() {
     }
     setBusy(true);
     try {
-      // The owner account + org are created UNVERIFIED and a 6-digit code is
-      // emailed — the owner must enter it before they can log in (that first
-      // login is when the E2E keypair + recovery phrase are set up). No
-      // auto-login; go to the code screen with the email prefilled, same as a
-      // personal signup.
+      // The account is created unverified: the owner must enter the emailed
+      // 6-digit code before they can log in, and that first login is what sets up
+      // the E2E keypair and recovery phrase. No auto-login.
       await registerBusiness({
         organization_name: orgName,
         username,

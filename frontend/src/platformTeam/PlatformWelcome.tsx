@@ -3,10 +3,8 @@ import { useAuth } from "../auth/useAuth";
 import { ROLE_LABELS, normalizeRole } from "../auth/permissions";
 import "./platformTeam.css";
 
-// Landing page for platform `member` and `guest` roles. Both share the same
-// baseline permission bundle (apps:use, profile:manage_self) and have no
-// admin surface to operate, so the home is a welcome tile grid pointing at
-// the apps they can actually use.
+// Landing page for the platform `member` and `guest` roles, which share the same
+// baseline permissions (apps:use, profile:manage_self) and have no admin surface.
 const APP_TILES: Array<{
   path: string;
   icon: string;

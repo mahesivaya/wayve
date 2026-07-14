@@ -1,9 +1,8 @@
 import { useState } from "react";
 
-// Per-client "connect" picker for a registered MCP server. Given the server's
-// URL, it shows the exact setup for each AI client. The bearer token is never
-// returned by the API, so snippets use a <YOUR_TOKEN> placeholder; the optional
-// field below fills them in client-side only (it is never sent anywhere).
+// Per-client setup snippets for a registered MCP server. The API never returns
+// the bearer token, so snippets carry a <YOUR_TOKEN> placeholder; the optional
+// field below substitutes it client-side and never sends it anywhere.
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);

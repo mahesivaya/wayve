@@ -5,16 +5,14 @@ import { relativeTime } from "../utils";
 type Props = {
   title: string;
   selectedChannel: ChatChannel | null;
-  // True when the open conversation is a 1:1 DM (drives the presence line).
   isDirect: boolean;
-  // The peer's presence for a DM; null until known / not a DM.
+  // Null until the first presence snapshot, or when this isn't a DM.
   presence: PresenceInfo | null;
   settingsOpen: boolean;
-  // Audio / video call entry points. Only rendered for 1:1 conversations
-  // (the host hides them on channels by passing `null` callbacks).
+  // Calls are 1-on-1 only, so the host passes null on channels to hide the buttons.
   onAudioCall: (() => void) | null;
   onVideoCall: (() => void) | null;
-  // Disable while we're already in a call or signaling channel is down.
+  // Set while already in a call, or when the signaling socket is down.
   callDisabled?: boolean;
   onBack: () => void;
   onToggleSettings: () => void;
@@ -35,8 +33,6 @@ export default function ChatHeader({
   onJoinChannel,
 }: Props) {
   const showCallButtons = !selectedChannel && (onAudioCall || onVideoCall);
-  // Presence line under a DM peer's name. Unknown until the first snapshot;
-  // once known, "Online" (green) or "last seen …" from the durable timestamp.
   const showPresence = isDirect && !selectedChannel && presence !== null;
   const presenceOnline = presence?.online ?? false;
   const lastSeenLabel = presence?.lastSeen

@@ -4,10 +4,9 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { verifyEmail, resendVerification } from "../api/Auth";
 import "./login.css";
 
-// Code-entry screen reached after register (or a login blocked as unverified),
-// with the address passed as `?email=`. The user types the 6-digit code that was
-// emailed. On success we send them to /login (with the "Verified — sign in"
-// banner + email prefilled) — first sign-in sets up E2E keys.
+// Code-entry screen reached from register, or from a login blocked as unverified,
+// with the address passed as `?email=`. On success it hands off to /login, whose
+// first successful sign-in is what sets up the E2E keys.
 export default function VerifyEmail() {
   const [params] = useSearchParams();
   const email = params.get("email") ?? "";
