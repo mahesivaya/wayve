@@ -15,6 +15,9 @@ import {
   AIChatIcon,
 } from "../icons";
 import { hasPermission } from "../auth/permissions";
+import { useGlobalSearch } from "../search/SearchContext";
+import { matchesTileSearch } from "../search/tileSearch";
+import AIChat from "../aichat/AIChat";
 import { getOrgKeys } from "../orgKeys/api";
 import { listOrganizationMembers } from "../api/rbac";
 import { getOrganizationBilling } from "../api/billing";
@@ -94,6 +97,18 @@ export default function OrganizationAdminHome() {
   const canReadAudit = hasPermission(user, "audit:read");
   // Owner-only: select the org's AI provider + see its usage/cost governance.
   const canSeeAi = hasPermission(user, "ai:manage");
+
+  // The header search box lives in `Layout`; the query reaches us through the
+  // search context.
+  const { searchQuery, normalizedSearchQuery, setSearchQuery } =
+    useGlobalSearch();
+
+  // The query is app-wide state and isn't cleared on navigation, so arriving
+  // here carrying a leftover query from another page would silently hide most
+  // of the tiles. Landing on home always starts from a clean box.
+  useEffect(() => {
+    setSearchQuery("");
+  }, [setSearchQuery]);
 
   // Live figures for the org-owner console tiles.
   const [membersCount, setMembersCount] = useState<number | null>(null);
@@ -321,8 +336,16 @@ export default function OrganizationAdminHome() {
     },
   ];
 
+  // RBAC decides which tiles exist for this user; the header search box then
+  // narrows that set. Kept as two steps so an empty result is attributable —
+  // "you have no consoles" and "nothing matched your search" are different
+  // states and get different copy below.
   const visibleConsoles = consoles.filter((c) => c.visible);
   const hasAnyConsole = visibleConsoles.length > 0;
+  const matchedConsoles = visibleConsoles.filter((c) =>
+    matchesTileSearch(normalizedSearchQuery, c.label, c.description)
+  );
+  const noSearchMatches = hasAnyConsole && matchedConsoles.length === 0;
 
   const handleCardKeyDown = (
     event: KeyboardEvent<HTMLElement>,
@@ -368,11 +391,24 @@ export default function OrganizationAdminHome() {
 
   return (
     <div className="organization-admin-home u-page-shell">
+      {/* AI ask-box first — this is the org member's landing surface, so the
+        primary action is asking, not navigating. Same arrangement (and same
+        embedded component) as the platform home. */}
+      <section className="organization-admin-panel u-panel org-ai-panel">
+        <div className="org-ai-chat">
+          <AIChat hideHeader />
+        </div>
+      </section>
+
       {hasAnyConsole && (
         <section className="organization-admin-panel u-panel">
-          <div className="org-home-tiles">
-            {visibleConsoles.map(renderTile)}
-          </div>
+          {noSearchMatches ? (
+            <p className="organization-admin-empty">
+              Nothing here matches “{searchQuery.trim()}”.
+            </p>
+          ) : (
+            <div className="org-home-tiles">{matchedConsoles.map(renderTile)}</div>
+          )}
         </section>
       )}
     </div>
