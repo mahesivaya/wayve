@@ -68,7 +68,6 @@ import {
   WhiteboardIcon,
   InsightsIcon,
   AssistantIcon,
-  SettingsIcon,
   WorkspaceIcon,
   PlatformIcon,
   DevelopersIcon,
@@ -1301,10 +1300,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
             {/* Sits below the flex spacer so it stays pinned to the bottom
               regardless of how many nav groups render above it. */}
-            <div className="sidebar-section sidebar-section-bottom">
-              {/* In the desktop shell a profile button replaces the Settings
-                link, since that runtime has no header ProfileMenu. */}
-              {desktop ? (
+            {/* Desktop shell only: a profile button pinned to the bottom, since
+              that runtime has no header ProfileMenu. The web build reaches
+              Settings through the header ProfileMenu instead. */}
+            {desktop && (
+              <div className="sidebar-section sidebar-section-bottom">
                 <button
                   type="button"
                   className={`sidebar-link sidebar-profile-btn${
@@ -1325,15 +1325,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   </span>
                   <span className="sidebar-label">{user.email}</span>
                 </button>
-              ) : (
-                renderSidebarLink(
-                  "/settings",
-                  "Settings",
-                  <SettingsIcon size={18} />,
-                  location.pathname === "/settings"
-                )
-              )}
-            </div>
+              </div>
+            )}
           </nav>
 
           {/* Resizing is meaningless in the icon rail or the narrow overlay. */}
