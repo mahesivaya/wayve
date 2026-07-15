@@ -132,6 +132,13 @@
   width: 100%;
   text-align: left;
   cursor: pointer;
+  /* It's a real <button> (the web build uses a <Link> here), so strip the UA
+     button chrome — otherwise the default light-gray button background shows
+     through and the near-white label is unreadable on it in dark mode. */
+  appearance: none;
+  background: none;
+  border: none;
+  font-family: inherit;
 }
 
 .sidebar-profile-btn .sidebar-label {
