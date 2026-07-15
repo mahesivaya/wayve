@@ -35,13 +35,10 @@ export default function Integrations() {
     hasPermission(user, "mcp:manage") &&
     (isEnterprise || user?.scope === "platform");
 
-  // Mirrors the backend gate `require_external_mailbox_actor`: only personal
-  // accounts and a primary owner may connect their own mailbox. Everyone else
-  // uses shared inboxes, so the Gmail tile is hidden rather than 403-ing.
-  const isPersonalScope = user?.scope
-    ? user.scope === "personal"
-    : user?.account_type === "personal";
-  const canConnectMailbox = isPersonalScope || user?.is_primary_owner === true;
+  // Mirrors the backend gate `require_external_mailbox_actor`: any signed-in
+  // account may connect its own mailbox — the address it logged in with —
+  // regardless of scope (personal, organization/enterprise, or platform).
+  const canConnectMailbox = !!user;
 
   // Connection badges are best-effort: any error just leaves the card unconnected.
   const [jiraConnected, setJiraConnected] = useState(false);

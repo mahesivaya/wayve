@@ -332,15 +332,21 @@ export default function Emails() {
     }
 
     const errorParam = params.get("error") ?? hashParams.get("error");
-    if (errorParam === "email_in_use") {
+    const OAUTH_ERRORS: Record<string, string> = {
+      email_in_use:
+        "This mailbox is already connected to another Fluxze account. " +
+        "To use it here, sign in to that account and disconnect it first.",
+      mailbox_must_match_login:
+        "You can only connect the mailbox for the address you sign in to " +
+        "Fluxze with. Pick that account on the provider's sign-in screen.",
+      mailbox_check_failed:
+        "Couldn't verify the mailbox against your account just now. Please try again.",
+    };
+    const oauthMessage = errorParam ? OAUTH_ERRORS[errorParam] : undefined;
+    if (oauthMessage) {
       // Deferred out of the effect body to satisfy the set-state-in-effect lint.
       // It still runs before paint, so there is no flash.
-      const h = window.setTimeout(() => {
-        setOauthError(
-          "This mailbox is already connected to another Fluxze account. " +
-            "To use it here, sign in to that account and disconnect it first."
-        );
-      }, 0);
+      const h = window.setTimeout(() => setOauthError(oauthMessage), 0);
       window.history.replaceState({}, "", "/emails");
       return () => window.clearTimeout(h);
     }
@@ -448,14 +454,13 @@ export default function Emails() {
   const isPersonalScope = user?.scope
     ? user.scope === "personal"
     : user?.account_type === "personal";
-  // Org and platform teams manage shared/domain mailboxes in /settings/inboxes.
-  // The backend has no account-type gate here; this is purely a UI choice.
-  const showAccountManagement = isPersonalScope;
-  // Connecting an external mailbox is limited to personal accounts and the single
-  // primary owner of an org or the platform (server-computed). Everyone else uses
-  // shared inboxes.
-  const canConnectOwnMailbox =
-    isPersonalScope || user?.is_primary_owner === true;
+  // Any signed-in user may connect and manage their OWN mailbox — the address
+  // they logged in with — so the Accounts panel and add-account button show for
+  // every scope. Shared/domain mailboxes are still managed in /settings/inboxes.
+  const showAccountManagement = !!user;
+  // Mirrors the backend gate `require_external_mailbox_actor`: any authenticated
+  // account may connect its own mailbox, regardless of scope.
+  const canConnectOwnMailbox = !!user;
   // With activeAccount = null the backend returns owned + shared-member + wayve
   // mail, so every scope defaults to the unified inbox but can still drill into a
   // single shared one.

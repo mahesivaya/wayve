@@ -294,6 +294,39 @@ pub async fn email_owned_by_other_user(
     Ok(row.map(|r| r.get::<i32, _>("user_id")))
 }
 
+/// Whether `user_id` may attach the mailbox `authorized_email`. Every managed
+/// account — organization, organization_admin, and platform_admin — may only
+/// connect the mailbox matching the address it signs in to Fluxze with; only
+/// personal accounts are unrestricted. Comparison is trimmed + case-insensitive.
+///
+/// A DB error propagates as `Err` so callers can fail closed on a check this
+/// security-relevant. A missing user row yields `Ok(true)` — the connect flow
+/// has already authenticated the caller, so a vanished row is not this gate's
+/// concern.
+pub async fn account_may_attach_mailbox(
+    pool: &PgPool,
+    user_id: i32,
+    authorized_email: &str,
+) -> Result<bool, sqlx::Error> {
+    let Some(row) = sqlx::query("SELECT email, account_type FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?
+    else {
+        return Ok(true);
+    };
+
+    let account_type: String = row.get("account_type");
+    if account_type == "personal" {
+        return Ok(true);
+    }
+
+    let login_email: String = row.get("email");
+    Ok(login_email
+        .trim()
+        .eq_ignore_ascii_case(authorized_email.trim()))
+}
+
 #[instrument(
     target = "db",
     skip(pool, account),
