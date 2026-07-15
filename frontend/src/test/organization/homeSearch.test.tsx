@@ -100,14 +100,14 @@ describe("organization home", () => {
 
   it("filters the console tiles as you type", () => {
     renderHome();
-    expect(screen.getByText("Projects")).toBeInTheDocument();
+    expect(screen.getByText("Developer")).toBeInTheDocument();
     expect(screen.getByText("Billing")).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox"), {
-      target: { value: "project" },
+      target: { value: "developer" },
     });
 
-    expect(screen.getByText("Projects")).toBeInTheDocument();
+    expect(screen.getByText("Developer")).toBeInTheDocument();
     expect(screen.queryByText("Billing")).not.toBeInTheDocument();
   });
 
@@ -119,7 +119,7 @@ describe("organization home", () => {
     });
 
     expect(screen.getByText("Billing")).toBeInTheDocument();
-    expect(screen.queryByText("Projects")).not.toBeInTheDocument();
+    expect(screen.queryByText("Developer")).not.toBeInTheDocument();
   });
 
   it("explains an empty result instead of rendering a blank page", () => {
@@ -129,6 +129,6 @@ describe("organization home", () => {
     });
 
     expect(screen.getByText(/nothing here matches/i)).toBeInTheDocument();
-    expect(screen.queryByText("Projects")).not.toBeInTheDocument();
+    expect(screen.queryByText("Developer")).not.toBeInTheDocument();
   });
 });
