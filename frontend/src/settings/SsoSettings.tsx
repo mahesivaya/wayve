@@ -54,8 +54,7 @@ export default function SsoSettings() {
 
   // Known before the config is saved, so the guide can show it up front.
   const redirectUri =
-    existing?.redirect_uri ??
-    `${window.location.origin}/api/auth/sso/callback`;
+    existing?.redirect_uri ?? `${window.location.origin}/api/auth/sso/callback`;
 
   const load = useCallback(async () => {
     if (!orgId) {
@@ -206,7 +205,9 @@ export default function SsoSettings() {
           aria-expanded={showGuide}
           onClick={() => setShowGuide((v) => !v)}
         >
-          {showGuide ? "Hide setup guide" : "How do I get these from Google Workspace?"}
+          {showGuide
+            ? "Hide setup guide"
+            : "How do I get these from Google Workspace?"}
         </button>
 
         {showGuide && (
@@ -222,18 +223,22 @@ export default function SsoSettings() {
                 >
                   Google Cloud Console
                 </a>{" "}
-                and pick (or create) a project — ideally one under your Workspace
-                organization.
+                and pick (or create) a project — ideally one under your
+                Workspace organization.
               </li>
               <li>
-                Go to <strong>APIs &amp; Services → OAuth consent screen</strong>.
+                Go to{" "}
+                <strong>APIs &amp; Services → OAuth consent screen</strong>.
                 Choose <strong>Internal</strong> (so only your Workspace users
                 can sign in), fill in an app name + support email, and save.
               </li>
               <li>
-                Go to <strong>APIs &amp; Services → Credentials → Create
-                Credentials → OAuth client ID</strong>. For{" "}
-                <strong>Application type</strong> choose{" "}
+                Go to{" "}
+                <strong>
+                  APIs &amp; Services → Credentials → Create Credentials → OAuth
+                  client ID
+                </strong>
+                . For <strong>Application type</strong> choose{" "}
                 <strong>Web application</strong> and name it e.g. “Fluxze SSO”.
               </li>
               <li>
@@ -244,8 +249,8 @@ export default function SsoSettings() {
               <li>
                 Google shows your <strong>Client ID</strong> (ends in{" "}
                 <code>.apps.googleusercontent.com</code>) and{" "}
-                <strong>Client secret</strong> (starts with <code>GOCSPX-</code>).
-                Copy both into the fields on this page.
+                <strong>Client secret</strong> (starts with <code>GOCSPX-</code>
+                ). Copy both into the fields on this page.
               </li>
               <li>
                 Set <strong>Issuer URL</strong> to{" "}
@@ -280,11 +285,11 @@ export default function SsoSettings() {
               <small>
                 The base URL of your IdP. Fluxze appends
                 <code> /.well-known/openid-configuration</code> for discovery.
-                E.g. <code>https://accounts.google.com</code> (Google Workspace),
-                {" "}
-                <code>https://acme.okta.com</code> (Okta), or
-                {" "}
-                <code>https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0</code>{" "}
+                E.g. <code>https://accounts.google.com</code> (Google
+                Workspace), <code>https://acme.okta.com</code> (Okta), or{" "}
+                <code>
+                  https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0
+                </code>{" "}
                 (Azure AD).
               </small>
             </label>
@@ -299,8 +304,7 @@ export default function SsoSettings() {
                 required
               />
               <small>
-                The OAuth client ID from your IdP. Google Workspace looks like
-                {" "}
+                The OAuth client ID from your IdP. Google Workspace looks like{" "}
                 <code>…apps.googleusercontent.com</code>.
               </small>
             </label>

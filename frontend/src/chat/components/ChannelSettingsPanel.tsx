@@ -90,7 +90,11 @@ export default function ChannelSettingsPanel({
       <div className="channel-settings-section">
         <span className="channel-settings-label">Privacy</span>
         {isAdmin ? (
-          <div className="channel-radio-group" role="radiogroup" aria-label="Privacy">
+          <div
+            className="channel-radio-group"
+            role="radiogroup"
+            aria-label="Privacy"
+          >
             <label className="channel-radio">
               <input
                 type="radio"
@@ -119,7 +123,9 @@ export default function ChannelSettingsPanel({
             </label>
           </div>
         ) : (
-          <strong>{channel.visibility === "public" ? "Public" : "Private"}</strong>
+          <strong>
+            {channel.visibility === "public" ? "Public" : "Private"}
+          </strong>
         )}
       </div>
 

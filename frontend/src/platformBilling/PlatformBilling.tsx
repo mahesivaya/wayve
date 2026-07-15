@@ -166,39 +166,42 @@ export default function PlatformBilling() {
   // `useCache` defaults to false so every post-mutation reload fetches fresh;
   // only the initial mount opts into the short-lived cache (avoids the
   // 7-request refetch when navigating back to Platform Billing).
-  const reload = useCallback(async (useCache = false) => {
-    if (!canView) return;
-    setError("");
-    try {
-      const [ov, us, os, inv, emp, runs, hist] = await cachedLoad(
-        "platform-billing",
-        useCache ? 8000 : 0,
-        () =>
-          Promise.all([
-            getPlatformBillingOverview(),
-            listUserSubscriptions(),
-            listOrganizationSubscriptions(),
-            listPlatformInvoices(),
-            listEmployees(),
-            listPayrollRuns(),
-            listBillingHistory(),
-          ])
-      );
-      setOverview(ov);
-      setUserSubs(us);
-      setOrgSubs(os);
-      setInvoices(inv);
-      setEmployees(emp);
-      setPayrollRuns(runs);
-      setHistory(hist);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load billing data"
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [canView]);
+  const reload = useCallback(
+    async (useCache = false) => {
+      if (!canView) return;
+      setError("");
+      try {
+        const [ov, us, os, inv, emp, runs, hist] = await cachedLoad(
+          "platform-billing",
+          useCache ? 8000 : 0,
+          () =>
+            Promise.all([
+              getPlatformBillingOverview(),
+              listUserSubscriptions(),
+              listOrganizationSubscriptions(),
+              listPlatformInvoices(),
+              listEmployees(),
+              listPayrollRuns(),
+              listBillingHistory(),
+            ])
+        );
+        setOverview(ov);
+        setUserSubs(us);
+        setOrgSubs(os);
+        setInvoices(inv);
+        setEmployees(emp);
+        setPayrollRuns(runs);
+        setHistory(hist);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load billing data"
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [canView]
+  );
 
   useEffect(() => {
     const handle = window.setTimeout(() => {

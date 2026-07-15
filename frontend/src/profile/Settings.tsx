@@ -21,6 +21,7 @@ import {
   updateMyOrganization,
 } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
+import { homePathForUser } from "../auth/accountHome";
 import { canViewIntegrations, hasPermission } from "../auth/permissions";
 import { cachedLoad } from "../api/cache";
 import { listMyTickets, type SupportTicket } from "../api/support";
@@ -58,12 +59,36 @@ function formatMoney(cents: number, currency: string): string {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { user, refresh, logout } = useAuth();
+  const { user, refresh, logout, switchMode } = useAuth();
   // Desktop shell only: the header ProfileMenu dropdown is gone there, so its
   // account links (My Profile / Integrations / Appearance / Log out) are
   // surfaced as an Account card on this page instead.
   const desktop = isDesktopApp();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+
+  // The admin-mode toggle also lives only in the header ProfileMenu on the web,
+  // so the desktop shell would otherwise strand an owner in normal mode with no
+  // way to elevate. Mirror the ProfileMenu switcher here.
+  const [switchingMode, setSwitchingMode] = useState(false);
+  const inAdminMode = user?.mode === "admin";
+  const showModeSwitcher = inAdminMode || (user?.can_switch_admin ?? false);
+
+  const handleSwitchMode = async (target: "normal" | "admin") => {
+    if (switchingMode) return;
+    setSwitchingMode(true);
+    try {
+      await switchMode(target);
+      navigate(
+        target === "admin"
+          ? homePathForUser({ ...user, mode: "admin", can_switch_admin: true })
+          : "/home"
+      );
+    } catch {
+      // Server refused (e.g. no longer eligible); leave the page as-is.
+    } finally {
+      setSwitchingMode(false);
+    }
+  };
 
   // Free personal accounts see an Upgrade CTA (moved here from the header in the
   // desktop shell). Mirrors the gate + navigation in Layout's header Upgrade.
@@ -405,6 +430,27 @@ export default function Settings() {
                 <div className="settings-appearance-panel">
                   <ThemeCustomizer />
                 </div>
+              )}
+              {showModeSwitcher && (
+                <button
+                  type="button"
+                  className="settings-account-link"
+                  disabled={switchingMode}
+                  onClick={() =>
+                    void handleSwitchMode(inAdminMode ? "normal" : "admin")
+                  }
+                >
+                  <span className="settings-account-link-icon">
+                    {inAdminMode ? "🚪" : "🛡️"}
+                  </span>
+                  <span>
+                    {switchingMode
+                      ? "Switching…"
+                      : inAdminMode
+                        ? "Exit admin mode"
+                        : "Switch to admin mode"}
+                  </span>
+                </button>
               )}
               <button
                 type="button"

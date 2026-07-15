@@ -1,8 +1,5 @@
 import { Link } from "react-router-dom";
-import {
-  peelTaskRefTrailing,
-  taskRefPath,
-} from "../../tasks/taskShareLink";
+import { peelTaskRefTrailing, taskRefPath } from "../../tasks/taskShareLink";
 
 // Bare URLs and task references (`#42 Task name`) become links. Same-origin URLs and
 // task refs use router links so the click navigates client-side; external URLs open in

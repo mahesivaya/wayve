@@ -69,9 +69,7 @@ describe("AIChat provider badge", () => {
     render(<AIChat />);
 
     expect(await screen.findByText("Gemini")).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: /ai settings/i })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /ai settings/i })).toBeNull();
   });
 
   it("shows the AI settings link for a platform owner (no enterprise tier)", async () => {

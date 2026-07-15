@@ -34,7 +34,11 @@ const PROVIDER_LABELS: Record<string, string> = {
   openai_compatible: "OpenAI-compatible",
 };
 
-export default function AIChat({ hideHeader = false }: { hideHeader?: boolean }) {
+export default function AIChat({
+  hideHeader = false,
+}: {
+  hideHeader?: boolean;
+}) {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -56,7 +60,9 @@ export default function AIChat({ hideHeader = false }: { hideHeader?: boolean })
     hasPermission(user, "ai:manage") &&
     (user?.current_plan?.tier === "enterprise" || user?.scope === "platform");
 
-  const providerName = provider ? (PROVIDER_LABELS[provider] ?? provider) : null;
+  const providerName = provider
+    ? (PROVIDER_LABELS[provider] ?? provider)
+    : null;
   const badgeText = providerName ?? "AI assistant";
 
   // Show the real provider on load (before any message) so the header never

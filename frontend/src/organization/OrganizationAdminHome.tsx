@@ -368,7 +368,9 @@ export default function OrganizationAdminHome() {
               Nothing here matches “{searchQuery.trim()}”.
             </p>
           ) : (
-            <div className="org-home-tiles">{matchedConsoles.map(renderTile)}</div>
+            <div className="org-home-tiles">
+              {matchedConsoles.map(renderTile)}
+            </div>
           )}
         </section>
       )}

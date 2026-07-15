@@ -67,8 +67,7 @@ export default function FeatureAccessPage() {
     for (const f of data.features) {
       const cur = draft[f.key] ?? new Set<string>();
       const orig = new Set(f.allowed_roles);
-      out[f.key] =
-        cur.size !== orig.size || [...cur].some((r) => !orig.has(r));
+      out[f.key] = cur.size !== orig.size || [...cur].some((r) => !orig.has(r));
     }
     return out;
   }, [data, draft]);

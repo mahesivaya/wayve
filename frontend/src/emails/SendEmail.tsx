@@ -156,7 +156,9 @@ export default function SendEmail({
       const senderId = user?.id;
 
       const attachmentPayloads =
-        attachments.length > 0 ? await filesToAttachments(attachments) : undefined;
+        attachments.length > 0
+          ? await filesToAttachments(attachments)
+          : undefined;
       // Attachments are standard-mailbox only, so any file forces every
       // recipient down the SMTP path and skips the E2E internal channel.
       const forceStandard = attachments.length > 0;

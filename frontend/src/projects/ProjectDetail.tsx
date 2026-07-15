@@ -215,9 +215,7 @@ export default function ProjectDetail() {
         >
           ← Projects
         </button>
-        <p className="projects-empty">
-          That project couldn&apos;t be found.
-        </p>
+        <p className="projects-empty">That project couldn&apos;t be found.</p>
       </div>
     );
   }

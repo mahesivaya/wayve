@@ -17,7 +17,12 @@ const VALID_JWT =
 
 // A snapshot of the shape that actually leaked: real inbox subjects and senders.
 const SEED_EMAILS = [
-  { id: 1, subject: "Q3 board deck", sender: "cfo@example.com", is_read: false },
+  {
+    id: 1,
+    subject: "Q3 board deck",
+    sender: "cfo@example.com",
+    is_read: false,
+  },
 ];
 
 // Enumerate through the Storage API, not Object.keys — the jsdom polyfill in

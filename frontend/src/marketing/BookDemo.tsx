@@ -98,8 +98,9 @@ export default function BookDemo() {
           <p className="marketing-eyebrow">Book a demo</p>
           <h1>See Fluxze in action.</h1>
           <p className="lead">
-            Tell us a little about you and pick a time that works. We'll walk you
-            through mail, chat, calls, files, and AI in one private workspace.
+            Tell us a little about you and pick a time that works. We'll walk
+            you through mail, chat, calls, files, and AI in one private
+            workspace.
           </p>
         </div>
 
@@ -110,8 +111,9 @@ export default function BookDemo() {
             </span>
             <h2>You're booked, {submitted.firstName}!</h2>
             <p>
-              We've noted your demo for <strong>{prettySlot(submitted.slot)}</strong>.
-              A confirmation will go to <strong>{submitted.workEmail}</strong>.
+              We've noted your demo for{" "}
+              <strong>{prettySlot(submitted.slot)}</strong>. A confirmation will
+              go to <strong>{submitted.workEmail}</strong>.
             </p>
             <div className="book-demo-success-actions">
               <button

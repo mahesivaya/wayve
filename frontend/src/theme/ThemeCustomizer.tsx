@@ -84,55 +84,55 @@ const BACKGROUNDS: {
   mode: ThemeMode;
   input: PaletteInput;
 }[] = [
-    {
-      id: "bg-navy",
-      label: "Navy",
-      mode: "dark",
-      input: { ...DEFAULT_INPUT, hue: 230, chroma: 0.16 },
-    },
-    {
-      id: "bg-slate",
-      label: "Slate",
-      mode: "dark",
-      input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.05 },
-    },
-    {
-      id: "bg-black",
-      label: "Ink",
-      mode: "dark",
-      input: { ...DEFAULT_INPUT, hue: 250, chroma: 0, depth: 0.04 },
-    },
-    {
-      id: "bg-forest",
-      label: "Forest",
-      mode: "dark",
-      input: { ...DEFAULT_INPUT, hue: 155, chroma: 0.14 },
-    },
-    {
-      id: "bg-plum",
-      label: "Plum",
-      mode: "dark",
-      input: { ...DEFAULT_INPUT, hue: 300, chroma: 0.15 },
-    },
-    {
-      id: "bg-light",
-      label: "Light",
-      mode: "light",
-      input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.12 },
-    },
-    {
-      id: "bg-cream",
-      label: "Cream",
-      mode: "light",
-      input: { ...DEFAULT_INPUT, hue: 75, chroma: 0.12 },
-    },
-    {
-      id: "bg-rose",
-      label: "Rose",
-      mode: "light",
-      input: { ...DEFAULT_INPUT, hue: 350, chroma: 0.12 },
-    },
-  ];
+  {
+    id: "bg-navy",
+    label: "Navy",
+    mode: "dark",
+    input: { ...DEFAULT_INPUT, hue: 230, chroma: 0.16 },
+  },
+  {
+    id: "bg-slate",
+    label: "Slate",
+    mode: "dark",
+    input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.05 },
+  },
+  {
+    id: "bg-black",
+    label: "Ink",
+    mode: "dark",
+    input: { ...DEFAULT_INPUT, hue: 250, chroma: 0, depth: 0.04 },
+  },
+  {
+    id: "bg-forest",
+    label: "Forest",
+    mode: "dark",
+    input: { ...DEFAULT_INPUT, hue: 155, chroma: 0.14 },
+  },
+  {
+    id: "bg-plum",
+    label: "Plum",
+    mode: "dark",
+    input: { ...DEFAULT_INPUT, hue: 300, chroma: 0.15 },
+  },
+  {
+    id: "bg-light",
+    label: "Light",
+    mode: "light",
+    input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.12 },
+  },
+  {
+    id: "bg-cream",
+    label: "Cream",
+    mode: "light",
+    input: { ...DEFAULT_INPUT, hue: 75, chroma: 0.12 },
+  },
+  {
+    id: "bg-rose",
+    label: "Rose",
+    mode: "light",
+    input: { ...DEFAULT_INPUT, hue: 350, chroma: 0.12 },
+  },
+];
 
 // Inputs for the Contrast button's monochrome toggle. `chroma: 0` makes
 // generatePalette emit a fully greyscale palette; `saturation: 0` is what lets
@@ -744,8 +744,8 @@ export default function ThemeCustomizer() {
                     ))}
                   </select>
                   <p className="theme-ui-font-note">
-                    Just for you — overrides your organization &amp; the platform
-                    default.
+                    Just for you — overrides your organization &amp; the
+                    platform default.
                   </p>
                 </div>
 

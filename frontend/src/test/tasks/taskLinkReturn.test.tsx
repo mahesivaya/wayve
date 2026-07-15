@@ -66,8 +66,6 @@ describe("task link → close returns to Messages", () => {
 
     // Closing the modal returns to Messages.
     await userEvent.click(screen.getByRole("button", { name: "Close modal" }));
-    await waitFor(() =>
-      expect(screen.getByText("Messages page")).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByText("Messages page")).toBeTruthy());
   });
 });

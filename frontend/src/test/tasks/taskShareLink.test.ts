@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { taskShareText, taskRefPath, peelTaskRefTrailing } from "../../tasks/taskShareLink";
+import {
+  taskShareText,
+  taskRefPath,
+  peelTaskRefTrailing,
+} from "../../tasks/taskShareLink";
 
 describe("taskShareText", () => {
   it("uses task_number when present", () => {

@@ -55,8 +55,7 @@ export type Project = {
   github_repo: string | null;
 };
 
-export const getProjects = async () =>
-  apiFetchJson<Project[]>("/api/projects");
+export const getProjects = async () => apiFetchJson<Project[]>("/api/projects");
 
 // Ranked by how much and how recently the person worked in the files the task is
 // likely to touch. `user_id` is set only for assignable members;

@@ -32,8 +32,11 @@ const renderPanel = async () => {
 
 describe("McpPanel connection blocks", () => {
   beforeEach(() => {
-    (getMcpConnections as unknown as { mockResolvedValue: (v: unknown) => void })
-      .mockResolvedValue([]);
+    (
+      getMcpConnections as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
+    ).mockResolvedValue([]);
   });
   afterEach(() => vi.clearAllMocks());
 
@@ -41,28 +44,37 @@ describe("McpPanel connection blocks", () => {
     await renderPanel();
 
     // The curated blocks render as radios; detail fields are hidden up front.
-    expect(screen.getByRole("radiogroup", { name: /mcp server/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("radiogroup", { name: /mcp server/i })
+    ).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /github/i })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /custom server/i })).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(URL_PLACEHOLDER)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: /custom server/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText(URL_PLACEHOLDER)
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /connect server/i })
     ).not.toBeInTheDocument();
   });
 
   it("flags a preset block as Connected when a matching server is registered", async () => {
-    (getMcpConnections as unknown as { mockResolvedValue: (v: unknown) => void })
-      .mockResolvedValue([
-        {
-          id: 7,
-          label: "Our GitHub",
-          server_url: "https://api.githubcopilot.com/mcp/",
-          enabled: true,
-          server_name: "github",
-          last_tool_count: 12,
-          last_validated_at: null,
-        },
-      ]);
+    (
+      getMcpConnections as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
+    ).mockResolvedValue([
+      {
+        id: 7,
+        label: "Our GitHub",
+        server_url: "https://api.githubcopilot.com/mcp/",
+        enabled: true,
+        server_name: "github",
+        last_tool_count: 12,
+        last_validated_at: null,
+      },
+    ]);
 
     render(<McpPanel />);
 
@@ -79,12 +91,16 @@ describe("McpPanel connection blocks", () => {
     await renderPanel();
     await userEvent.click(screen.getByRole("radio", { name: /github/i }));
 
-    expect(screen.getByPlaceholderText(LABEL_PLACEHOLDER)).toHaveValue("GitHub");
+    expect(screen.getByPlaceholderText(LABEL_PLACEHOLDER)).toHaveValue(
+      "GitHub"
+    );
     expect(screen.getByPlaceholderText(URL_PLACEHOLDER)).toHaveValue(
       "https://api.githubcopilot.com/mcp/"
     );
     // Smart-paste is scoped to the Custom block only.
-    expect(screen.queryByPlaceholderText(/paste a url/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText(/paste a url/i)
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /connect server/i })
     ).toBeInTheDocument();
@@ -92,7 +108,9 @@ describe("McpPanel connection blocks", () => {
 
   it("reveals the smart-paste box and blank fields for the Custom block", async () => {
     await renderPanel();
-    await userEvent.click(screen.getByRole("radio", { name: /custom server/i }));
+    await userEvent.click(
+      screen.getByRole("radio", { name: /custom server/i })
+    );
 
     expect(screen.getByPlaceholderText(/paste a url/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(LABEL_PLACEHOLDER)).toHaveValue("");
@@ -100,24 +118,31 @@ describe("McpPanel connection blocks", () => {
   });
 
   it("toggles a connected server on/off via the switch", async () => {
-    (getMcpConnections as unknown as { mockResolvedValue: (v: unknown) => void })
-      .mockResolvedValue([
-        {
-          id: 9,
-          label: "Acme DB",
-          server_url: "https://mcp.acme.com/mcp",
-          enabled: true,
-          server_name: "acme",
-          last_tool_count: 4,
-          last_validated_at: null,
-        },
-      ]);
     (
-      updateMcpConnection as unknown as { mockResolvedValue: (v: unknown) => void }
+      getMcpConnections as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
+    ).mockResolvedValue([
+      {
+        id: 9,
+        label: "Acme DB",
+        server_url: "https://mcp.acme.com/mcp",
+        enabled: true,
+        server_name: "acme",
+        last_tool_count: 4,
+        last_validated_at: null,
+      },
+    ]);
+    (
+      updateMcpConnection as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
     ).mockResolvedValue({});
 
     render(<McpPanel />);
-    const toggle = await screen.findByRole("checkbox", { name: /disable acme db/i });
+    const toggle = await screen.findByRole("checkbox", {
+      name: /disable acme db/i,
+    });
     expect(toggle).toBeChecked();
 
     await userEvent.click(toggle);
@@ -127,20 +152,25 @@ describe("McpPanel connection blocks", () => {
   });
 
   it("edits a server's settings and saves (rotating the token)", async () => {
-    (getMcpConnections as unknown as { mockResolvedValue: (v: unknown) => void })
-      .mockResolvedValue([
-        {
-          id: 9,
-          label: "Acme DB",
-          server_url: "https://mcp.acme.com/mcp",
-          enabled: true,
-          server_name: "acme",
-          last_tool_count: 4,
-          last_validated_at: null,
-        },
-      ]);
     (
-      updateMcpConnection as unknown as { mockResolvedValue: (v: unknown) => void }
+      getMcpConnections as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
+    ).mockResolvedValue([
+      {
+        id: 9,
+        label: "Acme DB",
+        server_url: "https://mcp.acme.com/mcp",
+        enabled: true,
+        server_name: "acme",
+        last_tool_count: 4,
+        last_validated_at: null,
+      },
+    ]);
+    (
+      updateMcpConnection as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
     ).mockResolvedValue({});
 
     render(<McpPanel />);
@@ -155,7 +185,9 @@ describe("McpPanel connection blocks", () => {
       screen.getByPlaceholderText(/leave blank to keep/i),
       "rotated-token"
     );
-    await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /save changes/i })
+    );
 
     await waitFor(() =>
       expect(updateMcpConnection).toHaveBeenCalledWith(9, {
@@ -178,7 +210,9 @@ describe("McpPanel connection blocks", () => {
     });
 
     await renderPanel();
-    await userEvent.click(screen.getByRole("radio", { name: /custom server/i }));
+    await userEvent.click(
+      screen.getByRole("radio", { name: /custom server/i })
+    );
 
     await userEvent.type(
       screen.getByPlaceholderText(LABEL_PLACEHOLDER),
@@ -207,7 +241,9 @@ describe("McpPanel connection blocks", () => {
 
     // On success the block picker resets (fields collapse back).
     await waitFor(() =>
-      expect(screen.queryByPlaceholderText(URL_PLACEHOLDER)).not.toBeInTheDocument()
+      expect(
+        screen.queryByPlaceholderText(URL_PLACEHOLDER)
+      ).not.toBeInTheDocument()
     );
   });
 });

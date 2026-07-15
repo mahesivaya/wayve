@@ -35,8 +35,7 @@ export default function VerifyEmail() {
       await verifyEmail(email, code.trim());
       setStatus("done");
       setTimeout(
-        () =>
-          navigate(`/login?verified=1&email=${encodeURIComponent(email)}`),
+        () => navigate(`/login?verified=1&email=${encodeURIComponent(email)}`),
         1000
       );
     } catch (err) {

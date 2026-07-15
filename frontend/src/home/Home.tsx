@@ -317,17 +317,26 @@ export default function Home() {
               <article className="hx-role">
                 <span className="hx-role-emoji">👤</span>
                 <h3>Personal</h3>
-                <p>Email, chat, drive, tasks and notes — your whole day in one tab.</p>
+                <p>
+                  Email, chat, drive, tasks and notes — your whole day in one
+                  tab.
+                </p>
               </article>
               <article className="hx-role">
                 <span className="hx-role-emoji">🚀</span>
                 <h3>Startups</h3>
-                <p>One login instead of five tools. Get your team running in minutes.</p>
+                <p>
+                  One login instead of five tools. Get your team running in
+                  minutes.
+                </p>
               </article>
               <article className="hx-role">
                 <span className="hx-role-emoji">🏢</span>
                 <h3>Business</h3>
-                <p>Roles and admin controls, shared inboxes, and a single invoice.</p>
+                <p>
+                  Roles and admin controls, shared inboxes, and a single
+                  invoice.
+                </p>
               </article>
             </div>
           </section>

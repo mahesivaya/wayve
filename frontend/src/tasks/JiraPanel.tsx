@@ -38,7 +38,12 @@ export default function JiraPanel({ onImported }: { onImported: () => void }) {
     try {
       setStatus(await getJiraConnection());
     } catch {
-      setStatus({ connected: false, base_url: null, email: null, enabled: false });
+      setStatus({
+        connected: false,
+        base_url: null,
+        email: null,
+        enabled: false,
+      });
     } finally {
       setLoading(false);
     }
@@ -74,7 +79,9 @@ export default function JiraPanel({ onImported }: { onImported: () => void }) {
       setOpen(false);
       setNotice("Jira connected.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect to Jira.");
+      setError(
+        err instanceof Error ? err.message : "Could not connect to Jira."
+      );
     } finally {
       setBusy(false);
     }
@@ -107,7 +114,12 @@ export default function JiraPanel({ onImported }: { onImported: () => void }) {
     setBusy(true);
     try {
       await disconnectJira();
-      setStatus({ connected: false, base_url: null, email: null, enabled: false });
+      setStatus({
+        connected: false,
+        base_url: null,
+        email: null,
+        enabled: false,
+      });
       setNotice("Jira disconnected.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not disconnect.");

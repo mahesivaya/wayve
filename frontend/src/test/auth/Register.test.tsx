@@ -68,7 +68,9 @@ describe("Register page", () => {
     // The account is created unverified: the user must enter the emailed 6-digit
     // code before their first login, and that login — not this form — sets up the
     // session, E2E keypair and recovery phrase. So there is deliberately no token.
-    expect(await screen.findByTestId("verify-email")).toHaveTextContent("x@y.z");
+    expect(await screen.findByTestId("verify-email")).toHaveTextContent(
+      "x@y.z"
+    );
     expect(getAuthToken()).toBeNull();
     expect(localStorage.getItem("token")).toBeNull();
   });

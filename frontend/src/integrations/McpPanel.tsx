@@ -99,7 +99,10 @@ function parseServerInput(text: string): {
   if (t.startsWith("{")) {
     try {
       const obj = JSON.parse(t) as Record<string, unknown>;
-      const map = (obj.mcpServers ?? obj.servers ?? obj) as Record<string, unknown>;
+      const map = (obj.mcpServers ?? obj.servers ?? obj) as Record<
+        string,
+        unknown
+      >;
       let name: string | undefined;
       let cfg: Record<string, unknown> = obj;
       if (map && typeof map === "object" && !("url" in map)) {
@@ -358,7 +361,9 @@ export default function McpPanel() {
                 <span className="mcp-block-label">{p.label}</span>
                 <span className="mcp-block-vendor">{p.vendor}</span>
                 <span className="mcp-block-blurb">{p.blurb}</span>
-                {connected && <span className="mcp-block-active">Connected</span>}
+                {connected && (
+                  <span className="mcp-block-active">Connected</span>
+                )}
               </button>
             );
           })}
@@ -373,7 +378,7 @@ export default function McpPanel() {
                   className="mcp-input mcp-textarea"
                   rows={2}
                   placeholder={
-                    'Paste a URL, a `claude mcp add …` command, or a JSON config — we’ll fill the fields below'
+                    "Paste a URL, a `claude mcp add …` command, or a JSON config — we’ll fill the fields below"
                   }
                   value={paste}
                   onChange={(e) => onPaste(e.target.value)}

@@ -149,12 +149,12 @@ export default function SlackPanel() {
             <code>chat:write.customize</code>, <code>users:read</code>.
           </li>
           <li>
-            <strong>Reinstall to Workspace</strong> after adding scopes — they do
-            not apply until you do.
+            <strong>Reinstall to Workspace</strong> after adding scopes — they
+            do not apply until you do.
           </li>
           <li>
-            Copy the <strong>Bot User OAuth Token</strong> (<code>xoxb-…</code>),
-            paste it below, and <strong>Connect</strong>.
+            Copy the <strong>Bot User OAuth Token</strong> (<code>xoxb-…</code>
+            ), paste it below, and <strong>Connect</strong>.
           </li>
           <li>
             <strong>Load channels</strong> → <strong>Link</strong> a channel
@@ -166,15 +166,17 @@ export default function SlackPanel() {
             posts fail with <code>not_in_channel</code>).
           </li>
           <li>
-            For real-time Slack → Wayve: turn on <strong>Event Subscriptions</strong>{" "}
-            with URL <code>https://fluxze.com/webhooks/slack_events</code> and
-            subscribe to <code>message.channels</code> (your admin sets the
-            signing secret).
+            For real-time Slack → Wayve: turn on{" "}
+            <strong>Event Subscriptions</strong> with URL{" "}
+            <code>https://fluxze.com/webhooks/slack_events</code> and subscribe
+            to <code>message.channels</code> (your admin sets the signing
+            secret).
           </li>
         </ol>
         <p className="slack-muted">
-          The two silent gotchas: <strong>reinstall after changing scopes</strong>{" "}
-          and <strong>invite the bot to the channel</strong>.{" "}
+          The two silent gotchas:{" "}
+          <strong>reinstall after changing scopes</strong> and{" "}
+          <strong>invite the bot to the channel</strong>.{" "}
           <a
             href="https://github.com/mahesivaya/wayve/blob/main/docs/slack-setup.md"
             target="_blank"

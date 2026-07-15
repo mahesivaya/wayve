@@ -1,7 +1,9 @@
 import type { Task } from "../api/tasks";
 
 /** Plain-text share snippet copied from a task card, e.g. "#42 Ship the thing". */
-export function taskShareText(task: Pick<Task, "id" | "task_number" | "name">): string {
+export function taskShareText(
+  task: Pick<Task, "id" | "task_number" | "name">
+): string {
   const num = task.task_number ?? task.id;
   return `#${num} ${task.name}`;
 }

@@ -80,7 +80,9 @@ export default function RecentConversations({
           <PresenceDot presence={presence.get(r.user.id)} />
         </span>
         <span className="conversation-main">
-          <span className={`conversation-name ${presenceNameClass(presence.get(r.user.id))}`}>
+          <span
+            className={`conversation-name ${presenceNameClass(presence.get(r.user.id))}`}
+          >
             {r.user.email}
           </span>
         </span>

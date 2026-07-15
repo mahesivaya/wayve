@@ -30,18 +30,41 @@ export function BrandIcon({ name }: { name: string }) {
       return (
         <svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">
           <path fill="#4285F4" d="M3 19h3V11l-3-2.3V17.5A1.5 1.5 0 0 0 3 19z" />
-          <path fill="#34A853" d="M18 19h3a1.5 1.5 0 0 0 1.5-1.5V8.7L18 11v8z" />
-          <path fill="#FBBC05" d="M18 5.6V11l4.5-3.4V6.5A1.5 1.5 0 0 0 20.1 5L18 5.6z" />
+          <path
+            fill="#34A853"
+            d="M18 19h3a1.5 1.5 0 0 0 1.5-1.5V8.7L18 11v8z"
+          />
+          <path
+            fill="#FBBC05"
+            d="M18 5.6V11l4.5-3.4V6.5A1.5 1.5 0 0 0 20.1 5L18 5.6z"
+          />
           <path fill="#C5221F" d="M6 11V5.6l6 4.4 6-4.4V11l-6 4.4L6 11z" />
-          <path fill="#EA4335" d="M1.5 6.5v1.1L6 11V5.6l-2.1-1.6A1.5 1.5 0 0 0 1.5 6.5z" />
+          <path
+            fill="#EA4335"
+            d="M1.5 6.5v1.1L6 11V5.6l-2.1-1.6A1.5 1.5 0 0 0 1.5 6.5z"
+          />
         </svg>
       );
     case "outlook":
       return (
         <svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">
-          <path fill="#0364B8" d="M22 7.5v9a1 1 0 0 1-1 1h-9V6h9a1 1 0 0 1 1 1.5z" />
-          <path fill="#fff" d="M12.6 9h8.4v1.4l-4.2 2.6-4.2-2.6V9z" opacity="0.85" />
-          <rect x="1.5" y="4.5" width="11.5" height="15" rx="2.4" fill="#0F78D4" />
+          <path
+            fill="#0364B8"
+            d="M22 7.5v9a1 1 0 0 1-1 1h-9V6h9a1 1 0 0 1 1 1.5z"
+          />
+          <path
+            fill="#fff"
+            d="M12.6 9h8.4v1.4l-4.2 2.6-4.2-2.6V9z"
+            opacity="0.85"
+          />
+          <rect
+            x="1.5"
+            y="4.5"
+            width="11.5"
+            height="15"
+            rx="2.4"
+            fill="#0F78D4"
+          />
           <ellipse
             cx="7.25"
             cy="12"
@@ -57,9 +80,30 @@ export function BrandIcon({ name }: { name: string }) {
       return (
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
           <rect x="10" y="2.5" width="3.6" height="9" rx="1.8" fill="#36C5F0" />
-          <rect x="2.5" y="10.4" width="9" height="3.6" rx="1.8" fill="#2EB67D" />
-          <rect x="12.5" y="12.5" width="9" height="3.6" rx="1.8" fill="#ECB22E" />
-          <rect x="10.4" y="12.5" width="3.6" height="9" rx="1.8" fill="#E01E5A" />
+          <rect
+            x="2.5"
+            y="10.4"
+            width="9"
+            height="3.6"
+            rx="1.8"
+            fill="#2EB67D"
+          />
+          <rect
+            x="12.5"
+            y="12.5"
+            width="9"
+            height="3.6"
+            rx="1.8"
+            fill="#ECB22E"
+          />
+          <rect
+            x="10.4"
+            y="12.5"
+            width="3.6"
+            height="9"
+            rx="1.8"
+            fill="#E01E5A"
+          />
         </svg>
       );
     case "gitlab":

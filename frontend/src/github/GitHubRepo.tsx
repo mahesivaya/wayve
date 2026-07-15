@@ -300,11 +300,10 @@ type TimelineEntry = {
 };
 
 // Priority order: merged, then closed, then draft, then open.
-function pullStatus(d: {
-  state: string;
-  draft?: boolean;
-  merged?: boolean;
-}): { label: string; cls: string } {
+function pullStatus(d: { state: string; draft?: boolean; merged?: boolean }): {
+  label: string;
+  cls: string;
+} {
   if (d.merged) return { label: "Merged", cls: "is-merged" };
   if (d.state === "closed") return { label: "Closed", cls: "is-closed" };
   if (d.draft) return { label: "Draft", cls: "is-draft" };
@@ -348,7 +347,10 @@ function RawUnifiedDiff({ text }: { text: string }) {
 
 // First letters of the first two word-parts, else the first two characters.
 function initials(name: string): string {
-  const parts = name.trim().split(/[\s-]+/).filter(Boolean);
+  const parts = name
+    .trim()
+    .split(/[\s-]+/)
+    .filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return (name.slice(0, 2) || "?").toUpperCase();
 }
@@ -2399,7 +2401,8 @@ function GitHubRepoViewer({
                                     )}
                                     <div className="github-commit-composer-foot">
                                       <span className="github-commit-composer-note">
-                                        Posts to GitHub as the connected account.
+                                        Posts to GitHub as the connected
+                                        account.
                                       </span>
                                       <button
                                         type="button"
@@ -2449,9 +2452,7 @@ function GitHubRepoViewer({
                   >
                     ← Previous
                   </button>
-                  <span className="github-pager-label">
-                    Page {commitsPage}
-                  </span>
+                  <span className="github-pager-label">Page {commitsPage}</span>
                   <button
                     type="button"
                     disabled={!commitsHasMore || commitsLoading}
@@ -2755,318 +2756,325 @@ function GitHubRepoViewer({
                               type="button"
                               className="github-pr-block-head"
                               onClick={() => toggleSection("files")}
-                                aria-expanded={!isCollapsed("files")}
+                              aria-expanded={!isCollapsed("files")}
+                            >
+                              <span
+                                className={`github-pr-chevron ${isCollapsed("files") ? "" : "open"}`}
                               >
-                                <span
-                                  className={`github-pr-chevron ${isCollapsed("files") ? "" : "open"}`}
-                                >
-                                  <ChevronIcon />
+                                <ChevronIcon />
+                              </span>
+                              <h3>Files changed</h3>
+                              {bundle.files.length > 0 && (
+                                <span className="github-pr-block-count">
+                                  {bundle.files.length}
                                 </span>
-                                <h3>Files changed</h3>
-                                {bundle.files.length > 0 && (
-                                  <span className="github-pr-block-count">
-                                    {bundle.files.length}
-                                  </span>
-                                )}
-                              </button>
-                              {!isCollapsed("files") && (
-                                <div className="github-pr-block-body">
-                                  {bundle.files.length === 0 ? (
-                                    <div className="github-empty">
-                                      No file changes to show.
-                                    </div>
-                                  ) : (
-                                    bundle.files.map((file) => {
-                                      const fileKey = `pr-${selectedPull}::${file.filename}`;
-                                      const fileOpen =
-                                        !collapsedFiles.has(fileKey);
-                                      return (
-                                        <article
-                                          key={file.filename}
-                                          className={`github-commit-file status-${file.status} ${fileOpen ? "is-open" : "is-collapsed"}`}
-                                        >
-                                          <button
-                                            type="button"
-                                            className="github-commit-file-head"
-                                            onClick={() => toggleFile(fileKey)}
-                                            aria-expanded={fileOpen}
-                                          >
-                                            <span
-                                              className={`github-tree-toggle ${fileOpen ? "open" : ""}`}
-                                              aria-hidden="true"
-                                            >
-                                              <ChevronIcon />
-                                            </span>
-                                            <span className="github-commit-file-name">
-                                              {file.previous_filename
-                                                ? `${file.previous_filename} → ${file.filename}`
-                                                : file.filename}
-                                            </span>
-                                            <span className="github-commit-file-meta">
-                                              <em
-                                                className={`github-commit-status status-${file.status}`}
-                                              >
-                                                {file.status}
-                                              </em>
-                                              <span className="github-commit-stat is-add">
-                                                +{file.additions}
-                                              </span>
-                                              <span className="github-commit-stat is-del">
-                                                −{file.deletions}
-                                              </span>
-                                            </span>
-                                          </button>
-                                          {fileOpen &&
-                                            (file.patch ? (
-                                              <CommitSplitPatch
-                                                patch={file.patch}
-                                              />
-                                            ) : (
-                                              <div className="github-commit-nopatch">
-                                                Binary file or diff not
-                                                available — open on GitHub to
-                                                view.
-                                              </div>
-                                            ))}
-                                        </article>
-                                      );
-                                    })
-                                  )}
-                                  {(hasMissingPatch || rawDiff) && (
-                                    <div className="github-commit-fulldiff">
-                                      {!rawDiff && (
+                              )}
+                            </button>
+                            {!isCollapsed("files") && (
+                              <div className="github-pr-block-body">
+                                {bundle.files.length === 0 ? (
+                                  <div className="github-empty">
+                                    No file changes to show.
+                                  </div>
+                                ) : (
+                                  bundle.files.map((file) => {
+                                    const fileKey = `pr-${selectedPull}::${file.filename}`;
+                                    const fileOpen =
+                                      !collapsedFiles.has(fileKey);
+                                    return (
+                                      <article
+                                        key={file.filename}
+                                        className={`github-commit-file status-${file.status} ${fileOpen ? "is-open" : "is-collapsed"}`}
+                                      >
                                         <button
                                           type="button"
-                                          className="github-commit-fulldiff-btn"
-                                          onClick={() =>
-                                            void loadPullFullDiff(selectedPull)
-                                          }
-                                          disabled={pullFullDiffLoading.has(
-                                            selectedPull
-                                          )}
+                                          className="github-commit-file-head"
+                                          onClick={() => toggleFile(fileKey)}
+                                          aria-expanded={fileOpen}
                                         >
-                                          {pullFullDiffLoading.has(selectedPull)
-                                            ? "Loading full diff…"
-                                            : "Load full diff"}
+                                          <span
+                                            className={`github-tree-toggle ${fileOpen ? "open" : ""}`}
+                                            aria-hidden="true"
+                                          >
+                                            <ChevronIcon />
+                                          </span>
+                                          <span className="github-commit-file-name">
+                                            {file.previous_filename
+                                              ? `${file.previous_filename} → ${file.filename}`
+                                              : file.filename}
+                                          </span>
+                                          <span className="github-commit-file-meta">
+                                            <em
+                                              className={`github-commit-status status-${file.status}`}
+                                            >
+                                              {file.status}
+                                            </em>
+                                            <span className="github-commit-stat is-add">
+                                              +{file.additions}
+                                            </span>
+                                            <span className="github-commit-stat is-del">
+                                              −{file.deletions}
+                                            </span>
+                                          </span>
                                         </button>
-                                      )}
-                                      {pullFullDiffError[selectedPull] && (
-                                        <div className="github-banner">
-                                          {pullFullDiffError[selectedPull]}
-                                        </div>
-                                      )}
-                                      {rawDiff && (
-                                        <RawUnifiedDiff text={rawDiff} />
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </section>
-
-                            <section className="github-pr-block github-pr-full">
-                              <button
-                                type="button"
-                                className="github-pr-block-head"
-                                onClick={() => toggleSection("discussion")}
-                                aria-expanded={!isCollapsed("discussion")}
-                              >
-                                <span
-                                  className={`github-pr-chevron ${isCollapsed("discussion") ? "" : "open"}`}
-                                >
-                                  <ChevronIcon />
-                                </span>
-                                <h3>Discussion</h3>
-                                {timeline.length > 0 && (
-                                  <span className="github-pr-block-count">
-                                    {timeline.length}
-                                  </span>
-                                )}
-                              </button>
-                              {!isCollapsed("discussion") && (
-                                <div className="github-pr-block-body">
-                                  {timeline.length === 0 ? (
-                                    <div className="github-empty">
-                                      No conversation yet.
-                                    </div>
-                                  ) : (
-                                    <ul className="github-pr-thread">
-                                      {timeline.map((e) => (
-                                        <li
-                                          key={e.key}
-                                          className="github-pr-comment"
-                                        >
-                                          <PrAvatar name={e.author} />
-                                          <div className="github-pr-comment-main">
-                                            <div className="github-pr-comment-head">
-                                              <strong>{e.author}</strong>
-                                              {e.reviewState && (
-                                                <span
-                                                  className={`github-pr-review-badge ${reviewBadge(e.reviewState).cls}`}
-                                                >
-                                                  {
-                                                    reviewBadge(e.reviewState)
-                                                      .label
-                                                  }
-                                                </span>
-                                              )}
-                                              {e.ts && (
-                                                <small className="github-pr-comment-time">
-                                                  {formatDate(e.ts)}
-                                                </small>
-                                              )}
+                                        {fileOpen &&
+                                          (file.patch ? (
+                                            <CommitSplitPatch
+                                              patch={file.patch}
+                                            />
+                                          ) : (
+                                            <div className="github-commit-nopatch">
+                                              Binary file or diff not available
+                                              — open on GitHub to view.
                                             </div>
-                                            {e.body.trim() && (
-                                              <div className="github-pr-comment-text">
-                                                {renderRichText(e.body)}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                  <div
-                                    className="github-pr-composer"
-                                    aria-disabled="true"
-                                    title="Read-only — commenting needs a connected GitHub account"
-                                  >
-                                    <div className="github-pr-composer-input">
-                                      Leave a comment…
-                                    </div>
-                                    <div className="github-pr-composer-foot">
-                                      <span className="github-pr-composer-tools">
-                                        <span aria-hidden="true">📎</span>
-                                        <span aria-hidden="true">Aa</span>
-                                      </span>
-                                      <span
-                                        className="github-pr-composer-send"
-                                        aria-hidden="true"
+                                          ))}
+                                      </article>
+                                    );
+                                  })
+                                )}
+                                {(hasMissingPatch || rawDiff) && (
+                                  <div className="github-commit-fulldiff">
+                                    {!rawDiff && (
+                                      <button
+                                        type="button"
+                                        className="github-commit-fulldiff-btn"
+                                        onClick={() =>
+                                          void loadPullFullDiff(selectedPull)
+                                        }
+                                        disabled={pullFullDiffLoading.has(
+                                          selectedPull
+                                        )}
                                       >
-                                        ↑
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </section>
-
-                          {d.state === "open" && !d.merged && (
-                          <aside className="github-pr-side-col github-pr-full">
-                            {d.state === "open" && !d.merged && (
-                              <div className="github-pr-card github-pr-approve-card">
-                                <span className="github-pr-card-title">
-                                  Owner review
-                                </span>
-                                {approvedPulls.has(selectedPull) ||
-                                bundle.reviews.some(
-                                  (r) => r.state === "APPROVED"
-                                ) ? (
-                                  <div className="github-pr-approved">
-                                    ✓ Approved
-                                  </div>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      className="github-pr-approve-btn"
-                                      onClick={() =>
-                                        void approvePull(selectedPull)
-                                      }
-                                      disabled={approvingPull === selectedPull}
-                                    >
-                                      {approvingPull === selectedPull
-                                        ? "Approving…"
-                                        : "Approve pull request"}
-                                    </button>
-                                    {approveErrorByPull[selectedPull] && (
-                                      <div className="github-pr-approve-err">
-                                        {approveErrorByPull[selectedPull]}
+                                        {pullFullDiffLoading.has(selectedPull)
+                                          ? "Loading full diff…"
+                                          : "Load full diff"}
+                                      </button>
+                                    )}
+                                    {pullFullDiffError[selectedPull] && (
+                                      <div className="github-banner">
+                                        {pullFullDiffError[selectedPull]}
                                       </div>
                                     )}
-                                  </>
+                                    {rawDiff && (
+                                      <RawUnifiedDiff text={rawDiff} />
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             )}
-                            {d.state === "open" && !d.merged && (
-                              <div className="github-pr-card github-pr-merge-card">
-                                <span className="github-pr-card-title">
-                                  Merge
+                          </section>
+
+                          <section className="github-pr-block github-pr-full">
+                            <button
+                              type="button"
+                              className="github-pr-block-head"
+                              onClick={() => toggleSection("discussion")}
+                              aria-expanded={!isCollapsed("discussion")}
+                            >
+                              <span
+                                className={`github-pr-chevron ${isCollapsed("discussion") ? "" : "open"}`}
+                              >
+                                <ChevronIcon />
+                              </span>
+                              <h3>Discussion</h3>
+                              {timeline.length > 0 && (
+                                <span className="github-pr-block-count">
+                                  {timeline.length}
                                 </span>
-                                {d.mergeable === false ? (
-                                  <div className="github-pr-merge-err">
-                                    This branch has conflicts that must be
-                                    resolved before it can be merged.
+                              )}
+                            </button>
+                            {!isCollapsed("discussion") && (
+                              <div className="github-pr-block-body">
+                                {timeline.length === 0 ? (
+                                  <div className="github-empty">
+                                    No conversation yet.
                                   </div>
-                                ) : confirmMergePull === selectedPull ? (
-                                  <>
-                                    <div className="github-pr-merge-confirmtext">
-                                      Merge #{selectedPull} into{" "}
-                                      <code>{d.base.ref}</code>?
-                                    </div>
-                                    <div className="github-pr-merge-actions">
-                                      <button
-                                        type="button"
-                                        className="github-pr-merge-confirm"
-                                        onClick={() =>
-                                          void mergePull(selectedPull)
-                                        }
-                                        disabled={mergingPull === selectedPull}
-                                      >
-                                        {mergingPull === selectedPull
-                                          ? "Merging…"
-                                          : "Confirm merge"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="github-pr-merge-cancel"
-                                        onClick={() => setConfirmMergePull(null)}
-                                        disabled={mergingPull === selectedPull}
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </>
                                 ) : (
-                                  <>
-                                    <select
-                                      className="github-pr-merge-method"
-                                      value={mergeMethod}
-                                      onChange={(e) =>
-                                        setMergeMethod(
-                                          e.target.value as MergeMethod
-                                        )
-                                      }
-                                    >
-                                      <option value="merge">
-                                        Create a merge commit
-                                      </option>
-                                      <option value="squash">
-                                        Squash and merge
-                                      </option>
-                                      <option value="rebase">
-                                        Rebase and merge
-                                      </option>
-                                    </select>
-                                    <button
-                                      type="button"
-                                      className="github-pr-merge-btn"
-                                      onClick={() =>
-                                        setConfirmMergePull(selectedPull)
-                                      }
-                                    >
-                                      Merge pull request
-                                    </button>
-                                  </>
+                                  <ul className="github-pr-thread">
+                                    {timeline.map((e) => (
+                                      <li
+                                        key={e.key}
+                                        className="github-pr-comment"
+                                      >
+                                        <PrAvatar name={e.author} />
+                                        <div className="github-pr-comment-main">
+                                          <div className="github-pr-comment-head">
+                                            <strong>{e.author}</strong>
+                                            {e.reviewState && (
+                                              <span
+                                                className={`github-pr-review-badge ${reviewBadge(e.reviewState).cls}`}
+                                              >
+                                                {
+                                                  reviewBadge(e.reviewState)
+                                                    .label
+                                                }
+                                              </span>
+                                            )}
+                                            {e.ts && (
+                                              <small className="github-pr-comment-time">
+                                                {formatDate(e.ts)}
+                                              </small>
+                                            )}
+                                          </div>
+                                          {e.body.trim() && (
+                                            <div className="github-pr-comment-text">
+                                              {renderRichText(e.body)}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </li>
+                                    ))}
+                                  </ul>
                                 )}
-                                {mergeErrorByPull[selectedPull] && (
-                                  <div className="github-pr-merge-err">
-                                    {mergeErrorByPull[selectedPull]}
+                                <div
+                                  className="github-pr-composer"
+                                  aria-disabled="true"
+                                  title="Read-only — commenting needs a connected GitHub account"
+                                >
+                                  <div className="github-pr-composer-input">
+                                    Leave a comment…
                                   </div>
-                                )}
+                                  <div className="github-pr-composer-foot">
+                                    <span className="github-pr-composer-tools">
+                                      <span aria-hidden="true">📎</span>
+                                      <span aria-hidden="true">Aa</span>
+                                    </span>
+                                    <span
+                                      className="github-pr-composer-send"
+                                      aria-hidden="true"
+                                    >
+                                      ↑
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                             )}
-                          </aside>
+                          </section>
+
+                          {d.state === "open" && !d.merged && (
+                            <aside className="github-pr-side-col github-pr-full">
+                              {d.state === "open" && !d.merged && (
+                                <div className="github-pr-card github-pr-approve-card">
+                                  <span className="github-pr-card-title">
+                                    Owner review
+                                  </span>
+                                  {approvedPulls.has(selectedPull) ||
+                                  bundle.reviews.some(
+                                    (r) => r.state === "APPROVED"
+                                  ) ? (
+                                    <div className="github-pr-approved">
+                                      ✓ Approved
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="github-pr-approve-btn"
+                                        onClick={() =>
+                                          void approvePull(selectedPull)
+                                        }
+                                        disabled={
+                                          approvingPull === selectedPull
+                                        }
+                                      >
+                                        {approvingPull === selectedPull
+                                          ? "Approving…"
+                                          : "Approve pull request"}
+                                      </button>
+                                      {approveErrorByPull[selectedPull] && (
+                                        <div className="github-pr-approve-err">
+                                          {approveErrorByPull[selectedPull]}
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                              {d.state === "open" && !d.merged && (
+                                <div className="github-pr-card github-pr-merge-card">
+                                  <span className="github-pr-card-title">
+                                    Merge
+                                  </span>
+                                  {d.mergeable === false ? (
+                                    <div className="github-pr-merge-err">
+                                      This branch has conflicts that must be
+                                      resolved before it can be merged.
+                                    </div>
+                                  ) : confirmMergePull === selectedPull ? (
+                                    <>
+                                      <div className="github-pr-merge-confirmtext">
+                                        Merge #{selectedPull} into{" "}
+                                        <code>{d.base.ref}</code>?
+                                      </div>
+                                      <div className="github-pr-merge-actions">
+                                        <button
+                                          type="button"
+                                          className="github-pr-merge-confirm"
+                                          onClick={() =>
+                                            void mergePull(selectedPull)
+                                          }
+                                          disabled={
+                                            mergingPull === selectedPull
+                                          }
+                                        >
+                                          {mergingPull === selectedPull
+                                            ? "Merging…"
+                                            : "Confirm merge"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="github-pr-merge-cancel"
+                                          onClick={() =>
+                                            setConfirmMergePull(null)
+                                          }
+                                          disabled={
+                                            mergingPull === selectedPull
+                                          }
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <select
+                                        className="github-pr-merge-method"
+                                        value={mergeMethod}
+                                        onChange={(e) =>
+                                          setMergeMethod(
+                                            e.target.value as MergeMethod
+                                          )
+                                        }
+                                      >
+                                        <option value="merge">
+                                          Create a merge commit
+                                        </option>
+                                        <option value="squash">
+                                          Squash and merge
+                                        </option>
+                                        <option value="rebase">
+                                          Rebase and merge
+                                        </option>
+                                      </select>
+                                      <button
+                                        type="button"
+                                        className="github-pr-merge-btn"
+                                        onClick={() =>
+                                          setConfirmMergePull(selectedPull)
+                                        }
+                                      >
+                                        Merge pull request
+                                      </button>
+                                    </>
+                                  )}
+                                  {mergeErrorByPull[selectedPull] && (
+                                    <div className="github-pr-merge-err">
+                                      {mergeErrorByPull[selectedPull]}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </aside>
                           )}
                         </div>
                       </div>
@@ -3564,7 +3572,9 @@ function PersonalRepoManager() {
       })
       .catch((e) =>
         setErr(
-          e instanceof Error ? e.message : "Couldn't start the GitHub connect flow."
+          e instanceof Error
+            ? e.message
+            : "Couldn't start the GitHub connect flow."
         )
       );
   };
