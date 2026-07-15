@@ -1074,7 +1074,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       <div className="app">
         <SearchProvider>
           <div className="header">
-            <div className="header-brand">
+            <div
+              className={`header-brand${
+                sidebarCollapsed && !isNarrow ? " collapsed" : ""
+              }`}
+              style={
+                !isNarrow && !sidebarCollapsed
+                  ? { width: `${sidebarWidth}px` }
+                  : undefined
+              }
+            >
               <div className="logo" onClick={() => navigate("/")}>
                 {/* The wordmark hides when the sidebar collapses to the icon rail.
                 The narrow overlay has no collapsed rail, so it always shows. */}
@@ -1083,8 +1092,38 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   <span className="logo-word">{BRAND_NAME}</span>
                 )}
               </div>
+              {/* Desktop expand/collapse toggle, docked next to the brand mark so
+              it stays reachable whether the sidebar is a full panel or an icon
+              rail. The narrow overlay uses the hamburger below instead. */}
+              {!isNarrow && (
+                <button
+                  type="button"
+                  className="sidebar-collapse-btn header-collapse-btn"
+                  onClick={() => setSidebarCollapsed((c) => !c)}
+                  title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  aria-label={
+                    sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+                  }
+                  aria-expanded={!sidebarCollapsed}
+                >
+                  <svg
+                    className="sidebar-collapse-icon"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    {/* The arrow points the way the panel will move on click. */}
+                    <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                    <line x1="9" y1="5" x2="9" y2="19" />
+                    {sidebarCollapsed ? (
+                      <polyline points="12 9 15 12 12 15" />
+                    ) : (
+                      <polyline points="15 9 12 12 15 15" />
+                    )}
+                  </svg>
+                </button>
+              )}
               {/* This toggle is the mobile hamburger only. On wide screens the
-              show/hide control lives on the sidebar itself; the overlay has no
+              show/hide control lives next to the brand above; the overlay has no
               persistent divider to host it, so it needs the header button. */}
               {isNarrow && (
                 <button
@@ -1138,38 +1177,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               }
               aria-label="Primary navigation"
             >
-              {/* Desktop-only show/hide control. The narrow overlay uses the
-              header hamburger instead. */}
-              {!isNarrow && (
-                <div className="sidebar-collapse-row">
-                  <button
-                    type="button"
-                    className="sidebar-collapse-btn"
-                    onClick={() => setSidebarCollapsed((c) => !c)}
-                    title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-                    aria-label={
-                      sidebarCollapsed ? "Show sidebar" : "Hide sidebar"
-                    }
-                    aria-expanded={!sidebarCollapsed}
-                  >
-                    <svg
-                      className="sidebar-collapse-icon"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      {/* The arrow points the way the panel will move on click. */}
-                      <rect x="3" y="5" width="18" height="14" rx="2.2" />
-                      <line x1="9" y1="5" x2="9" y2="19" />
-                      {sidebarCollapsed ? (
-                        <polyline points="12 9 15 12 12 15" />
-                      ) : (
-                        <polyline points="15 9 12 12 15 15" />
-                      )}
-                    </svg>
-                  </button>
-                </div>
-              )}
-
               <div className="sidebar-section">
                 {renderSidebarItem("/", "home", "Home", <HomeIcon size={18} />)}
                 {renderSidebarItem(

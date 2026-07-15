@@ -373,32 +373,32 @@
   overflow: hidden;
 }
 
-/* Wide-screen sidebar show/hide control — a small, dimmed chevron pinned at the
-   top of the sidebar, above Home. Kept compact so it hugs the top of the panel
-   instead of floating: no hairline/extra padding, pulled up into the sidebar's
-   top padding and trimming the gap to the first nav section below it.
-   Right-aligned when expanded; centered in the icon rail when collapsed. */
-.sidebar-collapse-row {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding-bottom: 0;
-  margin-bottom: -12px;
-}
-
-.sidebar.collapsed .sidebar-collapse-row {
-  justify-content: center;
-}
-
-/* Both runtimes trim the top padding so the collapse toggle / brand mark sits
-   flush at the very top of the sidebar. */
+/* The expand/collapse toggle now lives in the header next to the brand, so the
+   sidebar leads with its first nav section — give it a little breathing room at
+   the top instead of sitting flush under the header. */
 .sidebar {
-  padding-top: 0;
-}
-.is-desktop .sidebar-collapse-row {
-  margin-bottom: -14px;
+  padding-top: 8px;
 }
 
+/* The header expand/collapse toggle is right-aligned within the brand area,
+   whose width tracks the sidebar (set inline in Layout). That parks the button
+   just inside the sidebar's right divider — the "menu line" — above the nav. */
+.header-collapse-btn {
+  margin-left: auto;
+  /* Negative inset nudges the toggle past the brand's right edge so it sits
+     right over the sidebar's divider (the "menu line"). Bounded by the header's
+     12px gap before the search box. */
+  margin-right: -8px;
+}
+
+/* Collapsed rail: the brand area is auto-width (icon only), so `margin-left:
+   auto` has no slack to push against. Nudge the toggle right explicitly so it
+   still lands over the collapsed rail's divider. */
+.header-brand.collapsed .header-collapse-btn {
+  margin-left: 14px;
+}
+
+/* Shared by the header expand/collapse toggle (`.header-collapse-btn`). */
 .sidebar-collapse-btn {
   width: 26px;
   height: 20px;
@@ -1659,9 +1659,6 @@
      unchanged: surface-soft is also #0a1730. */
   background: var(--color-surface-soft);
   border-right: 1px solid var(--color-border-dark);
-}
-:root[data-theme="dark"] .sidebar-collapse-row {
-  border-bottom-color: var(--color-border-dark);
 }
 :root[data-theme="dark"] .sidebar-collapse-btn {
   color: var(--color-on-primary);
