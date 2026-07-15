@@ -153,13 +153,33 @@ pub async fn imap_connect(
         }
     };
 
-    // Same RBAC gate as the OAuth connectors: personal users + org owners may
-    // attach external mailboxes; everyone else uses shared inboxes.
+    // Same gate as the OAuth connectors: any authenticated account may attach
+    // its own external mailbox.
     if let Err(response) = require_external_mailbox_actor(pool.get_ref(), user_id).await {
         return response;
     }
 
     let email = body.email.trim().to_lowercase();
+
+    // Mailbox-match policy: a managed account (organization or platform) may
+    // only connect the mailbox matching the address it logs into Fluxze with.
+    // Fails closed on a policy-check DB error.
+    match crate::email::account::account_may_attach_mailbox(pool.get_ref(), user_id, &email).await {
+        Ok(true) => {}
+        Ok(false) => {
+            warn!(target: "auth", user_id, "managed account IMAP connect rejected: address does not match Fluxze login");
+            return HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "You can only connect the mailbox for the address you sign in to Fluxze with."
+            }));
+        }
+        Err(e) => {
+            error!(target: "auth", user_id, error = %e, "mailbox-match policy check failed; rejecting IMAP connect");
+            return HttpResponse::InternalServerError().json(
+                serde_json::json!({ "message": "Couldn't verify mailbox policy. Try again." }),
+            );
+        }
+    }
+
     let host = body.imap_host.trim().to_string();
     let smtp_host = body.smtp_host.trim().to_string();
     let password = body.password.trim().to_string();

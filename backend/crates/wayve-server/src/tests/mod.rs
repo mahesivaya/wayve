@@ -13,6 +13,7 @@ mod embed_tokens_test;
 mod gitlab_test;
 mod jira_test;
 mod jira_webhook_test;
+mod mailbox_policy_test;
 mod mcp_test;
 mod mode_switch_test;
 mod org_keys_test;

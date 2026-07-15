@@ -287,6 +287,31 @@ async fn finalize_oauth_session(
                 );
             }
         }
+
+        // Mailbox-match policy: a managed account (organization or platform) may
+        // only attach the mailbox matching its Fluxze login address. Fails closed
+        // on a policy-check DB error.
+        match crate::email::account::account_may_attach_mailbox(pool, user_id, ctx.email).await {
+            Ok(true) => {}
+            Ok(false) => {
+                warn!(target: "auth", user_id, provider = ctx.provider, "managed account mailbox connect rejected: address does not match Fluxze login");
+                return HttpResponse::Found()
+                    .append_header((
+                        "Location",
+                        format!("{}/emails?error=mailbox_must_match_login", ctx.frontend),
+                    ))
+                    .finish();
+            }
+            Err(e) => {
+                error!(target: "auth", user_id, error = %e, "mailbox-match policy check failed; rejecting connect");
+                return HttpResponse::Found()
+                    .append_header((
+                        "Location",
+                        format!("{}/emails?error=mailbox_check_failed", ctx.frontend),
+                    ))
+                    .finish();
+            }
+        }
     }
 
     match upsert_email_account(pool, user_id, ctx.email, ctx.tokens).await {

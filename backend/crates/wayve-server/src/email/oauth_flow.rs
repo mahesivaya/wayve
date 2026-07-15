@@ -9,48 +9,27 @@ use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::{auth_cookie, create_jwt_for_account};
 use wayve_security::oauth::{consume_state, create_oauth_state};
-use wayve_security::rbac::{self, Role, Scope};
+use wayve_security::rbac;
 
-/// Gates the external-mailbox connect flows to personal accounts and
-/// organization owners. Other org members work out of shared inboxes, and
-/// platform staff have no reason to hang a personal mailbox off an admin
-/// account. `Err(response)` is a ready-to-return 403 or 500.
+/// Confirms the account exists before an external-mailbox connect. Any
+/// authenticated account may connect its OWN mailbox — personal, organization
+/// (including enterprise), or platform. The OAuth flow binds the mailbox to this
+/// `user_id`, so a member only ever imports the address they signed in with;
+/// there is no cross-user access. `Err(response)` is a ready-to-return 401 or
+/// 500.
 pub(crate) async fn require_external_mailbox_actor(
     pool: &PgPool,
     user_id: i32,
 ) -> Result<(), HttpResponse> {
-    let ctx = match rbac::resolve_role_context(pool, user_id).await {
-        Ok(ctx) => ctx,
-        Err(sqlx::Error::RowNotFound) => {
-            return Err(HttpResponse::Unauthorized()
-                .json(serde_json::json!({ "message": "Account not found" })));
-        }
+    match rbac::resolve_role_context(pool, user_id).await {
+        Ok(_) => Ok(()),
+        Err(sqlx::Error::RowNotFound) => Err(HttpResponse::Unauthorized()
+            .json(serde_json::json!({ "message": "Account not found" }))),
         Err(e) => {
             error!(target: "auth", error = ?e, user_id, "rbac role resolution failed for mailbox connect");
-            return Err(HttpResponse::InternalServerError().finish());
+            Err(HttpResponse::InternalServerError().finish())
         }
-    };
-
-    let allowed = match ctx.scope {
-        Scope::Personal => true,
-        Scope::Organization => ctx.role == Role::Owner,
-        Scope::Platform => ctx.role == Role::Owner,
-    };
-
-    if !allowed {
-        warn!(
-            target: "auth",
-            user_id,
-            scope = ?ctx.scope,
-            role = ctx.role.as_str(),
-            "external mailbox connect denied",
-        );
-        return Err(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Only personal accounts, organization owners, and platform owners can connect an external mailbox."
-        })));
     }
-
-    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -202,9 +181,9 @@ pub async fn gmail_login(
             }
         };
 
-        // /gmail/login is the legacy redirect-based connect flow, so it needs the
-        // same RBAC gate as POST /gmail/connect-url; without it an org member
-        // could bypass the JSON endpoint via a plain browser redirect.
+        // /gmail/login is the legacy redirect-based connect flow; keep it behind
+        // the same actor check as POST /gmail/connect-url so both paths require a
+        // real account.
         if let Err(response) = require_external_mailbox_actor(pool.get_ref(), user_id).await {
             return response;
         }
@@ -399,6 +378,40 @@ pub async fn oauth_callback(
             Err(e) => {
                 error!(target: "auth", error = %e, "Google signup user lookup failed");
                 return HttpResponse::InternalServerError().body("Database error");
+            }
+        }
+    }
+
+    // Mailbox-match policy: a managed account (organization or platform) may
+    // only connect the mailbox matching the address it logs into Fluxze with.
+    // Only the connect flow is checked — a Google *signup* creates its account
+    // from this same address, so it matches by construction. A policy-check DB
+    // error fails closed.
+    if !is_signup {
+        match crate::email::account::account_may_attach_mailbox(pool.get_ref(), user_id, email)
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => {
+                warn!(target: "gmail", user_id, "managed account mailbox connect rejected: authorized address does not match Fluxze login");
+                return HttpResponse::Found()
+                    .insert_header((
+                        actix_web::http::header::LOCATION,
+                        format!(
+                            "{}/emails?error=mailbox_must_match_login",
+                            frontend_for_errors
+                        ),
+                    ))
+                    .finish();
+            }
+            Err(e) => {
+                error!(target: "gmail", user_id, error = %e, "mailbox-match policy check failed; rejecting connect");
+                return HttpResponse::Found()
+                    .insert_header((
+                        actix_web::http::header::LOCATION,
+                        format!("{}/emails?error=mailbox_check_failed", frontend_for_errors),
+                    ))
+                    .finish();
             }
         }
     }
