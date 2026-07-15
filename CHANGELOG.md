@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.3.0](https://github.com/mahesivaya/wayve/releases/tag/v7.3.0) - 2026-07-15
+
+### 🚀 Features
+
+- **email:** Let any member connect their own mailbox, restricted to their login address ([#81](https://github.com/mahesivaya/wayve/issues/81))
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v7.2.2 [skip ci]
+
 ## [7.2.2](https://github.com/mahesivaya/wayve/releases/tag/v7.2.2) - 2026-07-14
 
 ### 🧹 Maintenance
