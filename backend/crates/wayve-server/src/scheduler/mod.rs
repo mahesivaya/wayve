@@ -11,6 +11,7 @@ use actix_web::web;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(handler::create_meeting)
+        .service(handler::create_meeting_link)
         .service(handler::get_meetings)
         .service(handler::update_meeting)
         .service(handler::delete_meeting);

@@ -20,7 +20,6 @@ import ProfileMenu from "./ProfileMenu";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
 import NotificationBell from "./NotificationBell";
-import SupportModal from "../support/SupportModal";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import { useChatUnreadCount } from "../chat/useChatUnreadCount";
@@ -356,7 +355,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  const [supportOpen, setSupportOpen] = useState(false);
   const sections = useSidebarSections();
   // Team creation is org-owner-only. The control is hidden otherwise, but the
   // backend enforces it regardless.
@@ -1050,16 +1048,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         chatUnread={chatUnreadCount}
       />
 
-      <button
-        type="button"
-        className="header-bug-btn"
-        onClick={() => setSupportOpen(true)}
-        title="Report an issue"
-        aria-label="Report an issue"
-      >
-        <BugReportIcon className="header-bug-icon" />
-      </button>
-
       {/* The desktop shell surfaces Upgrade on the Settings page instead. */}
       {!desktop && isBasicPersonalUser && (
         <button
@@ -1495,7 +1483,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </div>
       </SearchProvider>
 
-      {supportOpen && <SupportModal onClose={() => setSupportOpen(false)} />}
 
       <Modal
         isOpen={addAppOpen}
