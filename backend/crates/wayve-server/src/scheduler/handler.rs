@@ -6,7 +6,7 @@ use crate::scheduler::email_notifications::{
     MeetingEmailKind, MeetingEmailRequest, send_meeting_emails,
 };
 use crate::scheduler::time::minutes_to_time;
-use crate::scheduler::zoom::create_zoom_meeting;
+use crate::scheduler::zoom::{ZoomError, create_zoom_meeting};
 use actix_web::{HttpRequest, HttpResponse, delete, post, put, web};
 use chrono::Utc;
 use serde_json::json;
@@ -262,6 +262,52 @@ pub async fn create_meeting(
         message: "Meeting created successfully".into(),
         meeting_id,
     }))
+}
+
+/// Map a Zoom mint result to the `POST /api/meetings/link` response. Split out so
+/// the status mapping can be unit-tested without a live Zoom call.
+pub(crate) fn meeting_link_response(result: Result<String, ZoomError>) -> HttpResponse {
+    match result {
+        Ok(join_url) => HttpResponse::Ok().json(json!({ "join_url": join_url })),
+        Err(ZoomError::MissingEnv(_)) => HttpResponse::ServiceUnavailable()
+            .body("Video meetings are not configured on this server."),
+        Err(e) => {
+            warn!(target: "scheduler", error = %e, "meeting link mint failed");
+            HttpResponse::BadGateway().body("Could not create a meeting link. Please try again.")
+        }
+    }
+}
+
+/// Mint an instant, shareable Zoom meeting link. No inputs and no DB row: the link
+/// is a shared Zoom room anyone holding the URL can join, which the user copies and
+/// pastes wherever they want.
+#[post("/meetings/link")]
+#[instrument(target = "scheduler", skip(req, pool))]
+pub async fn create_meeting_link(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = match get_user_id(&req) {
+        Ok(id) => id,
+        Err(resp) => return Ok(resp),
+    };
+
+    let result = create_zoom_meeting("Instant meeting", Utc::now(), 60).await;
+
+    if result.is_ok() {
+        info!(target: "scheduler", user_id, "instant meeting link created");
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "meeting_link_created",
+                resource_type: "meeting_link",
+                resource_id: None,
+                metadata: None,
+            },
+        )
+        .await;
+    }
+
+    Ok(meeting_link_response(result))
 }
 
 #[get("/meetings")]

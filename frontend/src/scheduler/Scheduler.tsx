@@ -7,6 +7,7 @@ import { computeLanes } from "./eventLayout";
 import Modal from "../components/Modal";
 import {
   createMeetingApi,
+  createMeetingLinkApi,
   deleteMeetingApi,
   getMeetings,
   updateMeetingApi,
@@ -197,6 +198,40 @@ export default function Scheduler() {
   const [directory, setDirectory] = useState<ChatUser[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(0);
+
+  // Instant, shareable meeting link (a Zoom room anyone with the URL can join).
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [meetingLink, setMeetingLink] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const createMeetingLink = useCallback(async () => {
+    if (linkBusy) return;
+    setLinkBusy(true);
+    setLinkError(null);
+    setLinkCopied(false);
+    try {
+      const { join_url } = await createMeetingLinkApi();
+      setMeetingLink(join_url);
+    } catch (err) {
+      setMeetingLink(null);
+      setLinkError(
+        err instanceof Error && err.message === "not_configured"
+          ? "Video meetings aren't set up on this server."
+          : "Couldn't create a meeting link. Please try again."
+      );
+    } finally {
+      setLinkBusy(false);
+    }
+  }, [linkBusy]);
+
+  const copyMeetingLink = useCallback(() => {
+    if (!meetingLink) return;
+    void navigator.clipboard?.writeText(meetingLink).then(() => {
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 1500);
+    });
+  }, [meetingLink]);
 
   useEffect(() => {
     let alive = true;
@@ -601,6 +636,36 @@ export default function Scheduler() {
           <span>＋</span>
           Create
         </button>
+
+        <button
+          className="scheduler-link-btn"
+          onClick={createMeetingLink}
+          disabled={linkBusy}
+        >
+          <span>🔗</span>
+          {linkBusy ? "Creating link…" : "Create meeting link"}
+        </button>
+
+        {linkError && <div className="scheduler-link-error">{linkError}</div>}
+
+        {meetingLink && (
+          <div className="scheduler-link-panel">
+            <div className="scheduler-link-label">
+              Shareable meeting link — anyone with it can join.
+            </div>
+            <a
+              className="scheduler-link-url"
+              href={meetingLink}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {meetingLink}
+            </a>
+            <button className="scheduler-link-copy" onClick={copyMeetingLink}>
+              {linkCopied ? "Copied!" : "Copy link"}
+            </button>
+          </div>
+        )}
 
         <div className="mini-header">
           <button onClick={() => changeMonth(-1)}>◀</button>

@@ -1,9 +1,9 @@
 // The org home is where an organization member lands after login. It leads
 // with the AI ask-box (same embedded surface the platform home uses), with the
-// console/app tiles below it. The header search box narrows those tiles — it
-// used to render on this page and do nothing at all when you typed in it.
+// console/app tiles below it. The header search box is suppressed on the home
+// routes (see HIDE_SEARCH_PATHS), so it must not render here.
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../../auth/useAuth", () => ({
@@ -91,44 +91,8 @@ describe("organization home", () => {
     ).toBeTruthy();
   });
 
-  it("keeps the header search box on this route", () => {
+  it("does not render the header search box on this route", () => {
     renderHome();
-    expect(
-      screen.getByRole("searchbox", { name: /search apps and settings/i })
-    ).toBeInTheDocument();
-  });
-
-  it("filters the console tiles as you type", () => {
-    renderHome();
-    expect(screen.getByText("Developer")).toBeInTheDocument();
-    expect(screen.getByText("Billing")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByRole("searchbox"), {
-      target: { value: "developer" },
-    });
-
-    expect(screen.getByText("Developer")).toBeInTheDocument();
-    expect(screen.queryByText("Billing")).not.toBeInTheDocument();
-  });
-
-  it("matches on the tile description, not just the title", () => {
-    renderHome();
-    // "invoices" only appears in Billing's blurb.
-    fireEvent.change(screen.getByRole("searchbox"), {
-      target: { value: "invoices" },
-    });
-
-    expect(screen.getByText("Billing")).toBeInTheDocument();
-    expect(screen.queryByText("Developer")).not.toBeInTheDocument();
-  });
-
-  it("explains an empty result instead of rendering a blank page", () => {
-    renderHome();
-    fireEvent.change(screen.getByRole("searchbox"), {
-      target: { value: "zzzznope" },
-    });
-
-    expect(screen.getByText(/nothing here matches/i)).toBeInTheDocument();
-    expect(screen.queryByText("Developer")).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
   });
 });

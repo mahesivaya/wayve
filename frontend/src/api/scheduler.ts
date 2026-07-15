@@ -42,6 +42,12 @@ export const updateMeetingApi = async (id: number, data: MeetingPayload) => {
   return res.json();
 };
 
+export const createMeetingLinkApi = async (): Promise<{ join_url: string }> => {
+  const res = await apiFetch("/api/meetings/link", { method: "POST" });
+  if (!res.ok) throw new Error(res.status === 503 ? "not_configured" : "failed");
+  return res.json();
+};
+
 export const deleteMeetingApi = async (id: number) => {
   const res = await apiFetch(`/api/meetings/${id}`, {
     method: "DELETE",

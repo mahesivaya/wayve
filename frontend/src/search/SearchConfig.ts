@@ -18,7 +18,12 @@ export const SEARCH_LABELS: Record<string, string> = {
   "/logs/audit": "security audit logs",
 };
 
-export const HIDE_SEARCH_PATHS = ["/scheduler"];
+export const HIDE_SEARCH_PATHS = [
+  "/scheduler",
+  "/home",
+  "/organization/home",
+  "/platform/home",
+];
 
 export const getSearchLabel = (path: string) =>
   SEARCH_LABELS[path] ?? "this page";
