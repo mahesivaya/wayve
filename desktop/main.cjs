@@ -51,6 +51,50 @@ function isInWindowUrl(urlString) {
   );
 }
 
+/** True when `urlString` is the Fluxze app itself — NOT an external auth page
+ *  like accounts.google.com (which is in-window but not ours). */
+function isAppUrl(urlString) {
+  let u;
+  try {
+    u = new URL(urlString);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  const host = u.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  return host === "fluxze.com" || host.endsWith(".fluxze.com");
+}
+
+/**
+ * Floating "cancel" pill injected on external auth pages (Google sign-in). The
+ * shell has no browser chrome, so a failed or abandoned OAuth would otherwise
+ * strand the user on Google's page with no way back into the app.
+ * `executeJavaScript` is not subject to the page's CSP, and the button is
+ * plain createElement/textContent so Trusted Types on Google pages are fine.
+ */
+function injectCancelButton(webContents) {
+  const js = `(() => {
+    if (document.getElementById("fluxze-cancel-btn")) return;
+    const btn = document.createElement("button");
+    btn.id = "fluxze-cancel-btn";
+    btn.type = "button";
+    btn.textContent = "✕ Cancel — back to Fluxze";
+    Object.assign(btn.style, {
+      position: "fixed", top: "14px", right: "16px", zIndex: "2147483647",
+      padding: "8px 14px", borderRadius: "999px",
+      border: "1px solid #d0d5dd", background: "#ffffff", color: "#1f2937",
+      font: "500 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)",
+    });
+    btn.addEventListener("click", () => {
+      window.location.href = ${JSON.stringify(START_URL)};
+    });
+    (document.body || document.documentElement).appendChild(btn);
+  })();`;
+  webContents.executeJavaScript(js).catch(() => {});
+}
+
 let mainWindow = null;
 
 function createWindow() {
@@ -94,6 +138,16 @@ function createWindow() {
     if (!isInWindowUrl(url)) {
       event.preventDefault();
       void shell.openExternal(url);
+    }
+  });
+
+  // Any full page load that isn't the app (i.e. an external auth page such as
+  // Google sign-in) gets the floating cancel pill, so there is always a way
+  // back if the flow fails or the user changes their mind.
+  mainWindow.webContents.on("did-finish-load", () => {
+    const url = mainWindow.webContents.getURL();
+    if (/^https?:/i.test(url) && !isAppUrl(url)) {
+      injectCancelButton(mainWindow.webContents);
     }
   });
 
@@ -182,6 +236,40 @@ function buildMenu() {
       : []),
     { role: "fileMenu" },
     { role: "editMenu" },
+    {
+      // Navigation for a shell with no browser chrome — the keyboard/menu
+      // counterpart to the injected cancel pill on external auth pages.
+      label: "Go",
+      submenu: [
+        {
+          label: "Back",
+          accelerator: "CmdOrCtrl+[",
+          click: () => {
+            const wc = (mainWindow ?? BrowserWindow.getFocusedWindow())
+              ?.webContents;
+            if (wc?.canGoBack()) wc.goBack();
+          },
+        },
+        {
+          label: "Forward",
+          accelerator: "CmdOrCtrl+]",
+          click: () => {
+            const wc = (mainWindow ?? BrowserWindow.getFocusedWindow())
+              ?.webContents;
+            if (wc?.canGoForward()) wc.goForward();
+          },
+        },
+        { type: "separator" },
+        {
+          label: "Return to Fluxze",
+          accelerator: "CmdOrCtrl+Shift+H",
+          click: () =>
+            (mainWindow ?? BrowserWindow.getFocusedWindow())?.loadURL(
+              START_URL,
+            ),
+        },
+      ],
+    },
     {
       label: "View",
       submenu: [
