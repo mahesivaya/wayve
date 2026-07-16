@@ -13,21 +13,25 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
 });
 
 // Injected into the iframe document so emails relying on UA defaults still read
-// well and images/tables can't overflow. Only defaults are set, tuned for the
-// navy app theme; emails that hardcode their own colors keep them.
+// well and images/tables can't overflow. HTML emails are authored against a
+// WHITE canvas (they hardcode dark text but rarely set a page background), so
+// the frame always renders on white with dark defaults — deliberately
+// independent of the app theme. A themed background here put near-black email
+// text on a navy canvas and made messages unreadable; white keeps every email
+// legible in every theme. Emails that hardcode their own colors keep them.
 const FRAME_CSS = `
-  html, body { margin: 0; padding: 0; background: #0a1730; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 14px;
     line-height: 1.5;
-    color: #c6d2ec;
+    color: #1f2937;
     word-break: break-word;
     overflow-wrap: anywhere;
   }
   img, video { max-width: 100%; height: auto; }
   table { max-width: 100%; }
-  a { color: #60a5fa; }
+  a { color: #2563eb; }
 `;
 
 // SECURITY: the HTML is sanitized with DOMPurify *and* the frame runs without
@@ -58,6 +62,11 @@ function HtmlEmail({ html }: { html: string }) {
     return (
       `<!doctype html><html><head><meta charset="utf-8">` +
       `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+      // No Referer on any subresource: some image CDNs (e.g. Google's
+      // lh3.googleusercontent.com avatars) reject requests carrying a
+      // third-party referrer (429), and not leaking our origin to email
+      // image hosts is standard mail-client privacy behaviour anyway.
+      `<meta name="referrer" content="no-referrer">` +
       `<base target="_blank"><style>${FRAME_CSS}</style></head>` +
       `<body>${clean}</body></html>`
     );

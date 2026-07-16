@@ -1677,7 +1677,11 @@
   display: block;
   width: 100%;
   border: none;
-  background: var(--color-canvas);
+  /* Match the frame document's own white canvas (see FRAME_CSS in
+     EmailBody.tsx) so there's no themed flash before the srcdoc paints.
+     HTML emails are authored for white — never theme this. */
+  background: #ffffff;
+  border-radius: 8px;
 }
 
 .email-body a {
