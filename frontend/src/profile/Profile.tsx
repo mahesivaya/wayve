@@ -53,6 +53,8 @@ export default function Profile() {
   const [avatarBust, setAvatarBust] = useState(0);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  // Success confirmation ("photo updated/removed"), auto-cleared like `status`.
+  const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
 
   const onPickAvatar = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -61,10 +63,15 @@ export default function Profile() {
     if (!file) return;
     setAvatarBusy(true);
     setAvatarError(null);
+    setAvatarNotice(null);
     try {
+      const hadAvatar = Boolean(profile?.avatar_url);
       const { avatar_url } = await uploadAvatar(file);
       setProfile((p) => (p ? { ...p, avatar_url } : p));
       setAvatarBust((b) => b + 1);
+      setAvatarNotice(
+        hadAvatar ? "✓ Profile photo updated" : "✓ Profile photo uploaded"
+      );
     } catch (err) {
       setAvatarError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -75,10 +82,12 @@ export default function Profile() {
   const onRemoveAvatar = async () => {
     setAvatarBusy(true);
     setAvatarError(null);
+    setAvatarNotice(null);
     try {
       await deleteAvatar();
       setProfile((p) => (p ? { ...p, avatar_url: null } : p));
       setAvatarBust((b) => b + 1);
+      setAvatarNotice("✓ Profile photo removed");
     } catch (err) {
       setAvatarError(err instanceof Error ? err.message : "Remove failed");
     } finally {
@@ -105,6 +114,14 @@ export default function Profile() {
     const t = setTimeout(() => setStatus(null), 2000);
     return () => clearTimeout(t);
   }, [status]);
+
+  // The avatar confirmation lingers a touch longer than the save toast so it
+  // isn't missed while the eye is on the photo, then clears itself.
+  useEffect(() => {
+    if (!avatarNotice) return;
+    const t = setTimeout(() => setAvatarNotice(null), 3000);
+    return () => clearTimeout(t);
+  }, [avatarNotice]);
 
   useEffect(() => {
     if (!pwStatus) return;
@@ -317,7 +334,12 @@ export default function Profile() {
                 PNG, JPEG, or WebP. Max 2 MB.
               </p>
               {avatarError && (
-                <span className="profile-status">{avatarError}</span>
+                <span className="profile-status profile-status-error">
+                  {avatarError}
+                </span>
+              )}
+              {!avatarError && avatarNotice && (
+                <span className="profile-status">{avatarNotice}</span>
               )}
             </div>
           </div>
