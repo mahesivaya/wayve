@@ -3,6 +3,31 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.4.0](https://github.com/mahesivaya/wayve/releases/tag/v7.4.0) - 2026-07-16
+
+### 🚀 Features
+
+- **emails:** Keep the folder menu in reach in attachments and split views
+- **settings:** Desktop settings takeover with a persistent left menu
+- **desktop:** Always offer a way back from external auth pages
+- **layout:** Dock the sidebar expand/collapse toggle in the header
+- **organization:** Remove the Projects card from the org and platform home pages ([#82](https://github.com/mahesivaya/wayve/issues/82))
+- **scheduler:** Add an instant, shareable meeting link
+- **support:** Remove the "Report an issue" bug button from the header
+- **organization:** Remove the Projects card from the org and platform home pages
+
+### 🐛 Bug Fixes
+
+- **emails:** Dock the attachments-view chips beside Compose, no dead gap
+- **profile:** Confirm avatar upload, update and removal inline
+- **emails:** Render HTML bodies on a white canvas with no referrer leak
+- **sidebar:** Show the desktop profile email legibly and drop the web Settings link
+
+### 🧹 Maintenance
+
+- **frontend:** Apply Prettier formatting across the tree
+- **changelog:** Update for v7.3.0 [skip ci]
+
 ## [7.3.0](https://github.com/mahesivaya/wayve/releases/tag/v7.3.0) - 2026-07-15
 
 ### 🚀 Features
