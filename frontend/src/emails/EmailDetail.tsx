@@ -194,7 +194,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
 
     return (
-      <div className="email-detail">
+      <div className="email-detail email-detail--files">
         {/* Same folder-chips toolbar as the list header, so the menu doesn't
           vanish while browsing attachments — a chip click hops straight back
           to that folder in the email view. */}

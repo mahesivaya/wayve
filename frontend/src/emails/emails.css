@@ -1399,6 +1399,12 @@
   text-align: left;
 }
 
+/* Files (attachments) view: there's no email header above, so the generous
+   reading top-padding just reads as dead space under the toolbar — tighten. */
+.email-detail.email-detail--files {
+  padding-top: var(--space-4);
+}
+
 /* ================= NARROW (split-pane / small viewport) =================
    Stack list and detail into one column. Either is shown but never both,
    driven by `showList` / `showDetail` in Emails.tsx. */

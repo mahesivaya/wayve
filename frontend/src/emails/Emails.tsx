@@ -209,7 +209,10 @@ export default function Emails() {
   // for its header chips, so the folder menu relocates to the page toolbar
   // next to Compose.
   const inSplitPane = useInSplitPane();
-  const chipsInToolbar = inSplitPane || emailViewLayout === "split";
+  // The attachments view also docks the chips beside Compose — its own pane
+  // header sat noticeably lower, leaving a dead gap under the toolbar.
+  const chipsInToolbar =
+    inSplitPane || emailViewLayout === "split" || viewMode === "files";
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const stored = localStorage.getItem("rwayve.emailSidebar.width");
     const parsed = stored ? Number(stored) : NaN;
