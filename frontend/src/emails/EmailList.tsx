@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
+import { FolderChips } from "./FolderChips";
 import { useGlobalSearch } from "../search/SearchContext";
 import { fmtListTimestamp } from "../utils/datetime";
 
@@ -253,39 +254,10 @@ export const EmailList: React.FC<EmailListProps> = ({
           aria-label="Bulk email selection"
         >
           {showFolderTabs && onSelectFolder && (
-            <div
-              className="email-folder-tabs"
-              role="group"
-              aria-label="Mail folder"
-            >
-              <button
-                type="button"
-                className={`email-bulk-action${activeFolder === "inbox" ? " is-active" : ""}`}
-                onClick={() => onSelectFolder("inbox")}
-                aria-pressed={activeFolder === "inbox"}
-                title="Inbox"
-              >
-                Inbox
-              </button>
-              <button
-                type="button"
-                className={`email-bulk-action${activeFolder === "sent" ? " is-active" : ""}`}
-                onClick={() => onSelectFolder("sent")}
-                aria-pressed={activeFolder === "sent"}
-                title="Sent"
-              >
-                Sent
-              </button>
-              <button
-                type="button"
-                className={`email-bulk-action${activeFolder === "github" ? " is-active" : ""}`}
-                onClick={() => onSelectFolder("github")}
-                aria-pressed={activeFolder === "github"}
-                title="GitHub pull request emails"
-              >
-                🐙 GitHub PRs
-              </button>
-            </div>
+            <FolderChips
+              activeFolder={activeFolder}
+              onSelectFolder={onSelectFolder}
+            />
           )}
           <input
             type="checkbox"

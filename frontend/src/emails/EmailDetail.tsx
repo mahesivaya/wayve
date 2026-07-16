@@ -9,7 +9,8 @@ import {
 import { formatFileSize } from "./renderUtils";
 import { isGmailReconnectError } from "./bodyUtils";
 import EmailBody from "./EmailBody";
-import { EmailItem, EmailAttachment } from "./types";
+import { EmailItem, EmailAttachment, EmailFolder } from "./types";
+import { FolderChips } from "./FolderChips";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
@@ -22,6 +23,10 @@ interface EmailDetailProps {
   files: EmailAttachment[];
   filesLoading: boolean;
   filesError: string | null;
+  // When set, the Files view leads with the same folder-chips toolbar the list
+  // shows, so switching back to Inbox/Sent doesn't require leaving the view
+  // first. Clicking a chip is expected to flip back to the email view.
+  onSelectFolder?: (folder: EmailFolder) => void;
   normalizedSearchQuery: string;
   // Sync context for the Files view. A freshly connected account has 0 synced
   // emails, so without these counts the panel can't tell "no attachments exist"
@@ -39,6 +44,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   files,
   filesLoading,
   filesError,
+  onSelectFolder,
   normalizedSearchQuery,
   inboxAccountCount,
   inboxEmailCount,
@@ -189,20 +195,31 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
 
     return (
       <div className="email-detail">
-        <div className="email-detail-actions">
-          <button
-            className="email-detail-back"
-            onClick={onBack}
-            title="Close"
-            aria-label="Close"
+        {/* Same folder-chips toolbar as the list header, so the menu doesn't
+          vanish while browsing attachments — a chip click hops straight back
+          to that folder in the email view. */}
+        {onSelectFolder && (
+          <div
+            className="email-bulk-bar"
+            role="toolbar"
+            aria-label="Mail folders"
           >
-            ✕
-          </button>
-        </div>
+            <FolderChips activeFolder={null} onSelectFolder={onSelectFolder} />
+            <button
+              type="button"
+              className="email-bulk-action is-active"
+              aria-pressed="true"
+              title="Showing all attachments"
+            >
+              Attachments
+            </button>
+          </div>
+        )}
+        {/* No close/"back to inbox" affordances here: the folder chips above
+          (or the sidebar for personal accounts) already navigate away. */}
         <div className="email-files-inline">
           <div className="email-files-header">
             <h2>Files</h2>
-            <button onClick={onBack}>Back to inbox</button>
           </div>
           {filesLoading ? (
             <div className="email-files-empty">Loading files…</div>

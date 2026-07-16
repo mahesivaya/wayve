@@ -19,6 +19,8 @@ import {
 } from "../api/email";
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
+import { useInSplitPane } from "../components/SplitPaneContext";
+import { FolderChips } from "./FolderChips";
 import SearchBar from "../search/SearchBar";
 import { logger } from "../utils/logger";
 import type { EmailItem } from "./types";
@@ -202,6 +204,12 @@ export default function Emails() {
   const sidebarDraggingRef = useRef(false);
   const emailListDraggingRef = useRef(false);
   const [isNarrow, setIsNarrow] = useState(false);
+  // "Split" comes in two flavors: the app-level split pane, and the emails
+  // page's own list+detail split layout. In either, the list is too cramped
+  // for its header chips, so the folder menu relocates to the page toolbar
+  // next to Compose.
+  const inSplitPane = useInSplitPane();
+  const chipsInToolbar = inSplitPane || emailViewLayout === "split";
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const stored = localStorage.getItem("rwayve.emailSidebar.width");
     const parsed = stored ? Number(stored) : NaN;
@@ -492,6 +500,29 @@ export default function Emails() {
               Compose
             </button>
           )}
+          {/* Split (pane or list+detail layout): the folder menu sits next to
+            Compose (the list header that normally hosts it is too cramped). */}
+          {chipsInToolbar && !isPersonalScope && (
+            <>
+              <FolderChips
+                activeFolder={viewMode === "email" ? activeFolder : null}
+                onSelectFolder={(f) => {
+                  setViewMode("email");
+                  setSelectedEmail(null);
+                  setActiveFolder(f);
+                }}
+              />
+              <button
+                type="button"
+                className={`email-bulk-action${viewMode === "files" ? " is-active" : ""}`}
+                onClick={openFiles}
+                aria-pressed={viewMode === "files"}
+                title="Show all attachments across your emails"
+              >
+                Attachments
+              </button>
+            </>
+          )}
           <SearchBar />
         </div>
       )}
@@ -586,7 +617,7 @@ export default function Emails() {
             showChrome={showToolbar}
             canAddAccount={canConnectOwnMailbox}
             onAddAccount={() => setAddAccountOpen(true)}
-            showFolderTabs={!isPersonalScope}
+            showFolderTabs={!isPersonalScope && !chipsInToolbar}
             onSelectFolder={(f) => {
               setViewMode("email");
               setActiveFolder(f);
@@ -649,6 +680,18 @@ export default function Emails() {
             files={files}
             filesLoading={filesLoading}
             filesError={filesError}
+            onSelectFolder={
+              // Same scope gate as the list's folder chips: personal accounts
+              // navigate folders via the sidebar instead. When the chips sit
+              // in the page toolbar (split), skip the duplicate here.
+              !isPersonalScope && !chipsInToolbar
+                ? (f) => {
+                    setViewMode("email");
+                    setSelectedEmail(null);
+                    setActiveFolder(f);
+                  }
+                : undefined
+            }
             normalizedSearchQuery={normalizedSearchQuery}
             inboxAccountCount={accounts.length}
             inboxEmailCount={emails.length}
