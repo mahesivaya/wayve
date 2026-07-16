@@ -10,8 +10,11 @@ import ChannelCreateForm from "./ChannelCreateForm";
 import ChannelList from "./ChannelList";
 import PersonalChatList from "./PersonalChatList";
 import RecentConversations from "./RecentConversations";
+import StatusSelector from "./StatusSelector";
 
 type Props = {
+  // The signed-in user, for the presence-status picker.
+  myUserId: number;
   users: ChatUser[];
   channels: ChatChannel[];
   selectedConversation: Conversation | null;
@@ -32,6 +35,7 @@ type Props = {
 };
 
 export default function ConversationSidebar({
+  myUserId,
   users,
   channels,
   selectedConversation,
@@ -54,6 +58,8 @@ export default function ConversationSidebar({
 
   return (
     <aside className="user-list">
+      {/* Your own presence-status picker sits at the very top, above search. */}
+      <StatusSelector myUserId={myUserId} />
       {/* Chat search lives at the top of the sidebar (above Recent) rather than
           in the global header. Drives the same global query that filters the
           channels / users / messages below. */}

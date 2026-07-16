@@ -901,6 +901,7 @@ export default function Chat() {
       style={{ "--chat-sidebar-w": `${sidebarWidth}px` } as React.CSSProperties}
     >
       <ConversationSidebar
+        myUserId={user?.id ?? 0}
         users={visibleUsers}
         channels={visibleChannels}
         selectedConversation={selectedConversation}

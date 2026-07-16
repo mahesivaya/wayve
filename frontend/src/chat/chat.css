@@ -304,8 +304,95 @@
   background: #15803d;
 }
 
+/* Do Not Disturb — red; Away — amber. Both are "online" states (the user holds
+   a socket), just manually chosen tints. Offline still overrides to gray. */
+.presence-dot.dnd {
+  background: #dc2626;
+}
+
+.presence-dot.away {
+  background: #d97706;
+}
+
 .presence-dot.offline {
   background: #cbd5e1;
+}
+
+/* ===== Presence-status picker (top of the Messages sidebar, above search) ===== */
+.status-selector {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.status-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  cursor: pointer;
+}
+
+.status-selector-trigger:hover {
+  background: var(--color-surface-hover);
+}
+
+/* The dot inside the selector is inline (not corner-pinned to an avatar). */
+.status-selector .presence-dot {
+  position: static;
+  right: auto;
+  bottom: auto;
+  border: none;
+  flex: 0 0 auto;
+}
+
+.status-selector-label {
+  flex: 1;
+  text-align: left;
+}
+
+.status-selector-caret {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.status-selector-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--u-card-shadow, 0 4px 16px rgb(0, 0, 0, 0.12));
+}
+
+.status-selector-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-md);
+  color: var(--color-text-primary);
+}
+
+.status-selector-option:hover {
+  background: var(--color-surface-hover);
+}
+
+.status-selector-option.is-selected {
+  font-weight: 600;
 }
 
 /* Header variant: inline with the "Online / last seen" label, not corner-pinned. */

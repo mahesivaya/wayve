@@ -23,6 +23,15 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
 -- Redis `presence:online` sorted set (or the local session registry when Redis
 -- is down); this column is only the durable fallback. See chat/presence.rs.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ;
+-- Manually chosen chat presence status, shown as a colored dot in Messages.
+-- 'active' (green) is the default; 'dnd' (red) = Do Not Disturb; 'away' (amber).
+-- Orthogonal to the live online/offline signal: an offline user renders gray
+-- regardless, and this only tints the dot while they hold a chat socket.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_status TEXT NOT NULL DEFAULT 'active';
+DO $$ BEGIN
+  ALTER TABLE users ADD CONSTRAINT users_chat_status_check
+    CHECK (chat_status IN ('active', 'dnd', 'away'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- Uploaded profile image: server-relative path on disk under ./uploads/avatars/.
 -- Served (decrypted, plain) via GET /api/users/{id}/avatar so other members can
 -- see it; NULL means "no upload, fall back to the generated initial avatar".

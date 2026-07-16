@@ -162,10 +162,15 @@ export const getChatUsers = async () =>
 // (RFC3339, null if never connected) is shown when they're offline. Live changes
 // also arrive over the chat socket as `{ type: "presence" }` frames — this
 // endpoint seeds the initial state and reconciles on a light poll.
+// The user's manually chosen presence status, tinting their dot in Messages.
+// Orthogonal to `online`: an offline user shows gray whatever their status.
+export type ChatStatus = "active" | "dnd" | "away";
+
 export type UserPresence = {
   user_id: number;
   online: boolean;
   last_seen: string | null;
+  status: ChatStatus;
 };
 
 export const getPresence = async (ids: number[]): Promise<UserPresence[]> => {
@@ -175,6 +180,14 @@ export const getPresence = async (ids: number[]): Promise<UserPresence[]> => {
     `/api/chat/presence?${params.toString()}`
   );
   return data.presence;
+};
+
+// Set the caller's own status; the server broadcasts the change to contacts.
+export const setChatStatus = async (status: ChatStatus): Promise<void> => {
+  await apiFetchJson("/api/chat/presence/status", {
+    method: "PUT",
+    body: JSON.stringify({ status }),
+  });
 };
 
 // Counts and timestamps only — message content stays E2E-encrypted and is never
