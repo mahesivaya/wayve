@@ -21,14 +21,13 @@ import {
   updateMyOrganization,
 } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
-import { homePathForUser } from "../auth/accountHome";
-import { canViewIntegrations, hasPermission } from "../auth/permissions";
+import { hasPermission } from "../auth/permissions";
 import { cachedLoad } from "../api/cache";
 import { listMyTickets, type SupportTicket } from "../api/support";
 import SupportModal from "../support/SupportModal";
 import { fmtDate, fmtShortDate } from "../utils/datetime";
 import { isDesktopApp } from "../utils/desktop";
-import ThemeCustomizer from "../theme/ThemeCustomizer";
+import SettingsShell from "./SettingsShell";
 
 type Account = {
   id: number;
@@ -59,36 +58,11 @@ function formatMoney(cents: number, currency: string): string {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { user, refresh, logout, switchMode } = useAuth();
+  const { user, refresh, logout } = useAuth();
   // Desktop shell only: the header ProfileMenu dropdown is gone there, so its
   // account links (My Profile / Integrations / Appearance / Log out) are
   // surfaced as an Account card on this page instead.
   const desktop = isDesktopApp();
-  const [appearanceOpen, setAppearanceOpen] = useState(false);
-
-  // The admin-mode toggle also lives only in the header ProfileMenu on the web,
-  // so the desktop shell would otherwise strand an owner in normal mode with no
-  // way to elevate. Mirror the ProfileMenu switcher here.
-  const [switchingMode, setSwitchingMode] = useState(false);
-  const inAdminMode = user?.mode === "admin";
-  const showModeSwitcher = inAdminMode || (user?.can_switch_admin ?? false);
-
-  const handleSwitchMode = async (target: "normal" | "admin") => {
-    if (switchingMode) return;
-    setSwitchingMode(true);
-    try {
-      await switchMode(target);
-      navigate(
-        target === "admin"
-          ? homePathForUser({ ...user, mode: "admin", can_switch_admin: true })
-          : "/home"
-      );
-    } catch {
-      // Server refused (e.g. no longer eligible); leave the page as-is.
-    } finally {
-      setSwitchingMode(false);
-    }
-  };
 
   // Free personal accounts see an Upgrade CTA (moved here from the header in the
   // desktop shell). Mirrors the gate + navigation in Layout's header Upgrade.
@@ -366,10 +340,8 @@ export default function Settings() {
   };
 
   return (
-    <div className="settings-page">
-      <div className="settings-stack">
-        <h1 className="settings-page-title">Settings &amp; Privacy</h1>
-
+    <SettingsShell title={<>Settings &amp; Privacy</>}>
+      <>
         {/* Desktop shell: the Upgrade CTA, moved here from the header. Only for
           free personal accounts, matching the header gate on the web. */}
         {desktop && isBasicPersonalUser && (
@@ -385,80 +357,6 @@ export default function Settings() {
                 onClick={goToUpgrade}
               >
                 Upgrade plan
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Desktop shell: the account links that live in the header ProfileMenu
-          dropdown on the web (which the desktop shell hides). */}
-        {desktop && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">Account</h2>
-            <div className="settings-rows">
-              <button
-                type="button"
-                className="settings-account-link"
-                onClick={() => void navigate("/profile")}
-              >
-                <span className="settings-account-link-icon">👤</span>
-                <span>My Profile</span>
-              </button>
-              {canViewIntegrations(user) && (
-                <button
-                  type="button"
-                  className="settings-account-link"
-                  onClick={() => void navigate("/integrations")}
-                >
-                  <span className="settings-account-link-icon">🔌</span>
-                  <span>Integrations</span>
-                </button>
-              )}
-              <button
-                type="button"
-                className="settings-account-link"
-                aria-expanded={appearanceOpen}
-                onClick={() => setAppearanceOpen((o) => !o)}
-              >
-                <span className="settings-account-link-icon">🎨</span>
-                <span>Appearance</span>
-                <span className="settings-account-link-chevron">
-                  {appearanceOpen ? "▾" : "›"}
-                </span>
-              </button>
-              {appearanceOpen && (
-                <div className="settings-appearance-panel">
-                  <ThemeCustomizer />
-                </div>
-              )}
-              {showModeSwitcher && (
-                <button
-                  type="button"
-                  className="settings-account-link"
-                  disabled={switchingMode}
-                  onClick={() =>
-                    void handleSwitchMode(inAdminMode ? "normal" : "admin")
-                  }
-                >
-                  <span className="settings-account-link-icon">
-                    {inAdminMode ? "🚪" : "🛡️"}
-                  </span>
-                  <span>
-                    {switchingMode
-                      ? "Switching…"
-                      : inAdminMode
-                        ? "Exit admin mode"
-                        : "Switch to admin mode"}
-                  </span>
-                </button>
-              )}
-              <button
-                type="button"
-                className="settings-account-link settings-account-logout"
-                onClick={() => logout()}
-              >
-                <span className="settings-account-link-icon">⏻</span>
-                <span>Log out</span>
               </button>
             </div>
           </section>
@@ -838,14 +736,14 @@ export default function Settings() {
             )}
           </section>
         )}
-      </div>
 
-      {supportOpen && (
-        <SupportModal
-          onClose={() => setSupportOpen(false)}
-          onSubmitted={() => void loadTickets()}
-        />
-      )}
-    </div>
+        {supportOpen && (
+          <SupportModal
+            onClose={() => setSupportOpen(false)}
+            onSubmitted={() => void loadTickets()}
+          />
+        )}
+      </>
+    </SettingsShell>
   );
 }

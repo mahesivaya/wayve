@@ -380,6 +380,12 @@
   padding-top: 8px;
 }
 
+/* Desktop shell settings takeover: the settings pages bring their own left
+   rail, so the main sidebar fully steps aside. */
+.sidebar.takeover-hidden {
+  display: none;
+}
+
 /* The header expand/collapse toggle is right-aligned within the brand area,
    whose width tracks the sidebar (set inline in Layout). That parks the button
    just inside the sidebar's right divider — the "menu line" — above the nav. */

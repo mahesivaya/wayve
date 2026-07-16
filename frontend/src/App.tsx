@@ -43,6 +43,7 @@ const NotFound = lazy(() => import("./components/NotFound"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
 const Integrations = lazy(() => import("./integrations/Integrations"));
+const Appearance = lazy(() => import("./profile/Appearance"));
 const FeatureAccessPage = lazy(
   () => import("./featureAccess/FeatureAccessPage")
 );
@@ -385,6 +386,9 @@ export default function App() {
                   )
                 }
               />
+              {/* Theme customizer as a page, so the settings sidebar's
+                Appearance entry navigates like My Profile / Integrations. */}
+              <Route path="/appearance" element={<Appearance />} />
               {/* The owner-only feature access matrix self-guards. One component
                 serves both scopes; the backend resolves the matrix from the
                 caller's scope. */}

@@ -191,6 +191,67 @@
   gap: 16px;
 }
 
+/* Desktop shell: the settings menu is a true left sidebar — full height, flush
+   against the page's left edge (it stands in for the main app sidebar, which is
+   hidden on the settings pages) — with the content scrolling beside it. */
+.settings-page--split {
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.settings-page--split .settings-side {
+  flex: 0 0 240px;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  padding: 16px 12px;
+  box-sizing: border-box;
+}
+
+/* Inside the rail the Account block is a flat menu, not a floating card. */
+.settings-page--split .settings-side .settings-card {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  width: auto;
+  max-width: none;
+}
+
+/* The content pane owns the scroll; the rail stays put. */
+.settings-page--split .settings-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px 32px;
+  box-sizing: border-box;
+}
+
+/* No global box-sizing reset exists, so `width: 100%` + 24px padding renders
+   cards wider than their box; keep content cards inside their column. */
+.settings-page--split .settings-content .settings-card {
+  box-sizing: border-box;
+}
+
+/* The sidebar entry for the page you're on. */
+.settings-account-link.active {
+  background: var(--color-primary-soft);
+  font-weight: 600;
+}
+
+/* "Back to Home" leads the rail and reads as an exit, not a sibling page:
+   muted, with a hairline separating it from the real settings entries. */
+.settings-back-link {
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  margin-bottom: 4px;
+}
+
 .settings-page-title {
   margin: 0 0 4px;
   font-size: var(--text-3xl);

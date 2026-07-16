@@ -15,6 +15,7 @@ import JiraPanel from "../tasks/JiraPanel";
 import GitHubPanel from "./GitHubPanel";
 import GmailPanel from "./GmailPanel";
 import { BrandIcon } from "./BrandIcon";
+import SettingsShell from "../profile/SettingsShell";
 import "./integrations.css";
 
 type Status = "enabled" | "available" | "soon" | "enterprise";
@@ -211,123 +212,118 @@ export default function Integrations() {
   );
 
   return (
-    <div className="settings-page">
-      <div className="settings-stack">
-        <h1 className="settings-page-title">Integrations</h1>
-
-        <section className="settings-card">
-          <h2 className="settings-card-title">Connect a service</h2>
-          <div className="integrations-cards">
-            {visibleServices.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                className="integration-tile"
-                onClick={s.onClick}
-                disabled={s.status === "soon" || s.status === "enterprise"}
-              >
-                <div className="integration-tile-head">
-                  <span className="integration-tile-icon">{s.icon}</span>
-                  <span className="integration-tile-titles">
-                    <span className="integration-tile-name">{s.name}</span>
-                    <span
-                      className={`integration-tile-status integration-tile-status--${s.status}`}
-                    >
-                      {STATUS_LABEL[s.status]}
-                    </span>
+    <SettingsShell title="Integrations">
+      <section className="settings-card">
+        <h2 className="settings-card-title">Connect a service</h2>
+        <div className="integrations-cards">
+          {visibleServices.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              className="integration-tile"
+              onClick={s.onClick}
+              disabled={s.status === "soon" || s.status === "enterprise"}
+            >
+              <div className="integration-tile-head">
+                <span className="integration-tile-icon">{s.icon}</span>
+                <span className="integration-tile-titles">
+                  <span className="integration-tile-name">{s.name}</span>
+                  <span
+                    className={`integration-tile-status integration-tile-status--${s.status}`}
+                  >
+                    {STATUS_LABEL[s.status]}
                   </span>
-                </div>
-                <p className="integration-tile-desc">{s.description}</p>
-              </button>
-            ))}
-          </div>
+                </span>
+              </div>
+              <p className="integration-tile-desc">{s.description}</p>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="settings-card integrations-info">
+        <h2 className="settings-card-title">
+          AI assistant · Model Context Protocol (MCP)
+        </h2>
+        <p className="integrations-info-text">
+          Fluxze's AI assistant supports the{" "}
+          <strong>Model Context Protocol (MCP)</strong> — an open standard for
+          securely connecting AI to external tools and data. Enterprise
+          organizations and platform administrators may register their own
+          remote MCP servers, enabling the assistant to read live information
+          from systems you operate — for example, your own database — through
+          interfaces you fully control.
+        </p>
+        <p className="integrations-info-text">
+          Fluxze never connects to your data store directly. It communicates
+          only with the MCP server you designate, which governs precisely what
+          the assistant may access. Connection credentials are encrypted at
+          rest, and every server is validated before it is used.
+        </p>
+        <div className="integrations-info-foot">
+          {canManageMcp ? (
+            <button
+              type="button"
+              className="integrations-info-btn"
+              onClick={() => setShowMcp(true)}
+            >
+              Connect an MCP server
+            </button>
+          ) : (
+            <span className="integrations-info-badge">
+              Available to Enterprise organizations and platform administrators
+            </span>
+          )}
+        </div>
+      </section>
+
+      {canConnectMailbox && showGmail && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">Gmail</h2>
+          <GmailPanel onChange={setGmailConnected} />
         </section>
+      )}
 
-        <section className="settings-card integrations-info">
-          <h2 className="settings-card-title">
-            AI assistant · Model Context Protocol (MCP)
-          </h2>
-          <p className="integrations-info-text">
-            Fluxze's AI assistant supports the{" "}
-            <strong>Model Context Protocol (MCP)</strong> — an open standard for
-            securely connecting AI to external tools and data. Enterprise
-            organizations and platform administrators may register their own
-            remote MCP servers, enabling the assistant to read live information
-            from systems you operate — for example, your own database — through
-            interfaces you fully control.
-          </p>
-          <p className="integrations-info-text">
-            Fluxze never connects to your data store directly. It communicates
-            only with the MCP server you designate, which governs precisely what
-            the assistant may access. Connection credentials are encrypted at
-            rest, and every server is validated before it is used.
-          </p>
-          <div className="integrations-info-foot">
-            {canManageMcp ? (
-              <button
-                type="button"
-                className="integrations-info-btn"
-                onClick={() => setShowMcp(true)}
-              >
-                Connect an MCP server
-              </button>
-            ) : (
-              <span className="integrations-info-badge">
-                Available to Enterprise organizations and platform
-                administrators
-              </span>
-            )}
-          </div>
+      {showJira && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">Jira</h2>
+          <JiraPanel
+            onImported={() =>
+              void getJiraConnection()
+                .then((s) => setJiraConnected(s.connected))
+                .catch(() => {})
+            }
+          />
         </section>
+      )}
 
-        {canConnectMailbox && showGmail && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">Gmail</h2>
-            <GmailPanel onChange={setGmailConnected} />
-          </section>
-        )}
+      {showGithub && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">GitHub</h2>
+          <GitHubPanel onChange={setGithubConnected} />
+        </section>
+      )}
 
-        {showJira && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">Jira</h2>
-            <JiraPanel
-              onImported={() =>
-                void getJiraConnection()
-                  .then((s) => setJiraConnected(s.connected))
-                  .catch(() => {})
-              }
-            />
-          </section>
-        )}
+      {isEnterprise && showSlack && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">Slack</h2>
+          <SlackPanel />
+        </section>
+      )}
 
-        {showGithub && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">GitHub</h2>
-            <GitHubPanel onChange={setGithubConnected} />
-          </section>
-        )}
+      {canManageMcp && showMcp && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">Connect MCP</h2>
+          <McpPanel />
+        </section>
+      )}
 
-        {isEnterprise && showSlack && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">Slack</h2>
-            <SlackPanel />
-          </section>
-        )}
-
-        {canManageMcp && showMcp && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">Connect MCP</h2>
-            <McpPanel />
-          </section>
-        )}
-
-        {showGitlab && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">GitLab</h2>
-            <GitLabPanel />
-          </section>
-        )}
-      </div>
-    </div>
+      {showGitlab && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">GitLab</h2>
+          <GitLabPanel />
+        </section>
+      )}
+    </SettingsShell>
   );
 }

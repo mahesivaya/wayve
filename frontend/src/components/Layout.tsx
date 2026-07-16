@@ -1027,6 +1027,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // sidebar. `headerActions` is the cluster that stays in the header in both
   // runtimes.
   const desktop = isDesktopApp();
+
+  // Desktop shell: the settings-family pages render their own left rail
+  // (SettingsShell), so the main sidebar steps aside there and the rail's
+  // Back button returns home. Web keeps the normal sidebar.
+  const settingsTakeover =
+    desktop &&
+    ["/settings", "/profile", "/integrations", "/appearance"].includes(
+      location.pathname
+    );
+
   const headerActions = (
     <>
       {user.mode === "admin" && user.can_switch_admin && (
@@ -1094,13 +1104,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               </div>
               {/* Desktop expand/collapse toggle, docked next to the brand mark so
               it stays reachable whether the sidebar is a full panel or an icon
-              rail. The narrow overlay uses the hamburger below instead. */}
-              {!isNarrow && (
+              rail. The narrow overlay uses the hamburger below instead; hidden
+              while settings takes over (there's no sidebar to toggle). */}
+              {!isNarrow && !settingsTakeover && (
                 <button
                   type="button"
                   className="sidebar-collapse-btn header-collapse-btn"
                   onClick={() => setSidebarCollapsed((c) => !c)}
-                  title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  title={
+                    sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+                  }
                   aria-label={
                     sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
                   }
@@ -1125,7 +1138,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {/* This toggle is the mobile hamburger only. On wide screens the
               show/hide control lives next to the brand above; the overlay has no
               persistent divider to host it, so it needs the header button. */}
-              {isNarrow && (
+              {isNarrow && !settingsTakeover && (
                 <button
                   type="button"
                   className="sidebar-toggle-btn"
@@ -1169,7 +1182,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <div className="body">
             <nav
               ref={sidebarRef}
-              className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`.trim()}
+              className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""} ${settingsTakeover ? "takeover-hidden" : ""}`.trim()}
               style={
                 !sidebarCollapsed && !isNarrow
                   ? { width: `${sidebarWidth}px` }
@@ -1328,8 +1341,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               )}
             </nav>
 
-            {/* Resizing is meaningless in the icon rail or the narrow overlay. */}
-            {!sidebarCollapsed && !isNarrow && (
+            {/* Resizing is meaningless in the icon rail, the narrow overlay,
+              or when settings takes over and the sidebar is hidden. */}
+            {!sidebarCollapsed && !isNarrow && !settingsTakeover && (
               <ResizeHandle
                 onPointerDown={startSidebarResize}
                 ariaLabel="Resize sidebar"

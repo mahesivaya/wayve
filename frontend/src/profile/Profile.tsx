@@ -12,6 +12,7 @@ import { useAuth } from "../auth/useAuth";
 import Avatar from "../components/Avatar";
 import { getApiBase } from "../config/env";
 import { logger } from "../utils/logger";
+import SettingsShell from "./SettingsShell";
 import "./profile.css";
 
 export default function Profile() {
@@ -202,84 +203,102 @@ export default function Profile() {
   const roleKey = profile.effective_role ?? user?.effective_role ?? "owner";
 
   return (
-    <div className="settings-page">
-      <div className="settings-stack">
-        <h1 className="settings-page-title">My Profile</h1>
-
-        <section className="settings-card">
-          <h2 className="settings-card-title">Profile photo</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div style={{ position: "relative", width: 72, height: 72 }}>
-              <Avatar
-                name={profile.email}
-                src={
-                  profile.avatar_url
-                    ? `${getApiBase()}${profile.avatar_url}?v=${avatarBust}`
-                    : undefined
-                }
-                size={72}
-              />
-              {/* Single small edit button overlaid on the avatar; opens a
+    <SettingsShell title="My Profile">
+      <section className="settings-card">
+        <h2 className="settings-card-title">Profile photo</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div style={{ position: "relative", width: 72, height: 72 }}>
+            <Avatar
+              name={profile.email}
+              src={
+                profile.avatar_url
+                  ? `${getApiBase()}${profile.avatar_url}?v=${avatarBust}`
+                  : undefined
+              }
+              size={72}
+            />
+            {/* Single small edit button overlaid on the avatar; opens a
                   compact menu to change or remove the photo. */}
-              <button
-                type="button"
-                onClick={() => setAvatarMenuOpen((o) => !o)}
-                disabled={avatarBusy}
-                aria-label="Edit profile photo"
-                aria-haspopup="menu"
-                aria-expanded={avatarMenuOpen}
-                title="Edit profile photo"
-                style={{
-                  position: "absolute",
-                  right: -2,
-                  bottom: -2,
-                  width: 26,
-                  height: 26,
-                  borderRadius: "50%",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  border: "2px solid var(--color-surface, #fff)",
-                  background: "var(--color-primary-action, #2563eb)",
-                  color: "#fff",
-                  cursor: avatarBusy ? "default" : "pointer",
-                  fontSize: 12,
-                  lineHeight: 1,
-                  padding: 0,
-                }}
-              >
-                {avatarBusy ? "…" : "✎"}
-              </button>
+            <button
+              type="button"
+              onClick={() => setAvatarMenuOpen((o) => !o)}
+              disabled={avatarBusy}
+              aria-label="Edit profile photo"
+              aria-haspopup="menu"
+              aria-expanded={avatarMenuOpen}
+              title="Edit profile photo"
+              style={{
+                position: "absolute",
+                right: -2,
+                bottom: -2,
+                width: 26,
+                height: 26,
+                borderRadius: "50%",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "2px solid var(--color-surface, #fff)",
+                background: "var(--color-primary-action, #2563eb)",
+                color: "#fff",
+                cursor: avatarBusy ? "default" : "pointer",
+                fontSize: 12,
+                lineHeight: 1,
+                padding: 0,
+              }}
+            >
+              {avatarBusy ? "…" : "✎"}
+            </button>
 
-              {avatarMenuOpen && (
-                <>
-                  {/* Click-away backdrop. */}
-                  <div
-                    onClick={() => setAvatarMenuOpen(false)}
-                    style={{ position: "fixed", inset: 0, zIndex: 10 }}
-                  />
-                  <div
-                    role="menu"
+            {avatarMenuOpen && (
+              <>
+                {/* Click-away backdrop. */}
+                <div
+                  onClick={() => setAvatarMenuOpen(false)}
+                  style={{ position: "fixed", inset: 0, zIndex: 10 }}
+                />
+                <div
+                  role="menu"
+                  style={{
+                    position: "absolute",
+                    top: "78px",
+                    left: 0,
+                    zIndex: 11,
+                    minWidth: 150,
+                    background: "var(--color-surface, #fff)",
+                    border: "1px solid var(--color-border, #d1d5db)",
+                    borderRadius: 8,
+                    boxShadow: "0 6px 18px rgba(0,0,0,0.15)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="avatar-menu-item"
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                      document.getElementById("avatar-input")?.click();
+                    }}
                     style={{
-                      position: "absolute",
-                      top: "78px",
-                      left: 0,
-                      zIndex: 11,
-                      minWidth: 150,
-                      background: "var(--color-surface, #fff)",
-                      border: "1px solid var(--color-border, #d1d5db)",
-                      borderRadius: 8,
-                      boxShadow: "0 6px 18px rgba(0,0,0,0.15)",
-                      overflow: "hidden",
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "8px 12px",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
                     }}
                   >
+                    {profile.avatar_url ? "Change photo" : "Upload photo"}
+                  </button>
+                  {profile.avatar_url && (
                     <button
                       type="button"
                       role="menuitem"
                       className="avatar-menu-item"
                       onClick={() => {
                         setAvatarMenuOpen(false);
-                        document.getElementById("avatar-input")?.click();
+                        void onRemoveAvatar();
                       }}
                       style={{
                         display: "block",
@@ -289,215 +308,193 @@ export default function Profile() {
                         background: "none",
                         border: "none",
                         cursor: "pointer",
+                        color: "#dc2626",
                       }}
                     >
-                      {profile.avatar_url ? "Change photo" : "Upload photo"}
+                      Remove
                     </button>
-                    {profile.avatar_url && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="avatar-menu-item"
-                        onClick={() => {
-                          setAvatarMenuOpen(false);
-                          void onRemoveAvatar();
-                        }}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          textAlign: "left",
-                          padding: "8px 12px",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          color: "#dc2626",
-                        }}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div>
-              <input
-                id="avatar-input"
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(e) => void onPickAvatar(e)}
-                disabled={avatarBusy}
-                style={{ display: "none" }}
-              />
-              <p style={{ margin: 0, fontSize: "0.85em", opacity: 0.7 }}>
-                PNG, JPEG, or WebP. Max 2 MB.
-              </p>
-              {avatarError && (
-                <span className="profile-status profile-status-error">
-                  {avatarError}
-                </span>
-              )}
-              {!avatarError && avatarNotice && (
-                <span className="profile-status">{avatarNotice}</span>
-              )}
-            </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
-        </section>
 
-        <section className="settings-card">
-          <h2 className="settings-card-title">Account</h2>
-          <div className="settings-rows">
-            <div className="settings-usage-row">
-              <span>Email</span>
-              <strong>{profile.email}</strong>
-            </div>
-            <div className="settings-usage-row">
-              <span>Account Type</span>
-              <strong style={{ textTransform: "capitalize" }}>
-                {accountType}
-              </strong>
-            </div>
-            <div className="settings-usage-row">
-              <span>Access Role</span>
-              <strong>{roleLabel}</strong>
-            </div>
-            <div className="settings-usage-row">
-              <span>Role Key</span>
-              <strong>{roleKey}</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="settings-card">
-          <h2 className="settings-card-title">Name</h2>
-
-          <div className="profile-row">
-            <label htmlFor="profile-first">First name</label>
+          <div>
             <input
-              id="profile-first"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              placeholder="First name"
+              id="avatar-input"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => void onPickAvatar(e)}
+              disabled={avatarBusy}
+              style={{ display: "none" }}
             />
+            <p style={{ margin: 0, fontSize: "0.85em", opacity: 0.7 }}>
+              PNG, JPEG, or WebP. Max 2 MB.
+            </p>
+            {avatarError && (
+              <span className="profile-status profile-status-error">
+                {avatarError}
+              </span>
+            )}
+            {!avatarError && avatarNotice && (
+              <span className="profile-status">{avatarNotice}</span>
+            )}
           </div>
+        </div>
+      </section>
 
-          <div className="profile-row">
-            <label htmlFor="profile-last">Last name</label>
-            <input
-              id="profile-last"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              placeholder="Last name"
-            />
+      <section className="settings-card">
+        <h2 className="settings-card-title">Account</h2>
+        <div className="settings-rows">
+          <div className="settings-usage-row">
+            <span>Email</span>
+            <strong>{profile.email}</strong>
           </div>
+          <div className="settings-usage-row">
+            <span>Account Type</span>
+            <strong style={{ textTransform: "capitalize" }}>
+              {accountType}
+            </strong>
+          </div>
+          <div className="settings-usage-row">
+            <span>Access Role</span>
+            <strong>{roleLabel}</strong>
+          </div>
+          <div className="settings-usage-row">
+            <span>Role Key</span>
+            <strong>{roleKey}</strong>
+          </div>
+        </div>
+      </section>
 
+      <section className="settings-card">
+        <h2 className="settings-card-title">Name</h2>
+
+        <div className="profile-row">
+          <label htmlFor="profile-first">First name</label>
+          <input
+            id="profile-first"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            placeholder="First name"
+          />
+        </div>
+
+        <div className="profile-row">
+          <label htmlFor="profile-last">Last name</label>
+          <input
+            id="profile-last"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            placeholder="Last name"
+          />
+        </div>
+
+        <div className="profile-actions">
+          <button
+            type="button"
+            className="profile-save"
+            onClick={() => void save()}
+            disabled={saving}
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+          {status && <span className="profile-status">{status}</span>}
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <h2 className="settings-card-title">Password</h2>
+
+        {!showPwForm ? (
           <div className="profile-actions">
             <button
               type="button"
               className="profile-save"
-              onClick={() => void save()}
-              disabled={saving}
+              onClick={() => setShowPwForm(true)}
             >
-              {saving ? "Saving…" : "Save"}
+              {profile.auth_provider === "google"
+                ? "Create Password"
+                : "Change Password"}
             </button>
-            {status && <span className="profile-status">{status}</span>}
+            {pwStatus && <span className="profile-status">{pwStatus}</span>}
           </div>
-        </section>
+        ) : (
+          <>
+            {profile.auth_provider !== "google" && (
+              <div className="profile-row">
+                <label htmlFor="profile-current-pw">Current password</label>
+                <input
+                  id="profile-current-pw"
+                  type="password"
+                  value={currentPw}
+                  onChange={(e) => setCurrentPw(e.target.value)}
+                  autoComplete="current-password"
+                />
+              </div>
+            )}
 
-        <section className="settings-card">
-          <h2 className="settings-card-title">Password</h2>
+            <div className="profile-row">
+              <label htmlFor="profile-new-pw">
+                {profile.auth_provider === "google"
+                  ? "Password"
+                  : "New password"}
+              </label>
+              <input
+                id="profile-new-pw"
+                type="password"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
 
-          {!showPwForm ? (
+            <div className="profile-row">
+              <label htmlFor="profile-confirm-pw">
+                {profile.auth_provider === "google"
+                  ? "Confirm password"
+                  : "Confirm new password"}
+              </label>
+              <input
+                id="profile-confirm-pw"
+                type="password"
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+
             <div className="profile-actions">
               <button
                 type="button"
                 className="profile-save"
-                onClick={() => setShowPwForm(true)}
+                onClick={() => void submitPasswordChange()}
+                disabled={pwSaving}
               >
-                {profile.auth_provider === "google"
-                  ? "Create Password"
-                  : "Change Password"}
+                {pwSaving
+                  ? "Saving…"
+                  : profile.auth_provider === "google"
+                    ? "Create password"
+                    : "Update password"}
+              </button>
+              <button
+                type="button"
+                className="profile-cancel"
+                onClick={() => {
+                  setShowPwForm(false);
+                  setCurrentPw("");
+                  setNewPw("");
+                  setConfirmPw("");
+                }}
+                disabled={pwSaving}
+              >
+                Cancel
               </button>
               {pwStatus && <span className="profile-status">{pwStatus}</span>}
             </div>
-          ) : (
-            <>
-              {profile.auth_provider !== "google" && (
-                <div className="profile-row">
-                  <label htmlFor="profile-current-pw">Current password</label>
-                  <input
-                    id="profile-current-pw"
-                    type="password"
-                    value={currentPw}
-                    onChange={(e) => setCurrentPw(e.target.value)}
-                    autoComplete="current-password"
-                  />
-                </div>
-              )}
-
-              <div className="profile-row">
-                <label htmlFor="profile-new-pw">
-                  {profile.auth_provider === "google"
-                    ? "Password"
-                    : "New password"}
-                </label>
-                <input
-                  id="profile-new-pw"
-                  type="password"
-                  value={newPw}
-                  onChange={(e) => setNewPw(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-
-              <div className="profile-row">
-                <label htmlFor="profile-confirm-pw">
-                  {profile.auth_provider === "google"
-                    ? "Confirm password"
-                    : "Confirm new password"}
-                </label>
-                <input
-                  id="profile-confirm-pw"
-                  type="password"
-                  value={confirmPw}
-                  onChange={(e) => setConfirmPw(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-
-              <div className="profile-actions">
-                <button
-                  type="button"
-                  className="profile-save"
-                  onClick={() => void submitPasswordChange()}
-                  disabled={pwSaving}
-                >
-                  {pwSaving
-                    ? "Saving…"
-                    : profile.auth_provider === "google"
-                      ? "Create password"
-                      : "Update password"}
-                </button>
-                <button
-                  type="button"
-                  className="profile-cancel"
-                  onClick={() => {
-                    setShowPwForm(false);
-                    setCurrentPw("");
-                    setNewPw("");
-                    setConfirmPw("");
-                  }}
-                  disabled={pwSaving}
-                >
-                  Cancel
-                </button>
-                {pwStatus && <span className="profile-status">{pwStatus}</span>}
-              </div>
-            </>
-          )}
-        </section>
-      </div>
-    </div>
+          </>
+        )}
+      </section>
+    </SettingsShell>
   );
 }
