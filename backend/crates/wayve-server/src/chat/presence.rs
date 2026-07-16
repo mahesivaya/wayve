@@ -38,12 +38,24 @@ fn now_ts() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
-/// `online` is the live signal; `last_seen` is the durable offline fallback.
+/// `online` is the live signal; `last_seen` is the durable offline fallback;
+/// `status` is the user's manually chosen active/dnd/away tint.
 #[derive(Serialize)]
 pub struct PresenceView {
     pub user_id: i32,
     pub online: bool,
     pub last_seen: Option<String>,
+    pub status: String,
+}
+
+/// Whitelist a client-supplied status; anything unknown falls back to active so
+/// a bad value can never land in the DB (also enforced by the CHECK constraint).
+fn normalize_status(raw: &str) -> &'static str {
+    match raw {
+        "dnd" => "dnd",
+        "away" => "away",
+        _ => "active",
+    }
 }
 
 /// Marks the user online and announces it to their contacts, but only on a real
@@ -164,6 +176,37 @@ pub struct PresenceQuery {
     pub ids: String,
 }
 
+#[derive(Deserialize)]
+pub struct SetStatusInput {
+    /// One of `active` | `dnd` | `away`; anything else is coerced to `active`.
+    pub status: String,
+}
+
+/// `PUT /api/chat/presence/status` — set the caller's own chat status and push
+/// the change to their contacts so their dot re-tints live.
+#[instrument(target = "http", skip(req, pool, cache, body))]
+pub async fn set_status(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    cache: web::Data<Option<Cache>>,
+    body: web::Json<SetStatusInput>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let status = normalize_status(&body.status);
+
+    sqlx::query("UPDATE users SET chat_status = $1 WHERE id = $2")
+        .bind(status)
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
+
+    // Setting a status implies the user is online (they have an open client), so
+    // broadcast an online frame carrying the fresh status.
+    broadcast_presence(pool.get_ref(), cache.get_ref(), user_id, true).await;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "status": status })))
+}
+
 /// `online` comes from Redis freshness, or the local registry without Redis;
 /// `last_seen` comes from the DB.
 pub async fn snapshot(cache: &Option<Cache>, pool: &PgPool, ids: &[i32]) -> Vec<PresenceView> {
@@ -171,19 +214,29 @@ pub async fn snapshot(cache: &Option<Cache>, pool: &PgPool, ids: &[i32]) -> Vec<
         return Vec::new();
     }
 
-    let last_seen: std::collections::HashMap<i32, String> =
-        sqlx::query_as::<_, (i32, Option<chrono::DateTime<chrono::Utc>>)>(
-            "SELECT id, last_seen FROM users WHERE id = ANY($1)",
-        )
-        .bind(ids)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_else(|e| {
-            warn!(target: "ws", error = ?e, "presence last_seen lookup failed");
-            Vec::new()
-        })
+    let rows = sqlx::query_as::<_, (i32, Option<chrono::DateTime<chrono::Utc>>, Option<String>)>(
+        "SELECT id, last_seen, chat_status FROM users WHERE id = ANY($1)",
+    )
+    .bind(ids)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_else(|e| {
+        warn!(target: "ws", error = ?e, "presence lookup failed");
+        Vec::new()
+    });
+
+    let last_seen: std::collections::HashMap<i32, String> = rows
+        .iter()
+        .filter_map(|(id, ts, _)| ts.map(|t| (*id, t.to_rfc3339())))
+        .collect();
+    let status_by_id: std::collections::HashMap<i32, String> = rows
         .into_iter()
-        .filter_map(|(id, ts)| ts.map(|t| (id, t.to_rfc3339())))
+        .map(|(id, _, s)| {
+            (
+                id,
+                normalize_status(s.as_deref().unwrap_or("active")).to_string(),
+            )
+        })
         .collect();
 
     let now = now_ts();
@@ -200,6 +253,10 @@ pub async fn snapshot(cache: &Option<Cache>, pool: &PgPool, ids: &[i32]) -> Vec<
             user_id: id,
             online,
             last_seen: last_seen.get(&id).cloned(),
+            status: status_by_id
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(|| "active".to_string()),
         });
     }
     views
@@ -216,6 +273,18 @@ async fn persist_last_seen(pool: &PgPool, user_id: i32) {
     }
 }
 
+/// The user's chosen status, defaulting to active on any read failure.
+async fn fetch_status(pool: &PgPool, user_id: i32) -> String {
+    sqlx::query_scalar::<_, String>("SELECT chat_status FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|s| normalize_status(&s).to_string())
+        .unwrap_or_else(|| "active".to_string())
+}
+
 /// Push a presence change to the user's contacts over the per-user fan-out.
 async fn broadcast_presence(pool: &PgPool, cache: &Option<Cache>, user_id: i32, online: bool) {
     let contacts = contacts_of(pool, user_id).await;
@@ -223,11 +292,13 @@ async fn broadcast_presence(pool: &PgPool, cache: &Option<Cache>, user_id: i32, 
         return;
     }
 
+    let status = fetch_status(pool, user_id).await;
     let payload = serde_json::json!({
         "type": "presence",
         "user_id": user_id,
         "online": online,
         "last_seen": chrono::Utc::now().to_rfc3339(),
+        "status": status,
     })
     .to_string();
 

@@ -32,6 +32,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         web::get().to(handler::get_conversation_summary),
     )
     .route("/chat/presence", web::get().to(presence::get_presence))
+    .route("/chat/presence/status", web::put().to(presence::set_status))
     .service(handler::get_channels)
     .service(handler::create_channel)
     .service(handler::update_channel_subject)

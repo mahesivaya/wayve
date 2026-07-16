@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getPresence } from "../../api/chat";
+import { getPresence, type ChatStatus } from "../../api/chat";
 import { logger } from "../../utils/logger";
 
 export type PresenceInfo = {
   online: boolean;
   // RFC3339, or null if the user has never held a chat socket.
   lastSeen: string | null;
+  // Manually chosen status; tints the dot when online.
+  status: ChatStatus;
 };
 
 export type PresenceMap = ReadonlyMap<number, PresenceInfo>;
@@ -35,7 +37,11 @@ export function usePresence(userIds: number[]) {
       setPresence(() => {
         const next = new Map<number, PresenceInfo>();
         for (const e of entries) {
-          next.set(e.user_id, { online: e.online, lastSeen: e.last_seen });
+          next.set(e.user_id, {
+            online: e.online,
+            lastSeen: e.last_seen,
+            status: e.status ?? "active",
+          });
         }
         return next;
       });
@@ -51,10 +57,15 @@ export function usePresence(userIds: number[]) {
   }, [refresh]);
 
   const applyPresenceEvent = useCallback(
-    (userId: number, online: boolean, lastSeen: string | null) => {
+    (
+      userId: number,
+      online: boolean,
+      lastSeen: string | null,
+      status: ChatStatus = "active"
+    ) => {
       setPresence((prev) => {
         const next = new Map(prev);
-        next.set(userId, { online, lastSeen });
+        next.set(userId, { online, lastSeen, status });
         return next;
       });
     },

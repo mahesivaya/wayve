@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { ChatMessage, ReactionGroup } from "../../api/chat";
+import type { ChatMessage, ChatStatus, ReactionGroup } from "../../api/chat";
 import { getWsBase } from "../../config/env";
 import { logger } from "../../utils/logger";
 import type { Conversation } from "../types";
@@ -23,7 +23,8 @@ export function useChatSocket(
   onPresence?: (
     userId: number,
     online: boolean,
-    lastSeen: string | null
+    lastSeen: string | null,
+    status: ChatStatus
   ) => void,
   // Carries the message's full reaction set, not a delta, so a client that missed
   // a frame still converges.
@@ -110,10 +111,15 @@ export function useChatSocket(
         if (msg.type?.startsWith("email:")) return;
         if (msg.type === "presence") {
           if (typeof msg.user_id === "number") {
+            // `status` is presence-specific and collides with ChatMessage's
+            // own delivery `status`, so read it off a narrow local cast.
+            const presenceStatus =
+              (msg as unknown as { status?: ChatStatus }).status ?? "active";
             onPresenceRef.current?.(
               msg.user_id,
               !!msg.online,
-              msg.last_seen ?? null
+              msg.last_seen ?? null,
+              presenceStatus
             );
           }
           return;
