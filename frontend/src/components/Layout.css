@@ -1210,7 +1210,8 @@
   position: relative;
 }
 
-.split-pane.active-target::after {
+.split-pane.active-target::after,
+.pane-half.active-target::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1305,6 +1306,40 @@
   background: var(--color-primary-action);
 }
 
+/* Horizontal variant for a pane's internal top/bottom sub-split: a full-width,
+   10px-tall hit area with the divider line and grip rotated to run left↔right. */
+.split-resize-handle--horizontal {
+  margin: -4px 0;
+  cursor: row-resize;
+}
+
+.split-resize-handle--horizontal::after {
+  top: 50%;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  width: auto;
+  height: 2px;
+}
+
+.split-resize-handle--horizontal::before {
+  width: 36px;
+  height: 4px;
+}
+
+.split-resize-handle--horizontal:hover::after,
+.split-resize-handle--horizontal:active::after {
+  width: auto;
+  height: 3px;
+}
+
+.split-resize-handle--horizontal:hover::before,
+.split-resize-handle--horizontal:active::before {
+  width: 52px;
+  height: 4px;
+}
+
 /* Body holds the rendered app — it must fill so the embedded page (Emails,
    Chat, Scheduler) gets `100%` height/width to lay out into. */
 .split-pane-body {
@@ -1319,6 +1354,27 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
+}
+
+/* A pane split into two stacked halves (its own vertical sub-split). */
+.split-pane-body--stacked {
+  flex-direction: column;
+}
+
+/* The internal divider must stay a fixed 10px band, not flex-grow like a half. */
+.split-pane-body--stacked > .split-resize-handle {
+  flex: 0 0 10px;
+}
+
+/* Each sub-split half is a mini-pane: its own toolbar stacked over its body.
+   position:relative anchors the .active-target focus outline. */
+.pane-half {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* Right-pane tab bar. Keeps the split/tab close control outside the embedded
@@ -1367,6 +1423,53 @@
   background: var(--color-danger-soft);
   border-color: var(--color-danger-border);
   color: var(--color-danger-hover);
+}
+
+/* Split-pane toolbar controls: the per-pane split toggle + close button. */
+.split-pane-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Per-pane vertical-split toggle (framed-pane icon button). */
+.split-menu-btn {
+  height: 32px;
+  width: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgb(0, 0, 0, 0.05);
+  transition: 0.15s;
+}
+
+.split-menu-btn:hover {
+  border-color: var(--color-primary-action);
+  color: var(--color-text-primary);
+}
+
+/* Active = this pane is currently sub-split. */
+.split-menu-btn.active {
+  background: var(--color-accent-indigo-mist);
+  border-color: var(--color-admin-badge-ring);
+  color: var(--color-accent-indigo-deep);
+}
+
+.split-menu-btn svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Empty placeholder shown until the user picks an app from the top nav. */
