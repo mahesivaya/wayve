@@ -59,6 +59,8 @@ pub const API_SCOPES: &[&str] = &[
     "drive:write",
     "notes:read",
     "notes:write",
+    "reminders:read",
+    "reminders:write",
     "tasks:read",
     "tasks:write",
     "ai:use",
@@ -131,6 +133,13 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
                 "notes:read"
             } else {
                 "notes:write"
+            }
+        }
+        "reminders" => {
+            if is_read {
+                "reminders:read"
+            } else {
+                "reminders:write"
             }
         }
         "tasks" => {

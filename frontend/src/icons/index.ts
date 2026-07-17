@@ -45,6 +45,7 @@ export {
   KeyRound as ApiKeysIcon,
   // Generic / actions
   Bell as BellIcon,
+  AlarmClock as ReminderIcon,
   Reply as ReplyIcon,
   Forward as ForwardIcon,
   Trash2 as TrashIcon,

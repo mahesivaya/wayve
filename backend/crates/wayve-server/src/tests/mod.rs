@@ -30,6 +30,7 @@ mod repo_access_test;
 mod rls_chat_test;
 mod rls_emails_test;
 mod rls_notes_test;
+mod rls_reminders_test;
 mod scheduler_create_meeting_validation_test;
 mod scheduler_jwt_test;
 mod scheduler_mail_delivery_test;

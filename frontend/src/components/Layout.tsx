@@ -17,7 +17,7 @@ import {
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
-import MeetingReminders from "./MeetingReminders";
+import ReminderPopups from "./ReminderPopups";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
 import NotificationBell from "./NotificationBell";
@@ -1345,7 +1345,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   return (
     <SplitControlContext.Provider value={splitControl}>
       <div className="app">
-        <MeetingReminders />
+        <ReminderPopups />
         <SearchProvider>
           <div className="header">
             <div

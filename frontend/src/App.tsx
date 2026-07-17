@@ -40,6 +40,7 @@ const DomainVerification = lazy(
 );
 const ComingSoon = lazy(() => import("./components/ComingSoon"));
 const NotFound = lazy(() => import("./components/NotFound"));
+const Reminders = lazy(() => import("./reminders/Reminders"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
 const Integrations = lazy(() => import("./integrations/Integrations"));
@@ -300,6 +301,7 @@ export default function App() {
                 path="/email-files"
                 element={<Navigate to="/emails/attachments" replace />}
               />
+              <Route path="/reminders" element={<Reminders />} />
               <Route path="/call" element={<Call />} />
               <Route path="/documents" element={<Documents />} />
               <Route path="/teams/:slug" element={<TeamPage />} />

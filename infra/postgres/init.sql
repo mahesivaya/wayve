@@ -1019,6 +1019,19 @@ ALTER TABLE notes ADD COLUMN IF NOT EXISTS title_iv TEXT;
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS content_encrypted TEXT;
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS content_iv TEXT;
 
+-- Reminders (personal, time-based). Distinct from meetings/tasks: a standalone
+-- "remind me at" entry that the client pops a minute before `remind_at`.
+CREATE TABLE IF NOT EXISTS reminders (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    notes TEXT,
+    remind_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_user_time ON reminders(user_id, remind_at);
+
 -- Tasks (personal to-do items). Priority is 1-5, 5 = Highest.
 CREATE TABLE IF NOT EXISTS tasks (
     id SERIAL PRIMARY KEY,
@@ -2206,6 +2219,7 @@ DECLARE
         ['tasks','user_id'], ['task_attachments','user_id'],
         ['drive_files','user_id'], ['folders','user_id'],
         ['meetings','user_id'], ['secure_messages','sender_user_id'],
+        ['reminders','user_id'],
         ['user_jira_connections','user_id'], ['user_gitlab_connections','user_id']
     ];
 BEGIN

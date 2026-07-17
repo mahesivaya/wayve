@@ -35,6 +35,7 @@ mod platform_team;
 mod platform_ui;
 mod prelude;
 mod rbac_cache;
+mod reminders;
 mod repo_access;
 mod routes;
 mod routing;
