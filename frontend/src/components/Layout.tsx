@@ -672,7 +672,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const leftApp =
     SPLIT_APPS.find((a) => a.key === appKeyFromPath(location.pathname)) ?? null;
   const leftLabel = leftApp?.label ?? "Home";
-  const splitOpen = Boolean(middleView || rightView);
+  // A horizontal split (a second side-by-side pane) …
+  const hasSecondPane = Boolean(middleView || rightView);
+  // … or a lone left pane that's been vertically sub-split both count as "split
+  // open": the left pane then renders its toolbar/halves instead of a plain page.
+  const splitOpen = hasSecondPane || subSplit.left;
 
   // Home fills any newly opened split pane (header split + sub-split's new half)
   // instead of duplicating the current app.
@@ -686,15 +690,21 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   }
 
   function closeLeftPane() {
+    const fromKey: PaneKey = rightApp ? "right" : "center";
     const nextApp = rightApp ?? middleApp;
     if (!nextApp) return;
     void navigate(nextApp.path);
+    // Promote the surviving pane — including its vertical sub-split (bottom app
+    // + ratio) — into the left/main pane, so closing the left pane keeps that
+    // pane exactly as it was.
+    setSubSplit((s) => ({ ...s, left: s[fromKey], [fromKey]: false }));
+    setSubBottomView((v) => ({ ...v, left: v[fromKey] }));
+    setSubTop((t) => ({ ...t, left: t[fromKey] }));
     setRightView(null);
-    if (middleView === nextApp.key) {
+    if (fromKey === "center" || middleView === nextApp.key) {
       setMiddleView(null);
     }
     focusPane("left");
-    setSubSplit((s) => ({ ...s, left: false }));
   }
 
   // Closes ONE half of a pane's sub-split, keeping the other as the full pane —
@@ -1676,7 +1686,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 )}
               </div>
 
-              {splitOpen && (
+              {hasSecondPane && (
                 <div
                   className="split-resize-handle"
                   role="separator"
