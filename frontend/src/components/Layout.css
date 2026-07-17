@@ -903,6 +903,14 @@
   padding-top: 8px;
 }
 
+/* Admin-mode row sits directly above the profile control at the sidebar
+   bottom. No top border — the profile section below owns the divider — so the
+   two stacked bottom sections read as one cluster. */
+.sidebar-admin-mode {
+  display: flex;
+  padding: 4px 0;
+}
+
 /* Shared base for navigable sidebar rows — both the top-level `.sidebar-link`
    and the Workspace sub-item `.sidebar-project-label` (they differ only in
    layout: flex+icon vs block+ellipsis, set below). */

@@ -1039,11 +1039,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   const headerActions = (
     <>
-      {user.mode === "admin" && user.can_switch_admin && (
-        <span className="admin-mode-badge" title="You are in admin mode">
-          🛡️ Admin mode
-        </span>
-      )}
       {/* The desktop shell surfaces Upgrade on the Settings page instead. */}
       {!desktop && isBasicPersonalUser && (
         <button
@@ -1306,6 +1301,19 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {sectionDefs.map(renderSection)}
 
               <div className="sidebar-spacer" />
+
+              {/* Admin-mode indicator, pinned just above the profile control at
+              the sidebar bottom (moved here from the header). */}
+              {user.mode === "admin" && user.can_switch_admin && (
+                <div className="sidebar-section sidebar-admin-mode">
+                  <span
+                    className="admin-mode-badge"
+                    title="You are in admin mode"
+                  >
+                    🛡️ Admin mode
+                  </span>
+                </div>
+              )}
 
               {/* Sits below the flex spacer so it stays pinned to the bottom
               regardless of how many nav groups render above it. */}
