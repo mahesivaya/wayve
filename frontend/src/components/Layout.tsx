@@ -733,11 +733,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         <div
           className={`pane-half ${focused ? "active-target" : ""}`.trim()}
           style={{ flexGrow: grow }}
-          onMouseDown={(e) => {
-            // Beat the pane div's own focus handler so the half sticks.
-            e.stopPropagation();
-            focusPane(key, whichHalf);
-          }}
+          onMouseDown={() => focusPane(key, whichHalf)}
         >
           <div className="split-pane-toolbar">
             <span className="split-pane-title">{title}</span>
@@ -1621,7 +1617,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             <div className={`content`} ref={contentRef}>
               <div
                 className={`split-pane left ${splitOpen && splitTarget === "left" && !subSplit.left ? "active-target" : ""}`}
-                onMouseDown={() => focusPane("left")}
+                onMouseDown={() => {
+                  // When sub-split, the half's own handler owns focus; don't
+                  // let the pane div override it back to the top half.
+                  if (!subSplit.left) focusPane("left");
+                }}
                 style={splitOpen ? { flexGrow: paneWeights.left } : undefined}
               >
                 {splitOpen ? (
@@ -1672,7 +1672,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {middleView && (
                 <div
                   className={`split-pane center ${splitTarget === "center" && !subSplit.center ? "active-target" : ""}`}
-                  onMouseDown={() => focusPane("center")}
+                  onMouseDown={() => {
+                    if (!subSplit.center) focusPane("center");
+                  }}
                   style={{ flexGrow: paneWeights.center }}
                 >
                   {!subSplit.center && (
@@ -1716,7 +1718,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {rightView && (
                 <div
                   className={`split-pane right ${splitTarget === "right" && !subSplit.right ? "active-target" : ""}`}
-                  onMouseDown={() => focusPane("right")}
+                  onMouseDown={() => {
+                    if (!subSplit.right) focusPane("right");
+                  }}
                   style={{ flexGrow: paneWeights.right }}
                 >
                   {!subSplit.right && (
