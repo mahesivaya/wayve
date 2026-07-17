@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.6.0](https://github.com/mahesivaya/wayve/releases/tag/v7.6.0) - 2026-07-17
+
+### 🚀 Features
+
+- **tasks:** Compact Linear-style create/edit task form
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v7.5.0 [skip ci]
+
 ## [7.5.0](https://github.com/mahesivaya/wayve/releases/tag/v7.5.0) - 2026-07-17
 
 ### 🚀 Features
