@@ -3,6 +3,19 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.5.0](https://github.com/mahesivaya/wayve/releases/tag/v7.5.0) - 2026-07-17
+
+### 🚀 Features
+
+- **chat:** Show the header search on /chat, ahead of the notification bell
+- **chat:** Remove Messages search box and render presence picker as inline "Status:" dropdown
+- **chat:** Manual presence status (Active / Do Not Disturb / Away)
+
+### 🧹 Maintenance
+
+- **scm:** Add Sapling and Jujutsu references; recommend Sapling extension
+- **changelog:** Update for v7.4.0 [skip ci]
+
 ## [7.4.0](https://github.com/mahesivaya/wayve/releases/tag/v7.4.0) - 2026-07-16
 
 ### 🚀 Features
