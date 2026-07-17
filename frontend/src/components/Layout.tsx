@@ -140,28 +140,39 @@ function isValidAppKey(value: unknown): value is AppKey {
   return typeof value === "string" && SPLIT_APPS.some((a) => a.key === value);
 }
 
+// Which pane a sidebar click targets — the pane the user last clicked in.
+type PaneFocus = "left" | "center" | "right";
+
+const asPaneFocus = (v: unknown): PaneFocus =>
+  v === "center" || v === "right" ? v : "left";
+
 type PersistedSplit = {
   middleView: AppKey | null;
   rightView: AppKey | null;
-  splitTarget: "left" | "right";
+  splitTarget: PaneFocus;
 };
 
 function loadPersistedSplit(): PersistedSplit {
+  const empty: PersistedSplit = {
+    middleView: null,
+    rightView: null,
+    splitTarget: "left",
+  };
   try {
     const raw = localStorage.getItem(SPLIT_STORAGE_KEY);
-    if (!raw) return { middleView: null, rightView: null, splitTarget: "left" };
+    if (!raw) return empty;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") {
-      return { middleView: null, rightView: null, splitTarget: "left" };
+      return empty;
     }
     const obj = parsed as Record<string, unknown>;
     return {
       middleView: isValidAppKey(obj.middleView) ? obj.middleView : null,
       rightView: isValidAppKey(obj.rightView) ? obj.rightView : null,
-      splitTarget: obj.splitTarget === "right" ? "right" : "left",
+      splitTarget: asPaneFocus(obj.splitTarget),
     };
   } catch {
-    return { middleView: null, rightView: null, splitTarget: "left" };
+    return empty;
   }
 }
 
@@ -265,9 +276,20 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     () => loadPersistedSplit().rightView
   );
 
-  // Decides whether the next nav-link click navigates or retargets the pane.
-  const [splitTarget, setSplitTarget] = useState<"left" | "right">(
+  // The pane the user last clicked in — a sidebar click retargets it (loads the
+  // app into that pane only). `focusHalf` picks a sub-split half within it.
+  const [splitTarget, setSplitTarget] = useState<PaneFocus>(
     () => loadPersistedSplit().splitTarget
+  );
+  const [focusHalf, setFocusHalf] = useState<"top" | "bottom">("top");
+
+  // Focus a pane (and optionally one of its sub-split halves) in a single click.
+  const focusPane = useCallback(
+    (pane: PaneFocus, half: "top" | "bottom" = "top") => {
+      setSplitTarget(pane);
+      setFocusHalf(half);
+    },
+    []
   );
 
   // One-shot focus hand-off for a programmatically-opened pane app (e.g. a chat
@@ -277,12 +299,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const openApp = useCallback((app: AppKey, opts?: { taskId?: number }) => {
     setRightView(app);
     setSplitTarget("right");
+    setFocusHalf("top");
     setPaneTarget({ app, taskId: opts?.taskId });
   }, []);
 
   const closeApp = useCallback(() => {
     setRightView(null);
     setSplitTarget("left");
+    setFocusHalf("top");
     setPaneTarget(null);
   }, []);
 
@@ -504,6 +528,39 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     center: 0.5,
     right: 0.5,
   });
+
+  // Which app each pane's bottom (new) half shows. Defaults to Home; a sidebar
+  // click while a bottom half is focused retargets it here.
+  const SUB_BOTTOM_STORAGE_KEY = "rwayve.layout.subBottom";
+  const [subBottomView, setSubBottomView] = useState<Record<PaneKey, AppKey>>(
+    () => {
+      try {
+        const raw = localStorage.getItem(SUB_BOTTOM_STORAGE_KEY);
+        if (raw) {
+          const o = JSON.parse(raw) as Record<string, unknown>;
+          const pick = (v: unknown): AppKey => (isValidAppKey(v) ? v : "home");
+          return {
+            left: pick(o.left),
+            center: pick(o.center),
+            right: pick(o.right),
+          };
+        }
+      } catch {
+        // ignore
+      }
+      return { left: "home", center: "home", right: "home" };
+    }
+  );
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        SUB_BOTTOM_STORAGE_KEY,
+        JSON.stringify(subBottomView)
+      );
+    } catch {
+      // ignore
+    }
+  }, [subBottomView]);
   const toggleSubSplit = (key: PaneKey) =>
     setSubSplit((s) => ({ ...s, [key]: !s[key] }));
 
@@ -620,7 +677,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   function openSplitPane() {
     setRightView("home");
-    setSplitTarget("right");
+    focusPane("right");
   }
 
   function closeLeftPane() {
@@ -631,15 +688,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     if (middleView === nextApp.key) {
       setMiddleView(null);
     }
-    setSplitTarget("left");
+    focusPane("left");
     setSubSplit((s) => ({ ...s, left: false }));
   }
 
   // Renders a pane's body. When the pane is sub-split it becomes two stacked
   // half-panes, each a mini-pane with its own toolbar (title + split toggle + ✕):
-  // the top half keeps the pane's app; the new (bottom) half shows Home. The ✕ or
-  // toggle on either half collapses the sub-split. When not split, the single app
-  // fills the body (the pane's own toolbar sits above, rendered separately).
+  // the top half keeps the pane's app; the new (bottom) half shows `subBottomView`
+  // (Home by default). Clicking a half focuses it, so a sidebar click retargets
+  // only that half. The ✕/toggle collapses the sub-split. When not split, the
+  // single app fills the body (the pane's own toolbar sits above, separately).
   const renderPaneBody = (key: PaneKey, label: string, node: ReactNode) => {
     const bodyOf = (content: ReactNode) => (
       <div className="split-pane-body">
@@ -654,28 +712,49 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       return bodyOf(node);
     }
     const removeSplit = () => setSubSplit((s) => ({ ...s, [key]: false }));
-    const half = (title: string, content: ReactNode, grow: number) => (
-      <div className="pane-half" style={{ flexGrow: grow }}>
-        <div className="split-pane-toolbar">
-          <span className="split-pane-title">{title}</span>
-          <div className="split-pane-tools">
-            <PaneSplitMenu active onToggle={removeSplit} />
-            <button
-              className="split-close-btn"
-              onClick={removeSplit}
-              title="Close split"
-              aria-label="Close split"
-            >
-              ✕
-            </button>
+    const bottomApp =
+      SPLIT_APPS.find((a) => a.key === subBottomView[key]) ?? homeApp;
+    const BottomComp = bottomApp?.Comp ?? HomeComp;
+    const bottomLabel = bottomApp?.label ?? homeLabel;
+
+    const half = (
+      whichHalf: "top" | "bottom",
+      title: string,
+      content: ReactNode,
+      grow: number
+    ) => {
+      const focused = splitTarget === key && focusHalf === whichHalf;
+      return (
+        <div
+          className={`pane-half ${focused ? "active-target" : ""}`.trim()}
+          style={{ flexGrow: grow }}
+          onMouseDown={(e) => {
+            // Beat the pane div's own focus handler so the half sticks.
+            e.stopPropagation();
+            focusPane(key, whichHalf);
+          }}
+        >
+          <div className="split-pane-toolbar">
+            <span className="split-pane-title">{title}</span>
+            <div className="split-pane-tools">
+              <PaneSplitMenu active onToggle={removeSplit} />
+              <button
+                className="split-close-btn"
+                onClick={removeSplit}
+                title="Close split"
+                aria-label="Close split"
+              >
+                ✕
+              </button>
+            </div>
           </div>
+          {bodyOf(content)}
         </div>
-        {bodyOf(content)}
-      </div>
-    );
+      );
+    };
     return (
       <div className="split-pane-body split-pane-body--stacked">
-        {half(label, node, subTop[key])}
+        {half("top", label, node, subTop[key])}
         <div
           className="split-resize-handle split-resize-handle--horizontal"
           role="separator"
@@ -683,13 +762,19 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           aria-label="Resize pane"
           onPointerDown={handleSubResize(key)}
         />
-        {half(homeLabel, HomeComp ? <HomeComp /> : node, 1 - subTop[key])}
+        {half(
+          "bottom",
+          bottomLabel,
+          BottomComp ? <BottomComp /> : node,
+          1 - subTop[key]
+        )}
       </div>
     );
   };
 
-  // With the split open, sidebar clicks retarget the right pane instead of
-  // navigating; when closed the link behaves normally.
+  // With the split open, a sidebar click loads the app into whichever pane (and
+  // sub-split half) the user last clicked — never the others. When closed, the
+  // link navigates normally.
   const renderSidebarItem = useCallback(
     (
       path: string,
@@ -714,10 +799,20 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           className={`sidebar-link ${isLeftActive ? "active" : ""} ${isMiddleActive || isRightActive ? "active-split" : ""}`.trim()}
           onClick={(e) => {
             setNavOpen(false);
-            if (splitTarget === "right") {
+            if (!splitOpen) return; // no split — navigate normally
+            // Route the click to the focused pane / half only.
+            if (focusHalf === "bottom" && subSplit[splitTarget]) {
+              e.preventDefault();
+              setSubBottomView((v) => ({ ...v, [splitTarget]: app }));
+            } else if (splitTarget === "center") {
+              e.preventDefault();
+              setMiddleView(app);
+            } else if (splitTarget === "right") {
               e.preventDefault();
               setRightView(app);
             }
+            // splitTarget === "left" (top): let the Link navigate, which changes
+            // the routed left pane.
           }}
         >
           <span className="sidebar-icon" aria-hidden="true">
@@ -732,7 +827,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </Link>
       );
     },
-    [location.pathname, middleView, rightView, splitTarget]
+    [
+      location.pathname,
+      middleView,
+      rightView,
+      splitTarget,
+      splitOpen,
+      focusHalf,
+      subSplit,
+    ]
   );
 
   const renderSidebarLink = (
@@ -968,7 +1071,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               }`}
               onClick={(e) => {
                 setNavOpen(false);
-                if (splitTarget === "right") {
+                if (!splitOpen) return;
+                if (focusHalf === "bottom" && subSplit[splitTarget]) {
+                  e.preventDefault();
+                  setSubBottomView((v) => ({ ...v, [splitTarget]: "github" }));
+                } else if (splitTarget === "center") {
+                  e.preventDefault();
+                  setMiddleView("github");
+                } else if (splitTarget === "right") {
                   e.preventDefault();
                   setRightView("github");
                 }
@@ -1505,8 +1615,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
             <div className={`content`} ref={contentRef}>
               <div
-                className={`split-pane left ${splitOpen && splitTarget === "left" ? "active-target" : ""}`}
-                onMouseDown={() => setSplitTarget("left")}
+                className={`split-pane left ${splitOpen && splitTarget === "left" && !subSplit.left ? "active-target" : ""}`}
+                onMouseDown={() => focusPane("left")}
                 style={splitOpen ? { flexGrow: paneWeights.left } : undefined}
               >
                 {splitOpen ? (
@@ -1556,7 +1666,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
               {middleView && (
                 <div
-                  className="split-pane center"
+                  className={`split-pane center ${splitTarget === "center" && !subSplit.center ? "active-target" : ""}`}
+                  onMouseDown={() => focusPane("center")}
                   style={{ flexGrow: paneWeights.center }}
                 >
                   {!subSplit.center && (
@@ -1599,8 +1710,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
               {rightView && (
                 <div
-                  className={`split-pane right ${splitTarget === "right" ? "active-target" : ""}`}
-                  onMouseDown={() => setSplitTarget("right")}
+                  className={`split-pane right ${splitTarget === "right" && !subSplit.right ? "active-target" : ""}`}
+                  onMouseDown={() => focusPane("right")}
                   style={{ flexGrow: paneWeights.right }}
                 >
                   {!subSplit.right && (

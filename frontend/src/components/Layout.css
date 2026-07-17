@@ -1210,7 +1210,8 @@
   position: relative;
 }
 
-.split-pane.active-target::after {
+.split-pane.active-target::after,
+.pane-half.active-target::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1365,8 +1366,10 @@
   flex: 0 0 10px;
 }
 
-/* Each sub-split half is a mini-pane: its own toolbar stacked over its body. */
+/* Each sub-split half is a mini-pane: its own toolbar stacked over its body.
+   position:relative anchors the .active-target focus outline. */
 .pane-half {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
