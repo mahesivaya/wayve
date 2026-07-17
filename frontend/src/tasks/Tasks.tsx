@@ -91,123 +91,120 @@ const STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
   { value: "done", label: "Done" },
 ];
 
-// A free-text input backed by a live-filtered dropdown of org/platform users.
-// A hand-typed value is still accepted, so this degrades to a plain input when
-// the user list is empty or failed to load.
-function UserAutocomplete({
-  id,
-  value,
-  onChange,
+// Linear-style assignee dropdown: the list of assignable users shows
+// immediately, with a "No assignee" row on top and a checkmark on the current
+// selection. A slim filter input appears only for larger teams. Extra footer
+// content (the code-history suggestions) renders below the list.
+function AssigneeMenu({
   users,
-  placeholder,
+  selectedEmail,
+  onSelect,
+  onClose,
+  children,
 }: {
-  id?: string;
-  value: string;
-  onChange: (next: string) => void;
   users: AssignableUser[];
-  placeholder?: string;
+  selectedEmail: string;
+  /** `null` selects "No assignee". */
+  onSelect: (user: AssignableUser | null) => void;
+  onClose: () => void;
+  children?: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(-1);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-
-  const query = value.trim().toLowerCase();
-  const matches = useMemo(() => {
-    const list = query
-      ? users.filter(
-          (u) =>
-            u.email.toLowerCase().includes(query) ||
-            (u.username ?? "").toLowerCase().includes(query)
-        )
-      : users;
-    return list.slice(0, 8);
-  }, [users, query]);
-
-  useEffect(() => {
-    const onDocPointer = (event: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDocPointer);
-    return () => document.removeEventListener("mousedown", onDocPointer);
-  }, []);
-
-  const select = (u: AssignableUser) => {
-    onChange(u.email);
-    setOpen(false);
-    setActiveIdx(-1);
-  };
-
-  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-      setOpen(true);
-      return;
-    }
-    if (matches.length === 0) return;
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveIdx((i) => (i + 1) % matches.length);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveIdx((i) => (i <= 0 ? matches.length - 1 : i - 1));
-    } else if (event.key === "Enter" && activeIdx >= 0) {
-      event.preventDefault();
-      select(matches[activeIdx]);
-    } else if (event.key === "Escape") {
-      setOpen(false);
-    }
-  };
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const matches = q
+    ? users.filter(
+        (u) =>
+          u.email.toLowerCase().includes(q) ||
+          (u.username ?? "").toLowerCase().includes(q)
+      )
+    : users;
+  const selected = selectedEmail.trim().toLowerCase();
 
   return (
-    <div className="task-assignee" ref={wrapRef}>
-      <input
-        id={id}
-        value={value}
-        placeholder={placeholder}
-        autoComplete="off"
-        role="combobox"
-        aria-expanded={open}
-        aria-autocomplete="list"
-        onChange={(event) => {
-          onChange(event.target.value);
-          setOpen(true);
-          setActiveIdx(-1);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-      />
-      {open && matches.length > 0 && (
-        <ul className="task-assignee-menu" role="listbox">
-          {matches.map((u, i) => (
-            <li
-              key={u.user_id}
-              role="option"
-              aria-selected={i === activeIdx}
-              className={`task-assignee-option${i === activeIdx ? " active" : ""}`}
-              onMouseDown={(event) => {
-                // mousedown, not click, so this beats the input's blur/outside
-                // handler and the selection still registers.
-                event.preventDefault();
-                select(u);
-              }}
-              onMouseEnter={() => setActiveIdx(i)}
-            >
-              <Avatar
-                name={u.username || u.email}
-                src={`${getApiBase()}/api/users/${u.user_id}/avatar`}
-                size={28}
-              />
-              <span className="task-assignee-text">
-                <span className="task-assignee-email">{u.email}</span>
-                {u.username && (
-                  <span className="task-assignee-username">{u.username}</span>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
+    <div
+      className="task-assignee-pop"
+      role="dialog"
+      aria-label="Choose assignee"
+    >
+      {users.length > 6 && (
+        <input
+          className="task-assignee-filter"
+          value={query}
+          placeholder="Search team…"
+          autoComplete="off"
+          autoFocus
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              // Close only the menu — the modal's own ESC handler listens on
+              // window, so stop the event from reaching it.
+              event.stopPropagation();
+              onClose();
+            } else if (event.key === "Enter") {
+              event.preventDefault();
+              if (matches.length > 0) onSelect(matches[0]);
+            }
+          }}
+        />
       )}
+      <ul className="task-assignee-options" role="listbox">
+        <li>
+          <button
+            type="button"
+            role="option"
+            aria-selected={selected === ""}
+            className="task-assignee-row"
+            onClick={() => onSelect(null)}
+          >
+            <svg
+              className="task-assignee-row-icon"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+            >
+              <circle cx="8" cy="5.5" r="2.8" />
+              <path d="M2.5 14c.8-2.8 3-4.2 5.5-4.2s4.7 1.4 5.5 4.2" />
+            </svg>
+            <span className="task-assignee-row-name">No assignee</span>
+            {selected === "" && (
+              <span className="task-assignee-check" aria-hidden="true">
+                ✓
+              </span>
+            )}
+          </button>
+        </li>
+        {matches.map((u) => {
+          const isSelected = u.email.toLowerCase() === selected;
+          return (
+            <li key={u.user_id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                className="task-assignee-row"
+                onClick={() => onSelect(u)}
+              >
+                <Avatar
+                  name={u.username || u.email}
+                  src={`${getApiBase()}/api/users/${u.user_id}/avatar`}
+                  size={22}
+                />
+                <span className="task-assignee-row-name">
+                  {u.username || u.email}
+                </span>
+                {isSelected && (
+                  <span className="task-assignee-check" aria-hidden="true">
+                    ✓
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+        {matches.length === 0 && (
+          <li className="task-assignee-empty">No matching teammates</li>
+        )}
+      </ul>
+      {children}
     </div>
   );
 }
@@ -408,8 +405,33 @@ export default function Tasks() {
   >([]);
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // The compact form folds assignee picking (autocomplete + code-history
+  // suggestions) into a popover behind an "Assignee" pill.
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
+  const assigneePickerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!assigneePickerOpen) return;
+    const onDocPointer = (event: MouseEvent) => {
+      if (
+        assigneePickerRef.current &&
+        !assigneePickerRef.current.contains(event.target as Node)
+      ) {
+        setAssigneePickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocPointer);
+    return () => document.removeEventListener("mousedown", onDocPointer);
+  }, [assigneePickerOpen]);
 
   const isEditing = editingId !== null;
+
+  // The assignee pill shows the picked teammate's name + avatar when the
+  // stored email matches an assignable user, else the raw stored value.
+  const assigneeUser =
+    assignableUsers.find(
+      (u) => u.email.toLowerCase() === assignee.trim().toLowerCase()
+    ) ?? null;
 
   const loadTasks = useCallback(async () => {
     setLoadError("");
@@ -533,6 +555,7 @@ export default function Tasks() {
     setError("");
     setPendingAttachments([]);
     setExistingAttachments([]);
+    setAssigneePickerOpen(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -1100,23 +1123,38 @@ export default function Tasks() {
           onClose={closeForm}
           title={isEditing ? "Edit Task" : "Create Task"}
         >
-          <form
-            className="task-create-form task-create-form--modal"
-            onSubmit={saveTask}
-          >
-            {!isEditing && (
-              <p className="task-form-required-hint">
-                Required fields are marked with an asterisk{" "}
-                <span className="task-form-required-mark">*</span>
-              </p>
-            )}
+          <form className="task-compose" onSubmit={saveTask}>
+            <input
+              className="task-compose-title"
+              value={taskName}
+              onChange={(event) => setTaskName(event.target.value)}
+              placeholder="Task title"
+              aria-label="Task title"
+              autoFocus
+              required
+            />
 
-            <div className="task-form-grid">
-              <label className="task-form-field">
-                <span className="task-form-label">Status</span>
+            <textarea
+              className="task-compose-desc"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Add description…"
+              aria-label="Task description"
+            />
+
+            <div className="task-compose-pills">
+              <label
+                className="task-pill"
+                title={isEditing ? "Status" : "Initial status upon creation"}
+              >
+                <span
+                  className={`task-pill-dot task-pill-dot--${status}`}
+                  aria-hidden="true"
+                />
                 <select
-                  className="task-form-select"
+                  className="task-pill-select"
                   value={status}
+                  aria-label="Status"
                   onChange={(event) =>
                     setStatus(event.target.value as TaskStatus)
                   }
@@ -1127,18 +1165,50 @@ export default function Tasks() {
                     </option>
                   ))}
                 </select>
-                {!isEditing && (
-                  <span className="task-form-hint">
-                    This is the initial status upon creation
-                  </span>
-                )}
               </label>
 
-              <label className="task-form-field">
-                <span className="task-form-label">Project</span>
+              <label className="task-pill" title="Priority">
+                <svg
+                  className="task-pill-icon"
+                  viewBox="0 0 16 16"
+                  aria-hidden="true"
+                >
+                  <rect x="1.5" y="9" width="3" height="5.5" rx="1" />
+                  <rect x="6.5" y="5.5" width="3" height="9" rx="1" />
+                  <rect x="11.5" y="2" width="3" height="12.5" rx="1" />
+                </svg>
                 <select
-                  className="task-form-select"
+                  className="task-pill-select"
+                  value={priority}
+                  aria-label="Priority"
+                  onChange={(event) =>
+                    setPriority(normalizePriority(event.target.value))
+                  }
+                >
+                  {PRIORITY_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {priorityLabel(value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label
+                className="task-pill"
+                title="Project — used to suggest assignees from its code history"
+              >
+                <svg
+                  className="task-pill-icon task-pill-icon--stroke"
+                  viewBox="0 0 16 16"
+                  aria-hidden="true"
+                >
+                  <path d="M8 1.5l5.5 3v7l-5.5 3-5.5-3v-7l5.5-3z" />
+                  <path d="M2.5 4.5L8 7.5l5.5-3M8 7.5v6.5" />
+                </svg>
+                <select
+                  className="task-pill-select"
                   value={projectId ?? ""}
+                  aria-label="Project"
                   onChange={(event) => {
                     setProjectId(
                       event.target.value ? Number(event.target.value) : null
@@ -1156,266 +1226,210 @@ export default function Tasks() {
                     </option>
                   ))}
                 </select>
-                <span className="task-form-hint">
-                  Pick the project so we can suggest assignees from its code
-                  history
-                </span>
               </label>
 
-              <label className="task-form-field">
-                <span className="task-form-label">
-                  Summary <span className="task-form-required-mark">*</span>
-                </span>
-                <input
-                  value={taskName}
-                  onChange={(event) => setTaskName(event.target.value)}
-                  placeholder="Enter task summary"
-                  autoFocus
-                  required
-                />
-              </label>
-
-              <label className="task-form-field">
-                <span className="task-form-label">Description</span>
-                <textarea
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder="Add task details"
-                />
-              </label>
-
-              {/* Assignment is a team feature, so only organization accounts see
-                  it. "Assigned by" is never shown, since a task is always
-                  attributed to its creator. */}
+              {/* Assignment is a team feature, so only organization accounts
+                    see it. "Assigned by" is never shown, since a task is
+                    always attributed to its creator. */}
               {!isPersonal && (
-                <>
-                  <div className="task-form-field">
-                    <label className="task-form-label" htmlFor="task-assignee">
-                      Assignee
-                    </label>
-                    <UserAutocomplete
-                      id="task-assignee"
-                      value={assignee}
-                      onChange={(value) => {
-                        setAssignee(value);
-                        const match = assignableUsers.find(
-                          (u) =>
-                            u.email.toLowerCase() === value.trim().toLowerCase()
-                        );
-                        setAssigneeId(match ? match.user_id : null);
-                      }}
-                      users={assignableUsers}
-                      placeholder="Search team by name or email"
-                    />
-                    {user?.email && (
-                      <span className="task-form-assign-me">
-                        <input
-                          type="checkbox"
-                          checked={
-                            assignee.trim().toLowerCase() ===
-                            user.email.toLowerCase()
-                          }
-                          onChange={(event) => {
-                            if (event.target.checked && user.email) {
-                              setAssignee(user.email);
-                              const match = assignableUsers.find(
-                                (u) =>
-                                  u.email.toLowerCase() ===
-                                  user.email.toLowerCase()
-                              );
-                              setAssigneeId(match ? match.user_id : null);
-                            } else {
-                              setAssignee("");
-                              setAssigneeId(null);
-                            }
-                          }}
-                        />
-                        Assign to me
-                      </span>
-                    )}
-                  </div>
-
-                  {projectId !== null && (
-                    <div className="task-suggest">
-                      <button
-                        type="button"
-                        className="task-suggest-btn"
-                        onClick={() => void loadSuggestions()}
-                        disabled={suggestLoading}
-                      >
-                        {suggestLoading
-                          ? "Finding people who worked here…"
-                          : "Suggest assignees from code history"}
-                      </button>
-                      {suggestions &&
-                        suggestions.length > 0 &&
-                        !suggestUsedAi && (
-                          <span className="task-suggest-hint">
-                            Matched by keyword (AI unavailable)
-                          </span>
-                        )}
-                      {suggestNote && (
-                        <p className="task-suggest-note">{suggestNote}</p>
-                      )}
-                      {suggestions && suggestions.length > 0 && (
-                        <ul className="task-suggest-list">
-                          {suggestions.map((s, i) => (
-                            <li
-                              key={`${s.github_login ?? s.display}-${i}`}
-                              className="task-suggest-item"
-                            >
-                              <button
-                                type="button"
-                                className="task-suggest-pick"
-                                onClick={() => pickSuggestion(s)}
-                              >
-                                <span className="task-suggest-name">
-                                  {s.display}
-                                  {s.is_reference_only && (
-                                    <span className="task-suggest-ref">
-                                      {" "}
-                                      · reference
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="task-suggest-reason">
-                                  {s.reason}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
-              <label className="task-form-field">
-                <span className="task-form-label">Priority</span>
-                <select
-                  className="task-form-select"
-                  value={priority}
-                  onChange={(event) =>
-                    setPriority(normalizePriority(event.target.value))
-                  }
-                >
-                  {PRIORITY_OPTIONS.map((value) => (
-                    <option key={value} value={value}>
-                      {priorityLabel(value)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="task-form-field task-form-field--attachments">
-                <span className="task-form-label">Attachments</span>
-                <div className="task-attachments-controls">
+                <div className="task-pill-wrap" ref={assigneePickerRef}>
                   <button
                     type="button"
-                    className="task-attachments-pick"
-                    onClick={() => fileInputRef.current?.click()}
+                    className="task-pill task-pill--button"
+                    onClick={() => setAssigneePickerOpen((open) => !open)}
+                    aria-expanded={assigneePickerOpen}
+                    aria-haspopup="dialog"
                   >
-                    + Add files
+                    {assigneeUser ? (
+                      <Avatar
+                        name={assigneeUser.username || assigneeUser.email}
+                        src={`${getApiBase()}/api/users/${assigneeUser.user_id}/avatar`}
+                        size={16}
+                      />
+                    ) : (
+                      <svg
+                        className="task-pill-icon task-pill-icon--stroke"
+                        viewBox="0 0 16 16"
+                        aria-hidden="true"
+                      >
+                        <circle cx="8" cy="5.5" r="2.8" />
+                        <path d="M2.5 14c.8-2.8 3-4.2 5.5-4.2s4.7 1.4 5.5 4.2" />
+                      </svg>
+                    )}
+                    <span className="task-pill-text">
+                      {assigneeUser?.username || assignee.trim() || "Assignee"}
+                    </span>
                   </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    className="task-attachments-input"
-                    onChange={onPickFiles}
-                  />
-                  <span className="task-form-hint">
-                    Files are uploaded when you save the task.
-                  </span>
+
+                  {assigneePickerOpen && (
+                    <AssigneeMenu
+                      users={assignableUsers}
+                      selectedEmail={assignee}
+                      onClose={() => setAssigneePickerOpen(false)}
+                      onSelect={(picked) => {
+                        setAssignee(picked ? picked.email : "");
+                        setAssigneeId(picked ? picked.user_id : null);
+                        setAssigneePickerOpen(false);
+                      }}
+                    >
+                      {projectId !== null && (
+                        <div className="task-suggest">
+                          <button
+                            type="button"
+                            className="task-suggest-btn"
+                            onClick={() => void loadSuggestions()}
+                            disabled={suggestLoading}
+                          >
+                            {suggestLoading
+                              ? "Finding people who worked here…"
+                              : "Suggest assignees from code history"}
+                          </button>
+                          {suggestions &&
+                            suggestions.length > 0 &&
+                            !suggestUsedAi && (
+                              <span className="task-suggest-hint">
+                                Matched by keyword (AI unavailable)
+                              </span>
+                            )}
+                          {suggestNote && (
+                            <p className="task-suggest-note">{suggestNote}</p>
+                          )}
+                          {suggestions && suggestions.length > 0 && (
+                            <ul className="task-suggest-list">
+                              {suggestions.map((s, i) => (
+                                <li
+                                  key={`${s.github_login ?? s.display}-${i}`}
+                                  className="task-suggest-item"
+                                >
+                                  <button
+                                    type="button"
+                                    className="task-suggest-pick"
+                                    onClick={() => pickSuggestion(s)}
+                                  >
+                                    <span className="task-suggest-name">
+                                      {s.display}
+                                      {s.is_reference_only && (
+                                        <span className="task-suggest-ref">
+                                          {" "}
+                                          · reference
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="task-suggest-reason">
+                                      {s.reason}
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </AssigneeMenu>
+                  )}
                 </div>
-
-                {isEditing && attachmentsLoading && (
-                  <div className="task-attachments-empty">
-                    Loading attachments…
-                  </div>
-                )}
-
-                {(existingAttachments.length > 0 ||
-                  pendingAttachments.length > 0) && (
-                  <ul className="task-attachments-list">
-                    {existingAttachments.map((att) => (
-                      <li
-                        key={`saved-${att.id}`}
-                        className="task-attachment-item"
-                      >
-                        <button
-                          type="button"
-                          className="task-attachment-name"
-                          onClick={() => void downloadExisting(att)}
-                          title="Download"
-                        >
-                          {att.name}
-                        </button>
-                        <span className="task-attachment-size">
-                          {formatBytes(att.size)}
-                        </span>
-                        <button
-                          type="button"
-                          className="task-attachment-remove"
-                          onClick={() => void removeExisting(att)}
-                          aria-label={`Remove ${att.name}`}
-                        >
-                          ×
-                        </button>
-                      </li>
-                    ))}
-                    {pendingAttachments.map((file, idx) => (
-                      <li
-                        key={`pending-${idx}-${file.name}`}
-                        className="task-attachment-item task-attachment-item--pending"
-                      >
-                        <span className="task-attachment-name task-attachment-name--pending">
-                          {file.name}
-                        </span>
-                        <span className="task-attachment-size">
-                          {formatBytes(file.size)}
-                        </span>
-                        <span className="task-attachment-badge">Pending</span>
-                        <button
-                          type="button"
-                          className="task-attachment-remove"
-                          onClick={() => removePending(idx)}
-                          aria-label={`Remove ${file.name}`}
-                        >
-                          ×
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              )}
             </div>
+
+            {isEditing && attachmentsLoading && (
+              <div className="task-attachments-empty">Loading attachments…</div>
+            )}
+
+            {(existingAttachments.length > 0 ||
+              pendingAttachments.length > 0) && (
+              <ul className="task-attachments-list">
+                {existingAttachments.map((att) => (
+                  <li key={`saved-${att.id}`} className="task-attachment-item">
+                    <button
+                      type="button"
+                      className="task-attachment-name"
+                      onClick={() => void downloadExisting(att)}
+                      title="Download"
+                    >
+                      {att.name}
+                    </button>
+                    <span className="task-attachment-size">
+                      {formatBytes(att.size)}
+                    </span>
+                    <button
+                      type="button"
+                      className="task-attachment-remove"
+                      onClick={() => void removeExisting(att)}
+                      aria-label={`Remove ${att.name}`}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+                {pendingAttachments.map((file, idx) => (
+                  <li
+                    key={`pending-${idx}-${file.name}`}
+                    className="task-attachment-item task-attachment-item--pending"
+                  >
+                    <span className="task-attachment-name task-attachment-name--pending">
+                      {file.name}
+                    </span>
+                    <span className="task-attachment-size">
+                      {formatBytes(file.size)}
+                    </span>
+                    <span className="task-attachment-badge">Pending</span>
+                    <button
+                      type="button"
+                      className="task-attachment-remove"
+                      onClick={() => removePending(idx)}
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             {error && <div className="task-error">{error}</div>}
 
-            <div className="task-form-footer">
-              {!isEditing ? (
-                <label className="task-form-create-another">
-                  <input
-                    type="checkbox"
-                    checked={createAnother}
-                    onChange={(event) => setCreateAnother(event.target.checked)}
-                  />
-                  <span>Create another</span>
-                </label>
-              ) : (
-                <span />
-              )}
-              <div className="task-form-actions">
-                <button
-                  type="button"
-                  className="task-form-cancel"
-                  disabled={submitting}
-                  onClick={closeForm}
+            <div className="task-compose-footer">
+              <button
+                type="button"
+                className="task-compose-attach"
+                onClick={() => fileInputRef.current?.click()}
+                title="Attach files — uploaded when you save the task"
+                aria-label="Attach files"
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
                 >
-                  Cancel
-                </button>
+                  <path d="M14 7.5l-5.7 5.7a3.4 3.4 0 01-4.8-4.8L9.2 2.7a2.3 2.3 0 013.2 3.2L6.7 11.6a1.1 1.1 0 01-1.6-1.6l5.3-5.3" />
+                </svg>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="task-attachments-input"
+                onChange={onPickFiles}
+              />
+
+              <div className="task-compose-footer-right">
+                {!isEditing && (
+                  <label className="task-compose-more">
+                    <input
+                      type="checkbox"
+                      checked={createAnother}
+                      onChange={(event) =>
+                        setCreateAnother(event.target.checked)
+                      }
+                    />
+                    <span className="task-compose-switch" aria-hidden="true" />
+                    <span>Create more</span>
+                  </label>
+                )}
                 <button type="submit" className="primary" disabled={submitting}>
                   {submitting
                     ? isEditing
@@ -1423,7 +1437,7 @@ export default function Tasks() {
                       : "Creating…"
                     : isEditing
                       ? "Save changes"
-                      : "Create"}
+                      : "Create task"}
                 </button>
               </div>
             </div>
