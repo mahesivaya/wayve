@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { homePathForUser } from "../auth/accountHome";
 import { canViewIntegrations } from "../auth/permissions";
-import ThemeCustomizer from "../theme/ThemeCustomizer";
 import { useCustomTheme } from "../theme/useCustomTheme";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
@@ -46,9 +45,7 @@ export default function ProfileMenu({
       setSwitching(false);
     }
   };
-  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const appearanceRef = useRef<HTMLDivElement>(null);
   // Re-keying on the choice forces the inline var() values to re-resolve.
   const { choice } = useCustomTheme();
   const swatchKey = useMemo(() => JSON.stringify(choice), [choice]);
@@ -67,31 +64,6 @@ export default function ProfileMenu({
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [menuOpen]);
-
-  // The Appearance panel needs its own outside-click handler because it renders
-  // outside the profile-menu wrapper, so the menu's handler would otherwise fire
-  // when the user drags a slider inside the customizer.
-  useEffect(() => {
-    if (!appearanceOpen) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (
-        appearanceRef.current &&
-        e.target instanceof Node &&
-        !appearanceRef.current.contains(e.target)
-      ) {
-        setAppearanceOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAppearanceOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [appearanceOpen]);
 
   if (!user) return null;
 
@@ -160,7 +132,7 @@ export default function ProfileMenu({
             className="profile-dropdown-item"
             onClick={() => {
               setMenuOpen(false);
-              setAppearanceOpen(true);
+              void navigate("/appearance");
             }}
           >
             <span className="profile-dropdown-icon">🎨</span>
@@ -211,17 +183,6 @@ export default function ProfileMenu({
             <span className="profile-dropdown-icon">⏻</span>
             Log out
           </button>
-        </div>
-      )}
-
-      {appearanceOpen && (
-        <div
-          className="appearance-panel"
-          role="dialog"
-          aria-label="Appearance"
-          ref={appearanceRef}
-        >
-          <ThemeCustomizer />
         </div>
       )}
     </div>
