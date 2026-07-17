@@ -1365,17 +1365,13 @@
   flex: 0 0 10px;
 }
 
+/* Each sub-split half is a mini-pane: its own toolbar stacked over its body. */
 .pane-half {
   display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-}
-
-.pane-half > * {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
 }
 
 /* Right-pane tab bar. Keeps the split/tab close control outside the embedded
