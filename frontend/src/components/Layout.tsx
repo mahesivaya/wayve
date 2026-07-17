@@ -561,8 +561,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       // ignore
     }
   }, [subBottomView]);
-  const toggleSubSplit = (key: PaneKey) =>
+  const toggleSubSplit = (key: PaneKey) => {
+    // Opening the split always starts the new (bottom) half on Home.
+    if (!subSplit[key]) {
+      setSubBottomView((v) => ({ ...v, [key]: "home" }));
+    }
     setSubSplit((s) => ({ ...s, [key]: !s[key] }));
+  };
 
   const contentRef = useRef<HTMLDivElement>(null);
 
