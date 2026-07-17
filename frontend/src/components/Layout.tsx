@@ -20,6 +20,7 @@ import ProfileMenu from "./ProfileMenu";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
 import NotificationBell from "./NotificationBell";
+import PaneSplitMenu from "./PaneSplitMenu";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import { useChatUnreadCount } from "../chat/useChatUnreadCount";
@@ -470,6 +471,42 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     }
   }, [paneWeights]);
 
+  // Per-pane vertical sub-split: each top-level pane (left/center/right) can be
+  // split once into two stacked halves that both show a duplicate of that pane's
+  // app. Independent per pane — toggling one never affects another.
+  const SUB_SPLIT_STORAGE_KEY = "rwayve.layout.subSplit";
+  const [subSplit, setSubSplit] = useState<Record<PaneKey, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(SUB_SPLIT_STORAGE_KEY);
+      if (raw) {
+        const o = JSON.parse(raw) as Record<string, unknown>;
+        return {
+          left: o.left === true,
+          center: o.center === true,
+          right: o.right === true,
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return { left: false, center: false, right: false };
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(SUB_SPLIT_STORAGE_KEY, JSON.stringify(subSplit));
+    } catch {
+      // ignore
+    }
+  }, [subSplit]);
+  // Top-half fraction within each sub-split pane (in-memory; resets on reload).
+  const [subTop, setSubTop] = useState<Record<PaneKey, number>>({
+    left: 0.5,
+    center: 0.5,
+    right: 0.5,
+  });
+  const toggleSubSplit = (key: PaneKey) =>
+    setSubSplit((s) => ({ ...s, [key]: !s[key] }));
+
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Resizes the boundary between two adjacent panes. Other panes' weights are
@@ -529,6 +566,40 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     [paneWeights]
   );
 
+  // Resizes a pane's internal top/bottom sub-split (Y axis, within one pane).
+  // Stored as the top half's fraction of that pane's body height.
+  const handleSubResize = useCallback(
+    (key: PaneKey) => (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const bodyEl = contentRef.current?.querySelector<HTMLElement>(
+        `.split-pane.${key} .split-pane-body--stacked`
+      );
+      if (!bodyEl) return;
+      const rect = bodyEl.getBoundingClientRect();
+
+      const onMove = (ev: PointerEvent) => {
+        const frac = Math.max(
+          PANE_MIN_WEIGHT,
+          Math.min(1 - PANE_MIN_WEIGHT, (ev.clientY - rect.top) / rect.height)
+        );
+        setSubTop((t) => ({ ...t, [key]: frac }));
+      };
+      const onUp = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "row-resize";
+    },
+    []
+  );
+
   const middleApp = SPLIT_APPS.find((a) => a.key === middleView) ?? null;
   const MiddleComp = middleApp?.Comp ?? null;
   const middleLabel = middleApp?.label ?? null;
@@ -555,7 +626,41 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       setMiddleView(null);
     }
     setSplitTarget("left");
+    setSubSplit((s) => ({ ...s, left: false }));
   }
+
+  // Wraps a pane's app in the split context + Suspense. When the pane is
+  // sub-split, renders two stacked copies of the app with a horizontal drag
+  // handle between them; otherwise the single app fills the body.
+  const renderPaneBody = (key: PaneKey, node: ReactNode) => {
+    const wrapped = (
+      <SplitPaneContext.Provider value={true}>
+        <Suspense fallback={<div className="split-loading">Loading…</div>}>
+          {node}
+        </Suspense>
+      </SplitPaneContext.Provider>
+    );
+    if (!subSplit[key]) {
+      return <div className="split-pane-body">{wrapped}</div>;
+    }
+    return (
+      <div className="split-pane-body split-pane-body--stacked">
+        <div className="pane-half" style={{ flexGrow: subTop[key] }}>
+          {wrapped}
+        </div>
+        <div
+          className="split-resize-handle split-resize-handle--horizontal"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize pane"
+          onPointerDown={handleSubResize(key)}
+        />
+        <div className="pane-half" style={{ flexGrow: 1 - subTop[key] }}>
+          {wrapped}
+        </div>
+      </div>
+    );
+  };
 
   // With the split open, sidebar clicks retarget the right pane instead of
   // navigating; when closed the link behaves normally.
@@ -1382,26 +1487,22 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   <>
                     <div className="split-pane-toolbar">
                       <span className="split-pane-title">{leftLabel}</span>
-                      <button
-                        className="split-close-btn"
-                        onClick={closeLeftPane}
-                        title="Close pane"
-                        aria-label="Close left pane"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <div className="split-pane-body">
-                      <SplitPaneContext.Provider value={true}>
-                        <Suspense
-                          fallback={
-                            <div className="split-loading">Loading…</div>
-                          }
+                      <div className="split-pane-tools">
+                        <PaneSplitMenu
+                          active={subSplit.left}
+                          onToggle={() => toggleSubSplit("left")}
+                        />
+                        <button
+                          className="split-close-btn"
+                          onClick={closeLeftPane}
+                          title="Close pane"
+                          aria-label="Close left pane"
                         >
-                          {children ?? <Outlet />}
-                        </Suspense>
-                      </SplitPaneContext.Provider>
+                          ✕
+                        </button>
+                      </div>
                     </div>
+                    {renderPaneBody("left", children ?? <Outlet />)}
                   </>
                 ) : (
                   <Suspense
@@ -1432,28 +1533,25 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 >
                   <div className="split-pane-toolbar">
                     <span className="split-pane-title">{middleLabel}</span>
-                    <button
-                      className="split-close-btn"
-                      onClick={() => setMiddleView(null)}
-                      title="Close pane"
-                      aria-label="Close center pane"
-                    >
-                      ✕
-                    </button>
+                    <div className="split-pane-tools">
+                      <PaneSplitMenu
+                        active={subSplit.center}
+                        onToggle={() => toggleSubSplit("center")}
+                      />
+                      <button
+                        className="split-close-btn"
+                        onClick={() => {
+                          setMiddleView(null);
+                          setSubSplit((s) => ({ ...s, center: false }));
+                        }}
+                        title="Close pane"
+                        aria-label="Close center pane"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                  <div className="split-pane-body">
-                    {MiddleComp && (
-                      <SplitPaneContext.Provider value={true}>
-                        <Suspense
-                          fallback={
-                            <div className="split-loading">Loading…</div>
-                          }
-                        >
-                          <MiddleComp />
-                        </Suspense>
-                      </SplitPaneContext.Provider>
-                    )}
-                  </div>
+                  {MiddleComp && renderPaneBody("center", <MiddleComp />)}
                 </div>
               )}
 
@@ -1476,32 +1574,27 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 >
                   <div className="split-pane-toolbar">
                     <span className="split-pane-title">{rightLabel}</span>
-                    <button
-                      className="split-close-btn"
-                      onClick={() => {
-                        setRightView(null);
-                        setSplitTarget("left");
-                        setPaneTarget(null);
-                      }}
-                      title="Close pane"
-                      aria-label="Close right pane"
-                    >
-                      ✕
-                    </button>
+                    <div className="split-pane-tools">
+                      <PaneSplitMenu
+                        active={subSplit.right}
+                        onToggle={() => toggleSubSplit("right")}
+                      />
+                      <button
+                        className="split-close-btn"
+                        onClick={() => {
+                          setRightView(null);
+                          setSplitTarget("left");
+                          setPaneTarget(null);
+                          setSubSplit((s) => ({ ...s, right: false }));
+                        }}
+                        title="Close pane"
+                        aria-label="Close right pane"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                  <div className="split-pane-body">
-                    {RightComp && (
-                      <SplitPaneContext.Provider value={true}>
-                        <Suspense
-                          fallback={
-                            <div className="split-loading">Loading…</div>
-                          }
-                        >
-                          <RightComp />
-                        </Suspense>
-                      </SplitPaneContext.Provider>
-                    )}
-                  </div>
+                  {RightComp && renderPaneBody("right", <RightComp />)}
                 </div>
               )}
             </div>
