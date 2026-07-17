@@ -363,6 +363,58 @@
   box-shadow: 0 12px 32px rgb(0, 0, 0, 0.4);
 }
 
+/* Web build: the ProfileMenu is mounted at the sidebar bottom instead of the
+   header. The trigger reads as a full-width sidebar row (avatar + email, like
+   the desktop button) and its popovers open upward / to the side rather than
+   down-from-top-right. Header placement is untouched — all overrides are
+   scoped under this modifier. */
+.profile-menu--sidebar {
+  width: 100%;
+}
+
+.profile-menu--sidebar .profile-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.profile-menu--sidebar .profile-trigger:hover {
+  background: var(--color-surface-hover);
+}
+
+.profile-menu--sidebar .profile-trigger:hover .profile-avatar {
+  transform: none;
+}
+
+.profile-menu--sidebar .profile-trigger .sidebar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+}
+
+/* Open upward from the bottom-left instead of down from the top-right. */
+.profile-menu--sidebar .profile-dropdown {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: auto;
+}
+
+/* The 560px theme panel can't fit in the narrow sidebar, so hang it to the
+   right of the sidebar, aligned to the trigger's bottom. */
+.profile-menu--sidebar .appearance-panel {
+  top: auto;
+  bottom: 0;
+  left: calc(100% + 8px);
+  right: auto;
+}
+
 /* =============================
    🔥 BODY LAYOUT
 ============================== */

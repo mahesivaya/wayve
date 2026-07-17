@@ -17,7 +17,9 @@ const SWATCH_VARS = [
   "var(--color-success)",
 ] as const;
 
-export default function ProfileMenu() {
+export default function ProfileMenu({
+  placement = "header",
+}: { placement?: "header" | "sidebar" } = {}) {
   const { user, logout, switchMode } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -93,8 +95,10 @@ export default function ProfileMenu() {
 
   if (!user) return null;
 
+  const inSidebar = placement === "sidebar";
+
   return (
-    <div className="profile-menu" ref={menuRef}>
+    <div className={`profile-menu profile-menu--${placement}`} ref={menuRef}>
       <button
         className="profile-trigger"
         onClick={() => setMenuOpen((o) => !o)}
@@ -106,8 +110,9 @@ export default function ProfileMenu() {
           className="profile-avatar"
           name={user.email}
           src={`${getApiBase()}/api/users/${user.id}/avatar`}
-          size={30}
+          size={inSidebar ? 22 : 30}
         />
+        {inSidebar && <span className="sidebar-label">{user.email}</span>}
       </button>
 
       {menuOpen && (
