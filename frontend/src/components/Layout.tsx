@@ -612,8 +612,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const leftLabel = leftApp?.label ?? "Home";
   const splitOpen = Boolean(middleView || rightView);
 
-  function duplicateCurrentApp() {
-    setRightView(appKeyFromPath(location.pathname));
+  // Home fills any newly opened split pane (header split + sub-split's new half)
+  // instead of duplicating the current app.
+  const homeApp = SPLIT_APPS.find((a) => a.key === "home") ?? null;
+  const HomeComp = homeApp?.Comp ?? null;
+  const homeLabel = homeApp?.label ?? "Home";
+
+  function openSplitPane() {
+    setRightView("home");
     setSplitTarget("right");
   }
 
@@ -630,46 +636,46 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   }
 
   // Renders a pane's body. When the pane is sub-split it becomes two stacked
-  // half-panes, each a mini version of the top-level pane: its own toolbar
-  // (title + split toggle + ✕) over a duplicate of the pane's app. The ✕ or the
-  // toggle on either half collapses the sub-split. When not split, the single
-  // app fills the body (the pane's own toolbar sits above, rendered separately).
+  // half-panes, each a mini-pane with its own toolbar (title + split toggle + ✕):
+  // the top half keeps the pane's app; the new (bottom) half shows Home. The ✕ or
+  // toggle on either half collapses the sub-split. When not split, the single app
+  // fills the body (the pane's own toolbar sits above, rendered separately).
   const renderPaneBody = (key: PaneKey, label: string, node: ReactNode) => {
-    const body = (
+    const bodyOf = (content: ReactNode) => (
       <div className="split-pane-body">
         <SplitPaneContext.Provider value={true}>
           <Suspense fallback={<div className="split-loading">Loading…</div>}>
-            {node}
+            {content}
           </Suspense>
         </SplitPaneContext.Provider>
       </div>
     );
     if (!subSplit[key]) {
-      return body;
+      return bodyOf(node);
     }
     const removeSplit = () => setSubSplit((s) => ({ ...s, [key]: false }));
-    const halfToolbar = (
-      <div className="split-pane-toolbar">
-        <span className="split-pane-title">{label}</span>
-        <div className="split-pane-tools">
-          <PaneSplitMenu active onToggle={removeSplit} />
-          <button
-            className="split-close-btn"
-            onClick={removeSplit}
-            title="Close split"
-            aria-label="Close split"
-          >
-            ✕
-          </button>
+    const half = (title: string, content: ReactNode, grow: number) => (
+      <div className="pane-half" style={{ flexGrow: grow }}>
+        <div className="split-pane-toolbar">
+          <span className="split-pane-title">{title}</span>
+          <div className="split-pane-tools">
+            <PaneSplitMenu active onToggle={removeSplit} />
+            <button
+              className="split-close-btn"
+              onClick={removeSplit}
+              title="Close split"
+              aria-label="Close split"
+            >
+              ✕
+            </button>
+          </div>
         </div>
+        {bodyOf(content)}
       </div>
     );
     return (
       <div className="split-pane-body split-pane-body--stacked">
-        <div className="pane-half" style={{ flexGrow: subTop[key] }}>
-          {halfToolbar}
-          {body}
-        </div>
+        {half(label, node, subTop[key])}
         <div
           className="split-resize-handle split-resize-handle--horizontal"
           role="separator"
@@ -677,10 +683,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           aria-label="Resize pane"
           onPointerDown={handleSubResize(key)}
         />
-        <div className="pane-half" style={{ flexGrow: 1 - subTop[key] }}>
-          {halfToolbar}
-          {body}
-        </div>
+        {half(homeLabel, HomeComp ? <HomeComp /> : node, 1 - subTop[key])}
       </div>
     );
   };
@@ -1181,9 +1184,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       <button
         type="button"
         className={`duplicate-pane-btn ${splitTarget === "right" ? "active" : ""}`}
-        onClick={duplicateCurrentApp}
-        title="Duplicate current app"
-        aria-label="Duplicate current app"
+        onClick={openSplitPane}
+        title="Split view"
+        aria-label="Split view"
       >
         <svg
           className="duplicate-pane-icon"
