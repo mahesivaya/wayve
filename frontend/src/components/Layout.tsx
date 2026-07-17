@@ -697,6 +697,26 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     setSubSplit((s) => ({ ...s, left: false }));
   }
 
+  // Closes ONE half of a pane's sub-split, keeping the other as the full pane —
+  // closing a half must never take its sibling with it. Closing the top half
+  // promotes the bottom half's app to the pane's single view; closing the bottom
+  // keeps the pane's current app (already the top).
+  const closeHalf = (key: PaneKey, whichHalf: "top" | "bottom") => {
+    if (whichHalf === "top") {
+      const bottomKey = subBottomView[key];
+      if (key === "left") {
+        const path = SPLIT_APPS.find((a) => a.key === bottomKey)?.path ?? "/";
+        void navigate(path);
+      } else if (key === "center") {
+        setMiddleView(bottomKey);
+      } else {
+        setRightView(bottomKey);
+      }
+    }
+    setSubSplit((s) => ({ ...s, [key]: false }));
+    focusPane(key, "top");
+  };
+
   // Renders a pane's body. When the pane is sub-split it becomes two stacked
   // half-panes, each a mini-pane with its own toolbar (title + split toggle + ✕):
   // the top half keeps the pane's app; the new (bottom) half shows `subBottomView`
@@ -741,9 +761,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               <PaneSplitMenu active onToggle={removeSplit} />
               <button
                 className="split-close-btn"
-                onClick={removeSplit}
-                title="Close split"
-                aria-label="Close split"
+                onClick={() => closeHalf(key, whichHalf)}
+                title="Close this pane"
+                aria-label="Close this pane"
               >
                 ✕
               </button>
