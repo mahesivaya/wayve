@@ -1165,11 +1165,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               )}
             </div>
 
-            {/* Emails, Notes and Chat own their own in-page search, so the header
-            search is suppressed there to avoid two competing search inputs. */}
+            {/* Emails and Notes own their own in-page search, so the header
+            search is suppressed there to avoid two competing search inputs.
+            Chat has no in-page search box — the header search drives it. */}
             {!location.pathname.startsWith("/emails") &&
-              !location.pathname.startsWith("/notes") &&
-              !location.pathname.startsWith("/chat") && <SearchBar />}
+              !location.pathname.startsWith("/notes") && <SearchBar />}
 
             <div className="actions">
               {headerActions}
