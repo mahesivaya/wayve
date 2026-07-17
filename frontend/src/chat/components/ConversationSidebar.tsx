@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type {
   ChatChannel,
   ChatConversationSummary,
@@ -54,38 +55,18 @@ export default function ConversationSidebar({
   summary,
   presence,
 }: Props) {
-  const { searchQuery, setSearchQuery } = useGlobalSearch();
+  const { setSearchQuery } = useGlobalSearch();
+
+  // Messages has no search input; clear any query carried over from another
+  // page so it can't silently filter the conversation lists below.
+  useEffect(() => {
+    setSearchQuery("");
+  }, [setSearchQuery]);
 
   return (
     <aside className="user-list">
-      {/* Your own presence-status picker sits at the very top, above search. */}
+      {/* Your own presence-status picker sits at the very top. */}
       <StatusSelector myUserId={myUserId} />
-      {/* Chat search lives at the top of the sidebar (above Recent) rather than
-          in the global header. Drives the same global query that filters the
-          channels / users / messages below. */}
-      <div className="global-search-box chat-sidebar-search">
-        <span className="global-search-icon" aria-hidden="true">
-          ⌕
-        </span>
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search"
-          aria-label="Search"
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            className="global-search-clear"
-            onClick={() => setSearchQuery("")}
-            title="Clear search"
-            aria-label="Clear search"
-          >
-            ×
-          </button>
-        )}
-      </div>
 
       {/* Active conversations (Unread + Recent) sit above the channels so the
           chats you're in the middle of are the first thing you see. Recent now

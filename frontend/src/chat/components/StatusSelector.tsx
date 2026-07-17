@@ -66,38 +66,44 @@ export default function StatusSelector({ myUserId }: { myUserId: number }) {
 
   return (
     <div className="status-selector" ref={wrapRef}>
-      <button
-        type="button"
-        className="status-selector-trigger"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className={`presence-dot ${clsOf(status)}`} aria-hidden="true" />
-        <span className="status-selector-label">{labelOf(status)}</span>
-        <span className="status-selector-caret" aria-hidden="true">
-          ▾
-        </span>
-      </button>
-      {open && (
-        <ul className="status-selector-menu" role="listbox">
-          {OPTIONS.map((o) => (
-            <li
-              key={o.value}
-              role="option"
-              aria-selected={o.value === status}
-              className={`status-selector-option${o.value === status ? " is-selected" : ""}`}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                choose(o.value);
-              }}
-            >
-              <span className={`presence-dot ${o.cls}`} aria-hidden="true" />
-              {o.label}
-            </li>
-          ))}
-        </ul>
-      )}
+      <span className="status-selector-heading">Status:</span>
+      <div className="status-selector-control">
+        <button
+          type="button"
+          className="status-selector-trigger"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <span
+            className={`presence-dot ${clsOf(status)}`}
+            aria-hidden="true"
+          />
+          <span className="status-selector-label">{labelOf(status)}</span>
+          <span className="status-selector-caret" aria-hidden="true">
+            ▾
+          </span>
+        </button>
+        {open && (
+          <ul className="status-selector-menu" role="listbox">
+            {OPTIONS.map((o) => (
+              <li
+                key={o.value}
+                role="option"
+                aria-selected={o.value === status}
+                className={`status-selector-option${o.value === status ? " is-selected" : ""}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  choose(o.value);
+                }}
+              >
+                <span className={`presence-dot ${o.cls}`} aria-hidden="true" />
+                {o.label}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
