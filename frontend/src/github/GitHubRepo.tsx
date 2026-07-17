@@ -845,6 +845,10 @@ function GitHubRepoViewer({
   const [pulls, setPulls] = useState<GitHubPull[]>([]);
   const [pullsLoading, setPullsLoading] = useState(false);
   const [pullsError, setPullsError] = useState("");
+  // The PR list is capped at one page (per_page=50), so `pulls.length` tops out
+  // at 50 and can't be trusted as a total. Like commitsTotal, derive the real
+  // count (all states) from the `rel="last"` page of a per_page=1 Link header.
+  const [pullsTotal, setPullsTotal] = useState<number | null>(null);
   // Open and closed PRs are fetched together (state=all) and filtered here.
   const [pullFilter, setPullFilter] = useState<"open" | "closed">("open");
   // Null means the list view; a number is the opened PR. Each opened PR's
@@ -1235,6 +1239,34 @@ function GitHubRepoViewer({
       );
     } finally {
       setPullsLoading(false);
+    }
+  }, [API_BASE]);
+
+  // /pulls has no total_count field, so read the true count off the Link
+  // header of a per_page=1 request — the same trick as loadCommitsTotal.
+  // state=all matches the sidebar badge, which counts every PR.
+  const loadPullsTotal = useCallback(async () => {
+    try {
+      const token = getAuthToken();
+      const res = await fetch(`${API_BASE}/pulls?state=all&per_page=1`, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        setPullsTotal(null);
+        return;
+      }
+      const link = res.headers.get("Link");
+      const last = link?.match(/[?&]page=(\d+)>;\s*rel="last"/);
+      if (last) {
+        setPullsTotal(parseInt(last[1], 10));
+        return;
+      }
+      // No "last" relation means a single page, so the body length is the total.
+      const data = (await res.json()) as unknown;
+      setPullsTotal(Array.isArray(data) ? data.length : null);
+    } catch {
+      setPullsTotal(null);
     }
   }, [API_BASE]);
 
@@ -1637,7 +1669,10 @@ function GitHubRepoViewer({
     // Reset to the PR list rather than a stale detail when the repo or branch
     // changes. Non-owners never fetch PRs; the proxy would 403 them.
     setSelectedPull(null);
-    if (isOwner) void loadPulls();
+    if (isOwner) {
+      void loadPulls();
+      void loadPullsTotal();
+    }
     // The Actions list is branch-agnostic, so it only refreshes on the initial
     // repo load. Run-detail caches stay valid because run ids are global.
     setRunsPage(1);
@@ -1651,6 +1686,7 @@ function GitHubRepoViewer({
     loadCommits,
     loadCommitsTotal,
     loadPulls,
+    loadPullsTotal,
     loadReadme,
     loadRuns,
     loadWorkflows,
@@ -1885,7 +1921,9 @@ function GitHubRepoViewer({
                   🔀
                 </span>
                 <span className="github-sidebar-label">Pull Requests</span>
-                <span className="github-sidebar-count">{pulls.length}</span>
+                <span className="github-sidebar-count">
+                  {pullsTotal ?? pulls.length}
+                </span>
               </button>
             )}
             <button
@@ -1897,7 +1935,9 @@ function GitHubRepoViewer({
                 ▶
               </span>
               <span className="github-sidebar-label">Actions</span>
-              <span className="github-sidebar-count">{runs.length}</span>
+              <span className="github-sidebar-count">
+                {runsTotal || runs.length}
+              </span>
             </button>
             {canManageAccess && (
               <button
