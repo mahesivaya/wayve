@@ -47,6 +47,28 @@
   box-sizing: border-box;
 }
 
+/* Sidebar variant: the wrapper is a full-width nav row and the trigger reuses
+   .sidebar-link styling. The badge (`.sidebar-badge`) is supplied by Layout. */
+.notif-bell--sidebar {
+  display: block;
+}
+
+.notif-sidebar-trigger {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The sidebar clips overflow, so its panel is fixed-positioned (inline
+   left/top from the trigger rect) instead of absolutely anchored. */
+.notif-panel--fixed {
+  position: fixed;
+  top: auto;
+  right: auto;
+}
+
 .notif-panel {
   position: absolute;
   top: calc(100% + 8px);

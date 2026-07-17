@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { homePathForUser } from "../auth/accountHome";
 import { canViewIntegrations } from "../auth/permissions";
-import ThemeCustomizer from "../theme/ThemeCustomizer";
 import { useCustomTheme } from "../theme/useCustomTheme";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
@@ -17,7 +16,9 @@ const SWATCH_VARS = [
   "var(--color-success)",
 ] as const;
 
-export default function ProfileMenu() {
+export default function ProfileMenu({
+  placement = "header",
+}: { placement?: "header" | "sidebar" } = {}) {
   const { user, logout, switchMode } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -44,9 +45,7 @@ export default function ProfileMenu() {
       setSwitching(false);
     }
   };
-  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const appearanceRef = useRef<HTMLDivElement>(null);
   // Re-keying on the choice forces the inline var() values to re-resolve.
   const { choice } = useCustomTheme();
   const swatchKey = useMemo(() => JSON.stringify(choice), [choice]);
@@ -66,35 +65,12 @@ export default function ProfileMenu() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [menuOpen]);
 
-  // The Appearance panel needs its own outside-click handler because it renders
-  // outside the profile-menu wrapper, so the menu's handler would otherwise fire
-  // when the user drags a slider inside the customizer.
-  useEffect(() => {
-    if (!appearanceOpen) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (
-        appearanceRef.current &&
-        e.target instanceof Node &&
-        !appearanceRef.current.contains(e.target)
-      ) {
-        setAppearanceOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAppearanceOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [appearanceOpen]);
-
   if (!user) return null;
 
+  const inSidebar = placement === "sidebar";
+
   return (
-    <div className="profile-menu" ref={menuRef}>
+    <div className={`profile-menu profile-menu--${placement}`} ref={menuRef}>
       <button
         className="profile-trigger"
         onClick={() => setMenuOpen((o) => !o)}
@@ -106,8 +82,9 @@ export default function ProfileMenu() {
           className="profile-avatar"
           name={user.email}
           src={`${getApiBase()}/api/users/${user.id}/avatar`}
-          size={30}
+          size={inSidebar ? 22 : 30}
         />
+        {inSidebar && <span className="sidebar-label">{user.email}</span>}
       </button>
 
       {menuOpen && (
@@ -155,7 +132,7 @@ export default function ProfileMenu() {
             className="profile-dropdown-item"
             onClick={() => {
               setMenuOpen(false);
-              setAppearanceOpen(true);
+              void navigate("/appearance");
             }}
           >
             <span className="profile-dropdown-icon">🎨</span>
@@ -206,17 +183,6 @@ export default function ProfileMenu() {
             <span className="profile-dropdown-icon">⏻</span>
             Log out
           </button>
-        </div>
-      )}
-
-      {appearanceOpen && (
-        <div
-          className="appearance-panel"
-          role="dialog"
-          aria-label="Appearance"
-          ref={appearanceRef}
-        >
-          <ThemeCustomizer />
         </div>
       )}
     </div>

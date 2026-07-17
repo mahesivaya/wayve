@@ -346,21 +346,47 @@
   line-height: 1;
 }
 
-/* The Appearance customizer floats next to the profile dropdown when
-   "Appearance" is picked. Wider than the menu (the customizer itself wants
-   ~560px), anchored to the right edge so it sits flush under the avatar
-   like the menu does. */
-.appearance-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: 560px;
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 80px);
-  overflow-y: auto;
-  z-index: 200;
-  border-radius: var(--radius-md);
-  box-shadow: 0 12px 32px rgb(0, 0, 0, 0.4);
+/* Web build: the ProfileMenu is mounted at the sidebar bottom instead of the
+   header. The trigger reads as a full-width sidebar row (avatar + email, like
+   the desktop button) and its dropdown opens upward rather than
+   down-from-top-right. Header placement is untouched — all overrides are
+   scoped under this modifier. */
+.profile-menu--sidebar {
+  width: 100%;
+}
+
+.profile-menu--sidebar .profile-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.profile-menu--sidebar .profile-trigger:hover {
+  background: var(--color-surface-hover);
+}
+
+.profile-menu--sidebar .profile-trigger:hover .profile-avatar {
+  transform: none;
+}
+
+.profile-menu--sidebar .profile-trigger .sidebar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+}
+
+/* Open upward from the bottom-left instead of down from the top-right. */
+.profile-menu--sidebar .profile-dropdown {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: auto;
 }
 
 /* =============================

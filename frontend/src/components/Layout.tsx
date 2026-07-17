@@ -1023,9 +1023,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     },
   ];
 
-  // In the desktop shell only the ProfileMenu relocates, to the bottom of the
-  // sidebar. `headerActions` is the cluster that stays in the header in both
-  // runtimes.
+  // The profile control lives at the bottom of the sidebar in both runtimes
+  // (desktop as a plain Settings button, web as the full ProfileMenu dropdown).
+  // `headerActions` is the cluster that stays in the header in both.
   const desktop = isDesktopApp();
 
   // Desktop shell: the settings-family pages render their own left rail
@@ -1044,11 +1044,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           🛡️ Admin mode
         </span>
       )}
-      <NotificationBell
-        emailUnread={emailsUnreadCount}
-        chatUnread={chatUnreadCount}
-      />
-
       {/* The desktop shell surfaces Upgrade on the Settings page instead. */}
       {!desktop && isBasicPersonalUser && (
         <button
@@ -1171,10 +1166,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             {!location.pathname.startsWith("/emails") &&
               !location.pathname.startsWith("/notes") && <SearchBar />}
 
-            <div className="actions">
-              {headerActions}
-              {!desktop && <ProfileMenu />}
-            </div>
+            <div className="actions">{headerActions}</div>
           </div>
 
           <StorageLimitBanner onUpgrade={goToUpgrade} />
@@ -1192,6 +1184,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             >
               <div className="sidebar-section">
                 {renderSidebarItem("/", "home", "Home", <HomeIcon size={18} />)}
+                <NotificationBell
+                  variant="sidebar"
+                  emailUnread={emailsUnreadCount}
+                  chatUnread={chatUnreadCount}
+                />
                 {renderSidebarItem(
                   "/emails",
                   "emails",
@@ -1312,9 +1309,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
               {/* Sits below the flex spacer so it stays pinned to the bottom
               regardless of how many nav groups render above it. */}
-              {/* Desktop shell only: a profile button pinned to the bottom, since
-              that runtime has no header ProfileMenu. The web build reaches
-              Settings through the header ProfileMenu instead. */}
+              {/* Desktop shell: a plain profile button pinned to the bottom that
+              opens Settings (that runtime has no dropdown). */}
               {desktop && (
                 <div className="sidebar-section sidebar-section-bottom">
                   <button
@@ -1337,6 +1333,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                     </span>
                     <span className="sidebar-label">{user.email}</span>
                   </button>
+                </div>
+              )}
+
+              {/* Web build: the profile menu lives at the sidebar bottom (like
+              the desktop button), but keeps its full dropdown — Log out,
+              Appearance, admin switch — rather than just linking to Settings. */}
+              {!desktop && (
+                <div className="sidebar-section sidebar-section-bottom">
+                  <ProfileMenu placement="sidebar" />
                 </div>
               )}
             </nav>
