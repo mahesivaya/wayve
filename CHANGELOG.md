@@ -3,6 +3,31 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.7.0](https://github.com/mahesivaya/wayve/releases/tag/v7.7.0) - 2026-07-17
+
+### 🚀 Features
+
+- **layout:** Horizontal split opens Home in the new pane
+- **layout:** Sidebar clicks retarget only the focused pane
+- **layout:** Open Home in a newly split pane instead of a duplicate
+- **layout:** Give each sub-split half its own toolbar
+- **layout:** Per-pane vertical split toggle
+- **sidebar:** Move Admin mode badge from header to sidebar above profile
+- **profile:** Open Appearance as a full page like Profile/Settings
+- **notifications:** Render the bell as a sidebar row
+- **layout:** Move the web profile menu to the sidebar bottom-left
+
+### 🐛 Bug Fixes
+
+- **layout:** Closing left pane preserves the surviving pane's sub-split
+- **layout:** Closing one sub-split half keeps its sibling
+- **layout:** Don't stopPropagation on sub-split half focus
+- **github:** Show true total counts for Pull Requests and Actions
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v7.6.1 [skip ci]
+
 ## [7.6.1](https://github.com/mahesivaya/wayve/releases/tag/v7.6.1) - 2026-07-17
 
 ### 🧹 Maintenance
