@@ -217,6 +217,8 @@ export default function Reminders() {
         </p>
       </header>
 
+      <div className="reminders-layout">
+        <div className="reminders-side-col">
       <section className="reminders-section">
         <div className="reminders-section-head">
           <h2>New reminder</h2>
@@ -261,7 +263,9 @@ export default function Reminders() {
           </div>
         </form>
       </section>
+        </div>
 
+        <div className="reminders-main-col">
       <section className="reminders-section">
         <div className="reminders-section-head">
           <h2>Your reminders</h2>
@@ -386,6 +390,8 @@ export default function Reminders() {
           </ul>
         )}
       </section>
+        </div>
+      </div>
     </div>
   );
 }

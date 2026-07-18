@@ -1,7 +1,60 @@
 .reminders-page {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 24px 20px 48px;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 24px 40px 48px;
+}
+
+.reminders-page *,
+.reminders-page *::before,
+.reminders-page *::after {
+  box-sizing: border-box;
+}
+
+/* Two columns: reminders/lists on the left, the create form on the right.
+   DOM order is form-first (side-col) then lists (main-col); `order` flips the
+   visual placement so the list column reads on the left. */
+.reminders-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+  margin-top: 20px;
+}
+
+.reminders-main-col {
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.reminders-side-col {
+  order: 2;
+  flex: 0 0 340px;
+  position: sticky;
+  top: 20px;
+}
+
+/* Sections that lead a column shouldn't push down with the stacked spacing. */
+.reminders-main-col > .reminders-section:first-child,
+.reminders-side-col > .reminders-section:first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 860px) {
+  .reminders-layout {
+    flex-direction: column;
+  }
+  .reminders-side-col {
+    order: 1;
+    position: static;
+    flex-basis: auto;
+    align-self: stretch;
+  }
+  .reminders-main-col {
+    order: 2;
+    align-self: stretch;
+    width: 100%;
+  }
 }
 
 .reminders-header h1 {
