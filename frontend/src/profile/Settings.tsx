@@ -402,7 +402,7 @@ export default function Settings() {
             <div className="settings-rows">
               {adminConsoles.map((c) => (
                 <div className="settings-usage-row" key={c.path}>
-                  <span title={c.description}>{c.label}</span>
+                  <span data-tooltip={c.description}>{c.label}</span>
                   <button
                     type="button"
                     className="settings-billing-link"
@@ -453,7 +453,7 @@ export default function Settings() {
               </strong>
             </div>
             <div className="settings-usage-row">
-              <span title="Number of emails synced to your local rwayve mailbox. Your Gmail/Outlook account may hold many more — sync pulls the most recent batch and grows over time.">
+              <span data-tooltip="Number of emails synced to your local rwayve mailbox. Your Gmail/Outlook account may hold many more — sync pulls the most recent batch and grows over time.">
                 Synced Emails
               </span>
               <strong>
@@ -499,7 +499,7 @@ export default function Settings() {
                 {accounts.map((acc) => (
                   <div key={acc.id} className="settings-account">
                     <span className="settings-account-icon">📧</span>
-                    <span className="settings-account-email" title={acc.email}>
+                    <span className="settings-account-email" data-tooltip={acc.email}>
                       {acc.email}
                     </span>
                     <button
@@ -634,7 +634,7 @@ export default function Settings() {
               {tickets.map((t) => (
                 <li key={t.id} className="settings-ticket-row">
                   <div className="settings-ticket-main">
-                    <span className="settings-ticket-subject" title={t.subject}>
+                    <span className="settings-ticket-subject" data-tooltip={t.subject}>
                       #{t.id} · {t.subject}
                     </span>
                     <span className="settings-ticket-meta">

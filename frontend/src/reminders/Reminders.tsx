@@ -375,7 +375,7 @@ export default function Reminders() {
               >
                 <span
                   className={`reminder-priority p${t.priority}`}
-                  title={`Priority ${t.priority} — ${priorityLabel(t.priority)}`}
+                  data-tooltip={`Priority ${t.priority} — ${priorityLabel(t.priority)}`}
                 >
                   P{t.priority}
                 </span>

@@ -92,7 +92,7 @@ export default function ChatHeader({
                 className="chat-call-btn chat-call-btn-audio"
                 onClick={onAudioCall}
                 disabled={callDisabled}
-                title="Audio call"
+                data-tooltip="Audio call"
                 aria-label={`Audio call ${title}`}
               >
                 {/* Handset silhouette — matches the green-camcorder treatment
@@ -114,7 +114,7 @@ export default function ChatHeader({
                 className="chat-call-btn chat-call-btn-video"
                 onClick={onVideoCall}
                 disabled={callDisabled}
-                title="Video call"
+                data-tooltip="Video call"
                 aria-label={`Video call ${title}`}
               >
                 {/* Camcorder silhouette in green — narrow lens snout points
@@ -154,7 +154,7 @@ export default function ChatHeader({
                 type="button"
                 className={`channel-settings-btn ${settingsOpen ? "active" : ""}`}
                 onClick={onToggleSettings}
-                title="Channel settings"
+                data-tooltip="Channel settings"
                 aria-label="Channel settings"
               >
                 ⚙

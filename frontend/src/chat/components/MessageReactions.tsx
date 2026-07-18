@@ -46,7 +46,7 @@ export default function MessageReactions({
             aria-label={`${group.emoji} ${count} ${
               count === 1 ? "reaction" : "reactions"
             }`}
-            title={mine ? "Remove your reaction" : "React"}
+            data-tooltip={mine ? "Remove your reaction" : "React"}
             onClick={() => toggle(group.emoji)}
           >
             <span aria-hidden="true">{group.emoji}</span>
@@ -68,7 +68,7 @@ export default function MessageReactions({
           className="reaction-add"
           aria-label="Add reaction"
           aria-expanded={pickerOpen}
-          title="Add reaction"
+          data-tooltip="Add reaction"
           onClick={() => setPickerOpen((open) => !open)}
         >
           ☺

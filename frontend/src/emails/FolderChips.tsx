@@ -19,7 +19,7 @@ export function FolderChips({
       className={`email-bulk-action${activeFolder === folder ? " is-active" : ""}`}
       onClick={() => onSelectFolder(folder)}
       aria-pressed={activeFolder === folder}
-      title={title}
+      data-tooltip={title}
     >
       {label}
     </button>

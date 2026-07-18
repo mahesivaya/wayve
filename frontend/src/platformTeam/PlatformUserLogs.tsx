@@ -360,11 +360,11 @@ export default function PlatformUserLogs({
                             ? `${a.resource_type}${a.resource_id ? `#${a.resource_id}` : ""}`
                             : "-"}
                         </td>
-                        <td className="pt-details" title={details}>
+                        <td className="pt-details" data-tooltip={details}>
                           {details || "-"}
                         </td>
                         <td>{a.ip ?? "-"}</td>
-                        <td className="pt-loc" title={location}>
+                        <td className="pt-loc" data-tooltip={location}>
                           {location || "-"}
                         </td>
                       </tr>

@@ -183,7 +183,7 @@ export default function Notes() {
                   onClick={() => setView("list")}
                   aria-pressed={view === "list"}
                   aria-label="List view"
-                  title="List view"
+                  data-tooltip="List view"
                 >
                   ☰
                 </button>
@@ -193,7 +193,7 @@ export default function Notes() {
                   onClick={() => setView("grid")}
                   aria-pressed={view === "grid"}
                   aria-label="Grid view"
-                  title="Grid view"
+                  data-tooltip="Grid view"
                 >
                   ▦
                 </button>

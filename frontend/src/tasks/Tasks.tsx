@@ -229,7 +229,7 @@ function CopyLinkButton({
         event.stopPropagation();
         onCopy();
       }}
-      title={copied ? "Link copied" : "Copy link"}
+      data-tooltip={copied ? "Link copied" : "Copy link"}
       aria-label={copied ? `Link to ${label} copied` : `Copy link to ${label}`}
     >
       {copied ? (
@@ -276,7 +276,7 @@ function CopyLinkButton({
 function TaskKeyBadge({ value }: { value: string | null }) {
   if (!value) return null;
   return (
-    <span className="task-number-badge" title="Task key">
+    <span className="task-number-badge" data-tooltip="Task key">
       {value}
     </span>
   );
@@ -932,7 +932,7 @@ export default function Tasks() {
                   onClick={() => setFiltersOpen((open) => !open)}
                   aria-haspopup="dialog"
                   aria-expanded={filtersOpen}
-                  title="Filter tasks"
+                  data-tooltip="Filter tasks"
                 >
                   <span aria-hidden="true">⌄</span> Filters
                   {activeFilterCount > 0 && (
@@ -1080,7 +1080,7 @@ export default function Tasks() {
                   }}
                   aria-pressed={mode === "tasks" && view === "list"}
                   aria-label="List view"
-                  title="List view"
+                  data-tooltip="List view"
                 >
                   ☰
                 </button>
@@ -1093,7 +1093,7 @@ export default function Tasks() {
                   }}
                   aria-pressed={mode === "tasks" && view === "grid"}
                   aria-label="Grid view"
-                  title="Grid view"
+                  data-tooltip="Grid view"
                 >
                   ⊞
                 </button>
@@ -1103,7 +1103,7 @@ export default function Tasks() {
                   onClick={() => setMode("jira")}
                   aria-pressed={mode === "jira"}
                   aria-label="Columns (Jira board) view"
-                  title="Columns (Jira board) view"
+                  data-tooltip="Columns (Jira board) view"
                 >
                   ◫
                 </button>
@@ -1145,7 +1145,7 @@ export default function Tasks() {
             <div className="task-compose-pills">
               <label
                 className="task-pill"
-                title={isEditing ? "Status" : "Initial status upon creation"}
+                data-tooltip={isEditing ? "Status" : "Initial status upon creation"}
               >
                 <span
                   className={`task-pill-dot task-pill-dot--${status}`}
@@ -1167,7 +1167,7 @@ export default function Tasks() {
                 </select>
               </label>
 
-              <label className="task-pill" title="Priority">
+              <label className="task-pill" data-tooltip="Priority">
                 <svg
                   className="task-pill-icon"
                   viewBox="0 0 16 16"
@@ -1195,7 +1195,7 @@ export default function Tasks() {
 
               <label
                 className="task-pill"
-                title="Project — used to suggest assignees from its code history"
+                data-tooltip="Project — used to suggest assignees from its code history"
               >
                 <svg
                   className="task-pill-icon task-pill-icon--stroke"
@@ -1344,7 +1344,7 @@ export default function Tasks() {
                       type="button"
                       className="task-attachment-name"
                       onClick={() => void downloadExisting(att)}
-                      title="Download"
+                      data-tooltip="Download"
                     >
                       {att.name}
                     </button>
@@ -1393,7 +1393,7 @@ export default function Tasks() {
                 type="button"
                 className="task-compose-attach"
                 onClick={() => fileInputRef.current?.click()}
-                title="Attach files — uploaded when you save the task"
+                data-tooltip="Attach files — uploaded when you save the task"
                 aria-label="Attach files"
               >
                 <svg
@@ -1527,7 +1527,7 @@ export default function Tasks() {
                             <div className="task-board-card-top">
                               <span
                                 className={`task-priority-badge priority-${task.priority}`}
-                                title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                                data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
                               >
                                 P{task.priority}
                               </span>
@@ -1542,7 +1542,7 @@ export default function Tasks() {
                               type="button"
                               className="task-card-title-link task-board-card-title"
                               onClick={() => openEdit(task)}
-                              title="Open task details"
+                              data-tooltip="Open task details"
                             >
                               {task.name}
                             </button>
@@ -1638,7 +1638,7 @@ export default function Tasks() {
                               type="button"
                               className="task-card-title-link"
                               onClick={() => openEdit(task)}
-                              title="Open task details"
+                              data-tooltip="Open task details"
                             >
                               {task.name}
                             </button>
@@ -1647,7 +1647,7 @@ export default function Tasks() {
                           </h3>
                           <span
                             className={`task-priority-badge priority-${task.priority}`}
-                            title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                            data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
                           >
                             P{task.priority}
                           </span>
@@ -1737,7 +1737,7 @@ export default function Tasks() {
                               type="button"
                               className="task-card-title-link"
                               onClick={() => openEdit(task)}
-                              title="Open task details"
+                              data-tooltip="Open task details"
                             >
                               {task.name}
                             </button>
@@ -1746,7 +1746,7 @@ export default function Tasks() {
                           </h3>
                           <span
                             className={`task-priority-badge priority-${task.priority}`}
-                            title={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                            data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
                           >
                             P{task.priority}
                           </span>

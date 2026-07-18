@@ -66,7 +66,7 @@ export default function EmojiPicker({ onSelect, onClose, anchorRef }: Props) {
                   key={e.char}
                   type="button"
                   className="chat-emoji-btn"
-                  title={e.name}
+                  data-tooltip={e.name}
                   aria-label={e.name}
                   onClick={() => onSelect(e.char)}
                 >
@@ -85,7 +85,7 @@ export default function EmojiPicker({ onSelect, onClose, anchorRef }: Props) {
                     key={e.char}
                     type="button"
                     className="chat-emoji-btn"
-                    title={e.name}
+                    data-tooltip={e.name}
                     aria-label={e.name}
                     onClick={() => onSelect(e.char)}
                   >

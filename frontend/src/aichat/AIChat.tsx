@@ -304,7 +304,7 @@ export default function AIChat({
         className="ai-chat-send"
         onClick={send}
         disabled={busy || !input.trim()}
-        title="Send"
+        data-tooltip="Send"
       >
         {busy ? "…" : "Send"}
       </button>
@@ -328,7 +328,7 @@ export default function AIChat({
               <button
                 className="ai-chat-settings"
                 onClick={() => navigate("/settings/ai")}
-                title="Change the AI provider for your organization"
+                data-tooltip="Change the AI provider for your organization"
               >
                 ⚙ AI settings
               </button>

@@ -76,7 +76,8 @@ export default function ProfileMenu({
         onClick={() => setMenuOpen((o) => !o)}
         aria-haspopup="true"
         aria-expanded={menuOpen}
-        title={user.email}
+        data-tooltip={user.email}
+        aria-label={user.email}
       >
         <Avatar
           className="profile-avatar"

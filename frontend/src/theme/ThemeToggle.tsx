@@ -44,7 +44,7 @@ export default function ThemeToggle({ className }: Props) {
         type="button"
         className={`theme-toggle theme-toggle--${resolved} ${className ?? ""}`.trim()}
         onClick={() => setOpen((o) => !o)}
-        title="Customize appearance"
+        data-tooltip="Customize appearance"
         aria-label="Customize appearance"
         aria-haspopup="dialog"
         aria-expanded={open}

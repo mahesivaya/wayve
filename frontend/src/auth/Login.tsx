@@ -265,7 +265,7 @@ export default function Login() {
                 type="button"
                 className="sso-btn"
                 disabled
-                title="SSO sign-in is temporarily disabled"
+                data-tooltip="SSO sign-in is temporarily disabled"
                 onClick={() => {
                   setSsoMode(true);
                   setError("");

@@ -212,7 +212,7 @@ export default function MessageComposer({
             <button
               type="button"
               className="chat-attach-btn"
-              title="Attach files"
+              data-tooltip="Attach files"
               aria-label="Attach files"
               disabled={disabled}
               onClick={() => fileInputRef.current?.click()}
@@ -232,7 +232,7 @@ export default function MessageComposer({
           <button
             type="button"
             className="chat-emoji-btn-toggle"
-            title="Emoji"
+            data-tooltip="Emoji"
             aria-label="Emoji"
             aria-expanded={emojiOpen}
             disabled={disabled}

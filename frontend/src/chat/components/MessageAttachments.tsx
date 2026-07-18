@@ -118,7 +118,7 @@ function AttachmentItem({
       className="message-attachment-file"
       onClick={() => void downloadFile()}
       disabled={busy}
-      title={`Download ${att.name}`}
+      data-tooltip={`Download ${att.name}`}
     >
       <span className="message-attachment-file-icon" aria-hidden="true">
         📄

@@ -500,7 +500,7 @@ export default function Emails() {
             <button
               className="compose-btn compose-btn--toolbar"
               onClick={() => setComposeOpen(true)}
-              title="Compose"
+              data-tooltip="Compose"
             >
               Compose
             </button>
@@ -522,7 +522,7 @@ export default function Emails() {
                 className={`email-bulk-action${viewMode === "files" ? " is-active" : ""}`}
                 onClick={openFiles}
                 aria-pressed={viewMode === "files"}
-                title="Show all attachments across your emails"
+                data-tooltip="Show all attachments across your emails"
               >
                 Attachments
               </button>
@@ -598,7 +598,7 @@ export default function Emails() {
               role="separator"
               aria-orientation="vertical"
               aria-label="Resize email sidebar"
-              title="Drag to resize sidebar"
+              data-tooltip="Drag to resize sidebar"
             />
           </>
         )}
@@ -640,7 +640,7 @@ export default function Emails() {
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize email list"
-            title="Drag to resize email list"
+            data-tooltip="Drag to resize email list"
           />
         )}
 

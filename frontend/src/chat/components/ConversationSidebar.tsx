@@ -88,7 +88,7 @@ export default function ConversationSidebar({
           className="new-channel-btn"
           onClick={onToggleCreateChannel}
           aria-label="Add channel"
-          title="Add channel"
+          data-tooltip="Add channel"
         >
           +
         </button>

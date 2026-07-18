@@ -298,10 +298,10 @@ export default function PlatformLogs({
                           </span>
                         </td>
                         <td>{r.user_email ?? "anon"}</td>
-                        <td className="logs-message" title={r.message}>
+                        <td className="logs-message" data-tooltip={r.message}>
                           {r.message}
                         </td>
-                        <td className="logs-url" title={r.url ?? ""}>
+                        <td className="logs-url" data-tooltip={r.url ?? ""}>
                           {r.url ?? "—"}
                         </td>
                         <td>

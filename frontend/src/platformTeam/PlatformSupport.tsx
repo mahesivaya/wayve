@@ -158,7 +158,7 @@ export default function PlatformSupport() {
                     key={t.id}
                     className="pt-row-clickable"
                     onClick={() => setSelectedTicket(t)}
-                    title="View ticket details"
+                    data-tooltip="View ticket details"
                   >
                     <td>#{t.id}</td>
                     <td>

@@ -27,7 +27,7 @@ export default function SearchBar() {
             type="button"
             className={`email-layout-btn ${emailViewLayout === "list" ? "active" : ""}`}
             onClick={() => setEmailViewLayout("list")}
-            title="List view"
+            data-tooltip="List view"
             aria-label="List view"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -41,7 +41,7 @@ export default function SearchBar() {
             type="button"
             className={`email-layout-btn ${emailViewLayout === "split" ? "active" : ""}`}
             onClick={() => setEmailViewLayout("split")}
-            title="Split view"
+            data-tooltip="Split view"
             aria-label="Split view"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -70,7 +70,7 @@ export default function SearchBar() {
             type="button"
             className="global-search-clear"
             onClick={() => setSearchQuery("")}
-            title="Clear search"
+            data-tooltip="Clear search"
             aria-label="Clear search"
           >
             ×

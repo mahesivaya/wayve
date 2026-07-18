@@ -2067,7 +2067,7 @@ function GitHubRepoViewer({
                           setFileText("");
                         }}
                         aria-label="Close file preview"
-                        title="Close preview"
+                        data-tooltip="Close preview"
                       >
                         ✕
                       </button>
@@ -2128,7 +2128,7 @@ function GitHubRepoViewer({
                             setFileText("");
                           }}
                           aria-label="Close workflow preview"
-                          title="Close preview"
+                          data-tooltip="Close preview"
                         >
                           ✕
                         </button>
@@ -2201,7 +2201,7 @@ function GitHubRepoViewer({
                         href={commit.html_url}
                         target="_blank"
                         rel="noreferrer"
-                        title="Open on GitHub"
+                        data-tooltip="Open on GitHub"
                         aria-label="Open on GitHub"
                         onClick={(event) => event.stopPropagation()}
                       >
@@ -2969,7 +2969,7 @@ function GitHubRepoViewer({
                                 <div
                                   className="github-pr-composer"
                                   aria-disabled="true"
-                                  title="Read-only — commenting needs a connected GitHub account"
+                                  data-tooltip="Read-only — commenting needs a connected GitHub account"
                                 >
                                   <div className="github-pr-composer-input">
                                     Leave a comment…
@@ -3326,7 +3326,7 @@ function GitHubRepoViewer({
                                                   target="_blank"
                                                   rel="noreferrer"
                                                   aria-label={`Open ${job.name} on GitHub`}
-                                                  title="Open on GitHub"
+                                                  data-tooltip="Open on GitHub"
                                                   onClick={(event) =>
                                                     event.stopPropagation()
                                                   }

@@ -159,7 +159,7 @@ export default function ChannelSettingsPanel({
                     className="channel-member-remove"
                     onClick={() => onDeleteUser(member.email)}
                     aria-label={`Remove ${member.email}`}
-                    title={`Remove ${member.email}`}
+                    data-tooltip={`Remove ${member.email}`}
                   >
                     ×
                   </button>

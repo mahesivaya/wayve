@@ -386,7 +386,7 @@ export default function ProjectDetail() {
                         href={c.html_url}
                         target="_blank"
                         rel="noreferrer"
-                        title={msg}
+                        data-tooltip={msg}
                       >
                         {msg}
                       </a>
@@ -450,7 +450,7 @@ export default function ProjectDetail() {
             </div>
             <div className="project-detail-prop">
               <dt>Updated</dt>
-              <dd title={absoluteDate(repo.updated_at)}>
+              <dd data-tooltip={absoluteDate(repo.updated_at)}>
                 {timeAgo(repo.updated_at) || "—"}
               </dd>
             </div>

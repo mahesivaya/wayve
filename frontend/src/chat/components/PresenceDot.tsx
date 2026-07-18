@@ -28,7 +28,7 @@ export default function PresenceDot({ presence }: Props) {
       className={`presence-dot ${cls}`}
       role="img"
       aria-label={label}
-      title={label}
+      data-tooltip={label}
     />
   );
 }

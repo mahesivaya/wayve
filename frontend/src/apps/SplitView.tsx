@@ -65,7 +65,7 @@ export default function SplitView({ left, right }: Props) {
         onMouseDown={startDrag}
         role="separator"
         aria-orientation="vertical"
-        title="Drag to resize"
+        data-tooltip="Drag to resize"
       />
       <div className="split-view-pane" style={{ width: `${100 - leftPct}%` }}>
         {right}

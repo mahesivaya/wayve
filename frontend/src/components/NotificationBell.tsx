@@ -46,7 +46,7 @@ export default function NotificationBell({
           type="button"
           className="sidebar-link notif-sidebar-trigger"
           onClick={open}
-          title="Reminders"
+          data-tooltip="Reminders"
         >
           <span className="sidebar-icon" aria-hidden="true">
             <ReminderIcon size={18} />
@@ -65,7 +65,7 @@ export default function NotificationBell({
         className="notif-bell-btn"
         onClick={open}
         aria-label={total > 0 ? `${total} unread reminders` : "Reminders"}
-        title="Reminders"
+        data-tooltip="Reminders"
       >
         <BellIcon size={20} />
         {badge}

@@ -222,7 +222,7 @@ export default function AiUsageGovernance() {
                   key={d.day}
                   className="ai-trend-bar"
                   style={{ height: `${(d.cost_cents / maxDailyCost) * 100}%` }}
-                  title={`${d.day}: ${usd(d.cost_cents)} · ${d.requests} reqs`}
+                  data-tooltip={`${d.day}: ${usd(d.cost_cents)} · ${d.requests} reqs`}
                 />
               ))}
             </div>

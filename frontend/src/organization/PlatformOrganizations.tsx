@@ -154,7 +154,8 @@ export default function PlatformOrganizations() {
                   type="button"
                   className={viewMode === "list" ? "active" : ""}
                   aria-pressed={viewMode === "list"}
-                  title="List view"
+                  data-tooltip="List view"
+                  aria-label="List view"
                   onClick={() => setViewMode("list")}
                 >
                   ☰
@@ -163,7 +164,8 @@ export default function PlatformOrganizations() {
                   type="button"
                   className={viewMode === "block" ? "active" : ""}
                   aria-pressed={viewMode === "block"}
-                  title="Block view"
+                  data-tooltip="Block view"
+                  aria-label="Block view"
                   onClick={() => setViewMode("block")}
                 >
                   ▦
@@ -195,7 +197,7 @@ export default function PlatformOrganizations() {
                     key={org.id}
                     className="org-table-row"
                     onClick={() => setSelectedOrg(org)}
-                    title={`View ${org.name}`}
+                    data-tooltip={`View ${org.name}`}
                   >
                     <td>
                       <strong>{org.name}</strong>
@@ -219,7 +221,7 @@ export default function PlatformOrganizations() {
                   key={org.id}
                   type="button"
                   className="organization-grid-tile"
-                  title={org.name}
+                  data-tooltip={org.name}
                   onClick={() => setSelectedOrg(org)}
                 >
                   <strong>{org.name}</strong>

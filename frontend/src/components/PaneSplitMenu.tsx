@@ -16,7 +16,7 @@ export default function PaneSplitMenu({
       type="button"
       className={`split-menu-btn${active ? " active" : ""}`}
       onClick={onToggle}
-      title={active ? "Remove split" : "Split this pane"}
+      data-tooltip={active ? "Remove split" : "Split this pane"}
       aria-label={active ? "Remove split" : "Split this pane"}
       aria-pressed={active}
     >

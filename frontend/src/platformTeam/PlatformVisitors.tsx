@@ -202,12 +202,12 @@ export default function PlatformVisitors({
                       <td>
                         {r.ip ?? <span className="pt-empty-cell">-</span>}
                       </td>
-                      <td className="pt-loc" title={location}>
+                      <td className="pt-loc" data-tooltip={location}>
                         {location || <span className="pt-empty-cell">-</span>}
                       </td>
                       <td>{parseDevice(r.user_agent)}</td>
                       <td>{parseBrowser(r.user_agent)}</td>
-                      <td className="pt-details" title={r.referrer ?? ""}>
+                      <td className="pt-details" data-tooltip={r.referrer ?? ""}>
                         {r.referrer || <span className="pt-empty-cell">—</span>}
                       </td>
                     </tr>

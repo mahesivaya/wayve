@@ -999,7 +999,7 @@ export default function AuditSecurity({
                         <td>{formatLocation(row)}</td>
                         <td
                           className="audit-path"
-                          title={formatUserActionDetails(row) || "-"}
+                          data-tooltip={formatUserActionDetails(row) || "-"}
                         >
                           {formatUserActionDetails(row) || "-"}
                         </td>
@@ -1116,19 +1116,19 @@ export default function AuditSecurity({
                         </span>
                       </td>
                       <td>{formatProvider(row)}</td>
-                      <td className="audit-path" title={metaStr(row, "from")}>
+                      <td className="audit-path" data-tooltip={metaStr(row, "from")}>
                         {metaStr(row, "from")}
                       </td>
-                      <td className="audit-path" title={metaStr(row, "to")}>
+                      <td className="audit-path" data-tooltip={metaStr(row, "to")}>
                         {metaStr(row, "to")}
                       </td>
                       <td
                         className="audit-path"
-                        title={metaStr(row, "subject")}
+                        data-tooltip={metaStr(row, "subject")}
                       >
                         {metaStr(row, "subject")}
                       </td>
-                      <td className="audit-path" title={formatAttachments(row)}>
+                      <td className="audit-path" data-tooltip={formatAttachments(row)}>
                         {formatAttachments(row)}
                       </td>
                     </tr>
@@ -1237,13 +1237,13 @@ export default function AuditSecurity({
                         </td>
                         <td
                           className="audit-path"
-                          title={metaStr(row, "channel")}
+                          data-tooltip={metaStr(row, "channel")}
                         >
                           {metaStr(row, "channel")}
                         </td>
                         <td
                           className="audit-path"
-                          title={metaStr(row, "peer_email")}
+                          data-tooltip={metaStr(row, "peer_email")}
                         >
                           {metaStr(row, "peer_email")}
                         </td>
@@ -1353,13 +1353,13 @@ export default function AuditSecurity({
                           {CALENDAR_ACTION_LABEL[row.action] ?? row.action}
                         </span>
                       </td>
-                      <td className="audit-path" title={metaStr(row, "title")}>
+                      <td className="audit-path" data-tooltip={metaStr(row, "title")}>
                         {metaStr(row, "title")}
                       </td>
                       <td>{metaStr(row, "date")}</td>
                       <td>{formatMeetingTime(row)}</td>
                       <td>{formatMeetingDuration(row)}</td>
-                      <td className="audit-path" title={formatInvitees(row)}>
+                      <td className="audit-path" data-tooltip={formatInvitees(row)}>
                         {formatInvitees(row)}
                       </td>
                       <td>{metaStr(row, "status")}</td>
@@ -1475,10 +1475,10 @@ export default function AuditSecurity({
                           {DRIVE_ACTION_LABEL[row.action] ?? row.action}
                         </span>
                       </td>
-                      <td className="audit-path" title={driveNameTitle(row)}>
+                      <td className="audit-path" data-tooltip={driveNameTitle(row)}>
                         {metaStr(row, "name")}
                       </td>
-                      <td className="audit-path" title={metaStr(row, "folder")}>
+                      <td className="audit-path" data-tooltip={metaStr(row, "folder")}>
                         {metaStr(row, "folder")}
                       </td>
                       <td>{formatSize(row)}</td>
@@ -1575,7 +1575,7 @@ export default function AuditSecurity({
                           {NOTE_ACTION_LABEL[row.action] ?? row.action}
                         </span>
                       </td>
-                      <td className="audit-path" title={metaStr(row, "name")}>
+                      <td className="audit-path" data-tooltip={metaStr(row, "name")}>
                         {metaStr(row, "name")}
                       </td>
                       <td>{formatSize(row)}</td>
@@ -1685,7 +1685,7 @@ export default function AuditSecurity({
                       </td>
                       <td
                         className="audit-path"
-                        title={metaStr(row, "summary")}
+                        data-tooltip={metaStr(row, "summary")}
                       >
                         {metaStr(row, "summary")}
                       </td>

@@ -247,7 +247,7 @@ export default function UserAudit({
                           </span>
                         </td>
                         <td>{labelOf(row)}</td>
-                        <td className="audit-path" title={describe(row)}>
+                        <td className="audit-path" data-tooltip={describe(row)}>
                           {describe(row)}
                         </td>
                       </tr>
@@ -293,7 +293,7 @@ export default function UserAudit({
                           {ACTIVITY_KIND_LABEL[ev.kind] ?? ev.kind}
                         </span>
                       </td>
-                      <td className="audit-path" title={describeActivity(ev)}>
+                      <td className="audit-path" data-tooltip={describeActivity(ev)}>
                         {describeActivity(ev)}
                       </td>
                       <td>{ev.ip ?? "-"}</td>

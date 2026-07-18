@@ -118,7 +118,7 @@ export default function MessageThread({
                     className={`message-status${
                       msg.status === "read" ? " message-status--read" : ""
                     }`}
-                    title={msg.status}
+                    data-tooltip={msg.status}
                     aria-label={msg.status}
                   >
                     {getStatusIcon(msg.status)}
@@ -130,7 +130,8 @@ export default function MessageThread({
                   type="button"
                   className="message-thread-action"
                   onClick={() => onOpenThread!(msg)}
-                  title="Reply in thread"
+                  data-tooltip="Reply in thread"
+                  aria-label="Reply in thread"
                 >
                   💬
                 </button>

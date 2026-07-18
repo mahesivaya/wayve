@@ -773,7 +773,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               <button
                 className="split-close-btn"
                 onClick={() => closeHalf(key, whichHalf)}
-                title="Close this pane"
+                data-tooltip="Close this pane"
                 aria-label="Close this pane"
               >
                 ✕
@@ -922,7 +922,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         <button
           type="button"
           className="sidebar-section-add-btn"
-          title={`New ${label}`}
+          data-tooltip={`New ${label}`}
           aria-label={`New ${label}`}
           onClick={(e) => {
             e.preventDefault();
@@ -1327,7 +1327,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         type="button"
         className={`duplicate-pane-btn ${splitTarget === "right" ? "active" : ""}`}
         onClick={openSplitPane}
-        title="Split view"
+        data-tooltip="Split view"
         aria-label="Split view"
       >
         <svg
@@ -1375,7 +1375,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   type="button"
                   className="sidebar-collapse-btn header-collapse-btn"
                   onClick={() => setSidebarCollapsed((c) => !c)}
-                  title={
+                  data-tooltip={
                     sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
                   }
                   aria-label={
@@ -1407,7 +1407,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   type="button"
                   className="sidebar-toggle-btn"
                   onClick={() => setNavOpen((open) => !open)}
-                  title={navOpen ? "Hide sidebar" : "Show sidebar"}
+                  data-tooltip={navOpen ? "Hide sidebar" : "Show sidebar"}
                   aria-label={navOpen ? "Hide sidebar" : "Show sidebar"}
                   aria-expanded={navOpen}
                 >
@@ -1525,7 +1525,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                           key={a.key}
                           type="button"
                           className="sidebar-link sidebar-link-placeholder"
-                          title={`${a.label} (coming soon)`}
+                          data-tooltip={`${a.label} (coming soon)`}
                           onClick={() =>
                             navigate(
                               `/coming-soon?feature=${encodeURIComponent(a.label)}`
@@ -1545,7 +1545,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                       <button
                         type="button"
                         className="sidebar-link sidebar-add-app-btn"
-                        title="Add app"
+                        data-tooltip="Add app"
                         onClick={() => setAddAppOpen(true)}
                       >
                         <span className="sidebar-icon" aria-hidden="true">
@@ -1582,7 +1582,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 <div className="sidebar-section sidebar-admin-mode">
                   <span
                     className="admin-mode-badge"
-                    title="You are in admin mode"
+                    data-tooltip="You are in admin mode"
                   >
                     🛡️ Admin mode
                   </span>
@@ -1600,7 +1600,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                     className={`sidebar-link sidebar-profile-btn${
                       location.pathname === "/settings" ? " active" : ""
                     }`}
-                    title={`${user.email} — open settings`}
+                    data-tooltip={`${user.email} — open settings`}
                     onClick={() => {
                       setNavOpen(false);
                       void navigate("/settings");
@@ -1669,7 +1669,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                           <button
                             className="split-close-btn"
                             onClick={closeLeftPane}
-                            title="Close pane"
+                            data-tooltip="Close pane"
                             aria-label="Close left pane"
                           >
                             ✕
@@ -1723,7 +1723,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                             setMiddleView(null);
                             setSubSplit((s) => ({ ...s, center: false }));
                           }}
-                          title="Close pane"
+                          data-tooltip="Close pane"
                           aria-label="Close center pane"
                         >
                           ✕
@@ -1771,7 +1771,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                             setPaneTarget(null);
                             setSubSplit((s) => ({ ...s, right: false }));
                           }}
-                          title="Close pane"
+                          data-tooltip="Close pane"
                           aria-label="Close right pane"
                         >
                           ✕

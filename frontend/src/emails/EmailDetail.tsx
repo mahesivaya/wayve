@@ -53,6 +53,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Gmail-style "more actions" kebab menu (temporary placeholder items).
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const [replySending, setReplySending] = useState(false);
@@ -129,6 +132,28 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [selectedEmail?.id]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (
+        moreRef.current &&
+        event.target instanceof Node &&
+        !moreRef.current.contains(event.target)
+      ) {
+        setMoreOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoreOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [moreOpen]);
 
   async function patchInboxState(
     patch: Parameters<typeof updateEmailState>[1]
@@ -209,7 +234,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
               type="button"
               className="email-bulk-action is-active"
               aria-pressed="true"
-              title="Showing all attachments"
+              data-tooltip="Showing all attachments"
             >
               Attachments
             </button>
@@ -479,7 +504,24 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
 
   return (
     <div className="email-detail">
-      <div className="email-detail-actions">
+      <div className="email-detail-header">
+        <button
+          type="button"
+          className="email-detail-back-top"
+          onClick={onBack}
+          data-tooltip="Back to list"
+          aria-label="Back to list"
+        >
+          <svg
+            className="email-detail-back-top-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path d="M15 6l-6 6 6 6" />
+          </svg>
+          <span>Back</span>
+        </button>
+        <div className="email-detail-actions">
         <button
           className="email-detail-reply"
           onClick={() => {
@@ -488,7 +530,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             setForwardOpen(false);
             setForwardError(null);
           }}
-          title="Reply"
+          data-tooltip="Reply"
           aria-label="Reply"
         >
           <svg
@@ -499,11 +541,12 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             <path d="M10 8 5 13l5 5" />
             <path d="M5 13h9a5 5 0 0 1 5 5v1" />
           </svg>
+          <span>Reply</span>
         </button>
         <button
           className="email-detail-forward"
           onClick={openForward}
-          title="Forward"
+          data-tooltip="Forward"
           aria-label="Forward"
         >
           <svg
@@ -514,12 +557,13 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             <path d="M14 8l5 5-5 5" />
             <path d="M5 19v-1a5 5 0 0 1 5-5h9" />
           </svg>
+          <span>Forward</span>
         </button>
         <button
           className="email-detail-delete"
           onClick={() => void handleDelete()}
           disabled={deleting}
-          title="Delete email"
+          data-tooltip="Delete email"
           aria-label="Delete email"
         >
           {deleting ? (
@@ -541,11 +585,40 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         <button
           className="email-detail-back"
           onClick={onBack}
-          title="Close"
+          data-tooltip="Close"
           aria-label="Close"
         >
           ✕
         </button>
+        <div className="email-detail-more" ref={moreRef}>
+          <button
+            type="button"
+            className="email-detail-more-btn"
+            onClick={() => setMoreOpen((open) => !open)}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            data-tooltip="More"
+            aria-label="More actions"
+          >
+            ⋮
+          </button>
+          {moreOpen && (
+            <div className="email-detail-more-menu" role="menu">
+              {["test1", "test2", "test3"].map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  role="menuitem"
+                  className="email-detail-more-item"
+                  onClick={() => setMoreOpen(false)}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        </div>
       </div>
       <h2 className="email-detail-subject">
         {selectedEmail.subject || "(No subject)"}

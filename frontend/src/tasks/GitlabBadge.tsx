@@ -14,7 +14,7 @@ export function GitlabBadge({ task }: { task: Task }) {
       href={task.gitlab_web_url}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Open GitLab issue #${task.gitlab_issue_iid}`}
+      data-tooltip={`Open GitLab issue #${task.gitlab_issue_iid}`}
       onClick={(e) => e.stopPropagation()}
     >
       {label}

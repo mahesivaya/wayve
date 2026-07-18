@@ -731,7 +731,7 @@ export default function MembersRolesPanel(props: Props) {
                                   setResetError("");
                                   setResetPassword("");
                                 }}
-                                title="Reset this member's password — they'll keep all their data"
+                                data-tooltip="Reset this member's password — they'll keep all their data"
                               >
                                 Reset password
                               </button>
@@ -744,7 +744,7 @@ export default function MembersRolesPanel(props: Props) {
                           className="rbac-delete-btn"
                           disabled={deletingId === member.user_id}
                           onClick={() => void deleteMember(member)}
-                          title="Delete account"
+                          data-tooltip="Delete account"
                           aria-label={`Delete ${member.email}`}
                         >
                           {deletingId === member.user_id

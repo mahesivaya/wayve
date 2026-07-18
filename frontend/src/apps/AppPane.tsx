@@ -29,7 +29,7 @@ export default function AppPane({ appKey, side, onPick, onClose }: Props) {
         <button
           className="app-pane-close"
           onClick={onClose}
-          title="Close pane"
+          data-tooltip="Close pane"
           aria-label="Close pane"
         >
           ×

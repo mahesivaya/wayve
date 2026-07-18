@@ -226,7 +226,7 @@ export default function Profile() {
               aria-label="Edit profile photo"
               aria-haspopup="menu"
               aria-expanded={avatarMenuOpen}
-              title="Edit profile photo"
+              data-tooltip="Edit profile photo"
               style={{
                 position: "absolute",
                 right: -2,

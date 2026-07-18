@@ -83,7 +83,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           className="compose-btn"
           onClick={onCompose}
           disabled={composeDisabled}
-          title={composeDisabled ? "No inbox available" : "Compose"}
+          data-tooltip={composeDisabled ? "No inbox available" : "Compose"}
         >
           Compose
         </button>
@@ -98,7 +98,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
             onClick={onRequestAddAccount}
             aria-haspopup="dialog"
             aria-label="Add account"
-            title="Add account"
+            data-tooltip="Add account"
           >
             +
           </button>
@@ -167,7 +167,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
                       className="account-icon-btn"
                       onClick={() => void saveName(acc)}
                       disabled={savingAccountId === acc.id}
-                      title="Save name"
+                      data-tooltip="Save name"
                       aria-label="Save name"
                     >
                       ✓
@@ -176,7 +176,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
                       type="button"
                       className="account-icon-btn"
                       onClick={() => setEditingAccountId(null)}
-                      title="Cancel"
+                      data-tooltip="Cancel"
                       aria-label="Cancel"
                     >
                       ×
@@ -193,7 +193,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
                       type="button"
                       className="account-filter-main"
                       onClick={() => setActiveAccount(acc.id)}
-                      title={
+                      data-tooltip={
                         acc.is_shared
                           ? `Shared inbox · ${acc.email}`
                           : acc.email
@@ -223,7 +223,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
                         type="button"
                         className="account-icon-btn"
                         onClick={() => startEditing(acc)}
-                        title="Edit account name"
+                        data-tooltip="Edit account name"
                         aria-label={`Edit name for ${acc.email}`}
                       >
                         ✎

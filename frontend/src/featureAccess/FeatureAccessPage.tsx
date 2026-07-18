@@ -194,7 +194,7 @@ export default function FeatureAccessPage() {
                           type="button"
                           className="feature-access-reset"
                           onClick={() => resetToDefault(f.key, f.default_roles)}
-                          title="Reset to the default roles"
+                          data-tooltip="Reset to the default roles"
                         >
                           Reset
                         </button>

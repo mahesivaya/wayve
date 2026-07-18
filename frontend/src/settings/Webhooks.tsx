@@ -409,7 +409,7 @@ export default function Webhooks() {
                           </td>
                           <td>{d.http_status ?? "—"}</td>
                           <td>{d.attempt_count}</td>
-                          <td title={d.response_excerpt ?? ""}>
+                          <td data-tooltip={d.response_excerpt ?? ""}>
                             {d.response_excerpt
                               ? d.response_excerpt.slice(0, 80) +
                                 (d.response_excerpt.length > 80 ? "…" : "")

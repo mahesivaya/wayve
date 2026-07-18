@@ -216,7 +216,7 @@ export default function PlatformEnterprises() {
                   key={ent.id}
                   type="button"
                   className="organization-grid-tile organization-grid-tile--stats"
-                  title={ent.name}
+                  data-tooltip={ent.name}
                   onClick={() => setSelectedOrg(ent)}
                 >
                   <strong>{ent.name}</strong>

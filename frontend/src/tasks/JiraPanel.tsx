@@ -257,7 +257,7 @@ export function JiraBadge({ task }: { task: Task }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Open ${task.jira_issue_key} in Jira`}
+      data-tooltip={`Open ${task.jira_issue_key} in Jira`}
       onClick={(e) => e.stopPropagation()}
     >
       {task.jira_issue_key}

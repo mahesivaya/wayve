@@ -311,7 +311,7 @@ export default function RecoverMemberDataPage() {
                 {tab.label}
                 {!tab.isE2E && (
                   <span
-                    title="Plaintext on the server (not E2E in v1)"
+                    data-tooltip="Plaintext on the server (not E2E in v1)"
                     style={{ marginLeft: 6, fontSize: 11, color: "#a16207" }}
                   >
                     plaintext

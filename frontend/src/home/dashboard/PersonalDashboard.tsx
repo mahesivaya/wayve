@@ -297,7 +297,7 @@ export default function PersonalDashboard() {
                       e.stopPropagation();
                       void completeTask(t);
                     }}
-                    title="Mark done"
+                    data-tooltip="Mark done"
                     aria-label="Mark done"
                   >
                     ○

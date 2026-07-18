@@ -500,7 +500,7 @@ export default function Drive() {
         <div className="drive-breadcrumb-actions">
           <label
             className={`drive-folder-new-btn drive-upload-btn${uploading ? " is-busy" : ""}`}
-            title="Upload files to this folder"
+            data-tooltip="Upload files to this folder"
           >
             {uploading ? "Uploading…" : "⬆ Upload"}
             <input
@@ -563,7 +563,7 @@ export default function Drive() {
               type="button"
               className="drive-view-btn drive-layout-trigger"
               onClick={() => setLayoutMenuOpen((o) => !o)}
-              title="Layout"
+              data-tooltip="Layout"
               aria-label="Layout"
               aria-haspopup="menu"
               aria-expanded={layoutMenuOpen}
@@ -675,7 +675,7 @@ export default function Drive() {
                             id === folder.id ? null : folder.id
                           )
                         }
-                        title="More actions"
+                        data-tooltip="More actions"
                         aria-label="More actions"
                         aria-haspopup="menu"
                         aria-expanded={menuOpenFolderId === folder.id}
@@ -786,7 +786,8 @@ export default function Drive() {
                     type="button"
                     className="file-left drive-folder-open"
                     onClick={() => void openPreview(file)}
-                    title="Open preview"
+                    data-tooltip="Open preview"
+                    aria-label="Open preview"
                   >
                     <DriveThumbnail
                       file={file}
@@ -821,7 +822,7 @@ export default function Drive() {
                       onClick={() =>
                         setMenuOpenId((id) => (id === file.id ? null : file.id))
                       }
-                      title="More actions"
+                      data-tooltip="More actions"
                       aria-label="More actions"
                       aria-haspopup="menu"
                       aria-expanded={menuOpenId === file.id}
@@ -898,7 +899,7 @@ export default function Drive() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drive-preview-header">
-              <span className="drive-preview-title" title={previewFile.name}>
+              <span className="drive-preview-title" data-tooltip={previewFile.name}>
                 {previewFile.name}
               </span>
               <div className="drive-preview-actions">

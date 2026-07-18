@@ -392,7 +392,7 @@ export default function ThemeCustomizer() {
             type="button"
             className="theme-icon-btn"
             onClick={handleSave}
-            title="Save to your themes"
+            data-tooltip="Save to your themes"
             aria-label="Save theme"
           >
             <SaveIcon />
@@ -401,7 +401,7 @@ export default function ThemeCustomizer() {
             type="button"
             className="theme-icon-btn"
             onClick={handleRandomize}
-            title="Randomize"
+            data-tooltip="Randomize"
             aria-label="Randomize theme"
           >
             <DiceIcon />
@@ -410,7 +410,7 @@ export default function ThemeCustomizer() {
             type="button"
             className="theme-icon-btn"
             onClick={toggleBlackAndWhite}
-            title={
+            data-tooltip={
               bwActive
                 ? `Black & white: ${choice.kind === "custom" && choice.mode === "dark" ? "black — click for white" : "white — click for black"}`
                 : "Black & white"
@@ -452,7 +452,7 @@ export default function ThemeCustomizer() {
                 type="button"
                 className={`theme-bg-swatch ${active ? "active" : ""}`}
                 style={{ background: surface }}
-                title={bg.label}
+                data-tooltip={bg.label}
                 aria-label={`${bg.label} background`}
                 aria-pressed={active}
                 onClick={() => {
@@ -534,7 +534,7 @@ export default function ThemeCustomizer() {
             type="button"
             className="theme-tool-btn"
             onClick={() => copyTheme({ name, mode, input })}
-            title="Copy this theme to clipboard"
+            data-tooltip="Copy this theme to clipboard"
           >
             📋 Copy
           </button>
@@ -545,7 +545,7 @@ export default function ThemeCustomizer() {
               setImportOpen((o) => !o);
               setImportError(null);
             }}
-            title="Import a theme from clipboard text"
+            data-tooltip="Import a theme from clipboard text"
           >
             Import
           </button>
@@ -560,7 +560,7 @@ export default function ThemeCustomizer() {
             type="button"
             className="theme-customizer-reset"
             onClick={resetToDefault}
-            title="Restore stylesheet defaults"
+            data-tooltip="Restore stylesheet defaults"
           >
             Reset
           </button>
@@ -624,7 +624,7 @@ export default function ThemeCustomizer() {
                   type="button"
                   className="theme-lib-apply"
                   onClick={() => applyPreset(preset.id)}
-                  title={`Apply ${preset.name}`}
+                  data-tooltip={`Apply ${preset.name}`}
                 >
                   <RowSwatch input={preset.input} mode={preset.mode} />
                   <span className="theme-lib-name">{preset.name}</span>
@@ -639,7 +639,7 @@ export default function ThemeCustomizer() {
                       input: preset.input,
                     })
                   }
-                  title="Copy theme"
+                  data-tooltip="Copy theme"
                   aria-label={`Copy ${preset.name}`}
                 >
                   📋
@@ -656,7 +656,7 @@ export default function ThemeCustomizer() {
                   type="button"
                   className="theme-lib-apply"
                   onClick={() => applySaved(t)}
-                  title={`Apply ${t.name}`}
+                  data-tooltip={`Apply ${t.name}`}
                 >
                   <RowSwatch input={t.input} mode={t.mode} />
                   {renamingId === t.id ? (
@@ -688,7 +688,7 @@ export default function ThemeCustomizer() {
                   onClick={() =>
                     copyTheme({ name: t.name, mode: t.mode, input: t.input })
                   }
-                  title="Copy theme"
+                  data-tooltip="Copy theme"
                   aria-label={`Copy ${t.name}`}
                 >
                   📋
@@ -697,7 +697,7 @@ export default function ThemeCustomizer() {
                   type="button"
                   className="theme-lib-icon"
                   onClick={() => setRenamingId(t.id)}
-                  title="Rename"
+                  data-tooltip="Rename"
                   aria-label={`Rename ${t.name}`}
                 >
                   ✏️
@@ -706,7 +706,7 @@ export default function ThemeCustomizer() {
                   type="button"
                   className="theme-lib-icon theme-lib-delete"
                   onClick={() => deleteTheme(t.id)}
-                  title="Delete"
+                  data-tooltip="Delete"
                   aria-label={`Delete ${t.name}`}
                 >
                   ✕
@@ -823,7 +823,7 @@ export default function ThemeCustomizer() {
                       type="button"
                       className="theme-lib-icon"
                       onClick={() => clearUiOverride(role)}
-                      title="Clear override"
+                      data-tooltip="Clear override"
                       aria-label={`Clear ${label} override`}
                     >
                       ✕
