@@ -3,6 +3,33 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.7.1](https://github.com/mahesivaya/wayve/releases/tag/v7.7.1) - 2026-07-18
+
+### 🚀 Features
+
+- **emails:** Signal now includes Gmail Important OR Updates, minus noise senders
+- **emails:** Mark a sender as Noise to route all their mail to the Noise folder
+- **ui:** App-wide instant tooltips — replace native `title` hover hints
+- **emails:** Wire Signal to Important and Noise to Social + Promotions
+- **emails:** Per-row hover quick-actions with visible icon highlight
+- **emails:** Show bulk delete icon only when emails are selected
+- **emails:** Reorder read toggles and fold inbox sub-views into folder chips
+- **emails:** Gmail-style toolbar — select dropdown, icon actions, Reviews chip
+- **reminders:** Two-column layout — lists left, create form right, full width
+- **reminders:** Add user-created reminders with a create page and 1-min popup
+- **scheduler:** Remind 15 min before a meeting with a snoozable alert card
+
+### 🐛 Bug Fixes
+
+- **reminders:** Sidebar badge counts reminders, not unread mail/chat
+- **emails:** Forward wheel/touchpad scroll from the email iframe to the pane
+- **emails:** Remove leading gutter before the row envelope/checkbox
+
+### 🧹 Maintenance
+
+- **db:** Add hand-apply migration for reminders table + RLS
+- **changelog:** Update for v7.7.0 [skip ci]
+
 ## [7.7.0](https://github.com/mahesivaya/wayve/releases/tag/v7.7.0) - 2026-07-17
 
 ### 🚀 Features
