@@ -240,23 +240,39 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                 qb.push(" AND lower(coalesce(e.sender, '')) LIKE '%github.com%' ");
             }
             // Inbox sub-views (the "All / Signal / Noise" chips): "signal" is the
-            // important mail; "noise" bundles the low-priority categories (social
-            // + promotions).
+            // high-priority mail — anything Gmail tags Important OR Updates —
+            // minus senders the user marked as Noise. "noise" bundles the
+            // low-priority categories (social + promotions) plus marked senders.
             "signal" => {
-                qb.push(" AND 'IMPORTANT' = ANY(e.labels) ");
-            }
-            "noise" => {
-                // Social + promotions categories, plus any sender the user has
-                // explicitly marked as noise.
                 qb.push(
-                    " AND ('CATEGORY_SOCIAL' = ANY(e.labels) \
-                       OR 'CATEGORY_PROMOTIONS' = ANY(e.labels) \
-                       OR EXISTS (SELECT 1 FROM noise_senders ns \
+                    " AND ('IMPORTANT' = ANY(e.labels) \
+                       OR 'CATEGORY_UPDATES' = ANY(e.labels)) \
+                       AND NOT EXISTS (SELECT 1 FROM noise_senders ns \
                           WHERE ns.user_id = ",
                 );
                 qb.push_bind(filters.user_id);
                 qb.push(
-                    " AND lower(coalesce(e.sender, '')) LIKE '%' || lower(ns.sender_email) || '%')) ",
+                    " AND lower(coalesce(e.sender, '')) LIKE '%' || lower(ns.sender_email) || '%') ",
+                );
+            }
+            "noise" => {
+                // A sender the user marked as Noise ALWAYS lands here — even if
+                // Gmail tagged the mail Important/Updates — so noise-marking
+                // overrides Signal. Otherwise, the low-priority categories
+                // (social + promotions) that Signal doesn't claim. The
+                // NOT IMPORTANT / NOT CATEGORY_UPDATES guards keep Signal and
+                // Noise disjoint for mail Gmail double-tags.
+                qb.push(
+                    " AND (EXISTS (SELECT 1 FROM noise_senders ns \
+                          WHERE ns.user_id = ",
+                );
+                qb.push_bind(filters.user_id);
+                qb.push(
+                    " AND lower(coalesce(e.sender, '')) LIKE '%' || lower(ns.sender_email) || '%') \
+                       OR (NOT ('IMPORTANT' = ANY(e.labels)) \
+                           AND NOT ('CATEGORY_UPDATES' = ANY(e.labels)) \
+                           AND ('CATEGORY_SOCIAL' = ANY(e.labels) \
+                                OR 'CATEGORY_PROMOTIONS' = ANY(e.labels)))) ",
                 );
             }
             _ => {}
