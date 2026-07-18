@@ -1023,6 +1023,43 @@
   margin-left: auto;
 }
 
+/* Per-row quick actions (Gmail-style): hidden until the row is hovered, where
+   they take the timestamp's place at the right edge. */
+.email-row-actions {
+  display: none;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  margin-left: auto;
+}
+
+.email-item:hover .email-row-meta {
+  display: none;
+}
+
+.email-item:hover .email-row-actions {
+  display: inline-flex;
+}
+
+.email-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.email-row-action:hover {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
+
 /* Subject-only row. Sender deliberately omitted — folder context already
    tells the user who they're talking to. Keep this single span behaving
    well in both the narrow split-view column and the wide list-view. */
@@ -1233,8 +1270,10 @@
 
 .email-bulk-action--icon:hover:not(:disabled) {
   border-color: transparent;
-  color: var(--color-text-primary);
-  background: var(--color-overlay-hover, var(--color-surface-hover));
+  color: var(--color-primary);
+  /* A tint of the accent stays visible on any surface, including custom
+     themes where --color-surface-hover barely differs from the bar. */
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
 .email-bulk-action--danger.email-bulk-action--icon:hover:not(:disabled) {

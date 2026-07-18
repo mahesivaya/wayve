@@ -8,6 +8,7 @@ import {
   getAllEmailAttachments,
   deleteEmail as deleteEmailRequest,
   markEmailRead,
+  markEmailUnread,
 } from "../api/email";
 import { logger } from "../utils/logger";
 import { decryptWayveBodyIfNeeded, emailBodyErrorMessage } from "./bodyUtils";
@@ -60,14 +61,8 @@ export function useEmailInbox(
 
   useEffect(() => {
     const fetchInitialEmails = async () => {
-      // Signal/Noise are client-only inbox sub-views with no backend query yet —
-      // show them empty rather than hitting the API with an unknown folder.
-      if (activeFolder === "signal" || activeFolder === "noise") {
-        setEmails([]);
-        setHasMore(false);
-        setSelectedEmail(null);
-        return;
-      }
+      // Signal (important) and Noise (social + promotions) are resolved
+      // server-side in email/repo.rs, so the raw folder is sent as-is.
       const { emails: data, hasMore: hasMorePage } = await getEmails<EmailItem>(
         {
           folder: activeFolder,
@@ -90,7 +85,13 @@ export function useEmailInbox(
       );
     };
     void fetchInitialEmails();
-  }, [activeAccount, activeFolder, refreshTick, normalizedSearchQuery]);
+  }, [
+    activeAccount,
+    activeFolder,
+    queryFolder,
+    refreshTick,
+    normalizedSearchQuery,
+  ]);
 
   const loadMore = async () => {
     if (!hasMore || emails.length === 0 || loadingMore) return;
@@ -102,7 +103,7 @@ export function useEmailInbox(
       // return empty and the button vanish.
       const before = new Date(last.created_at).getTime();
       const { emails: data } = await getEmails<EmailItem>({
-        folder: activeFolder,
+        folder: queryFolder,
         accountId: activeAccount,
         query: normalizedSearchQuery,
         before,
@@ -309,6 +310,39 @@ export function useEmailInbox(
     );
   };
 
+  // Single-row read (hover action). Reuses the optimistic bulk path so cache and
+  // account badges stay in sync.
+  const markRead = (id: number) => bulkMarkRead([id]);
+
+  // Single-row unread — the inverse: flip the row, bump the account badge, patch
+  // the cache, then POST. A failed POST reconciles on the next sync.
+  const markUnread = async (id: number) => {
+    let accountId: number | null = null;
+    setEmails((prev) =>
+      prev.map((email) => {
+        if (email.id !== id) return email;
+        if (email.is_read !== false) accountId = email.account_id ?? null;
+        return { ...email, is_read: false };
+      })
+    );
+    if (accountId != null) {
+      setAccounts((prev) =>
+        prev.map((acc) =>
+          acc.id === accountId
+            ? { ...acc, unread_count: (acc.unread_count ?? 0) + 1 }
+            : acc
+        )
+      );
+    }
+    const cached = emailCache.current[id];
+    if (cached) emailCache.current[id] = { ...cached, is_read: false };
+    try {
+      await markEmailUnread(id);
+    } catch (err) {
+      logger.warn("markUnread failed", { id, err });
+    }
+  };
+
   // Optimistic removal, then parallel deletes. A failed delete leaves the row
   // gone from the UI until the next refresh pulls it back, which is acceptable
   // here because the user can simply re-delete.
@@ -356,5 +390,7 @@ export function useEmailInbox(
     deleteEmail,
     bulkMarkRead,
     bulkDelete,
+    markRead,
+    markUnread,
   };
 }

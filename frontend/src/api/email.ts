@@ -182,6 +182,13 @@ export const markEmailRead = async (emailId: number): Promise<void> => {
   }
 };
 
+export const markEmailUnread = async (emailId: number): Promise<void> => {
+  await apiFetchJson(`/api/emails/${emailId}/unread`, { method: "POST" });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("rwayve:emails-unread-changed"));
+  }
+};
+
 // Maps an email address to a supported OAuth provider key (`"gmail"` or
 // `"outlook"`). Throws on unsupported domains. See
 // [provider_lookup.rs](../../../backend/src/email/provider_lookup.rs).

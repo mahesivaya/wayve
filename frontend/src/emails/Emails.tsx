@@ -59,6 +59,8 @@ export default function Emails() {
     deleteEmail,
     bulkMarkRead,
     bulkDelete,
+    markRead,
+    markUnread,
   } = useEmailInbox(user?.id, normalizedSearchQuery);
 
   // `accounts` starts empty on every refresh, so gating the toolbar on
@@ -614,6 +616,8 @@ export default function Emails() {
             isListView={emailViewLayout === "list"}
             onBulkMarkRead={bulkMarkRead}
             onBulkDelete={bulkDelete}
+            onMarkRead={markRead}
+            onMarkUnread={markUnread}
             activeFolder={activeFolder}
             hasAccounts={accounts.length > 0}
             accountsLoaded={accountsLoaded}

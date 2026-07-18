@@ -17,6 +17,9 @@ interface EmailListProps {
   isListView?: boolean;
   onBulkMarkRead?: (ids: number[]) => Promise<void> | void;
   onBulkDelete?: (ids: number[]) => Promise<void> | void;
+  // Per-row hover actions: toggle a single email's read state.
+  onMarkRead?: (id: number) => Promise<void> | void;
+  onMarkUnread?: (id: number) => Promise<void> | void;
   activeFolder?: EmailFolder;
   // `accountsLoaded` distinguishes "no accounts" from "not fetched yet", so the
   // connect-an-account empty state never flashes at users who do have mailboxes.
@@ -76,6 +79,8 @@ export const EmailList: React.FC<EmailListProps> = ({
   isListView = false,
   onBulkMarkRead,
   onBulkDelete,
+  onMarkRead,
+  onMarkUnread,
   activeFolder,
   hasAccounts = true,
   accountsLoaded = true,
@@ -99,9 +104,6 @@ export const EmailList: React.FC<EmailListProps> = ({
   // and Show more still pages older mail in chronological order.
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
 
-  // Signal/Noise are inbox sub-views selected from the folder chips; both render
-  // empty for now (their backend filtering isn't wired up).
-  const isEmptySubView = activeFolder === "signal" || activeFolder === "noise";
 
   const visibleEmails = useMemo(
     () => (showUnreadOnly ? emails.filter((e) => e.is_read === false) : emails),
@@ -467,16 +469,6 @@ export const EmailList: React.FC<EmailListProps> = ({
             Switch back to <em>Inbox</em> or <em>Sent</em> to keep working.
           </span>
         </div>
-      ) : isEmptySubView ? (
-        <div className="email-folder-placeholder" role="status">
-          <div className="email-folder-placeholder-icon" aria-hidden="true">
-            {activeFolder === "signal" ? "📡" : "🔕"}
-          </div>
-          <strong>
-            {activeFolder === "signal" ? "Signal" : "Noise"} — coming soon
-          </strong>
-          <span>This view is empty for now.</span>
-        </div>
       ) : (
         <>
           {visibleEmails.length === 0 && isListView && showUnreadOnly && (
@@ -585,6 +577,47 @@ export const EmailList: React.FC<EmailListProps> = ({
                     {fmtListTimestamp(email.created_at)}
                   </span>
                 </span>
+                {(onMarkRead || onMarkUnread) && (
+                  <span
+                    className="email-row-actions"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {email.is_read === false
+                      ? onMarkRead && (
+                          <button
+                            type="button"
+                            className="email-row-action"
+                            title="Mark as read"
+                            aria-label="Mark as read"
+                            onClick={() => void onMarkRead(email.id)}
+                          >
+                            <MailOpenIcon size={16} />
+                          </button>
+                        )
+                      : onMarkUnread && (
+                          <button
+                            type="button"
+                            className="email-row-action"
+                            title="Mark as unread"
+                            aria-label="Mark as unread"
+                            onClick={() => void onMarkUnread(email.id)}
+                          >
+                            <EmailsIcon size={16} />
+                          </button>
+                        )}
+                    {email.has_attachments && (
+                      <button
+                        type="button"
+                        className="email-row-action"
+                        title="View attachments"
+                        aria-label="View attachments"
+                        onClick={() => onOpenEmail(email)}
+                      >
+                        <AttachmentIcon size={16} />
+                      </button>
+                    )}
+                  </span>
+                )}
               </div>
               <div className="mobile-email-row">
                 <div className="mobile-email-avatar" aria-hidden="true">
