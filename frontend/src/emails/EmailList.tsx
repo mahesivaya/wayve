@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { FolderChips } from "./FolderChips";
+import { AttachmentIcon, MailOpenIcon, TrashIcon } from "../icons";
 import { useGlobalSearch } from "../search/SearchContext";
 import { fmtListTimestamp } from "../utils/datetime";
 
@@ -98,10 +99,22 @@ export const EmailList: React.FC<EmailListProps> = ({
   // and Show more still pages older mail in chronological order.
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
 
+  // Inbox sub-tabs at the top of the list. "all" mirrors today's inbox; "signal"
+  // and "noise" are placeholders that render empty until their filtering lands.
+  const [inboxTab, setInboxTab] = useState<"all" | "signal" | "noise">("all");
+
   const visibleEmails = useMemo(
     () => (showUnreadOnly ? emails.filter((e) => e.is_read === false) : emails),
     [emails, showUnreadOnly]
   );
+
+  // The Inbox tab strip only fits the inbox context; Sent/GitHub/category folders
+  // and the stub/no-account states skip it.
+  const showInboxTabs =
+    showChrome &&
+    !showNoAccounts &&
+    !isStubFolder &&
+    (activeFolder === "inbox" || activeFolder === undefined);
 
   useEffect(() => {
     if (!bulkHint) return;
@@ -133,6 +146,39 @@ export const EmailList: React.FC<EmailListProps> = ({
     [visibleEmails.length, checkedIds.size]
   );
   const someChecked = checkedIds.size > 0 && !allChecked;
+
+  // Gmail-style select dropdown (checkbox + caret): pick a subset of the
+  // currently-visible rows. `Starred`/`Unstarred` are omitted — emails aren't
+  // starrable in this app.
+  const [selectMenuOpen, setSelectMenuOpen] = useState(false);
+  const selectMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const selectBy = (pred: (email: EmailItem) => boolean) => {
+    setCheckedIds(new Set(visibleEmails.filter(pred).map((e) => e.id)));
+    setSelectMenuOpen(false);
+  };
+
+  useEffect(() => {
+    if (!selectMenuOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (
+        selectMenuRef.current &&
+        event.target instanceof Node &&
+        !selectMenuRef.current.contains(event.target)
+      ) {
+        setSelectMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [selectMenuOpen]);
 
   const runBulkMarkRead = async () => {
     if (!onBulkMarkRead) return;
@@ -247,42 +293,120 @@ export const EmailList: React.FC<EmailListProps> = ({
       </div>
       <div className="mobile-mail-label">Inbox</div>
 
+      {showInboxTabs && (
+        <div
+          className="email-inbox-tabs"
+          role="tablist"
+          aria-label="Inbox view"
+        >
+          {(
+            [
+              ["all", "All"],
+              ["signal", "Signal"],
+              ["noise", "Noise"],
+            ] as const
+          ).map(([tab, label]) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={inboxTab === tab}
+              className={`email-inbox-tab${inboxTab === tab ? " is-active" : ""}`}
+              onClick={() => {
+                setInboxTab(tab);
+                // Drop selections a hidden tab would strand.
+                setCheckedIds(new Set());
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {isListView && showChrome && !showNoAccounts && (
         <div
           className="email-bulk-bar"
           role="toolbar"
           aria-label="Bulk email selection"
         >
+          <div className="email-select" ref={selectMenuRef}>
+            <input
+              type="checkbox"
+              className="email-bulk-master"
+              checked={allChecked}
+              ref={(el) => {
+                if (el) el.indeterminate = someChecked;
+              }}
+              onChange={toggleAll}
+              aria-label={allChecked ? "Clear selection" : "Select all emails"}
+            />
+            <button
+              type="button"
+              className="email-select-caret"
+              aria-haspopup="menu"
+              aria-expanded={selectMenuOpen}
+              aria-label="Selection options"
+              onClick={() => setSelectMenuOpen((open) => !open)}
+            >
+              ▾
+            </button>
+            {selectMenuOpen && (
+              <div className="email-select-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="email-select-item"
+                  onClick={() => selectBy(() => true)}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="email-select-item"
+                  onClick={() => selectBy(() => false)}
+                >
+                  None
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="email-select-item"
+                  onClick={() => selectBy((e) => e.is_read === true)}
+                >
+                  Read
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="email-select-item"
+                  onClick={() => selectBy((e) => e.is_read === false)}
+                >
+                  Unread
+                </button>
+              </div>
+            )}
+          </div>
+          {checkedIds.size > 0 && (
+            <span className="email-bulk-count">{checkedIds.size} selected</span>
+          )}
           {showFolderTabs && onSelectFolder && (
             <FolderChips
               activeFolder={activeFolder}
               onSelectFolder={onSelectFolder}
             />
           )}
-          <input
-            type="checkbox"
-            className="email-bulk-master"
-            checked={allChecked}
-            ref={(el) => {
-              if (el) el.indeterminate = someChecked;
-            }}
-            onChange={toggleAll}
-            aria-label={allChecked ? "Clear selection" : "Select all emails"}
-          />
-          {checkedIds.size > 0 ? (
-            <span className="email-bulk-count">{checkedIds.size} selected</span>
-          ) : (
-            <span className="email-bulk-hint">Select all emails</span>
-          )}
           {onBulkMarkRead && (
             <button
               type="button"
-              className="email-bulk-action"
+              className="email-bulk-action email-bulk-action--icon"
               onClick={runBulkMarkRead}
               disabled={bulkBusy}
               title="Mark selected as read"
+              aria-label="Mark selected as read"
             >
-              Mark read
+              <MailOpenIcon size={18} />
             </button>
           )}
           <button
@@ -305,22 +429,24 @@ export const EmailList: React.FC<EmailListProps> = ({
           {onShowAttachments && (
             <button
               type="button"
-              className="email-bulk-action"
+              className="email-bulk-action email-bulk-action--icon"
               onClick={onShowAttachments}
               title="Show all attachments across your emails"
+              aria-label="Show all attachments across your emails"
             >
-              Attachments
+              <AttachmentIcon size={18} />
             </button>
           )}
           {onBulkDelete && (
             <button
               type="button"
-              className="email-bulk-action email-bulk-action--danger"
+              className="email-bulk-action email-bulk-action--danger email-bulk-action--icon"
               onClick={runBulkDelete}
               disabled={bulkBusy}
               title="Delete selected"
+              aria-label="Delete selected"
             >
-              Delete
+              <TrashIcon size={18} />
             </button>
           )}
           {checkedIds.size > 0 && (
@@ -376,6 +502,16 @@ export const EmailList: React.FC<EmailListProps> = ({
             Gmail-label and Outlook-category sync isn&apos;t wired up yet.
             Switch back to <em>Inbox</em> or <em>Sent</em> to keep working.
           </span>
+        </div>
+      ) : inboxTab !== "all" ? (
+        <div className="email-folder-placeholder" role="status">
+          <div className="email-folder-placeholder-icon" aria-hidden="true">
+            {inboxTab === "signal" ? "📡" : "🔕"}
+          </div>
+          <strong>
+            {inboxTab === "signal" ? "Signal" : "Noise"} — coming soon
+          </strong>
+          <span>This view is empty for now.</span>
         </div>
       ) : (
         <>
@@ -538,7 +674,7 @@ export const EmailList: React.FC<EmailListProps> = ({
 
       {/* Fallback for what infinite scroll can't cover, e.g. a shrunk pane where
           the page fits without overflowing, so there is nothing to scroll. */}
-      {!isStubFolder && hasMore && (
+      {inboxTab === "all" && !isStubFolder && hasMore && (
         <div className="load-more-wrap">
           {loadingMore ? (
             <span className="load-more-status">Loading more…</span>
@@ -553,7 +689,7 @@ export const EmailList: React.FC<EmailListProps> = ({
           )}
         </div>
       )}
-      {!isStubFolder && !hasMore && emails.length > 0 && (
+      {inboxTab === "all" && !isStubFolder && !hasMore && emails.length > 0 && (
         <div className="load-more-wrap load-more-wrap--end">
           <span className="load-more-status is-end">No more emails.</span>
         </div>

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { EmailAccount, EmailFolder } from "./types";
+import { PullRequestIcon } from "../icons";
 
 interface EmailSidebarProps {
   accounts: EmailAccount[];
@@ -256,7 +257,9 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
             className={`filter-btn ${activeFolder === "github" && viewMode === "email" ? "active" : ""}`}
             onClick={() => setActiveFolder("github")}
           >
-            🐙 GitHub PRs
+            <span className="email-chip-label">
+              <PullRequestIcon size={14} /> Reviews
+            </span>
           </button>
           {/* Category folders, all filtered on `emails.labels`. */}
           <button
