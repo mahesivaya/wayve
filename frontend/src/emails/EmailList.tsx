@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { FolderChips } from "./FolderChips";
-import { AttachmentIcon, MailOpenIcon, TrashIcon } from "../icons";
+import { AttachmentIcon, EmailsIcon, MailOpenIcon, TrashIcon } from "../icons";
 import { useGlobalSearch } from "../search/SearchContext";
 import { fmtListTimestamp } from "../utils/datetime";
 
@@ -99,22 +99,14 @@ export const EmailList: React.FC<EmailListProps> = ({
   // and Show more still pages older mail in chronological order.
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
 
-  // Inbox sub-tabs at the top of the list. "all" mirrors today's inbox; "signal"
-  // and "noise" are placeholders that render empty until their filtering lands.
-  const [inboxTab, setInboxTab] = useState<"all" | "signal" | "noise">("all");
+  // Signal/Noise are inbox sub-views selected from the folder chips; both render
+  // empty for now (their backend filtering isn't wired up).
+  const isEmptySubView = activeFolder === "signal" || activeFolder === "noise";
 
   const visibleEmails = useMemo(
     () => (showUnreadOnly ? emails.filter((e) => e.is_read === false) : emails),
     [emails, showUnreadOnly]
   );
-
-  // The Inbox tab strip only fits the inbox context; Sent/GitHub/category folders
-  // and the stub/no-account states skip it.
-  const showInboxTabs =
-    showChrome &&
-    !showNoAccounts &&
-    !isStubFolder &&
-    (activeFolder === "inbox" || activeFolder === undefined);
 
   useEffect(() => {
     if (!bulkHint) return;
@@ -293,37 +285,6 @@ export const EmailList: React.FC<EmailListProps> = ({
       </div>
       <div className="mobile-mail-label">Inbox</div>
 
-      {showInboxTabs && (
-        <div
-          className="email-inbox-tabs"
-          role="tablist"
-          aria-label="Inbox view"
-        >
-          {(
-            [
-              ["all", "All"],
-              ["signal", "Signal"],
-              ["noise", "Noise"],
-            ] as const
-          ).map(([tab, label]) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={inboxTab === tab}
-              className={`email-inbox-tab${inboxTab === tab ? " is-active" : ""}`}
-              onClick={() => {
-                setInboxTab(tab);
-                // Drop selections a hidden tab would strand.
-                setCheckedIds(new Set());
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-
       {isListView && showChrome && !showNoAccounts && (
         <div
           className="email-bulk-bar"
@@ -397,6 +358,26 @@ export const EmailList: React.FC<EmailListProps> = ({
               onSelectFolder={onSelectFolder}
             />
           )}
+          <button
+            type="button"
+            className={`email-bulk-action email-bulk-action--icon${showUnreadOnly ? " is-active" : ""}`}
+            onClick={() => {
+              setShowUnreadOnly((prev) => !prev);
+              // Drop selections the new filter would hide, so the count in the bar
+              // always matches what the user can see.
+              setCheckedIds(new Set());
+            }}
+            aria-pressed={showUnreadOnly}
+            title={
+              showUnreadOnly ? "Show all emails" : "Show only unread emails"
+            }
+            aria-label={
+              showUnreadOnly ? "Show all emails" : "Show only unread emails"
+            }
+            disabled={bulkBusy}
+          >
+            <EmailsIcon size={18} />
+          </button>
           {onBulkMarkRead && (
             <button
               type="button"
@@ -409,23 +390,6 @@ export const EmailList: React.FC<EmailListProps> = ({
               <MailOpenIcon size={18} />
             </button>
           )}
-          <button
-            type="button"
-            className={`email-bulk-action${showUnreadOnly ? " is-active" : ""}`}
-            onClick={() => {
-              setShowUnreadOnly((prev) => !prev);
-              // Drop selections the new filter would hide, so the count in the bar
-              // always matches what the user can see.
-              setCheckedIds(new Set());
-            }}
-            aria-pressed={showUnreadOnly}
-            title={
-              showUnreadOnly ? "Show all emails" : "Show only unread emails"
-            }
-            disabled={bulkBusy}
-          >
-            {showUnreadOnly ? "Showing unread" : "Show unread"}
-          </button>
           {onShowAttachments && (
             <button
               type="button"
@@ -503,13 +467,13 @@ export const EmailList: React.FC<EmailListProps> = ({
             Switch back to <em>Inbox</em> or <em>Sent</em> to keep working.
           </span>
         </div>
-      ) : inboxTab !== "all" ? (
+      ) : isEmptySubView ? (
         <div className="email-folder-placeholder" role="status">
           <div className="email-folder-placeholder-icon" aria-hidden="true">
-            {inboxTab === "signal" ? "📡" : "🔕"}
+            {activeFolder === "signal" ? "📡" : "🔕"}
           </div>
           <strong>
-            {inboxTab === "signal" ? "Signal" : "Noise"} — coming soon
+            {activeFolder === "signal" ? "Signal" : "Noise"} — coming soon
           </strong>
           <span>This view is empty for now.</span>
         </div>
@@ -674,7 +638,7 @@ export const EmailList: React.FC<EmailListProps> = ({
 
       {/* Fallback for what infinite scroll can't cover, e.g. a shrunk pane where
           the page fits without overflowing, so there is nothing to scroll. */}
-      {inboxTab === "all" && !isStubFolder && hasMore && (
+      {!isStubFolder && hasMore && (
         <div className="load-more-wrap">
           {loadingMore ? (
             <span className="load-more-status">Loading more…</span>
@@ -689,7 +653,7 @@ export const EmailList: React.FC<EmailListProps> = ({
           )}
         </div>
       )}
-      {inboxTab === "all" && !isStubFolder && !hasMore && emails.length > 0 && (
+      {!isStubFolder && !hasMore && emails.length > 0 && (
         <div className="load-more-wrap load-more-wrap--end">
           <span className="load-more-status is-end">No more emails.</span>
         </div>

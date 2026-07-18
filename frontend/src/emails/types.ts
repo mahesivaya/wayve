@@ -62,6 +62,11 @@ export type EmailFolder =
   | "trash"
   // Virtual folder matched by sender (`notifications@github.com`) on the
   // backend, not a Gmail label.
-  | "github";
+  | "github"
+  // Client-only inbox sub-views shown as chips beside "All" (= inbox). No
+  // backend query yet: `useEmailInbox` short-circuits them to an empty list and
+  // EmailList renders a "coming soon" placeholder.
+  | "signal"
+  | "noise";
 
 export const STUB_EMAIL_FOLDERS: ReadonlyArray<EmailFolder> = [];

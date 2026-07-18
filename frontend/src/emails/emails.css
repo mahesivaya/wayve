@@ -1082,39 +1082,6 @@
   z-index: 1;
 }
 
-/* Inbox sub-tabs (All / Signal / Noise) across the top of the email list —
-   a Gmail-category-style strip above the bulk bar. */
-.email-inbox-tabs {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--color-overlay-border);
-  background: var(--color-pane);
-}
-
-.email-inbox-tab {
-  appearance: none;
-  border: none;
-  background: transparent;
-  padding: 10px 14px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-
-.email-inbox-tab:hover {
-  color: var(--color-text-primary);
-}
-
-.email-inbox-tab.is-active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-}
-
 /* Inbox/Sent tabs at the start of the bulk bar (org/platform inbox). A right
    divider separates them from the bulk-select controls. */
 .email-folder-tabs {

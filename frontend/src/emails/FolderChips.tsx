@@ -27,7 +27,10 @@ export function FolderChips({
 
   return (
     <div className="email-folder-tabs" role="group" aria-label="Mail folder">
-      {chip("inbox", "Inbox", "Inbox")}
+      {/* "All" is the inbox; Signal/Noise are inbox sub-views (empty for now). */}
+      {chip("inbox", "All", "All inbox mail")}
+      {chip("signal", "Signal", "Signal")}
+      {chip("noise", "Noise", "Noise")}
       {chip("sent", "Sent", "Sent")}
       {chip(
         "github",

@@ -60,6 +60,14 @@ export function useEmailInbox(
 
   useEffect(() => {
     const fetchInitialEmails = async () => {
+      // Signal/Noise are client-only inbox sub-views with no backend query yet —
+      // show them empty rather than hitting the API with an unknown folder.
+      if (activeFolder === "signal" || activeFolder === "noise") {
+        setEmails([]);
+        setHasMore(false);
+        setSelectedEmail(null);
+        return;
+      }
       const { emails: data, hasMore: hasMorePage } = await getEmails<EmailItem>(
         {
           folder: activeFolder,

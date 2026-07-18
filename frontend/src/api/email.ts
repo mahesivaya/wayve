@@ -13,7 +13,11 @@ export type EmailFolder =
   | "drafts"
   | "social"
   | "trash"
-  | "github";
+  | "github"
+  // Client-only inbox sub-views; callers short-circuit these to an empty list
+  // and never send them here (see `useEmailInbox`).
+  | "signal"
+  | "noise";
 
 export type EmailListParams = {
   folder: EmailFolder;
