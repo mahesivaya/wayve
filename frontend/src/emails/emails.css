@@ -1060,6 +1060,10 @@
   background: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
+/* Tooltips are provided globally (see the `[data-tooltip]` utility in
+   index.css). Row actions hug the list's right edge, so they opt into the
+   right-anchored variant via `data-tooltip-align="right"`. */
+
 /* Subject-only row. Sender deliberately omitted — folder context already
    tells the user who they're talking to. Keep this single span behaving
    well in both the narrow split-view column and the wide list-view. */

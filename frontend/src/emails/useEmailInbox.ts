@@ -85,13 +85,7 @@ export function useEmailInbox(
       );
     };
     void fetchInitialEmails();
-  }, [
-    activeAccount,
-    activeFolder,
-    queryFolder,
-    refreshTick,
-    normalizedSearchQuery,
-  ]);
+  }, [activeAccount, activeFolder, refreshTick, normalizedSearchQuery]);
 
   const loadMore = async () => {
     if (!hasMore || emails.length === 0 || loadingMore) return;
@@ -103,7 +97,7 @@ export function useEmailInbox(
       // return empty and the button vanish.
       const before = new Date(last.created_at).getTime();
       const { emails: data } = await getEmails<EmailItem>({
-        folder: queryFolder,
+        folder: activeFolder,
         accountId: activeAccount,
         query: normalizedSearchQuery,
         before,

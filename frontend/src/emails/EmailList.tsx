@@ -370,7 +370,7 @@ export const EmailList: React.FC<EmailListProps> = ({
               setCheckedIds(new Set());
             }}
             aria-pressed={showUnreadOnly}
-            title={
+            data-tooltip={
               showUnreadOnly ? "Show all emails" : "Show only unread emails"
             }
             aria-label={
@@ -386,7 +386,7 @@ export const EmailList: React.FC<EmailListProps> = ({
               className="email-bulk-action email-bulk-action--icon"
               onClick={runBulkMarkRead}
               disabled={bulkBusy}
-              title="Mark selected as read"
+              data-tooltip="Mark selected as read"
               aria-label="Mark selected as read"
             >
               <MailOpenIcon size={18} />
@@ -397,7 +397,7 @@ export const EmailList: React.FC<EmailListProps> = ({
               type="button"
               className="email-bulk-action email-bulk-action--icon"
               onClick={onShowAttachments}
-              title="Show all attachments across your emails"
+              data-tooltip="All attachments"
               aria-label="Show all attachments across your emails"
             >
               <AttachmentIcon size={18} />
@@ -409,7 +409,7 @@ export const EmailList: React.FC<EmailListProps> = ({
               className="email-bulk-action email-bulk-action--danger email-bulk-action--icon"
               onClick={runBulkDelete}
               disabled={bulkBusy}
-              title="Delete selected"
+              data-tooltip="Delete selected"
               aria-label="Delete selected"
             >
               <TrashIcon size={18} />
@@ -587,7 +587,8 @@ export const EmailList: React.FC<EmailListProps> = ({
                           <button
                             type="button"
                             className="email-row-action"
-                            title="Mark as read"
+                            data-tooltip="Mark as read"
+                            data-tooltip-align="right"
                             aria-label="Mark as read"
                             onClick={() => void onMarkRead(email.id)}
                           >
@@ -598,7 +599,8 @@ export const EmailList: React.FC<EmailListProps> = ({
                           <button
                             type="button"
                             className="email-row-action"
-                            title="Mark as unread"
+                            data-tooltip="Mark as unread"
+                            data-tooltip-align="right"
                             aria-label="Mark as unread"
                             onClick={() => void onMarkUnread(email.id)}
                           >
@@ -609,7 +611,8 @@ export const EmailList: React.FC<EmailListProps> = ({
                       <button
                         type="button"
                         className="email-row-action"
-                        title="View attachments"
+                        data-tooltip="View attachments"
+                        data-tooltip-align="right"
                         aria-label="View attachments"
                         onClick={() => onOpenEmail(email)}
                       >

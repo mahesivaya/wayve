@@ -230,6 +230,18 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
             "github" => {
                 qb.push(" AND lower(coalesce(e.sender, '')) LIKE '%github.com%' ");
             }
+            // Inbox sub-views (the "All / Signal / Noise" chips): "signal" is the
+            // important mail; "noise" bundles the low-priority categories (social
+            // + promotions).
+            "signal" => {
+                qb.push(" AND 'IMPORTANT' = ANY(e.labels) ");
+            }
+            "noise" => {
+                qb.push(
+                    " AND ('CATEGORY_SOCIAL' = ANY(e.labels) \
+                       OR 'CATEGORY_PROMOTIONS' = ANY(e.labels)) ",
+                );
+            }
             _ => {}
         }
     }
