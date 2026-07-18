@@ -1,34 +1,25 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { BellIcon, ReminderIcon } from "../icons";
-import { useStorageStatus } from "./useStorageStatus";
+import { useRemindersCount } from "./useRemindersCount";
 import "./notificationBell.css";
 
 type NotificationBellProps = {
-  emailUnread: number;
-  chatUnread: number;
   /** "header" is the original top-bar bell; "sidebar" renders a nav row. */
   variant?: "header" | "sidebar";
 };
 
-// Clicking the bell opens the full Reminders page. Counts arrive as props from
-// the same hooks that feed the sidebar badges, so the badge stays in lock-step;
-// a low-storage alert adds one so the bell surfaces it too.
+// Clicking opens the full Reminders page. The badge shows the user's reminder
+// count so it stays in lock-step with the reminders list (it used to show the
+// unread mail + chat total, which had nothing to do with reminders).
 export default function NotificationBell({
-  emailUnread,
-  chatUnread,
   variant = "header",
 }: NotificationBellProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { level: storageLevel } = useStorageStatus();
+  const total = useRemindersCount(Boolean(user));
 
   if (!user) return null;
-
-  const total =
-    Math.max(0, emailUnread) +
-    Math.max(0, chatUnread) +
-    (storageLevel === "none" ? 0 : 1);
 
   const badge =
     total > 0 ? (
@@ -64,7 +55,7 @@ export default function NotificationBell({
         type="button"
         className="notif-bell-btn"
         onClick={open}
-        aria-label={total > 0 ? `${total} unread reminders` : "Reminders"}
+        aria-label={total > 0 ? `${total} reminders` : "Reminders"}
         data-tooltip="Reminders"
       >
         <BellIcon size={20} />

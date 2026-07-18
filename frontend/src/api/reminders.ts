@@ -16,6 +16,14 @@ export type ReminderInput = {
   remind_at: string;
 };
 
+// Nudge mounted reminder badges/lists to refresh now instead of waiting for
+// their poll. The listener lives in useRemindersCount.
+const notifyRemindersChanged = () => {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("rwayve:reminders-changed"));
+  }
+};
+
 export const getReminders = async () =>
   apiFetchJson<Reminder[]>("/api/reminders");
 
@@ -25,11 +33,15 @@ export const createReminder = async (data: ReminderInput) => {
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("create_reminder_failed");
-  return res.json() as Promise<Reminder>;
+  const created = (await res.json()) as Reminder;
+  notifyRemindersChanged();
+  return created;
 };
 
 export const deleteReminder = async (id: number) => {
   const res = await apiFetch(`/api/reminders/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("delete_reminder_failed");
-  return res.json();
+  const body = await res.json();
+  notifyRemindersChanged();
+  return body;
 };

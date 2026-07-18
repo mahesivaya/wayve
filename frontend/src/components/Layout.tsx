@@ -1453,11 +1453,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             >
               <div className="sidebar-section">
                 {renderSidebarItem("/", "home", "Home", <HomeIcon size={18} />)}
-                <NotificationBell
-                  variant="sidebar"
-                  emailUnread={emailsUnreadCount}
-                  chatUnread={chatUnreadCount}
-                />
+                <NotificationBell variant="sidebar" />
                 {renderSidebarItem(
                   "/emails",
                   "emails",
