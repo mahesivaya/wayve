@@ -34,6 +34,20 @@ const FRAME_CSS = `
   a { color: #2563eb; }
 `;
 
+// Nearest scrollable ancestor of the iframe in the PARENT document (the reading
+// pane). Used to forward wheel/touchpad scroll out of the content-sized frame.
+function scrollableAncestor(el: HTMLElement): HTMLElement | null {
+  let node = el.parentElement;
+  while (node) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
 // SECURITY: the HTML is sanitized with DOMPurify *and* the frame runs without
 // `allow-scripts`, so email JavaScript can never execute. `allow-same-origin`
 // exists only to measure content height for auto-fit; absent `allow-scripts` it
@@ -83,13 +97,41 @@ function HtmlEmail({ html }: { html: string }) {
 
   const handleLoad = () => {
     fit();
-    const doc = ref.current?.contentDocument;
-    doc?.querySelectorAll("img").forEach((img) => {
+    const frame = ref.current;
+    const doc = frame?.contentDocument;
+    if (!doc) return;
+    doc.querySelectorAll("img").forEach((img) => {
       if (!img.complete) {
         img.addEventListener("load", fit, { once: true });
         img.addEventListener("error", fit, { once: true });
       }
     });
+
+    // The iframe is sized to its full content, so it can't scroll itself, and a
+    // same-origin content-sized frame doesn't reliably chain wheel/touchpad
+    // scroll to the parent. Forward wheel deltas to the reading pane so scrolling
+    // with the pointer over the email body moves the pane. Re-bound on every
+    // load; changing srcDoc discards the old document (and its listener).
+    if (frame) {
+      const scroller = scrollableAncestor(frame);
+      if (scroller) {
+        doc.addEventListener(
+          "wheel",
+          (event) => {
+            const factor =
+              event.deltaMode === 1
+                ? 16
+                : event.deltaMode === 2
+                  ? scroller.clientHeight
+                  : 1;
+            scroller.scrollTop += event.deltaY * factor;
+            scroller.scrollLeft += event.deltaX * factor;
+            event.preventDefault();
+          },
+          { passive: false }
+        );
+      }
+    }
   };
 
   return (
