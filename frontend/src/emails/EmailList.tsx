@@ -401,7 +401,7 @@ export const EmailList: React.FC<EmailListProps> = ({
               <AttachmentIcon size={18} />
             </button>
           )}
-          {onBulkDelete && (
+          {onBulkDelete && checkedIds.size > 0 && (
             <button
               type="button"
               className="email-bulk-action email-bulk-action--danger email-bulk-action--icon"
