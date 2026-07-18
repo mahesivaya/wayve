@@ -110,6 +110,7 @@ pub trait MailSender: Send + Sync {
 #[async_trait]
 pub trait MailRead: Send + Sync {
     async fn mark_read(&self, access_token: &str, provider_message_id: &str) -> Result<()>;
+    async fn mark_unread(&self, access_token: &str, provider_message_id: &str) -> Result<()>;
 }
 
 /// Umbrella trait the registry returns.
@@ -222,6 +223,27 @@ impl MailRead for GoogleMailClient {
         }
         Ok(())
     }
+
+    async fn mark_unread(&self, access_token: &str, provider_message_id: &str) -> Result<()> {
+        // Symmetric to mark_read: re-adding the UNREAD label is the unread marker.
+        let url = format!(
+            "{}/gmail/v1/users/me/messages/{}/modify",
+            crate::external::gmail_api_base(),
+            provider_message_id
+        );
+        let resp = HTTP_CLIENT
+            .post(url)
+            .bearer_auth(access_token)
+            .json(&serde_json::json!({ "addLabelIds": ["UNREAD"] }))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Gmail mark-unread failed: {} {}", status, body);
+        }
+        Ok(())
+    }
 }
 
 impl MailProviderClient for GoogleMailClient {
@@ -307,6 +329,28 @@ impl MailRead for OutlookMailClient {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             anyhow::bail!("Outlook mark-read failed: {} {}", status, body);
+        }
+        Ok(())
+    }
+
+    async fn mark_unread(&self, access_token: &str, provider_message_id: &str) -> Result<()> {
+        let mut url = reqwest::Url::parse(&format!(
+            "{}/v1.0/me/messages",
+            crate::external::microsoft_graph_base()
+        ))?;
+        url.path_segments_mut()
+            .map_err(|_| anyhow::anyhow!("Graph base must be a base URL"))?
+            .push(provider_message_id);
+        let resp = HTTP_CLIENT
+            .patch(url)
+            .bearer_auth(access_token)
+            .json(&serde_json::json!({ "isRead": false }))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Outlook mark-unread failed: {} {}", status, body);
         }
         Ok(())
     }
@@ -441,6 +485,11 @@ impl MailRead for ImapMailClient {
         // is_read.
         Ok(())
     }
+
+    async fn mark_unread(&self, _access_token: &str, _provider_message_id: &str) -> Result<()> {
+        // No-op, same as mark_read: sync reconciles \Seen on the next tick.
+        Ok(())
+    }
 }
 
 impl MailProviderClient for ImapMailClient {
@@ -502,6 +551,12 @@ impl MailProvider {
     pub async fn mark_read(self, access_token: &str, provider_message_id: &str) -> Result<()> {
         require_client(self)?
             .mark_read(access_token, provider_message_id)
+            .await
+    }
+
+    pub async fn mark_unread(self, access_token: &str, provider_message_id: &str) -> Result<()> {
+        require_client(self)?
+            .mark_unread(access_token, provider_message_id)
             .await
     }
 }

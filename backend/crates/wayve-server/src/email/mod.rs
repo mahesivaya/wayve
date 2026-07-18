@@ -31,6 +31,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(crate::routes::email::get_unread_count)
         .service(crate::routes::email::delete_email)
         .service(crate::routes::email::mark_email_read)
+        .service(crate::routes::email::mark_email_unread)
         .service(crate::routes::email::get_all_email_attachments)
         .service(crate::routes::email::get_email_attachments)
         .service(crate::routes::email::download_email_attachment)

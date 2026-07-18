@@ -499,14 +499,6 @@ export const EmailList: React.FC<EmailListProps> = ({
             >
               <div className="email-top">
                 {isListView && (
-                  // The read state keeps an empty slot rather than collapsing, so
-                  // the row gutter alignment never shifts.
-                  <span
-                    className={`email-row-unread-dot ${email.is_read === false ? "is-unread" : ""}`}
-                    aria-hidden="true"
-                  />
-                )}
-                {isListView && (
                   // The envelope icon and the checkbox share a spot and cross-fade
                   // on hover. stopPropagation so ticking the checkbox doesn't also
                   // open the email.

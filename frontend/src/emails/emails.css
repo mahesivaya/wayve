@@ -994,7 +994,12 @@
 /* Top row */
 .email-top {
   display: flex;
-  justify-content: space-between;
+  /* Pack from the left so the checkbox/envelope always hugs the row start.
+     `space-between` used to strand the leading unread-dot at the far left and
+     shove the toggle to the far right whenever the middle (sender/subject)
+     collapsed in a narrow column, leaving a big empty gap before the checkbox.
+     The meta (time) is pinned right on its own via margin-left:auto below. */
+  justify-content: flex-start;
   align-items: center;
   gap: var(--space-4);
   min-width: 0;
@@ -1014,6 +1019,8 @@
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+  /* Pin the time to the right edge now that the row packs from the left. */
+  margin-left: auto;
 }
 
 /* Subject-only row. Sender deliberately omitted — folder context already
@@ -1363,19 +1370,6 @@
    gutter shifts when scrolling past read messages). Solid orange for
    unread; transparent for read. Reference screenshot uses this same
    "orange bullet on the left, envelope next to it" pattern. */
-.email-row-unread-dot {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: transparent;
-  margin-right: 4px;
-}
-
-.email-row-unread-dot.is-unread {
-  background: var(--color-warning, #f59e0b);
-}
-
 /* Gmail-style row affordance: an envelope icon sits at the left of each
    row by default; on row hover (or when the row is already checked) the
    icon fades out and the checkbox fades in over the same 18×18 spot. The

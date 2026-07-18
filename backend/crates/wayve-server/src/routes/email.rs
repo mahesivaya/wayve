@@ -535,6 +535,165 @@ pub async fn mark_email_read(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": true })))
 }
 
+#[actix_web::post("/emails/{id}/unread")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn mark_email_unread(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<EmailDeletePath>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let email_id = path.id;
+
+    // Mirror of mark_email_read: the account join authorizes, and the
+    // `AND e.is_read = TRUE` guard makes a re-mark a no-op with no provider push.
+    let updated = sqlx::query(
+        r#"
+        UPDATE emails AS e
+           SET is_read = FALSE
+          FROM email_accounts AS a
+         WHERE e.account_id = a.id
+           AND e.id = $1
+           AND a.user_id = $2
+           AND e.is_read = TRUE
+        RETURNING e.gmail_id, a.id AS account_id, a.refresh_token, a.provider,
+                  e.subject, e.sender, e.receiver
+        "#,
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    if let Some(row) = updated {
+        let provider_message_id: String = row.get("gmail_id");
+        let account_id: i32 = row.get("account_id");
+
+        let subject: Option<String> = row.try_get("subject").ok();
+        let sender: Option<String> = row.try_get("sender").ok();
+        let receiver: Option<String> = row.try_get("receiver").ok();
+        let unread_provider: Option<String> = row.try_get("provider").ok();
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: "email_unread",
+                resource_type: "email",
+                resource_id: Some(email_id.to_string()),
+                metadata: Some(serde_json::json!({
+                    "direction": "unread",
+                    "from": sender,
+                    "to": receiver,
+                    "subject": subject,
+                    "provider": unread_provider,
+                })),
+            },
+        )
+        .await;
+
+        // Bump the cached unread count back up to mirror the reversal.
+        sqlx::query(
+            "UPDATE email_accounts \
+             SET provider_unread_count = COALESCE(provider_unread_count, 0) + 1 \
+             WHERE id = $1",
+        )
+        .bind(account_id)
+        .execute(pool.get_ref())
+        .await
+        .ok();
+        let provider = row
+            .try_get::<String, _>("provider")
+            .map(|value| MailProvider::from_db(&value))
+            .unwrap_or(MailProvider::Google);
+        let refresh_token: Option<String> = row.get("refresh_token");
+
+        if let Some(refresh_token) = refresh_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+        {
+            let pool_clone = pool.get_ref().clone();
+            tokio::spawn(async move {
+                push_unread_state_to_provider(
+                    &pool_clone,
+                    user_id,
+                    account_id,
+                    provider,
+                    &refresh_token,
+                    &provider_message_id,
+                )
+                .await;
+            });
+        } else {
+            warn!(
+                target: "gmail",
+                user_id,
+                account_id,
+                provider = provider.as_db(),
+                email_id,
+                "mark-unread: no refresh token; provider push skipped"
+            );
+        }
+
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": false })));
+    }
+
+    // No row means not owned (404) or already unread (nothing to push).
+    let owns: Option<i32> = sqlx::query_scalar(
+        "SELECT e.id FROM emails e JOIN email_accounts a ON e.account_id = a.id \
+         WHERE e.id = $1 AND a.user_id = $2",
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    if owns.is_none() {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({ "error": "Email not found" })));
+    }
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": false })))
+}
+
+#[instrument(target = "gmail", skip(pool, refresh_token), fields(user_id, account_id, provider = provider.as_db()))]
+#[allow(clippy::too_many_arguments)]
+async fn push_unread_state_to_provider(
+    pool: &PgPool,
+    user_id: i32,
+    account_id: i32,
+    provider: MailProvider,
+    refresh_token: &str,
+    provider_message_id: &str,
+) {
+    let token =
+        match refresh_and_persist_email_token(pool, account_id, provider, refresh_token).await {
+            Ok(token) => token.access_token,
+            Err(e) => {
+                warn!(
+                    target: "gmail",
+                    user_id,
+                    account_id,
+                    provider = provider.as_db(),
+                    error = ?e,
+                    "mark-unread token refresh failed; provider push skipped"
+                );
+                return;
+            }
+        };
+
+    if let Err(e) = provider.mark_unread(&token, provider_message_id).await {
+        warn!(
+            target: "gmail",
+            user_id,
+            account_id,
+            provider = provider.as_db(),
+            error = ?e,
+            "mark-unread provider push failed; Wayve DB state stands"
+        );
+    }
+}
+
 #[instrument(target = "gmail", skip(pool, refresh_token), fields(user_id, account_id, provider = provider.as_db()))]
 #[allow(clippy::too_many_arguments)]
 async fn push_read_state_to_provider(

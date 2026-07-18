@@ -138,6 +138,13 @@ mod tests {
             ) -> Result<()> {
                 Ok(())
             }
+            async fn mark_unread(
+                &self,
+                _access_token: &str,
+                _provider_message_id: &str,
+            ) -> Result<()> {
+                Ok(())
+            }
         }
 
         impl MailProviderClient for FullStub {
