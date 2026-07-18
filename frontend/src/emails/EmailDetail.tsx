@@ -20,6 +20,8 @@ interface EmailDetailProps {
   viewMode: "email" | "files";
   onBack: () => void;
   onDeleteEmail: (emailId: number) => Promise<void>;
+  // Marks the email's sender as noise (routes their mail to the Noise folder).
+  onMarkNoise?: (emailId: number) => Promise<void>;
   files: EmailAttachment[];
   filesLoading: boolean;
   filesError: string | null;
@@ -41,6 +43,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   viewMode,
   onBack,
   onDeleteEmail,
+  onMarkNoise,
   files,
   filesLoading,
   filesError,
@@ -56,6 +59,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // Gmail-style "more actions" kebab menu (temporary placeholder items).
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
+  // The reading pane is the scroll container for the (auto-height) body iframe.
+  // Focus it when an email opens so the first wheel/arrow-key scroll lands here
+  // instead of the list row that was just clicked. See the focus effect below.
+  const detailRef = useRef<HTMLDivElement | null>(null);
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const [replySending, setReplySending] = useState(false);
@@ -132,6 +139,17 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [selectedEmail?.id]);
+
+  // Move focus to the reading pane when an email opens, so the very first wheel
+  // or arrow-key scroll acts on this scroll container rather than the list row
+  // that was just clicked. `preventScroll` keeps the pane pinned at the top.
+  useEffect(() => {
+    if (viewMode !== "email" || !selectedEmail) return;
+    const el = detailRef.current;
+    if (!el) return;
+    const timer = window.setTimeout(() => el.focus({ preventScroll: true }), 0);
+    return () => window.clearTimeout(timer);
+  }, [selectedEmail?.id, viewMode]);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -319,6 +337,20 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   };
 
+  const handleMarkNoise = async () => {
+    if (!onMarkNoise) return;
+    try {
+      await onMarkNoise(selectedEmail.id);
+      // The sender's mail (this email included) is now Noise, so leave the
+      // detail and return to the list where it's been filtered out.
+      onBack();
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to mark sender as noise"
+      );
+    }
+  };
+
   const replyTo = emailAddress(selectedEmail.sender);
   const originalSubject = selectedEmail.subject?.trim() || "(No Subject)";
   const forwardSubject = originalSubject.toLowerCase().startsWith("fwd:")
@@ -503,7 +535,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   );
 
   return (
-    <div className="email-detail">
+    <div className="email-detail" ref={detailRef} tabIndex={-1}>
       <div className="email-detail-header">
         <button
           type="button"
@@ -604,7 +636,18 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           </button>
           {moreOpen && (
             <div className="email-detail-more-menu" role="menu">
-              {["test1", "test2", "test3"].map((item) => (
+              <button
+                type="button"
+                role="menuitem"
+                className="email-detail-more-item"
+                onClick={() => {
+                  setMoreOpen(false);
+                  void handleMarkNoise();
+                }}
+              >
+                Mark as Noise
+              </button>
+              {["test2", "test3"].map((item) => (
                 <button
                   key={item}
                   type="button"

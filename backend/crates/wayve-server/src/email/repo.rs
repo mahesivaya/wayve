@@ -194,6 +194,15 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                            AND ('INBOX' = ANY(e.labels) \
                                 OR lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'))) ",
                 );
+                // Marked-noise senders are moved out of the inbox.
+                qb.push(
+                    " AND NOT EXISTS (SELECT 1 FROM noise_senders ns \
+                       WHERE ns.user_id = ",
+                );
+                qb.push_bind(filters.user_id);
+                qb.push(
+                    " AND lower(coalesce(e.sender, '')) LIKE '%' || lower(ns.sender_email) || '%') ",
+                );
             }
             "sent" => {
                 qb.push(
@@ -237,9 +246,17 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                 qb.push(" AND 'IMPORTANT' = ANY(e.labels) ");
             }
             "noise" => {
+                // Social + promotions categories, plus any sender the user has
+                // explicitly marked as noise.
                 qb.push(
                     " AND ('CATEGORY_SOCIAL' = ANY(e.labels) \
-                       OR 'CATEGORY_PROMOTIONS' = ANY(e.labels)) ",
+                       OR 'CATEGORY_PROMOTIONS' = ANY(e.labels) \
+                       OR EXISTS (SELECT 1 FROM noise_senders ns \
+                          WHERE ns.user_id = ",
+                );
+                qb.push_bind(filters.user_id);
+                qb.push(
+                    " AND lower(coalesce(e.sender, '')) LIKE '%' || lower(ns.sender_email) || '%')) ",
                 );
             }
             _ => {}

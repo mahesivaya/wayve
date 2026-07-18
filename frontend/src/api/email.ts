@@ -182,6 +182,14 @@ export const markEmailRead = async (emailId: number): Promise<void> => {
   }
 };
 
+// Marks the email's sender as "noise": the backend routes all of that address's
+// mail (current + future) into Noise and out of the inbox. Returns the address
+// that was marked.
+export const markEmailSenderNoise = async (
+  emailId: number
+): Promise<{ marked: boolean; sender_email: string }> =>
+  apiFetchJson(`/api/emails/${emailId}/noise`, { method: "POST" });
+
 export const markEmailUnread = async (emailId: number): Promise<void> => {
   await apiFetchJson(`/api/emails/${emailId}/unread`, { method: "POST" });
   if (typeof window !== "undefined") {

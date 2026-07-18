@@ -1032,6 +1032,18 @@ CREATE TABLE IF NOT EXISTS reminders (
 );
 CREATE INDEX IF NOT EXISTS idx_reminders_user_time ON reminders(user_id, remind_at);
 
+-- Noise senders: per-user list of sender addresses the user marked as "noise".
+-- The email `noise` folder includes mail from these senders (current + future),
+-- and the inbox excludes them, so marking one address routes all their mail.
+CREATE TABLE IF NOT EXISTS noise_senders (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sender_email TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE (user_id, sender_email)
+);
+CREATE INDEX IF NOT EXISTS idx_noise_senders_user ON noise_senders(user_id);
+
 -- Tasks (personal to-do items). Priority is 1-5, 5 = Highest.
 CREATE TABLE IF NOT EXISTS tasks (
     id SERIAL PRIMARY KEY,
@@ -2219,7 +2231,7 @@ DECLARE
         ['tasks','user_id'], ['task_attachments','user_id'],
         ['drive_files','user_id'], ['folders','user_id'],
         ['meetings','user_id'], ['secure_messages','sender_user_id'],
-        ['reminders','user_id'],
+        ['reminders','user_id'], ['noise_senders','user_id'],
         ['user_jira_connections','user_id'], ['user_gitlab_connections','user_id']
     ];
 BEGIN

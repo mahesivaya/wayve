@@ -57,6 +57,7 @@ export default function Emails() {
     openFiles,
     openEmail,
     deleteEmail,
+    markSenderNoise,
     bulkMarkRead,
     bulkDelete,
     markRead,
@@ -684,6 +685,7 @@ export default function Emails() {
               setSelectedEmail(null);
             }}
             onDeleteEmail={deleteEmail}
+            onMarkNoise={markSenderNoise}
             files={files}
             filesLoading={filesLoading}
             filesError={filesError}

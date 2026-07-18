@@ -656,6 +656,91 @@ pub async fn mark_email_unread(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": false })))
 }
 
+/// Extract the bare address from an RFC 5322 `Name <addr@host>` sender header,
+/// falling back to the token that looks like an address when it's already bare.
+fn extract_sender_address(sender: &str) -> Option<String> {
+    let s = sender.trim();
+    // Prefer the address inside angle brackets when the header is "Name <addr>".
+    let bracketed = match (s.find('<'), s.rfind('>')) {
+        (Some(open), Some(close)) if open < close => s.get(open + 1..close).map(str::trim),
+        _ => None,
+    };
+    if let Some(inner) = bracketed.filter(|i| i.contains('@')) {
+        return Some(inner.to_lowercase());
+    }
+    s.split_whitespace()
+        .rev()
+        .find(|token| token.contains('@'))
+        .map(|token| {
+            token
+                .trim_matches(|c| c == '<' || c == '>' || c == '"' || c == ',')
+                .to_lowercase()
+        })
+}
+
+// Mark the sender of email {id} as "noise": all of that address's mail (current
+// and future) then routes into the Noise folder and out of the inbox — the
+// filtering lives in email/repo.rs, so no rows are rewritten here.
+#[actix_web::post("/emails/{id}/noise")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn mark_email_noise(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<EmailDeletePath>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let email_id = path.id;
+
+    // The join authorizes: a user may only act on their own mail (owned via
+    // account, or delivered to them for wayve-source rows).
+    let sender: Option<Option<String>> = sqlx::query_scalar(
+        "SELECT e.sender FROM emails e \
+         LEFT JOIN email_accounts a ON e.account_id = a.id \
+         WHERE e.id = $1 AND (a.user_id = $2 OR e.recipient_user_id = $2)",
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    let Some(sender) = sender else {
+        return Err(AppError::NotFound("email"));
+    };
+    let address = sender
+        .as_deref()
+        .and_then(extract_sender_address)
+        .ok_or_else(|| AppError::bad_request("email has no usable sender address"))?;
+
+    let insert_addr = address.clone();
+    crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        sqlx::query(
+            "INSERT INTO noise_senders (user_id, sender_email) VALUES ($1, $2) \
+             ON CONFLICT (user_id, sender_email) DO NOTHING",
+        )
+        .bind(user_id)
+        .bind(&insert_addr)
+        .execute(&mut *tx)
+        .await?;
+        Ok((tx, ()))
+    })
+    .await?;
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "email_sender_marked_noise",
+            resource_type: "email",
+            resource_id: Some(email_id.to_string()),
+            metadata: Some(serde_json::json!({ "sender_email": address })),
+        },
+    )
+    .await;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "marked": true, "sender_email": address })))
+}
+
 #[instrument(target = "gmail", skip(pool, refresh_token), fields(user_id, account_id, provider = provider.as_db()))]
 #[allow(clippy::too_many_arguments)]
 async fn push_unread_state_to_provider(

@@ -9,6 +9,7 @@ import {
   deleteEmail as deleteEmailRequest,
   markEmailRead,
   markEmailUnread,
+  markEmailSenderNoise,
 } from "../api/email";
 import { logger } from "../utils/logger";
 import { decryptWayveBodyIfNeeded, emailBodyErrorMessage } from "./bodyUtils";
@@ -258,6 +259,18 @@ export function useEmailInbox(
     setSelectedEmail((cur) => (cur?.id === emailId ? null : cur));
   };
 
+  // Mark the email's sender as noise. The backend routes all of that address's
+  // mail into Noise and out of the inbox; here we optimistically drop every
+  // loaded row from that sender so the current list updates immediately.
+  const markSenderNoise = async (emailId: number) => {
+    const { sender_email } = await markEmailSenderNoise(emailId);
+    const needle = sender_email.toLowerCase();
+    const fromSender = (email: EmailItem) =>
+      (email.sender ?? "").toLowerCase().includes(needle);
+    setEmails((prev) => prev.filter((email) => !fromSender(email)));
+    setSelectedEmail((cur) => (cur && fromSender(cur) ? null : cur));
+  };
+
   // Failed POSTs log but don't roll back, so a flaky network mid-batch doesn't
   // make rows pop back to unread; the next provider sync reconciles.
   const bulkMarkRead = async (ids: number[]) => {
@@ -382,6 +395,7 @@ export function useEmailInbox(
     openFiles,
     openEmail,
     deleteEmail,
+    markSenderNoise,
     bulkMarkRead,
     bulkDelete,
     markRead,

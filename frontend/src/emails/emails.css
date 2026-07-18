@@ -1526,6 +1526,13 @@
   text-align: left;
 }
 
+/* The pane is focused programmatically on open (tabIndex=-1, not tab-reachable)
+   so the first scroll/arrow lands here — it's a scroll region, not a control, so
+   no focus ring. */
+.email-detail:focus {
+  outline: none;
+}
+
 /* Files (attachments) view: there's no email header above, so the generous
    reading top-padding just reads as dead space under the toolbar — tighten. */
 .email-detail.email-detail--files {
