@@ -14,6 +14,7 @@ use tracing::{info, instrument, warn};
 
 use super::mapping::map_issue_fields;
 use super::models::{JiraWebhookIssue, JiraWebhookPayload};
+use crate::tasks::statuses;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(jira_webhook);
@@ -91,25 +92,47 @@ async fn apply_to_tasks(
     base: Option<&str>,
 ) -> Result<u64, AppError> {
     let mapped = map_issue_fields(&issue.key, &issue.fields);
-    let result = sqlx::query(
-        "UPDATE tasks SET
-            name = $1,
-            description = $2,
-            priority = $3,
-            status = $4,
-            updated_at = NOW()
-         WHERE jira_issue_key = $5
-           AND ($6::text IS NULL OR jira_base = $6)",
+
+    // One issue can be linked from several users' tasks, and statuses are owned
+    // per organization / per user — so there is no single slug this update can
+    // bind. Resolve the owner's own status set for each affected row instead of
+    // writing one global value, which would otherwise land a foreign slug on any
+    // user whose workflow differs from the first one seen.
+    let owners: Vec<(i32, i32)> = sqlx::query_as(
+        "SELECT id, user_id FROM tasks
+          WHERE jira_issue_key = $1
+            AND ($2::text IS NULL OR jira_base = $2)",
     )
-    .bind(&mapped.name)
-    .bind(&mapped.description)
-    .bind(mapped.priority)
-    .bind(mapped.status)
     .bind(&issue.key)
     .bind(base)
-    .execute(pool)
+    .fetch_all(pool)
     .await?;
-    Ok(result.rows_affected())
+
+    let mut affected = 0u64;
+    for (task_id, user_id) in owners {
+        let owner = statuses::owner_for_user(pool, user_id).await?;
+        let resolver = statuses::category_resolver(pool, owner).await?;
+        let slug = resolver.slug_for_hinted(mapped.category, &mapped.status_name);
+
+        let result = sqlx::query(
+            "UPDATE tasks SET
+                name = $1,
+                description = $2,
+                priority = $3,
+                status = $4,
+                updated_at = NOW()
+             WHERE id = $5",
+        )
+        .bind(&mapped.name)
+        .bind(&mapped.description)
+        .bind(mapped.priority)
+        .bind(&slug)
+        .bind(task_id)
+        .execute(pool)
+        .await?;
+        affected += result.rows_affected();
+    }
+    Ok(affected)
 }
 
 /// Reduce a Jira `self` URL to its site base, the form stored in `jira_base`.

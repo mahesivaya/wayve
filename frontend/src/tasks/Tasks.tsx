@@ -26,6 +26,11 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "../api/tasks";
+import {
+  getTaskStatuses,
+  isTerminalCategory,
+  type TaskStatusRow,
+} from "../api/taskStatuses";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { taskShareText } from "./taskShareLink";
@@ -36,6 +41,7 @@ import { useInSplitPane } from "../components/SplitPaneContext";
 import { getApiBase } from "../config/env";
 import { JiraBadge } from "./JiraPanel";
 import { GitlabBadge } from "./GitlabBadge";
+import TaskStatusIcon from "./TaskStatusIcon";
 import "./tasks.css";
 
 const PRIORITY_OPTIONS: TaskPriority[] = [5, 4, 3, 2, 1];
@@ -68,11 +74,23 @@ const normalizePriority = (value: unknown): TaskPriority => {
   return 3;
 };
 
-const normalizeStatus = (value: unknown): TaskStatus => {
-  if (value === "done" || value === "in_review" || value === "in_progress") {
-    return value;
-  }
-  return "to_do";
+/**
+ * Coerce a server value to a status slug the loaded set actually contains.
+ *
+ * The old version hardcoded the four legal slugs and fell back to `to_do`. With
+ * user-defined statuses there is no fixed list to check against, so the loaded
+ * rows are the authority and the first status (board order) is the fallback.
+ * Returning the raw value when the set hasn't loaded yet matters: coercing
+ * during the initial render would flash every task onto the wrong status.
+ */
+const normalizeStatus = (
+  value: unknown,
+  known: TaskStatusRow[]
+): TaskStatus => {
+  const slug = typeof value === "string" ? value : "";
+  if (known.length === 0) return slug;
+  if (known.some((s) => s.slug === slug)) return slug;
+  return known[0].slug;
 };
 
 const sortTasks = (list: Task[]) =>
@@ -84,12 +102,22 @@ const sortTasks = (list: Task[]) =>
         new Date(b.created_at ?? 0).getTime()
   );
 
-const STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
-  { value: "to_do", label: "To Do" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "in_review", label: "In Review" },
-  { value: "done", label: "Done" },
-];
+/**
+ * Statuses are loaded per org, so a task's slug may not resolve while the list
+ * is still in flight (or if a status was deleted out from under a stale tab).
+ * This keeps such a task visible with a readable label instead of rendering a
+ * blank chip.
+ */
+const UNKNOWN_STATUS = (slug: string): TaskStatusRow => ({
+  id: -1,
+  slug,
+  name: slug || "Unknown",
+  description: "",
+  color: "#6b7280",
+  category: "backlog",
+  position: 0,
+  task_count: 0,
+});
 
 // Linear-style assignee dropdown: the list of assignable users shows
 // immediately, with a "No assignee" row on top and a checkmark on the current
@@ -380,7 +408,10 @@ export default function Tasks() {
   const [taskName, setTaskName] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TaskPriority>(3);
-  const [status, setStatus] = useState<TaskStatus>("to_do");
+  // Empty until the org's statuses load. The compose form's default is applied
+  // once they arrive (see the effect below) rather than guessed here, since
+  // there is no longer a slug that is guaranteed to exist.
+  const [status, setStatus] = useState<TaskStatus>("");
   const [assignedBy, setAssignedBy] = useState("");
   const [assignee, setAssignee] = useState("");
   // `assigneeId` is set only when a real member is picked, not for a hand-typed
@@ -433,6 +464,40 @@ export default function Tasks() {
       (u) => u.email.toLowerCase() === assignee.trim().toLowerCase()
     ) ?? null;
 
+  // The org's configured statuses, in board order. Everything status-shaped on
+  // this page — the board columns, the filter, the selects, the colours — is
+  // derived from this list rather than from a hardcoded set.
+  const [statusRows, setStatusRows] = useState<TaskStatusRow[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setStatusRows(await getTaskStatuses());
+      } catch {
+        // A failure here leaves the board grouped by whatever slugs the tasks
+        // themselves carry (via UNKNOWN_STATUS), which still renders. Tasks
+        // failing to load is the error worth surfacing, not this.
+      }
+    })();
+  }, []);
+
+  const statusBySlug = useMemo(() => {
+    const map = new Map<string, TaskStatusRow>();
+    for (const row of statusRows) map.set(row.slug, row);
+    return map;
+  }, [statusRows]);
+
+  const lookupStatus = useCallback(
+    (slug: string): TaskStatusRow => statusBySlug.get(slug) ?? UNKNOWN_STATUS(slug),
+    [statusBySlug]
+  );
+
+  // The compose form's effective status. `status` stays empty until the user
+  // picks one (or an edit populates it), so the default is *derived* from the
+  // loaded list rather than synced into state by an effect — writing state in an
+  // effect here would cascade a second render on every load.
+  const composeStatus = status || statusRows[0]?.slug || "";
+
   const loadTasks = useCallback(async () => {
     setLoadError("");
     setLoading(true);
@@ -443,7 +508,7 @@ export default function Tasks() {
           list.map((t) => ({
             ...t,
             priority: normalizePriority(t.priority),
-            status: normalizeStatus(t.status),
+            status: normalizeStatus(t.status, statusRows),
           }))
         )
       );
@@ -583,7 +648,7 @@ export default function Tasks() {
     setTaskName(task.name);
     setDescription(task.description);
     setPriority(normalizePriority(task.priority));
-    setStatus(normalizeStatus(task.status));
+    setStatus(normalizeStatus(task.status, statusRows));
     setAssignedBy(task.assigned_by ?? "");
     setAssignee(task.assignee ?? "");
     setAssigneeId(task.assignee_id ?? null);
@@ -713,7 +778,7 @@ export default function Tasks() {
               ? {
                   ...updated,
                   priority: normalizePriority(updated.priority),
-                  status: normalizeStatus(updated.status),
+                  status: normalizeStatus(updated.status, statusRows),
                 }
               : t
           )
@@ -800,12 +865,21 @@ export default function Tasks() {
   );
 
   const activeTasks = useMemo(
-    () => filteredTasks.filter((t) => t.status !== "done"),
+    // "Active" is every task whose status sits in a non-terminal category, not
+    // the literal slug "done" — a renamed or extra completion status (or a
+    // Canceled one) must not keep showing up as outstanding work.
+    () =>
+      filteredTasks.filter(
+        (t) => !isTerminalCategory(lookupStatus(t.status).category)
+      ),
     [filteredTasks]
   );
 
   const completedTasks = useMemo(
-    () => filteredTasks.filter((t) => t.status === "done"),
+    () =>
+      filteredTasks.filter((t) =>
+        isTerminalCategory(lookupStatus(t.status).category)
+      ),
     [filteredTasks]
   );
 
@@ -828,7 +902,7 @@ export default function Tasks() {
           name,
           description: details,
           priority,
-          status,
+          status: composeStatus,
           assigned_by: assignedBy.trim(),
           assignee: assignee.trim(),
           assignee_id: assigneeId,
@@ -842,7 +916,7 @@ export default function Tasks() {
                 ? {
                     ...updated,
                     priority: normalizePriority(updated.priority),
-                    status: normalizeStatus(updated.status),
+                    status: normalizeStatus(updated.status, statusRows),
                   }
                 : t
             )
@@ -853,7 +927,7 @@ export default function Tasks() {
           name,
           description: details,
           priority,
-          status,
+          status: composeStatus,
           assigned_by: assignedBy.trim(),
           assignee: assignee.trim(),
           assignee_id: assigneeId,
@@ -866,7 +940,7 @@ export default function Tasks() {
             {
               ...created,
               priority: normalizePriority(created.priority),
-              status: normalizeStatus(created.status),
+              status: normalizeStatus(created.status, statusRows),
             },
           ])
         );
@@ -957,9 +1031,9 @@ export default function Tasks() {
                         aria-label="Filter by status"
                       >
                         <option value="all">All statuses</option>
-                        {STATUS_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
+                        {statusRows.map((row) => (
+                          <option key={row.id} value={row.slug}>
+                            {row.name}
                           </option>
                         ))}
                       </select>
@@ -1147,21 +1221,24 @@ export default function Tasks() {
                 className="task-pill"
                 data-tooltip={isEditing ? "Status" : "Initial status upon creation"}
               >
+                {/* Colour comes from the status row, not a per-status CSS
+                    class — a user-defined status has no class to key off. */}
                 <span
-                  className={`task-pill-dot task-pill-dot--${status}`}
+                  className="task-pill-dot"
+                  style={{ backgroundColor: lookupStatus(composeStatus).color }}
                   aria-hidden="true"
                 />
                 <select
                   className="task-pill-select"
-                  value={status}
+                  value={composeStatus}
                   aria-label="Status"
                   onChange={(event) =>
                     setStatus(event.target.value as TaskStatus)
                   }
                 >
-                  {STATUS_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
+                  {statusRows.map((row) => (
+                    <option key={row.id} value={row.slug}>
+                      {row.name}
                     </option>
                   ))}
                 </select>
@@ -1463,22 +1540,29 @@ export default function Tasks() {
             </div>
           ) : (
             <div className="task-board">
-              {STATUS_OPTIONS.map((col) => {
+              {statusRows.map((col) => {
                 const colTasks = filteredTasks.filter(
-                  (t) => t.status === col.value
+                  (t) => t.status === col.slug
                 );
                 return (
                   <section
-                    key={col.value}
-                    className={`task-board-col task-board-col--${col.value}${
-                      dragOverStatus === col.value
+                    key={col.id}
+                    // The terminal modifier drives the struck-through card title,
+                    // and is keyed to the category so a renamed completion
+                    // status keeps the treatment.
+                    className={`task-board-col${
+                      isTerminalCategory(col.category)
+                        ? " task-board-col--terminal"
+                        : ""
+                    }${
+                      dragOverStatus === col.slug
                         ? " task-board-col--dragover"
                         : ""
                     }`}
                     onDragOver={(event) => {
                       event.preventDefault();
-                      if (dragOverStatus !== col.value)
-                        setDragOverStatus(col.value);
+                      if (dragOverStatus !== col.slug)
+                        setDragOverStatus(col.slug);
                     }}
                     onDragLeave={(event) => {
                       // Only clear when the pointer actually leaves the column,
@@ -1488,7 +1572,7 @@ export default function Tasks() {
                           event.relatedTarget as Node | null
                         )
                       ) {
-                        setDragOverStatus((s) => (s === col.value ? null : s));
+                        setDragOverStatus((s) => (s === col.slug ? null : s));
                       }
                     }}
                     onDrop={(event) => {
@@ -1498,11 +1582,16 @@ export default function Tasks() {
                         event.dataTransfer.getData("text/plain")
                       );
                       const dropped = tasks.find((t) => t.id === id);
-                      if (dropped) void changeStatus(dropped, col.value);
+                      if (dropped) void changeStatus(dropped, col.slug);
                     }}
                   >
                     <header className="task-board-col-header">
-                      <span className="task-board-col-title">{col.label}</span>
+                      <TaskStatusIcon
+                        category={col.category}
+                        color={col.color}
+                        size={15}
+                      />
+                      <span className="task-board-col-title">{col.name}</span>
                       <span className="task-board-col-count">
                         {colTasks.length}
                       </span>
@@ -1685,23 +1774,37 @@ export default function Tasks() {
                           >
                             Delete
                           </button>
-                          <select
-                            className={`task-status-select task-status-select--${task.status}`}
-                            value={task.status}
-                            onChange={(event) =>
-                              void changeStatus(
-                                task,
-                                event.target.value as TaskStatus
-                              )
-                            }
-                            aria-label={`Status of ${task.name}`}
-                          >
-                            {STATUS_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
+                          <span className="task-status-control">
+                            <TaskStatusIcon
+                              category={lookupStatus(task.status).category}
+                              color={lookupStatus(task.status).color}
+                            />
+                            {/* Tinted from the status's own colour rather than a
+                                per-status class, so custom statuses are styled
+                                the same way the built-in ones are. */}
+                            <select
+                              className="task-status-select"
+                              style={{
+                                borderColor: lookupStatus(task.status).color,
+                                color: lookupStatus(task.status).color,
+                                backgroundColor: `${lookupStatus(task.status).color}1a`,
+                              }}
+                              value={task.status}
+                              onChange={(event) =>
+                                void changeStatus(
+                                  task,
+                                  event.target.value as TaskStatus
+                                )
+                              }
+                              aria-label={`Status of ${task.name}`}
+                            >
+                              {statusRows.map((row) => (
+                                <option key={row.id} value={row.slug}>
+                                  {row.name}
+                                </option>
+                              ))}
+                            </select>
+                          </span>
                         </div>
                       )}
                     </article>

@@ -4,7 +4,13 @@ import { apiFetch, apiFetchJson } from "./client";
 
 export type TaskPriority = 1 | 2 | 3 | 4 | 5;
 
-export type TaskStatus = "to_do" | "in_progress" | "in_review" | "done";
+/**
+ * A status *slug*. Was a fixed union of four values; statuses are now
+ * user-configurable (see `api/taskStatuses.ts`), so the legal set is per-org
+ * data rather than a compile-time constant. Resolve a slug to its name, colour
+ * and category through the list returned by `getTaskStatuses`.
+ */
+export type TaskStatus = string;
 
 export type Task = {
   id: number;

@@ -38,6 +38,7 @@ mod tests {
                 "org_keys:bootstrap",
                 "org_keys:use_master",
                 "documents:manage",
+                "task_statuses:manage",
             ],
             Role::SuperAdmin => &[
                 "apps:use",
@@ -67,6 +68,7 @@ mod tests {
                 "org_keys:use_master",
                 // Documents management is owner + super_admin only (not admin).
                 "documents:manage",
+                "task_statuses:manage",
             ],
             Role::Admin => &[
                 "apps:use",
@@ -84,6 +86,8 @@ mod tests {
                 // member passwords and recover departing-member data
                 // without involving the owner.
                 "org_keys:use_master",
+                // Admin configures the task workflow alongside org:settings.
+                "task_statuses:manage",
             ],
             Role::Security => &[
                 "apps:use",

@@ -1063,8 +1063,56 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'to_do';
+-- Statuses became user-configurable (see task_statuses below), so the set of
+-- legal values is no longer fixed and cannot be expressed as a CHECK. Validation
+-- moved into tasks::handler::resolve_status, which rejects any slug not present
+-- in the caller's own status set rather than silently coercing it.
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('to_do', 'in_progress', 'in_review', 'done'));
+
+-- ------------------------------------------------------------
+-- User-configurable task statuses.
+--
+-- Polymorphic-owned exactly like `projects`: exactly one of organization_id /
+-- user_id is set. Org rows are the shared workflow for every member of that org
+-- (edited by holders of `task_statuses:manage`); personal and platform accounts
+-- own their statuses via user_id.
+--
+-- `category` is the fixed semantic axis and is NOT user-editable. `tasks.status`
+-- stores the free-form `slug`, but every behavioural decision — is this task
+-- finished, does it belong on the active list, which Jira category does it map
+-- to — keys off `category` instead. That split is what lets a user rename "Done"
+-- to "Shipped" without silently breaking the dashboard's open-task count.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS task_statuses (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    -- #rrggbb, lowercase. Rendered as an inline style, so it is constrained here
+    -- rather than trusted from the client.
+    color TEXT NOT NULL DEFAULT '#6b7280' CHECK (color ~ '^#[0-9a-f]{6}$'),
+    category TEXT NOT NULL CHECK (
+        category IN ('backlog', 'planned', 'in_progress', 'completed', 'canceled')
+    ),
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT task_statuses_owner_chk CHECK (
+        (organization_id IS NOT NULL AND user_id IS NULL) OR
+        (organization_id IS NULL AND user_id IS NOT NULL)
+    )
+);
+
+-- Slugs are unique per owner. Two partial indexes rather than one UNIQUE, since
+-- the owner column is polymorphic and NULLs never compare equal.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_task_statuses_org_slug
+    ON task_statuses (organization_id, slug) WHERE organization_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_task_statuses_user_slug
+    ON task_statuses (user_id, slug) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_task_statuses_org  ON task_statuses (organization_id);
+CREATE INDEX IF NOT EXISTS idx_task_statuses_user ON task_statuses (user_id);
 
 -- Free-text "assigned by" / "assignee" attribution (who handed the task over
 -- and who it's assigned to). Plain text, optional; empty string when unspecified.

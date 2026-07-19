@@ -337,8 +337,38 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             updated_at TIMESTAMP DEFAULT NOW()
         )",
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'to_do'",
+        // Statuses are user-configurable now, so the legal set is per-owner and
+        // can't be a CHECK. tasks::handler::resolve_status validates instead.
         "ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check",
-        "ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('to_do', 'in_progress', 'in_review', 'done'))",
+        // Mirrors the task_statuses block in init.sql — see the comment there for
+        // why `category` is fixed while name/color/slug are user data.
+        "CREATE TABLE IF NOT EXISTS task_statuses (
+            id SERIAL PRIMARY KEY,
+            organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            slug TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            color TEXT NOT NULL DEFAULT '#6b7280' CHECK (color ~ '^#[0-9a-f]{6}$'),
+            category TEXT NOT NULL CHECK (
+                category IN ('backlog', 'planned', 'in_progress', 'completed', 'canceled')
+            ),
+            position INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT task_statuses_owner_chk CHECK (
+                (organization_id IS NOT NULL AND user_id IS NULL) OR
+                (organization_id IS NULL AND user_id IS NOT NULL)
+            )
+        )",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_task_statuses_org_slug \
+         ON task_statuses (organization_id, slug) WHERE organization_id IS NOT NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_task_statuses_user_slug \
+         ON task_statuses (user_id, slug) WHERE user_id IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_task_statuses_org \
+         ON task_statuses (organization_id)",
+        "CREATE INDEX IF NOT EXISTS idx_task_statuses_user \
+         ON task_statuses (user_id)",
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee TEXT NOT NULL DEFAULT ''",
         "CREATE INDEX IF NOT EXISTS idx_tasks_user_priority \

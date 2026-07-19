@@ -6,8 +6,9 @@ use crate::prelude::*;
 use tracing::warn;
 
 use super::client::JiraClient;
-use super::mapping::{map_issue_fields, wayve_status_to_jira_category};
+use super::mapping::{map_issue_fields, wayve_category_to_jira_category};
 use super::models::JiraConnection;
+use crate::tasks::statuses;
 
 /// Pull issues matching `jql` into the user's tasks, upserting on
 /// `(user_id, jira_issue_key)` so re-imports update in place.
@@ -25,6 +26,12 @@ pub async fn pull(
         return Ok((0, 0));
     }
 
+    // Statuses are user-configurable, so the importer can't hardcode a slug. Load
+    // this user's set once here rather than per issue, since the upsert below
+    // builds its rows inside a synchronous closure.
+    let owner = statuses::owner_for_user(pool, user_id).await?;
+    let resolver = statuses::category_resolver(pool, owner).await?;
+
     // One multi-row upsert, not a round-trip per issue. `(xmax::text = '0')` is
     // true only for a fresh INSERT, because an ON CONFLICT UPDATE stamps xmax with
     // the updating xid, so the per-row flag separates imported from updated.
@@ -39,7 +46,7 @@ pub async fn pull(
             .push_bind(mapped.name)
             .push_bind(mapped.description)
             .push_bind(mapped.priority)
-            .push_bind(mapped.status)
+            .push_bind(resolver.slug_for_hinted(mapped.category, &mapped.status_name))
             .push_bind(issue.key.clone())
             .push_bind(conn.base_url.clone());
     });
@@ -84,7 +91,15 @@ async fn push_inner(pool: &PgPool, user_id: i32, key: &str, task: &Task) -> Resu
 
     // If the Jira workflow allows no transition to a matching status category from
     // the current state, skip the move rather than fail.
-    let target = wayve_status_to_jira_category(&task.status);
+    // The task stores a user-defined slug, so resolve it to its category before
+    // asking which Jira category to transition into. A slug with no matching
+    // status row (a status deleted between the edit and this push) has no
+    // meaningful target, so leave the Jira issue where it is.
+    let owner = statuses::owner_for_user(pool, user_id).await?;
+    let Some(category) = statuses::category_of(pool, owner, &task.status).await? else {
+        return Ok(());
+    };
+    let target = wayve_category_to_jira_category(&category);
     let transitions = client.list_transitions(key).await?;
     if let Some(t) = transitions.iter().find(|t| {
         t.to.as_ref()

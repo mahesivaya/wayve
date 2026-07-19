@@ -39,6 +39,10 @@ export const PERMISSIONS = [
   // Write access to the shared Documents workspace: owner + super_admin only,
   // everyone else is read-only.
   "documents:manage",
+  // Editing the org's task statuses: owner / super_admin / admin, alongside
+  // org:settings. Reading them is ungated — the task board can't render
+  // without the status list.
+  "task_statuses:manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -87,6 +91,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "inbox:manage",
     "mcp:manage",
     "org_keys:use_master",
+    "task_statuses:manage",
   ],
   security: [
     "apps:use",

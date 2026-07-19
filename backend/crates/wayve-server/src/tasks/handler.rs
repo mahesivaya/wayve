@@ -1,5 +1,6 @@
 use crate::models::task::{Task, TaskInput};
 use crate::prelude::*;
+use crate::tasks::statuses;
 use crate::webhooks::{Event, emit, handler::owner_for_user};
 use actix_web::{delete, put};
 use sqlx::Row;
@@ -33,13 +34,40 @@ fn normalize_priority(value: Option<i16>) -> i16 {
     p.clamp(1, 5)
 }
 
-fn normalize_status(value: Option<&str>) -> &'static str {
-    match value.map(|s| s.trim()) {
-        Some("done") => "done",
-        Some("in_review") => "in_review",
-        Some("in_progress") => "in_progress",
-        _ => "to_do",
-    }
+/// Resolves the status slug a write should store, validated against the caller's
+/// own configured set.
+///
+/// This replaced a pure function whose fallback arm was `_ => "to_do"`. That was
+/// safe only while the legal set was a fixed four-value CHECK: once statuses are
+/// user-defined, a silent fallback means any slug the server doesn't recognise
+/// *quietly resets the task to the first backlog status* instead of failing —
+/// so a stale browser tab, or a client one deploy behind, would rewrite tasks it
+/// meant to leave alone. Unknown slugs are now a 400.
+///
+/// Omitting `status` entirely still has a sensible default (the first status in
+/// board order), since creating a task without naming a status is legitimate.
+async fn resolve_status(
+    pool: &PgPool,
+    owner: statuses::StatusOwner,
+    value: Option<&str>,
+) -> Result<String, AppError> {
+    let available = statuses::load(pool, owner).await?;
+    let Some(requested) = value.map(str::trim).filter(|v| !v.is_empty()) else {
+        return available
+            .first()
+            .map(|s| s.slug.clone())
+            .ok_or_else(|| AppError::internal("no task statuses configured for owner"));
+    };
+
+    available
+        .iter()
+        .find(|s| s.slug == requested)
+        .map(|s| s.slug.clone())
+        .ok_or_else(|| {
+            AppError::bad_request(format!(
+                "Unknown status '{requested}'. Configure it under Settings → Task statuses."
+            ))
+        })
 }
 
 #[get("/tasks")]
@@ -131,7 +159,8 @@ pub async fn create_task(
     }
     let description = data.description.as_deref().unwrap_or("").trim();
     let priority = normalize_priority(data.priority);
-    let status = normalize_status(data.status.as_deref());
+    let status_owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
+    let status = resolve_status(pool.get_ref(), status_owner, data.status.as_deref()).await?;
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
     let assignee_id = data.assignee_id;
@@ -153,7 +182,7 @@ pub async fn create_task(
     .bind(name)
     .bind(description)
     .bind(priority)
-    .bind(status)
+    .bind(&status)
     .bind(assigned_by)
     .bind(assignee)
     .bind(assignee_id)
@@ -212,7 +241,8 @@ pub async fn update_task(
     }
     let description = data.description.as_deref().unwrap_or("").trim();
     let priority = normalize_priority(data.priority);
-    let status = normalize_status(data.status.as_deref());
+    let status_owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
+    let status = resolve_status(pool.get_ref(), status_owner, data.status.as_deref()).await?;
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
     let assignee_id = data.assignee_id;
@@ -240,7 +270,7 @@ pub async fn update_task(
     .bind(name)
     .bind(description)
     .bind(priority)
-    .bind(status)
+    .bind(&status)
     .bind(assigned_by)
     .bind(assignee)
     .bind(assignee_id)
@@ -251,7 +281,7 @@ pub async fn update_task(
     .await?
     .ok_or(AppError::NotFound("task"))?;
 
-    let status_changed = old_status.as_deref() != Some(status);
+    let status_changed = old_status.as_deref() != Some(status.as_str());
     let attachments_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM task_attachments WHERE task_id = $1")
             .bind(id)

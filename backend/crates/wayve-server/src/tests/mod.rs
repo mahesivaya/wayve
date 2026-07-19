@@ -41,6 +41,7 @@ mod scim_tokens_test;
 mod security_encryption_test;
 mod slack_test;
 mod slack_webhook_test;
+mod task_statuses_test;
 mod task_suggest_test;
 mod webhooks_test;
 mod workspace_test;

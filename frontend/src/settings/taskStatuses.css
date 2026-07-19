@@ -1,0 +1,266 @@
+/* Task statuses settings page. Grouped by category, with an inline create /
+   edit row per group. Colours come from the status rows themselves (inline
+   styles), so nothing here is keyed to a specific status. */
+
+.ts-page {
+  padding: 24px;
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-color, var(--color-text-primary));
+  /* The page host (.split-pane-body) is overflow:hidden and stretches this page
+     to its height — so the page must own its vertical scroll or tall content is
+     clipped with no scrollbar. Same contract as the other settings pages. */
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ts-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.ts-subtitle {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  max-width: 640px;
+}
+
+.ts-muted {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.ts-error {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--color-danger-soft, rgb(254, 226, 226));
+  color: var(--color-danger-deep, rgb(153, 27, 27));
+  border: 1px solid var(--color-danger-border, rgb(252, 165, 165));
+}
+
+.ts-card {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.ts-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--color-surface-muted, rgba(127, 127, 127, 0.08));
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ts-group-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.ts-add {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+}
+
+.ts-add:hover {
+  background: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.ts-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ts-group:last-child .ts-row:last-child {
+  border-bottom: none;
+}
+
+.ts-row--dragging {
+  opacity: 0.45;
+}
+
+.ts-handle {
+  cursor: grab;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  user-select: none;
+}
+
+/* The rounded tinted square behind the glyph. The tint is the status colour at
+   ~13% alpha (the `22` suffix on the hex), applied inline. */
+.ts-chip,
+.ts-color-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  flex: none;
+}
+
+.ts-color {
+  position: relative;
+  display: inline-flex;
+}
+
+.ts-color-button {
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.ts-color-button:disabled {
+  cursor: default;
+}
+
+.ts-color-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(5, 20px);
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.ts-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ts-swatch--on {
+  border-color: var(--color-text-primary);
+}
+
+.ts-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ts-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ts-sub {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ts-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.ts-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-input-border, var(--color-border));
+  background: var(--color-surface);
+  color: inherit;
+  font-size: 14px;
+  /* 16px on mobile, or iOS Safari zooms the page on focus — same fix as the
+     login form. */
+}
+
+@media (max-width: 640px) {
+  .ts-input {
+    font-size: 16px;
+  }
+}
+
+.ts-input--desc {
+  flex: 1.6;
+}
+
+.ts-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  flex: none;
+}
+
+.ts-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ts-btn--ghost:hover:not(:disabled) {
+  background: var(--color-border);
+}
+
+.ts-btn--primary {
+  background: var(--color-primary-action);
+  color: #fff;
+  border-radius: 999px;
+  padding: 8px 20px;
+}
+
+.ts-btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-action-hover);
+}
+
+.ts-btn--danger {
+  color: var(--color-danger-deep, rgb(153, 27, 27));
+}
+
+.ts-btn--danger:hover:not(:disabled) {
+  background: var(--color-danger-soft, rgb(254, 226, 226));
+}
+
+/* Rows become two-line stacks on narrow screens so the name and the action
+   buttons stop competing for the same horizontal space. */
+@media (max-width: 720px) {
+  .ts-row {
+    flex-wrap: wrap;
+  }
+
+  .ts-input,
+  .ts-input--desc {
+    flex-basis: 100%;
+  }
+}

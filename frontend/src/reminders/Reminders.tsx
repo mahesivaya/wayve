@@ -9,6 +9,7 @@ import {
   type Reminder,
 } from "../api/reminders";
 import { fromTime, formatHour } from "../scheduler/dateUtils";
+import { useTaskStatuses } from "../tasks/useTaskStatuses";
 import "./reminders.css";
 
 type ApiMeeting = {
@@ -40,15 +41,6 @@ const priorityLabel = (p: TaskPriority): string =>
         : p === 2
           ? "Low"
           : "Lowest";
-
-const statusLabel = (s: Task["status"]): string =>
-  s === "in_progress"
-    ? "In Progress"
-    : s === "in_review"
-      ? "In Review"
-      : s === "done"
-        ? "Done"
-        : "To Do";
 
 // A local Date for a meeting's date ("YYYY-MM-DD") + minute-of-day. Meetings are
 // stored/validated in the browser's local zone, so a plain local Date matches.
@@ -88,6 +80,8 @@ const dateLabel = (date: string): string =>
   });
 
 export default function Reminders() {
+  // Statuses are user-configurable, so labels come from the org's own list.
+  const { label: statusLabel } = useTaskStatuses();
   const navigate = useNavigate();
   const [meetings, setMeetings] = useState<UpcomingMeeting[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);

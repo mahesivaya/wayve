@@ -432,7 +432,9 @@
   gap: 6px;
 }
 
-.task-board-col--done .task-board-card-title {
+/* Keyed to the terminal *category*, not the "done" slug, so a renamed or
+   additional completion status (and Canceled) keeps the treatment. */
+.task-board-col--terminal .task-board-card-title {
   text-decoration: line-through;
   color: var(--color-text-muted);
 }
@@ -574,24 +576,15 @@
   stroke-linejoin: round;
 }
 
+/* The dot's colour is set inline from the status row's own `color`, since a
+   user-defined status has no CSS class to key off. The background here is only
+   the fallback for a status that hasn't resolved yet. */
 .task-pill-dot {
   width: 9px;
   height: 9px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--color-text-muted);
-}
-
-.task-pill-dot--in_progress {
-  background: #4c9aff;
-}
-
-.task-pill-dot--in_review {
-  background: #f5a623;
-}
-
-.task-pill-dot--done {
-  background: #36b37e;
 }
 
 /* Anchor for the assignee popover. */
@@ -1253,28 +1246,24 @@
   border-color: var(--color-primary-action);
 }
 
-.task-status-select--to_do {
-  border-color: var(--color-input-border);
-  color: var(--color-text-slate);
-  background: var(--color-surface);
+/* Circular progress glyph (TaskStatusIcon).
+
+   Both the glyph and the <select> beside it take their colour inline from the
+   status row's `color`, so they cannot disagree about what a given status looks
+   like — previously they were separate CSS blocks that had already drifted (the
+   pill dots used hardcoded hexes while these used theme tokens). */
+.task-status-icon {
+  flex: none;
+  vertical-align: middle;
 }
 
-.task-status-select--in_progress {
-  border-color: var(--color-primary-action);
-  color: var(--color-primary-action-hover);
-  background: var(--color-primary-soft);
-}
-
-.task-status-select--in_review {
-  border-color: var(--color-warning-deep);
-  color: var(--color-warning-deep);
-  background: var(--color-warning-soft, rgb(254, 243, 199));
-}
-
-.task-status-select--done {
-  border-color: var(--color-success-emerald);
-  color: var(--color-success-deep);
-  background: var(--color-success-pale);
+/* Pairs the glyph with the status <select>. A native select can't render an
+   SVG in its options, so the icon sits beside it and reflects the current
+   value. */
+.task-status-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .task-completed-section {

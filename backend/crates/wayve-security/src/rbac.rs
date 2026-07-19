@@ -173,10 +173,15 @@ pub enum Permission {
     /// workspace. Owner and super_admin only; every other role, admin included,
     /// gets read-only.
     DocumentsManage,
+    /// Create, rename, recolour, reorder, and delete the org's task statuses —
+    /// the workflow every member's task board renders. Sits alongside OrgSettings
+    /// as an admin-level capability: changing it reshapes the board for the whole
+    /// org, so members and guests get read-only.
+    TaskStatusesManage,
 }
 
 impl Permission {
-    pub const ALL: [Permission; 27] = [
+    pub const ALL: [Permission; 28] = [
         AppsUse,
         AppsManage,
         ProfileManageSelf,
@@ -204,6 +209,7 @@ impl Permission {
         OrgKeysBootstrap,
         OrgKeysUseMaster,
         DocumentsManage,
+        TaskStatusesManage,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -235,6 +241,7 @@ impl Permission {
             OrgKeysBootstrap => "org_keys:bootstrap",
             OrgKeysUseMaster => "org_keys:use_master",
             DocumentsManage => "documents:manage",
+            TaskStatusesManage => "task_statuses:manage",
         }
     }
 }
@@ -277,6 +284,7 @@ static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Ve
                     // stays owner-only.
                     OrgKeysUseMaster,
                     DocumentsManage,
+                    TaskStatusesManage,
                 ],
             ),
             (
@@ -297,6 +305,9 @@ static PERMISSION_MATRIX: std::sync::LazyLock<std::collections::HashMap<Role, Ve
                     // pubkey at promotion, so they can reset member passwords and
                     // recover data. They still cannot bootstrap or promote.
                     OrgKeysUseMaster,
+                    // Paired with OrgSettings above: shaping the task workflow is
+                    // org configuration, not a privileged security action.
+                    TaskStatusesManage,
                 ],
             ),
             (

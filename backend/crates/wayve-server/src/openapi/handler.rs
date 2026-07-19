@@ -600,7 +600,10 @@ fn schemas() -> serde_json::Value {
                 "name": { "type": "string" },
                 "description": { "type": "string" },
                 "priority": { "type": "integer", "minimum": 1, "maximum": 5 },
-                "status": { "type": "string", "enum": ["in_progress", "done"] },
+                "status": {
+                    "type": "string",
+                    "description": "A task status slug. The legal set is per-organization and configurable via /api/task-statuses, so this is not an enum."
+                },
                 "created_at": { "type": "string", "format": "date-time" }
             }
         },
@@ -611,7 +614,10 @@ fn schemas() -> serde_json::Value {
                 "name": { "type": "string" },
                 "description": { "type": "string", "nullable": true },
                 "priority": { "type": "integer", "minimum": 1, "maximum": 5 },
-                "status": { "type": "string", "enum": ["in_progress", "done"] }
+                "status": {
+                    "type": "string",
+                    "description": "A task status slug from /api/task-statuses. Unknown slugs are rejected with 400."
+                }
             }
         },
         "AiChatInput": {

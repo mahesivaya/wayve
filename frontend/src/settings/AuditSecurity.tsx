@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { hasPermission } from "../auth/permissions";
 import { useAuth } from "../auth/useAuth";
+import { useTaskStatuses } from "../tasks/useTaskStatuses";
 import {
   downloadAuditExport,
   formatUserActionDetails,
@@ -256,13 +257,6 @@ const TASK_ACTION_LABEL: Record<string, string> = {
   task_deleted: "Task deleted",
 };
 
-const TASK_STATUS_LABEL: Record<string, string> = {
-  to_do: "To do",
-  in_progress: "In progress",
-  in_review: "In review",
-  done: "Done",
-};
-
 const PRIORITY_LABEL: Record<number, string> = {
   1: "Lowest",
   2: "Low",
@@ -271,7 +265,12 @@ const PRIORITY_LABEL: Record<number, string> = {
   5: "Highest",
 };
 
-const stLabel = (s: string) => TASK_STATUS_LABEL[s] ?? s;
+// Audit rows record the status *slug* at the time of the action. Statuses are
+// user-configurable, so resolving to a display name needs the live list —
+// `resolve` is the component's `label` from useTaskStatuses, and an unresolvable
+// slug (a status deleted since the row was written) falls back to the slug.
+const stLabel = (s: string, resolve: (slug: string) => string) =>
+  s ? resolve(s) : s;
 
 // Org/platform-only fields read "No Data available" for personal users, who
 // have no assigner/assignee concept.
@@ -290,12 +289,15 @@ function taskStatusOf(row: UserActionRow): string {
   return typeof s === "string" ? s : "";
 }
 
-function formatTaskStatus(row: UserActionRow): string {
+function formatTaskStatus(
+  row: UserActionRow,
+  resolve: (slug: string) => string
+): string {
   if (row.action === "task_status_changed") {
-    return `${stLabel(metaStr(row, "old_status"))} → ${stLabel(metaStr(row, "new_status"))}`;
+    return `${stLabel(metaStr(row, "old_status"), resolve)} → ${stLabel(metaStr(row, "new_status"), resolve)}`;
   }
   const s = metaStr(row, "status");
-  return s === "-" ? "-" : stLabel(s);
+  return s === "-" ? "-" : stLabel(s, resolve);
 }
 
 function formatPriority(row: UserActionRow): string {
@@ -393,6 +395,9 @@ export default function AuditSecurity({
   embedded?: boolean;
 }) {
   const { user } = useAuth();
+  // Audit rows store status slugs; the live list turns them into display names
+  // and populates the status filter, so both track user-defined statuses.
+  const { statuses: taskStatuses, label: statusLabel } = useTaskStatuses();
   const canReadAudit = hasPermission(user, "audit:read");
   const canManageSiem = hasPermission(user, "webhooks:manage");
 
@@ -1628,10 +1633,11 @@ export default function AuditSecurity({
                 onChange={(event) => setTkStatus(event.target.value)}
               >
                 <option value="">All statuses</option>
-                <option value="to_do">To do</option>
-                <option value="in_progress">In progress</option>
-                <option value="in_review">In review</option>
-                <option value="done">Done</option>
+                {taskStatuses.map((row) => (
+                  <option key={row.id} value={row.slug}>
+                    {row.name}
+                  </option>
+                ))}
               </select>
             </label>
             <button
@@ -1689,7 +1695,7 @@ export default function AuditSecurity({
                       >
                         {metaStr(row, "summary")}
                       </td>
-                      <td>{formatTaskStatus(row)}</td>
+                      <td>{formatTaskStatus(row, statusLabel)}</td>
                       <td>{formatPriority(row)}</td>
                       <td>{noData(row.metadata?.assigned_by)}</td>
                       <td>{noData(row.metadata?.assignee)}</td>

@@ -11,7 +11,13 @@ pub struct MappedFields {
     /// The issue summary, or the issue key when the summary is blank.
     pub name: String,
     pub description: String,
-    pub status: &'static str,
+    /// A Wayve status *category*, resolved to a real slug by the caller via
+    /// `tasks::statuses::CategoryResolver`.
+    pub category: &'static str,
+    /// The Jira status display name, passed to
+    /// `CategoryResolver::slug_for_hinted` so an org that kept a review status
+    /// still gets "In Review" issues routed there rather than to "In Progress".
+    pub status_name: String,
     pub priority: i16,
 }
 
@@ -33,30 +39,28 @@ pub fn map_issue_fields(key: &str, fields: &JiraFields) -> MappedFields {
         ),
         None => ("", ""),
     };
-    let status = jira_status_to_wayve(category, status_name);
+    let mapped_category = jira_status_to_category(category, status_name);
     let priority = jira_priority_to_wayve(fields.priority.as_ref().map(|p| p.name.as_str()));
     MappedFields {
         name,
         description,
-        status,
+        category: mapped_category,
+        status_name: status_name.to_string(),
         priority,
     }
 }
 
-/// Jira's category key is one of `new`, `indeterminate`, or `done`;
-/// `indeterminate` is split into `in_progress` and `in_review` by display name.
-pub fn jira_status_to_wayve(category_key: &str, status_name: &str) -> &'static str {
+/// Jira's category key is one of `new`, `indeterminate`, or `done`.
+///
+/// Returns a Wayve *category*, not a status slug: slugs are user-configurable, so
+/// an importer can't know one exists. `tasks::statuses::CategoryResolver` turns
+/// the category into whichever slug this owner actually has there.
+pub fn jira_status_to_category(category_key: &str, _status_name: &str) -> &'static str {
     match category_key {
-        "new" => "to_do",
-        "done" => "done",
-        "indeterminate" => {
-            if status_name.to_lowercase().contains("review") {
-                "in_review"
-            } else {
-                "in_progress"
-            }
-        }
-        _ => "to_do",
+        "done" => "completed",
+        "indeterminate" => "in_progress",
+        // "new" and anything unrecognised.
+        _ => "backlog",
     }
 }
 
@@ -71,12 +75,14 @@ pub fn jira_priority_to_wayve(name: Option<&str>) -> i16 {
     }
 }
 
-/// The Jira status category a Wayve status should land in when pushing back. Used
-/// to pick a transition whose target `statusCategory.key` matches.
-pub fn wayve_status_to_jira_category(status: &str) -> &'static str {
-    match status {
-        "done" => "done",
-        "in_progress" | "in_review" => "indeterminate",
+/// The Jira status category a Wayve *category* should land in when pushing back.
+/// Used to pick a transition whose target `statusCategory.key` matches.
+pub fn wayve_category_to_jira_category(category: &str) -> &'static str {
+    match category {
+        // Canceled has no Jira equivalent; closing the issue is the closest
+        // truthful mapping, and matches what a cancelled task means locally.
+        "completed" | "canceled" => "done",
+        "in_progress" => "indeterminate",
         _ => "new",
     }
 }
@@ -129,21 +135,20 @@ mod tests {
 
     #[test]
     fn status_mapping() {
-        assert_eq!(jira_status_to_wayve("new", "To Do"), "to_do");
+        assert_eq!(jira_status_to_category("new", "To Do"), "backlog");
         assert_eq!(
-            jira_status_to_wayve("indeterminate", "In Progress"),
+            jira_status_to_category("indeterminate", "In Progress"),
             "in_progress"
         );
+        // Both halves of Jira's "indeterminate" map to the same category; the
+        // In Progress / In Review split is recovered from `status_name` by
+        // CategoryResolver::slug_for_hinted, not here.
         assert_eq!(
-            jira_status_to_wayve("indeterminate", "In Review"),
-            "in_review"
+            jira_status_to_category("indeterminate", "In Review"),
+            "in_progress"
         );
-        assert_eq!(
-            jira_status_to_wayve("indeterminate", "Code Review"),
-            "in_review"
-        );
-        assert_eq!(jira_status_to_wayve("done", "Done"), "done");
-        assert_eq!(jira_status_to_wayve("weird", "Whatever"), "to_do");
+        assert_eq!(jira_status_to_category("done", "Done"), "completed");
+        assert_eq!(jira_status_to_category("weird", "Whatever"), "backlog");
     }
 
     #[test]
@@ -158,14 +163,16 @@ mod tests {
     }
 
     #[test]
-    fn wayve_status_to_category() {
-        assert_eq!(wayve_status_to_jira_category("to_do"), "new");
+    fn wayve_category_to_jira() {
+        assert_eq!(wayve_category_to_jira_category("backlog"), "new");
+        assert_eq!(wayve_category_to_jira_category("planned"), "new");
         assert_eq!(
-            wayve_status_to_jira_category("in_progress"),
+            wayve_category_to_jira_category("in_progress"),
             "indeterminate"
         );
-        assert_eq!(wayve_status_to_jira_category("in_review"), "indeterminate");
-        assert_eq!(wayve_status_to_jira_category("done"), "done");
+        assert_eq!(wayve_category_to_jira_category("completed"), "done");
+        // Jira has no "canceled"; closing the issue is the closest truthful map.
+        assert_eq!(wayve_category_to_jira_category("canceled"), "done");
     }
 
     #[test]

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTaskStatuses } from "../../tasks/useTaskStatuses";
 import {
   getHomeInbox,
   getHomeRecent,
@@ -48,13 +49,6 @@ const senderName = (sender: string | null | undefined) => {
   if (m) return m[1].trim();
   if (sender.includes("@")) return sender.split("@")[0];
   return sender;
-};
-
-const TASK_STATUS_LABEL: Record<string, string> = {
-  to_do: "To do",
-  in_progress: "In progress",
-  in_review: "In review",
-  done: "Done",
 };
 
 export default function ActivityDashboard() {
@@ -225,6 +219,9 @@ function TasksCard({
   loading,
   onOpen,
 }: CardProps<{ top: TaskPreview[] }>) {
+  // Statuses are user-configurable, so labels come from the org's own list
+  // rather than a local map that only knew the four original slugs.
+  const { label: statusLabel } = useTaskStatuses();
   const items: TaskPreview[] = data?.top ?? [];
   return (
     <section className="dashboard-card">
@@ -247,7 +244,7 @@ function TasksCard({
               </span>
               <span className="dashboard-item-title">{t.name}</span>
               <span className="dashboard-item-trail">
-                {TASK_STATUS_LABEL[t.status] ?? t.status}
+                {statusLabel(t.status)}
               </span>
             </li>
           ))}

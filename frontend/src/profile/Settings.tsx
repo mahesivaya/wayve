@@ -512,6 +512,32 @@ export default function Settings() {
           </section>
         )}
 
+        {/* Deliberately NOT in the Administration card below. That card is
+            gated per-console and, for org/platform accounts, is hidden entirely
+            in normal session mode (downscope_for_mode demotes a non-personal
+            owner to `member`) — which made this page unreachable without first
+            switching to admin mode. Reading statuses is ungated on the backend
+            and the page renders read-only without `task_statuses:manage`, so
+            the entry point is always shown and the page itself decides whether
+            editing is offered. */}
+        <section className="settings-card">
+          <h2 className="settings-card-title">Tasks</h2>
+          <div className="settings-rows">
+            <div className="settings-usage-row">
+              <span data-tooltip="Name, colour and order the statuses tasks move through.">
+                Task statuses
+              </span>
+              <button
+                type="button"
+                className="settings-billing-link"
+                onClick={() => navigate("/settings/statuses")}
+              >
+                Open
+              </button>
+            </div>
+          </div>
+        </section>
+
         {adminConsoles.length > 0 && (
           <section className="settings-card">
             <h2 className="settings-card-title">Administration</h2>

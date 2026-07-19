@@ -9,7 +9,9 @@ use super::models::GitlabIssue;
 pub struct MappedFields {
     pub name: String,
     pub description: String,
-    pub status: &'static str,
+    /// A Wayve status *category*, resolved to a real slug by the caller via
+    /// `tasks::statuses::CategoryResolver`.
+    pub category: &'static str,
     pub priority: i16,
 }
 
@@ -23,23 +25,24 @@ pub fn map_issue(issue: &GitlabIssue) -> MappedFields {
     MappedFields {
         name,
         description: issue.description.clone().unwrap_or_default(),
-        status: gitlab_state_to_wayve(&issue.state, &issue.labels),
+        category: gitlab_state_to_category(&issue.state, &issue.labels),
         priority: gitlab_priority_from_labels(&issue.labels),
     }
 }
 
-/// A closed issue is done; an open one is refined by common workflow labels.
-pub fn gitlab_state_to_wayve(state: &str, labels: &[String]) -> &'static str {
+/// A closed issue is completed; an open one is refined by common workflow labels.
+///
+/// Returns a Wayve *category*, not a status slug — slugs are user-configurable,
+/// so an importer can't know one exists.
+pub fn gitlab_state_to_category(state: &str, labels: &[String]) -> &'static str {
     if state.eq_ignore_ascii_case("closed") {
-        return "done";
+        return "completed";
     }
     let has = |needle: &str| labels.iter().any(|l| l.to_lowercase().contains(needle));
-    if has("review") {
-        "in_review"
-    } else if has("progress") || has("doing") {
+    if has("review") || has("progress") || has("doing") {
         "in_progress"
     } else {
-        "to_do"
+        "backlog"
     }
 }
 
@@ -76,15 +79,17 @@ mod tests {
 
     #[test]
     fn status_mapping() {
-        assert_eq!(gitlab_state_to_wayve("closed", &[]), "done");
-        assert_eq!(gitlab_state_to_wayve("opened", &[]), "to_do");
+        assert_eq!(gitlab_state_to_category("closed", &[]), "completed");
+        assert_eq!(gitlab_state_to_category("opened", &[]), "backlog");
         assert_eq!(
-            gitlab_state_to_wayve("opened", &["In Progress".into()]),
+            gitlab_state_to_category("opened", &["In Progress".into()]),
             "in_progress"
         );
+        // Review labels share the in_progress category; which concrete status
+        // an issue lands on is the resolver's call, not this mapping's.
         assert_eq!(
-            gitlab_state_to_wayve("opened", &["needs review".into()]),
-            "in_review"
+            gitlab_state_to_category("opened", &["needs review".into()]),
+            "in_progress"
         );
     }
 
@@ -101,7 +106,7 @@ mod tests {
     fn map_issue_uses_iid_when_title_blank() {
         let mapped = map_issue(&issue("opened", &[], "  ", 42));
         assert_eq!(mapped.name, "#42");
-        assert_eq!(mapped.status, "to_do");
+        assert_eq!(mapped.category, "backlog");
         assert_eq!(mapped.priority, 3);
         assert_eq!(mapped.description, "body");
     }

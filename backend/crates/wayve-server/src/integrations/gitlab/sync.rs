@@ -5,6 +5,7 @@ use crate::prelude::*;
 use super::client::GitlabClient;
 use super::mapping::map_issue;
 use super::models::GitlabConnection;
+use crate::tasks::statuses;
 
 /// Pull issues assigned to the connected user into their tasks, upserting on
 /// `(user_id, gitlab_project_id, gitlab_issue_iid)` so re-imports update in place.
@@ -22,6 +23,12 @@ pub async fn pull(
         return Ok((0, 0));
     }
 
+    // Statuses are user-configurable, so the importer can't hardcode a slug. Load
+    // this user's set once here rather than per issue, since the upsert below
+    // builds its rows inside a synchronous closure.
+    let owner = statuses::owner_for_user(pool, user_id).await?;
+    let resolver = statuses::category_resolver(pool, owner).await?;
+
     // One multi-row upsert, not a round-trip per issue. `(xmax::text = '0')` is
     // true only for a fresh INSERT, because an ON CONFLICT UPDATE stamps xmax with
     // the updating xid, so the per-row flag separates imported from updated. Issues
@@ -37,7 +44,7 @@ pub async fn pull(
             .push_bind(mapped.name)
             .push_bind(mapped.description)
             .push_bind(mapped.priority)
-            .push_bind(mapped.status)
+            .push_bind(resolver.slug_for(mapped.category))
             .push_bind(issue.iid)
             .push_bind(issue.project_id)
             .push_bind(issue.web_url.clone());

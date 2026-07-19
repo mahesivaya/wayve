@@ -202,14 +202,25 @@ pub async fn home_inbox(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
 // ─────────────────────────── Tasks ────────────────────────────
 
 async fn load_tasks(pool: &PgPool, user_id: i32) -> Result<TasksSummary, sqlx::Error> {
+    // "Open" is every task whose status is in a non-terminal category, not the
+    // literal slug 'done'. Statuses are user-configurable, so a renamed or
+    // additional completion status (or a Canceled one) would otherwise keep
+    // showing up as outstanding work on the dashboard.
+    let terminal = crate::tasks::statuses::TERMINAL_CATEGORIES;
     let rows = sqlx::query(
-        "SELECT id, name, status
-         FROM tasks
-         WHERE user_id = $1 AND status != 'done'
-         ORDER BY priority DESC, created_at DESC
+        "SELECT t.id, t.name, t.status
+         FROM tasks t
+         LEFT JOIN task_statuses s
+           ON s.slug = t.status
+          AND (s.user_id = t.user_id
+               OR s.organization_id = (SELECT organization_id FROM users WHERE id = t.user_id))
+         WHERE t.user_id = $1
+           AND (s.category IS NULL OR s.category != ALL($2))
+         ORDER BY t.priority DESC, t.created_at DESC
          LIMIT 5",
     )
     .bind(user_id)
+    .bind(terminal)
     .fetch_all(pool)
     .await?;
 
