@@ -319,33 +319,6 @@
   background: var(--color-danger-soft);
 }
 
-/* Right-aligned cluster on a menu item — live theme swatch + chevron for
-   the Appearance entry. */
-.profile-dropdown-item-right {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.profile-dropdown-swatch {
-  display: inline-flex;
-  gap: 2px;
-}
-
-.profile-dropdown-swatch span {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px rgb(0, 0, 0, 0.15);
-}
-
-.profile-dropdown-chevron {
-  color: var(--color-text-muted);
-  font-size: var(--text-lg);
-  line-height: 1;
-}
-
 /* Web build: the ProfileMenu is mounted at the sidebar bottom instead of the
    header. The trigger reads as a full-width sidebar row (avatar + email, like
    the desktop button) and its dropdown opens upward rather than

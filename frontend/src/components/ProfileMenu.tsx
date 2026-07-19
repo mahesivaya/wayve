@@ -1,20 +1,10 @@
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { homePathForUser } from "../auth/accountHome";
 import { canViewIntegrations } from "../auth/permissions";
-import { useCustomTheme } from "../theme/useCustomTheme";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
-
-// Must stay as var() references, not literal colors: browsers resolve var() in
-// inline styles, so the swatch tracks the active palette (custom themes and dark
-// mode included) without mirroring any values into React state.
-const SWATCH_VARS = [
-  "var(--color-primary-action)",
-  "var(--color-accent-purple)",
-  "var(--color-success)",
-] as const;
 
 export default function ProfileMenu({
   placement = "header",
@@ -46,9 +36,6 @@ export default function ProfileMenu({
     }
   };
   const menuRef = useRef<HTMLDivElement>(null);
-  // Re-keying on the choice forces the inline var() values to re-resolve.
-  const { choice } = useCustomTheme();
-  const swatchKey = useMemo(() => JSON.stringify(choice), [choice]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -138,14 +125,6 @@ export default function ProfileMenu({
           >
             <span className="profile-dropdown-icon">🎨</span>
             Appearance
-            <span className="profile-dropdown-item-right">
-              <span className="profile-dropdown-swatch" key={swatchKey}>
-                {SWATCH_VARS.map((v, i) => (
-                  <span key={i} style={{ background: v }} />
-                ))}
-              </span>
-              <span className="profile-dropdown-chevron">›</span>
-            </span>
           </button>
 
           {showSwitcher && (
