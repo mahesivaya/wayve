@@ -3,6 +3,22 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.8.0](https://github.com/mahesivaya/wayve/releases/tag/v7.8.0) - 2026-07-19
+
+### 🚀 Features
+
+- **emails:** Route GitHub PR/review mail exclusively to the Reviews folder
+
+### 🐛 Bug Fixes
+
+- **auth:** Correct mobile rendering of the login and register pages
+- **emails:** Make browser Back close the open email instead of leaving the page
+- **emails:** Let sender-based folders bootstrap via a Gmail search backfill
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v7.7.1 [skip ci]
+
 ## [7.7.1](https://github.com/mahesivaya/wayve/releases/tag/v7.7.1) - 2026-07-18
 
 ### 🚀 Features
