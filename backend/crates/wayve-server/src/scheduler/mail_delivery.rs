@@ -58,17 +58,18 @@ pub fn filter_participants(participants: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+/// The subject and plain-text body of a meeting email. Shared by both
+/// transports so a Gmail-sent invite and an SMTP-sent one are byte-identical —
+/// the delivery mechanism must not change what the participant reads.
 #[allow(clippy::too_many_arguments)]
-pub fn build_meeting_message(
-    sender_email: &str,
-    participants: &[String],
+pub fn build_meeting_content(
     title: &str,
     date: NaiveDate,
     start: NaiveTime,
     end: NaiveTime,
     kind: MeetingEmailKind,
     zoom_join_url: Option<&str>,
-) -> RawMailMessage {
+) -> (String, String) {
     let start_str = start.format("%H:%M").to_string();
     let end_str = end.format("%H:%M").to_string();
 
@@ -87,12 +88,27 @@ pub fn build_meeting_message(
         "{header}\n\nTitle: {title}\nDate: {date}\nStart: {start_str}\nEnd: {end_str}{zoom_line}\n\n-- Wayve Scheduler"
     );
 
+    (format!("{subject_prefix}: {title}"), body)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_meeting_message(
+    sender_email: &str,
+    participants: &[String],
+    title: &str,
+    date: NaiveDate,
+    start: NaiveTime,
+    end: NaiveTime,
+    kind: MeetingEmailKind,
+    zoom_join_url: Option<&str>,
+) -> RawMailMessage {
+    let (subject, body) = build_meeting_content(title, date, start, end, kind, zoom_join_url);
     let to_list = participants.join(",");
 
     let raw_message = format!(
         "From: {sender_email}\r\n\
 To: {to_list}\r\n\
-Subject: {subject_prefix}: {title}\r\n\
+Subject: {subject}\r\n\
 Content-Type: text/plain; charset=\"UTF-8\"\r\n\r\n{body}"
     );
 

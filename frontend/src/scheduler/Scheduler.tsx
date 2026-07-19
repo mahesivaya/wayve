@@ -62,6 +62,9 @@ type ApiMeeting = {
 
 type CreatedMeeting = {
   meeting_id?: number;
+  // Absent when there were no participants to notify; false when the invite
+  // emails could not be delivered.
+  invites_sent?: boolean | null;
 };
 
 type TimeOption = { value: string; label: string };
@@ -475,12 +478,27 @@ export default function Scheduler() {
       participants: finalParticipants,
     };
 
+    // The meeting itself is saved either way; only the invite delivery can fail
+    // separately, so this warns rather than reporting the save as failed.
+    const warnIfInvitesFailed = (res: CreatedMeeting | undefined) => {
+      if (res?.invites_sent === false) {
+        alert(
+          "Meeting saved, but the invite emails could not be sent. " +
+            "Participants have not been notified."
+        );
+      }
+    };
+
     if (editingEvent) {
-      await updateMeetingApi(editingEvent.id, payload);
+      const updated = (await updateMeetingApi(
+        editingEvent.id,
+        payload
+      )) as CreatedMeeting;
       setEventCalendars((prev) => ({
         ...prev,
         [String(editingEvent.id)]: selectedCalendarId,
       }));
+      warnIfInvitesFailed(updated);
     } else {
       const created = (await createMeetingApi(payload)) as CreatedMeeting;
       if (created?.meeting_id) {
@@ -489,6 +507,7 @@ export default function Scheduler() {
           [String(created.meeting_id)]: selectedCalendarId,
         }));
       }
+      warnIfInvitesFailed(created);
     }
 
     resetModal();

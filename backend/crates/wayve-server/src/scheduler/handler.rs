@@ -64,6 +64,12 @@ fn encrypt_optional_field(
 struct MeetingResponse {
     message: String,
     meeting_id: i32,
+    /// Whether the invite emails actually went out. `None` when the meeting had
+    /// no participants to notify. The client surfaces a warning on `false` —
+    /// this used to be logged and nowhere else, which is how invites stayed
+    /// broken for every non-Gmail user without anyone noticing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    invites_sent: Option<bool>,
 }
 
 #[post("/meetings")]
@@ -220,8 +226,6 @@ pub async fn create_meeting(
         .await;
     }
 
-    let pool_clone = pool.clone();
-
     let email_req = MeetingEmailRequest {
         user_id,
         participants: participants.clone(),
@@ -233,11 +237,20 @@ pub async fn create_meeting(
         zoom_join_url: zoom_join_url.clone(),
     };
 
-    actix_web::rt::spawn(async move {
-        if let Err(e) = send_meeting_emails(pool_clone.get_ref(), email_req).await {
-            warn!(target: "scheduler", meeting_id, error = %e, "invite email failed");
+    // Awaited rather than spawned so the response can report the outcome. The
+    // cost is the SMTP/Gmail round trip on the create request; the benefit is
+    // that a failed invite is visible instead of silent.
+    let invites_sent = if participants.is_empty() {
+        None
+    } else {
+        match send_meeting_emails(pool.get_ref(), email_req).await {
+            Ok(()) => Some(true),
+            Err(e) => {
+                warn!(target: "scheduler", meeting_id, error = %e, "invite email failed");
+                Some(false)
+            }
         }
-    });
+    };
 
     // Plaintext title, date, and time only: the encrypted-at-rest columns are an
     // internal storage concern, not part of the public event contract.
@@ -261,6 +274,7 @@ pub async fn create_meeting(
     Ok(HttpResponse::Ok().json(MeetingResponse {
         message: "Meeting created successfully".into(),
         meeting_id,
+        invites_sent,
     }))
 }
 
@@ -576,8 +590,7 @@ pub async fn update_meeting(
         None => (false, None),
     };
 
-    if content_changed && !participants.is_empty() {
-        let pool_clone = pool.clone();
+    let invites_sent = if content_changed && !participants.is_empty() {
         let email_req = MeetingEmailRequest {
             user_id,
             participants,
@@ -588,12 +601,16 @@ pub async fn update_meeting(
             kind: MeetingEmailKind::Update,
             zoom_join_url: existing_zoom_url,
         };
-        actix_web::rt::spawn(async move {
-            if let Err(e) = send_meeting_emails(pool_clone.get_ref(), email_req).await {
+        match send_meeting_emails(pool.get_ref(), email_req).await {
+            Ok(()) => Some(true),
+            Err(e) => {
                 warn!(target: "scheduler", meeting_id = id, error = %e, "update email failed");
+                Some(false)
             }
-        });
-    }
+        }
+    } else {
+        None
+    };
 
     let owner = crate::webhooks::handler::owner_for_user(pool.get_ref(), user_id).await;
     crate::webhooks::emit(
@@ -612,7 +629,8 @@ pub async fn update_meeting(
     .await;
 
     Ok(HttpResponse::Ok().json(json!({
-        "message": "Meeting updated successfully"
+        "message": "Meeting updated successfully",
+        "invites_sent": invites_sent,
     })))
 }
 

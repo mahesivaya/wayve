@@ -61,6 +61,19 @@ fn build_transport(
 
 #[instrument(target = "smtp", skip(body), fields(to, subject))]
 pub async fn send_mail(to: &str, subject: &str, body: &str) -> Result<(), MailError> {
+    send_mail_reply_to(to, subject, body, None).await
+}
+
+/// `send_mail` with an optional `Reply-To`. Needed wherever the sending mailbox
+/// isn't the person the recipient should answer — meeting invites go out from
+/// the server's SMTP identity, but replies belong to the organizer.
+#[instrument(target = "smtp", skip(body), fields(to, subject))]
+pub async fn send_mail_reply_to(
+    to: &str,
+    subject: &str,
+    body: &str,
+    reply_to: Option<&str>,
+) -> Result<(), MailError> {
     let crate::config::SmtpConfig {
         host,
         port,
@@ -82,9 +95,18 @@ pub async fn send_mail(to: &str, subject: &str, body: &str) -> Result<(), MailEr
             source,
         })?;
 
-    let email = Message::builder()
-        .from(from_parsed)
-        .to(to_parsed)
+    let mut builder = Message::builder().from(from_parsed).to(to_parsed);
+    if let Some(addr) = reply_to {
+        let parsed = clean_mailbox(addr)
+            .parse()
+            .map_err(|source| MailError::InvalidMailbox {
+                field: "reply_to",
+                source,
+            })?;
+        builder = builder.reply_to(parsed);
+    }
+
+    let email = builder
         .subject(subject)
         .header(ContentType::TEXT_PLAIN)
         .body(body.to_string())

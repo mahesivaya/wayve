@@ -35,6 +35,7 @@ mod rls_reminders_test;
 mod scheduler_create_meeting_validation_test;
 mod scheduler_jwt_test;
 mod scheduler_mail_delivery_test;
+mod scheduler_smtp_fallback_test;
 mod scheduler_zoom_test;
 mod scim_tokens_test;
 mod security_encryption_test;
