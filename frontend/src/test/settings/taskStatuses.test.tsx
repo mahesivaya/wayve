@@ -70,6 +70,7 @@ import {
   createTaskStatus,
   deleteTaskStatus,
   getTaskStatuses,
+  updateTaskStatus,
 } from "../../api/taskStatuses";
 
 const renderPage = () =>
@@ -147,6 +148,28 @@ describe("Task statuses settings", () => {
     expect(
       screen.getByText(/organization's shared statuses/i)
     ).toBeTruthy();
+  });
+
+  /**
+   * Regression: the coloured chip on each row reads as the colour control, but
+   * was originally inert — recolouring meant discovering "Edit", changing the
+   * colour, then "Save". Clicking the chip must recolour and save on its own.
+   */
+  it("recolours straight from the row swatch, without entering edit mode", async () => {
+    vi.mocked(updateTaskStatus).mockResolvedValue(statusRows[0]);
+    renderPage();
+    await screen.findByText("To Do");
+
+    // Deliberately does NOT click Edit first.
+    fireEvent.click(screen.getAllByLabelText("Choose status color")[0]);
+    fireEvent.click(screen.getByLabelText("#e5484d"));
+
+    await waitFor(() => {
+      expect(updateTaskStatus).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ color: "#e5484d", name: "To Do" })
+      );
+    });
   });
 
   /**
