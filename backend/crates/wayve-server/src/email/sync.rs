@@ -174,6 +174,21 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         }
     }
 
+    // GitHub review/PR mail feeds the Reviews folder, which filters on the
+    // sender. The label walk above can't reach it (no local rows to seed from),
+    // so pull it by search instead — one window per tick until exhausted.
+    if let Err(err) = backfill_query_older(
+        pool,
+        account.id,
+        &token.access_token,
+        "from:github.com",
+        "%github.com%",
+    )
+    .await
+    {
+        warn!(target: "worker", account_id = account.id, error = ?err, "github backfill failed");
+    }
+
     // Calendar rides the email cadence, reusing the token refreshed above.
     // Idempotent: import_upcoming_events upserts on (user_id, google_event_id).
     if account.provider == crate::email::provider::MailProvider::Google {
@@ -589,6 +604,105 @@ async fn backfill_label_older(
         count = ids.len(),
         before_timestamp,
         "fetched older label ids"
+    );
+
+    let mut tasks = FuturesUnordered::new();
+    for id in ids {
+        let token = token.to_string();
+        tasks.push(async move { fetch_headers_only(&token, &id).await });
+        if tasks.len() >= MAX_EMAIL_CONCURRENCY {
+            process_batch(pool, account_id, &mut tasks).await?;
+        }
+    }
+    while !tasks.is_empty() {
+        process_batch(pool, account_id, &mut tasks).await?;
+    }
+    Ok(())
+}
+
+/// Message ids matching a Gmail search `query`, optionally older than
+/// `before_timestamp`. Unlike the label walk this is a free-text search, so it
+/// can reach mail no local row points at yet. Params go through `.query()` so
+/// the `from:`/`before:` operators are URL-encoded correctly.
+pub async fn fetch_query_ids(
+    token: &str,
+    query: &str,
+    before_timestamp: Option<i64>,
+    max_results: usize,
+) -> Result<Vec<String>> {
+    let q = match before_timestamp {
+        Some(ts) => format!("{query} before:{ts}"),
+        None => query.to_string(),
+    };
+    let url = format!(
+        "{}/gmail/v1/users/me/messages",
+        crate::external::gmail_api_base()
+    );
+
+    let res: Value = HTTP_CLIENT
+        .get(&url)
+        .bearer_auth(token)
+        .query(&[
+            ("maxResults", max_results.to_string()),
+            ("q", q),
+            ("includeSpamTrash", "true".to_string()),
+        ])
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let ids = res["messages"]
+        .as_array()
+        .map(|messages| {
+            messages
+                .iter()
+                .filter_map(|m| m["id"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(ids)
+}
+
+/// Backfills one BACKFILL_BATCH window of mail matching a Gmail search.
+///
+/// The per-label walk seeds off `MIN(created_at)` of rows that already carry the
+/// label, so it can never bootstrap a category with no local rows. This variant
+/// seeds off `sender_like` instead and, when nothing local matches yet, starts
+/// from the newest matching mail — which is how GitHub review mail gets pulled
+/// in for the Reviews folder even though no row references it yet.
+async fn backfill_query_older(
+    pool: &PgPool,
+    account_id: i32,
+    token: &str,
+    query: &str,
+    sender_like: &str,
+) -> Result<()> {
+    let oldest: Option<NaiveDateTime> = sqlx::query_scalar(
+        "SELECT MIN(created_at) FROM emails \
+         WHERE account_id = $1 AND lower(coalesce(sender, '')) LIKE $2",
+    )
+    .bind(account_id)
+    .bind(sender_like)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+
+    // None => nothing local yet, so pull the newest matching page instead of
+    // giving up (the bug that kept Reviews empty).
+    let before_timestamp = oldest.map(|dt| dt.and_utc().timestamp());
+    let ids = fetch_query_ids(token, query, before_timestamp, BACKFILL_BATCH).await?;
+    if ids.is_empty() {
+        return Ok(());
+    }
+    debug!(
+        target: "worker",
+        account_id,
+        query,
+        count = ids.len(),
+        ?before_timestamp,
+        "fetched query-matched ids"
     );
 
     let mut tasks = FuturesUnordered::new();
