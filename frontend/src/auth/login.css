@@ -12,6 +12,11 @@
        the recovery-mode fieldset) can extend past the viewport without
        being clipped; the body scrolls instead of the card. */
   min-height: 100vh;
+  /* iOS Safari counts the collapsible URL bar in `100vh`, so the page ends up
+     taller than what's actually visible and the centered card sits pushed below
+     the fold. `dvh` tracks the real viewport. Declared second so browsers
+     without `dvh` keep the `100vh` fallback above. */
+  min-height: 100dvh;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -225,7 +230,11 @@
   min-width: 0;
 }
 
-@media (max-width: 380px) {
+/* 480px, not 380px: real phones are wider than the old breakpoint assumed —
+   iPhone SE is 375 but 12/13/14 Pro are 390, 15 Pro is 393 and Pro Max is 430,
+   so every modern iPhone missed this and kept the two OAuth buttons squeezed
+   side by side. Emulators only reproduced it on the narrowest presets. */
+@media (max-width: 480px) {
   .auth-oauth-row {
     flex-direction: column;
   }
