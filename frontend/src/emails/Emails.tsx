@@ -92,11 +92,26 @@ export default function Emails() {
   // link restores it. This effect applies the param; the next one syncs back.
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkAppliedRef = useRef<number | null>(null);
+  // Last value of `?open=` seen by the effect below, so it can tell "the param
+  // was removed" (Back/Forward) apart from "the param isn't there yet" (the tick
+  // right after a row click, before the URL catches up).
+  const prevOpenParamRef = useRef<string | null>(null);
   useEffect(() => {
     const raw = searchParams.get("open");
+    const prevRaw = prevOpenParamRef.current;
+    prevOpenParamRef.current = raw;
     if (!raw) {
       // Reset the guard so navigating to the same id again works.
       deepLinkAppliedRef.current = null;
+      // Close the reader only when the param was genuinely DROPPED (Back/Forward),
+      // i.e. it was present on the previous run. Reacting to a merely-absent param
+      // would also fire in the tick between a row click and the sync effect below
+      // writing `?open=`, closing the email the user just opened.
+      // Deferred out of the effect body for the set-state-in-effect lint.
+      if (prevRaw !== null && selectedEmail !== null) {
+        const h = window.setTimeout(() => setSelectedEmail(null), 0);
+        return () => window.clearTimeout(h);
+      }
       return;
     }
     const id = Number(raw);
@@ -156,6 +171,7 @@ export default function Emails() {
     openEmail,
     setSearchParams,
     selectedEmail,
+    setSelectedEmail,
     emailViewLayout,
     setEmailViewLayout,
   ]);
@@ -169,15 +185,21 @@ export default function Emails() {
     const had = prevSelectedIdRef.current;
     prevSelectedIdRef.current = cur;
     if (cur !== null) {
-      setSearchParams(
-        (prev) => {
+      // PUSH (not replace) so Back closes the email and returns to the list.
+      // Replacing here collapsed the list entry, which made Back skip straight
+      // past /emails to whatever preceded it (usually Home).
+      // Skipped when the URL already carries this id — on a deep link the param
+      // is what opened the email, and rewriting it would add a bogus entry.
+      if (searchParams.get("open") !== String(cur)) {
+        setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           next.set("open", String(cur));
           return next;
-        },
-        { replace: true }
-      );
-    } else if (had !== null) {
+        });
+      }
+    } else if (had !== null && searchParams.get("open") !== null) {
+      // Closing from the UI is a correction, not a navigation, so replace —
+      // and skip entirely when Back already removed the param.
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -187,7 +209,7 @@ export default function Emails() {
         { replace: true }
       );
     }
-  }, [selectedEmail?.id, setSearchParams]);
+  }, [selectedEmail?.id, searchParams, setSearchParams]);
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [accountNameOverrides, setAccountNameOverrides] = useState<
