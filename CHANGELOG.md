@@ -3,6 +3,24 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.9.0](https://github.com/mahesivaya/wayve/releases/tag/v7.9.0) - 2026-07-19
+
+### 🚀 Features
+
+- **tasks:** User-configurable task statuses
+- **scheduler:** Alert before a meeting starts
+
+### 🐛 Bug Fixes
+
+- **scheduler:** Send meeting invites when the organizer has no Gmail
+- **auth:** Stop iOS Safari zooming the login form on input focus
+
+### 🧹 Maintenance
+
+- **tasks:** Cover recolouring a status from its row swatch
+- **sidebar:** Drop the swatches and chevron from the Appearance row
+- **changelog:** Update for v7.8.0 [skip ci]
+
 ## [7.8.0](https://github.com/mahesivaya/wayve/releases/tag/v7.8.0) - 2026-07-19
 
 ### 🚀 Features
