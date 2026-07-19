@@ -177,6 +177,14 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
         }
     }
 
+    // GitHub notification mail (PR/review requests) lives exclusively under the
+    // "Reviews" folder: the `github` arm selects on this predicate and the inbox
+    // tabs (All / Signal / Noise) subtract it, so the two sides stay disjoint and
+    // a PR email never shows up in two places. `sender` is the only plaintext,
+    // indexable field — `subject` is encrypted at rest — so it's the sole basis
+    // available for this routing.
+    const GITHUB_SENDER_MATCH: &str = "lower(coalesce(e.sender, '')) LIKE '%github.com%'";
+
     if let Some(folder) = filters.folder.as_deref() {
         match folder {
             // Wayve-source rows have a NULL account_id, so the legacy
@@ -203,6 +211,8 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                 qb.push(
                     " AND lower(coalesce(e.sender, '')) LIKE '%' || lower(ns.sender_email) || '%') ",
                 );
+                // PR/review mail belongs to Reviews, not the inbox.
+                qb.push(format!(" AND NOT {GITHUB_SENDER_MATCH} "));
             }
             "sent" => {
                 qb.push(
@@ -237,7 +247,7 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
             // search. It relies on the plaintext `sender` column, which sync
             // still populates; only `subject` is nulled.
             "github" => {
-                qb.push(" AND lower(coalesce(e.sender, '')) LIKE '%github.com%' ");
+                qb.push(format!(" AND {GITHUB_SENDER_MATCH} "));
             }
             // Inbox sub-views (the "All / Signal / Noise" chips): "signal" is the
             // high-priority mail — anything Gmail tags Important OR Updates —
@@ -254,6 +264,8 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                 qb.push(
                     " AND lower(coalesce(e.sender, '')) LIKE '%' || lower(ns.sender_email) || '%') ",
                 );
+                // PR/review mail belongs to Reviews, not Signal.
+                qb.push(format!(" AND NOT {GITHUB_SENDER_MATCH} "));
             }
             "noise" => {
                 // A sender the user marked as Noise ALWAYS lands here — even if
@@ -274,6 +286,8 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                            AND ('CATEGORY_SOCIAL' = ANY(e.labels) \
                                 OR 'CATEGORY_PROMOTIONS' = ANY(e.labels)))) ",
                 );
+                // PR/review mail belongs to Reviews, not Noise.
+                qb.push(format!(" AND NOT {GITHUB_SENDER_MATCH} "));
             }
             _ => {}
         }
