@@ -11,7 +11,21 @@ export type MeetingPayload = {
   participants: string[];
 };
 
-export const getMeetings = async () => {
+// Wire shape of a meeting row. `date` and `start_time`/`end_time` are naive
+// local wall-clock ("YYYY-MM-DD" and "HH:MM[:SS]") — there is no stored zone, so
+// they're interpreted in the viewer's local zone, matching src/utils/datetime.ts.
+export type ApiMeeting = {
+  id: number;
+  title: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  participants?: string[];
+  zoom_join_url?: string | null;
+  source?: string;
+};
+
+export const getMeetings = async (): Promise<ApiMeeting[]> => {
   const res = await apiFetch("/api/meetings");
   return res.json();
 };

@@ -437,6 +437,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           recovery_mode: normalizeRecoveryMode(data.recovery_mode),
           theme_json: data.theme_json ?? null,
           chat_encrypt_files: data.chat_encrypt_files ?? true,
+          meeting_alert_minutes: data.meeting_alert_minutes ?? 10,
         };
         // Only patch state if the server sees a different user, so the
         // optimistic claims don't trigger a pointless re-render.
@@ -456,6 +457,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           (prev.username ?? null) === (nextUser.username ?? null) &&
           prev.recovery_mode === nextUser.recovery_mode &&
           (prev.theme_json ?? null) === (nextUser.theme_json ?? null) &&
+          // ReminderPopups reads this straight off `user`, so a lead-time
+          // change has to re-render or the new timing won't apply until reload.
+          (prev.meeting_alert_minutes ?? null) ===
+            (nextUser.meeting_alert_minutes ?? null) &&
           // A plan change must re-render so the tier badge and Upgrade
           // affordance refresh. Comparing `code` suffices: the other plan
           // fields only change when it does.
@@ -686,6 +691,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       current_plan: data.current_plan ?? null,
       recovery_mode: normalizeRecoveryMode(data.recovery_mode),
       theme_json: data.theme_json ?? null,
+      // Both preference fields must be carried here as well as in the bootstrap
+      // mapping above: refresh() replaces the whole user object, so anything
+      // omitted silently reverts to its default until a full reload.
+      chat_encrypt_files: data.chat_encrypt_files ?? true,
+      meeting_alert_minutes: data.meeting_alert_minutes ?? 10,
     });
   };
 

@@ -58,6 +58,9 @@ export type UserType = {
   // True means this user's chat attachments are end-to-end encrypted and the
   // server cannot read them; false means server-encrypted at rest only.
   chat_encrypt_files?: boolean;
+  // Minutes before a meeting starts that the alert popup fires; 0 means meeting
+  // alerts are off. Absent on responses predating the column — treat as 10.
+  meeting_alert_minutes?: number;
 };
 
 export type AuthType = {

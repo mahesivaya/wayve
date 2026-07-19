@@ -522,6 +522,44 @@
   font-weight: 600;
 }
 
+/* Secondary qualifier under a settings row label ("This device only"). Block so
+   it starts a line flush with the label above rather than inheriting the
+   row's inline flow. */
+.settings-usage-row small {
+  display: block;
+  /* .settings-card centres its text, so a block child needs this to sit flush
+     under its label rather than appearing indented. */
+  text-align: left;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  opacity: 0.8;
+}
+
+/* Right-hand controls inside a .settings-usage-row. Neutral chrome, so they
+   read as inline adjustments rather than the card's primary action. */
+.settings-select,
+.settings-secondary-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-secondary-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.settings-select:disabled,
+.settings-secondary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Dark-mode success token override — index.css doesn't define a green
    success token, so .profile-status would otherwise stay light-mode bright
    green on the dark surface. Subtle dark green keeps it readable without

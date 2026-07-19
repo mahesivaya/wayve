@@ -462,6 +462,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_json TEXT;
 -- (server can't read the body); when false they're encrypted at rest with the
 -- server key only. Toggled in Settings by personal accounts and owners.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_encrypt_files BOOLEAN NOT NULL DEFAULT true;
+-- How many minutes before a meeting starts the client pops its alert. 0 means
+-- meeting alerts are off for this user. Stored server-side so the preference
+-- follows the user across devices; whether that alert *also* raises an OS-level
+-- desktop notification stays device-local (browser permission is per-device).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS meeting_alert_minutes SMALLINT NOT NULL DEFAULT 10
+    CHECK (meeting_alert_minutes >= 0 AND meeting_alert_minutes <= 1440);
 
 
 

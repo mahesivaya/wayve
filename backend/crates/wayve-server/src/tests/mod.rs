@@ -15,6 +15,7 @@ mod jira_test;
 mod jira_webhook_test;
 mod mailbox_policy_test;
 mod mcp_test;
+mod meeting_alert_minutes_test;
 mod meeting_link_test;
 mod mode_switch_test;
 mod org_keys_test;

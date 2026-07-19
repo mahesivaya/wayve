@@ -42,7 +42,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let row = sqlx::query(
         r#"
         SELECT u.id, u.email, u.account_type, u.organization_id, u.recovery_mode, u.theme_json,
-               u.avatar_path, u.chat_encrypt_files,
+               u.avatar_path, u.chat_encrypt_files, u.meeting_alert_minutes,
                o.slug AS organization_slug, o.name AS organization_name
         FROM users u
         LEFT JOIN organizations o ON o.id = u.organization_id
@@ -76,6 +76,9 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let avatar_path: Option<String> = row.try_get("avatar_path").ok().flatten();
     let avatar_url = avatar_path.map(|_| format!("/api/users/{id}/avatar"));
     let chat_encrypt_files: bool = row.try_get("chat_encrypt_files").unwrap_or(true);
+    let meeting_alert_minutes: i16 = row
+        .try_get("meeting_alert_minutes")
+        .unwrap_or(DEFAULT_MEETING_ALERT_MINUTES);
 
     let organization_name = display_organization_name(
         &account_type,
@@ -119,6 +122,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "theme_json": theme_json,
         "avatar_url": avatar_url,
         "chat_encrypt_files": chat_encrypt_files,
+        "meeting_alert_minutes": meeting_alert_minutes,
     });
 
     ME_CACHE.insert((user_id, mode), response.clone()).await;
@@ -184,6 +188,14 @@ pub async fn put_theme(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "theme": theme })))
 }
 
+/// Lead time used when the column is unreadable (legacy row predating it).
+pub const DEFAULT_MEETING_ALERT_MINUTES: i16 = 10;
+
+/// The lead times the UI offers. `0` turns meeting alerts off. Anything else is
+/// rejected rather than clamped, so a typo surfaces instead of silently
+/// becoming a different reminder time than the user picked.
+pub const MEETING_ALERT_CHOICES: [i16; 5] = [0, 5, 10, 15, 30];
+
 #[put("/me/chat-encrypt-files")]
 #[instrument(target = "http", skip(req, pool, body))]
 pub async fn put_chat_encrypt_files(
@@ -212,4 +224,42 @@ pub async fn put_chat_encrypt_files(
 
     invalidate_me_cache(user_id).await;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "chat_encrypt_files": enabled })))
+}
+
+#[put("/me/meeting-alert-minutes")]
+#[instrument(target = "http", skip(req, pool, body))]
+pub async fn put_meeting_alert_minutes(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<serde_json::Value>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({ "error": "Missing or invalid token" })));
+        }
+    };
+
+    let minutes = match body
+        .get("minutes")
+        .and_then(serde_json::Value::as_i64)
+        .and_then(|m| i16::try_from(m).ok())
+        .filter(|m| MEETING_ALERT_CHOICES.contains(m))
+    {
+        Some(m) => m,
+        None => {
+            return Ok(HttpResponse::BadRequest()
+                .json(serde_json::json!({ "error": "Unsupported meeting alert lead time" })));
+        }
+    };
+
+    sqlx::query("UPDATE users SET meeting_alert_minutes = $1 WHERE id = $2")
+        .bind(minutes)
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
+
+    invalidate_me_cache(user_id).await;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "meeting_alert_minutes": minutes })))
 }

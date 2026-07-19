@@ -89,3 +89,11 @@ export const putChatEncryptFiles = async (enabled: boolean) =>
     method: "PUT",
     body: JSON.stringify({ enabled }),
   });
+
+// Lead time, in minutes, for the meeting alert popup. 0 turns meeting alerts
+// off. The server rejects anything outside MEETING_ALERT_CHOICES.
+export const putMeetingAlertMinutes = async (minutes: number) =>
+  apiFetchJson<{ meeting_alert_minutes: number }>(
+    "/api/me/meeting-alert-minutes",
+    { method: "PUT", body: JSON.stringify({ minutes }) }
+  );
