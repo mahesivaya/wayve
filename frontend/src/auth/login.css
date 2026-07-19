@@ -238,6 +238,15 @@
   .auth-oauth-row {
     flex-direction: column;
   }
+
+  /* iOS Safari force-zooms the whole page when a focused input is under 16px,
+     which throws the layout off the moment you tap Email or Password (the app's
+     --text-md is 13px). 16px is the threshold that suppresses it. Scoped to the
+     mobile breakpoint so desktop keeps the smaller, denser field. Android
+     doesn't zoom, but the larger touch target is welcome there too. */
+  .login-card input {
+    font-size: 16px;
+  }
 }
 
 .login-card .google-btn {
