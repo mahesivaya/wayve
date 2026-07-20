@@ -172,42 +172,6 @@
   white-space: nowrap;
 }
 
-.duplicate-pane-btn {
-  width: 34px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-ink);
-  cursor: pointer;
-  transition: 0.15s;
-}
-
-.duplicate-pane-btn:hover {
-  background: var(--color-surface-hover);
-  border-color: var(--color-border-muted);
-}
-
-.duplicate-pane-btn.active {
-  background: var(--color-accent-indigo-mist);
-  border-color: var(--color-admin-badge-ring);
-  color: var(--color-accent-indigo-deep);
-}
-
-.duplicate-pane-icon {
-  width: 23px;
-  height: 23px;
-  display: block;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 /* =============================
    👤 PROFILE DROPDOWN
 ============================== */
@@ -1623,8 +1587,7 @@
        horizontal space for the brand + actions,
      - collapse any second/third split pane (multi-pane on a phone
        is unreadable).
-   At ≤480px we tighten paddings and shrink the duplicate-pane
-   button which is a desktop-first affordance.
+   At ≤480px we tighten paddings further.
 ============================== */
 /* Between 768px and 1100px we no longer FORCE the icon-only rail: the
    icon-only treatment now applies only when the user has actually collapsed
@@ -1764,10 +1727,6 @@
     display: none;
   }
 
-  .duplicate-pane-btn {
-    width: 32px;
-    height: 32px;
-  }
 }
 
 @media (max-width: 480px) {
@@ -1777,10 +1736,6 @@
 
   .logo {
     font-size: var(--text-lg);
-  }
-
-  .duplicate-pane-btn {
-    display: none;
   }
 
   .sidebar {

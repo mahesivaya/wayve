@@ -27,8 +27,6 @@ export type PaneDropResult = {
   navigateTo?: AppKey;
 };
 
-const COLUMNS: PaneKey[] = ["left", "center", "right"];
-
 const clone = (a: PaneArrangement): PaneArrangement => ({
   ...a,
   subSplit: { ...a.subSplit },
@@ -63,28 +61,25 @@ function setAppAt(
   else a[pane] = app;
 }
 
-/** Columns that currently hold something, in visual order. */
-const openColumns = (a: PaneArrangement): PaneKey[] =>
-  COLUMNS.filter((c) => (c === "left" ? true : a[c] !== null));
+/**
+ * The layout is capped at two columns and two rows — four panes. The vertical
+ * cap is structural (a pane splits into exactly two halves); this is the
+ * horizontal one.
+ *
+ * `right` is the second column rather than `center`; `center` is left
+ * permanently empty, kept only so a persisted arrangement from before the cap
+ * still renders.
+ */
+const firstFreeColumn = (a: PaneArrangement): PaneKey | null =>
+  a.right === null ? "right" : null;
 
-/** First column with no app, or null when all three are in use. */
-const firstFreeColumn = (a: PaneArrangement): PaneKey | null => {
-  if (a.center === null) return "center";
-  if (a.right === null) return "right";
-  return null;
-};
-
-/** The open column immediately beside `target` on `side`, if any. */
-function neighbourColumn(
-  a: PaneArrangement,
-  target: PaneKey,
-  side: "left" | "right"
-): PaneKey | null {
-  const open = openColumns(a);
-  const i = open.indexOf(target);
-  if (i === -1) return null;
-  return open[side === "left" ? i - 1 : i + 1] ?? null;
-}
+/**
+ * True while a left/right drop can still open a *new* column. Once all three
+ * are in use an edge drop degrades to replacing the pane under the cursor, and
+ * the overlay must stop previewing a new column that can't be created.
+ */
+export const canOpenNewColumn = (a: PaneArrangement): boolean =>
+  firstFreeColumn(a) !== null;
 
 /**
  * Removes the dragged pane from where it came, after its app has been placed
@@ -214,16 +209,15 @@ export function applyPaneDrop(
     return finish(free, "top");
   }
 
-  // No room: replace the pane on that side (or the target itself at the end).
-  const victim = neighbourColumn(current, target, zone) ?? target;
-  const displaced = appAt(current, victim, "top");
-  setAppAt(next, victim, "top", moving);
+  // All three columns are in use, so there is no new column to open. Fall back
+  // to replacing the pane under the cursor — i.e. behave exactly like a centre
+  // drop on it. Replacing the *neighbour* would be surprising: you would be
+  // pointing at one pane and watch a different one change.
+  const displaced = appAt(current, target, targetHalf);
+  setAppAt(next, target, targetHalf, moving);
   if (isPaneDrag) {
-    if (swapInsteadOfMove && displaced) {
-      setAppAt(next, payload.from, sourceHalf, displaced);
-    } else {
-      clearSource(next, payload.from, sourceHalf);
-    }
+    if (displaced) setAppAt(next, payload.from, sourceHalf, displaced);
+    else clearSource(next, payload.from, sourceHalf);
   }
-  return finish(victim, "top");
+  return finish(target, targetHalf);
 }

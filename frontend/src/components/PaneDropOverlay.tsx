@@ -15,10 +15,21 @@ import {
 // OS files, and those must keep working while this is mounted.
 export default function PaneDropOverlay({
   onDrop,
+  canOpenNewColumn = true,
 }: {
   onDrop: (zone: DropZone, payload: PaneDragPayload) => void;
+  /**
+   * False once all three columns are in use. A left/right drop then replaces
+   * this pane instead of opening a column, so the preview must show the whole
+   * pane rather than a sliver promising a column that can't be created.
+   */
+  canOpenNewColumn?: boolean;
 }) {
   const [zone, setZone] = useState<DropZone | null>(null);
+
+  const isEdge = zone === "left" || zone === "right";
+  const shownZone: DropZone | null =
+    zone && isEdge && !canOpenNewColumn ? "center" : zone;
 
   const zoneFor = (e: DragEvent<HTMLDivElement>): DropZone => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -51,9 +62,9 @@ export default function PaneDropOverlay({
         onDrop(target, payload);
       }}
     >
-      {zone && (
+      {shownZone && (
         <div
-          className={`pane-drop-hint pane-drop-hint--${zone}`}
+          className={`pane-drop-hint pane-drop-hint--${shownZone}`}
           aria-hidden="true"
         />
       )}

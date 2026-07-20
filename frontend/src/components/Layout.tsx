@@ -630,9 +630,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     ]
   );
 
+  // The layout is capped at two columns (see firstFreeColumn). Once the second
+  // is open an edge drop can only replace, so the overlay stops previewing a
+  // new column it cannot open.
+  const columnsAvailable = rightView === null;
+
   const dropOverlay = (target: PaneKey, half: PaneHalf) =>
     paneDrag ? (
       <PaneDropOverlay
+        canOpenNewColumn={columnsAvailable}
         onDrop={(zone, payload) => handlePaneDrop(target, half, zone, payload)}
       />
     ) : null;
@@ -759,11 +765,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const homeApp = SPLIT_APPS.find((a) => a.key === "home") ?? null;
   const HomeComp = homeApp?.Comp ?? null;
   const homeLabel = homeApp?.label ?? "Home";
-
-  function openSplitPane() {
-    setRightView("home");
-    focusPane("right");
-  }
 
   function closeLeftPane() {
     const fromKey: PaneKey = rightApp ? "right" : "center";
@@ -1415,22 +1416,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </button>
       )}
 
-      <button
-        type="button"
-        className={`duplicate-pane-btn ${splitTarget === "right" ? "active" : ""}`}
-        onClick={openSplitPane}
-        data-tooltip="Split view"
-        aria-label="Split view"
-      >
-        <svg
-          className="duplicate-pane-icon"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <rect x="4" y="5" width="16" height="14" rx="2" />
-          <line x1="12" y1="5" x2="12" y2="19" />
-        </svg>
-      </button>
     </>
   );
 

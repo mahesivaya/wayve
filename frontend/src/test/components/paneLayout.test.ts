@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { dropZoneFromPointer, EDGE_BAND } from "../../components/paneDnd";
 import {
   applyPaneDrop,
+  canOpenNewColumn,
   type PaneArrangement,
 } from "../../components/paneLayout";
 
@@ -63,36 +64,33 @@ describe("applyPaneDrop — dragging an app from the sidebar", () => {
     expect(r?.navigateTo).toBe("chat");
   });
 
-  it("opens the first free column on an edge drop", () => {
+  it("opens the second column on an edge drop", () => {
     const r = applyPaneDrop(base(), "left", "top", "right", {
       kind: "app",
       app: "chat",
     });
-    expect(r?.next.center).toBe("chat");
+    expect(r?.next.right).toBe("chat");
     expect(r?.next.left).toBe("emails"); // untouched
     expect(r?.navigateTo).toBeUndefined();
-    expect(r?.focus).toEqual({ pane: "center", half: "top" });
+    expect(r?.focus).toEqual({ pane: "right", half: "top" });
   });
 
-  it("uses the right column once center is taken", () => {
-    const r = applyPaneDrop(base({ center: "notes" }), "center", "top", "right", {
+  it("caps the layout at two columns", () => {
+    // Second column already open: another edge drop must not open a third, it
+    // replaces the pane being pointed at instead.
+    const a = base({ right: "tasks" });
+    const r = applyPaneDrop(a, "left", "top", "right", {
       kind: "app",
       app: "chat",
     });
-    expect(r?.next.right).toBe("chat");
-    expect(r?.next.center).toBe("notes");
+    expect(r?.next.center).toBeNull(); // never used
+    expect(r?.next.right).toBe("tasks"); // untouched — not the one hovered
+    expect(r?.next.left).toBe("chat"); // the hovered pane is replaced
   });
 
-  it("replaces the neighbour when all three columns are in use", () => {
-    const a = base({ center: "notes", right: "tasks" });
-    const r = applyPaneDrop(a, "center", "top", "right", {
-      kind: "app",
-      app: "chat",
-    });
-    // No free slot -> the pane to the right of center is replaced.
-    expect(r?.next.right).toBe("chat");
-    expect(r?.next.center).toBe("notes");
-    expect(r?.next.left).toBe("emails");
+  it("reports when no new column can be opened", () => {
+    expect(canOpenNewColumn(base())).toBe(true);
+    expect(canOpenNewColumn(base({ right: "tasks" }))).toBe(false);
   });
 
   it("stacks into halves, keeping the existing app in the other half", () => {
@@ -116,85 +114,86 @@ describe("applyPaneDrop — dragging an app from the sidebar", () => {
 });
 
 describe("applyPaneDrop — rearranging an open pane", () => {
+  // `right` is the second column; `center` is never populated under the
+  // two-column cap, so these all describe reachable arrangements.
+  const twoColumns = base({ right: "chat" });
+
   it("swaps two columns on a centre drop", () => {
-    const a = base({ center: "chat" });
-    const r = applyPaneDrop(a, "left", "top", "center", {
+    const r = applyPaneDrop(twoColumns, "left", "top", "center", {
       kind: "pane",
-      from: "center",
+      from: "right",
       half: "top",
     });
     expect(r?.next.left).toBe("chat");
-    expect(r?.next.center).toBe("emails");
+    expect(r?.next.right).toBe("emails");
     expect(r?.navigateTo).toBe("chat");
   });
 
   it("is a no-op when dropped on itself", () => {
-    const a = base({ center: "chat" });
     expect(
-      applyPaneDrop(a, "center", "top", "center", {
+      applyPaneDrop(twoColumns, "right", "top", "center", {
         kind: "pane",
-        from: "center",
+        from: "right",
         half: "top",
       })
     ).toBeNull();
   });
 
-  it("moving a column away empties it", () => {
-    const a = base({ center: "chat", right: "tasks" });
-    const r = applyPaneDrop(a, "right", "top", "bottom", {
+  it("moving a column into the other pane's half empties it", () => {
+    const r = applyPaneDrop(twoColumns, "left", "top", "bottom", {
       kind: "pane",
-      from: "center",
+      from: "right",
       half: "top",
     });
-    expect(r?.next.center).toBeNull(); // vacated
-    expect(r?.next.subSplit.right).toBe(true);
-    expect(r?.next.subBottomView.right).toBe("chat");
-    expect(r?.next.right).toBe("tasks");
+    expect(r?.next.right).toBeNull(); // vacated
+    expect(r?.next.subSplit.left).toBe(true);
+    expect(r?.next.subBottomView.left).toBe("chat");
+    expect(r?.next.left).toBe("emails");
   });
 
   it("never empties the routed column — it swaps instead of moving", () => {
-    const a = base({ center: "chat" });
-    // Dragging the left pane onto the centre pane's bottom edge would otherwise
-    // leave the routed column with nothing to render.
-    const r = applyPaneDrop(a, "center", "top", "bottom", {
+    // Dragging the left pane into the other column's bottom half would
+    // otherwise leave the routed column with nothing to render.
+    const r = applyPaneDrop(twoColumns, "right", "top", "bottom", {
       kind: "pane",
       from: "left",
       half: "top",
     });
     expect(r?.next.left).not.toBeNull();
-    expect(r?.next.subBottomView.center).toBe("emails");
+    expect(r?.next.subBottomView.right).toBe("emails");
   });
 
   it("promotes the bottom half when the top half is dragged out", () => {
     const a = base({
-      center: "chat",
-      subSplit: { left: false, center: true, right: false },
-      subBottomView: { left: "home", center: "tasks", right: "home" },
+      right: "chat",
+      subSplit: { left: false, center: false, right: true },
+      subBottomView: { left: "home", center: "home", right: "tasks" },
     });
-    const r = applyPaneDrop(a, "left", "top", "right", {
+    const r = applyPaneDrop(a, "left", "top", "bottom", {
       kind: "pane",
-      from: "center",
+      from: "right",
       half: "top",
     });
-    // chat moved out to a new column; tasks takes over the whole center column.
-    expect(r?.next.center).toBe("tasks");
-    expect(r?.next.subSplit.center).toBe(false);
-    expect(r?.next.right).toBe("chat");
+    // chat moved into the left column's lower half; tasks takes over the whole
+    // right column.
+    expect(r?.next.subBottomView.left).toBe("chat");
+    expect(r?.next.right).toBe("tasks");
+    expect(r?.next.subSplit.right).toBe(false);
   });
 
   it("dragging out the bottom half just un-splits the column", () => {
     const a = base({
-      center: "chat",
-      subSplit: { left: false, center: true, right: false },
-      subBottomView: { left: "home", center: "tasks", right: "home" },
+      right: "chat",
+      subSplit: { left: false, center: false, right: true },
+      subBottomView: { left: "home", center: "home", right: "tasks" },
     });
-    const r = applyPaneDrop(a, "left", "top", "right", {
+    const r = applyPaneDrop(a, "left", "top", "bottom", {
       kind: "pane",
-      from: "center",
+      from: "right",
       half: "bottom",
     });
-    expect(r?.next.subSplit.center).toBe(false);
-    expect(r?.next.center).toBe("chat"); // top half keeps the column
-    expect(r?.next.right).toBe("tasks");
+    expect(r?.next.subSplit.right).toBe(false);
+    expect(r?.next.right).toBe("chat"); // top half keeps the column
+    expect(r?.next.subBottomView.left).toBe("tasks");
   });
 });
