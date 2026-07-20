@@ -3,6 +3,13 @@
 // pane's app); clicking again removes the sub-split. Independent per pane — it
 // never affects the other panes. The glyph is a framed pane divided top/bottom.
 
+// Mac reports "MacIntel"/"Mac" here; everything else gets the Ctrl label. Only
+// used for the tooltip hint, so a wrong guess is cosmetic.
+const MOD_KEY =
+  typeof navigator !== "undefined" && /Mac/i.test(navigator.platform)
+    ? "⌘"
+    : "Ctrl+";
+
 export default function PaneSplitMenu({
   active,
   onToggle,
@@ -11,13 +18,16 @@ export default function PaneSplitMenu({
   active: boolean;
   onToggle: () => void;
 }) {
+  const label = active ? "Remove split" : "Split this pane";
   return (
     <button
       type="button"
       className={`split-menu-btn${active ? " active" : ""}`}
       onClick={onToggle}
-      data-tooltip={active ? "Remove split" : "Split this pane"}
-      aria-label={active ? "Remove split" : "Split this pane"}
+      // The shortcut is otherwise undiscoverable — there is no longer a
+      // header button to hang it off.
+      data-tooltip={`${label} (${MOD_KEY}⇧\\)`}
+      aria-label={label}
       aria-pressed={active}
     >
       {/* Framed pane divided top/bottom — the vertical-split glyph. */}

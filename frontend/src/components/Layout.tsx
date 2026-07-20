@@ -581,6 +581,56 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     setSubSplit((s) => ({ ...s, [key]: !s[key] }));
   };
 
+  // Keyboard equivalents of the drag gestures. Dragging is not keyboard
+  // accessible, so without these there is no way to reach a split without a
+  // mouse — and until one exists there is no pane toolbar to click either.
+  //
+  //   Cmd/Ctrl + \          horizontal split (open the second column)
+  //   Cmd/Ctrl + Shift + \  vertical split (stack the focused pane)
+  //
+  // Mirrors VS Code, where \ is the split key.
+  useEffect(() => {
+    // Splits are hidden below 768px, so a shortcut there would only create
+    // state the user can't see.
+    if (isNarrow) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "\\" || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+      // Never steal the key from a field the user is typing in.
+      const el = e.target as HTMLElement | null;
+      if (
+        el &&
+        (el.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))
+      ) {
+        return;
+      }
+      e.preventDefault();
+
+      if (e.shiftKey) {
+        // Vertical: a toggle, matching the pane toolbar's split button. A new
+        // half always starts on Home, as it does everywhere else.
+        if (!subSplit[splitTarget]) {
+          setSubBottomView((v) => ({ ...v, [splitTarget]: "home" }));
+        }
+        setSubSplit((s) => ({ ...s, [splitTarget]: !s[splitTarget] }));
+        focusPane(splitTarget, "top");
+        return;
+      }
+
+      // Horizontal: open the second column. Capped at two, and deliberately
+      // not a toggle — silently closing a pane would discard whatever was in
+      // it; its ✕ is the explicit way out.
+      if (rightView === null) {
+        setRightView("home");
+        focusPane("right");
+      }
+    };
+
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isNarrow, splitTarget, subSplit, rightView, focusPane]);
+
   // Resolves a drag-and-drop onto a pane. The rules live in `applyPaneDrop`
   // (pure and unit-tested); this only projects Layout's state into the shape it
   // expects and maps the result back onto the setters.
