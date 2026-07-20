@@ -1193,6 +1193,54 @@
   z-index: 5;
 }
 
+/* Drag-to-split drop target. Mounted only while a pane drag is in flight (see
+   PaneDropOverlay), so it can cover the whole pane without swallowing clicks
+   the rest of the time. Sits above the pane's own ::after focus ring. */
+.pane-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+}
+
+/* Translucent preview of the region the drop would fill, echoing the
+   .active-target focus ring so the two read as the same visual language. */
+.pane-drop-hint {
+  position: absolute;
+  pointer-events: none;
+  background: rgb(59, 130, 246, 0.22);
+  border: 2px solid rgb(59, 130, 246, 0.75);
+  border-radius: 4px;
+  transition:
+    inset 0.09s ease-out,
+    opacity 0.09s ease-out;
+}
+
+/* Centre replaces the pane; the edges show the half that would be created. */
+.pane-drop-hint--center {
+  inset: 0;
+}
+.pane-drop-hint--left {
+  inset: 0 50% 0 0;
+}
+.pane-drop-hint--right {
+  inset: 0 0 0 50%;
+}
+.pane-drop-hint--top {
+  inset: 0 0 50% 0;
+}
+.pane-drop-hint--bottom {
+  inset: 50% 0 0 0;
+}
+
+/* The grab affordance on a pane's title — this is the app's equivalent of a
+   VS Code tab, and dragging it moves the pane. */
+.split-pane-title[draggable="true"] {
+  cursor: grab;
+}
+.split-pane-title[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 /* Automatically add vertical borders between any adjacent active panes.
    When a .split-resize-handle sits between two panes, the handle owns the
    1px visual border instead — so the rule above doesn't double-up. */

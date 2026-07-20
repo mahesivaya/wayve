@@ -13,6 +13,7 @@ import {
   useMemo,
   useRef,
   type ReactNode,
+  type DragEvent as ReactDragEvent,
 } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
@@ -31,6 +32,14 @@ import { SplitControlContext, type SplitTarget } from "./SplitControlContext";
 import ResizeHandle from "./ResizeHandle";
 import { useResizableWidth } from "./useResizableWidth";
 import { useIsNarrow } from "./useIsNarrow";
+import PaneDropOverlay from "./PaneDropOverlay";
+import {
+  setPaneDragData,
+  type DropZone,
+  type PaneDragPayload,
+  type PaneHalf,
+} from "./paneDnd";
+import { applyPaneDrop, type PaneArrangement } from "./paneLayout";
 import { listTeams, createTeam, type Team } from "../api/workspace";
 import { getFeatureAccess } from "../api/featureAccess";
 import { isDesktopApp } from "../utils/desktop";
@@ -290,6 +299,19 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     (pane: PaneFocus, half: "top" | "bottom" = "top") => {
       setSplitTarget(pane);
       setFocusHalf(half);
+    },
+    []
+  );
+
+  // Non-null only while a pane drag is in flight. Gates the drop overlays, so
+  // they exist exactly when a drop is possible and never intercept a click.
+  const [paneDrag, setPaneDrag] = useState<PaneDragPayload | null>(null);
+
+  // Starts a drag from a sidebar app link or a pane's title.
+  const beginPaneDrag = useCallback(
+    (e: ReactDragEvent, payload: PaneDragPayload) => {
+      setPaneDragData(e.dataTransfer, payload);
+      setPaneDrag(payload);
     },
     []
   );
@@ -559,6 +581,70 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     setSubSplit((s) => ({ ...s, [key]: !s[key] }));
   };
 
+  // Resolves a drag-and-drop onto a pane. The rules live in `applyPaneDrop`
+  // (pure and unit-tested); this only projects Layout's state into the shape it
+  // expects and maps the result back onto the setters.
+  const handlePaneDrop = useCallback(
+    (
+      target: PaneKey,
+      targetHalf: PaneHalf,
+      zone: DropZone,
+      payload: PaneDragPayload
+    ) => {
+      setPaneDrag(null);
+      const arrangement: PaneArrangement = {
+        left: appKeyFromPath(location.pathname),
+        center: middleView,
+        right: rightView,
+        subSplit,
+        subBottomView,
+      };
+      const result = applyPaneDrop(
+        arrangement,
+        target,
+        targetHalf,
+        zone,
+        payload
+      );
+      if (!result) return;
+
+      setMiddleView(result.next.center);
+      setRightView(result.next.right);
+      setSubSplit(result.next.subSplit);
+      setSubBottomView(result.next.subBottomView);
+      // The left column is route-driven, so a change there is a navigation.
+      if (result.navigateTo) {
+        const path = SPLIT_APPS.find((a) => a.key === result.navigateTo)?.path;
+        if (path) void navigate(path);
+      }
+      focusPane(result.focus.pane, result.focus.half);
+    },
+    [
+      location.pathname,
+      middleView,
+      rightView,
+      subSplit,
+      subBottomView,
+      navigate,
+      focusPane,
+    ]
+  );
+
+  const dropOverlay = (target: PaneKey, half: PaneHalf) =>
+    paneDrag ? (
+      <PaneDropOverlay
+        onDrop={(zone, payload) => handlePaneDrop(target, half, zone, payload)}
+      />
+    ) : null;
+
+  // Makes a pane's title behave like a VS Code tab: drag it to move the pane.
+  const titleDragProps = (from: PaneKey, half: PaneHalf = "top") => ({
+    draggable: true,
+    onDragStart: (e: ReactDragEvent) =>
+      beginPaneDrag(e, { kind: "pane", from, half }),
+    onDragEnd: () => setPaneDrag(null),
+  });
+
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Resizes the boundary between two adjacent panes. Other panes' weights are
@@ -756,7 +842,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           onMouseDown={() => focusPane(key, whichHalf)}
         >
           <div className="split-pane-toolbar">
-            <span className="split-pane-title">{title}</span>
+            <span className="split-pane-title" {...titleDragProps(key, whichHalf)}>
+              {title}
+            </span>
             <div className="split-pane-tools">
               <PaneSplitMenu active onToggle={removeSplit} />
               <button
@@ -770,6 +858,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             </div>
           </div>
           {bodyOf(content)}
+          {dropOverlay(key, whichHalf)}
         </div>
       );
     };
@@ -818,6 +907,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           to={path}
           title={label}
           className={`sidebar-link ${isLeftActive ? "active" : ""} ${isMiddleActive || isRightActive ? "active-split" : ""}`.trim()}
+          // Drag any app onto a pane to open it exactly where you drop it. One
+          // handler here covers every split app in the sidebar.
+          draggable
+          onDragStart={(e) => beginPaneDrag(e, { kind: "app", app })}
+          onDragEnd={() => setPaneDrag(null)}
           onClick={(e) => {
             setNavOpen(false);
             if (!splitOpen) return; // no split — navigate normally
@@ -856,6 +950,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       splitOpen,
       focusHalf,
       subSplit,
+      beginPaneDrag,
     ]
   );
 
@@ -1653,7 +1748,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   <>
                     {!subSplit.left && (
                       <div className="split-pane-toolbar">
-                        <span className="split-pane-title">{leftLabel}</span>
+                        <span
+                          className="split-pane-title"
+                          {...titleDragProps("left")}
+                        >
+                          {leftLabel}
+                        </span>
                         <div className="split-pane-tools">
                           <PaneSplitMenu
                             active={subSplit.left}
@@ -1671,13 +1771,19 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                       </div>
                     )}
                     {renderPaneBody("left", leftLabel, children ?? <Outlet />)}
+                    {!subSplit.left && dropOverlay("left", "top")}
                   </>
                 ) : (
-                  <Suspense
-                    fallback={<div className="split-loading">Loading…</div>}
-                  >
-                    {children ?? <Outlet />}
-                  </Suspense>
+                  <>
+                    <Suspense
+                      fallback={<div className="split-loading">Loading…</div>}
+                    >
+                      {children ?? <Outlet />}
+                    </Suspense>
+                    {/* No split open yet: dropping here is how the first one
+                        gets created, so the whole page is a drop target. */}
+                    {dropOverlay("left", "top")}
+                  </>
                 )}
               </div>
 
@@ -1704,7 +1810,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 >
                   {!subSplit.center && (
                     <div className="split-pane-toolbar">
-                      <span className="split-pane-title">{middleLabel}</span>
+                      <span
+                        className="split-pane-title"
+                        {...titleDragProps("center")}
+                      >
+                        {middleLabel}
+                      </span>
                       <div className="split-pane-tools">
                         <PaneSplitMenu
                           active={subSplit.center}
@@ -1726,6 +1837,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   )}
                   {MiddleComp &&
                     renderPaneBody("center", middleLabel ?? "", <MiddleComp />)}
+                  {!subSplit.center && dropOverlay("center", "top")}
                 </div>
               )}
 
@@ -1750,7 +1862,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 >
                   {!subSplit.right && (
                     <div className="split-pane-toolbar">
-                      <span className="split-pane-title">{rightLabel}</span>
+                      <span
+                        className="split-pane-title"
+                        {...titleDragProps("right")}
+                      >
+                        {rightLabel}
+                      </span>
                       <div className="split-pane-tools">
                         <PaneSplitMenu
                           active={subSplit.right}
@@ -1774,6 +1891,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   )}
                   {RightComp &&
                     renderPaneBody("right", rightLabel ?? "", <RightComp />)}
+                  {!subSplit.right && dropOverlay("right", "top")}
                 </div>
               )}
             </div>
