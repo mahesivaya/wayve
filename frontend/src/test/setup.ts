@@ -46,6 +46,29 @@ if (typeof window !== "undefined") {
   installStorage(window, "sessionStorage");
 }
 
+// jsdom implements no CSS layout, so it ships no `matchMedia` at all. Anything
+// rendering a responsive component (useIsNarrow, and so Layout / SettingsShell)
+// would throw on mount. Report "not matching" — the wide/desktop branch — which
+// is the layout these tests assert against.
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: (query: string): MediaQueryList =>
+      ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        // Deprecated pair, still called by some libraries.
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList,
+  });
+}
+
 afterEach(() => {
   cleanup();
   (globalThis as unknown as { localStorage: Storage }).localStorage.clear();

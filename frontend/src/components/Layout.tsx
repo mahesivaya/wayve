@@ -30,6 +30,7 @@ import { SplitPaneContext } from "./SplitPaneContext";
 import { SplitControlContext, type SplitTarget } from "./SplitControlContext";
 import ResizeHandle from "./ResizeHandle";
 import { useResizableWidth } from "./useResizableWidth";
+import { useIsNarrow } from "./useIsNarrow";
 import { listTeams, createTeam, type Team } from "../api/workspace";
 import { getFeatureAccess } from "../api/featureAccess";
 import { isDesktopApp } from "../utils/desktop";
@@ -359,20 +360,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const [navOpen, setNavOpen] = useState(false);
 
   // At or below 768px the sidebar is an off-canvas overlay; above it, a
-  // permanent rail.
-  const [isNarrow, setIsNarrow] = useState<boolean>(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(max-width: 768px)").matches
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-width: 768px)");
-    const onChange = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
+  // permanent rail. Shared with SettingsShell — see useIsNarrow.
+  const isNarrow = useIsNarrow();
 
   const sections = useSidebarSections();
   // Team creation is org-owner-only. The control is hidden otherwise, but the
@@ -1301,14 +1290,22 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // `headerActions` is the cluster that stays in the header in both.
   const desktop = isDesktopApp();
 
-  // Desktop shell: the settings-family pages render their own left rail
-  // (SettingsShell), so the main sidebar steps aside there and the rail's
-  // Back button returns home. Web keeps the normal sidebar.
+  // The settings-family pages render their own left rail (SettingsShell), so
+  // the main sidebar steps aside there and the rail's Back button returns home.
+  // Both runtimes behave the same; only narrow screens keep the normal sidebar,
+  // since a 240px rail beside the content doesn't fit a phone.
+  //
+  // Only routes that actually render SettingsShell may appear here — hiding the
+  // sidebar on a page without the rail would leave no way back.
   const settingsTakeover =
-    desktop &&
-    ["/settings", "/profile", "/integrations", "/appearance"].includes(
-      location.pathname
-    );
+    !isNarrow &&
+    [
+      "/settings",
+      "/profile",
+      "/integrations",
+      "/appearance",
+      "/settings/statuses",
+    ].includes(location.pathname);
 
   const headerActions = (
     <>

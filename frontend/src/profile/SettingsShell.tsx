@@ -6,20 +6,21 @@ import "./profile.css";
 import { useAuth } from "../auth/useAuth";
 import { homePathForUser } from "../auth/accountHome";
 import { canViewIntegrations } from "../auth/permissions";
-import { isDesktopApp } from "../utils/desktop";
+import { useIsNarrow } from "../components/useIsNarrow";
 
-// Desktop shell only: the Account links that live in the header ProfileMenu
-// dropdown on the web (which the desktop shell hides). Docked as a left
-// sidebar and rendered by SettingsShell on Settings, My Profile and
-// Integrations alike, so the menu stays put while navigating between them.
+// The Account links that otherwise live in the ProfileMenu dropdown, docked as
+// a left rail and rendered by SettingsShell on Settings, My Profile and
+// Integrations alike, so the menu stays put while navigating between them. It
+// stands in for the main sidebar, which Layout hides on these routes — hence
+// the Back to Home link and the admin-mode switch.
 function SettingsSideNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, switchMode } = useAuth();
 
-  // The admin-mode toggle also lives only in the header ProfileMenu on the
-  // web, so the desktop shell would otherwise strand an owner in normal mode
-  // with no way to elevate. Mirror the ProfileMenu switcher here.
+  // The admin-mode toggle otherwise lives only in the ProfileMenu, which is
+  // out of reach while settings has taken the sidebar over — without this an
+  // owner would be stranded in normal mode. Mirror the ProfileMenu switcher.
   const [switchingMode, setSwitchingMode] = useState(false);
   const inAdminMode = user?.mode === "admin";
   const showModeSwitcher = inAdminMode || (user?.can_switch_admin ?? false);
@@ -131,9 +132,9 @@ function SettingsSideNav() {
 }
 
 // Shared scaffolding for the settings-family pages (Settings, My Profile,
-// Integrations): page title on top, then the Account sidebar (desktop shell
-// only) beside the page's own cards. On the web it degrades to the plain
-// single-column stack these pages always had.
+// Integrations): page title on top, then the Account rail beside the page's own
+// cards. Both runtimes get the same view; only narrow screens degrade to the
+// plain single-column stack.
 export default function SettingsShell({
   title,
   children,
@@ -141,10 +142,12 @@ export default function SettingsShell({
   title: ReactNode;
   children: ReactNode;
 }) {
-  const desktop = isDesktopApp();
+  // Must agree with Layout's `settingsTakeover`, which hides the main sidebar
+  // exactly when this rail stands in for it.
+  const narrow = useIsNarrow();
 
-  // Web: the plain centered stack these pages always had.
-  if (!desktop) {
+  // Narrow: the plain centered stack, with the main sidebar still in place.
+  if (narrow) {
     return (
       <div className="settings-page">
         <div className="settings-stack">
@@ -155,8 +158,8 @@ export default function SettingsShell({
     );
   }
 
-  // Desktop shell: the settings menu is a full-height left sidebar (standing
-  // in for the hidden main app sidebar); the content pane scrolls beside it.
+  // Wide: the settings menu is a full-height left rail (standing in for the
+  // hidden main app sidebar); the content pane scrolls beside it.
   return (
     <div className="settings-page settings-page--split">
       <SettingsSideNav />
