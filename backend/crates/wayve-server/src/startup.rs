@@ -280,6 +280,17 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE users ADD CONSTRAINT users_recovery_mode_check \
          CHECK (recovery_mode = 'full')",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ",
+        // `/api/me` selects this column unconditionally, so an environment that
+        // has the new binary but not the column 500s on every request to it —
+        // which logs every user out on refresh, since the frontend's auth
+        // bootstrap treats a non-200 as "no session". init.sql alone is not
+        // enough: it only runs when the Postgres volume is first initialised,
+        // so an existing deployment never sees it.
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS meeting_alert_minutes \
+         SMALLINT NOT NULL DEFAULT 10",
+        "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_meeting_alert_minutes_check",
+        "ALTER TABLE users ADD CONSTRAINT users_meeting_alert_minutes_check \
+         CHECK (meeting_alert_minutes >= 0 AND meeting_alert_minutes <= 1440)",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.
