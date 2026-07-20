@@ -176,9 +176,16 @@ mod tests {
         cleanup(&pool, &[member_id], &[org_id]).await;
     }
 
-    // Once an org owner links a public repo, any member of that org can read it
-    // through the proxy, while a repo that was never linked stays refused.
-    // GitHub is mocked with wiremock via the GITHUB_API_BASE indirection.
+    // Once an org owner links a public repo, a member *granted that repo* can
+    // read it through the proxy, while a repo that was never linked stays
+    // refused. GitHub is mocked with wiremock via the GITHUB_API_BASE
+    // indirection.
+    //
+    // Note the grant: linking alone is not enough for a restricted role. The
+    // proxy runs three independent gates for org scope — the per-role
+    // `code_repo` feature toggle, the repo being linked to an org project, and
+    // (for anyone below admin) a `member_project_access` row. This test seeds
+    // all three.
     #[actix_web::test]
     #[serial_test::serial]
     async fn owner_links_repo_then_org_member_can_read_via_proxy() {
@@ -225,6 +232,20 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap_or_else(|e| panic!("seed org feature access: {e}"));
+
+        // Below admin, the proxy also requires an explicit per-repo grant
+        // (`is_project_admin(role) || member_has_repo_grant(...)`). Without this
+        // row the member is refused at that gate even though the repo is linked
+        // and their role has the Code Repo feature.
+        sqlx::query(
+            "INSERT INTO member_project_access (user_id, repo_full_name, granted_by) \
+             VALUES ($1, 'octocat/Hello-World', $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(member_id)
+        .bind(owner_id)
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("seed member repo grant: {e}"));
 
         let app = actix_test::init_service(
             App::new()
