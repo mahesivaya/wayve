@@ -21,6 +21,7 @@ import {
   type AssigneeSuggestion,
   type AssignableUser,
   type Project,
+  type SaveTaskPayload,
   type Task,
   type TaskAttachment,
   type TaskPriority,
@@ -301,16 +302,88 @@ function CopyLinkButton({
 
 // The task-key pill ("way12", or "#12" when project-less). Renders nothing when
 // there's no key.
-function TaskKeyBadge({ value }: { value: string | null }) {
+function TaskKeyBadge({
+  value,
+  tooltip,
+}: {
+  value: string | null;
+  tooltip: string;
+}) {
   if (!value) return null;
   return (
-    <span className="task-number-badge" data-tooltip="Task key">
+    <span className="task-number-badge" data-tooltip={tooltip}>
       {value}
     </span>
   );
 }
 
-export default function Tasks() {
+// This component powers both the personal Tasks board (`/tasks`) and the
+// org-shared Workspace "User Stories" board (`/user-stories`). Everything that
+// differs between the two — the CRUD endpoints, the visible labels, the
+// localStorage namespace, and whether attachments are available — is injected
+// via `config`. The default is the Tasks configuration, so `<Tasks />` is
+// unchanged; the stories wrapper passes its own config (see
+// `frontend/src/userstories/UserStories.tsx`).
+export type TasksConfig = {
+  api: {
+    list: () => Promise<Task[]>;
+    create: (payload: SaveTaskPayload) => Promise<Task>;
+    update: (id: number, payload: SaveTaskPayload) => Promise<Task>;
+    remove: (id: number) => Promise<void>;
+  };
+  features: {
+    // Attachments hit `/api/tasks/{id}/attachments`, which is task-only, so the
+    // stories board disables them (there is no story-attachment endpoint).
+    attachments: boolean;
+  };
+  // localStorage prefix so the two boards keep independent view/mode state.
+  storageKey: string;
+  labels: {
+    title: string;
+    subtitle: string;
+    singular: string;
+    lowerSingular: string;
+    lowerPlural: string;
+    createButton: string;
+    createTitle: string;
+    editTitle: string;
+    namePlaceholder: string;
+    numberBadgeTooltip: string;
+    filtersTooltip: string;
+    filtersAria: string;
+  };
+};
+
+const TASKS_CONFIG: TasksConfig = {
+  api: {
+    list: getTasks,
+    create: createTaskApi,
+    update: updateTaskApi,
+    remove: deleteTaskApi,
+  },
+  features: { attachments: true },
+  storageKey: "tasks",
+  labels: {
+    title: "Tasks",
+    subtitle: "Create simple work items with a name and description.",
+    singular: "Task",
+    lowerSingular: "task",
+    lowerPlural: "tasks",
+    createButton: "+ Create task",
+    createTitle: "Create Task",
+    editTitle: "Edit Task",
+    namePlaceholder: "Task title",
+    numberBadgeTooltip: "Task key",
+    filtersTooltip: "Filter tasks",
+    filtersAria: "Task filters",
+  },
+};
+
+export default function Tasks({
+  config = TASKS_CONFIG,
+}: {
+  config?: TasksConfig;
+} = {}) {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
   const isPersonal = user?.scope === "personal";
@@ -335,13 +408,13 @@ export default function Tasks() {
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const [creating, setCreating] = useState(false);
   const [view, setView] = useState<"list" | "grid">(() => {
-    const saved = window.localStorage.getItem("wayve.tasks.view");
+    const saved = window.localStorage.getItem(`wayve.${config.storageKey}.view`);
     return saved === "grid" ? "grid" : "list";
   });
   // "tasks" is the default list/grid layout; "jira" is a kanban board with one
   // column per status, where dragging a card between columns changes its status.
   const [mode, setMode] = useState<"tasks" | "jira">(() => {
-    const saved = window.localStorage.getItem("wayve.tasks.mode");
+    const saved = window.localStorage.getItem(`wayve.${config.storageKey}.mode`);
     return saved === "jira" ? "jira" : "tasks";
   });
   // The status, priority and date filters combine, and apply to both the list
@@ -398,12 +471,12 @@ export default function Tasks() {
   }, [filtersOpen]);
 
   useEffect(() => {
-    window.localStorage.setItem("wayve.tasks.view", view);
-  }, [view]);
+    window.localStorage.setItem(`wayve.${config.storageKey}.view`, view);
+  }, [view, config.storageKey]);
 
   useEffect(() => {
-    window.localStorage.setItem("wayve.tasks.mode", mode);
-  }, [mode]);
+    window.localStorage.setItem(`wayve.${config.storageKey}.mode`, mode);
+  }, [mode, config.storageKey]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [taskName, setTaskName] = useState("");
   const [description, setDescription] = useState("");
@@ -502,7 +575,7 @@ export default function Tasks() {
     setLoadError("");
     setLoading(true);
     try {
-      const list = await getTasks();
+      const list = await config.api.list();
       setTasks(
         sortTasks(
           list.map((t) => ({
@@ -513,11 +586,17 @@ export default function Tasks() {
         )
       );
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to load tasks");
+      setLoadError(
+        err instanceof Error
+          ? err.message
+          : `Failed to load ${config.labels.lowerPlural}`
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+    // `config` is a stable module constant (see TASKS_CONFIG / the stories
+    // wrapper), so listing it never re-creates this callback.
+  }, [config]);
 
   // The load is deferred to a timeout so the effect body doesn't synchronously
   // call setState, which React 19 flags as a cascading-render risk.
@@ -658,13 +737,15 @@ export default function Tasks() {
     setPendingAttachments([]);
     setExistingAttachments([]);
     setCreating(true);
-    setAttachmentsLoading(true);
-    listTaskAttachments(task.id)
-      .then((list) => setExistingAttachments(list))
-      .catch(() => {
-        // Non-fatal — just leave the list empty.
-      })
-      .finally(() => setAttachmentsLoading(false));
+    if (config.features.attachments) {
+      setAttachmentsLoading(true);
+      listTaskAttachments(task.id)
+        .then((list) => setExistingAttachments(list))
+        .catch(() => {
+          // Non-fatal — just leave the list empty.
+        })
+        .finally(() => setAttachmentsLoading(false));
+    }
   };
 
   const copyTaskLink = (task: Task) => {
@@ -763,7 +844,7 @@ export default function Tasks() {
       )
     );
     try {
-      const updated = await updateTaskApi(task.id, {
+      const updated = await config.api.update(task.id, {
         name: task.name,
         description: task.description,
         priority: task.priority,
@@ -811,7 +892,7 @@ export default function Tasks() {
     );
     if (!ok) return;
     try {
-      await deleteTaskApi(task.id);
+      await config.api.remove(task.id);
       setTasks((prev) => prev.filter((t) => t.id !== task.id));
       if (editingId === task.id) {
         resetForm();
@@ -819,7 +900,9 @@ export default function Tasks() {
       }
     } catch (err) {
       window.alert(
-        err instanceof Error ? err.message : "Failed to delete task"
+        err instanceof Error
+          ? err.message
+          : `Failed to delete ${config.labels.lowerSingular}`
       );
     }
   };
@@ -889,7 +972,7 @@ export default function Tasks() {
     const details = description.trim();
 
     if (!name) {
-      setError("Task name is required");
+      setError(`${config.labels.singular} name is required`);
       return;
     }
 
@@ -898,7 +981,7 @@ export default function Tasks() {
     try {
       let targetTaskId: number;
       if (editingId !== null) {
-        const updated = await updateTaskApi(editingId, {
+        const updated = await config.api.update(editingId, {
           name,
           description: details,
           priority,
@@ -923,7 +1006,7 @@ export default function Tasks() {
           )
         );
       } else {
-        const created = await createTaskApi({
+        const created = await config.api.create({
           name,
           description: details,
           priority,
@@ -946,7 +1029,7 @@ export default function Tasks() {
         );
       }
 
-      if (pendingAttachments.length > 0) {
+      if (config.features.attachments && pendingAttachments.length > 0) {
         try {
           await uploadTaskAttachments(targetTaskId, pendingAttachments);
         } catch (err) {
@@ -973,7 +1056,11 @@ export default function Tasks() {
         closeForm();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save task");
+      setError(
+        err instanceof Error
+          ? err.message
+          : `Failed to save ${config.labels.lowerSingular}`
+      );
     } finally {
       setSubmitting(false);
     }
@@ -987,13 +1074,13 @@ export default function Tasks() {
             className="create-task-btn create-task-btn--split"
             onClick={openCreate}
           >
-            + Create task
+            {config.labels.createButton}
           </button>
         ) : (
           <div className="tasks-header">
             <div>
-              <h2>Tasks</h2>
-              <p>Create simple work items with a name and description.</p>
+              <h2>{config.labels.title}</h2>
+              <p>{config.labels.subtitle}</p>
             </div>
             <div className="tasks-header-actions">
               <span className="tasks-count">{tasks.length} total</span>
@@ -1006,7 +1093,7 @@ export default function Tasks() {
                   onClick={() => setFiltersOpen((open) => !open)}
                   aria-haspopup="dialog"
                   aria-expanded={filtersOpen}
-                  data-tooltip="Filter tasks"
+                  data-tooltip={config.labels.filtersTooltip}
                 >
                   <span aria-hidden="true">⌄</span> Filters
                   {activeFilterCount > 0 && (
@@ -1019,7 +1106,7 @@ export default function Tasks() {
                   <div
                     className="tasks-filters-popover"
                     role="dialog"
-                    aria-label="Task filters"
+                    aria-label={config.labels.filtersAria}
                   >
                     <label className="tasks-filter-row">
                       <span>Status</span>
@@ -1195,15 +1282,15 @@ export default function Tasks() {
         <Modal
           isOpen={creating}
           onClose={closeForm}
-          title={isEditing ? "Edit Task" : "Create Task"}
+          title={isEditing ? config.labels.editTitle : config.labels.createTitle}
         >
           <form className="task-compose" onSubmit={saveTask}>
             <input
               className="task-compose-title"
               value={taskName}
               onChange={(event) => setTaskName(event.target.value)}
-              placeholder="Task title"
-              aria-label="Task title"
+              placeholder={config.labels.namePlaceholder}
+              aria-label={config.labels.namePlaceholder}
               autoFocus
               required
             />
@@ -1408,12 +1495,13 @@ export default function Tasks() {
               )}
             </div>
 
-            {isEditing && attachmentsLoading && (
+            {config.features.attachments && isEditing && attachmentsLoading && (
               <div className="task-attachments-empty">Loading attachments…</div>
             )}
 
-            {(existingAttachments.length > 0 ||
-              pendingAttachments.length > 0) && (
+            {config.features.attachments &&
+              (existingAttachments.length > 0 ||
+                pendingAttachments.length > 0) && (
               <ul className="task-attachments-list">
                 {existingAttachments.map((att) => (
                   <li key={`saved-${att.id}`} className="task-attachment-item">
@@ -1466,32 +1554,36 @@ export default function Tasks() {
             {error && <div className="task-error">{error}</div>}
 
             <div className="task-compose-footer">
-              <button
-                type="button"
-                className="task-compose-attach"
-                onClick={() => fileInputRef.current?.click()}
-                data-tooltip="Attach files — uploaded when you save the task"
-                aria-label="Attach files"
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M14 7.5l-5.7 5.7a3.4 3.4 0 01-4.8-4.8L9.2 2.7a2.3 2.3 0 013.2 3.2L6.7 11.6a1.1 1.1 0 01-1.6-1.6l5.3-5.3" />
-                </svg>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="task-attachments-input"
-                onChange={onPickFiles}
-              />
+              {config.features.attachments && (
+                <>
+                  <button
+                    type="button"
+                    className="task-compose-attach"
+                    onClick={() => fileInputRef.current?.click()}
+                    data-tooltip="Attach files — uploaded when you save"
+                    aria-label="Attach files"
+                  >
+                    <svg
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M14 7.5l-5.7 5.7a3.4 3.4 0 01-4.8-4.8L9.2 2.7a2.3 2.3 0 013.2 3.2L6.7 11.6a1.1 1.1 0 01-1.6-1.6l5.3-5.3" />
+                    </svg>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="task-attachments-input"
+                    onChange={onPickFiles}
+                  />
+                </>
+              )}
 
               <div className="task-compose-footer-right">
                 {!isEditing && (
@@ -1514,7 +1606,7 @@ export default function Tasks() {
                       : "Creating…"
                     : isEditing
                       ? "Save changes"
-                      : "Create task"}
+                      : `Create ${config.labels.lowerSingular}`}
                 </button>
               </div>
             </div>
@@ -1524,11 +1616,11 @@ export default function Tasks() {
         {mode === "jira" ? (
           loading ? (
             <div className="tasks-empty">
-              <strong>Loading tasks…</strong>
+              <strong>{`Loading ${config.labels.lowerPlural}…`}</strong>
             </div>
           ) : loadError ? (
             <div className="tasks-empty">
-              <strong>Couldn&apos;t load tasks</strong>
+              <strong>{`Couldn't load ${config.labels.lowerPlural}`}</strong>
               <span>{loadError}</span>
               <button
                 type="button"
@@ -1598,7 +1690,9 @@ export default function Tasks() {
                     </header>
                     <div className="task-board-col-body">
                       {colTasks.length === 0 ? (
-                        <div className="task-board-empty">No tasks</div>
+                        <div className="task-board-empty">
+                          No {config.labels.lowerPlural}
+                        </div>
                       ) : (
                         colTasks.map((task) => (
                           <article
@@ -1620,7 +1714,10 @@ export default function Tasks() {
                               >
                                 P{task.priority}
                               </span>
-                              <TaskKeyBadge value={taskKey(task)} />
+                              <TaskKeyBadge
+                              value={taskKey(task)}
+                              tooltip={config.labels.numberBadgeTooltip}
+                            />
                               <CopyLinkButton
                                 copied={copiedTaskId === task.id}
                                 onCopy={() => copyTaskLink(task)}
@@ -1631,7 +1728,7 @@ export default function Tasks() {
                               type="button"
                               className="task-card-title-link task-board-card-title"
                               onClick={() => openEdit(task)}
-                              data-tooltip="Open task details"
+                              data-tooltip={`Open ${config.labels.lowerSingular} details`}
                             >
                               {task.name}
                             </button>
@@ -1674,11 +1771,11 @@ export default function Tasks() {
             <div className={`task-list task-list--${view}`}>
               {loading ? (
                 <div className="tasks-empty">
-                  <strong>Loading tasks…</strong>
+                  <strong>{`Loading ${config.labels.lowerPlural}…`}</strong>
                 </div>
               ) : loadError ? (
                 <div className="tasks-empty">
-                  <strong>Couldn&apos;t load tasks</strong>
+                  <strong>{`Couldn't load ${config.labels.lowerPlural}`}</strong>
                   <span>{loadError}</span>
                   <button
                     type="button"
@@ -1691,11 +1788,13 @@ export default function Tasks() {
               ) : filteredTasks.length === 0 ? (
                 <div className="tasks-empty">
                   <strong>
-                    {tasks.length === 0 ? "No tasks yet" : "No matching tasks"}
+                    {tasks.length === 0
+                      ? `No ${config.labels.lowerPlural} yet`
+                      : `No matching ${config.labels.lowerPlural}`}
                   </strong>
                   <span>
                     {tasks.length === 0
-                      ? "Use + Create task to add your first task."
+                      ? `Use ${config.labels.createButton} to add your first ${config.labels.lowerSingular}.`
                       : "Try a different search term."}
                   </span>
                 </div>
@@ -1716,7 +1815,10 @@ export default function Tasks() {
                     >
                       <div className="task-card-body">
                         <div className="task-card-title">
-                          <TaskKeyBadge value={taskKey(task)} />
+                          <TaskKeyBadge
+                              value={taskKey(task)}
+                              tooltip={config.labels.numberBadgeTooltip}
+                            />
                           <CopyLinkButton
                             copied={copiedTaskId === task.id}
                             onCopy={() => copyTaskLink(task)}
@@ -1727,7 +1829,7 @@ export default function Tasks() {
                               type="button"
                               className="task-card-title-link"
                               onClick={() => openEdit(task)}
-                              data-tooltip="Open task details"
+                              data-tooltip={`Open ${config.labels.lowerSingular} details`}
                             >
                               {task.name}
                             </button>
@@ -1829,7 +1931,10 @@ export default function Tasks() {
                     >
                       <div className="task-card-body">
                         <div className="task-card-title">
-                          <TaskKeyBadge value={taskKey(task)} />
+                          <TaskKeyBadge
+                              value={taskKey(task)}
+                              tooltip={config.labels.numberBadgeTooltip}
+                            />
                           <CopyLinkButton
                             copied={copiedTaskId === task.id}
                             onCopy={() => copyTaskLink(task)}
@@ -1840,7 +1945,7 @@ export default function Tasks() {
                               type="button"
                               className="task-card-title-link"
                               onClick={() => openEdit(task)}
-                              data-tooltip="Open task details"
+                              data-tooltip={`Open ${config.labels.lowerSingular} details`}
                             >
                               {task.name}
                             </button>

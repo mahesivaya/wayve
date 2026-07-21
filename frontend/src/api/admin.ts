@@ -216,6 +216,21 @@ export async function updateMyOrganization(
   return data;
 }
 
+// Admin-only (org:settings). Sets the sprint (cycle) length in days, 1–90, that
+// the user-stories burnup uses.
+export async function updateOrgSprintDays(days: number): Promise<void> {
+  const res = await apiFetch("/api/organizations/me/sprint-days", {
+    method: "PATCH",
+    body: JSON.stringify({ days }),
+    preserve401: true,
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || "Failed to update sprint length");
+  }
+}
+
 // Refuses with 409 while the caller still owns an organization or has an active
 // Stripe subscription; both must be torn down first.
 export async function deleteMyAccount(): Promise<void> {

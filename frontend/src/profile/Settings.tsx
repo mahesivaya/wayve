@@ -20,6 +20,7 @@ import {
   deleteMyAccount,
   deleteMyOrganization,
   updateMyOrganization,
+  updateOrgSprintDays,
 } from "../api/admin";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
@@ -236,6 +237,28 @@ export default function Settings() {
       );
     } finally {
       setPendingLead(null);
+    }
+  };
+
+  // Org sprint (cycle) length in days, 1–90. Same optimistic pattern as the
+  // meeting-lead control; the value lives on the organization, not the user.
+  const [pendingSprint, setPendingSprint] = useState<number | null>(null);
+  const [sprintError, setSprintError] = useState("");
+  const sprintDays = pendingSprint ?? user?.organization_sprint_total_days ?? 14;
+  const changeSprintDays = async (next: number) => {
+    const clamped = Math.min(90, Math.max(1, Math.round(next)));
+    if (clamped === sprintDays) return;
+    setSprintError("");
+    setPendingSprint(clamped);
+    try {
+      await updateOrgSprintDays(clamped);
+      await refresh();
+    } catch (err) {
+      setSprintError(
+        err instanceof Error ? err.message : "Could not update sprint length"
+      );
+    } finally {
+      setPendingSprint(null);
     }
   };
 
@@ -816,7 +839,34 @@ export default function Settings() {
                   }}
                 />
               </label>
+              <label className="settings-usage-row">
+                <span>Sprint length (days)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={90}
+                  step={1}
+                  // Uncontrolled + keyed to the saved value so it resets to the
+                  // canonical number after a save; commits on blur / Enter.
+                  key={sprintDays}
+                  defaultValue={sprintDays}
+                  disabled={pendingSprint !== null}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
+                  onBlur={(e) => void changeSprintDays(Number(e.target.value))}
+                  style={{
+                    padding: "6px 10px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 6,
+                    minWidth: 90,
+                  }}
+                />
+              </label>
             </div>
+            {sprintError && (
+              <p className="settings-danger-error">{sprintError}</p>
+            )}
             {orgError && <p className="settings-danger-error">{orgError}</p>}
             {orgSaved && (
               <p className="settings-support-empty">Organization renamed.</p>

@@ -291,6 +291,15 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_meeting_alert_minutes_check",
         "ALTER TABLE users ADD CONSTRAINT users_meeting_alert_minutes_check \
          CHECK (meeting_alert_minutes >= 0 AND meeting_alert_minutes <= 1440)",
+        // Sprint length for the user-stories burnup. /api/me selects this via the
+        // org join, so an existing deployment on the new binary needs the column
+        // or every org member's /api/me 500s — same logout-on-refresh failure as
+        // the meeting-alert column above.
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS sprint_total_days \
+         SMALLINT NOT NULL DEFAULT 14",
+        "ALTER TABLE organizations DROP CONSTRAINT IF EXISTS organizations_sprint_total_days_check",
+        "ALTER TABLE organizations ADD CONSTRAINT organizations_sprint_total_days_check \
+         CHECK (sprint_total_days >= 1 AND sprint_total_days <= 90)",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.

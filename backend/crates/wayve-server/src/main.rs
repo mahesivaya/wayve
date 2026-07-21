@@ -43,6 +43,8 @@ mod scheduler;
 mod scim;
 mod startup;
 mod tasks;
+mod tickets;
+mod user_stories;
 mod webhooks;
 mod workers;
 mod workspace;
