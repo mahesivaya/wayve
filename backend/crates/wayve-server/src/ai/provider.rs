@@ -124,14 +124,33 @@ pub async fn resolve_ai_for_user(
         }
     }
 
-    Ok(crate::config::gemini_api_key().map(|api_key| ResolvedAi {
+    Ok(env_default_ai())
+}
+
+/// The platform's env-configured default provider, used when neither an org nor a
+/// platform config applies. Prefers Anthropic (Claude) when `ANTHROPIC_API_KEY`
+/// is set — so a prod deployment auto-uses Claude with no in-app configuration —
+/// and otherwise falls back to Gemini (`GEMINI_API_KEY`). `None` when neither key
+/// is present.
+fn env_default_ai() -> Option<ResolvedAi> {
+    if let Some(api_key) = crate::config::anthropic_api_key() {
+        return Some(ResolvedAi {
+            provider: AiProvider::Anthropic,
+            api_key,
+            model: crate::config::anthropic_model(),
+            base_url: None,
+            fail_closed: false,
+            data_access: DataAccess::default(),
+        });
+    }
+    crate::config::gemini_api_key().map(|api_key| ResolvedAi {
         provider: AiProvider::Gemini,
         api_key,
         model: crate::config::gemini_model(),
         base_url: None,
         fail_closed: false,
         data_access: DataAccess::default(),
-    }))
+    })
 }
 
 /// Falls back to the platform Gemini env key when the row stored no key.

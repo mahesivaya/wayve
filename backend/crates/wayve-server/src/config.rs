@@ -271,6 +271,18 @@ pub fn gemini_model() -> String {
     var_or("GEMINI_MODEL", "gemini-2.0-flash")
 }
 
+/// The platform's default Anthropic (Claude) key. When set, it becomes the
+/// default AI provider for callers without their own org/platform config — so a
+/// prod deployment auto-uses Claude with no in-app configuration. Takes
+/// precedence over the Gemini env default (see `ai::provider::resolve_ai_for_user`).
+pub fn anthropic_api_key() -> Option<String> {
+    var_opt("ANTHROPIC_API_KEY")
+}
+
+pub fn anthropic_model() -> String {
+    var_or("ANTHROPIC_MODEL", "claude-opus-4-8")
+}
+
 /// Shared secret for the inbound Jira webhook, passed as the `?token=` query
 /// value. Jira Cloud does not sign webhook payloads, so this token is the only
 /// authenticator; when unset the receiver refuses all deliveries.
@@ -369,6 +381,7 @@ pub fn validate() {
         }
     };
     feature("stripe (billing)", stripe().secret_key.is_some());
+    feature("anthropic (AI)", anthropic_api_key().is_some());
     feature("gemini (AI)", gemini_api_key().is_some());
     feature("zoom (scheduler)", zoom().is_ok());
     feature("google oauth", google_oauth().client_id.is_some());

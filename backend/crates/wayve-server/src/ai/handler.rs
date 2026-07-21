@@ -58,7 +58,28 @@ pub async fn ai_chat(
         return Ok(HttpResponse::BadRequest().body("Empty conversation"));
     }
 
-    let result = crate::ai::agent::run(pool.get_ref(), user_id, msgs, &ai).await?;
+    // Surface the real upstream reason to the caller. `AppError::Internal`
+    // otherwise renders every 5xx as a generic "Internal server error", which
+    // hides provider failures (bad API key, wrong/retired model, quota) that only
+    // the account owner can fix. The message carries no secrets — the API key is
+    // never echoed by the provider.
+    let result = match crate::ai::agent::run(pool.get_ref(), user_id, msgs, &ai).await {
+        Ok(result) => result,
+        Err(err) => {
+            error!(
+                "AI chat failed: user_id={} provider={} model={} error={}",
+                user_id,
+                ai.provider.as_str(),
+                ai.model,
+                err
+            );
+            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
+                "error": err.to_string(),
+                "provider": ai.provider.as_str(),
+                "model": ai.model,
+            })));
+        }
+    };
 
     // Metering is best-effort: a failure here must never fail the chat. The owner
     // scope mirrors provider resolution, so an org with its own enabled config owns
