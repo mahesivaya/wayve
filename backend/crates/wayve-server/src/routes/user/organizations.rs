@@ -900,6 +900,73 @@ pub async fn update_my_organization(
     })))
 }
 
+#[derive(Deserialize)]
+pub struct UpdateSprintDaysInput {
+    pub days: i16,
+}
+
+/// Set the organization's sprint (cycle) length in days, 1–90. Feeds the
+/// user-stories burnup. Gated on `org:settings` so any org admin (not only the
+/// owner) can change it. The value is read through every member's `/api/me`, so
+/// those caches are busted org-wide.
+#[patch("/organizations/me/sprint-days")]
+#[instrument(target = "auth", skip(req, pool, data))]
+pub async fn update_org_sprint_days(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    data: web::Json<UpdateSprintDaysInput>,
+) -> AppResult {
+    let ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::OrgSettings).await {
+        Ok(c) => c,
+        Err(resp) => return Ok(resp),
+    };
+    if ctx.scope != Scope::Organization {
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "Organization scope required"
+        })));
+    }
+    let organization_id = match ctx.organization_id {
+        Some(id) => id,
+        None => {
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "message": "Your account is not bound to an organization"
+            })));
+        }
+    };
+
+    let days = data.days;
+    if !(1..=90).contains(&days) {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Sprint length must be between 1 and 90 days"
+        })));
+    }
+
+    let updated = sqlx::query("UPDATE organizations SET sprint_total_days = $1 WHERE id = $2")
+        .bind(days)
+        .bind(organization_id)
+        .execute(pool.get_ref())
+        .await?;
+    if updated.rows_affected() == 0 {
+        return Ok(HttpResponse::NotFound()
+            .json(serde_json::json!({ "message": "Organization not found" })));
+    }
+
+    // The number rides on every member's /api/me, so bust those caches org-wide.
+    let member_ids: Vec<i32> =
+        sqlx::query_scalar("SELECT id FROM users WHERE organization_id = $1")
+            .bind(organization_id)
+            .fetch_all(pool.get_ref())
+            .await?;
+    for member_id in &member_ids {
+        invalidate_profile_cache(*member_id).await;
+        invalidate_me_cache(*member_id).await;
+    }
+
+    info!(target: "auth", organization_id, days, "organization sprint length updated");
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "sprint_total_days": days })))
+}
+
 /// Permanently delete the caller's own account and everything that cascades from
 /// `users.id`. An organization owner must delete the organization first, because
 /// their user row anchors its members, shared inboxes, and billing. An active or

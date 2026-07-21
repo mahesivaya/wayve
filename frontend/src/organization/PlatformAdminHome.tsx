@@ -21,6 +21,7 @@ import { adminListTickets } from "../api/support";
 import { listApiKeys } from "../api/apiKeys";
 import { listAuditLogs } from "../api/audit";
 import AIChat from "../aichat/AIChat";
+import UserStoriesSummaryCard from "./UserStoriesSummaryCard";
 import { listScimTokens } from "../api/scim";
 import { formatBytes } from "../utils/bytes";
 import "./admin-ui.css";
@@ -420,6 +421,10 @@ export default function PlatformAdminHome() {
         >
           <AIChat hideHeader />
         </div>
+      </section>
+
+      <section className="platform-admin-panel u-panel">
+        <UserStoriesSummaryCard />
       </section>
 
       {noSearchMatches && (

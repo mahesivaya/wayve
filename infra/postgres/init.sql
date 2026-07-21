@@ -116,6 +116,9 @@ ALTER TABLE organizations ADD COLUMN IF NOT EXISTS admin_email TEXT;
 -- ownership gate in admin_create_user. Off by default; toggled by the platform
 -- owner on /platform/domains. Security-relaxing, so deliberately opt-in.
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS allow_unverified_email_domains BOOLEAN NOT NULL DEFAULT false;
+-- Sprint (cycle) length in days for the workspace user-stories burnup. Admin-
+-- editable on /settings (1–90); read through every member's /api/me.
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS sprint_total_days SMALLINT NOT NULL DEFAULT 14 CHECK (sprint_total_days BETWEEN 1 AND 90);
 
 CREATE TABLE IF NOT EXISTS organization_members (
     organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -1399,6 +1402,76 @@ CREATE TABLE IF NOT EXISTS task_attachments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);
+
+-- ============================================================
+-- 📖 WORKSPACE USER STORIES
+-- ------------------------------------------------------------
+-- A backlog presented in the Workspace sidebar section. Same shape as `tasks`
+-- but polymorphic-owned exactly like `task_statuses` (exactly one of
+-- organization_id / user_id): an organization member reads and writes their
+-- org's ONE shared list, while platform and personal accounts get their own.
+-- This mirrors status ownership (see `statuses::owner_for_user`), so a story and
+-- its statuses always share the same owner. `story_number` is a per-owner
+-- sequence assigned at creation. Statuses are NOT duplicated — the board reuses
+-- the owner's `task_statuses` set (one workflow per owner), and `status` stores
+-- a status slug validated against it.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_stories (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    story_number INTEGER,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    priority SMALLINT NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
+    status TEXT NOT NULL DEFAULT 'to_do',
+    assigned_by TEXT NOT NULL DEFAULT '',
+    assignee TEXT NOT NULL DEFAULT '',
+    assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT user_stories_owner_chk CHECK (
+        (organization_id IS NOT NULL AND user_id IS NULL)
+     OR (organization_id IS NULL AND user_id IS NOT NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_stories_org ON user_stories(organization_id);
+CREATE INDEX IF NOT EXISTS idx_user_stories_user ON user_stories(user_id);
+
+-- ============================================================
+-- 🎫 WORKSPACE TICKETS
+-- ------------------------------------------------------------
+-- A second Workspace backlog board, independent of user_stories.
+-- Same polymorphic ownership and the same reuse of the owner's
+-- `task_statuses` set (`ticket_number` is a per-owner sequence).
+-- This is NOT the support_tickets feature below — that is in-app
+-- support requests; these are a Tasks-style board.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS workspace_tickets (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    ticket_number INTEGER,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    priority SMALLINT NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
+    status TEXT NOT NULL DEFAULT 'to_do',
+    assigned_by TEXT NOT NULL DEFAULT '',
+    assignee TEXT NOT NULL DEFAULT '',
+    assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT workspace_tickets_owner_chk CHECK (
+        (organization_id IS NOT NULL AND user_id IS NULL)
+     OR (organization_id IS NULL AND user_id IS NOT NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_tickets_org ON workspace_tickets(organization_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_tickets_user ON workspace_tickets(user_id);
 
 -- ============================================================
 -- 🎫 SUPPORT TICKETS

@@ -10,6 +10,8 @@ export type AppKey =
   | "drive"
   | "notes"
   | "tasks"
+  | "userstories"
+  | "tickets"
   | "aichat"
   | "github"
   | "about"
@@ -23,6 +25,8 @@ const SchedulerView = lazy(() => import("../scheduler/Scheduler"));
 const DriveView = lazy(() => import("../drive/DriveBox"));
 const NotesView = lazy(() => import("../notes/Notes"));
 const TasksView = lazy(() => import("../tasks/Tasks"));
+const UserStoriesView = lazy(() => import("../userstories/UserStories"));
+const TicketsView = lazy(() => import("../tickets/Tickets"));
 const AIChatView = lazy(() => import("../aichat/AIChat"));
 const GitHubRepoView = lazy(() => import("../github/GitHubRepo"));
 const AboutView = lazy(() => import("../about/About"));
@@ -68,6 +72,20 @@ export const SPLIT_APPS: SplitApp[] = [
   { key: "drive", label: "Drive", path: "/drive", icon: "📁", Comp: DriveView },
   { key: "notes", label: "Notes", path: "/notes", icon: "📝", Comp: NotesView },
   { key: "tasks", label: "Tasks", path: "/tasks", icon: "☑", Comp: TasksView },
+  {
+    key: "userstories",
+    label: "User Stories",
+    path: "/user-stories",
+    icon: "📖",
+    Comp: UserStoriesView,
+  },
+  {
+    key: "tickets",
+    label: "Tickets",
+    path: "/tickets",
+    icon: "🎫",
+    Comp: TicketsView,
+  },
   {
     key: "aichat",
     label: "AI Chat",

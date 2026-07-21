@@ -918,6 +918,22 @@
   text-overflow: ellipsis;
 }
 
+/* Workspace sub-item that carries a count badge (e.g. Tickets). The base
+   `.sidebar-project-label` is block+ellipsis; switch to a flex row so the
+   badge sits on the right edge while the label keeps its ellipsis. */
+.sidebar-project-label--badged {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sidebar-project-label--badged > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Unread / activity badge on the right edge of a sidebar nav item.
    Fed by /api/emails/unread-count for the Emails row; tile-shape pill
    styled to match the active state's color tokens so it doesn't clash. */

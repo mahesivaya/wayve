@@ -43,7 +43,8 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         r#"
         SELECT u.id, u.email, u.account_type, u.organization_id, u.recovery_mode, u.theme_json,
                u.avatar_path, u.chat_encrypt_files, u.meeting_alert_minutes,
-               o.slug AS organization_slug, o.name AS organization_name
+               o.slug AS organization_slug, o.name AS organization_name,
+               o.sprint_total_days AS organization_sprint_total_days
         FROM users u
         LEFT JOIN organizations o ON o.id = u.organization_id
         WHERE u.id = $1
@@ -79,6 +80,9 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let meeting_alert_minutes: i16 = row
         .try_get("meeting_alert_minutes")
         .unwrap_or(DEFAULT_MEETING_ALERT_MINUTES);
+    // Null for personal/platform accounts (no org join); the client defaults it.
+    let organization_sprint_total_days: Option<i16> =
+        row.try_get("organization_sprint_total_days").ok().flatten();
 
     let organization_name = display_organization_name(
         &account_type,
@@ -123,6 +127,7 @@ pub async fn get_me(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "avatar_url": avatar_url,
         "chat_encrypt_files": chat_encrypt_files,
         "meeting_alert_minutes": meeting_alert_minutes,
+        "organization_sprint_total_days": organization_sprint_total_days,
     });
 
     ME_CACHE.insert((user_id, mode), response.clone()).await;

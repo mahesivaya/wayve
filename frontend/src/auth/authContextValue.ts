@@ -48,6 +48,9 @@ export type UserType = {
   organization_id?: number | null;
   organization_slug?: string | null;
   organization_name?: string | null;
+  // Sprint (cycle) length in days for the user-stories burnup. Null for
+  // personal/platform accounts (no org); the burnup defaults it to 14.
+  organization_sprint_total_days?: number | null;
   current_plan?: CurrentPlan | null;
   // Defaults to "full" when /api/me predates the column (legacy rows).
   recovery_mode?: RecoveryMode;
