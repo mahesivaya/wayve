@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { logger } from "../utils/logger";
+import { sendAiChat } from "../api/ai";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { useGlobalSearch } from "../search/SearchContext";
@@ -52,6 +53,25 @@ const TEXT_TYPES = [
 const isTextFile = (t: string | null): boolean =>
   TEXT_TYPES.includes((t ?? "").toLowerCase());
 
+// Above this many characters the whole-document AI prompt gets impractical, so
+// the assist buttons disable rather than firing a huge request.
+const MAX_AI_CHARS = 100_000;
+
+// Prompts are tag-delimited and instruct "return ONLY …" so the assistant
+// replies with plain text and no preamble, quotes, or tool chatter.
+const GRAMMAR_PROMPT = (content: string): string =>
+  "You are a copy editor. Correct the spelling and grammar of the text between " +
+  "<text> tags. Preserve the original meaning, tone, and line breaks. Return ONLY " +
+  "the corrected text — no preamble, quotes, or commentary.\n<text>\n" +
+  content +
+  "\n</text>";
+const SUMMARY_PROMPT = (content: string): string =>
+  "Summarize the text between <text> tags in plain, easy-to-understand language " +
+  "for a non-expert. Use a few short sentences or bullet points. Return ONLY the " +
+  "summary.\n<text>\n" +
+  content +
+  "\n</text>";
+
 function iconFor(fileType: string | null): string {
   const t = (fileType ?? "").toLowerCase();
   if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(t))
@@ -95,6 +115,18 @@ export default function DocumentsBox() {
   const [editorContent, setEditorContent] = useState("");
   const [editorLoading, setEditorLoading] = useState(false);
   const [editorSaving, setEditorSaving] = useState(false);
+  // Ref to the editor textarea so file references insert at the caret.
+  const editorTextareaRef = useRef<HTMLTextAreaElement>(null);
+  // Editor assist state: which AI action is in flight, the pending grammar
+  // suggestion (awaiting Apply/Discard), the read-only summary, any assist error,
+  // and whether the attach-file picker is open. All reset when a file opens.
+  const [aiBusy, setAiBusy] = useState<"fix" | "summary" | null>(null);
+  const [grammarSuggestion, setGrammarSuggestion] = useState<string | null>(
+    null
+  );
+  const [summary, setSummary] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!user) return;
@@ -170,6 +202,12 @@ export default function DocumentsBox() {
     setEditorContent("");
     setEditorLoading(true);
     setError(null);
+    // Clear any assist state left over from a previously edited file.
+    setAiBusy(null);
+    setGrammarSuggestion(null);
+    setSummary(null);
+    setAiError(null);
+    setAttachOpen(false);
     try {
       const data = await getDocumentContent(file.id);
       setEditorContent(data.content);
@@ -195,6 +233,78 @@ export default function DocumentsBox() {
       setEditorSaving(false);
     }
   };
+
+  // Whether the AI assist buttons are usable: nothing else in flight, not saving,
+  // there's trimmed content, and the document isn't too large to send.
+  const aiDisabled =
+    aiBusy !== null ||
+    editorSaving ||
+    editorContent.trim().length === 0 ||
+    editorContent.length > MAX_AI_CHARS;
+
+  // Run one whole-document AI assist. `build` turns the content into a prompt;
+  // `onReply` stashes the plain-text reply (grammar suggestion or summary).
+  const runAssist = async (
+    kind: "fix" | "summary",
+    build: (content: string) => string,
+    onReply: (reply: string) => void
+  ) => {
+    if (aiDisabled) return;
+    setAiBusy(kind);
+    setAiError(null);
+    try {
+      const res = await sendAiChat([
+        { role: "user", content: build(editorContent) },
+      ]);
+      const reply = (res.reply ?? "").trim();
+      if (!reply) throw new Error("The assistant returned an empty result.");
+      onReply(reply);
+    } catch (err) {
+      setAiError(
+        err instanceof Error
+          ? err.message
+          : "Couldn't reach the assistant. It may not be set up for your workspace yet."
+      );
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  const runGrammarFix = () =>
+    void runAssist("fix", GRAMMAR_PROMPT, setGrammarSuggestion);
+  const runSummary = () => void runAssist("summary", SUMMARY_PROMPT, setSummary);
+
+  // Accept the grammar suggestion into the editor (still requires Save).
+  const applyGrammar = () => {
+    if (grammarSuggestion === null) return;
+    setEditorContent(grammarSuggestion);
+    setGrammarSuggestion(null);
+  };
+
+  const copySummary = () => {
+    if (summary === null) return;
+    void navigator.clipboard?.writeText(summary).catch(() => undefined);
+  };
+
+  // Insert a Markdown reference to another library file at the caret (or append
+  // if the textarea isn't focused). The link is the in-app authenticated route.
+  // Wrapped so the textarea ref is only read at click time, never during render.
+  const insertFileReference = useCallback((file: DocumentFile) => {
+    const ref = `[${file.name}](/api/documents/${file.id}/download)`;
+    const el = editorTextareaRef.current;
+    setEditorContent((cur) => {
+      if (!el) return cur ? `${cur}\n${ref}` : ref;
+      const start = el.selectionStart ?? cur.length;
+      const end = el.selectionEnd ?? start;
+      const caret = start + ref.length;
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(caret, caret);
+      });
+      return cur.slice(0, start) + ref + cur.slice(end);
+    });
+    setAttachOpen(false);
+  }, []);
 
   const commitRename = async () => {
     const target = editing;
@@ -563,6 +673,7 @@ export default function DocumentsBox() {
         ) : (
           <>
             <textarea
+              ref={editorTextareaRef}
               value={editorContent}
               onChange={(e) => setEditorContent(e.target.value)}
               style={{
@@ -574,6 +685,117 @@ export default function DocumentsBox() {
                 boxSizing: "border-box",
               }}
             />
+
+            {/* Attach + AI assist toolbar. */}
+            <div className="doc-editor-tools">
+              <button
+                type="button"
+                className="doc-tool-btn"
+                aria-expanded={attachOpen}
+                disabled={editorSaving}
+                onClick={() => setAttachOpen((v) => !v)}
+                data-tooltip="Insert a link to a library file"
+              >
+                📎 Attach
+              </button>
+              <button
+                type="button"
+                className="doc-tool-btn"
+                disabled={aiDisabled}
+                onClick={runGrammarFix}
+                data-tooltip={
+                  editorContent.length > MAX_AI_CHARS
+                    ? "Document is too large for AI assist"
+                    : "Correct spelling & grammar"
+                }
+              >
+                {aiBusy === "fix" ? "Working…" : "✨ Fix grammar & spelling"}
+              </button>
+              <button
+                type="button"
+                className="doc-tool-btn"
+                disabled={aiDisabled}
+                onClick={runSummary}
+                data-tooltip="Plain-language summary"
+              >
+                {aiBusy === "summary" ? "Working…" : "📝 Summarize"}
+              </button>
+            </div>
+
+            {attachOpen &&
+              (() => {
+                const others = files.filter((f) => f.id !== editorFile?.id);
+                return (
+                  <div className="doc-attach-picker">
+                    {others.length === 0 ? (
+                      <p className="file-meta">
+                        No other files in this folder to link.
+                      </p>
+                    ) : (
+                      others.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          className="doc-attach-item"
+                          onClick={() => insertFileReference(f)}
+                        >
+                          <span aria-hidden="true">{iconFor(f.file_type)}</span>
+                          <span className="doc-attach-item-name">{f.name}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                );
+              })()}
+
+            {aiError && <p className="doc-ai-error">{aiError}</p>}
+
+            {grammarSuggestion !== null && (
+              <div className="doc-ai-panel">
+                <div className="doc-ai-panel-head">Suggested correction</div>
+                <div className="doc-ai-panel-body">{grammarSuggestion}</div>
+                <div className="doc-ai-panel-actions">
+                  <button
+                    type="button"
+                    className="drive-folder-create-btn"
+                    onClick={applyGrammar}
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    className="drive-folder-cancel-btn"
+                    onClick={() => setGrammarSuggestion(null)}
+                  >
+                    Discard
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {summary !== null && (
+              <div className="doc-ai-panel">
+                <div className="doc-ai-panel-head">Summary</div>
+                <div className="doc-ai-panel-body">{summary}</div>
+                <div className="doc-ai-panel-actions">
+                  <button
+                    type="button"
+                    className="drive-folder-create-btn"
+                    onClick={copySummary}
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    className="drive-folder-cancel-btn"
+                    onClick={() => setSummary(null)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button
                 type="button"
