@@ -1440,6 +1440,23 @@ CREATE TABLE IF NOT EXISTS user_stories (
 CREATE INDEX IF NOT EXISTS idx_user_stories_org ON user_stories(organization_id);
 CREATE INDEX IF NOT EXISTS idx_user_stories_user ON user_stories(user_id);
 
+-- Status-change history for the user-stories burnup trend lines. One row per
+-- status a story enters (create writes the first; each later status change adds
+-- another). The history endpoint replays these to reconstruct per-day,
+-- per-status counts. Owner columns are denormalised from the story so the
+-- aggregation scopes without a join. See startup.rs for the day-0 backfill.
+CREATE TABLE IF NOT EXISTS user_story_status_events (
+    id SERIAL PRIMARY KEY,
+    user_story_id INTEGER NOT NULL REFERENCES user_stories(id) ON DELETE CASCADE,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    to_status TEXT NOT NULL,
+    to_category TEXT NOT NULL,
+    changed_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_usse_org ON user_story_status_events(organization_id, changed_at);
+CREATE INDEX IF NOT EXISTS idx_usse_user ON user_story_status_events(user_id, changed_at);
+
 -- ============================================================
 -- 🎫 WORKSPACE TICKETS
 -- ------------------------------------------------------------

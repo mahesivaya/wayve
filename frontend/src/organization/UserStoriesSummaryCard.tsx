@@ -3,6 +3,7 @@ import type { KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ReferenceLine,
@@ -11,35 +12,36 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { getUserStories } from "../api/userStories";
+import {
+  getUserStories,
+  getUserStoryStatusHistory,
+  type StatusHistoryDay,
+} from "../api/userStories";
+import { getTaskStatuses, type TaskStatusRow } from "../api/taskStatuses";
 import { useAuth } from "../auth/useAuth";
 import "./userStoriesSummaryCard.css";
 
-// A small graphical burnup for the team's user stories. "Points" is the sum of
-// each story's priority (1–5, 5 = highest). Over a fixed two-week cycle we plot
-// the *expected* cumulative completion — one dot per day rising in a straight
-// line to the two-week total points — the ideal pace to finish the scope.
+// A small graphical summary of the team's user stories over a fixed sprint
+// (cycle) window. The chart draws one line per status (Todo / In Progress /
+// In Review / Completed…), each in its own status colour, showing how many
+// stories sit in that status on each day — the real burnup trend.
 //
-// This is the feasible, backend-free view: the stories table stores no
-// completion timestamps, so the *actual* completed-per-day curve (as in Linear's
-// progress chart) isn't reconstructable here — only the expected/ideal line is.
+// The counts come from replayed status-change history, so the lines only carry
+// true day-by-day movement from when recording started; earlier days rest on the
+// backfilled day-0 baseline (each story's created_at → its current status).
+// "Total points" (sum of priorities) stays as a headline scalar — a different
+// measure from story counts, so it never shares the chart's axis.
 
-// Fallback when the org hasn't set a sprint length (or for personal/platform
-// accounts with no org). Admins change it on /settings (1–90).
 const DEFAULT_CYCLE_DAYS = 14;
-// Cycles are fixed blocks measured from this Monday. Anchoring to a constant
-// (rather than "today") keeps the cycle boundaries stable for everyone.
-const CYCLE_ANCHOR = new Date("2026-01-05T00:00:00"); // a Monday
+// Cycles are fixed blocks measured from this Monday, so boundaries are stable.
+const CYCLE_ANCHOR = new Date("2026-01-05T00:00:00");
 const DAY_MS = 86_400_000;
-const ACCENT = "#6366f1"; // single-series accent; reads on light + dark surfaces
 const AXIS_INK = "#94a3b8"; // muted gray, legible on both admin surfaces
 
 function startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
-// The cycle that today falls into, measured from the fixed anchor in blocks of
-// `cycleDays`.
 function currentCycleStart(today: Date, cycleDays: number): number {
   const anchor = startOfDay(CYCLE_ANCHOR);
   const elapsedDays = Math.floor((startOfDay(today) - anchor) / DAY_MS);
@@ -47,23 +49,62 @@ function currentCycleStart(today: Date, cycleDays: number): number {
   return anchor + cycleIndex * cycleDays * DAY_MS;
 }
 
-const fmtDay = (ms: number) =>
-  new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+// Local YYYY-MM-DD (not toISOString, which would shift the date in some zones).
+function isoDate(ms: number): string {
+  const d = new Date(ms);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+const fmtRange = (ms: number) =>
+  new Date(ms).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+// The API date is a bare YYYY-MM-DD; parse it as local midnight so the label
+// doesn't slip a day.
+const fmtDayLabel = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 
 export default function UserStoriesSummaryCard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const cycleDays = user?.organization_sprint_total_days ?? DEFAULT_CYCLE_DAYS;
+
+  const cycle = useMemo(() => {
+    const start = currentCycleStart(new Date(), cycleDays);
+    const end = start + cycleDays * DAY_MS;
+    const elapsed = Math.floor((startOfDay(new Date()) - start) / DAY_MS);
+    return {
+      start,
+      end,
+      todayDay: elapsed >= 0 && elapsed <= cycleDays ? elapsed : null,
+    };
+  }, [cycleDays]);
+
   const [totalPoints, setTotalPoints] = useState<number | null>(null);
+  const [statuses, setStatuses] = useState<TaskStatusRow[] | null>(null);
+  const [history, setHistory] = useState<StatusHistoryDay[] | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    getUserStories()
-      .then((stories) => {
+    const from = isoDate(cycle.start);
+    const to = isoDate(cycle.end);
+    Promise.all([
+      getUserStories(),
+      getTaskStatuses(),
+      getUserStoryStatusHistory(from, to),
+    ])
+      .then(([stories, sts, hist]) => {
         if (cancelled) return;
-        // Points = sum of priority values across the stories in scope.
         setTotalPoints(stories.reduce((sum, s) => sum + (s.priority ?? 0), 0));
+        setStatuses(sts);
+        setHistory(hist);
       })
       .catch(() => {
         if (!cancelled) setFailed(true);
@@ -71,26 +112,33 @@ export default function UserStoriesSummaryCard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [cycle.start, cycle.end]);
 
-  const { data, cycleStart, cycleEnd, todayDay } = useMemo(() => {
-    const start = currentCycleStart(new Date(), cycleDays);
-    const total = totalPoints ?? 0;
-    // Day 0 = start (0 pts) … day N = end (total pts): the straight ideal line.
-    const rows = Array.from({ length: cycleDays + 1 }, (_, day) => ({
-      day,
-      dateMs: start + day * DAY_MS,
-      dateLabel: fmtDay(start + day * DAY_MS),
-      expected: Math.round((total * day) / cycleDays),
-    }));
-    const elapsed = Math.floor((startOfDay(new Date()) - start) / DAY_MS);
-    return {
-      data: rows,
-      cycleStart: start,
-      cycleEnd: start + cycleDays * DAY_MS,
-      todayDay: elapsed >= 0 && elapsed <= cycleDays ? elapsed : null,
-    };
-  }, [totalPoints, cycleDays]);
+  // Only draw a line for a status that actually appears in the window, so the
+  // legend doesn't list empty statuses. Keep the owner's board order.
+  const seriesStatuses = useMemo(() => {
+    if (!statuses || !history) return [];
+    const present = new Set<string>();
+    for (const day of history) {
+      for (const [slug, n] of Object.entries(day.counts)) {
+        if (n > 0) present.add(slug);
+      }
+    }
+    return statuses.filter((s) => present.has(s.slug));
+  }, [statuses, history]);
+
+  // One row per day, with a numeric field per drawn status (0-filled so each
+  // line is continuous rather than gapped).
+  const rows = useMemo(() => {
+    if (!history) return [];
+    return history.map((day) => {
+      const row: Record<string, number | string> = {
+        dateLabel: fmtDayLabel(day.date),
+      };
+      for (const s of seriesStatuses) row[s.slug] = day.counts[s.slug] ?? 0;
+      return row;
+    });
+  }, [history, seriesStatuses]);
 
   const open = () => void navigate("/user-stories");
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -99,6 +147,11 @@ export default function UserStoriesSummaryCard() {
       open();
     }
   };
+
+  const loading = !failed && history === null;
+  const empty = !failed && !loading && seriesStatuses.length === 0;
+  const todayLabel =
+    cycle.todayDay !== null ? rows[cycle.todayDay]?.dateLabel : undefined;
 
   return (
     <article
@@ -113,7 +166,7 @@ export default function UserStoriesSummaryCard() {
         <div>
           <h3 className="us-summary-title">User Stories</h3>
           <p className="us-summary-sub">
-            Expected burnup · {fmtDay(cycleStart)}–{fmtDay(cycleEnd)}
+            By status · {fmtRange(cycle.start)}–{fmtRange(cycle.end)}
           </p>
         </div>
         <div className="us-summary-total" aria-hidden={failed}>
@@ -126,21 +179,18 @@ export default function UserStoriesSummaryCard() {
 
       {failed ? (
         <p className="us-summary-empty">Couldn’t load user stories.</p>
-      ) : totalPoints === null ? (
+      ) : loading ? (
         <p className="us-summary-empty">Loading…</p>
-      ) : totalPoints === 0 ? (
+      ) : empty ? (
         <p className="us-summary-empty">No user stories yet.</p>
       ) : (
         <div className="us-summary-chart">
-          <ResponsiveContainer width="100%" height={148}>
+          <ResponsiveContainer width="100%" height={172}>
             <LineChart
-              data={data}
-              margin={{ top: 6, right: 8, bottom: 0, left: -18 }}
+              data={rows}
+              margin={{ top: 6, right: 8, bottom: 0, left: -20 }}
             >
-              <CartesianGrid
-                stroke="rgba(148,163,184,0.18)"
-                vertical={false}
-              />
+              <CartesianGrid stroke="rgba(148,163,184,0.18)" vertical={false} />
               <XAxis
                 dataKey="dateLabel"
                 tick={{ fill: AXIS_INK, fontSize: 11 }}
@@ -153,7 +203,7 @@ export default function UserStoriesSummaryCard() {
                 tick={{ fill: AXIS_INK, fontSize: 11 }}
                 tickLine={false}
                 axisLine={false}
-                width={34}
+                width={30}
                 allowDecimals={false}
               />
               <Tooltip
@@ -164,30 +214,34 @@ export default function UserStoriesSummaryCard() {
                   borderRadius: 8,
                   fontSize: 12,
                 }}
-                labelFormatter={(l) => `Day — ${l}`}
-                formatter={(v: number) => [`${v} pts`, "Expected done"]}
               />
-              {todayDay !== null && (
+              <Legend wrapperStyle={{ fontSize: 11 }} iconType="plainline" />
+              {todayLabel && (
                 <ReferenceLine
-                  x={data[todayDay]?.dateLabel}
+                  x={todayLabel}
                   stroke={AXIS_INK}
                   strokeDasharray="3 3"
-                  label={{ value: "Today", position: "top", fill: AXIS_INK, fontSize: 10 }}
+                  label={{
+                    value: "Today",
+                    position: "top",
+                    fill: AXIS_INK,
+                    fontSize: 10,
+                  }}
                 />
               )}
-              <Line
-                type="linear"
-                dataKey="expected"
-                name="Expected done"
-                stroke={ACCENT}
-                strokeWidth={2}
-                strokeDasharray="5 4"
-                // One dot per day reads well for short sprints; for long ones
-                // it overcrowds, so drop to a bare line past ~3 weeks.
-                dot={cycleDays <= 21 ? { r: 3, fill: ACCENT, strokeWidth: 0 } : false}
-                activeDot={{ r: 5 }}
-                isAnimationActive={false}
-              />
+              {seriesStatuses.map((s) => (
+                <Line
+                  key={s.slug}
+                  type="monotone"
+                  dataKey={s.slug}
+                  name={s.name}
+                  stroke={s.color}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                  isAnimationActive={false}
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>

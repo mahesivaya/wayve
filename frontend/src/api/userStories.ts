@@ -17,7 +17,10 @@ export const createUserStoryApi = async (payload: SaveTaskPayload) =>
     body: JSON.stringify(payload),
   });
 
-export const updateUserStoryApi = async (id: number, payload: SaveTaskPayload) =>
+export const updateUserStoryApi = async (
+  id: number,
+  payload: SaveTaskPayload
+) =>
   apiFetchJson<Task>(`/api/user-stories/${id}`, {
     method: "PUT",
     body: JSON.stringify(payload),
@@ -25,4 +28,22 @@ export const updateUserStoryApi = async (id: number, payload: SaveTaskPayload) =
 
 export const deleteUserStoryApi = async (id: number) => {
   await apiFetch(`/api/user-stories/${id}`, { method: "DELETE" });
+};
+
+// Per-day, per-status story counts over [from, to] (both "YYYY-MM-DD"), for the
+// burnup trend lines. `counts` maps a status slug to the number of stories in
+// that status on that day. See the backend `user_story_status_history` handler.
+export type StatusHistoryDay = {
+  date: string;
+  counts: Record<string, number>;
+};
+
+export const getUserStoryStatusHistory = async (
+  from: string,
+  to: string
+): Promise<StatusHistoryDay[]> => {
+  const data = await apiFetchJson<{ days: StatusHistoryDay[] }>(
+    `/api/user-stories/status-history?from=${from}&to=${to}`
+  );
+  return data.days;
 };
