@@ -26,6 +26,7 @@ import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import { useChatUnreadCount } from "../chat/useChatUnreadCount";
 import { useTicketsOpenCount } from "../tickets/useTicketsOpenCount";
+import { useUserStoriesCount } from "../userstories/useUserStoriesCount";
 import StorageLimitBanner from "./StorageLimitBanner";
 import { SplitPaneContext } from "./SplitPaneContext";
 import { SplitControlContext, type SplitTarget } from "./SplitControlContext";
@@ -243,6 +244,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const emailsUnreadCount = useEmailsUnreadCount(Boolean(user));
   const chatUnreadCount = useChatUnreadCount(Boolean(user));
   const ticketsOpenCount = useTicketsOpenCount(Boolean(user));
+  const userStoriesCount = useUserStoriesCount(Boolean(user));
 
   // Activity telemetry: a page view per route change and a click on every
   // button/link. Fire-and-forget; surfaced per-user on the User Audit page.
@@ -1265,12 +1267,20 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <Link
             to="/user-stories"
             title="User Stories"
-            className={`sidebar-project-label${
+            className={`sidebar-project-label sidebar-project-label--badged${
               location.pathname === "/user-stories" ? " active" : ""
             }`}
             onClick={() => setNavOpen(false)}
           >
-            📖 User Stories
+            <span>📖 User Stories</span>
+            {userStoriesCount > 0 && (
+              <span
+                className="sidebar-badge"
+                aria-label={`${userStoriesCount} stories`}
+              >
+                {userStoriesCount}
+              </span>
+            )}
           </Link>
           <Link
             to="/tickets"

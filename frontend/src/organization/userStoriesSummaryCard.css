@@ -66,6 +66,13 @@
   width: 100%;
 }
 
+/* The "Today" reference-line label sits above the plot area; the chart's small
+   top margin means the SVG would otherwise clip it at its top edge. Let the
+   surface paint into the gap above instead so the label stays visible. */
+.us-summary-chart .recharts-surface {
+  overflow: visible;
+}
+
 .us-summary-empty {
   margin: 4px 0 2px;
   font-size: 13px;
