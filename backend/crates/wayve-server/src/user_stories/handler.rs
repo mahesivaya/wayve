@@ -16,6 +16,7 @@ use crate::prelude::*;
 use crate::tasks::statuses::{self, StatusOwner};
 use actix_web::{delete, put};
 use sqlx::Row;
+use std::collections::HashMap;
 use tracing::instrument;
 use wayve_security::jwt::get_user_id_from_request;
 
@@ -24,6 +25,33 @@ fn owner_ids(owner: StatusOwner) -> (Option<i32>, Option<i32>) {
     match owner {
         StatusOwner::Organization(id) => (Some(id), None),
         StatusOwner::User(id) => (None, Some(id)),
+    }
+}
+
+/// Appends a status-history event (the burnup trend lines replay these). Best
+/// effort: a failure here must not fail the story write, so it logs and moves on.
+/// The owner columns are denormalised so the history query scopes without a join.
+async fn record_status_event(pool: &PgPool, owner: StatusOwner, story_id: i32, slug: &str) {
+    let (org_id, uid) = owner_ids(owner);
+    let category = statuses::category_of(pool, owner, slug)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "backlog".to_string());
+    if let Err(e) = sqlx::query(
+        "INSERT INTO user_story_status_events
+             (user_story_id, organization_id, user_id, to_status, to_category)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(story_id)
+    .bind(org_id)
+    .bind(uid)
+    .bind(slug)
+    .bind(&category)
+    .execute(pool)
+    .await
+    {
+        tracing::warn!(target: "db", story_id, error = ?e, "failed to record user-story status event");
     }
 }
 
@@ -152,6 +180,8 @@ pub async fn create_user_story(
     .await?;
 
     let story = story_from_row(row);
+    // First history event: the status the story is born in.
+    record_status_event(pool.get_ref(), owner, story.id, &status).await;
     crate::audit::record_action(
         pool.get_ref(),
         &req,
@@ -196,6 +226,20 @@ pub async fn update_user_story(
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
 
+    // Read the current status before the write so we only record a history event
+    // when it actually changes. Owner-scoped, so it also confirms the row exists.
+    let old_status: Option<String> = sqlx::query_scalar(
+        "SELECT status FROM user_stories
+          WHERE id = $1
+            AND (($2::INTEGER IS NOT NULL AND organization_id = $2)
+              OR ($3::INTEGER IS NOT NULL AND user_id = $3))",
+    )
+    .bind(id)
+    .bind(org_id)
+    .bind(uid)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
     // The owner-scoped UPDATE 404s on a row outside this owner's scope, so an id
     // belonging to another org/user never leaks.
     let row = sqlx::query(&format!(
@@ -224,6 +268,11 @@ pub async fn update_user_story(
     .ok_or(AppError::NotFound("user story"))?;
 
     let story = story_from_row(row);
+    // Only a real status transition adds a history event; a rename/reprioritise
+    // that leaves status untouched does not.
+    if old_status.as_deref() != Some(status.as_str()) {
+        record_status_event(pool.get_ref(), owner, id, &status).await;
+    }
     crate::audit::record_action(
         pool.get_ref(),
         &req,
@@ -243,6 +292,106 @@ pub async fn update_user_story(
     .await;
 
     Ok(HttpResponse::Ok().json(story))
+}
+
+#[derive(Deserialize)]
+pub struct HistoryQuery {
+    /// Inclusive window bounds, "YYYY-MM-DD".
+    from: String,
+    to: String,
+}
+
+/// Per-day, per-status story counts over `[from, to]`, for the burnup trend
+/// lines. Reconstructed by replaying `user_story_status_events`: a story's
+/// status on day D is the `to_status` of its latest event at end-of-day D; a
+/// story with no event by then didn't exist yet and isn't counted. Response:
+/// `{ "days": [{ "date": "YYYY-MM-DD", "counts": { "<slug>": n, ... } }, ...] }`.
+#[get("/user-stories/status-history")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn user_story_status_history(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<HistoryQuery>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
+    let (org_id, uid) = owner_ids(owner);
+
+    let from = NaiveDate::parse_from_str(&query.from, "%Y-%m-%d")
+        .map_err(|_| AppError::bad_request("Invalid `from` date (expected YYYY-MM-DD)"))?;
+    let to = NaiveDate::parse_from_str(&query.to, "%Y-%m-%d")
+        .map_err(|_| AppError::bad_request("Invalid `to` date (expected YYYY-MM-DD)"))?;
+    if to < from {
+        return Err(AppError::bad_request("`to` must not be before `from`"));
+    }
+    if (to - from).num_days() > 120 {
+        return Err(AppError::bad_request("Range too large (max 120 days)"));
+    }
+
+    // All events up to end-of-`to`, oldest first per story, so each story's
+    // timeline can be swept in one pass across the day range.
+    let end_exclusive = to.succ_opt().unwrap_or(to);
+    let rows = sqlx::query(
+        "SELECT user_story_id, to_status, changed_at
+           FROM user_story_status_events
+          WHERE (($1::INTEGER IS NOT NULL AND organization_id = $1)
+             OR ($2::INTEGER IS NOT NULL AND user_id = $2))
+            AND changed_at < $3
+          ORDER BY user_story_id ASC, changed_at ASC, id ASC",
+    )
+    .bind(org_id)
+    .bind(uid)
+    .bind(NaiveDateTime::new(end_exclusive, NaiveTime::MIN))
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    // Group each story's (changed_at, status) timeline.
+    let mut by_story: HashMap<i32, Vec<(NaiveDateTime, String)>> = HashMap::new();
+    for row in rows {
+        let sid: i32 = row.get("user_story_id");
+        let at: NaiveDateTime = row.get("changed_at");
+        let slug: String = row.get("to_status");
+        by_story.entry(sid).or_default().push((at, slug));
+    }
+
+    let mut days = Vec::new();
+    let mut cursor = from;
+    while cursor <= to {
+        days.push(cursor);
+        match cursor.succ_opt() {
+            Some(next) => cursor = next,
+            None => break,
+        }
+    }
+
+    let mut counts: Vec<HashMap<String, i64>> = vec![HashMap::new(); days.len()];
+    for events in by_story.values() {
+        let mut j = 0;
+        let mut current: Option<&str> = None;
+        for (di, day) in days.iter().enumerate() {
+            let day_end = NaiveDateTime::new(day.succ_opt().unwrap_or(*day), NaiveTime::MIN);
+            while j < events.len() && events[j].0 < day_end {
+                current = Some(events[j].1.as_str());
+                j += 1;
+            }
+            if let Some(slug) = current {
+                *counts[di].entry(slug.to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+
+    let days_json: Vec<Value> = days
+        .iter()
+        .zip(counts.iter())
+        .map(|(day, day_counts)| {
+            serde_json::json!({
+                "date": day.format("%Y-%m-%d").to_string(),
+                "counts": day_counts,
+            })
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "days": days_json })))
 }
 
 #[delete("/user-stories/{id}")]

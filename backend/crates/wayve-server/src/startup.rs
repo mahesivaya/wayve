@@ -300,6 +300,35 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE organizations DROP CONSTRAINT IF EXISTS organizations_sprint_total_days_check",
         "ALTER TABLE organizations ADD CONSTRAINT organizations_sprint_total_days_check \
          CHECK (sprint_total_days >= 1 AND sprint_total_days <= 90)",
+        // User-stories status-change history for the burnup trend lines. The
+        // history endpoint reads this, so an existing deployment needs the table
+        // even though init.sql only runs on a fresh volume.
+        "CREATE TABLE IF NOT EXISTS user_story_status_events ( \
+            id SERIAL PRIMARY KEY, \
+            user_story_id INTEGER NOT NULL REFERENCES user_stories(id) ON DELETE CASCADE, \
+            organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE, \
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, \
+            to_status TEXT NOT NULL, \
+            to_category TEXT NOT NULL, \
+            changed_at TIMESTAMP NOT NULL DEFAULT NOW() \
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_usse_org ON user_story_status_events(organization_id, changed_at)",
+        "CREATE INDEX IF NOT EXISTS idx_usse_user ON user_story_status_events(user_id, changed_at)",
+        // Day-0 backfill: seed one baseline event per existing story (its
+        // created_at → its current status) so the trend lines have a starting
+        // point. Idempotent via NOT EXISTS, so it's a no-op on every later boot.
+        // Category comes from the owner's task_statuses; unknown slugs fall back
+        // to 'backlog'. True intermediate history only accrues from now on.
+        "INSERT INTO user_story_status_events \
+             (user_story_id, organization_id, user_id, to_status, to_category, changed_at) \
+         SELECT us.id, us.organization_id, us.user_id, us.status, \
+                COALESCE(ts.category, 'backlog'), us.created_at \
+           FROM user_stories us \
+           LEFT JOIN task_statuses ts ON ts.slug = us.status \
+                AND ((us.organization_id IS NOT NULL AND ts.organization_id = us.organization_id) \
+                  OR (us.user_id IS NOT NULL AND ts.user_id = us.user_id)) \
+          WHERE NOT EXISTS ( \
+                SELECT 1 FROM user_story_status_events e WHERE e.user_story_id = us.id)",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.
