@@ -83,48 +83,52 @@ export default function ProfileMenu({
 
           <button
             className="profile-dropdown-item"
+            title="My Profile"
             onClick={() => {
               setMenuOpen(false);
               void navigate("/profile");
             }}
           >
             <span className="profile-dropdown-icon">👤</span>
-            My Profile
+            <span className="profile-dropdown-label">My Profile</span>
           </button>
 
           <button
             className="profile-dropdown-item"
+            title="Settings & Privacy"
             onClick={() => {
               setMenuOpen(false);
               void navigate("/settings");
             }}
           >
             <span className="profile-dropdown-icon">⚙️</span>
-            Settings & Privacy
+            <span className="profile-dropdown-label">Settings & Privacy</span>
           </button>
 
           {canViewIntegrations(user) && (
             <button
               className="profile-dropdown-item"
+              title="Integrations"
               onClick={() => {
                 setMenuOpen(false);
                 void navigate("/integrations");
               }}
             >
               <span className="profile-dropdown-icon">🔌</span>
-              Integrations
+              <span className="profile-dropdown-label">Integrations</span>
             </button>
           )}
 
           <button
             className="profile-dropdown-item"
+            title="Appearance"
             onClick={() => {
               setMenuOpen(false);
               void navigate("/appearance");
             }}
           >
             <span className="profile-dropdown-icon">🎨</span>
-            Appearance
+            <span className="profile-dropdown-label">Appearance</span>
           </button>
 
           {showSwitcher && (
@@ -133,6 +137,9 @@ export default function ProfileMenu({
               <button
                 className="profile-dropdown-item"
                 disabled={switching}
+                title={
+                  inAdminMode ? "Exit admin mode" : "Switch to admin mode"
+                }
                 onClick={() =>
                   void handleSwitch(inAdminMode ? "normal" : "admin")
                 }
@@ -140,11 +147,13 @@ export default function ProfileMenu({
                 <span className="profile-dropdown-icon">
                   {inAdminMode ? "🚪" : "🛡️"}
                 </span>
-                {switching
-                  ? "Switching…"
-                  : inAdminMode
-                    ? "Exit admin mode"
-                    : "Switch to admin mode"}
+                <span className="profile-dropdown-label">
+                  {switching
+                    ? "Switching…"
+                    : inAdminMode
+                      ? "Exit admin mode"
+                      : "Switch to admin mode"}
+                </span>
               </button>
             </>
           )}
@@ -153,6 +162,7 @@ export default function ProfileMenu({
 
           <button
             className="profile-dropdown-item profile-dropdown-logout"
+            title="Log out"
             onClick={() => {
               setMenuOpen(false);
               // logout() owns the redirect. Navigating here instead would bounce
@@ -161,7 +171,7 @@ export default function ProfileMenu({
             }}
           >
             <span className="profile-dropdown-icon">⏻</span>
-            Log out
+            <span className="profile-dropdown-label">Log out</span>
           </button>
         </div>
       )}

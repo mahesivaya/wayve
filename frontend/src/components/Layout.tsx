@@ -1468,6 +1468,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </button>
       )}
 
+      {/* Elevated-session indicator, pinned in the top-right just before the
+          split control while a switchable owner is in admin mode. */}
+      {user.mode === "admin" && user.can_switch_admin && (
+        <span className="admin-mode-badge" title="You are in admin mode">
+          🛡️ Admin mode
+        </span>
+      )}
+
       {/* One split control in the top-right; the menu offers only the splits
           that can still be made. Hidden below 768px, where splits are too. */}
       {!isNarrow && (
@@ -1710,19 +1718,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {sectionDefs.map(renderSection)}
 
               <div className="sidebar-spacer" />
-
-              {/* Admin-mode indicator, pinned just above the profile control at
-              the sidebar bottom (moved here from the header). */}
-              {user.mode === "admin" && user.can_switch_admin && (
-                <div className="sidebar-section sidebar-admin-mode">
-                  <span
-                    className="admin-mode-badge"
-                    data-tooltip="You are in admin mode"
-                  >
-                    🛡️ Admin mode
-                  </span>
-                </div>
-              )}
 
               {/* Sits below the flex spacer so it stays pinned to the bottom
               regardless of how many nav groups render above it. */}
