@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { BellIcon, ReminderIcon } from "../icons";
 import { useRemindersCount } from "./useRemindersCount";
+import { useSplitControl } from "./SplitControlContext";
 import "./notificationBell.css";
 
 type NotificationBellProps = {
@@ -17,6 +18,7 @@ export default function NotificationBell({
 }: NotificationBellProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { openInFocusedPane } = useSplitControl();
   const total = useRemindersCount(Boolean(user));
 
   if (!user) return null;
@@ -28,7 +30,12 @@ export default function NotificationBell({
       </span>
     ) : null;
 
-  const open = () => void navigate("/reminders");
+  // Inside a split, open Reminders in the focused pane; otherwise (or outside a
+  // Layout provider, e.g. tests) fall back to normal navigation.
+  const open = () =>
+    openInFocusedPane
+      ? openInFocusedPane("reminders")
+      : void navigate("/reminders");
 
   if (variant === "sidebar") {
     return (

@@ -13,6 +13,7 @@ export type AppKey =
   | "aichat"
   | "github"
   | "about"
+  | "reminders"
   | "test_access";
 
 const HomeView = lazy(() => import("../home/Home"));
@@ -25,6 +26,7 @@ const TasksView = lazy(() => import("../tasks/Tasks"));
 const AIChatView = lazy(() => import("../aichat/AIChat"));
 const GitHubRepoView = lazy(() => import("../github/GitHubRepo"));
 const AboutView = lazy(() => import("../about/About"));
+const RemindersView = lazy(() => import("../reminders/Reminders"));
 
 // Single source of truth for the split-pane apps and their top-level routes:
 // App.tsx auto-renders a route per entry, so a new sidebar app needs only one
@@ -82,4 +84,15 @@ export const SPLIT_APPS: SplitApp[] = [
     autoRoute: false,
   },
   { key: "about", label: "About", path: "/about", icon: "ⓘ", Comp: AboutView },
+  {
+    key: "reminders",
+    label: "Reminders",
+    path: "/reminders",
+    icon: "⏰",
+    // App.tsx already declares /reminders; opt out of the generated route so
+    // it isn't defined twice. The entry exists so the Reminders bell can open
+    // into the focused split pane (resolved via SPLIT_APPS like any app).
+    autoRoute: false,
+    Comp: RemindersView,
+  },
 ];

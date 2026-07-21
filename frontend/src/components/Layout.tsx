@@ -335,11 +335,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     setPaneTarget(null);
   }, []);
 
-  const splitControl = useMemo(
-    () => ({ openApp, target: paneTarget, closeApp }),
-    [openApp, paneTarget, closeApp]
-  );
-
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -815,6 +810,36 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // open": the left pane then renders its toolbar/halves instead of a plain page.
   const splitOpen = hasSecondPane || subSplit.left;
 
+  // Open an app in whichever pane/half currently has focus, mirroring a sidebar
+  // item's click. Controls that aren't sidebar <Link>s (e.g. the Reminders bell)
+  // call this so they honor the focused pane instead of always routing the left
+  // column. Falls back to navigation when no split is open or the left
+  // (route-driven) pane is focused.
+  const openInFocusedPane = useCallback(
+    (app: AppKey) => {
+      const path = SPLIT_APPS.find((a) => a.key === app)?.path ?? "/";
+      if (!splitOpen) {
+        void navigate(path);
+        return;
+      }
+      if (focusHalf === "bottom" && subSplit[splitTarget]) {
+        setSubBottomView((v) => ({ ...v, [splitTarget]: app }));
+      } else if (splitTarget === "center") {
+        setMiddleView(app);
+      } else if (splitTarget === "right") {
+        setRightView(app);
+      } else {
+        void navigate(path); // left = the route-driven column
+      }
+    },
+    [splitOpen, focusHalf, subSplit, splitTarget, navigate]
+  );
+
+  const splitControl = useMemo(
+    () => ({ openApp, target: paneTarget, closeApp, openInFocusedPane }),
+    [openApp, paneTarget, closeApp, openInFocusedPane]
+  );
+
   // Home fills any newly opened split pane (header split + sub-split's new half)
   // instead of duplicating the current app.
   const homeApp = SPLIT_APPS.find((a) => a.key === "home") ?? null;
@@ -894,7 +919,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         <div
           className={`pane-half ${focused ? "active-target" : ""}`.trim()}
           style={{ flexGrow: grow }}
-          onMouseDown={() => focusPane(key, whichHalf)}
+          // Capture phase + focus: any interaction in the half re-targets it,
+          // even children that stop propagation or take keyboard focus.
+          onMouseDownCapture={() => focusPane(key, whichHalf)}
+          onFocusCapture={() => focusPane(key, whichHalf)}
         >
           <div className="split-pane-toolbar">
             <span className="split-pane-title" {...titleDragProps(key, whichHalf)}>
@@ -1780,9 +1808,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             <div className={`content`} ref={contentRef}>
               <div
                 className={`split-pane left ${splitOpen && splitTarget === "left" && !subSplit.left ? "active-target" : ""}`}
-                onMouseDown={() => {
-                  // When sub-split, the half's own handler owns focus; don't
-                  // let the pane div override it back to the top half.
+                // Capture phase + focus so ANY interaction inside the pane
+                // (a child that stops mousedown propagation, or a keyboard
+                // focus) re-targets it — not just a bare click on the div.
+                // When sub-split, the half's own handler owns focus; don't
+                // let the pane div override it back to the top half.
+                onMouseDownCapture={() => {
+                  if (!subSplit.left) focusPane("left");
+                }}
+                onFocusCapture={() => {
                   if (!subSplit.left) focusPane("left");
                 }}
                 style={splitOpen ? { flexGrow: paneWeights.left } : undefined}
@@ -1842,7 +1876,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {middleView && (
                 <div
                   className={`split-pane center ${splitTarget === "center" && !subSplit.center ? "active-target" : ""}`}
-                  onMouseDown={() => {
+                  onMouseDownCapture={() => {
+                    if (!subSplit.center) focusPane("center");
+                  }}
+                  onFocusCapture={() => {
                     if (!subSplit.center) focusPane("center");
                   }}
                   style={{ flexGrow: paneWeights.center }}
@@ -1890,7 +1927,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {rightView && (
                 <div
                   className={`split-pane right ${splitTarget === "right" && !subSplit.right ? "active-target" : ""}`}
-                  onMouseDown={() => {
+                  onMouseDownCapture={() => {
+                    if (!subSplit.right) focusPane("right");
+                  }}
+                  onFocusCapture={() => {
                     if (!subSplit.right) focusPane("right");
                   }}
                   style={{ flexGrow: paneWeights.right }}

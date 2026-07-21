@@ -13,12 +13,17 @@ export type SplitControlValue = {
   // The focus target the pane app should honor on mount.
   target: SplitTarget | null;
   closeApp: (() => void) | null;
+  // Open an app in whichever pane/half currently has focus (or navigate when
+  // no split is open). Lets non-Link controls (e.g. the Reminders bell) honor
+  // the focused pane instead of always routing the left column.
+  openInFocusedPane: ((app: AppKey) => void) | null;
 };
 
 export const SplitControlContext = createContext<SplitControlValue>({
   openApp: null,
   target: null,
   closeApp: null,
+  openInFocusedPane: null,
 });
 
 export const useSplitControl = () => useContext(SplitControlContext);
