@@ -93,6 +93,30 @@ describe("applyPaneDrop — dragging an app from the sidebar", () => {
     expect(canOpenNewColumn(base({ right: "tasks" }))).toBe(false);
   });
 
+  it("replaces the half instead of splitting a pane that's already split", () => {
+    // The left column is already two halves (emails over tasks). A top/bottom
+    // drop can't split it further, so it replaces the half under the cursor.
+    const a = base({
+      subSplit: { left: true, center: false, right: false },
+      subBottomView: { left: "tasks", center: "home", right: "home" },
+    });
+    const bottom = applyPaneDrop(a, "left", "bottom", "bottom", {
+      kind: "app",
+      app: "chat",
+    });
+    expect(bottom?.next.subBottomView.left).toBe("chat"); // bottom half replaced
+    expect(bottom?.next.left).toBe("emails"); // top half untouched
+    expect(bottom?.next.subSplit.left).toBe(true); // still split, not un-split
+
+    const top = applyPaneDrop(a, "left", "top", "top", {
+      kind: "app",
+      app: "chat",
+    });
+    expect(top?.next.left).toBe("chat"); // top half replaced
+    expect(top?.next.subBottomView.left).toBe("tasks"); // bottom untouched
+    expect(top?.navigateTo).toBe("chat");
+  });
+
   it("stacks into halves, keeping the existing app in the other half", () => {
     const bottom = applyPaneDrop(base(), "left", "top", "bottom", {
       kind: "app",

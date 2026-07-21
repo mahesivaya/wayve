@@ -22,7 +22,6 @@ import ReminderPopups from "./ReminderPopups";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
 import NotificationBell from "./NotificationBell";
-import PaneSplitMenu from "./PaneSplitMenu";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
 import { useChatUnreadCount } from "../chat/useChatUnreadCount";
@@ -33,6 +32,7 @@ import ResizeHandle from "./ResizeHandle";
 import { useResizableWidth } from "./useResizableWidth";
 import { useIsNarrow } from "./useIsNarrow";
 import PaneDropOverlay from "./PaneDropOverlay";
+import SplitMenu from "./SplitMenu";
 import {
   setPaneDragData,
   type DropZone,
@@ -573,17 +573,36 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       // ignore
     }
   }, [subBottomView]);
-  const toggleSubSplit = (key: PaneKey) => {
-    // Opening the split always starts the new (bottom) half on Home.
-    if (!subSplit[key]) {
-      setSubBottomView((v) => ({ ...v, [key]: "home" }));
-    }
-    setSubSplit((s) => ({ ...s, [key]: !s[key] }));
-  };
+  // The two split gestures, shared by the header split menu and the keyboard
+  // shortcuts so there is one definition of what each does.
+
+  // Horizontal: open the second column. Capped at two, and deliberately not a
+  // toggle — silently closing a pane would discard whatever was in it; its ✕ is
+  // the explicit way out. No-op once the second column exists.
+  const splitHorizontally = useCallback(() => {
+    setRightView((cur) => {
+      if (cur !== null) return cur;
+      focusPane("right");
+      return "home";
+    });
+  }, [focusPane]);
+
+  // Vertical: stack the focused pane into two halves. A toggle, matching the
+  // pane toolbar's split button; a new half always starts on Home.
+  const toggleVerticalSplit = useCallback(
+    (pane: PaneFocus) => {
+      setSubSplit((s) => {
+        if (!s[pane]) setSubBottomView((v) => ({ ...v, [pane]: "home" }));
+        return { ...s, [pane]: !s[pane] };
+      });
+      focusPane(pane, "top");
+    },
+    [focusPane]
+  );
 
   // Keyboard equivalents of the drag gestures. Dragging is not keyboard
   // accessible, so without these there is no way to reach a split without a
-  // mouse — and until one exists there is no pane toolbar to click either.
+  // mouse.
   //
   //   Cmd/Ctrl + \          horizontal split (open the second column)
   //   Cmd/Ctrl + Shift + \  vertical split (stack the focused pane)
@@ -606,30 +625,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         return;
       }
       e.preventDefault();
-
-      if (e.shiftKey) {
-        // Vertical: a toggle, matching the pane toolbar's split button. A new
-        // half always starts on Home, as it does everywhere else.
-        if (!subSplit[splitTarget]) {
-          setSubBottomView((v) => ({ ...v, [splitTarget]: "home" }));
-        }
-        setSubSplit((s) => ({ ...s, [splitTarget]: !s[splitTarget] }));
-        focusPane(splitTarget, "top");
-        return;
-      }
-
-      // Horizontal: open the second column. Capped at two, and deliberately
-      // not a toggle — silently closing a pane would discard whatever was in
-      // it; its ✕ is the explicit way out.
-      if (rightView === null) {
-        setRightView("home");
-        focusPane("right");
-      }
+      if (e.shiftKey) toggleVerticalSplit(splitTarget);
+      else splitHorizontally();
     };
 
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [isNarrow, splitTarget, subSplit, rightView, focusPane]);
+  }, [isNarrow, splitTarget, splitHorizontally, toggleVerticalSplit]);
 
   // Resolves a drag-and-drop onto a pane. The rules live in `applyPaneDrop`
   // (pure and unit-tested); this only projects Layout's state into the shape it
@@ -689,6 +691,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     paneDrag ? (
       <PaneDropOverlay
         canOpenNewColumn={columnsAvailable}
+        // A pane already split into two halves can't split again.
+        canSplitVertically={!subSplit[target]}
         onDrop={(zone, payload) => handlePaneDrop(target, half, zone, payload)}
       />
     ) : null;
@@ -873,7 +877,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     if (!subSplit[key]) {
       return bodyOf(node);
     }
-    const removeSplit = () => setSubSplit((s) => ({ ...s, [key]: false }));
     const bottomApp =
       SPLIT_APPS.find((a) => a.key === subBottomView[key]) ?? homeApp;
     const BottomComp = bottomApp?.Comp ?? HomeComp;
@@ -897,7 +900,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               {title}
             </span>
             <div className="split-pane-tools">
-              <PaneSplitMenu active onToggle={removeSplit} />
               <button
                 className="split-close-btn"
                 onClick={() => closeHalf(key, whichHalf)}
@@ -1466,6 +1468,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </button>
       )}
 
+      {/* One split control in the top-right; the menu offers only the splits
+          that can still be made. Hidden below 768px, where splits are too. */}
+      {!isNarrow && (
+        <SplitMenu
+          canSplitHorizontal={rightView === null}
+          canSplitVertical={!subSplit[splitTarget]}
+          onSplitHorizontal={splitHorizontally}
+          onSplitVertical={() => toggleVerticalSplit(splitTarget)}
+        />
+      )}
     </>
   );
 
@@ -1790,10 +1802,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                           {leftLabel}
                         </span>
                         <div className="split-pane-tools">
-                          <PaneSplitMenu
-                            active={subSplit.left}
-                            onToggle={() => toggleSubSplit("left")}
-                          />
                           <button
                             className="split-close-btn"
                             onClick={closeLeftPane}
@@ -1852,10 +1860,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                         {middleLabel}
                       </span>
                       <div className="split-pane-tools">
-                        <PaneSplitMenu
-                          active={subSplit.center}
-                          onToggle={() => toggleSubSplit("center")}
-                        />
                         <button
                           className="split-close-btn"
                           onClick={() => {
@@ -1904,10 +1908,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                         {rightLabel}
                       </span>
                       <div className="split-pane-tools">
-                        <PaneSplitMenu
-                          active={subSplit.right}
-                          onToggle={() => toggleSubSplit("right")}
-                        />
                         <button
                           className="split-close-btn"
                           onClick={() => {

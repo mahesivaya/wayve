@@ -139,12 +139,29 @@ export function applyPaneDrop(
   const sourceHalf: PaneHalf =
     payload.kind === "pane" ? (payload.half ?? "top") : "top";
 
+  // A split that can't actually be created degrades to a replace, so the two
+  // axes stay symmetric: a pane already split into two halves can't split
+  // vertically again, and with both columns open nothing can split
+  // horizontally. In both cases the drop replaces the pane under the cursor
+  // instead of silently doing something else. `effectiveZone` is what the drop
+  // really does; the overlay previews the same fallback (see canSplitVertically
+  // / canOpenNewColumn on PaneDropOverlay).
+  let effectiveZone: DropZone = zone;
+  if ((zone === "top" || zone === "bottom") && current.subSplit[target]) {
+    effectiveZone = "center";
+  } else if (
+    (zone === "left" || zone === "right") &&
+    !canOpenNewColumn(current)
+  ) {
+    effectiveZone = "center";
+  }
+
   // Dropping a pane onto itself changes nothing.
   if (
     payload.kind === "pane" &&
     payload.from === target &&
     sourceHalf === targetHalf &&
-    zone === "center"
+    effectiveZone === "center"
   ) {
     return null;
   }
@@ -165,59 +182,47 @@ export function applyPaneDrop(
     return { next, focus: { pane, half }, navigateTo };
   };
 
-  if (zone === "center") {
+  if (effectiveZone === "center") {
+    // Replace the pane under the cursor. For a pane drag this swaps: the
+    // displaced app takes the dragged pane's place — total by construction, so
+    // no column is ever left empty and "what fills the hole" never arises.
     const displaced = appAt(current, target, targetHalf);
     setAppAt(next, target, targetHalf, moving);
     if (isPaneDrag) {
-      // A centre drop always swaps: the displaced app takes the dragged pane's
-      // place. Total by construction, so no column is ever left empty and the
-      // "what fills the hole" question never arises.
       if (displaced) setAppAt(next, payload.from, sourceHalf, displaced);
       else clearSource(next, payload.from, sourceHalf);
     }
     return finish(target, targetHalf);
   }
 
-  if (zone === "top" || zone === "bottom") {
+  if (effectiveZone === "top" || effectiveZone === "bottom") {
+    // Reachable only when the target isn't already split (else it was
+    // normalised to "center" above), so this always creates the split.
     const existing = appAt(current, target, "top");
-    if (!current.subSplit[target] && existing) {
-      // Splitting for the first time: the column's current app keeps the half
-      // the drop didn't land on.
-      if (zone === "top") {
+    if (existing) {
+      // The column's current app keeps the half the drop didn't land on.
+      if (effectiveZone === "top") {
         setAppAt(next, target, "bottom", existing);
         setAppAt(next, target, "top", moving);
       } else {
         setAppAt(next, target, "bottom", moving);
       }
     } else {
-      setAppAt(next, target, zone === "top" ? "top" : "bottom", moving);
+      setAppAt(next, target, effectiveZone, moving);
       next.subSplit[target] = true;
     }
     if (isPaneDrag && !swapInsteadOfMove) {
       clearSource(next, payload.from, sourceHalf);
     }
-    return finish(target, zone === "top" ? "top" : "bottom");
+    return finish(target, effectiveZone);
   }
 
-  // zone === "left" | "right": a new column beside the target.
-  const free = firstFreeColumn(current);
-  if (free && !(isPaneDrag && payload.from === free)) {
-    setAppAt(next, free, "top", moving);
-    if (isPaneDrag && !swapInsteadOfMove) {
-      clearSource(next, payload.from, sourceHalf);
-    }
-    return finish(free, "top");
+  // effectiveZone is "left" | "right": open a new column. Reachable only when a
+  // column is free (else normalised to "center"), so firstFreeColumn is set.
+  const free = firstFreeColumn(current) ?? target;
+  setAppAt(next, free, "top", moving);
+  if (isPaneDrag && !swapInsteadOfMove) {
+    clearSource(next, payload.from, sourceHalf);
   }
-
-  // All three columns are in use, so there is no new column to open. Fall back
-  // to replacing the pane under the cursor — i.e. behave exactly like a centre
-  // drop on it. Replacing the *neighbour* would be surprising: you would be
-  // pointing at one pane and watch a different one change.
-  const displaced = appAt(current, target, targetHalf);
-  setAppAt(next, target, targetHalf, moving);
-  if (isPaneDrag) {
-    if (displaced) setAppAt(next, payload.from, sourceHalf, displaced);
-    else clearSource(next, payload.from, sourceHalf);
-  }
-  return finish(target, targetHalf);
+  return finish(free, "top");
 }

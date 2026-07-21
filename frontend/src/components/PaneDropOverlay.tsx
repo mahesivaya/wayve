@@ -16,20 +16,32 @@ import {
 export default function PaneDropOverlay({
   onDrop,
   canOpenNewColumn = true,
+  canSplitVertically = true,
 }: {
   onDrop: (zone: DropZone, payload: PaneDragPayload) => void;
   /**
-   * False once all three columns are in use. A left/right drop then replaces
-   * this pane instead of opening a column, so the preview must show the whole
-   * pane rather than a sliver promising a column that can't be created.
+   * False once both columns are in use. A left/right drop then replaces this
+   * pane instead of opening a column, so the preview shows the whole pane
+   * rather than a sliver promising a column that can't be created.
    */
   canOpenNewColumn?: boolean;
+  /**
+   * False when this pane is already split into two halves. A top/bottom drop
+   * then replaces the half instead of splitting again, so the preview shows the
+   * whole pane rather than promising a split that can't happen.
+   */
+  canSplitVertically?: boolean;
 }) {
   const [zone, setZone] = useState<DropZone | null>(null);
 
-  const isEdge = zone === "left" || zone === "right";
+  // Preview the fallback the reducer will actually apply (applyPaneDrop
+  // normalises the same two cases to a replace), so what you see is what lands.
+  const blockedHorizontally =
+    (zone === "left" || zone === "right") && !canOpenNewColumn;
+  const blockedVertically =
+    (zone === "top" || zone === "bottom") && !canSplitVertically;
   const shownZone: DropZone | null =
-    zone && isEdge && !canOpenNewColumn ? "center" : zone;
+    zone && (blockedHorizontally || blockedVertically) ? "center" : zone;
 
   const zoneFor = (e: DragEvent<HTMLDivElement>): DropZone => {
     const rect = e.currentTarget.getBoundingClientRect();
