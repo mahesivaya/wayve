@@ -16,6 +16,8 @@ import {
 } from "../api/repoAccess";
 import Avatar from "../components/Avatar";
 import { getApiBase } from "../config/env";
+import { CommitDiffBody, ChevronIcon } from "../github/commitDiff";
+import { useCommitDiffs } from "../github/commitDiffData";
 import "./projects.css";
 
 // Relative "time ago" for the Updated / commit rows (e.g. "3 days ago"),
@@ -93,6 +95,9 @@ export default function ProjectDetail() {
   const [summaryDraft, setSummaryDraft] = useState("");
   const [savingSummary, setSavingSummary] = useState(false);
   const [summaryError, setSummaryError] = useState("");
+  // Clicking a Recent activity row expands that commit's diff inline, reusing
+  // the Code Repo viewer's renderer instead of opening github.com.
+  const diffs = useCommitDiffs(owner, repoName);
 
   // Resolve the repo when we didn't get it via navigation state (direct URL
   // load / refresh). Fall back to a synthesized stub so the page still renders
@@ -379,23 +384,44 @@ export default function ProjectDetail() {
                   const msg = c.commit.message.split("\n")[0];
                   const who =
                     c.author?.login || c.commit.author?.name || "unknown";
+                  const isOpen = diffs.expandedShas.has(c.sha);
                   return (
                     <li key={c.sha} className="project-detail-activity-item">
-                      <a
-                        className="project-detail-activity-msg"
-                        href={c.html_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        data-tooltip={msg}
+                      <button
+                        type="button"
+                        className="project-detail-activity-toggle"
+                        onClick={() => diffs.toggle(c.sha)}
+                        aria-expanded={isOpen}
                       >
-                        {msg}
-                      </a>
-                      <span className="project-detail-activity-meta">
-                        {who}
-                        {c.commit.author?.date
-                          ? ` · ${timeAgo(c.commit.author.date)}`
-                          : ""}
-                      </span>
+                        <span
+                          className={`github-tree-toggle ${isOpen ? "open" : ""}`}
+                          aria-hidden="true"
+                        >
+                          <ChevronIcon />
+                        </span>
+                        <span className="project-detail-activity-text">
+                          <span
+                            className="project-detail-activity-msg"
+                            data-tooltip={msg}
+                          >
+                            {msg}
+                          </span>
+                          <span className="project-detail-activity-meta">
+                            {who}
+                            {c.commit.author?.date
+                              ? ` · ${timeAgo(c.commit.author.date)}`
+                              : ""}
+                          </span>
+                        </span>
+                        <code className="project-detail-activity-sha">
+                          {c.sha.slice(0, 7)}
+                        </code>
+                      </button>
+                      {isOpen && (
+                        <div className="project-detail-activity-diff github-commit-diff">
+                          <CommitDiffBody sha={c.sha} diffs={diffs} />
+                        </div>
+                      )}
                     </li>
                   );
                 })}
