@@ -918,15 +918,19 @@
   text-overflow: ellipsis;
 }
 
-/* Workspace sub-item that carries a count badge (e.g. Tickets). The base
-   `.sidebar-project-label` is block+ellipsis; switch to a flex row so the
-   badge sits on the right edge while the label keeps its ellipsis. */
-.sidebar-project-label--badged {
+/* Workspace sub-item that carries a count badge (e.g. Tickets, User Stories).
+   The base `.sidebar-subitems .sidebar-project-label` is block+ellipsis; switch
+   to a flex row so the label grows and the badge is pushed to the right edge
+   (like the inbox count) while the label keeps its ellipsis. The selectors are
+   scoped under `.sidebar-subitems` so they out-specify that block base — a bare
+   `.sidebar-project-label--badged` loses the specificity battle and the row
+   stays `display: block`, dropping the badge inline next to the text. */
+.sidebar-subitems .sidebar-project-label--badged {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.sidebar-project-label--badged > span:first-child {
+.sidebar-subitems .sidebar-project-label--badged > span:first-child {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
