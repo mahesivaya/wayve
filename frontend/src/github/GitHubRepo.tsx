@@ -670,7 +670,16 @@ function GitHubRepoViewer({
   // count (all states) from the `rel="last"` page of a per_page=1 Link header.
   const [pullsTotal, setPullsTotal] = useState<number | null>(null);
   // Open and closed PRs are fetched together (state=all) and filtered here.
-  const [pullFilter, setPullFilter] = useState<"open" | "closed">("open");
+  // Persisted so a refresh keeps you on the same tab (Open vs Closed).
+  const [pullFilter, setPullFilter] = useState<"open" | "closed">(() => {
+    try {
+      const raw = localStorage.getItem("rwayve.github.pullFilter");
+      if (raw === "open" || raw === "closed") return raw;
+    } catch {
+      // ignore
+    }
+    return "open";
+  });
   // Null means the list view; a number is the opened PR. Each opened PR's
   // bundle is cached by number so re-opening is instant.
   const [selectedPull, setSelectedPull] = useState<number | null>(null);
@@ -802,6 +811,14 @@ function GitHubRepoViewer({
       // ignore
     }
   }, [activeSection]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("rwayve.github.pullFilter", pullFilter);
+    } catch {
+      // ignore
+    }
+  }, [pullFilter]);
 
   // Resizable split between the file tree and the preview panel.
   const { width: filesPaneWidth, startResize: handleFilesPaneResize } =
