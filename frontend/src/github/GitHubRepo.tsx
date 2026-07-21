@@ -2238,7 +2238,7 @@ function GitHubRepoViewer({
                               </span>
                             </div>
 
-                            <dl className="github-pr-meta">
+                            <dl className="github-pr-detail-meta">
                               <div className="github-pr-meta-row">
                                 <dt>Status</dt>
                                 <dd>

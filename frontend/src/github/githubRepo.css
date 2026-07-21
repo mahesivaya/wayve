@@ -2328,7 +2328,7 @@
 }
 
 /* Merged header — metadata definition list (Status / Reviewers / …) */
-.github-pr-meta {
+.github-pr-detail-meta {
   margin: 2px 0;
   padding: 12px 0;
   display: flex;
