@@ -1,4 +1,5 @@
 pub mod handler;
+pub mod triage;
 
 use actix_web::web;
 

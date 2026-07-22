@@ -74,6 +74,7 @@ fn story_from_row(row: sqlx::postgres::PgRow) -> Task {
         jira_base: None,
         gitlab_issue_iid: None,
         gitlab_web_url: None,
+        badge_kind: None,
     }
 }
 

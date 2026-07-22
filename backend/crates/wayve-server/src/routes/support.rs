@@ -126,20 +126,36 @@ pub async fn create_ticket(
     // action it there (materialised copy; this support_tickets row stays the
     // report-of-record). Best-effort: a mirror failure must not fail the report.
     // Idempotent via the unique support_ticket_id, matching the startup backfill.
-    if let Err(e) = sqlx::query(
+    match sqlx::query_scalar::<_, i32>(
         "INSERT INTO workspace_tickets \
              (user_id, name, description, priority, status, assigned_by, assignee, support_ticket_id) \
          SELECT st.user_id, st.subject, st.description, 3, 'to_do', COALESCE(u.email, ''), '', st.id \
            FROM support_tickets st \
            LEFT JOIN users u ON u.id = st.user_id \
           WHERE st.id = $1 \
-         ON CONFLICT (support_ticket_id) DO NOTHING",
+         ON CONFLICT (support_ticket_id) DO NOTHING \
+         RETURNING id",
     )
     .bind(id)
-    .execute(pool.get_ref())
+    .fetch_optional(pool.get_ref())
     .await
     {
-        warn!(target: "http", ticket_id = id, error = %e, "failed to mirror support ticket onto tickets board");
+        // New board ticket — triage its priority from the report text in the
+        // background (Claude in prod). The reporter's user_id resolves the AI
+        // config; personal reporters fall through to the platform/env default.
+        Ok(Some(ticket_id)) => {
+            crate::tickets::triage::spawn(
+                pool.get_ref().clone(),
+                ticket_id,
+                user_id,
+                subject.to_string(),
+                description.to_string(),
+            );
+        }
+        Ok(None) => {} // already mirrored (conflict) — nothing to do
+        Err(e) => {
+            warn!(target: "http", ticket_id = id, error = %e, "failed to mirror support ticket onto tickets board");
+        }
     }
 
     Ok(HttpResponse::Created().json(serde_json::json!({ "id": id })))

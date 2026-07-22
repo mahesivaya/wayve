@@ -317,6 +317,30 @@ function TaskKeyBadge({
   );
 }
 
+// Emoji + label per support-ticket category, driving the coloured card pill for
+// tickets materialised from a reported bug (Task.badge_kind). Unknown/absent
+// kinds render nothing, so tasks and user stories are unaffected.
+const BADGE_KINDS: Record<string, { icon: string; label: string }> = {
+  bug: { icon: "🐛", label: "Bug" },
+  feature: { icon: "✨", label: "Feature" },
+  billing: { icon: "💳", label: "Billing" },
+  account: { icon: "👤", label: "Account" },
+  other: { icon: "📌", label: "Report" },
+};
+
+function TaskBadge({ kind }: { kind?: string | null }) {
+  if (!kind) return null;
+  const meta = BADGE_KINDS[kind] ?? { icon: "📌", label: kind };
+  return (
+    <span
+      className={`ticket-kind-badge ticket-kind-${kind}`}
+      data-tooltip="Reported by a user"
+    >
+      {meta.icon} {meta.label}
+    </span>
+  );
+}
+
 // This component powers both the personal Tasks board (`/tasks`) and the
 // org-shared Workspace "User Stories" board (`/user-stories`). Everything that
 // differs between the two — the CRUD endpoints, the visible labels, the
@@ -1723,6 +1747,7 @@ export default function Tasks({
                                 onCopy={() => copyTaskLink(task)}
                                 label={task.name}
                               />
+                              <TaskBadge kind={task.badge_kind} />
                             </div>
                             <button
                               type="button"
@@ -1824,6 +1849,7 @@ export default function Tasks({
                             onCopy={() => copyTaskLink(task)}
                             label={task.name}
                           />
+                          <TaskBadge kind={task.badge_kind} />
                           <h3>
                             <button
                               type="button"
@@ -1940,6 +1966,7 @@ export default function Tasks({
                             onCopy={() => copyTaskLink(task)}
                             label={task.name}
                           />
+                          <TaskBadge kind={task.badge_kind} />
                           <h3>
                             <button
                               type="button"

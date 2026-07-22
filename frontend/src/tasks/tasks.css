@@ -947,6 +947,69 @@
   white-space: nowrap;
 }
 
+/* Card badge for a ticket materialised from a reported bug — one pill per
+   support category, coloured to read at a glance on the board. Only tickets
+   carry `badge_kind`, so tasks/user stories never show this. */
+.ticket-kind-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.ticket-kind-bug {
+  background: #fde8e8;
+  color: #b42318;
+  border-color: #f5c2c0;
+}
+.ticket-kind-feature {
+  background: #eae6fb;
+  color: #5b3ecb;
+  border-color: #d3c8f5;
+}
+.ticket-kind-billing {
+  background: #e7f4ea;
+  color: #1a7f37;
+  border-color: #bfe3c8;
+}
+.ticket-kind-account {
+  background: #e8f0fe;
+  color: #1a56db;
+  border-color: #c3d8fb;
+}
+.ticket-kind-other {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+@media (prefers-color-scheme: dark) {
+  .ticket-kind-bug {
+    background: rgba(180, 35, 24, 0.22);
+    color: #f5a8a2;
+    border-color: rgba(180, 35, 24, 0.5);
+  }
+  .ticket-kind-feature {
+    background: rgba(91, 62, 203, 0.22);
+    color: #c3b5f5;
+    border-color: rgba(91, 62, 203, 0.5);
+  }
+  .ticket-kind-billing {
+    background: rgba(26, 127, 55, 0.22);
+    color: #9be0ad;
+    border-color: rgba(26, 127, 55, 0.5);
+  }
+  .ticket-kind-account {
+    background: rgba(26, 86, 219, 0.22);
+    color: #a8c5f7;
+    border-color: rgba(26, 86, 219, 0.5);
+  }
+}
+
 /* "Copy task link" button shown on every task card. A quiet, compact ghost icon
    — its "Copy link" / "Link copied" label rides the native cursor tooltip
    (the button's title) rather than expanding — that tints on hover/focus and

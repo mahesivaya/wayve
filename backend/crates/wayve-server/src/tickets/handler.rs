@@ -61,6 +61,8 @@ fn ticket_from_row(row: sqlx::postgres::PgRow) -> Task {
         jira_base: None,
         gitlab_issue_iid: None,
         gitlab_web_url: None,
+        // Present only in the list query (bug-derived tickets); absent elsewhere.
+        badge_kind: row.try_get("badge_kind").ok().flatten(),
     }
 }
 
@@ -108,8 +110,10 @@ pub async fn list_tickets(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
 
     // The owner's own board is the non-bug tickets; bug-derived tickets (mirrored
     // reports) are hidden there and instead shown to every tickets:manage caller.
+    // badge_kind carries the reported bug's support category for a card badge.
     let rows = sqlx::query(&format!(
-        "SELECT {SELECT_COLS}
+        "SELECT {SELECT_COLS},
+                (SELECT category FROM support_tickets st WHERE st.id = support_ticket_id) AS badge_kind
          FROM workspace_tickets
          WHERE (support_ticket_id IS NULL
                 AND (($1::INTEGER IS NOT NULL AND organization_id = $1)
@@ -227,6 +231,16 @@ pub async fn create_ticket(
         },
     )
     .await;
+
+    // AI triage in the background: refine the priority from the title/description
+    // without blocking the response. Best-effort — skips silently if no AI config.
+    crate::tickets::triage::spawn(
+        pool.get_ref().clone(),
+        ticket.id,
+        user_id,
+        name.to_string(),
+        description.to_string(),
+    );
 
     Ok(HttpResponse::Ok().json(ticket))
 }
