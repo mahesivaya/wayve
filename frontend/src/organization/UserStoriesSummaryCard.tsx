@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -15,6 +15,7 @@ import {
 import {
   getUserStories,
   getUserStoryStatusHistory,
+  USER_STORIES_CHANGED_EVENT,
   type StatusHistoryDay,
 } from "../api/userStories";
 import { getTaskStatuses, type TaskStatusRow } from "../api/taskStatuses";
@@ -91,8 +92,11 @@ export default function UserStoriesSummaryCard() {
   const [history, setHistory] = useState<StatusHistoryDay[] | null>(null);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  // A monotonically-increasing id so a slower earlier fetch can't clobber the
+  // result of a newer one (e.g. a refetch triggered mid-flight by a story edit).
+  const reqIdRef = useRef(0);
+  const load = useCallback(() => {
+    const myId = ++reqIdRef.current;
     const from = isoDate(cycle.start);
     const to = isoDate(cycle.end);
     Promise.all([
@@ -101,18 +105,35 @@ export default function UserStoriesSummaryCard() {
       getUserStoryStatusHistory(from, to),
     ])
       .then(([stories, sts, hist]) => {
-        if (cancelled) return;
+        if (reqIdRef.current !== myId) return;
         setTotalPoints(stories.reduce((sum, s) => sum + (s.priority ?? 0), 0));
         setStatuses(sts);
         setHistory(hist);
+        setFailed(false);
       })
       .catch(() => {
-        if (!cancelled) setFailed(true);
+        if (reqIdRef.current === myId) setFailed(true);
       });
-    return () => {
-      cancelled = true;
-    };
   }, [cycle.start, cycle.end]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Live-refresh: any story mutation dispatches the change event (instant, same
+  // tab / split pane); a tab re-becoming visible catches edits made elsewhere.
+  useEffect(() => {
+    const onChange = () => load();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    window.addEventListener(USER_STORIES_CHANGED_EVENT, onChange);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener(USER_STORIES_CHANGED_EVENT, onChange);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load]);
 
   // Only draw a line for a status that actually appears in the window, so the
   // legend doesn't list empty statuses. Keep the owner's board order.
