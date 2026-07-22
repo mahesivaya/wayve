@@ -33,6 +33,7 @@ import { SPLIT_APPS } from "./components/LayoutConfig";
 const Home = lazy(() => import("./home/Home"));
 const Call = lazy(() => import("./call/Call"));
 const Documents = lazy(() => import("./documents/DocumentsBox"));
+const Skills = lazy(() => import("./skills/SkillsBox"));
 const GitHubRepo = lazy(() => import("./github/GitHubRepo"));
 const TeamPage = lazy(() => import("./teams/TeamPage"));
 const DomainVerification = lazy(
@@ -305,6 +306,7 @@ export default function App() {
               <Route path="/reminders" element={<Reminders />} />
               <Route path="/call" element={<Call />} />
               <Route path="/documents" element={<Documents />} />
+              <Route path="/skills" element={<Skills />} />
               <Route path="/teams/:slug" element={<TeamPage />} />
               {/* Legacy alias (no hyphen — original spelling). */}
               <Route
