@@ -301,6 +301,14 @@
   border-top: 1px solid var(--color-border);
 }
 
+/* Success view has no form fields above the button, so the divider would float
+   orphaned in the middle. */
+.support-form-actions--bare {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
 .support-primary-btn {
   padding: 9px 20px;
   border: 1px solid var(--color-primary-action);
