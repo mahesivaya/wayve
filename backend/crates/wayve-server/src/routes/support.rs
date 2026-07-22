@@ -147,7 +147,6 @@ pub async fn create_ticket(
             crate::tickets::triage::spawn(
                 pool.get_ref().clone(),
                 ticket_id,
-                user_id,
                 subject.to_string(),
                 description.to_string(),
             );

@@ -7,19 +7,13 @@ use crate::ai::{agent, provider};
 use crate::prelude::*;
 use tracing::{info, warn};
 
-/// Ask the model for a priority (1–5) given the ticket text. Returns None when no
-/// AI is configured for the user or the reply can't be read as a digit — the
-/// caller then leaves the existing priority untouched.
-pub async fn suggest_priority(
-    pool: &PgPool,
-    user_id: i32,
-    name: &str,
-    description: &str,
-) -> Option<i16> {
-    let ai = provider::resolve_ai_for_user(pool, user_id)
-        .await
-        .ok()
-        .flatten()?;
+/// Ask the platform model for a priority (1–5) given the ticket text. Returns
+/// None when no platform AI is configured or the reply can't be read as a digit —
+/// the caller then leaves the existing priority untouched. Resolves the platform
+/// AI (Claude in prod) rather than the ticket owner's, so a personal reporter's
+/// bug still triages on Claude instead of dropping to their env default.
+pub async fn suggest_priority(pool: &PgPool, name: &str, description: &str) -> Option<i16> {
+    let ai = provider::resolve_platform_ai(pool).await.ok().flatten()?;
 
     let prompt = format!(
         "You are triaging an engineering/support ticket. Read the title and \
@@ -49,9 +43,9 @@ fn parse_priority(reply: &str) -> Option<i16> {
 /// call from a request handler — it spawns and returns immediately. Uses actix's
 /// current-thread runtime (`rt::spawn`) rather than `tokio::spawn` because the AI
 /// client future is not `Send` (the same reason actix handlers aren't `Send`).
-pub fn spawn(pool: PgPool, ticket_id: i32, user_id: i32, name: String, description: String) {
+pub fn spawn(pool: PgPool, ticket_id: i32, name: String, description: String) {
     actix_web::rt::spawn(async move {
-        let Some(priority) = suggest_priority(&pool, user_id, &name, &description).await else {
+        let Some(priority) = suggest_priority(&pool, &name, &description).await else {
             return;
         };
         match sqlx::query(

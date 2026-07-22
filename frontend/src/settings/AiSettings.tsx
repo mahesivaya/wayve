@@ -111,7 +111,13 @@ export default function AiSettings() {
       const res = await getAiConfig();
       setProviders(res.providers);
       setConfig(res.config);
-      const initial = res.config.provider ?? res.providers[0]?.id ?? null;
+      // Default an unconfigured org to Claude (Anthropic) explicitly, not just
+      // "first in the catalog", so it stays the default if the list is reordered.
+      const initial =
+        res.config.provider ??
+        res.providers.find((p) => p.id === "anthropic")?.id ??
+        res.providers[0]?.id ??
+        null;
       setSelected(initial);
       setModel(res.config.model ?? "");
       setBaseUrl(res.config.base_url ?? "");
