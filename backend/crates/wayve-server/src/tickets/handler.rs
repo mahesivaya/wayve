@@ -20,17 +20,20 @@ use actix_web::{delete, put};
 use sqlx::Row;
 use tracing::{instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{self, Permission};
+use wayve_security::rbac::{self, Permission, Scope};
 
 /// Whether the caller may see and manage bug-report tickets — support tickets
-/// mirrored onto the board (`support_ticket_id IS NOT NULL`). These are shared
-/// across all platform staff holding `tickets:manage`, so they are excluded from
-/// normal per-owner boards and only surface for such callers. Non-failing: any
-/// resolution error resolves to `false`.
+/// mirrored onto the board (`support_ticket_id IS NOT NULL`). These are a
+/// cross-tenant **platform** concern, so the caller must be in the Platform
+/// scope AND hold `tickets:manage`. Scope matters because personal accounts
+/// resolve to `(Personal, Owner)` and Owner carries every permission — without
+/// the scope check a personal user would see every org's reports. In Normal
+/// mode a platform admin is downscoped to Personal (admin console gate), so this
+/// also naturally requires admin mode. Non-failing: any error resolves to false.
 async fn can_manage_bug_tickets(req: &HttpRequest, pool: &PgPool, user_id: i32) -> bool {
     rbac::resolve_role_context_moded(req, pool, user_id)
         .await
-        .map(|ctx| ctx.has(Permission::TicketsManage))
+        .map(|ctx| ctx.scope == Scope::Platform && ctx.has(Permission::TicketsManage))
         .unwrap_or(false)
 }
 
