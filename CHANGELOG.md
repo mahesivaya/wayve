@@ -3,6 +3,39 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [7.10.0](https://github.com/mahesivaya/wayve/releases/tag/v7.10.0) - 2026-07-22
+
+### 🚀 Features
+
+- **ai:** Surface Claude token usage on platform admin, tokens-only view
+- **dashboard:** Live-refresh the user-stories burnup on status change
+- **workspace:** User-stories burnup history and trend lines
+- **sidebar:** Show a User Stories count badge pinned to the row end
+- **workspace:** Add User Stories and Tickets boards
+- **ai:** Default to Claude via ANTHROPIC_API_KEY; surface upstream AI errors
+- **documents:** AI writing assist and file-reference in the library editor
+- **sidebar:** Default the Workspace section to expanded on reload
+- **sidebar:** Icon-only profile menu when collapsed; move admin badge to header
+- **github:** Persist PR Open/Closed filter across refresh
+- **projects:** Expand commit diffs inline in Recent activity
+- **layout:** Header split menu, single-pane discoverability, focus highlight
+- **layout:** Keyboard shortcuts for horizontal and vertical split
+- **layout:** Cap the workspace at 2x2 panes and drop the Split view button
+- **layout:** Drag apps and panes to split the workspace
+- **settings:** Give the web the desktop settings layout
+
+### 🐛 Bug Fixes
+
+- **dashboard:** Keep the burnup "Today" label from clipping at the chart top
+- **split:** Route sidebar/bell clicks to the focused pane
+- **github:** Stop PR list rows sharing detail-view meta borders
+- **scheduler:** Create meeting_alert_minutes on existing deployments
+
+### 🧹 Maintenance
+
+- **workspace:** Grant the member its repo before asserting proxy access
+- **changelog:** Update for v7.9.0 [skip ci]
+
 ## [7.9.0](https://github.com/mahesivaya/wayve/releases/tag/v7.9.0) - 2026-07-19
 
 ### 🚀 Features
