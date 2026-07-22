@@ -17,7 +17,7 @@ const USER_STORIES_CONFIG: TasksConfig = {
     update: updateUserStoryApi,
     remove: deleteUserStoryApi,
   },
-  features: { attachments: false },
+  features: { attachments: false, statusSummary: true },
   storageKey: "userstories",
   labels: {
     title: "User Stories",

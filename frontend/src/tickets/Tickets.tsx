@@ -18,7 +18,7 @@ const TICKETS_CONFIG: TasksConfig = {
     update: updateTicketApi,
     remove: deleteTicketApi,
   },
-  features: { attachments: false },
+  features: { attachments: false, statusSummary: true },
   storageKey: "tickets",
   labels: {
     title: "Tickets",

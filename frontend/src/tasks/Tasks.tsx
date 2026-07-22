@@ -321,7 +321,7 @@ function TaskKeyBadge({
 // tickets materialised from a reported bug (Task.badge_kind). Unknown/absent
 // kinds render nothing, so tasks and user stories are unaffected.
 const BADGE_KINDS: Record<string, { icon: string; label: string }> = {
-  bug: { icon: "🐛", label: "Bug" },
+  bug: { icon: "", label: "Bug" },
   feature: { icon: "✨", label: "Feature" },
   billing: { icon: "💳", label: "Billing" },
   account: { icon: "👤", label: "Account" },
@@ -336,7 +336,7 @@ function TaskBadge({ kind }: { kind?: string | null }) {
       className={`ticket-kind-badge ticket-kind-${kind}`}
       data-tooltip="Reported by a user"
     >
-      {meta.icon} {meta.label}
+      {meta.icon ? `${meta.icon} ${meta.label}` : meta.label}
     </span>
   );
 }
@@ -359,6 +359,9 @@ export type TasksConfig = {
     // Attachments hit `/api/tasks/{id}/attachments`, which is task-only, so the
     // stories board disables them (there is no story-attachment endpoint).
     attachments: boolean;
+    // Shows a per-status count strip above the board (total + each status). On
+    // for the shared workspace boards (Tickets, User Stories).
+    statusSummary?: boolean;
   };
   // localStorage prefix so the two boards keep independent view/mode state.
   storageKey: string;
@@ -588,6 +591,21 @@ export default function Tasks({
     (slug: string): TaskStatusRow => statusBySlug.get(slug) ?? UNKNOWN_STATUS(slug),
     [statusBySlug]
   );
+
+  // Per-status counts for the header summary strip (workspace boards only).
+  // Counted across all loaded items (not the filtered view), matching the
+  // "N total" pill, and kept in the board's status order.
+  const statusSummary = useMemo(() => {
+    if (!config.features.statusSummary) return [];
+    const counts = new Map<string, number>();
+    for (const t of tasks) counts.set(t.status, (counts.get(t.status) ?? 0) + 1);
+    return statusRows.map((row) => ({
+      slug: row.slug,
+      name: row.name,
+      color: row.color,
+      count: counts.get(row.slug) ?? 0,
+    }));
+  }, [config.features.statusSummary, tasks, statusRows]);
 
   // The compose form's effective status. `status` stays empty until the user
   // picks one (or an edit populates it), so the default is *derived* from the
@@ -1101,13 +1119,18 @@ export default function Tasks({
             {config.labels.createButton}
           </button>
         ) : (
+          <>
           <div className="tasks-header">
             <div>
               <h2>{config.labels.title}</h2>
               <p>{config.labels.subtitle}</p>
             </div>
             <div className="tasks-header-actions">
-              <span className="tasks-count">{tasks.length} total</span>
+              {/* Boards with the status strip below show the total there, so the
+                  header pill would just duplicate it. */}
+              {!config.features.statusSummary && (
+                <span className="tasks-count">{tasks.length} total</span>
+              )}
               <div className="tasks-filters" ref={filtersRef}>
                 <button
                   type="button"
@@ -1297,10 +1320,28 @@ export default function Tasks({
                 className="create-task-btn create-task-btn--inline"
                 onClick={openCreate}
               >
-                + Create task
+                {config.labels.createButton}
               </button>
             </div>
           </div>
+          {config.features.statusSummary && statusSummary.length > 0 && (
+            <div className="tasks-status-summary" aria-label="Status breakdown">
+              <span className="tss-chip tss-total">
+                <b>{tasks.length}</b> total
+              </span>
+              {statusSummary.map((s) => (
+                <span className="tss-chip" key={s.slug} title={s.name}>
+                  <span
+                    className="tss-dot"
+                    style={{ background: s.color }}
+                    aria-hidden="true"
+                  />
+                  {s.name} <b>{s.count}</b>
+                </span>
+              ))}
+            </div>
+          )}
+          </>
         )}
 
         <Modal
