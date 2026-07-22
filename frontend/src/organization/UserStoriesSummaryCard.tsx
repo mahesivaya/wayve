@@ -217,8 +217,11 @@ export default function UserStoriesSummaryCard() {
                 tick={{ fill: AXIS_INK, fontSize: 11 }}
                 tickLine={false}
                 axisLine={{ stroke: "rgba(148,163,184,0.3)" }}
-                interval={Math.max(0, Math.floor(cycleDays / 4))}
-                minTickGap={16}
+                // Fit as many date labels as the (now wider) card allows,
+                // always keeping the first + last and thinning the middle only
+                // enough to avoid overlap — so the wider block shows more dates.
+                interval="preserveStartEnd"
+                minTickGap={24}
               />
               <YAxis
                 tick={{ fill: AXIS_INK, fontSize: 11 }}
