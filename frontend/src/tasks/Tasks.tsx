@@ -388,6 +388,8 @@ export type TasksConfig = {
     // Optional: on-demand AI pass that labels duplicate/similar tickets. Only
     // the Tickets board wires this (see api/tickets.ts).
     findRelated?: () => Promise<RelatedResult>;
+    // Optional: dispatch the Claude Code CI fixer for one ticket. Tickets only.
+    aiFix?: (id: number) => Promise<{ reused_fix_from: number | null }>;
   };
   features: {
     // Attachments hit `/api/tasks/{id}/attachments`, which is task-only, so the
@@ -398,6 +400,8 @@ export type TasksConfig = {
     statusSummary?: boolean;
     // Shows the "Find related" (AI duplicate/similar) toolbar button. Tickets only.
     findRelated?: boolean;
+    // Shows the "Fix with AI" button in the edit modal. Tickets only.
+    aiFix?: boolean;
   };
   // localStorage prefix so the two boards keep independent view/mode state.
   storageKey: string;
@@ -706,6 +710,33 @@ export default function Tasks({
       setRelatedBusy(false);
     }
   }, [config, loadTasks]);
+
+  // "Fix with AI": dispatch the Claude Code CI fixer for the ticket being edited.
+  // The fix runs in GitHub Actions and opens a PR — this just kicks it off.
+  const [aiFixBusy, setAiFixBusy] = useState(false);
+  const [aiFixMsg, setAiFixMsg] = useState("");
+  const runAiFix = useCallback(
+    async (id: number) => {
+      if (!config.api.aiFix) return;
+      setAiFixBusy(true);
+      setAiFixMsg("");
+      try {
+        const r = await config.api.aiFix(id);
+        setAiFixMsg(
+          r.reused_fix_from
+            ? `Fix started in CI (reusing the fix from #${r.reused_fix_from}). A PR will open when it passes.`
+            : "Fix started in CI. A PR will open when it passes."
+        );
+      } catch (err) {
+        setAiFixMsg(
+          err instanceof Error ? err.message : "Couldn't start the AI fix."
+        );
+      } finally {
+        setAiFixBusy(false);
+      }
+    },
+    [config]
+  );
 
   // The load is deferred to a timeout so the effect body doesn't synchronously
   // call setState, which React 19 flags as a cascading-render risk.
@@ -1763,6 +1794,20 @@ export default function Tasks({
                     <span>Create more</span>
                   </label>
                 )}
+                {isEditing &&
+                  editingId !== null &&
+                  config.features.aiFix &&
+                  config.api.aiFix && (
+                    <button
+                      type="button"
+                      className="task-ai-fix-btn"
+                      onClick={() => void runAiFix(editingId)}
+                      disabled={aiFixBusy}
+                      data-tooltip="Have Claude fix this in CI and open a PR"
+                    >
+                      {aiFixBusy ? "Starting…" : "🤖 Fix with AI"}
+                    </button>
+                  )}
                 <button type="submit" className="primary" disabled={submitting}>
                   {submitting
                     ? isEditing
@@ -1773,6 +1818,11 @@ export default function Tasks({
                       : `Create ${config.labels.lowerSingular}`}
                 </button>
               </div>
+              {aiFixMsg && (
+                <p className="task-ai-fix-msg" role="status">
+                  {aiFixMsg}
+                </p>
+              )}
             </div>
           </form>
         </Modal>

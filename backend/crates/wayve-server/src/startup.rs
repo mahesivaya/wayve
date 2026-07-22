@@ -360,6 +360,12 @@ pub async fn ensure_email_schema(pool: &PgPool) {
                 ADD CONSTRAINT workspace_tickets_relation_kind_chk \
                 CHECK (relation_kind IN ('duplicate', 'similar')); \
          EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        // Resolution memory (Phase 2 AI-fix): pointer to the fix that resolved a
+        // ticket, so a later similar ticket can reuse it. Code stays in Git.
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolution_pr_url TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolution_commit TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolution_summary TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.
@@ -474,8 +480,12 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )",
         "ALTER TABLE org_document_folders ALTER COLUMN organization_id DROP NOT NULL",
+        // `collection` splits the shared workspace into independent trees sharing
+        // this table: 'library' (Documents) and 'skills' (Skills). Existing rows
+        // default to 'library'.
+        "ALTER TABLE org_document_folders ADD COLUMN IF NOT EXISTS collection VARCHAR(32) NOT NULL DEFAULT 'library'",
         "CREATE INDEX IF NOT EXISTS idx_org_doc_folders_org_parent \
-         ON org_document_folders(organization_id, parent_folder_id)",
+         ON org_document_folders(organization_id, collection, parent_folder_id)",
         "CREATE TABLE IF NOT EXISTS org_documents (
             id BIGSERIAL PRIMARY KEY,
             organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
@@ -490,8 +500,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )",
         "ALTER TABLE org_documents ALTER COLUMN organization_id DROP NOT NULL",
+        "ALTER TABLE org_documents ADD COLUMN IF NOT EXISTS collection VARCHAR(32) NOT NULL DEFAULT 'library'",
         "CREATE INDEX IF NOT EXISTS idx_org_documents_org_folder \
-         ON org_documents(organization_id, folder_id)",
+         ON org_documents(organization_id, collection, folder_id)",
         // Employees aren't always Wayve users, so user_id is nullable, and
         // `payroll_run_items.employee_name` denormalizes the name so a historical
         // run still reads correctly after a termination.

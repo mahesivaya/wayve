@@ -18,7 +18,7 @@ use crate::prelude::*;
 use crate::tasks::statuses::{self, StatusOwner};
 use actix_web::{delete, put};
 use sqlx::Row;
-use tracing::instrument;
+use tracing::{instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::rbac::{self, Permission};
 
@@ -296,6 +296,218 @@ pub async fn find_related_tickets(req: HttpRequest, pool: web::Data<PgPool>) -> 
         "duplicates": duplicates,
         "similar": similar,
     })))
+}
+
+/// Dispatch the Claude Code CI fixer for a ticket: recall a similar past fix (if
+/// any) to pass as a worked example, then trigger the GitHub Actions workflow
+/// which checks out the repo, has Claude implement + verify the fix, and opens a
+/// PR. Requires `tickets:manage` (it opens PRs on the repo) plus `GITHUB_TOKEN` +
+/// `GITHUB_REPO` configured. The fix runs entirely in CI — this only kicks it off.
+#[post("/workspace-tickets/{id}/ai-fix")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn ai_fix_ticket(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let id = path.into_inner();
+    let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
+    let (org_id, uid) = owner_ids(owner);
+    let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
+    if !manage_bugs {
+        return Err(AppError::Forbidden);
+    }
+
+    // The target ticket, scoped to the caller's view.
+    let row = sqlx::query(&format!(
+        "SELECT name, description FROM workspace_tickets WHERE id = $4 AND {VISIBLE_SCOPE}"
+    ))
+    .bind(org_id)
+    .bind(uid)
+    .bind(manage_bugs)
+    .bind(id)
+    .fetch_optional(pool.get_ref())
+    .await?
+    .ok_or(AppError::NotFound("workspace ticket"))?;
+    let name: String = row.get("name");
+    let description: String = row.get("description");
+
+    // Recall a resolved ticket with a stored fix that is the same kind of issue,
+    // to hand the fixer as a worked example (cold-start: none until fixes accrue).
+    let resolved = sqlx::query(&format!(
+        "SELECT id, name, description, resolution_summary FROM workspace_tickets
+         WHERE resolution_summary IS NOT NULL AND id <> $4 AND {VISIBLE_SCOPE}"
+    ))
+    .bind(org_id)
+    .bind(uid)
+    .bind(manage_bugs)
+    .bind(id)
+    .fetch_all(pool.get_ref())
+    .await?;
+    let candidates: Vec<crate::tickets::recall::ResolvedTicket> = resolved
+        .iter()
+        .map(|r| crate::tickets::recall::ResolvedTicket {
+            id: r.get("id"),
+            name: r.get("name"),
+            description: r.get("description"),
+            summary: r
+                .try_get("resolution_summary")
+                .ok()
+                .flatten()
+                .unwrap_or_default(),
+        })
+        .collect();
+    let matched = crate::tickets::recall::find_similar_fix(
+        pool.get_ref(),
+        (id, &name, &description),
+        &candidates,
+    )
+    .await;
+    let (past_summary, past_commit) = match matched {
+        Some(mid) => {
+            let m = sqlx::query(
+                "SELECT resolution_summary, resolution_commit FROM workspace_tickets WHERE id = $1",
+            )
+            .bind(mid)
+            .fetch_one(pool.get_ref())
+            .await?;
+            (
+                m.try_get::<Option<String>, _>("resolution_summary")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
+                m.try_get::<Option<String>, _>("resolution_commit")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
+            )
+        }
+        None => (String::new(), String::new()),
+    };
+
+    // Kick off the CI fixer workflow via the GitHub API.
+    let Some(gh_token) = crate::github_proxy::effective_github_token(&req, pool.get_ref()).await
+    else {
+        return Err(AppError::bad_request(
+            "GitHub is not configured (GITHUB_TOKEN missing)",
+        ));
+    };
+    let Some((gh_owner, gh_repo)) = crate::config::github_repo() else {
+        return Err(AppError::bad_request(
+            "Set GITHUB_REPO (owner/repo) to enable AI fix",
+        ));
+    };
+    let api_base = crate::external::github_api_base();
+    let url = format!(
+        "{api_base}/repos/{gh_owner}/{gh_repo}/actions/workflows/ai-fix-ticket.yml/dispatches"
+    );
+    let body = serde_json::json!({
+        "ref": "main",
+        "inputs": {
+            "ticket_number": id.to_string(),
+            "ticket_title": name,
+            "ticket_description": description,
+            "past_fix_summary": past_summary,
+            "past_fix_commit": past_commit,
+        }
+    });
+    let resp = reqwest::Client::new()
+        .post(&url)
+        .timeout(std::time::Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app")
+        .header("Authorization", format!("Bearer {gh_token}"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|_| AppError::internal("failed to reach GitHub"))?;
+    if !resp.status().is_success() {
+        let code = resp.status();
+        warn!(target: "http", ticket_id = id, %code, "AI-fix workflow dispatch failed");
+        return Err(AppError::bad_request(format!(
+            "GitHub workflow dispatch failed ({code}); is ai-fix-ticket.yml on the default branch?"
+        )));
+    }
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "workspace_ticket_ai_fix_requested",
+            resource_type: "workspace_ticket",
+            resource_id: Some(id.to_string()),
+            metadata: Some(serde_json::json!({ "reused_fix_from": matched })),
+        },
+    )
+    .await;
+
+    Ok(HttpResponse::Ok()
+        .json(serde_json::json!({ "dispatched": true, "reused_fix_from": matched })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ResolutionInput {
+    pub pr_url: Option<String>,
+    pub commit: Option<String>,
+    pub summary: String,
+}
+
+/// Record how a ticket was resolved (the fix pointer) so a later similar ticket
+/// can reuse it — called by the merge-capture workflow when an AI-fix PR lands.
+/// Requires `tickets:manage`; the workflow authenticates with an API key mapped
+/// to such a user. The fix code stays in Git; only the pointer + summary persist.
+#[post("/workspace-tickets/{id}/resolution")]
+#[instrument(target = "http", skip(req, pool, path, body))]
+pub async fn record_resolution(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    body: web::Json<ResolutionInput>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let id = path.into_inner();
+    if !can_manage_bug_tickets(&req, pool.get_ref(), user_id).await {
+        return Err(AppError::Forbidden);
+    }
+    let summary = body.summary.trim();
+    if summary.is_empty() {
+        return Err(AppError::BadRequest("summary is required".into()));
+    }
+
+    let updated = sqlx::query_scalar::<_, i32>(
+        "UPDATE workspace_tickets
+            SET resolution_pr_url = $1, resolution_commit = $2, resolution_summary = $3,
+                resolved_at = NOW(), updated_at = NOW()
+          WHERE id = $4
+         RETURNING id",
+    )
+    .bind(body.pr_url.as_deref())
+    .bind(body.commit.as_deref())
+    .bind(summary)
+    .bind(id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    if updated.is_none() {
+        return Err(AppError::NotFound("workspace ticket"));
+    }
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "workspace_ticket_resolution_recorded",
+            resource_type: "workspace_ticket",
+            resource_id: Some(id.to_string()),
+            metadata: Some(serde_json::json!({ "pr_url": body.pr_url, "commit": body.commit })),
+        },
+    )
+    .await;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "recorded": true })))
 }
 
 #[post("/workspace-tickets")]

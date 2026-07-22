@@ -267,6 +267,14 @@ pub fn gemini_api_key() -> Option<String> {
     var_opt("GEMINI_API_KEY")
 }
 
+/// `(owner, repo)` the AI-fix pipeline dispatches its workflow against, parsed
+/// from `GITHUB_REPO` (e.g. `mahesivaya/wayve`). None when unset or malformed.
+pub fn github_repo() -> Option<(String, String)> {
+    let raw = var_opt("GITHUB_REPO")?;
+    let (owner, repo) = raw.trim().split_once('/')?;
+    (!owner.is_empty() && !repo.is_empty()).then(|| (owner.to_string(), repo.to_string()))
+}
+
 pub fn gemini_model() -> String {
     var_or("GEMINI_MODEL", "gemini-2.0-flash")
 }

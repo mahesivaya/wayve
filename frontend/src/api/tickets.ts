@@ -68,3 +68,15 @@ export const findRelatedTickets = async () => {
   emitTicketsChanged();
   return result;
 };
+
+// Kick off the Claude Code CI fixer for one ticket: the backend recalls a
+// similar past fix and dispatches the ai-fix-ticket workflow, which opens a PR.
+export type AiFixResult = {
+  dispatched: boolean;
+  reused_fix_from: number | null;
+};
+
+export const aiFixTicket = async (id: number) =>
+  apiFetchJson<AiFixResult>(`/api/workspace-tickets/${id}/ai-fix`, {
+    method: "POST",
+  });

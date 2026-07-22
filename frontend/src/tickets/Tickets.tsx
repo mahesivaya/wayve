@@ -5,6 +5,7 @@ import {
   updateTicketApi,
   deleteTicketApi,
   findRelatedTickets,
+  aiFixTicket,
 } from "../api/tickets";
 
 // The Workspace "Tickets" board is the Tasks board with its own org-shared data
@@ -19,8 +20,14 @@ const TICKETS_CONFIG: TasksConfig = {
     update: updateTicketApi,
     remove: deleteTicketApi,
     findRelated: findRelatedTickets,
+    aiFix: aiFixTicket,
   },
-  features: { attachments: false, statusSummary: true, findRelated: true },
+  features: {
+    attachments: false,
+    statusSummary: true,
+    findRelated: true,
+    aiFix: true,
+  },
   storageKey: "tickets",
   labels: {
     title: "Tickets",

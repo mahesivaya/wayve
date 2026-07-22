@@ -1,0 +1,46 @@
+name: AI Fix Capture
+
+# When an AI-fix PR (branch ai-fix/ticket-<N>-<runid>) merges, record the fix on
+# the ticket so a later similar ticket can reuse it (resolution memory). Calls the
+# backend POST /api/workspace-tickets/<N>/resolution.
+#
+# Setup (one-time), as repository secrets:
+#   - WAYVE_BASE_URL  e.g. https://fluxze.com
+#   - WAYVE_API_KEY   an internal API key mapped to a user with tickets:manage
+#     (see routes/api_keys.rs). Sent as the X-API-KEY header.
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  capture:
+    # Only merged AI-fix PRs.
+    if: >-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'ai-fix/ticket-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record resolution on the ticket
+        env:
+          BASE_URL: ${{ secrets.WAYVE_BASE_URL }}
+          API_KEY: ${{ secrets.WAYVE_API_KEY }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          # branch is ai-fix/ticket-<N>-<runid> → extract <N>.
+          TICKET=$(printf '%s' "$BRANCH" | sed -n 's#^ai-fix/ticket-\([0-9]\+\)-.*#\1#p')
+          if [ -z "$TICKET" ]; then echo "no ticket number in branch $BRANCH"; exit 0; fi
+          if [ -z "${BASE_URL:-}" ] || [ -z "${API_KEY:-}" ]; then
+            echo "WAYVE_BASE_URL / WAYVE_API_KEY not configured; skipping capture."; exit 0
+          fi
+          jq -n --arg s "$TITLE" --arg c "$SHA" --arg u "$PR_URL" \
+            '{summary:$s, commit:$c, pr_url:$u}' \
+          | curl -fsS -X POST "$BASE_URL/api/workspace-tickets/$TICKET/resolution" \
+              -H "X-API-KEY: $API_KEY" \
+              -H "Content-Type: application/json" \
+              --data @-
+          echo "recorded resolution for ticket #$TICKET"

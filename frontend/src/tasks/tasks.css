@@ -1083,6 +1083,30 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
+
+/* "Fix with AI" button in the ticket edit modal + its status message. */
+.task-ai-fix-btn {
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.task-ai-fix-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+.task-ai-fix-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.task-ai-fix-msg {
+  margin: 8px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
 @media (prefers-color-scheme: dark) {
   .ticket-kind-bug {
     background: rgba(180, 35, 24, 0.22);
