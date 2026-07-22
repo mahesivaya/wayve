@@ -23,6 +23,7 @@ import { listAuditLogs } from "../api/audit";
 import AIChat from "../aichat/AIChat";
 import UserStoriesSummaryCard from "./UserStoriesSummaryCard";
 import { listScimTokens } from "../api/scim";
+import { getAiUsage, type AiUsage } from "../api/aiProvider";
 import { formatBytes } from "../utils/bytes";
 import "./admin-ui.css";
 import "./platformAdmin.css";
@@ -61,6 +62,11 @@ export default function PlatformAdminHome() {
   const canSeeOrganizations = canManageMembers || canManageApiKeys;
   const canSeeScim = hasPermission(user, "webhooks:manage");
   const canManagePlans = hasPermission(user, "billing:manage");
+  // AI usage is a platform-owner-only endpoint (`require_ai_owner` gates it to
+  // the platform Owner), so mirror that gate for the card. UI gating only.
+  const canSeeAiUsage =
+    (user?.scope === "platform" || user?.account_type === "platform_admin") &&
+    user?.effective_role === "owner";
 
   const [usersSummary, setUsersSummary] = useState<UsersSummary | null>(null);
   // The Business and Enterprise cards both aggregate this admin-org list.
@@ -73,6 +79,7 @@ export default function PlatformAdminHome() {
   const [summary, setSummary] = useState<SupportSummary | null>(null);
   const [auditCount, setAuditCount] = useState<number | null>(null);
   const [scimCount, setScimCount] = useState<number | null>(null);
+  const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
 
   const canSeeOrgStats = canManageMembers || canManageApiKeys;
   const canSeeBilling =
@@ -188,6 +195,17 @@ export default function PlatformAdminHome() {
       cancelled = true;
     };
   }, [canReadAudit]);
+
+  useEffect(() => {
+    if (!canSeeAiUsage) return;
+    let cancelled = false;
+    getAiUsage()
+      .then((u) => !cancelled && setAiUsage(u))
+      .catch(() => !cancelled && setAiUsage(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [canSeeAiUsage]);
 
   useEffect(() => {
     if (!canSeeScim) return;
@@ -308,6 +326,17 @@ export default function PlatformAdminHome() {
     if (key === "scim" && scimCount != null) {
       return [{ value: scimCount.toLocaleString(), label: "SCIM tokens" }];
     }
+    if (key === "ai" && aiUsage) {
+      const { input_tokens, output_tokens } = aiUsage.totals;
+      return [
+        {
+          value: (input_tokens + output_tokens).toLocaleString(),
+          label: "Total tokens (30d)",
+        },
+        { value: input_tokens.toLocaleString(), label: "Input tokens" },
+        { value: output_tokens.toLocaleString(), label: "Output tokens" },
+      ];
+    }
     return null;
   };
 
@@ -364,6 +393,14 @@ export default function PlatformAdminHome() {
       description: "Mint bearer tokens so Okta / Entra can provision users.",
       path: "/settings/scim",
       visible: canSeeScim,
+    },
+    {
+      key: "ai",
+      label: "AI usage",
+      description:
+        "Claude API token consumption over the last 30 days, by member and by model.",
+      path: "/settings/ai/usage",
+      visible: canSeeAiUsage,
     },
   ];
 

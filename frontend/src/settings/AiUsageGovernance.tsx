@@ -1,20 +1,15 @@
-// Owner-only AI usage and cost dashboard, gated by `ai:manage`. The figures are
-// sample data for now (the response carries `sample: true`); real metering will
-// arrive behind the same response shape.
+// Owner-only AI usage dashboard, gated by `ai:manage`. Shows token consumption
+// only — total tokens, and tokens broken down by member and by model. Cost and
+// budget are intentionally omitted; the numbers come from live per-turn metering
+// in `ai_usage_events`.
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
-import {
-  getAiUsage,
-  getAnthropicCost,
-  type AiUsage,
-  type AnthropicCost,
-} from "../api/aiProvider";
+import { getAiUsage, type AiUsage } from "../api/aiProvider";
 import "./aiProvider.css";
 
-const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 const num = (n: number) => n.toLocaleString();
 
 export default function AiUsageGovernance() {
@@ -23,9 +18,6 @@ export default function AiUsageGovernance() {
   const canManage = hasPermission(user, "ai:manage");
 
   const [usage, setUsage] = useState<AiUsage | null>(null);
-  const [anthropicCost, setAnthropicCost] = useState<AnthropicCost | null>(
-    null
-  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -38,13 +30,6 @@ export default function AiUsageGovernance() {
       setError(err instanceof Error ? err.message : "Failed to load usage");
     } finally {
       setLoading(false);
-    }
-    // Authoritative Anthropic spend is platform-owner-only, so a 403 or any
-    // other failure hides the panel rather than blocking the page.
-    try {
-      setAnthropicCost(await getAnthropicCost());
-    } catch {
-      setAnthropicCost(null);
     }
   }, []);
 
@@ -59,7 +44,7 @@ export default function AiUsageGovernance() {
   if (!canManage) {
     return (
       <div className="ai-usage">
-        <h1>AI Usage &amp; Cost</h1>
+        <h1>AI Usage</h1>
         <p className="ai-error">
           Only the organization <strong>owner</strong> can view AI usage.
         </p>
@@ -68,29 +53,15 @@ export default function AiUsageGovernance() {
     );
   }
 
-  const spentPct = usage
-    ? Math.min(
-        100,
-        Math.round(
-          (usage.budget.spent_cents / usage.budget.monthly_limit_cents) * 100
-        )
-      )
+  const totalTokens = usage
+    ? usage.totals.input_tokens + usage.totals.output_tokens
     : 0;
-  const overThreshold = usage
-    ? spentPct >= usage.budget.alert_threshold_pct
-    : false;
-  const maxDailyCost = usage
-    ? Math.max(...usage.daily.map((d) => d.cost_cents), 1)
-    : 1;
 
   return (
     <div className="ai-usage">
       <header className="ai-settings-header">
-        <h1>AI Usage &amp; Cost Governance</h1>
-        <p>
-          Spend, volume, and per-member usage for your organization's AI
-          provider.
-        </p>
+        <h1>AI Token Usage</h1>
+        <p>Token consumption for your AI provider, by member and by model.</p>
         <button
           type="button"
           className="ai-link-btn"
@@ -118,8 +89,8 @@ export default function AiUsageGovernance() {
 
           <div className="ai-kpi-grid">
             <div className="ai-kpi">
-              <span className="ai-kpi-value">{num(usage.totals.requests)}</span>
-              <span className="ai-kpi-label">Requests</span>
+              <span className="ai-kpi-value">{num(totalTokens)}</span>
+              <span className="ai-kpi-label">Total tokens</span>
             </div>
             <div className="ai-kpi">
               <span className="ai-kpi-value">
@@ -133,118 +104,23 @@ export default function AiUsageGovernance() {
               </span>
               <span className="ai-kpi-label">Output tokens</span>
             </div>
-            <div className="ai-kpi">
-              <span className="ai-kpi-value">
-                {usd(usage.totals.cost_cents)}
-              </span>
-              <span className="ai-kpi-label">Est. cost</span>
-            </div>
-            <div className="ai-kpi">
-              <span className="ai-kpi-value">
-                {num(usage.totals.active_users)}
-              </span>
-              <span className="ai-kpi-label">Active users</span>
-            </div>
           </div>
-
-          {anthropicCost?.configured && (
-            <section className="ai-card">
-              <h2>Authoritative spend — billed by Anthropic</h2>
-              <p className="ai-budget-text">
-                <strong>{usd(anthropicCost.total_cents ?? 0)}</strong> ·{" "}
-                {anthropicCost.period}
-                {anthropicCost.truncated ? " (partial)" : ""}
-              </p>
-              {anthropicCost.by_model && anthropicCost.by_model.length > 0 && (
-                <table className="ai-table">
-                  <thead>
-                    <tr>
-                      <th>Line item</th>
-                      <th>Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {anthropicCost.by_model.map((m) => (
-                      <tr key={m.model}>
-                        <td>{m.model}</td>
-                        <td>{usd(m.cost_cents)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              <p className="ai-budget-text ai-muted">
-                Actual USD from Anthropic's Cost API — organization-wide, across
-                all workspaces. The per-member figures below are local
-                estimates; Anthropic cannot attribute spend to individual
-                members.
-              </p>
-            </section>
-          )}
-          {anthropicCost && !anthropicCost.configured && (
-            <section className="ai-card">
-              <h2>Authoritative spend</h2>
-              <p className="ai-budget-text ai-muted">
-                Set an Anthropic Admin API key (<code>ANTHROPIC_ADMIN_KEY</code>
-                ) on the server to show real billed spend from Anthropic's Cost
-                API alongside the local estimate.
-              </p>
-            </section>
-          )}
-
-          <section className="ai-card">
-            <h2>Budget</h2>
-            <div className="ai-budget">
-              <div className="ai-budget-bar">
-                <div
-                  className={`ai-budget-fill ${overThreshold ? "is-alert" : ""}`}
-                  style={{ width: `${spentPct}%` }}
-                />
-              </div>
-              <p className="ai-budget-text">
-                {usd(usage.budget.spent_cents)} of{" "}
-                {usd(usage.budget.monthly_limit_cents)} ({spentPct}%)
-                {overThreshold && (
-                  <span className="ai-budget-alert">
-                    {" "}
-                    · over {usage.budget.alert_threshold_pct}% alert threshold
-                  </span>
-                )}
-              </p>
-            </div>
-          </section>
-
-          <section className="ai-card">
-            <h2>Cost — last 30 days</h2>
-            <div className="ai-trend" aria-hidden="true">
-              {usage.daily.map((d) => (
-                <span
-                  key={d.day}
-                  className="ai-trend-bar"
-                  style={{ height: `${(d.cost_cents / maxDailyCost) * 100}%` }}
-                  data-tooltip={`${d.day}: ${usd(d.cost_cents)} · ${d.requests} reqs`}
-                />
-              ))}
-            </div>
-          </section>
 
           <div className="ai-table-row">
             <section className="ai-card">
-              <h2>By model</h2>
+              <h2>By member</h2>
               <table className="ai-table">
                 <thead>
                   <tr>
-                    <th>Model</th>
-                    <th>Requests</th>
-                    <th>Cost</th>
+                    <th>Member</th>
+                    <th>Tokens</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {usage.by_model.map((m) => (
-                    <tr key={m.model}>
-                      <td>{m.model}</td>
-                      <td>{num(m.requests)}</td>
-                      <td>{usd(m.cost_cents)}</td>
+                  {usage.by_member.map((m) => (
+                    <tr key={m.name}>
+                      <td>{m.name}</td>
+                      <td>{num(m.tokens)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -252,21 +128,19 @@ export default function AiUsageGovernance() {
             </section>
 
             <section className="ai-card">
-              <h2>By member</h2>
+              <h2>By model</h2>
               <table className="ai-table">
                 <thead>
                   <tr>
-                    <th>Member</th>
-                    <th>Requests</th>
-                    <th>Cost</th>
+                    <th>Model</th>
+                    <th>Tokens</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {usage.by_member.map((m) => (
-                    <tr key={m.name}>
-                      <td>{m.name}</td>
-                      <td>{num(m.requests)}</td>
-                      <td>{usd(m.cost_cents)}</td>
+                  {usage.by_model.map((m) => (
+                    <tr key={m.model}>
+                      <td>{m.model}</td>
+                      <td>{num(m.tokens)}</td>
                     </tr>
                   ))}
                 </tbody>

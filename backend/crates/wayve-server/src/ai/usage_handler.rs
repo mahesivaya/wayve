@@ -102,12 +102,13 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     let by_model: Vec<Value> = sqlx::query(
         "SELECT model,
                 COUNT(*)::bigint                     AS requests,
+                COALESCE(SUM(input_tokens + output_tokens), 0)::bigint AS tokens,
                 COALESCE(SUM(cost_micro_cents), 0)::bigint AS cost_micro
            FROM ai_usage_events
           WHERE created_at >= NOW() - INTERVAL '30 days'
             AND (($1::int IS NULL AND organization_id IS NULL) OR organization_id = $1)
           GROUP BY model
-          ORDER BY requests DESC
+          ORDER BY tokens DESC
           LIMIT 10",
     )
     .bind(scope)
@@ -118,6 +119,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         serde_json::json!({
             "model": r.get::<String, _>("model"),
             "requests": r.get::<i64, _>("requests"),
+            "tokens": r.get::<i64, _>("tokens"),
             "cost_cents": r.get::<i64, _>("cost_micro") as f64 / 1_000_000.0,
         })
     })
@@ -131,13 +133,14 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
                     u.email
                 )                                    AS name,
                 COUNT(*)::bigint                     AS requests,
+                COALESCE(SUM(e.input_tokens + e.output_tokens), 0)::bigint AS tokens,
                 COALESCE(SUM(e.cost_micro_cents), 0)::bigint AS cost_micro
            FROM ai_usage_events e
            JOIN users u ON u.id = e.user_id
           WHERE e.created_at >= NOW() - INTERVAL '30 days'
             AND (($1::int IS NULL AND e.organization_id IS NULL) OR e.organization_id = $1)
           GROUP BY u.id
-          ORDER BY requests DESC
+          ORDER BY tokens DESC
           LIMIT 10",
     )
     .bind(scope)
@@ -148,6 +151,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         serde_json::json!({
             "name": r.get::<Option<String>, _>("name").unwrap_or_else(|| "Unknown".into()),
             "requests": r.get::<i64, _>("requests"),
+            "tokens": r.get::<i64, _>("tokens"),
             "cost_cents": r.get::<i64, _>("cost_micro") as f64 / 1_000_000.0,
         })
     })

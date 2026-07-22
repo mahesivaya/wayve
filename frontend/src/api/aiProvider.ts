@@ -87,8 +87,18 @@ export type AiUsage = {
     alert_threshold_pct: number;
   };
   daily: { day: string; requests: number; cost_cents: number }[];
-  by_model: { model: string; requests: number; cost_cents: number }[];
-  by_member: { name: string; requests: number; cost_cents: number }[];
+  by_model: {
+    model: string;
+    requests: number;
+    tokens: number;
+    cost_cents: number;
+  }[];
+  by_member: {
+    name: string;
+    requests: number;
+    tokens: number;
+    cost_cents: number;
+  }[];
 };
 
 export const getAiUsage = async () => apiFetchJson<AiUsage>("/api/ai/usage");
