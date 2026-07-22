@@ -9,7 +9,7 @@ use actix_web::{Error, delete, http::header, patch};
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use tokio::{fs, io::AsyncWriteExt};
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
 use wayve_security::jwt::get_user_id_from_request;
@@ -121,6 +121,26 @@ pub async fn create_ticket(
         user_id, ticket_id = id, category = %category,
         "support ticket created"
     );
+
+    // Mirror the report onto the Workspace Tickets board so platform staff see and
+    // action it there (materialised copy; this support_tickets row stays the
+    // report-of-record). Best-effort: a mirror failure must not fail the report.
+    // Idempotent via the unique support_ticket_id, matching the startup backfill.
+    if let Err(e) = sqlx::query(
+        "INSERT INTO workspace_tickets \
+             (user_id, name, description, priority, status, assigned_by, assignee, support_ticket_id) \
+         SELECT st.user_id, st.subject, st.description, 3, 'to_do', COALESCE(u.email, ''), '', st.id \
+           FROM support_tickets st \
+           LEFT JOIN users u ON u.id = st.user_id \
+          WHERE st.id = $1 \
+         ON CONFLICT (support_ticket_id) DO NOTHING",
+    )
+    .bind(id)
+    .execute(pool.get_ref())
+    .await
+    {
+        warn!(target: "http", ticket_id = id, error = %e, "failed to mirror support ticket onto tickets board");
+    }
 
     Ok(HttpResponse::Created().json(serde_json::json!({ "id": id })))
 }
