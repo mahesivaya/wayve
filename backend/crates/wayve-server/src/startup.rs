@@ -329,6 +329,28 @@ pub async fn ensure_email_schema(pool: &PgPool) {
                   OR (us.user_id IS NOT NULL AND ts.user_id = us.user_id)) \
           WHERE NOT EXISTS ( \
                 SELECT 1 FROM user_story_status_events e WHERE e.user_story_id = us.id)",
+        // Reported bugs (support_tickets) are mirrored onto the Workspace Tickets
+        // board so platform staff see/action them there. The marker column, its
+        // uniqueness (one board item per report), and the cascade FK must exist on
+        // existing deployments too, then backfill one board ticket per report.
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS support_ticket_id INTEGER",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_support_ticket \
+         ON workspace_tickets(support_ticket_id)",
+        "DO $$ BEGIN \
+            ALTER TABLE workspace_tickets \
+                ADD CONSTRAINT workspace_tickets_support_ticket_fk \
+                FOREIGN KEY (support_ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE; \
+         EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        // Backfill: one user-owned board ticket per existing report (assigned_by
+        // carries the reporter's email). Idempotent via NOT EXISTS + the unique
+        // index, so it's a no-op on every later boot.
+        "INSERT INTO workspace_tickets \
+             (user_id, name, description, priority, status, assigned_by, assignee, support_ticket_id) \
+         SELECT st.user_id, st.subject, st.description, 3, 'to_do', COALESCE(u.email, ''), '', st.id \
+           FROM support_tickets st \
+           LEFT JOIN users u ON u.id = st.user_id \
+          WHERE NOT EXISTS ( \
+                SELECT 1 FROM workspace_tickets wt WHERE wt.support_ticket_id = st.id)",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.

@@ -9,7 +9,7 @@ use actix_web::{Error, delete, http::header, patch};
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use tokio::{fs, io::AsyncWriteExt};
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
 use wayve_security::jwt::get_user_id_from_request;
@@ -121,6 +121,41 @@ pub async fn create_ticket(
         user_id, ticket_id = id, category = %category,
         "support ticket created"
     );
+
+    // Mirror the report onto the Workspace Tickets board so platform staff see and
+    // action it there (materialised copy; this support_tickets row stays the
+    // report-of-record). Best-effort: a mirror failure must not fail the report.
+    // Idempotent via the unique support_ticket_id, matching the startup backfill.
+    match sqlx::query_scalar::<_, i32>(
+        "INSERT INTO workspace_tickets \
+             (user_id, name, description, priority, status, assigned_by, assignee, support_ticket_id) \
+         SELECT st.user_id, st.subject, st.description, 3, 'to_do', COALESCE(u.email, ''), '', st.id \
+           FROM support_tickets st \
+           LEFT JOIN users u ON u.id = st.user_id \
+          WHERE st.id = $1 \
+         ON CONFLICT (support_ticket_id) DO NOTHING \
+         RETURNING id",
+    )
+    .bind(id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        // New board ticket — triage its priority from the report text in the
+        // background (Claude in prod). The reporter's user_id resolves the AI
+        // config; personal reporters fall through to the platform/env default.
+        Ok(Some(ticket_id)) => {
+            crate::tickets::triage::spawn(
+                pool.get_ref().clone(),
+                ticket_id,
+                subject.to_string(),
+                description.to_string(),
+            );
+        }
+        Ok(None) => {} // already mirrored (conflict) — nothing to do
+        Err(e) => {
+            warn!(target: "http", ticket_id = id, error = %e, "failed to mirror support ticket onto tickets board");
+        }
+    }
 
     Ok(HttpResponse::Created().json(serde_json::json!({ "id": id })))
 }

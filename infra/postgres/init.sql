@@ -1479,6 +1479,13 @@ CREATE TABLE IF NOT EXISTS workspace_tickets (
     assignee TEXT NOT NULL DEFAULT '',
     assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+    -- Set when this ticket was materialised from a reported bug (support_tickets):
+    -- the support row stays the report-of-record; this is the board work item.
+    -- Such tickets are hidden from normal per-owner boards and shown/managed only
+    -- by platform staff holding tickets:manage. See routes/support.rs + startup.rs.
+    -- FK + uniqueness added after support_tickets is defined below (that table
+    -- is created later in this file, so an inline reference would be a forward ref).
+    support_ticket_id INTEGER,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT workspace_tickets_owner_chk CHECK (
@@ -1489,6 +1496,10 @@ CREATE TABLE IF NOT EXISTS workspace_tickets (
 
 CREATE INDEX IF NOT EXISTS idx_workspace_tickets_org ON workspace_tickets(organization_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_tickets_user ON workspace_tickets(user_id);
+-- One board work item per reported bug; also lets the mirror INSERT use
+-- ON CONFLICT (support_ticket_id). NULLs (normal tickets) don't collide.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_support_ticket
+    ON workspace_tickets(support_ticket_id);
 
 -- ============================================================
 -- 🎫 SUPPORT TICKETS
@@ -1520,6 +1531,15 @@ CREATE INDEX IF NOT EXISTS idx_support_tickets_user ON support_tickets(user_id, 
 CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_support_tickets_org ON support_tickets(organization_id, created_at DESC)
     WHERE organization_id IS NOT NULL;
+
+-- Now that support_tickets exists, wire the workspace_tickets.support_ticket_id FK
+-- (declared above without a reference to avoid a forward ref). Deleting a report
+-- removes its materialised board ticket. Idempotent via the duplicate_object guard.
+DO $$ BEGIN
+    ALTER TABLE workspace_tickets
+        ADD CONSTRAINT workspace_tickets_support_ticket_fk
+        FOREIGN KEY (support_ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Screenshots / files uploaded with the ticket. Mirrors task_attachments:
 -- per-row AES-GCM ciphertext blob on disk under ./uploads, base64 IV in DB.

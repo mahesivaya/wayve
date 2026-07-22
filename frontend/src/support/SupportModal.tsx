@@ -123,13 +123,13 @@ export default function SupportModal({ onClose, onSubmitted }: Props) {
             </button>
           </header>
           <section className="support-form-section">
-            <div className="support-form-actions">
+            <div className="support-form-actions support-form-actions--bare">
               <button
                 type="button"
                 className="support-primary-btn"
                 onClick={onClose}
               >
-                Done
+                Close
               </button>
             </div>
           </section>

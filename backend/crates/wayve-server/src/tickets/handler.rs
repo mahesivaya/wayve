@@ -20,6 +20,19 @@ use actix_web::{delete, put};
 use sqlx::Row;
 use tracing::instrument;
 use wayve_security::jwt::get_user_id_from_request;
+use wayve_security::rbac::{self, Permission};
+
+/// Whether the caller may see and manage bug-report tickets — support tickets
+/// mirrored onto the board (`support_ticket_id IS NOT NULL`). These are shared
+/// across all platform staff holding `tickets:manage`, so they are excluded from
+/// normal per-owner boards and only surface for such callers. Non-failing: any
+/// resolution error resolves to `false`.
+async fn can_manage_bug_tickets(req: &HttpRequest, pool: &PgPool, user_id: i32) -> bool {
+    rbac::resolve_role_context_moded(req, pool, user_id)
+        .await
+        .map(|ctx| ctx.has(Permission::TicketsManage))
+        .unwrap_or(false)
+}
 
 /// Splits the polymorphic owner into the two nullable binds every query uses.
 fn owner_ids(owner: StatusOwner) -> (Option<i32>, Option<i32>) {
@@ -48,6 +61,8 @@ fn ticket_from_row(row: sqlx::postgres::PgRow) -> Task {
         jira_base: None,
         gitlab_issue_iid: None,
         gitlab_web_url: None,
+        // Present only in the list query (bug-derived tickets); absent elsewhere.
+        badge_kind: row.try_get("badge_kind").ok().flatten(),
     }
 }
 
@@ -91,16 +106,24 @@ pub async fn list_tickets(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
     let (org_id, uid) = owner_ids(owner);
+    let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
 
+    // The owner's own board is the non-bug tickets; bug-derived tickets (mirrored
+    // reports) are hidden there and instead shown to every tickets:manage caller.
+    // badge_kind carries the reported bug's support category for a card badge.
     let rows = sqlx::query(&format!(
-        "SELECT {SELECT_COLS}
+        "SELECT {SELECT_COLS},
+                (SELECT category FROM support_tickets st WHERE st.id = support_ticket_id) AS badge_kind
          FROM workspace_tickets
-         WHERE ($1::INTEGER IS NOT NULL AND organization_id = $1)
-            OR ($2::INTEGER IS NOT NULL AND user_id = $2)
+         WHERE (support_ticket_id IS NULL
+                AND (($1::INTEGER IS NOT NULL AND organization_id = $1)
+                  OR ($2::INTEGER IS NOT NULL AND user_id = $2)))
+            OR ($3::BOOLEAN AND support_ticket_id IS NOT NULL)
          ORDER BY priority DESC, created_at ASC, id ASC"
     ))
     .bind(org_id)
     .bind(uid)
+    .bind(manage_bugs)
     .fetch_all(pool.get_ref())
     .await?;
 
@@ -117,7 +140,11 @@ pub async fn count_open_tickets(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
     let (org_id, uid) = owner_ids(owner);
+    let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
 
+    // Mirror list_tickets' scope so the badge matches the board: the owner's own
+    // non-bug tickets, plus every bug-derived ticket when the caller manages them.
+    // Category comes from the caller's own statuses (default slugs are shared).
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)
          FROM workspace_tickets t
@@ -125,12 +152,15 @@ pub async fn count_open_tickets(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
                 ON s.slug = t.status
                AND (($1::INTEGER IS NOT NULL AND s.organization_id = $1)
                  OR ($2::INTEGER IS NOT NULL AND s.user_id = $2))
-         WHERE (($1::INTEGER IS NOT NULL AND t.organization_id = $1)
-             OR ($2::INTEGER IS NOT NULL AND t.user_id = $2))
+         WHERE ((t.support_ticket_id IS NULL
+                 AND (($1::INTEGER IS NOT NULL AND t.organization_id = $1)
+                   OR ($2::INTEGER IS NOT NULL AND t.user_id = $2)))
+             OR ($3::BOOLEAN AND t.support_ticket_id IS NOT NULL))
            AND COALESCE(s.category, '') NOT IN ('completed', 'canceled')",
     )
     .bind(org_id)
     .bind(uid)
+    .bind(manage_bugs)
     .fetch_one(pool.get_ref())
     .await?;
 
@@ -202,6 +232,15 @@ pub async fn create_ticket(
     )
     .await;
 
+    // AI triage in the background: refine the priority from the title/description
+    // without blocking the response. Best-effort — skips silently if no AI config.
+    crate::tickets::triage::spawn(
+        pool.get_ref().clone(),
+        ticket.id,
+        name.to_string(),
+        description.to_string(),
+    );
+
     Ok(HttpResponse::Ok().json(ticket))
 }
 
@@ -227,17 +266,20 @@ pub async fn update_ticket(
     let status = resolve_status(pool.get_ref(), owner, data.status.as_deref()).await?;
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
+    let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
 
     // The owner-scoped UPDATE 404s on a row outside this owner's scope, so an id
-    // belonging to another org/user never leaks.
+    // belonging to another org/user never leaks. Bug-derived tickets are owned by
+    // the reporter, so tickets:manage callers reach them via the extra clause.
     let row = sqlx::query(&format!(
         "UPDATE workspace_tickets
             SET name = $1, description = $2, priority = $3, status = $4,
                 assigned_by = $5, assignee = $6, assignee_id = $7, project_id = $8,
                 updated_at = NOW()
           WHERE id = $9
-            AND (($10::INTEGER IS NOT NULL AND organization_id = $10)
-              OR ($11::INTEGER IS NOT NULL AND user_id = $11))
+            AND ((($10::INTEGER IS NOT NULL AND organization_id = $10)
+               OR ($11::INTEGER IS NOT NULL AND user_id = $11))
+              OR ($12::BOOLEAN AND support_ticket_id IS NOT NULL))
          RETURNING {SELECT_COLS}"
     ))
     .bind(name)
@@ -251,6 +293,7 @@ pub async fn update_ticket(
     .bind(id)
     .bind(org_id)
     .bind(uid)
+    .bind(manage_bugs)
     .fetch_optional(pool.get_ref())
     .await?
     .ok_or(AppError::NotFound("workspace ticket"))?;
@@ -289,11 +332,16 @@ pub async fn delete_ticket(
     let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
     let (org_id, uid) = owner_ids(owner);
 
+    // Deliberately owner-scoped only: bug-derived tickets are mirrors of reports
+    // and cannot be deleted from the board (the startup backfill would recreate
+    // them anyway). Managers resolve them via a status change instead; deleting
+    // the report itself is a support-flow action.
     let removed: Option<String> = sqlx::query_scalar(
         "DELETE FROM workspace_tickets
           WHERE id = $1
             AND (($2::INTEGER IS NOT NULL AND organization_id = $2)
               OR ($3::INTEGER IS NOT NULL AND user_id = $3))
+            AND support_ticket_id IS NULL
          RETURNING name",
     )
     .bind(id)

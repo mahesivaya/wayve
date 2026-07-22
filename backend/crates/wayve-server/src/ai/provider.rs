@@ -127,6 +127,27 @@ pub async fn resolve_ai_for_user(
     Ok(env_default_ai())
 }
 
+/// The platform-wide AI, independent of any caller. In prod this is Claude
+/// (`platform_ai_config`, provider `anthropic`); it falls back to the env default
+/// (`ANTHROPIC_API_KEY`) so local dev can enable Claude with just the env key.
+///
+/// Used by platform automations like ticket triage that must run on the
+/// platform's model regardless of who owns the ticket — `resolve_ai_for_user`
+/// would miss the platform config for a personal reporter and drop to Gemini.
+pub async fn resolve_platform_ai(pool: &PgPool) -> Result<Option<ResolvedAi>, AppError> {
+    let prow = sqlx::query(
+        "SELECT provider, base_url, model, api_key_iv, api_key_encrypted, fail_closed,
+                ai_allow_email, ai_allow_calendar
+           FROM platform_ai_config WHERE id = 1 AND enabled",
+    )
+    .fetch_optional(pool)
+    .await?;
+    if let Some(row) = prow {
+        return Ok(Some(resolved_from_row(&row)?));
+    }
+    Ok(env_default_ai())
+}
+
 /// The platform's env-configured default provider, used when neither an org nor a
 /// platform config applies. Prefers Anthropic (Claude) when `ANTHROPIC_API_KEY`
 /// is set — so a prod deployment auto-uses Claude with no in-app configuration —

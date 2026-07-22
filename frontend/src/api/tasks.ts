@@ -35,6 +35,10 @@ export type Task = {
   jira_base?: string | null;
   gitlab_issue_iid?: number | null;
   gitlab_web_url?: string | null;
+  // A card badge kind, or absent for a plain ticket. Currently the support-ticket
+  // category (bug/feature/billing/account/other) for tickets materialised from a
+  // reported bug; the board renders it as a coloured pill.
+  badge_kind?: string | null;
 };
 
 export type SaveTaskPayload = {
