@@ -25,7 +25,7 @@ export const getTickets = async () =>
 // so the sidebar badge is one cheap query, not a full list fetch.
 export const getTicketsOpenCount = async () =>
   apiFetchJson<{ count: number }>("/api/workspace-tickets/open-count").then(
-    (r) => r.count,
+    (r) => r.count
   );
 
 export const createTicketApi = async (payload: SaveTaskPayload) => {
@@ -49,4 +49,22 @@ export const updateTicketApi = async (id: number, payload: SaveTaskPayload) => {
 export const deleteTicketApi = async (id: number) => {
   await apiFetch(`/api/workspace-tickets/${id}`, { method: "DELETE" });
   emitTicketsChanged();
+};
+
+// On-demand AI pass: Claude groups the board's tickets into duplicate / similar
+// clusters and labels them (related_to + relation_kind). Returns the counts so
+// the UI can report them; dispatches the change event so the board reloads.
+export type FindRelatedResult = {
+  groups: { kind: "duplicate" | "similar"; ids: number[] }[];
+  duplicates: number;
+  similar: number;
+};
+
+export const findRelatedTickets = async () => {
+  const result = await apiFetchJson<FindRelatedResult>(
+    "/api/workspace-tickets/find-related",
+    { method: "POST" }
+  );
+  emitTicketsChanged();
+  return result;
 };

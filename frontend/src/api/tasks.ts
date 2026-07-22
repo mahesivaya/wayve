@@ -39,6 +39,11 @@ export type Task = {
   // category (bug/feature/billing/account/other) for tickets materialised from a
   // reported bug; the board renders it as a coloured pill.
   badge_kind?: string | null;
+  // AI relationship labels (tickets only): related_to points at the group's
+  // canonical ticket id; relation_kind is how this ticket relates to it. The
+  // board renders a "Duplicate of #N" / "Similar to #N" pill.
+  related_to?: number | null;
+  relation_kind?: "duplicate" | "similar" | null;
 };
 
 export type SaveTaskPayload = {

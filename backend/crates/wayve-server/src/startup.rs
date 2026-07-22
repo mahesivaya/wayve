@@ -351,6 +351,15 @@ pub async fn ensure_email_schema(pool: &PgPool) {
            LEFT JOIN users u ON u.id = st.user_id \
           WHERE NOT EXISTS ( \
                 SELECT 1 FROM workspace_tickets wt WHERE wt.support_ticket_id = st.id)",
+        // AI relationship labels on tickets (tickets/relate.rs): related_to = the
+        // group's canonical (min id), relation_kind = how it relates. Labels only.
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS related_to INTEGER",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS relation_kind TEXT",
+        "DO $$ BEGIN \
+            ALTER TABLE workspace_tickets \
+                ADD CONSTRAINT workspace_tickets_relation_kind_chk \
+                CHECK (relation_kind IN ('duplicate', 'similar')); \
+         EXCEPTION WHEN duplicate_object THEN NULL; END $$",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.

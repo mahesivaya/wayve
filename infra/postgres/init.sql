@@ -1486,6 +1486,11 @@ CREATE TABLE IF NOT EXISTS workspace_tickets (
     -- FK + uniqueness added after support_tickets is defined below (that table
     -- is created later in this file, so an inline reference would be a forward ref).
     support_ticket_id INTEGER,
+    -- AI relationship labels (see tickets/relate.rs). related_to points at the
+    -- group's canonical (min id); relation_kind says how this ticket relates to
+    -- it. Labels only — nothing is merged or closed.
+    related_to INTEGER,
+    relation_kind TEXT CHECK (relation_kind IN ('duplicate', 'similar')),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT workspace_tickets_owner_chk CHECK (

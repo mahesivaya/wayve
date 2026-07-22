@@ -1022,6 +1022,67 @@
   color: var(--color-text-muted);
   border-color: var(--color-border);
 }
+
+/* AI relationship pill (Find related): amber for duplicates, blue for similar.
+   Only tickets carry relation_kind, so tasks/user stories never show this. */
+.ticket-relation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.ticket-relation-duplicate {
+  background: #fdf0d8;
+  color: #92600a;
+  border-color: #f2d59a;
+}
+.ticket-relation-similar {
+  background: #e8f0fe;
+  color: #1a56db;
+  border-color: #c3d8fb;
+}
+@media (prefers-color-scheme: dark) {
+  .ticket-relation-duplicate {
+    background: rgba(146, 96, 10, 0.24);
+    color: #f2ce8a;
+    border-color: rgba(146, 96, 10, 0.5);
+  }
+  .ticket-relation-similar {
+    background: rgba(26, 86, 219, 0.22);
+    color: #a8c5f7;
+    border-color: rgba(26, 86, 219, 0.5);
+  }
+}
+
+/* "Find related" toolbar button + its result message. */
+.tasks-find-related {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tasks-find-related:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+.tasks-find-related:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.tasks-find-related-msg {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
 @media (prefers-color-scheme: dark) {
   .ticket-kind-bug {
     background: rgba(180, 35, 24, 0.22);

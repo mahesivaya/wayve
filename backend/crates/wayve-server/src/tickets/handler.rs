@@ -63,6 +63,8 @@ fn ticket_from_row(row: sqlx::postgres::PgRow) -> Task {
         gitlab_web_url: None,
         // Present only in the list query (bug-derived tickets); absent elsewhere.
         badge_kind: row.try_get("badge_kind").ok().flatten(),
+        related_to: row.try_get("related_to").ok().flatten(),
+        relation_kind: row.try_get("relation_kind").ok().flatten(),
     }
 }
 
@@ -98,7 +100,7 @@ async fn resolve_status(
 }
 
 const SELECT_COLS: &str = "id, ticket_number, name, description, priority, status, assigned_by, \
-     assignee, assignee_id, project_id, created_at, updated_at";
+     assignee, assignee_id, project_id, related_to, relation_kind, created_at, updated_at";
 
 #[get("/workspace-tickets")]
 #[instrument(target = "http", skip(req, pool))]
@@ -165,6 +167,135 @@ pub async fn count_open_tickets(req: HttpRequest, pool: web::Data<PgPool>) -> Ap
     .await?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "count": count })))
+}
+
+/// The WHERE fragment (binds $1 org_id, $2 uid, $3 manage_bugs) that scopes a
+/// caller to the same tickets `list_tickets` shows: their own non-bug tickets
+/// plus every bug-derived ticket when they manage them. Kept as one string so
+/// list / relate share exactly the same visibility.
+const VISIBLE_SCOPE: &str = "((support_ticket_id IS NULL
+        AND (($1::INTEGER IS NOT NULL AND organization_id = $1)
+          OR ($2::INTEGER IS NOT NULL AND user_id = $2)))
+     OR ($3::BOOLEAN AND support_ticket_id IS NOT NULL))";
+
+/// On-demand AI pass: ask Claude to group the caller's visible tickets into
+/// `duplicate` / `similar` clusters and label them (`related_to` = the group's
+/// canonical = min id; `relation_kind` = how it relates). Re-runnable: it first
+/// clears the caller's existing labels, then re-applies, so stale links drop.
+#[post("/workspace-tickets/find-related")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn find_related_tickets(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
+    let (org_id, uid) = owner_ids(owner);
+    let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
+
+    // Pull the visible tickets Claude will reason over.
+    let rows = sqlx::query(&format!(
+        "SELECT id, name, description FROM workspace_tickets WHERE {VISIBLE_SCOPE}"
+    ))
+    .bind(org_id)
+    .bind(uid)
+    .bind(manage_bugs)
+    .fetch_all(pool.get_ref())
+    .await?;
+    let tickets: Vec<(i32, String, String)> = rows
+        .iter()
+        .map(|r| (r.get("id"), r.get("name"), r.get("description")))
+        .collect();
+
+    let groups = crate::tickets::relate::find_groups(pool.get_ref(), &tickets).await;
+
+    // Fresh labels each run: clear this caller's existing relation labels first.
+    sqlx::query(&format!(
+        "UPDATE workspace_tickets SET related_to = NULL, relation_kind = NULL WHERE {VISIBLE_SCOPE}"
+    ))
+    .bind(org_id)
+    .bind(uid)
+    .bind(manage_bugs)
+    .execute(pool.get_ref())
+    .await?;
+
+    // Each ticket gets at most one label. Claude can return overlapping groups
+    // (e.g. a duplicate pair also inside a broader similar group), so apply the
+    // stronger relation first (duplicate before similar) and skip any ticket
+    // already labelled — otherwise a later, weaker group would clobber it.
+    let mut duplicates = 0i64;
+    let mut similar = 0i64;
+    let mut assigned: std::collections::HashSet<i32> = std::collections::HashSet::new();
+    let ordered = groups
+        .iter()
+        .filter(|g| g.kind == "duplicate")
+        .chain(groups.iter().filter(|g| g.kind == "similar"));
+    for g in ordered {
+        let fresh: Vec<i32> = g
+            .ids
+            .iter()
+            .copied()
+            .filter(|id| !assigned.contains(id))
+            .collect();
+        // Canonical = min id (the group's anchor); the rest point at it.
+        let Some(canonical) = fresh.iter().min().copied() else {
+            continue;
+        };
+        let members: Vec<i32> = fresh
+            .iter()
+            .copied()
+            .filter(|id| *id != canonical)
+            .collect();
+        if members.is_empty() {
+            continue;
+        }
+        for id in &fresh {
+            assigned.insert(*id);
+        }
+        // Scope the write so a caller can never label a row outside their view.
+        let affected = sqlx::query(&format!(
+            "UPDATE workspace_tickets SET related_to = $4, relation_kind = $5
+             WHERE id = ANY($6) AND {VISIBLE_SCOPE}"
+        ))
+        .bind(org_id)
+        .bind(uid)
+        .bind(manage_bugs)
+        .bind(canonical)
+        .bind(&g.kind)
+        .bind(&members)
+        .execute(pool.get_ref())
+        .await?
+        .rows_affected() as i64;
+        if g.kind == "duplicate" {
+            duplicates += affected;
+        } else {
+            similar += affected;
+        }
+    }
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "workspace_tickets_related",
+            resource_type: "workspace_ticket",
+            resource_id: None,
+            metadata: Some(serde_json::json!({
+                "groups": groups.len(),
+                "duplicates": duplicates,
+                "similar": similar,
+            })),
+        },
+    )
+    .await;
+
+    let groups_json: Vec<Value> = groups
+        .iter()
+        .map(|g| serde_json::json!({ "kind": g.kind, "ids": g.ids }))
+        .collect();
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "groups": groups_json,
+        "duplicates": duplicates,
+        "similar": similar,
+    })))
 }
 
 #[post("/workspace-tickets")]
