@@ -1,5 +1,7 @@
 import { apiFetch, apiFetchJson } from "./client";
-import type { Task, SaveTaskPayload } from "./tasks";
+import type { Task, SaveTaskPayload, TaskAttachment } from "./tasks";
+import { getApiBase } from "../config/env";
+import { getAuthToken } from "../auth/token";
 
 // Workspace tickets are a second Tasks-style board, independent of user stories.
 // They reuse the Task record shape (task_number carries the per-owner ticket
@@ -126,3 +128,63 @@ export const openAiFixPr = async (id: number) =>
     `/api/workspace-tickets/${id}/ai-fix-open-pr`,
     { method: "POST" }
   );
+
+// Ticket attachments. Ticket-scoped mirror of the task-attachment API (see
+// api/tasks.ts). The backend serializes rows with `task_id` set to the ticket
+// id, so they satisfy the shared `TaskAttachment` type the board expects.
+export const listTicketAttachments = async (ticketId: number) =>
+  apiFetchJson<TaskAttachment[]>(
+    `/api/workspace-tickets/${ticketId}/attachments`
+  );
+
+// Raw fetch (not apiFetch) so the browser sets the multipart boundary.
+export const uploadTicketAttachments = async (
+  ticketId: number,
+  files: File[]
+): Promise<TaskAttachment[]> => {
+  if (files.length === 0) return [];
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+
+  const token = getAuthToken();
+  const res = await fetch(
+    `${getApiBase()}/api/workspace-tickets/${ticketId}/attachments`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
+    }
+  );
+  if (!res.ok) {
+    let message = "Attachment upload failed";
+    try {
+      const data = await res.clone().json();
+      message = data?.message || data?.error || message;
+    } catch {
+      const text = await res.text();
+      if (text.trim()) message = text.trim();
+    }
+    throw new Error(message);
+  }
+  return res.json() as Promise<TaskAttachment[]>;
+};
+
+export const deleteTicketAttachment = async (id: number) => {
+  await apiFetch(`/api/ticket-attachments/${id}`, { method: "DELETE" });
+};
+
+export const downloadTicketAttachment = async (
+  attachment: TaskAttachment
+): Promise<void> => {
+  const res = await apiFetch(`/api/ticket-attachments/${attachment.id}/download`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = attachment.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};

@@ -52,6 +52,33 @@ async fn can_manage_bug_tickets_service(pool: &PgPool, user_id: i32) -> bool {
         .unwrap_or(false)
 }
 
+/// Resolve the caller and confirm `ticket_id` is within their visible scope
+/// (own board, or a bug-derived ticket when they manage bugs). Returns the
+/// caller's `user_id` on success, `NotFound` otherwise. Shared with the ticket
+/// attachments module so it enforces the same visibility as the board.
+pub(super) async fn ticket_visible_to(
+    req: &HttpRequest,
+    pool: &PgPool,
+    ticket_id: i32,
+) -> Result<i32, AppError> {
+    let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
+    let owner = statuses::owner_for_user(pool, user_id).await?;
+    let (org_id, uid) = owner_ids(owner);
+    let manage_bugs = can_manage_bug_tickets(req, pool, user_id).await;
+    let found: Option<i32> = sqlx::query_scalar(&format!(
+        "SELECT id FROM workspace_tickets WHERE id = $4 AND {VISIBLE_SCOPE}"
+    ))
+    .bind(org_id)
+    .bind(uid)
+    .bind(manage_bugs)
+    .bind(ticket_id)
+    .fetch_optional(pool)
+    .await?;
+    found
+        .map(|_| user_id)
+        .ok_or(AppError::NotFound("workspace ticket"))
+}
+
 /// Splits the polymorphic owner into the two nullable binds every query uses.
 fn owner_ids(owner: StatusOwner) -> (Option<i32>, Option<i32>) {
     match owner {
