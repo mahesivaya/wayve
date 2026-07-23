@@ -41,8 +41,8 @@ example (inspect that commit's diff to see the pattern), not a literal copy.
   `Co-Authored-By` trailer (see `CLAUDE.md`).
 - Do not edit `infra/postgres/init.sql` schema unless the ticket truly requires it.
 - **Commit your change** on the current branch as one Conventional Commit
-  (`fix(scope): summary`, no `Co-Authored-By`) once the checks pass — the workflow
-  pushes that commit's branch and posts its diff back for in-app review. If you
-  make no commit, the pipeline reports "no change" for the ticket.
-- You do **not** open the PR. The owner reviews your diff on the ticket page and
-  clicks "Commit & push" to open it.
+  (`fix(scope): summary`, no `Co-Authored-By`) once the checks pass. The workflow
+  reads that commit to report the diff + changed files back for in-app review — it
+  does **not** push. If you make no commit, the pipeline reports "no change".
+- You do **not** push, open a PR, or otherwise touch the remote. The owner reviews
+  your diff on the ticket page and drives Commit → Push → Create PR from there.

@@ -7,6 +7,8 @@ import {
   deleteTicketApi,
   aiFixTicket,
   getAiFixState,
+  commitAiFix,
+  pushAiFix,
   openAiFixPr,
   type AiFixState,
 } from "../api/tickets";
@@ -50,7 +52,9 @@ export default function TicketDetail() {
   const [aiFixBusy, setAiFixBusy] = useState(false);
   const [aiFixMsg, setAiFixMsg] = useState("");
   const [aiFix, setAiFix] = useState<AiFixState | null>(null);
-  const [prBusy, setPrBusy] = useState(false);
+  const [stepBusy, setStepBusy] = useState<"commit" | "push" | "pr" | null>(
+    null
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -159,7 +163,13 @@ export default function TicketDetail() {
           : "Fix started in CI. The diff will appear here to review."
       );
       // Reflect the running state immediately and start polling for the diff.
-      setAiFix({ status: "running", branch: null, diff: null, pr_url: null });
+      setAiFix({
+        status: "running",
+        diff: null,
+        commit_sha: null,
+        branch: null,
+        pr_url: null,
+      });
     } catch (err) {
       setAiFixMsg(
         err instanceof Error ? err.message : "Couldn't start the AI fix."
@@ -169,23 +179,50 @@ export default function TicketDetail() {
     }
   };
 
-  const commitAndPush = async () => {
+  // The three GitHub steps, each gated on the prior one's status. `step` runs the
+  // API call and folds the returned field + new status into the local state.
+  const runStep = async (
+    step: "commit" | "push" | "pr",
+    fn: () => Promise<Partial<AiFixState>>,
+    nextStatus: AiFixState["status"],
+    failMsg: string
+  ) => {
     if (!ticket) return;
-    setPrBusy(true);
+    setStepBusy(step);
     setAiFixMsg("");
     try {
-      const { pr_url } = await openAiFixPr(ticket.id);
+      const patch = await fn();
       setAiFix((prev) =>
-        prev ? { ...prev, status: "pr_opened", pr_url } : prev
+        prev ? { ...prev, ...patch, status: nextStatus } : prev
       );
     } catch (err) {
-      setAiFixMsg(
-        err instanceof Error ? err.message : "Couldn't open the pull request."
-      );
+      setAiFixMsg(err instanceof Error ? err.message : failMsg);
     } finally {
-      setPrBusy(false);
+      setStepBusy(null);
     }
   };
+
+  const doCommit = () =>
+    runStep(
+      "commit",
+      async () => ({ commit_sha: (await commitAiFix(ticket!.id)).commit_sha }),
+      "committed",
+      "Couldn't create the commit."
+    );
+  const doPush = () =>
+    runStep(
+      "push",
+      async () => ({ branch: (await pushAiFix(ticket!.id)).branch }),
+      "pushed",
+      "Couldn't push the branch."
+    );
+  const doCreatePr = () =>
+    runStep(
+      "pr",
+      async () => ({ pr_url: (await openAiFixPr(ticket!.id)).pr_url }),
+      "pr_opened",
+      "Couldn't open the pull request."
+    );
 
   return (
     <div className="ticket-detail">
@@ -281,13 +318,13 @@ export default function TicketDetail() {
               <button type="submit" className="primary" disabled={saving}>
                 {saving ? "Saving…" : "Save changes"}
               </button>
-              {/* AI fix is limited to P1 tickets; hidden while a fix is already
-                  running, awaiting review, or merged into a PR (backend enforces
-                  the P1 gate too). */}
+              {/* AI fix is limited to P1 tickets; shown only when there's no fix
+                  in flight — i.e. nothing yet, or the last run gave nothing to
+                  review (backend enforces the P1 gate too). */}
               {priority === 1 &&
-                aiFix?.status !== "running" &&
-                aiFix?.status !== "ready" &&
-                aiFix?.status !== "pr_opened" && (
+                (!aiFix?.status ||
+                  aiFix.status === "no_change" ||
+                  aiFix.status === "error") && (
                   <button
                     type="button"
                     className="ticket-detail-aifix"
@@ -322,7 +359,7 @@ export default function TicketDetail() {
             )}
           </form>
 
-          {/* AI-fix review panel: the diff Claude produced, then Commit & push. */}
+          {/* AI-fix review panel: Claude's diff, then Commit → Push → Create PR. */}
           {aiFix?.status && aiFix.status !== "no_change" && (
             <section className="ticket-aifix" aria-label="AI fix">
               <h2 className="ticket-aifix-head">AI fix</h2>
@@ -341,61 +378,111 @@ export default function TicketDetail() {
                 </p>
               )}
 
-              {aiFix.status === "ready" && (
-                <>
-                  <p className="ticket-aifix-muted">
-                    Review Claude’s proposed change{" "}
-                    {aiFix.branch && (
-                      <>
-                        on branch <code>{aiFix.branch}</code>
-                      </>
-                    )}
-                    , then commit &amp; push to open the pull request.
-                  </p>
-                  <pre className="ticket-aifix-diff">
-                    <code>
-                      {(aiFix.diff ?? "").split("\n").map((line, i) => (
-                        <span
-                          key={i}
-                          className={`ticket-aifix-line ${diffLineClass(line)}`}
-                        >
-                          {line || " "}
-                          {"\n"}
-                        </span>
-                      ))}
-                    </code>
-                  </pre>
-                  <div className="ticket-aifix-actions">
-                    <button
-                      type="button"
-                      className="primary"
-                      onClick={() => void commitAndPush()}
-                      disabled={prBusy}
-                    >
-                      {prBusy ? "Opening PR…" : "Commit & push"}
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {aiFix.status === "pr_opened" && (
-                <p className="ticket-aifix-muted">
-                  ✅ Pull request opened
-                  {aiFix.pr_url && (
+              {(aiFix.status === "ready" ||
+                aiFix.status === "committed" ||
+                aiFix.status === "pushed" ||
+                aiFix.status === "pr_opened") &&
+                (() => {
+                  // How far the change has progressed; each button is active at
+                  // its own step and shows a check once the step is behind us.
+                  const order = {
+                    ready: 0,
+                    committed: 1,
+                    pushed: 2,
+                    pr_opened: 3,
+                  }[aiFix.status];
+                  return (
                     <>
-                      {" — "}
-                      <a
-                        href={aiFix.pr_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        view on GitHub
-                      </a>
+                      <p className="ticket-aifix-muted">
+                        Review Claude’s proposed change, then commit → push →
+                        create the pull request.
+                      </p>
+                      <pre className="ticket-aifix-diff">
+                        <code>
+                          {(aiFix.diff ?? "").split("\n").map((line, i) => (
+                            <span
+                              key={i}
+                              className={`ticket-aifix-line ${diffLineClass(
+                                line
+                              )}`}
+                            >
+                              {line || " "}
+                              {"\n"}
+                            </span>
+                          ))}
+                        </code>
+                      </pre>
+                      <div className="ticket-aifix-steps">
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => void doCommit()}
+                          disabled={stepBusy !== null || order >= 1}
+                        >
+                          {stepBusy === "commit"
+                            ? "Committing…"
+                            : order >= 1
+                              ? "✓ Committed"
+                              : "Commit"}
+                        </button>
+                        <span className="ticket-aifix-arrow" aria-hidden="true">
+                          →
+                        </span>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => void doPush()}
+                          disabled={stepBusy !== null || order < 1 || order >= 2}
+                        >
+                          {stepBusy === "push"
+                            ? "Pushing…"
+                            : order >= 2
+                              ? "✓ Pushed"
+                              : "Push"}
+                        </button>
+                        <span className="ticket-aifix-arrow" aria-hidden="true">
+                          →
+                        </span>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => void doCreatePr()}
+                          disabled={stepBusy !== null || order < 2 || order >= 3}
+                        >
+                          {stepBusy === "pr"
+                            ? "Opening PR…"
+                            : order >= 3
+                              ? "✓ PR opened"
+                              : "Create PR"}
+                        </button>
+                      </div>
+                      {order >= 2 && aiFix.branch && (
+                        <p className="ticket-aifix-muted">
+                          Branch <code>{aiFix.branch}</code>
+                          {aiFix.commit_sha && (
+                            <>
+                              {" · commit "}
+                              <code>{aiFix.commit_sha.slice(0, 7)}</code>
+                            </>
+                          )}
+                        </p>
+                      )}
+                      {aiFix.status === "pr_opened" && aiFix.pr_url && (
+                        <p className="ticket-aifix-muted">
+                          ✅ Pull request opened —{" "}
+                          <a
+                            href={aiFix.pr_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            view on GitHub
+                          </a>
+                          . CI must pass before it can merge.
+                        </p>
+                      )}
                     </>
-                  )}
-                  . CI must pass before it can merge.
-                </p>
-              )}
+                  );
+                })()}
             </section>
           )}
         </>

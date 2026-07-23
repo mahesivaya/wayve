@@ -1506,6 +1506,21 @@ CREATE TABLE IF NOT EXISTS workspace_tickets (
     resolution_commit TEXT,
     resolution_summary TEXT,
     resolved_at TIMESTAMP,
+    -- AI-fix review state: the "Fix with AI" pipeline (P1 tickets) dispatches CI,
+    -- which makes + verifies a fix and posts the changed files + diff back here
+    -- WITHOUT touching Git. The ticket page shows the diff, then three buttons
+    -- drive GitHub's Git Data API: Commit (ai_fix_files @ ai_fix_base_sha → a
+    -- commit object, ai_fix_commit_sha), Push (→ branch ai_fix_branch), Create PR
+    -- (→ ai_fix_pr_url). ai_fix_status ∈
+    -- (running|ready|committed|pushed|pr_opened|no_change|error).
+    ai_fix_status TEXT,
+    ai_fix_diff TEXT,
+    -- The changed files as a JSON array [{path, content(base64), deleted}].
+    ai_fix_files JSONB,
+    ai_fix_base_sha TEXT,
+    ai_fix_commit_sha TEXT,
+    ai_fix_branch TEXT,
+    ai_fix_pr_url TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT workspace_tickets_owner_chk CHECK (

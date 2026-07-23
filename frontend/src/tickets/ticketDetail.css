@@ -189,11 +189,14 @@
     color: #fca5a5;
   }
 }
-.ticket-aifix-actions {
+.ticket-aifix-steps {
   display: flex;
+  align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
-.ticket-aifix-actions .primary {
+.ticket-aifix-steps .primary {
   padding: 8px 16px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -201,7 +204,11 @@
   color: var(--color-surface);
   cursor: pointer;
 }
-.ticket-aifix-actions .primary:disabled {
-  opacity: 0.6;
+.ticket-aifix-steps .primary:disabled {
+  opacity: 0.55;
   cursor: default;
+}
+.ticket-aifix-arrow {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
