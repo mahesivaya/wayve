@@ -324,7 +324,7 @@ pub async fn ai_fix_ticket(
 
     // The target ticket, scoped to the caller's view.
     let row = sqlx::query(&format!(
-        "SELECT name, description FROM workspace_tickets WHERE id = $4 AND {VISIBLE_SCOPE}"
+        "SELECT name, description, priority FROM workspace_tickets WHERE id = $4 AND {VISIBLE_SCOPE}"
     ))
     .bind(org_id)
     .bind(uid)
@@ -335,6 +335,16 @@ pub async fn ai_fix_ticket(
     .ok_or(AppError::NotFound("workspace ticket"))?;
     let name: String = row.get("name");
     let description: String = row.get("description");
+    let priority: i16 = row.get("priority");
+
+    // For now the AI fixer is limited to P1 tickets, so it's rolled out on the
+    // lowest-priority tickets first. The UI hides the button off P1; this is the
+    // authoritative gate.
+    if priority != 1 {
+        return Err(AppError::bad_request(
+            "AI fix is available only for P1 tickets",
+        ));
+    }
 
     // Recall a resolved ticket with a stored fix that is the same kind of issue,
     // to hand the fixer as a worked example (cold-start: none until fixes accrue).
@@ -434,6 +444,19 @@ pub async fn ai_fix_ticket(
         )));
     }
 
+    // Mark the ticket "running" and clear any prior review state, so the ticket
+    // page shows a pending state until CI posts the diff back (POST .../ai-fix-diff).
+    sqlx::query(
+        "UPDATE workspace_tickets
+            SET ai_fix_status = 'running', ai_fix_diff = NULL, ai_fix_files = NULL,
+                ai_fix_base_sha = NULL, ai_fix_commit_sha = NULL, ai_fix_branch = NULL,
+                ai_fix_pr_url = NULL, updated_at = NOW()
+          WHERE id = $1",
+    )
+    .bind(id)
+    .execute(pool.get_ref())
+    .await?;
+
     crate::audit::record_action(
         pool.get_ref(),
         &req,
@@ -511,6 +534,238 @@ pub async fn record_resolution(
     .await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "recorded": true })))
+}
+
+/// GET /workspace-tickets/{id}/ai-fix — the ticket's AI-fix review state so the
+/// ticket page can show a pending spinner, the diff + a "Commit & push" button,
+/// or the opened PR link. Same gate as dispatch (`can_manage_bug_tickets`).
+#[get("/workspace-tickets/{id}/ai-fix")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn get_ai_fix_state(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let id = path.into_inner();
+    let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
+    let (org_id, uid) = owner_ids(owner);
+    let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
+    if !manage_bugs {
+        return Err(AppError::Forbidden);
+    }
+
+    let row = sqlx::query(&format!(
+        "SELECT ai_fix_status, ai_fix_branch, ai_fix_diff, ai_fix_pr_url
+         FROM workspace_tickets WHERE id = $4 AND {VISIBLE_SCOPE}"
+    ))
+    .bind(org_id)
+    .bind(uid)
+    .bind(manage_bugs)
+    .bind(id)
+    .fetch_optional(pool.get_ref())
+    .await?
+    .ok_or(AppError::NotFound("workspace ticket"))?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "status": row.try_get::<Option<String>, _>("ai_fix_status").ok().flatten(),
+        "branch": row.try_get::<Option<String>, _>("ai_fix_branch").ok().flatten(),
+        "diff": row.try_get::<Option<String>, _>("ai_fix_diff").ok().flatten(),
+        "pr_url": row.try_get::<Option<String>, _>("ai_fix_pr_url").ok().flatten(),
+    })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct AiFixDiffInput {
+    /// 'ready' (branch + diff present), 'no_change' (agent produced nothing), or
+    /// 'error' (the CI run failed before it could produce a fix).
+    pub status: String,
+    pub branch: Option<String>,
+    pub diff: Option<String>,
+}
+
+/// POST /workspace-tickets/{id}/ai-fix-diff — the CI callback. After the fixer
+/// pushes its branch, it posts the branch + diff here (no PR yet). Authenticated
+/// by an API key mapped to a tickets:manage user, exactly like `record_resolution`.
+#[post("/workspace-tickets/{id}/ai-fix-diff")]
+#[instrument(target = "http", skip(req, pool, path, body))]
+pub async fn record_ai_fix_diff(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    body: web::Json<AiFixDiffInput>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let id = path.into_inner();
+    if !can_manage_bug_tickets(&req, pool.get_ref(), user_id).await {
+        return Err(AppError::Forbidden);
+    }
+    let status = match body.status.trim() {
+        s @ ("ready" | "no_change" | "error") => s,
+        _ => return Err(AppError::BadRequest("invalid status".into())),
+    };
+    // A 'ready' report must carry the branch + diff to review; the others clear them.
+    let (branch, diff) = if status == "ready" {
+        match (body.branch.as_deref(), body.diff.as_deref()) {
+            (Some(b), Some(d)) if !b.trim().is_empty() => (Some(b), Some(d)),
+            _ => {
+                return Err(AppError::BadRequest(
+                    "ready requires branch and diff".into(),
+                ));
+            }
+        }
+    } else {
+        (None, None)
+    };
+
+    let updated = sqlx::query_scalar::<_, i32>(
+        "UPDATE workspace_tickets
+            SET ai_fix_status = $1, ai_fix_branch = $2, ai_fix_diff = $3, updated_at = NOW()
+          WHERE id = $4
+         RETURNING id",
+    )
+    .bind(status)
+    .bind(branch)
+    .bind(diff)
+    .bind(id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    if updated.is_none() {
+        return Err(AppError::NotFound("workspace ticket"));
+    }
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "recorded": true })))
+}
+
+/// POST /workspace-tickets/{id}/ai-fix-open-pr — the "Commit & push" action. The
+/// fix branch is already pushed by CI; this opens the PR from it to `main` via
+/// the GitHub API and records the URL. Same gate as dispatch.
+#[post("/workspace-tickets/{id}/ai-fix-open-pr")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn open_ai_fix_pr(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let id = path.into_inner();
+    let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
+    let (org_id, uid) = owner_ids(owner);
+    let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
+    if !manage_bugs {
+        return Err(AppError::Forbidden);
+    }
+
+    let row = sqlx::query(&format!(
+        "SELECT name, ai_fix_status, ai_fix_branch, ai_fix_pr_url
+         FROM workspace_tickets WHERE id = $4 AND {VISIBLE_SCOPE}"
+    ))
+    .bind(org_id)
+    .bind(uid)
+    .bind(manage_bugs)
+    .bind(id)
+    .fetch_optional(pool.get_ref())
+    .await?
+    .ok_or(AppError::NotFound("workspace ticket"))?;
+
+    // Idempotent: if a PR was already opened, return it rather than opening another.
+    if let Some(existing) = row
+        .try_get::<Option<String>, _>("ai_fix_pr_url")
+        .ok()
+        .flatten()
+    {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "pr_url": existing })));
+    }
+    let status: Option<String> = row.try_get("ai_fix_status").ok().flatten();
+    if status.as_deref() != Some("ready") {
+        return Err(AppError::bad_request(
+            "No reviewed fix is ready for this ticket",
+        ));
+    }
+    let Some(branch) = row
+        .try_get::<Option<String>, _>("ai_fix_branch")
+        .ok()
+        .flatten()
+    else {
+        return Err(AppError::bad_request(
+            "No fix branch recorded for this ticket",
+        ));
+    };
+    let name: String = row.get("name");
+
+    let Some(gh_token) = crate::github_proxy::effective_github_token(&req, pool.get_ref()).await
+    else {
+        return Err(AppError::bad_request(
+            "GitHub is not configured (GITHUB_TOKEN missing)",
+        ));
+    };
+    let Some((gh_owner, gh_repo)) = crate::config::github_repo() else {
+        return Err(AppError::bad_request(
+            "Set GITHUB_REPO (owner/repo) to enable AI fix",
+        ));
+    };
+    let api_base = crate::external::github_api_base();
+    let url = format!("{api_base}/repos/{gh_owner}/{gh_repo}/pulls");
+    let pr_body = serde_json::json!({
+        "title": format!("fix(ticket): #{id} {name}"),
+        "head": branch,
+        "base": "main",
+        "body": format!(
+            "Automated fix for Workspace ticket #{id}, reviewed in-app before opening.\n\n🤖 Generated by the AI-fix pipeline (Claude Code). CI must pass before merge."
+        ),
+    });
+    let resp = reqwest::Client::new()
+        .post(&url)
+        .timeout(std::time::Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app")
+        .header("Authorization", format!("Bearer {gh_token}"))
+        .json(&pr_body)
+        .send()
+        .await
+        .map_err(|_| AppError::internal("failed to reach GitHub"))?;
+    if !resp.status().is_success() {
+        let code = resp.status();
+        let detail = resp.text().await.unwrap_or_default();
+        warn!(target: "http", ticket_id = id, %code, "AI-fix open-PR failed: {detail}");
+        return Err(AppError::bad_request(format!(
+            "GitHub PR creation failed ({code}). The branch may be missing or a PR may already exist."
+        )));
+    }
+    let pr: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|_| AppError::internal("invalid GitHub response"))?;
+    let pr_url = pr
+        .get("html_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    sqlx::query(
+        "UPDATE workspace_tickets
+            SET ai_fix_pr_url = $1, ai_fix_status = 'pr_opened', updated_at = NOW()
+          WHERE id = $2",
+    )
+    .bind(&pr_url)
+    .bind(id)
+    .execute(pool.get_ref())
+    .await?;
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: "workspace_ticket_ai_fix_pr_opened",
+            resource_type: "workspace_ticket",
+            resource_id: Some(id.to_string()),
+            metadata: Some(serde_json::json!({ "pr_url": pr_url, "branch": branch })),
+        },
+    )
+    .await;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "pr_url": pr_url })))
 }
 
 #[post("/workspace-tickets")]

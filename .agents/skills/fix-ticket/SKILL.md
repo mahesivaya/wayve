@@ -40,4 +40,9 @@ example (inspect that commit's diff to see the pattern), not a literal copy.
 - Follow the repo's Conventional Commits (`fix(scope): summary`); **no**
   `Co-Authored-By` trailer (see `CLAUDE.md`).
 - Do not edit `infra/postgres/init.sql` schema unless the ticket truly requires it.
-- The workflow opens the PR after you finish; you just make the change and verify.
+- **Commit your change** on the current branch as one Conventional Commit
+  (`fix(scope): summary`, no `Co-Authored-By`) once the checks pass — the workflow
+  pushes that commit's branch and posts its diff back for in-app review. If you
+  make no commit, the pipeline reports "no change" for the ticket.
+- You do **not** open the PR. The owner reviews your diff on the ticket page and
+  clicks "Commit & push" to open it.

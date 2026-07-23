@@ -366,6 +366,16 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolution_commit TEXT",
         "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolution_summary TEXT",
         "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP",
+        // AI-fix review state (P1 tickets): CI posts the changed files + diff back
+        // here (no Git ops); the ticket page's Commit/Push/Create-PR buttons drive
+        // GitHub's Git Data API from that payload. See tickets/handler.rs.
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_status TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_diff TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_files JSONB",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_base_sha TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_commit_sha TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_branch TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_pr_url TEXT",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.

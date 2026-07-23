@@ -80,3 +80,32 @@ export const aiFixTicket = async (id: number) =>
   apiFetchJson<AiFixResult>(`/api/workspace-tickets/${id}/ai-fix`, {
     method: "POST",
   });
+
+// The AI-fix review state for one ticket. CI pushes a fix branch and posts its
+// diff here (status 'ready'); the ticket page shows the diff + a "Commit & push"
+// button that opens the PR (status → 'pr_opened'). 'running' = CI in flight;
+// 'no_change'/'error' = the run produced nothing to review.
+export type AiFixStatus =
+  | "running"
+  | "ready"
+  | "no_change"
+  | "error"
+  | "pr_opened";
+
+export type AiFixState = {
+  status: AiFixStatus | null;
+  branch: string | null;
+  diff: string | null;
+  pr_url: string | null;
+};
+
+export const getAiFixState = async (id: number) =>
+  apiFetchJson<AiFixState>(`/api/workspace-tickets/${id}/ai-fix`);
+
+// "Commit & push": open the PR from the already-pushed fix branch. Idempotent —
+// returns the existing PR url if one was already opened.
+export const openAiFixPr = async (id: number) =>
+  apiFetchJson<{ pr_url: string }>(
+    `/api/workspace-tickets/${id}/ai-fix-open-pr`,
+    { method: "POST" }
+  );

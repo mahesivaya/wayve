@@ -42,6 +42,7 @@ const DomainVerification = lazy(
 const ComingSoon = lazy(() => import("./components/ComingSoon"));
 const NotFound = lazy(() => import("./components/NotFound"));
 const Reminders = lazy(() => import("./reminders/Reminders"));
+const TicketDetail = lazy(() => import("./tickets/TicketDetail"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
 const Integrations = lazy(() => import("./integrations/Integrations"));
@@ -240,6 +241,10 @@ export default function App() {
                   <Route key={app.key} path={app.path} element={<app.Comp />} />
                 )
               )}
+
+              {/* A single ticket opens on its own page (Tickets board routes here
+                  via config.detailPath) instead of the edit modal. */}
+              <Route path="/tickets/:id" element={<TicketDetail />} />
 
               <Route path="/home" element={redirectToAccountHome ?? <Home />} />
               <Route

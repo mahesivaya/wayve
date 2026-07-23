@@ -341,32 +341,6 @@ function TaskBadge({ kind }: { kind?: string | null }) {
   );
 }
 
-// AI relationship pill: "Duplicate of #N" / "Similar to #N", set by the Find
-// related pass. Only tickets carry relation_kind, so tasks/user stories never
-// show this. Labels only — nothing is merged or closed.
-function TaskRelationBadge({
-  kind,
-  relatedTo,
-}: {
-  kind?: string | null;
-  relatedTo?: number | null;
-}) {
-  if (!kind || !relatedTo) return null;
-  const isDup = kind === "duplicate";
-  return (
-    <span
-      className={`ticket-relation-badge ticket-relation-${kind}`}
-      data-tooltip={
-        isDup
-          ? `Flagged as a duplicate of ticket #${relatedTo}`
-          : `Same kind of issue as ticket #${relatedTo}`
-      }
-    >
-      {isDup ? "⧉" : "🔗"} {isDup ? "Duplicate of" : "Similar to"} #{relatedTo}
-    </span>
-  );
-}
-
 // This component powers both the personal Tasks board (`/tasks`) and the
 // org-shared Workspace "User Stories" board (`/user-stories`). Everything that
 // differs between the two — the CRUD endpoints, the visible labels, the
@@ -405,6 +379,9 @@ export type TasksConfig = {
   };
   // localStorage prefix so the two boards keep independent view/mode state.
   storageKey: string;
+  // When set, clicking an item routes to this path (a full detail page) instead
+  // of opening the edit modal. Tickets only; Tasks/User Stories leave it unset.
+  detailPath?: (id: number) => string;
   labels: {
     title: string;
     subtitle: string;
@@ -724,8 +701,8 @@ export default function Tasks({
         const r = await config.api.aiFix(id);
         setAiFixMsg(
           r.reused_fix_from
-            ? `Fix started in CI (reusing the fix from #${r.reused_fix_from}). A PR will open when it passes.`
-            : "Fix started in CI. A PR will open when it passes."
+            ? `Fix started in CI (reusing the fix from #${r.reused_fix_from}). Open the ticket to review the diff.`
+            : "Fix started in CI. Open the ticket to review the diff."
         );
       } catch (err) {
         setAiFixMsg(
@@ -860,6 +837,13 @@ export default function Tasks({
   };
 
   const openEdit = (task: Task) => {
+    // Boards configured with a detail page (Tickets) open the item full-page
+    // instead of the modal — every card/edit click routes through here, so this
+    // one branch covers them all. Tasks/User Stories have no detailPath.
+    if (config.detailPath) {
+      navigate(config.detailPath(task.id));
+      return;
+    }
     // A normal open is not a deep-link open. The deep-link effect re-sets this
     // flag after it calls openEdit.
     openedFromDeepLink.current = false;
@@ -1797,15 +1781,18 @@ export default function Tasks({
                 {isEditing &&
                   editingId !== null &&
                   config.features.aiFix &&
-                  config.api.aiFix && (
+                  config.api.aiFix &&
+                  // The AI fixer is limited to P1 tickets for now; the backend
+                  // enforces the same gate.
+                  priority === 1 && (
                     <button
                       type="button"
                       className="task-ai-fix-btn"
                       onClick={() => void runAiFix(editingId)}
                       disabled={aiFixBusy}
-                      data-tooltip="Have Claude fix this in CI and open a PR"
+                      data-tooltip="Have Claude propose a fix in CI, then review the diff on the ticket"
                     >
-                      {aiFixBusy ? "Starting…" : "🤖 Fix with AI"}
+                      {aiFixBusy ? "Starting…" : "Fix with AI"}
                     </button>
                   )}
                 <button type="submit" className="primary" disabled={submitting}>
@@ -1938,10 +1925,6 @@ export default function Tasks({
                                 label={task.name}
                               />
                               <TaskBadge kind={task.badge_kind} />
-                              <TaskRelationBadge
-                                kind={task.relation_kind}
-                                relatedTo={task.related_to}
-                              />
                             </div>
                             <button
                               type="button"
@@ -2044,10 +2027,6 @@ export default function Tasks({
                             label={task.name}
                           />
                           <TaskBadge kind={task.badge_kind} />
-                          <TaskRelationBadge
-                            kind={task.relation_kind}
-                            relatedTo={task.related_to}
-                          />
                           <h3>
                             <button
                               type="button"
@@ -2165,10 +2144,6 @@ export default function Tasks({
                             label={task.name}
                           />
                           <TaskBadge kind={task.badge_kind} />
-                          <TaskRelationBadge
-                            kind={task.relation_kind}
-                            relatedTo={task.related_to}
-                          />
                           <h3>
                             <button
                               type="button"

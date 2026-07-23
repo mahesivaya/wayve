@@ -29,6 +29,8 @@ const TICKETS_CONFIG: TasksConfig = {
     aiFix: true,
   },
   storageKey: "tickets",
+  // Clicking a ticket opens its own page (see TicketDetail) instead of a modal.
+  detailPath: (id) => `/tickets/${id}`,
   labels: {
     title: "Tickets",
     subtitle: "A shared board of tickets for your workspace.",

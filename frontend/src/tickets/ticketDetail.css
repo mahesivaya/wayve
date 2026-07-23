@@ -1,0 +1,207 @@
+.ticket-detail {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+}
+
+.ticket-detail-back {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.ticket-detail-back:hover {
+  color: var(--color-text-primary);
+}
+
+.ticket-detail-muted {
+  color: var(--color-text-muted);
+}
+.ticket-detail-error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  color: var(--color-text-primary);
+}
+
+.ticket-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 20px;
+}
+.ticket-detail-key {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ticket-detail-head h1 {
+  margin: 0;
+  font-size: var(--text-2xl);
+  line-height: 1.25;
+}
+
+.ticket-detail-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ticket-detail-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.ticket-detail-form input,
+.ticket-detail-form textarea,
+.ticket-detail-form select {
+  font: inherit;
+  font-weight: 400;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.ticket-detail-form textarea {
+  resize: vertical;
+}
+
+.ticket-detail-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ticket-detail-row label {
+  flex: 1 1 160px;
+}
+
+.ticket-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.ticket-detail-actions button {
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-weight: 600;
+  cursor: pointer;
+}
+.ticket-detail-actions button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+.ticket-detail-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.ticket-detail-actions .primary {
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  border-color: transparent;
+}
+.ticket-detail-delete {
+  color: var(--color-danger, #b42318);
+}
+.ticket-detail-msg {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* AI-fix review panel: Claude's proposed diff + Commit & push. */
+.ticket-aifix {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+.ticket-aifix-head {
+  font-size: var(--text-base);
+  margin: 0 0 8px;
+}
+.ticket-aifix-muted {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0 0 12px;
+}
+.ticket-aifix-muted code {
+  font-size: 0.85em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--color-surface-hover);
+}
+.ticket-aifix-diff {
+  margin: 0 0 12px;
+  padding: 12px;
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-alt, #0f172a08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  tab-size: 2;
+}
+.ticket-aifix-diff code {
+  display: block;
+  white-space: pre;
+}
+.ticket-aifix-line {
+  display: block;
+}
+/* +/- lines get a tinted background so additions and removals read at a glance;
+   colours are theme-agnostic translucent fills over the code surface. */
+.ticket-aifix-line.is-add {
+  background: rgba(34, 197, 94, 0.16);
+  color: #16794a;
+}
+.ticket-aifix-line.is-del {
+  background: rgba(239, 68, 68, 0.16);
+  color: #b42318;
+}
+.ticket-aifix-line.is-hunk {
+  color: #2563eb;
+}
+.ticket-aifix-line.is-meta {
+  color: var(--color-text-muted);
+}
+@media (prefers-color-scheme: dark) {
+  .ticket-aifix-line.is-add {
+    color: #4ade80;
+  }
+  .ticket-aifix-line.is-del {
+    color: #fca5a5;
+  }
+}
+.ticket-aifix-actions {
+  display: flex;
+  gap: 8px;
+}
+.ticket-aifix-actions .primary {
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+.ticket-aifix-actions .primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
