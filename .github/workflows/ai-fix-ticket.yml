@@ -84,9 +84,16 @@ jobs:
             Similar past fix (may be empty — if present, read this commit's diff as a guide):
             summary: ${{ github.event.inputs.past_fix_summary }}
             commit: ${{ github.event.inputs.past_fix_commit }}
+          # --allowedTools is REQUIRED for the agent to actually change code: without
+          # it the action runs Claude locked-down (read-only), so its Edit/Write and
+          # `git commit` calls are denied (permission_denials_count > 0) and every run
+          # reports no_change with an empty diff. Grant the edit + bash tools so it can
+          # implement, verify (cargo/npm), and commit. --max-turns headroom lets the
+          # full verify suite finish before the cap.
           claude_args: |
-            --max-turns 20
+            --max-turns 30
             --model claude-sonnet-5
+            --allowedTools "Read,Glob,Grep,Edit,MultiEdit,Write,Bash,TodoWrite"
 
       # Report the fix back to the ticket for in-app review. NOTHING is pushed to
       # Git here — we post the diff (for review) plus the changed files + base SHA
