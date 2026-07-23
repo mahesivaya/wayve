@@ -360,7 +360,7 @@ export default function TicketDetail() {
           </form>
 
           {/* AI-fix review panel: Claude's diff, then Commit → Push → Create PR. */}
-          {aiFix?.status && aiFix.status !== "no_change" && (
+          {aiFix?.status && (
             <section className="ticket-aifix" aria-label="AI fix">
               <h2 className="ticket-aifix-head">AI fix</h2>
 
@@ -372,9 +372,24 @@ export default function TicketDetail() {
                 </p>
               )}
 
+              {aiFix.status === "no_change" && (
+                <p className="ticket-aifix-muted">
+                  🤖 Claude ran but proposed no code change — it couldn’t find a
+                  concrete fix for this ticket in the codebase. This usually
+                  means the ticket doesn’t map to an actual bug in an existing
+                  feature. Refine the description with the affected feature or
+                  file, the expected vs. actual behaviour, and steps to
+                  reproduce, then retry above.
+                </p>
+              )}
+
               {aiFix.status === "error" && (
                 <p className="ticket-aifix-muted">
-                  The AI fix run didn’t complete. You can retry above.
+                  The AI fix run didn’t complete — Claude may have run out of
+                  steps before finding a fix, which often happens when the
+                  ticket doesn’t map to real code to change. Refine the
+                  description with the affected feature or file and steps to
+                  reproduce, then retry above.
                 </p>
               )}
 
