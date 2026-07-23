@@ -376,6 +376,20 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_commit_sha TEXT",
         "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_branch TEXT",
         "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_pr_url TEXT",
+        // Attachments for Workspace tickets (org-shared; access by ticket
+        // visibility). New table, so create it here for existing deployments.
+        "CREATE TABLE IF NOT EXISTS ticket_attachments (
+            id BIGSERIAL PRIMARY KEY,
+            ticket_id INTEGER NOT NULL REFERENCES workspace_tickets(id) ON DELETE CASCADE,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            name TEXT NOT NULL,
+            file_type TEXT,
+            file_path TEXT NOT NULL,
+            file_iv TEXT,
+            size BIGINT NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id)",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.

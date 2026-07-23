@@ -364,6 +364,13 @@ export type TasksConfig = {
     findRelated?: () => Promise<RelatedResult>;
     // Optional: dispatch the Claude Code CI fixer for one ticket. Tickets only.
     aiFix?: (id: number) => Promise<{ reused_fix_from: number | null }>;
+    // Optional: attachment endpoints for this board's item type. Tasks hit
+    // /api/tasks/…, Tickets hit /api/workspace-tickets/… — the board just calls
+    // these. Only wired when `features.attachments` is on.
+    listAttachments?: (id: number) => Promise<TaskAttachment[]>;
+    uploadAttachments?: (id: number, files: File[]) => Promise<TaskAttachment[]>;
+    deleteAttachment?: (id: number) => Promise<void>;
+    downloadAttachment?: (attachment: TaskAttachment) => Promise<void>;
   };
   features: {
     // Attachments hit `/api/tasks/{id}/attachments`, which is task-only, so the
@@ -404,6 +411,10 @@ const TASKS_CONFIG: TasksConfig = {
     create: createTaskApi,
     update: updateTaskApi,
     remove: deleteTaskApi,
+    listAttachments: listTaskAttachments,
+    uploadAttachments: uploadTaskAttachments,
+    deleteAttachment: deleteTaskAttachment,
+    downloadAttachment: downloadTaskAttachment,
   },
   features: { attachments: true },
   storageKey: "tasks",
@@ -861,9 +872,10 @@ export default function Tasks({
     setPendingAttachments([]);
     setExistingAttachments([]);
     setCreating(true);
-    if (config.features.attachments) {
+    if (config.features.attachments && config.api.listAttachments) {
       setAttachmentsLoading(true);
-      listTaskAttachments(task.id)
+      config.api
+        .listAttachments(task.id)
         .then((list) => setExistingAttachments(list))
         .catch(() => {
           // Non-fatal — just leave the list empty.
@@ -926,9 +938,9 @@ export default function Tasks({
 
   const removeExisting = async (attachment: TaskAttachment) => {
     const ok = window.confirm(`Remove attachment "${attachment.name}"?`);
-    if (!ok) return;
+    if (!ok || !config.api.deleteAttachment) return;
     try {
-      await deleteTaskAttachment(attachment.id);
+      await config.api.deleteAttachment(attachment.id);
       setExistingAttachments((prev) =>
         prev.filter((a) => a.id !== attachment.id)
       );
@@ -940,8 +952,9 @@ export default function Tasks({
   };
 
   const downloadExisting = async (attachment: TaskAttachment) => {
+    if (!config.api.downloadAttachment) return;
     try {
-      await downloadTaskAttachment(attachment);
+      await config.api.downloadAttachment(attachment);
     } catch (err) {
       window.alert(
         err instanceof Error ? err.message : "Failed to download attachment"
@@ -1153,9 +1166,13 @@ export default function Tasks({
         );
       }
 
-      if (config.features.attachments && pendingAttachments.length > 0) {
+      if (
+        config.features.attachments &&
+        config.api.uploadAttachments &&
+        pendingAttachments.length > 0
+      ) {
         try {
-          await uploadTaskAttachments(targetTaskId, pendingAttachments);
+          await config.api.uploadAttachments(targetTaskId, pendingAttachments);
         } catch (err) {
           // The task is already saved, so keep the modal open and let the user
           // retry just the upload.
