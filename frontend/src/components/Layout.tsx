@@ -112,8 +112,8 @@ const ADDABLE_PERSONAL_APPS: {
   icon: ReactNode;
   path?: string;
 }[] = [
-  // Code Repo is a permanent sidebar item, so it is absent here by design.
-  { key: "canvas", label: "Canvas", icon: <CanvasIcon size={22} /> },
+  // Code Repo and Canvas are permanent sidebar items, so they are absent here
+  // by design.
   { key: "forms", label: "Forms", icon: <FormsIcon size={22} /> },
   {
     key: "automations",
@@ -1738,6 +1738,24 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                     "Code Repo",
                     <GitLogoIcon size={18} />
                   )}
+                {/* Canvas is a permanent sidebar item for personal accounts —
+                no opt-in needed. It has no route yet, so it lands on the
+                shared Coming Soon page, same as the other placeholder apps. */}
+                {user.account_type === "personal" && (
+                  <button
+                    type="button"
+                    className="sidebar-link sidebar-link-placeholder"
+                    data-tooltip="Canvas (coming soon)"
+                    onClick={() =>
+                      navigate(`/coming-soon?feature=${encodeURIComponent("Canvas")}`)
+                    }
+                  >
+                    <span className="sidebar-icon" aria-hidden="true">
+                      <CanvasIcon size={18} />
+                    </span>
+                    <span className="sidebar-label">Canvas</span>
+                  </button>
+                )}
                 {user.account_type === "personal" && (
                   <>
                     {ADDABLE_PERSONAL_APPS.filter((a) =>
