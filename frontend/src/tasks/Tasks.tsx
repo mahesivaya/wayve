@@ -1782,9 +1782,9 @@ export default function Tasks({
                   editingId !== null &&
                   config.features.aiFix &&
                   config.api.aiFix &&
-                  // The AI fixer is limited to P1 tickets for now; the backend
+                  // The AI fixer is limited to P5 tickets for now; the backend
                   // enforces the same gate.
-                  priority === 1 && (
+                  priority === 5 && (
                     <button
                       type="button"
                       className="task-ai-fix-btn"

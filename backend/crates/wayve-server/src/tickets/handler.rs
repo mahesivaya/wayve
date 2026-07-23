@@ -352,12 +352,11 @@ pub async fn ai_fix_ticket(
     let description: String = row.get("description");
     let priority: i16 = row.get("priority");
 
-    // For now the AI fixer is limited to P1 tickets, so it's rolled out on the
-    // lowest-priority tickets first. The UI hides the button off P1; this is the
-    // authoritative gate.
-    if priority != 1 {
+    // For now the AI fixer is limited to P5 (Highest-priority) tickets. The UI
+    // hides the button off P5; this is the authoritative gate.
+    if priority != 5 {
         return Err(AppError::bad_request(
-            "AI fix is available only for P1 tickets",
+            "AI fix is available only for P5 tickets",
         ));
     }
 
@@ -789,14 +788,18 @@ pub async fn commit_ai_fix(
         .ok()
         .flatten()
     else {
-        return Err(AppError::bad_request("No base commit recorded for this fix"));
+        return Err(AppError::bad_request(
+            "No base commit recorded for this fix",
+        ));
     };
     let files_val: Option<serde_json::Value> = row.try_get("ai_fix_files").ok().flatten();
     let files: Vec<AiFixFile> = files_val
         .and_then(|v| serde_json::from_value(v).ok())
         .unwrap_or_default();
     if files.is_empty() {
-        return Err(AppError::bad_request("No changed files recorded for this fix"));
+        return Err(AppError::bad_request(
+            "No changed files recorded for this fix",
+        ));
     }
     let name: String = row.get("name");
 
@@ -915,7 +918,10 @@ pub async fn push_ai_fix(
     else {
         return Err(AppError::bad_request("Commit the fix before pushing"));
     };
-    let branch = format!("ai-fix/ticket-{id}-{}", &commit_sha[..commit_sha.len().min(7)]);
+    let branch = format!(
+        "ai-fix/ticket-{id}-{}",
+        &commit_sha[..commit_sha.len().min(7)]
+    );
 
     let (token, gh_owner, gh_repo, api_base) = gh_context(&req, pool.get_ref()).await?;
     gh_call(
@@ -963,7 +969,9 @@ pub async fn open_ai_fix_pr(
         .ok()
         .flatten()
     else {
-        return Err(AppError::bad_request("Push the fix branch before opening a PR"));
+        return Err(AppError::bad_request(
+            "Push the fix branch before opening a PR",
+        ));
     };
     let name: String = row.get("name");
 
