@@ -32,6 +32,13 @@ pub struct Task {
     /// tickets materialised from a reported bug; None on tasks and user stories.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub badge_kind: Option<String>,
+    /// AI relationship labels for tickets (see `tickets/relate.rs`): `related_to`
+    /// is the group's canonical ticket id, `relation_kind` is `duplicate` or
+    /// `similar`. None on tasks, user stories, and unrelated tickets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub related_to: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relation_kind: Option<String>,
 }
 
 #[derive(Deserialize)]

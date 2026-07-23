@@ -989,8 +989,12 @@ CREATE TABLE IF NOT EXISTS org_document_folders (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE org_document_folders ALTER COLUMN organization_id DROP NOT NULL;
+-- `collection` partitions the shared workspace into independent file trees that
+-- share this one table: 'library' (the Documents page) and 'skills' (the Skills
+-- page). Existing rows default to 'library'.
+ALTER TABLE org_document_folders ADD COLUMN IF NOT EXISTS collection VARCHAR(32) NOT NULL DEFAULT 'library';
 CREATE INDEX IF NOT EXISTS idx_org_doc_folders_org_parent
-    ON org_document_folders(organization_id, parent_folder_id);
+    ON org_document_folders(organization_id, collection, parent_folder_id);
 
 CREATE TABLE IF NOT EXISTS org_documents (
     id BIGSERIAL PRIMARY KEY,
@@ -1006,8 +1010,11 @@ CREATE TABLE IF NOT EXISTS org_documents (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE org_documents ALTER COLUMN organization_id DROP NOT NULL;
+-- See org_document_folders.collection above; keeps Skills files out of the
+-- Documents (library) listing and vice versa.
+ALTER TABLE org_documents ADD COLUMN IF NOT EXISTS collection VARCHAR(32) NOT NULL DEFAULT 'library';
 CREATE INDEX IF NOT EXISTS idx_org_documents_org_folder
-    ON org_documents(organization_id, folder_id);
+    ON org_documents(organization_id, collection, folder_id);
 
 -- Notes
 CREATE TABLE IF NOT EXISTS notes (
@@ -1486,6 +1493,34 @@ CREATE TABLE IF NOT EXISTS workspace_tickets (
     -- FK + uniqueness added after support_tickets is defined below (that table
     -- is created later in this file, so an inline reference would be a forward ref).
     support_ticket_id INTEGER,
+    -- AI relationship labels (see tickets/relate.rs). related_to points at the
+    -- group's canonical (min id); relation_kind says how this ticket relates to
+    -- it. Labels only — nothing is merged or closed.
+    related_to INTEGER,
+    relation_kind TEXT CHECK (relation_kind IN ('duplicate', 'similar')),
+    -- Resolution memory (Phase 2): when a ticket is fixed by the AI-fix pipeline,
+    -- the pointer to the fix is recorded here (the code itself stays in Git). A
+    -- new ticket that is similar to a resolved one reuses resolution_summary +
+    -- the diff fetched via resolution_commit. See tickets/recall.rs.
+    resolution_pr_url TEXT,
+    resolution_commit TEXT,
+    resolution_summary TEXT,
+    resolved_at TIMESTAMP,
+    -- AI-fix review state: the "Fix with AI" pipeline (P1 tickets) dispatches CI,
+    -- which makes + verifies a fix and posts the changed files + diff back here
+    -- WITHOUT touching Git. The ticket page shows the diff, then three buttons
+    -- drive GitHub's Git Data API: Commit (ai_fix_files @ ai_fix_base_sha → a
+    -- commit object, ai_fix_commit_sha), Push (→ branch ai_fix_branch), Create PR
+    -- (→ ai_fix_pr_url). ai_fix_status ∈
+    -- (running|ready|committed|pushed|pr_opened|no_change|error).
+    ai_fix_status TEXT,
+    ai_fix_diff TEXT,
+    -- The changed files as a JSON array [{path, content(base64), deleted}].
+    ai_fix_files JSONB,
+    ai_fix_base_sha TEXT,
+    ai_fix_commit_sha TEXT,
+    ai_fix_branch TEXT,
+    ai_fix_pr_url TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT workspace_tickets_owner_chk CHECK (

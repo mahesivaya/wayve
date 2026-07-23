@@ -348,12 +348,22 @@ function TaskBadge({ kind }: { kind?: string | null }) {
 // via `config`. The default is the Tasks configuration, so `<Tasks />` is
 // unchanged; the stories wrapper passes its own config (see
 // `frontend/src/userstories/UserStories.tsx`).
+export type RelatedResult = {
+  duplicates: number;
+  similar: number;
+};
+
 export type TasksConfig = {
   api: {
     list: () => Promise<Task[]>;
     create: (payload: SaveTaskPayload) => Promise<Task>;
     update: (id: number, payload: SaveTaskPayload) => Promise<Task>;
     remove: (id: number) => Promise<void>;
+    // Optional: on-demand AI pass that labels duplicate/similar tickets. Only
+    // the Tickets board wires this (see api/tickets.ts).
+    findRelated?: () => Promise<RelatedResult>;
+    // Optional: dispatch the Claude Code CI fixer for one ticket. Tickets only.
+    aiFix?: (id: number) => Promise<{ reused_fix_from: number | null }>;
   };
   features: {
     // Attachments hit `/api/tasks/{id}/attachments`, which is task-only, so the
@@ -362,9 +372,16 @@ export type TasksConfig = {
     // Shows a per-status count strip above the board (total + each status). On
     // for the shared workspace boards (Tickets, User Stories).
     statusSummary?: boolean;
+    // Shows the "Find related" (AI duplicate/similar) toolbar button. Tickets only.
+    findRelated?: boolean;
+    // Shows the "Fix with AI" button in the edit modal. Tickets only.
+    aiFix?: boolean;
   };
   // localStorage prefix so the two boards keep independent view/mode state.
   storageKey: string;
+  // When set, clicking an item routes to this path (a full detail page) instead
+  // of opening the edit modal. Tickets only; Tasks/User Stories leave it unset.
+  detailPath?: (id: number) => string;
   labels: {
     title: string;
     subtitle: string;
@@ -435,13 +452,17 @@ export default function Tasks({
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const [creating, setCreating] = useState(false);
   const [view, setView] = useState<"list" | "grid">(() => {
-    const saved = window.localStorage.getItem(`wayve.${config.storageKey}.view`);
+    const saved = window.localStorage.getItem(
+      `wayve.${config.storageKey}.view`
+    );
     return saved === "grid" ? "grid" : "list";
   });
   // "tasks" is the default list/grid layout; "jira" is a kanban board with one
   // column per status, where dragging a card between columns changes its status.
   const [mode, setMode] = useState<"tasks" | "jira">(() => {
-    const saved = window.localStorage.getItem(`wayve.${config.storageKey}.mode`);
+    const saved = window.localStorage.getItem(
+      `wayve.${config.storageKey}.mode`
+    );
     return saved === "jira" ? "jira" : "tasks";
   });
   // The status, priority and date filters combine, and apply to both the list
@@ -588,7 +609,8 @@ export default function Tasks({
   }, [statusRows]);
 
   const lookupStatus = useCallback(
-    (slug: string): TaskStatusRow => statusBySlug.get(slug) ?? UNKNOWN_STATUS(slug),
+    (slug: string): TaskStatusRow =>
+      statusBySlug.get(slug) ?? UNKNOWN_STATUS(slug),
     [statusBySlug]
   );
 
@@ -598,7 +620,8 @@ export default function Tasks({
   const statusSummary = useMemo(() => {
     if (!config.features.statusSummary) return [];
     const counts = new Map<string, number>();
-    for (const t of tasks) counts.set(t.status, (counts.get(t.status) ?? 0) + 1);
+    for (const t of tasks)
+      counts.set(t.status, (counts.get(t.status) ?? 0) + 1);
     return statusRows.map((row) => ({
       slug: row.slug,
       name: row.name,
@@ -639,6 +662,58 @@ export default function Tasks({
     // `config` is a stable module constant (see TASKS_CONFIG / the stories
     // wrapper), so listing it never re-creates this callback.
   }, [config]);
+
+  // "Find related": ask Claude to label duplicate/similar tickets, then reload
+  // so the new relationship pills show. Best-effort; errors surface in-line.
+  const [relatedBusy, setRelatedBusy] = useState(false);
+  const [relatedMsg, setRelatedMsg] = useState("");
+  const runFindRelated = useCallback(async () => {
+    if (!config.api.findRelated) return;
+    setRelatedBusy(true);
+    setRelatedMsg("");
+    try {
+      const r = await config.api.findRelated();
+      setRelatedMsg(
+        r.duplicates + r.similar === 0
+          ? "No duplicates or similar tickets found."
+          : `Flagged ${r.duplicates} duplicate${r.duplicates === 1 ? "" : "s"} and ${r.similar} similar.`
+      );
+      await loadTasks();
+    } catch (err) {
+      setRelatedMsg(
+        err instanceof Error ? err.message : "Couldn't analyse tickets."
+      );
+    } finally {
+      setRelatedBusy(false);
+    }
+  }, [config, loadTasks]);
+
+  // "Fix with AI": dispatch the Claude Code CI fixer for the ticket being edited.
+  // The fix runs in GitHub Actions and opens a PR — this just kicks it off.
+  const [aiFixBusy, setAiFixBusy] = useState(false);
+  const [aiFixMsg, setAiFixMsg] = useState("");
+  const runAiFix = useCallback(
+    async (id: number) => {
+      if (!config.api.aiFix) return;
+      setAiFixBusy(true);
+      setAiFixMsg("");
+      try {
+        const r = await config.api.aiFix(id);
+        setAiFixMsg(
+          r.reused_fix_from
+            ? `Fix started in CI (reusing the fix from #${r.reused_fix_from}). Open the ticket to review the diff.`
+            : "Fix started in CI. Open the ticket to review the diff."
+        );
+      } catch (err) {
+        setAiFixMsg(
+          err instanceof Error ? err.message : "Couldn't start the AI fix."
+        );
+      } finally {
+        setAiFixBusy(false);
+      }
+    },
+    [config]
+  );
 
   // The load is deferred to a timeout so the effect body doesn't synchronously
   // call setState, which React 19 flags as a cascading-render risk.
@@ -762,6 +837,13 @@ export default function Tasks({
   };
 
   const openEdit = (task: Task) => {
+    // Boards configured with a detail page (Tickets) open the item full-page
+    // instead of the modal — every card/edit click routes through here, so this
+    // one branch covers them all. Tasks/User Stories have no detailPath.
+    if (config.detailPath) {
+      navigate(config.detailPath(task.id));
+      return;
+    }
     // A normal open is not a deep-link open. The deep-link effect re-sets this
     // flag after it calls openEdit.
     openedFromDeepLink.current = false;
@@ -1120,234 +1202,261 @@ export default function Tasks({
           </button>
         ) : (
           <>
-          <div className="tasks-header">
-            <div>
-              <h2>{config.labels.title}</h2>
-              <p>{config.labels.subtitle}</p>
-            </div>
-            <div className="tasks-header-actions">
-              {/* Boards with the status strip below show the total there, so the
+            <div className="tasks-header">
+              <div>
+                <h2>{config.labels.title}</h2>
+                <p>{config.labels.subtitle}</p>
+              </div>
+              <div className="tasks-header-actions">
+                {/* Boards with the status strip below show the total there, so the
                   header pill would just duplicate it. */}
-              {!config.features.statusSummary && (
-                <span className="tasks-count">{tasks.length} total</span>
-              )}
-              <div className="tasks-filters" ref={filtersRef}>
-                <button
-                  type="button"
-                  className={`tasks-status-filter tasks-filters-btn${
-                    activeFilterCount > 0 ? " has-active" : ""
-                  }`}
-                  onClick={() => setFiltersOpen((open) => !open)}
-                  aria-haspopup="dialog"
-                  aria-expanded={filtersOpen}
-                  data-tooltip={config.labels.filtersTooltip}
-                >
-                  <span aria-hidden="true">⌄</span> Filters
-                  {activeFilterCount > 0 && (
-                    <span className="tasks-filters-badge">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </button>
-                {filtersOpen && (
-                  <div
-                    className="tasks-filters-popover"
-                    role="dialog"
-                    aria-label={config.labels.filtersAria}
-                  >
-                    <label className="tasks-filter-row">
-                      <span>Status</span>
-                      <select
-                        value={statusFilter}
-                        onChange={(e) =>
-                          setStatusFilter(e.target.value as TaskStatus | "all")
-                        }
-                        aria-label="Filter by status"
-                      >
-                        <option value="all">All statuses</option>
-                        {statusRows.map((row) => (
-                          <option key={row.id} value={row.slug}>
-                            {row.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="tasks-filter-row">
-                      <span>Priority</span>
-                      <select
-                        value={priorityFilter}
-                        onChange={(e) =>
-                          setPriorityFilter(
-                            e.target.value === "all"
-                              ? "all"
-                              : (Number(e.target.value) as TaskPriority)
-                          )
-                        }
-                        aria-label="Filter by priority"
-                      >
-                        <option value="all">All priorities</option>
-                        {PRIORITY_OPTIONS.map((value) => (
-                          <option key={value} value={value}>
-                            {`P${value} — ${priorityLabel(value)}`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="tasks-filter-row">
-                      <span>Created</span>
-                      <select
-                        value={dateMode}
-                        onChange={(e) =>
-                          setDateMode(
-                            e.target.value as
-                              | "any"
-                              | "after"
-                              | "before"
-                              | "between"
-                          )
-                        }
-                        aria-label="Filter by date created"
-                      >
-                        <option value="any">Any date</option>
-                        <option value="after">Created after…</option>
-                        <option value="before">Created before…</option>
-                        <option value="between">Created between…</option>
-                      </select>
-                    </label>
-                    {(dateMode === "after" || dateMode === "between") && (
-                      <label className="tasks-filter-row">
-                        <span>
-                          {dateMode === "between" ? "From" : "On or after"}
-                        </span>
-                        <input
-                          type="date"
-                          value={dateFrom}
-                          max={
-                            dateMode === "between" && dateTo
-                              ? dateTo
-                              : undefined
-                          }
-                          onChange={(e) => setDateFrom(e.target.value)}
-                          aria-label={
-                            dateMode === "between"
-                              ? "From date"
-                              : "Created on or after"
-                          }
-                        />
-                      </label>
-                    )}
-                    {(dateMode === "before" || dateMode === "between") && (
-                      <label className="tasks-filter-row">
-                        <span>
-                          {dateMode === "between" ? "To" : "On or before"}
-                        </span>
-                        <input
-                          type="date"
-                          value={dateTo}
-                          min={
-                            dateMode === "between" && dateFrom
-                              ? dateFrom
-                              : undefined
-                          }
-                          onChange={(e) => setDateTo(e.target.value)}
-                          aria-label={
-                            dateMode === "between"
-                              ? "To date"
-                              : "Created on or before"
-                          }
-                        />
-                      </label>
-                    )}
-                    <div className="tasks-filters-footer">
-                      <button
-                        type="button"
-                        className="tasks-filters-clear"
-                        onClick={clearFilters}
-                        disabled={activeFilterCount === 0}
-                      >
-                        Clear all
-                      </button>
-                      <button
-                        type="button"
-                        className="tasks-filters-done"
-                        onClick={() => setFiltersOpen(false)}
-                      >
-                        Done
-                      </button>
-                    </div>
-                  </div>
+                {!config.features.statusSummary && (
+                  <span className="tasks-count">{tasks.length} total</span>
                 )}
+                {config.features.findRelated && config.api.findRelated && (
+                  <button
+                    type="button"
+                    className="tasks-find-related"
+                    onClick={runFindRelated}
+                    disabled={relatedBusy}
+                    data-tooltip="Let Claude flag duplicate & similar tickets"
+                  >
+                    {relatedBusy ? "Analysing…" : "🔗 Find related"}
+                  </button>
+                )}
+                {relatedMsg && (
+                  <span className="tasks-find-related-msg" role="status">
+                    {relatedMsg}
+                  </span>
+                )}
+                <div className="tasks-filters" ref={filtersRef}>
+                  <button
+                    type="button"
+                    className={`tasks-status-filter tasks-filters-btn${
+                      activeFilterCount > 0 ? " has-active" : ""
+                    }`}
+                    onClick={() => setFiltersOpen((open) => !open)}
+                    aria-haspopup="dialog"
+                    aria-expanded={filtersOpen}
+                    data-tooltip={config.labels.filtersTooltip}
+                  >
+                    <span aria-hidden="true">⌄</span> Filters
+                    {activeFilterCount > 0 && (
+                      <span className="tasks-filters-badge">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </button>
+                  {filtersOpen && (
+                    <div
+                      className="tasks-filters-popover"
+                      role="dialog"
+                      aria-label={config.labels.filtersAria}
+                    >
+                      <label className="tasks-filter-row">
+                        <span>Status</span>
+                        <select
+                          value={statusFilter}
+                          onChange={(e) =>
+                            setStatusFilter(
+                              e.target.value as TaskStatus | "all"
+                            )
+                          }
+                          aria-label="Filter by status"
+                        >
+                          <option value="all">All statuses</option>
+                          {statusRows.map((row) => (
+                            <option key={row.id} value={row.slug}>
+                              {row.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="tasks-filter-row">
+                        <span>Priority</span>
+                        <select
+                          value={priorityFilter}
+                          onChange={(e) =>
+                            setPriorityFilter(
+                              e.target.value === "all"
+                                ? "all"
+                                : (Number(e.target.value) as TaskPriority)
+                            )
+                          }
+                          aria-label="Filter by priority"
+                        >
+                          <option value="all">All priorities</option>
+                          {PRIORITY_OPTIONS.map((value) => (
+                            <option key={value} value={value}>
+                              {`P${value} — ${priorityLabel(value)}`}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="tasks-filter-row">
+                        <span>Created</span>
+                        <select
+                          value={dateMode}
+                          onChange={(e) =>
+                            setDateMode(
+                              e.target.value as
+                                | "any"
+                                | "after"
+                                | "before"
+                                | "between"
+                            )
+                          }
+                          aria-label="Filter by date created"
+                        >
+                          <option value="any">Any date</option>
+                          <option value="after">Created after…</option>
+                          <option value="before">Created before…</option>
+                          <option value="between">Created between…</option>
+                        </select>
+                      </label>
+                      {(dateMode === "after" || dateMode === "between") && (
+                        <label className="tasks-filter-row">
+                          <span>
+                            {dateMode === "between" ? "From" : "On or after"}
+                          </span>
+                          <input
+                            type="date"
+                            value={dateFrom}
+                            max={
+                              dateMode === "between" && dateTo
+                                ? dateTo
+                                : undefined
+                            }
+                            onChange={(e) => setDateFrom(e.target.value)}
+                            aria-label={
+                              dateMode === "between"
+                                ? "From date"
+                                : "Created on or after"
+                            }
+                          />
+                        </label>
+                      )}
+                      {(dateMode === "before" || dateMode === "between") && (
+                        <label className="tasks-filter-row">
+                          <span>
+                            {dateMode === "between" ? "To" : "On or before"}
+                          </span>
+                          <input
+                            type="date"
+                            value={dateTo}
+                            min={
+                              dateMode === "between" && dateFrom
+                                ? dateFrom
+                                : undefined
+                            }
+                            onChange={(e) => setDateTo(e.target.value)}
+                            aria-label={
+                              dateMode === "between"
+                                ? "To date"
+                                : "Created on or before"
+                            }
+                          />
+                        </label>
+                      )}
+                      <div className="tasks-filters-footer">
+                        <button
+                          type="button"
+                          className="tasks-filters-clear"
+                          onClick={clearFilters}
+                          disabled={activeFilterCount === 0}
+                        >
+                          Clear all
+                        </button>
+                        <button
+                          type="button"
+                          className="tasks-filters-done"
+                          onClick={() => setFiltersOpen(false)}
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div
+                  className="view-toggle"
+                  role="group"
+                  aria-label="View mode"
+                >
+                  <button
+                    type="button"
+                    className={`view-toggle-btn${mode === "tasks" && view === "list" ? " active" : ""}`}
+                    onClick={() => {
+                      setMode("tasks");
+                      setView("list");
+                    }}
+                    aria-pressed={mode === "tasks" && view === "list"}
+                    aria-label="List view"
+                    data-tooltip="List view"
+                  >
+                    ☰
+                  </button>
+                  <button
+                    type="button"
+                    className={`view-toggle-btn${mode === "tasks" && view === "grid" ? " active" : ""}`}
+                    onClick={() => {
+                      setMode("tasks");
+                      setView("grid");
+                    }}
+                    aria-pressed={mode === "tasks" && view === "grid"}
+                    aria-label="Grid view"
+                    data-tooltip="Grid view"
+                  >
+                    ⊞
+                  </button>
+                  <button
+                    type="button"
+                    className={`view-toggle-btn${mode === "jira" ? " active" : ""}`}
+                    onClick={() => setMode("jira")}
+                    aria-pressed={mode === "jira"}
+                    aria-label="Columns (Jira board) view"
+                    data-tooltip="Columns (Jira board) view"
+                  >
+                    ◫
+                  </button>
+                </div>
+                <button
+                  className="create-task-btn create-task-btn--inline"
+                  onClick={openCreate}
+                >
+                  {config.labels.createButton}
+                </button>
               </div>
-              <div className="view-toggle" role="group" aria-label="View mode">
-                <button
-                  type="button"
-                  className={`view-toggle-btn${mode === "tasks" && view === "list" ? " active" : ""}`}
-                  onClick={() => {
-                    setMode("tasks");
-                    setView("list");
-                  }}
-                  aria-pressed={mode === "tasks" && view === "list"}
-                  aria-label="List view"
-                  data-tooltip="List view"
-                >
-                  ☰
-                </button>
-                <button
-                  type="button"
-                  className={`view-toggle-btn${mode === "tasks" && view === "grid" ? " active" : ""}`}
-                  onClick={() => {
-                    setMode("tasks");
-                    setView("grid");
-                  }}
-                  aria-pressed={mode === "tasks" && view === "grid"}
-                  aria-label="Grid view"
-                  data-tooltip="Grid view"
-                >
-                  ⊞
-                </button>
-                <button
-                  type="button"
-                  className={`view-toggle-btn${mode === "jira" ? " active" : ""}`}
-                  onClick={() => setMode("jira")}
-                  aria-pressed={mode === "jira"}
-                  aria-label="Columns (Jira board) view"
-                  data-tooltip="Columns (Jira board) view"
-                >
-                  ◫
-                </button>
-              </div>
-              <button
-                className="create-task-btn create-task-btn--inline"
-                onClick={openCreate}
+            </div>
+            {config.features.statusSummary && statusSummary.length > 0 && (
+              <div
+                className="tasks-status-summary"
+                aria-label="Status breakdown"
               >
-                {config.labels.createButton}
-              </button>
-            </div>
-          </div>
-          {config.features.statusSummary && statusSummary.length > 0 && (
-            <div className="tasks-status-summary" aria-label="Status breakdown">
-              <span className="tss-chip tss-total">
-                <b>{tasks.length}</b> total
-              </span>
-              {statusSummary.map((s) => (
-                <span className="tss-chip" key={s.slug} title={s.name}>
-                  <span
-                    className="tss-dot"
-                    style={{ background: s.color }}
-                    aria-hidden="true"
-                  />
-                  {s.name} <b>{s.count}</b>
+                <span className="tss-chip tss-total">
+                  <b>{tasks.length}</b> total
                 </span>
-              ))}
-            </div>
-          )}
+                {statusSummary.map((s) => (
+                  <span className="tss-chip" key={s.slug} title={s.name}>
+                    <span
+                      className="tss-dot"
+                      style={{ background: s.color }}
+                      aria-hidden="true"
+                    />
+                    {s.name} <b>{s.count}</b>
+                  </span>
+                ))}
+              </div>
+            )}
           </>
         )}
 
         <Modal
           isOpen={creating}
           onClose={closeForm}
-          title={isEditing ? config.labels.editTitle : config.labels.createTitle}
+          title={
+            isEditing ? config.labels.editTitle : config.labels.createTitle
+          }
         >
           <form className="task-compose" onSubmit={saveTask}>
             <input
@@ -1371,7 +1480,9 @@ export default function Tasks({
             <div className="task-compose-pills">
               <label
                 className="task-pill"
-                data-tooltip={isEditing ? "Status" : "Initial status upon creation"}
+                data-tooltip={
+                  isEditing ? "Status" : "Initial status upon creation"
+                }
               >
                 {/* Colour comes from the status row, not a per-status CSS
                     class — a user-defined status has no class to key off. */}
@@ -1567,54 +1678,57 @@ export default function Tasks({
             {config.features.attachments &&
               (existingAttachments.length > 0 ||
                 pendingAttachments.length > 0) && (
-              <ul className="task-attachments-list">
-                {existingAttachments.map((att) => (
-                  <li key={`saved-${att.id}`} className="task-attachment-item">
-                    <button
-                      type="button"
-                      className="task-attachment-name"
-                      onClick={() => void downloadExisting(att)}
-                      data-tooltip="Download"
+                <ul className="task-attachments-list">
+                  {existingAttachments.map((att) => (
+                    <li
+                      key={`saved-${att.id}`}
+                      className="task-attachment-item"
                     >
-                      {att.name}
-                    </button>
-                    <span className="task-attachment-size">
-                      {formatBytes(att.size)}
-                    </span>
-                    <button
-                      type="button"
-                      className="task-attachment-remove"
-                      onClick={() => void removeExisting(att)}
-                      aria-label={`Remove ${att.name}`}
+                      <button
+                        type="button"
+                        className="task-attachment-name"
+                        onClick={() => void downloadExisting(att)}
+                        data-tooltip="Download"
+                      >
+                        {att.name}
+                      </button>
+                      <span className="task-attachment-size">
+                        {formatBytes(att.size)}
+                      </span>
+                      <button
+                        type="button"
+                        className="task-attachment-remove"
+                        onClick={() => void removeExisting(att)}
+                        aria-label={`Remove ${att.name}`}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                  {pendingAttachments.map((file, idx) => (
+                    <li
+                      key={`pending-${idx}-${file.name}`}
+                      className="task-attachment-item task-attachment-item--pending"
                     >
-                      ×
-                    </button>
-                  </li>
-                ))}
-                {pendingAttachments.map((file, idx) => (
-                  <li
-                    key={`pending-${idx}-${file.name}`}
-                    className="task-attachment-item task-attachment-item--pending"
-                  >
-                    <span className="task-attachment-name task-attachment-name--pending">
-                      {file.name}
-                    </span>
-                    <span className="task-attachment-size">
-                      {formatBytes(file.size)}
-                    </span>
-                    <span className="task-attachment-badge">Pending</span>
-                    <button
-                      type="button"
-                      className="task-attachment-remove"
-                      onClick={() => removePending(idx)}
-                      aria-label={`Remove ${file.name}`}
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+                      <span className="task-attachment-name task-attachment-name--pending">
+                        {file.name}
+                      </span>
+                      <span className="task-attachment-size">
+                        {formatBytes(file.size)}
+                      </span>
+                      <span className="task-attachment-badge">Pending</span>
+                      <button
+                        type="button"
+                        className="task-attachment-remove"
+                        onClick={() => removePending(idx)}
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
             {error && <div className="task-error">{error}</div>}
 
@@ -1664,6 +1778,23 @@ export default function Tasks({
                     <span>Create more</span>
                   </label>
                 )}
+                {isEditing &&
+                  editingId !== null &&
+                  config.features.aiFix &&
+                  config.api.aiFix &&
+                  // The AI fixer is limited to P5 tickets for now; the backend
+                  // enforces the same gate.
+                  priority === 5 && (
+                    <button
+                      type="button"
+                      className="task-ai-fix-btn"
+                      onClick={() => void runAiFix(editingId)}
+                      disabled={aiFixBusy}
+                      data-tooltip="Have Claude propose a fix in CI, then review the diff on the ticket"
+                    >
+                      {aiFixBusy ? "Starting…" : "Fix with AI"}
+                    </button>
+                  )}
                 <button type="submit" className="primary" disabled={submitting}>
                   {submitting
                     ? isEditing
@@ -1674,6 +1805,11 @@ export default function Tasks({
                       : `Create ${config.labels.lowerSingular}`}
                 </button>
               </div>
+              {aiFixMsg && (
+                <p className="task-ai-fix-msg" role="status">
+                  {aiFixMsg}
+                </p>
+              )}
             </div>
           </form>
         </Modal>
@@ -1780,9 +1916,9 @@ export default function Tasks({
                                 P{task.priority}
                               </span>
                               <TaskKeyBadge
-                              value={taskKey(task)}
-                              tooltip={config.labels.numberBadgeTooltip}
-                            />
+                                value={taskKey(task)}
+                                tooltip={config.labels.numberBadgeTooltip}
+                              />
                               <CopyLinkButton
                                 copied={copiedTaskId === task.id}
                                 onCopy={() => copyTaskLink(task)}
@@ -1882,9 +2018,9 @@ export default function Tasks({
                       <div className="task-card-body">
                         <div className="task-card-title">
                           <TaskKeyBadge
-                              value={taskKey(task)}
-                              tooltip={config.labels.numberBadgeTooltip}
-                            />
+                            value={taskKey(task)}
+                            tooltip={config.labels.numberBadgeTooltip}
+                          />
                           <CopyLinkButton
                             copied={copiedTaskId === task.id}
                             onCopy={() => copyTaskLink(task)}
@@ -1999,9 +2135,9 @@ export default function Tasks({
                       <div className="task-card-body">
                         <div className="task-card-title">
                           <TaskKeyBadge
-                              value={taskKey(task)}
-                              tooltip={config.labels.numberBadgeTooltip}
-                            />
+                            value={taskKey(task)}
+                            tooltip={config.labels.numberBadgeTooltip}
+                          />
                           <CopyLinkButton
                             copied={copiedTaskId === task.id}
                             onCopy={() => copyTaskLink(task)}

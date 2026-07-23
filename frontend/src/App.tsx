@@ -33,6 +33,7 @@ import { SPLIT_APPS } from "./components/LayoutConfig";
 const Home = lazy(() => import("./home/Home"));
 const Call = lazy(() => import("./call/Call"));
 const Documents = lazy(() => import("./documents/DocumentsBox"));
+const Skills = lazy(() => import("./skills/SkillsBox"));
 const GitHubRepo = lazy(() => import("./github/GitHubRepo"));
 const TeamPage = lazy(() => import("./teams/TeamPage"));
 const DomainVerification = lazy(
@@ -41,6 +42,7 @@ const DomainVerification = lazy(
 const ComingSoon = lazy(() => import("./components/ComingSoon"));
 const NotFound = lazy(() => import("./components/NotFound"));
 const Reminders = lazy(() => import("./reminders/Reminders"));
+const TicketDetail = lazy(() => import("./tickets/TicketDetail"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
 const Integrations = lazy(() => import("./integrations/Integrations"));
@@ -240,6 +242,10 @@ export default function App() {
                 )
               )}
 
+              {/* A single ticket opens on its own page (Tickets board routes here
+                  via config.detailPath) instead of the edit modal. */}
+              <Route path="/tickets/:id" element={<TicketDetail />} />
+
               <Route path="/home" element={redirectToAccountHome ?? <Home />} />
               <Route
                 path="/organization/home"
@@ -305,6 +311,7 @@ export default function App() {
               <Route path="/reminders" element={<Reminders />} />
               <Route path="/call" element={<Call />} />
               <Route path="/documents" element={<Documents />} />
+              <Route path="/skills" element={<Skills />} />
               <Route path="/teams/:slug" element={<TeamPage />} />
               {/* Legacy alias (no hyphen — original spelling). */}
               <Route

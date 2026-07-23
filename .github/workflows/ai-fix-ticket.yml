@@ -1,0 +1,160 @@
+name: AI Fix Ticket
+
+# Phase 2 of the ticket pipeline: Claude Code implements + verifies a fix for a
+# Workspace ticket, then posts the diff + the changed files + base SHA back to the
+# ticket. It touches NO Git — the owner reviews the diff on the ticket page and
+# clicks Commit → Push → Create PR, each of which drives GitHub's Git Data API
+# from the backend (POST /api/workspace-tickets/{id}/ai-fix-{commit,push,open-pr}).
+# Dispatched by the backend (POST /api/workspace-tickets/{id}/ai-fix) or manually.
+#
+# Setup (one-time), as repository secrets:
+#   - ANTHROPIC_API_KEY — for the agent.
+#   - WAYVE_BASE_URL    — e.g. https://fluxze.com (to POST the diff back).
+#   - WAYVE_API_KEY     — an internal API key mapped to a tickets:manage user.
+#   - This file must live on the default branch for workflow_dispatch to work.
+# The agent self-verifies (fmt/clippy/build/tsc/vitest via the fix-ticket skill);
+# the PR opened later re-runs the full CI (smoke.yml) as the enforced gate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticket_number:
+        description: "Workspace ticket id"
+        required: true
+      ticket_title:
+        description: "Ticket title"
+        required: true
+      ticket_description:
+        description: "Ticket description"
+        required: true
+      past_fix_summary:
+        description: "Summary of how a similar ticket was fixed (optional)"
+        required: false
+        default: ""
+      past_fix_commit:
+        description: "Commit SHA of that past fix (optional)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The agent runs the repo's verify commands, so it needs the toolchains.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Create fix branch
+        run: git checkout -b "ai-fix/ticket-${{ github.event.inputs.ticket_number }}-${{ github.run_id }}"
+
+      - name: Set commit identity
+        run: |
+          git config user.name "wayve-ai-fixer[bot]"
+          git config user.email "ai-fixer@users.noreply.github.com"
+
+      - id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            Use the /fix-ticket skill to implement and verify a fix for this ticket.
+
+            Ticket #${{ github.event.inputs.ticket_number }}: ${{ github.event.inputs.ticket_title }}
+
+            Description:
+            ${{ github.event.inputs.ticket_description }}
+
+            Similar past fix (may be empty — if present, read this commit's diff as a guide):
+            summary: ${{ github.event.inputs.past_fix_summary }}
+            commit: ${{ github.event.inputs.past_fix_commit }}
+          claude_args: |
+            --max-turns 20
+            --model claude-sonnet-5
+
+      # Report the fix back to the ticket for in-app review. NOTHING is pushed to
+      # Git here — we post the diff (for review) plus the changed files + base SHA
+      # so the ticket page's Commit → Push → Create-PR buttons can drive GitHub's
+      # Git Data API. Runs on every outcome (always) so a failed/empty run still
+      # reports its status.
+      - name: Report fix to ticket
+        if: always()
+        env:
+          BASE_URL: ${{ secrets.WAYVE_BASE_URL }}
+          API_KEY: ${{ secrets.WAYVE_API_KEY }}
+          TICKET: ${{ github.event.inputs.ticket_number }}
+          AGENT_OUTCOME: ${{ steps.claude.outcome }}
+        run: |
+          if [ -z "${BASE_URL:-}" ] || [ -z "${API_KEY:-}" ]; then
+            echo "WAYVE_BASE_URL / WAYVE_API_KEY not configured; cannot report back."
+            exit 0
+          fi
+          python3 - <<'PY'
+          import os, subprocess, base64, json, urllib.request, urllib.error
+
+          base_url = os.environ["BASE_URL"].rstrip("/")
+          api_key = os.environ["API_KEY"]
+          ticket = os.environ["TICKET"]
+          outcome = os.environ.get("AGENT_OUTCOME", "")
+
+          def git(*a):
+              return subprocess.run(["git", *a], capture_output=True, text=True).stdout
+
+          def post(body):
+              req = urllib.request.Request(
+                  f"{base_url}/api/workspace-tickets/{ticket}/ai-fix-diff",
+                  data=json.dumps(body).encode(),
+                  method="POST",
+                  headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
+              )
+              try:
+                  with urllib.request.urlopen(req) as r:
+                      print("callback", r.status, body["status"])
+              except urllib.error.HTTPError as e:
+                  print("callback failed", e.code, e.read().decode()[:300])
+
+          commits = git("rev-list", "--count", "origin/main..HEAD").strip() or "0"
+          if commits == "0":
+              # No commit: distinguish a clean "nothing to do" from a broken run.
+              post({"status": "no_change" if outcome == "success" else "error"})
+              raise SystemExit
+
+          base = git("rev-parse", "origin/main").strip()
+          diff = git("diff", "origin/main...HEAD")
+
+          files = []
+          def add_write(path):
+              with open(path, "rb") as fh:
+                  files.append({"path": path,
+                                "content": base64.b64encode(fh.read()).decode()})
+
+          for line in git("diff", "--name-status", "-M", "origin/main...HEAD").splitlines():
+              parts = line.split("\t")
+              st = parts[0]
+              if st.startswith("R"):          # rename: delete old, add new
+                  files.append({"path": parts[1], "deleted": True})
+                  add_write(parts[2])
+              elif st.startswith("D"):         # delete
+                  files.append({"path": parts[1], "deleted": True})
+              else:                            # A / M / C: current content
+                  add_write(parts[1])
+
+          post({"status": "ready", "diff": diff, "base_sha": base, "files": files})
+          print(f"Reported ready fix for ticket #{ticket}: {len(files)} file(s)")
+          PY

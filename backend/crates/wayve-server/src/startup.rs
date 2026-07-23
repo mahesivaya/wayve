@@ -351,6 +351,31 @@ pub async fn ensure_email_schema(pool: &PgPool) {
            LEFT JOIN users u ON u.id = st.user_id \
           WHERE NOT EXISTS ( \
                 SELECT 1 FROM workspace_tickets wt WHERE wt.support_ticket_id = st.id)",
+        // AI relationship labels on tickets (tickets/relate.rs): related_to = the
+        // group's canonical (min id), relation_kind = how it relates. Labels only.
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS related_to INTEGER",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS relation_kind TEXT",
+        "DO $$ BEGIN \
+            ALTER TABLE workspace_tickets \
+                ADD CONSTRAINT workspace_tickets_relation_kind_chk \
+                CHECK (relation_kind IN ('duplicate', 'similar')); \
+         EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        // Resolution memory (Phase 2 AI-fix): pointer to the fix that resolved a
+        // ticket, so a later similar ticket can reuse it. Code stays in Git.
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolution_pr_url TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolution_commit TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolution_summary TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP",
+        // AI-fix review state (P1 tickets): CI posts the changed files + diff back
+        // here (no Git ops); the ticket page's Commit/Push/Create-PR buttons drive
+        // GitHub's Git Data API from that payload. See tickets/handler.rs.
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_status TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_diff TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_files JSONB",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_base_sha TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_commit_sha TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_branch TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_pr_url TEXT",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.
@@ -465,8 +490,12 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )",
         "ALTER TABLE org_document_folders ALTER COLUMN organization_id DROP NOT NULL",
+        // `collection` splits the shared workspace into independent trees sharing
+        // this table: 'library' (Documents) and 'skills' (Skills). Existing rows
+        // default to 'library'.
+        "ALTER TABLE org_document_folders ADD COLUMN IF NOT EXISTS collection VARCHAR(32) NOT NULL DEFAULT 'library'",
         "CREATE INDEX IF NOT EXISTS idx_org_doc_folders_org_parent \
-         ON org_document_folders(organization_id, parent_folder_id)",
+         ON org_document_folders(organization_id, collection, parent_folder_id)",
         "CREATE TABLE IF NOT EXISTS org_documents (
             id BIGSERIAL PRIMARY KEY,
             organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
@@ -481,8 +510,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )",
         "ALTER TABLE org_documents ALTER COLUMN organization_id DROP NOT NULL",
+        "ALTER TABLE org_documents ADD COLUMN IF NOT EXISTS collection VARCHAR(32) NOT NULL DEFAULT 'library'",
         "CREATE INDEX IF NOT EXISTS idx_org_documents_org_folder \
-         ON org_documents(organization_id, folder_id)",
+         ON org_documents(organization_id, collection, folder_id)",
         // Employees aren't always Wayve users, so user_id is nullable, and
         // `payroll_run_items.employee_name` denormalizes the name so a historical
         // run still reads correctly after a termination.

@@ -25,7 +25,7 @@ export const getTickets = async () =>
 // so the sidebar badge is one cheap query, not a full list fetch.
 export const getTicketsOpenCount = async () =>
   apiFetchJson<{ count: number }>("/api/workspace-tickets/open-count").then(
-    (r) => r.count,
+    (r) => r.count
   );
 
 export const createTicketApi = async (payload: SaveTaskPayload) => {
@@ -50,3 +50,79 @@ export const deleteTicketApi = async (id: number) => {
   await apiFetch(`/api/workspace-tickets/${id}`, { method: "DELETE" });
   emitTicketsChanged();
 };
+
+// On-demand AI pass: Claude groups the board's tickets into duplicate / similar
+// clusters and labels them (related_to + relation_kind). Returns the counts so
+// the UI can report them; dispatches the change event so the board reloads.
+export type FindRelatedResult = {
+  groups: { kind: "duplicate" | "similar"; ids: number[] }[];
+  duplicates: number;
+  similar: number;
+};
+
+export const findRelatedTickets = async () => {
+  const result = await apiFetchJson<FindRelatedResult>(
+    "/api/workspace-tickets/find-related",
+    { method: "POST" }
+  );
+  emitTicketsChanged();
+  return result;
+};
+
+// Kick off the Claude Code CI fixer for one ticket: the backend recalls a
+// similar past fix and dispatches the ai-fix-ticket workflow, which opens a PR.
+export type AiFixResult = {
+  dispatched: boolean;
+  reused_fix_from: number | null;
+};
+
+export const aiFixTicket = async (id: number) =>
+  apiFetchJson<AiFixResult>(`/api/workspace-tickets/${id}/ai-fix`, {
+    method: "POST",
+  });
+
+// The AI-fix review state for one ticket. CI posts the diff + changed files here
+// (status 'ready'); the ticket page then drives three GitHub steps in order:
+// Commit ('committed') → Push ('pushed') → Create PR ('pr_opened'). 'running' =
+// CI in flight; 'no_change'/'error' = the run produced nothing to review.
+export type AiFixStatus =
+  | "running"
+  | "ready"
+  | "committed"
+  | "pushed"
+  | "pr_opened"
+  | "no_change"
+  | "error";
+
+export type AiFixState = {
+  status: AiFixStatus | null;
+  diff: string | null;
+  commit_sha: string | null;
+  branch: string | null;
+  pr_url: string | null;
+};
+
+export const getAiFixState = async (id: number) =>
+  apiFetchJson<AiFixState>(`/api/workspace-tickets/${id}/ai-fix`);
+
+// Step 1: create the commit object on GitHub from the reviewed change. Idempotent.
+export const commitAiFix = async (id: number) =>
+  apiFetchJson<{ commit_sha: string }>(
+    `/api/workspace-tickets/${id}/ai-fix-commit`,
+    { method: "POST" }
+  );
+
+// Step 2: create the branch ref pointing at the commit (the "push"). Idempotent.
+export const pushAiFix = async (id: number) =>
+  apiFetchJson<{ branch: string }>(
+    `/api/workspace-tickets/${id}/ai-fix-push`,
+    { method: "POST" }
+  );
+
+// Step 3: open the PR from the pushed branch into main. Idempotent — returns the
+// existing PR url if one was already opened.
+export const openAiFixPr = async (id: number) =>
+  apiFetchJson<{ pr_url: string }>(
+    `/api/workspace-tickets/${id}/ai-fix-open-pr`,
+    { method: "POST" }
+  );

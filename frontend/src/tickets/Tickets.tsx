@@ -4,6 +4,8 @@ import {
   createTicketApi,
   updateTicketApi,
   deleteTicketApi,
+  findRelatedTickets,
+  aiFixTicket,
 } from "../api/tickets";
 
 // The Workspace "Tickets" board is the Tasks board with its own org-shared data
@@ -17,9 +19,18 @@ const TICKETS_CONFIG: TasksConfig = {
     create: createTicketApi,
     update: updateTicketApi,
     remove: deleteTicketApi,
+    findRelated: findRelatedTickets,
+    aiFix: aiFixTicket,
   },
-  features: { attachments: false, statusSummary: true },
+  features: {
+    attachments: false,
+    statusSummary: true,
+    findRelated: true,
+    aiFix: true,
+  },
   storageKey: "tickets",
+  // Clicking a ticket opens its own page (see TicketDetail) instead of a modal.
+  detailPath: (id) => `/tickets/${id}`,
   labels: {
     title: "Tickets",
     subtitle: "A shared board of tickets for your workspace.",

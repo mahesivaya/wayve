@@ -1142,6 +1142,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     adminMode &&
     user.scope === "organization" &&
     user.effective_role === "owner";
+  // The Skills workspace surfaces only inside the owner/admin dashboard: admin
+  // mode, a workspace scope, and an owner / super_admin / admin role. Read-only
+  // members and personal accounts never see the row. (The backend still gates
+  // every Skills endpoint independently.)
+  const canSeeSkills =
+    adminMode &&
+    (user.scope === "organization" || user.scope === "platform") &&
+    ["owner", "super_admin", "admin"].includes(user.effective_role ?? "");
   // Custom-domain verification is a business / enterprise capability.
   const orgTier = user.current_plan?.tier;
   const canManageDomains =
@@ -1300,6 +1308,18 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               </span>
             )}
           </Link>
+          {canSeeSkills && (
+            <Link
+              to="/skills"
+              title="Skills"
+              className={`sidebar-project-label${
+                location.pathname === "/skills" ? " active" : ""
+              }`}
+              onClick={() => setNavOpen(false)}
+            >
+              🧠 Skills
+            </Link>
+          )}
           {user.effective_role !== "guest" && (
             <Link
               to="/github"

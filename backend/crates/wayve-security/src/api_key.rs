@@ -159,7 +159,11 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
             }
         }
         // Management surfaces — keys, RBAC, audit, billing, org/platform admin.
-        "admin" | "keys" | "audit" | "organizations" | "platform" | "billing" | "v1" => "admin",
+        // `workspace-tickets` is here so the AI-fix CI callbacks (resolution +
+        // ai-fix-diff) authenticate with an internal management key; the handlers
+        // then enforce tickets:manage on the key's user.
+        "admin" | "keys" | "audit" | "organizations" | "platform" | "billing" | "v1"
+        | "workspace-tickets" => "admin",
         _ => return None,
     };
     Some(scope)
@@ -486,6 +490,11 @@ mod tests {
             Some("admin")
         );
         assert_eq!(required_scope("POST", "/api/keys"), Some("admin"));
+        // AI-fix CI callbacks authenticate with an internal management key.
+        assert_eq!(
+            required_scope("POST", "/api/workspace-tickets/7/ai-fix-diff"),
+            Some("admin")
+        );
         assert_eq!(required_scope("GET", "/ws/chat"), Some("chat:write"));
         // Unmapped / auth routes are unreachable with an API key.
         assert_eq!(required_scope("POST", "/api/login"), None);
