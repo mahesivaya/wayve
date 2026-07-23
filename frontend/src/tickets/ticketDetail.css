@@ -2,6 +2,13 @@
   max-width: 760px;
   margin: 0 auto;
   padding: 24px 20px 48px;
+  /* The page renders inside `.split-pane`, which is `overflow: hidden`, so the
+     page itself must be the scroll container (same pattern as Tasks/Notes).
+     Without this a long AI-fix diff pushes the content past the viewport with
+     no way to scroll to the rest of the code or the Commit/Push/PR buttons. */
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .ticket-detail-back {
